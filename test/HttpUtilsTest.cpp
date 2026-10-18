@@ -92,7 +92,8 @@ TEST(HttpUtils, GetStringBodyRequest) {
   EXPECT_EQ(result.body(), "new body");
 }
 
-// ___________________________________________________________________________
+// Test that `createOkResponse` keeps a generator as the body of the response
+// and compresses it if the request accepts `gzip`.
 TEST(HttpUtils, CreateOkResponseFromGeneratorWithCompression) {
   namespace http = boost::beast::http;
   using ad_utility::MediaType;

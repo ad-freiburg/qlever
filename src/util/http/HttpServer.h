@@ -68,12 +68,13 @@ class HttpMessageSender {
   // advanced while the response is being serialized. This serialization runs
   // on the `bodyExecutor`, only the writing to the `stream_` happens on the
   // executor of the calling coroutine (the IO threads of the `HttpServer`).
-  // For a body that is expensive to compute (e.g. the result of a query), the
-  // `bodyExecutor` must therefore not be an executor of the IO threads, as
+  //
+  // NOTE: For a body that is expensive to compute (e.g. the result of a query),
+  // the `bodyExecutor` must therefore not be an executor of the IO threads, as
   // these would otherwise be blocked and unable to serve other connections in
   // the meantime. For a body that is cheap to compute (e.g. a single string),
-  // the executor of the calling coroutine (`co_await
-  // net::this_coro::executor`) can be used.
+  // the executor of the calling coroutine (`co_await net::this_coro::executor`)
+  // can be used.
   net::awaitable<void> operator()(StreamableResponse response,
                                   net::any_io_executor bodyExecutor) {
     AD_CONTRACT_CHECK(bodyExecutor);
@@ -136,8 +137,9 @@ class HttpMessageSender {
 // In both modes, `send` is an `HttpMessageSender` (see above); the handler is
 // responsible for sending the response via `co_await send(response)`, or via
 // `co_await send(response, executor)` for a response with a `streamable_body`.
-// (Note that `BodyReadMode` only concerns the body of the request, not the
-// body of the response.)
+//
+// NOTE: `BodyReadMode` only concerns the body of the request, not the body of
+// the response.
 //
 // A very basic `HttpHandler`, which simply serves files from a directory, can
 // be obtained via `ad_utility::httpUtils::makeFileServer()`.

@@ -603,10 +603,10 @@ TYPED_TEST(HttpServerBodyTest, Redirects) {
 
 namespace {
 
-// A body that is computed on an executor passed to `send` must not block the
-// threads of the server: while the body of one response is still being
-// computed, the server (which runs with a single thread in this test) must
-// still be able to answer other requests.
+// Test that a body that is computed on an executor passed to `send` does not
+// block the threads of the server: while the body of one response is still
+// being computed, the server (which runs with a single thread in this test)
+// still answers other requests.
 TYPED_TEST(HttpServerBodyTest, SlowResponseBodyDoesNotBlockServer) {
   std::promise<void> releaseSlowBody;
   std::shared_future<void> slowBodyReleased =
@@ -653,8 +653,8 @@ TYPED_TEST(HttpServerBodyTest, SlowResponseBodyDoesNotBlockServer) {
   EXPECT_EQ(toString(std::move(slowResponse.body_)), "slow-startslow-end");
 }
 
-// An exception while computing the body of a response is logged, and the
-// connection is closed, so that the client receives an incomplete response.
+// Test that an exception while computing the body of a response is logged and
+// closes the connection, so that the client receives an incomplete response.
 TYPED_TEST(HttpServerBodyTest, ExceptionInResponseBody) {
   auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
   net::thread_pool bodyThreadPool{1};
@@ -687,8 +687,8 @@ TYPED_TEST(HttpServerBodyTest, ExceptionInResponseBody) {
   }
 }
 
-// Sending a response with a `streamable_body` requires a (non-empty) executor
-// on which its body is computed.
+// Test that sending a response with a `streamable_body` requires a (non-empty)
+// executor on which its body is computed.
 TYPED_TEST(HttpServerBodyTest, StreamableResponseRequiresExecutor) {
   auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
   auto handler = [](auto req, auto&& send,
