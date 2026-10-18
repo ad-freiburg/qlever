@@ -25,7 +25,6 @@
 #include "global/Constants.h"
 #include "index/InputFileSpecification.h"
 #include "index/vocabulary/EncodedIriManager.h"
-#include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
 #include "rdfTypes/GeoPoint.h"
@@ -653,9 +652,8 @@ template <class T>
 void TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
     TripleComponent::Literal literal, const TripleComponent::Iri& typeIri) {
   AD_CORRECTNESS_CHECK(literal.isPlain());
-  std::string_view normalizedLiteralContent =
-      asStringViewUnsafe(literal.getContent());
-  std::string_view type = asStringViewUnsafe(typeIri.getContent());
+  std::string_view normalizedLiteralContent = literal.getContent();
+  std::string_view type = typeIri.getContent();
 
   // Helper to handle literals that are invalid for the respective datatype
   auto makeNormalLiteral = [this, &literal, normalizedLiteralContent,
@@ -762,7 +760,7 @@ void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setBaseIriOrThrow(
     const ad_utility::triple_component::Iri& iri) {
-  qlever::util::ParsedUri uri{asStringViewUnsafe(iri.getContent())};
+  qlever::util::ParsedUri uri{iri.getContent()};
   if (useSimplifiedGrammar_ &&
       (!baseIri().has_value() || baseIri().value() != uri)) {
     raiseDisallowedPrefixOrBaseError();
@@ -780,7 +778,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
 
   parser.literalAndDatatypeToTripleComponentImpl(
       TripleComponent::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedLiteralContent)),
+          normalizedLiteralContent),
       typeIri);
   return std::move(parser.lastParseResult_);
 }
