@@ -1557,7 +1557,8 @@ TEST(SparqlExpression, isSomethingFunctions) {
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 
   // `ql:isEncodedIri` is only true for ids of datatype `EncodedVal`, not for
-  // regular vocabulary IRIs, string IRIs, or literals.
+  // regular vocabulary IRIs, string IRIs, or literals, and UNDEF for an unbound
+  // argument.
   auto checkIsEncodedIri = testUnaryExpression<&makeIsEncodedIriExpression>;
   checkIsEncodedIri(Id::makeFromEncodedVal(0), T);
   checkIsEncodedIri(iri, F);

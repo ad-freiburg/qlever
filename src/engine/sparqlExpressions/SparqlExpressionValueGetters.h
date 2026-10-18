@@ -208,8 +208,10 @@ struct LiteralValueGetterWithoutStrFunction
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
-// given `datatype`. As for all the `is...` getters below, the result for UNDEF
-// is UNDEF, because an unbound argument is an error in SPARQL.
+// given `datatype`.
+//
+// NOTE: For this and all the `is...` getters below, the result for UNDEF is
+// UNDEF, because an unbound argument is an error in SPARQL.
 template <Datatype datatype>
 struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
   using Value = Id;
