@@ -12,6 +12,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -35,6 +36,21 @@ Filter::Filter(QueryExecutionContext* qec,
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap Filter::computeVariableToColumnMap() const {
+  // The columns of the `ExistsJoin`s are only needed to evaluate this filter.
+  // Hide them, so that parents neither join on them nor see them twice.
+  // TODO<StripColumns> Don't write these columns once `Filter` can strip
+  // columns.
+  auto variableColumns = _subtree->getVariableColumns();
+  for (const auto* expression : _expression.getExistsExpressions()) {
+    variableColumns.erase(
+        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression)
+            .variable());
+  }
+  return variableColumns;
 }
 
 // _____________________________________________________________________________
@@ -115,8 +131,8 @@ Result Filter::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename Table)(requires IdTableLike<Table>)
-    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                                  Table&& idTable) const {
+IdTable Filter::filterIdTable(qlm::vector<ColumnIndex> sortedBy,
+                              Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
@@ -132,7 +148,7 @@ CPP_template_def(typename Table)(requires IdTableLike<Table>)
 CPP_template_def(int WIDTH,
                  typename Table)(requires IdTableLike<Table>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      std::vector<ColumnIndex> sortedBy) const {
+                      qlm::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
@@ -251,6 +267,23 @@ bool Filter::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Filter::cloneImpl() const {
-  return std::make_unique<Filter>(_executionContext, _subtree->clone(),
+  return cloneWithNewChildren({_subtree->clone()});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Filter::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Filter>(_executionContext, std::move(children.at(0)),
                                   _expression);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The filter expression sees the target as unbound, but after the push down
+  // it wouldn't.
+  if (_expression.isVariableContained(bind._target)) {
+    return std::nullopt;
+  }
+  return pushDownBindToAnyChild(bind, {_subtree});
 }
