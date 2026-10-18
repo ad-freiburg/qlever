@@ -166,15 +166,15 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(
-        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.rowsPerBlock, c.parsedGeometriesMinLength,
-        c.createTextIndex, c.addWordsFromLiterals,
-        c.contentsOfWordsFileAndDocsfile, c.parserBufferSize, c.scoringMetric,
-        c.bAndKParam, c.indexType, c.encodedPrefixesWithoutAngleBrackets,
-        c.encodedIriPatterns, c.addHasWordTriples, c.secondaryVocabWords,
-        c.numThreads, c.parseInParallel, c.additionalSettings,
-        c.geoPointEncoding.value());
+    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
+                      c.usePatterns, c.usePrefixCompression, c.rowsPerBlock,
+                      c.parsedGeometriesMinLength, c.createTextIndex,
+                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
+                      c.indexType, c.encodedPrefixesWithoutAngleBrackets,
+                      c.encodedIriPatterns, c.addHasWordTriples,
+                      c.secondaryVocabWords, c.numThreads, c.parseInParallel,
+                      c.additionalSettings, c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,

@@ -10,9 +10,10 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <spatialjoin/Sweeper.h>
+
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
-#include <spatialjoin/Sweeper.h>
 #include <stdexcept>
 #include <vector>
 
@@ -367,10 +368,10 @@ template <typename V>
 void GeoVocabulary<V>::BlockWriter::precomputePayload(
     std::string_view word, ql::span<char> payload) const {
   AD_CONTRACT_CHECK(payload.size() == geoInfoOffset);
-  ql::ranges::copy(computeGeoInfoRecord(word, numInvalidGeometries_,
-                                        numInvalidPolygonArea_,
-                                        parsedGeometries_),
-                   payload.begin());
+  ql::ranges::copy(
+      computeGeoInfoRecord(word, numInvalidGeometries_, numInvalidPolygonArea_,
+                           parsedGeometries_),
+      payload.begin());
 }
 
 // ____________________________________________________________________________

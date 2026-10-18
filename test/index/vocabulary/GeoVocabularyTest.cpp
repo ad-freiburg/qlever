@@ -333,8 +333,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
             sizeof(uint64_t) + literals.size() * currentRecordSize);
   std::string contents = currentContents.substr(0, sizeof(uint64_t));
   for (size_t i = 0; i < literals.size(); ++i) {
-    contents.append(currentContents,
-                    sizeof(uint64_t) + i * currentRecordSize, recordSize);
+    contents.append(currentContents, sizeof(uint64_t) + i * currentRecordSize,
+                    recordSize);
   }
   const uint64_t version5 = 5;
   std::memcpy(contents.data(), &version5, sizeof(version5));
