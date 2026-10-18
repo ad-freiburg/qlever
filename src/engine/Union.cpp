@@ -10,6 +10,7 @@
 #include "backports/span.h"
 #include "engine/CallFixedSize.h"
 #include "engine/SortedUnionImpl.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/ChunkedForLoop.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
@@ -388,6 +389,46 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
     subtree = subtree->clone();
   }
   return copy;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Union::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Union>(_executionContext, std::move(children.at(0)),
+                                 std::move(children.at(1)), targetOrder_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  AD_CONTRACT_CHECK(!containsVariableInternally(bind._target));
+
+  // The TODO in `makeTreeWithStrippedColumns` below also applies here.
+  if (!targetOrder_.empty()) {
+    return std::nullopt;
+  }
+
+  // Push the `BIND` into every child, refuse if any child refuses.
+  //
+  // NOTE 1: A child that doesn't cover the expression variables can't compute
+  // the `BIND` at all (`QueryExecutionTree::makeTreeWithBindColumn` refuses
+  // then). Leaving it unchanged would fill the missing target column with
+  // `UNDEF` instead of evaluating the `BIND` expression, which silently changes
+  // the result for any expression that isn't itself `UNDEF` on `UNDEF` input
+  // (e.g. `COALESCE`).
+  //
+  // NOTE 2: `UNION` doesn't change any values, so (unlike for joins) it doesn't
+  // matter whether the variables might be `UNDEF` in a child.
+  std::vector<std::shared_ptr<QueryExecutionTree>> children;
+  for (const auto& subtree : _subtrees) {
+    auto result = subtree->makeTreeWithBindColumn(bind);
+    if (!result.has_value()) {
+      return std::nullopt;
+    }
+    children.push_back(std::move(result.value()));
+  }
+  return _executionContext->makeShared<QueryExecutionTree>(
+      _executionContext, cloneWithNewChildren(std::move(children)));
 }
 
 // _____________________________________________________________________________

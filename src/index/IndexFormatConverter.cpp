@@ -345,7 +345,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
            locatedTriplesState = std::move(locatedTriplesState),
            progress = std::move(progress)](IdTable& idTable) {
             for (auto column : idTable.getColumns()) {
-              ql::ranges::for_each(column, [](Id& id) { id = convertId(id); });
+              ql::ranges::for_each(column,
+                                   [](IdRef id) { id = convertId(id); });
             }
             progress(idTable.numRows());
             return IdTableStatic<0>{std::move(idTable)};
