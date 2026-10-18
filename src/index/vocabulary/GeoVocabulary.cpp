@@ -10,8 +10,9 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
 #include <spatialjoin/Sweeper.h>
-
 #include <stdexcept>
 #include <vector>
 
@@ -25,6 +26,8 @@
 #include "rdfTypes/ParsedGeometry.h"
 #include "util/Exception.h"
 #include "util/File.h"
+#include "util/GlobalExecutor.h"
+#include "util/MemorySize/MemorySize.h"
 
 using ad_utility::GeometryInfo;
 using ad_utility::ParsedGeometry;
@@ -44,27 +47,65 @@ template <typename V>
 void GeoVocabulary<V>::open(const std::string& filename) {
   literals_.open(filename);
 
-  // Open the geo info file and the parsed geometries file, and check that
-  // their headers hold the versions this code expects.
-  auto openWithVersionCheck =
-      [](ad_utility::File& file, const std::string& filename,
-         uint64_t expectedVersion, std::string_view what) {
-        file.open(filename.c_str(), "r");
-        uint64_t versionOfFile = 0;
-        file.read(&versionOfFile, sizeof(versionOfFile), 0);
-        if (versionOfFile != expectedVersion) {
-          throw std::runtime_error(absl::StrCat(
-              "The ", what, " version of ", filename, " is ", versionOfFile,
-              ", which is incompatible with version ", expectedVersion,
-              " as required by this version of QLever. Please rebuild your "
-              "index."));
-        }
-      };
-  openWithVersionCheck(geoInfoFile_, getGeoInfoFilename(filename),
-                       ad_utility::GEOMETRY_INFO_VERSION, "geometry info");
-  openWithVersionCheck(parsedGeometriesFile_,
-                       getParsedGeometriesFilename(filename),
-                       ad_utility::PARSED_GEOMETRY_VERSION, "parsed geometry");
+  geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "r");
+
+  // Read header of `geoInfoFile_` to determine version
+  std::decay_t<decltype(ad_utility::GEOMETRY_INFO_VERSION)> versionOfFile = 0;
+  geoInfoFile_.read(&versionOfFile, geoInfoHeader, 0);
+
+  // Check version of geo info file
+  if (!ad_utility::isLoadableGeometryInfoVersion(versionOfFile)) {
+    throw std::runtime_error(absl::StrCat(
+        "The geometry info version of ", getGeoInfoFilename(filename), " is ",
+        versionOfFile, ", which is incompatible with versions ",
+        ad_utility::MIN_LOADABLE_GEOMETRY_INFO_VERSION, " to ",
+        ad_utility::GEOMETRY_INFO_VERSION,
+        " as supported by this version of QLever. Please rebuild your index."));
+  }
+  if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
+    AD_LOG_WARN << "The geometry info version of "
+                << getGeoInfoFilename(filename) << " is " << versionOfFile
+                << ", which is older than the current version "
+                << ad_utility::GEOMETRY_INFO_VERSION
+                << ". Geometry information that this version does not "
+                   "precompute will be computed on the fly. Rebuild your "
+                   "index to make use of all precomputed geometry information."
+                << std::endl;
+  }
+  geoInfoVersion_ = versionOfFile;
+
+  // The file must have one record per word of the size of its version. This
+  // also rejects the files of pre-release builds with parsed geometries, which
+  // have version 6 (like the released version 6), but larger records.
+  const auto geoInfoFilename = getGeoInfoFilename(filename);
+  const uint64_t expectedFileSize =
+      geoInfoHeader + size() * ad_utility::geometryInfoSize(versionOfFile);
+  const uint64_t actualFileSize = ql::filesystem::file_size(geoInfoFilename);
+  if (actualFileSize != expectedFileSize) {
+    throw std::runtime_error(absl::StrCat(
+        "The geometry info file ", geoInfoFilename, " has ", actualFileSize,
+        " bytes, but ", expectedFileSize, " bytes are expected for ", size(),
+        " WKT literals with geometry info version ", versionOfFile,
+        ". The index was probably built with an incompatible version of "
+        "QLever. Please rebuild your index."));
+  }
+
+  // The parsed geometries, only for the versions that have them.
+  if (versionOfFile >= firstVersionWithParsedGeometries) {
+    const auto parsedGeometriesFilename = getParsedGeometriesFilename(filename);
+    parsedGeometriesFile_.open(parsedGeometriesFilename.c_str(), "r");
+    uint64_t parsedGeometriesVersion = 0;
+    parsedGeometriesFile_.read(&parsedGeometriesVersion,
+                               sizeof(parsedGeometriesVersion), 0);
+    if (parsedGeometriesVersion != ad_utility::PARSED_GEOMETRY_VERSION) {
+      throw std::runtime_error(absl::StrCat(
+          "The parsed geometry version of ", parsedGeometriesFilename, " is ",
+          parsedGeometriesVersion, ", which is incompatible with version ",
+          ad_utility::PARSED_GEOMETRY_VERSION,
+          " as required by this version of QLever. Please rebuild your "
+          "index."));
+    }
+  }
 
   endIndex_ = computeEndIndex();
 }
@@ -74,7 +115,9 @@ template <typename V>
 void GeoVocabulary<V>::close() {
   literals_.close();
   geoInfoFile_.close();
-  parsedGeometriesFile_.close();
+  if (parsedGeometriesFile_.isOpen()) {
+    parsedGeometriesFile_.close();
+  }
   endIndex_ = 0;
 }
 
@@ -129,25 +172,22 @@ GeoVocabulary<V>::WordWriter::WordWriter(
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
       grid_{grid},
-      parsedGeometriesFile_{getParsedGeometriesFilename(filename), "w"},
-      parsedGeometriesMinLength_{parsedGeometriesMinLength} {
-  // Initialize the geo info file and the parsed geometries file with their
-  // headers.
-  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
-  parsedGeometriesFileSize_ =
-      parsedGeometriesFile_.write(&ad_utility::PARSED_GEOMETRY_VERSION,
-                                  sizeof(ad_utility::PARSED_GEOMETRY_VERSION));
-
-  // The sweeper that computes the parsed geometries, if any are to be stored.
-  // Its temporary files (which it deletes itself) go next to the vocabulary.
-  if (parsedGeometriesMinLength_ > 0) {
-    ql::filesystem::path path{filename};
-    std::string dir = path.parent_path().string();
-    sweeper_ = std::make_unique<sj::Sweeper>(
-        ParsedGeometry::sweeperConfig(), dir.empty() ? "." : dir,
-        absl::StrCat(path.filename().string(), ".spatialjoin"));
-  }
+      parsedGeometries_{filename, parsedGeometriesMinLength} {
+  // Initialize the geo info file with its header. Like the records (see
+  // `flushBatch`), it is written with a positioned write, because positioned
+  // and sequential writes must not be mixed on the same file (see
+  // `File::write`).
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
 }
+
+using namespace ad_utility::memory_literals;
+
+// A batch of words is handed to the thread pool (see `flushBatch`) as soon as
+// it has this many words or this many bytes. A batch holds copies of its
+// words, so the limits bound its memory, while a batch stays large enough to
+// make the cost of a task on the pool negligible.
+static constexpr size_t GEO_WRITER_BATCH_NUM_WORDS = 10'000;
+static constexpr size_t GEO_WRITER_BATCH_NUM_BYTES = (10_MB).getBytes();
 
 // ____________________________________________________________________________
 template <typename V>
@@ -158,45 +198,6 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   // Store the WKT literal as a string in the underlying vocabulary
   index = (*underlyingWordWriter_)(word, isExternal);
 
-  // Precompute the `GeometryInfo`.
-  auto info = GeometryInfo::fromWktLiteral(word);
-  if (info.has_value()) {
-    if (!info.value().getMetricArea().isValid()) {
-      ++numInvalidPolygonArea_;
-    }
-  } else {
-    ++numInvalidGeometries_;
-  }
-
-  // For a valid literal of at least the minimum length, store the parsed
-  // geometry (see `ParsedGeometry`) as its number of bytes followed by the
-  // bytes, and remember its offset in the `GeometryInfo`.
-  if (parsedGeometriesMinLength_ > 0 &&
-      word.size() >= parsedGeometriesMinLength_) {
-    auto parsed = info.has_value()
-                      ? ParsedGeometry::fromWktLiteral(word, *sweeper_)
-                      : std::nullopt;
-    if (parsed.has_value()) {
-      std::string bytes = parsed.value().toBytes();
-      uint64_t numBytes = bytes.size();
-      info.value().setParsedGeometryOffset(parsedGeometriesFileSize_);
-      parsedGeometriesFileSize_ +=
-          parsedGeometriesFile_.write(&numBytes, sizeof(numBytes));
-      parsedGeometriesFileSize_ +=
-          parsedGeometriesFile_.write(bytes.data(), bytes.size());
-      ++numParsedGeometries_;
-    } else {
-      ++numParsedGeometriesSkipped_;
-    }
-  }
-
-  // Write the `GeometryInfo` to disk, or a zero buffer of the same size
-  // (indicating an invalid geometry). This is required to ensure direct
-  // access by index is still possible on the file.
-  const void* ptr = info.has_value() ? static_cast<const void*>(&info.value())
-                                     : &invalidGeoInfoBuffer;
-  geoInfoFile_.write(ptr, geoInfoOffset);
-
   if (grid_.has_value()) {
     AD_CORRECTNESS_CHECK(index == numWords_);
     // Keep one position free, so that `endIndex` (the past-the-end position
@@ -204,7 +205,11 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
     AD_CONTRACT_CHECK(numWords_ + 1 < grid_->maxNumWords(),
                       "Too many WKT literals for the configured geo cell "
                       "grid, please rebuild with a smaller grid level");
-    auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
+    // NOTE: This is the cell that `cellIndexOfWord` computes from the
+    // `GeometryInfo` of the word (which is not known yet, see the class
+    // comment), because a valid `GeometryInfo` has exactly the bounding box
+    // of the literal, see `indexFromPosition`.
+    auto cellIndex = grid_->cellIndexFromWktLiteral(word);
     AD_CONTRACT_CHECK(
         !lastCellIndex_.has_value() || lastCellIndex_.value() <= cellIndex,
         "WKT literals were not passed to the GeoVocabulary in the order of "
@@ -212,8 +217,85 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
     lastCellIndex_ = cellIndex;
     index = grid_->indexFromCellAndPosition(cellIndex, numWords_);
   }
+
+  // The `GeometryInfo` is computed and written by the thread pool, see
+  // `flushBatch`.
+  if (currentBatch_.empty()) {
+    firstPositionOfCurrentBatch_ = numWords_;
+  }
+  currentBatch_.emplace_back(word);
+  currentBatchSize_ += word.size();
+  if (currentBatch_.size() >= GEO_WRITER_BATCH_NUM_WORDS ||
+      currentBatchSize_ >= GEO_WRITER_BATCH_NUM_BYTES) {
+    flushBatch();
+  }
   ++numWords_;
   return index;
+}
+
+// ____________________________________________________________________________
+template <typename V>
+auto GeoVocabulary<V>::computeGeoInfoRecord(
+    std::string_view word, std::atomic<size_t>& numInvalidGeometries,
+    std::atomic<size_t>& numInvalidPolygonArea,
+    ParsedGeometriesWriter& parsedGeometries) -> GeometryInfoBuffer {
+  // Invalid WKT (according to the strict parsing mode) is treated as an
+  // invalid geometry.
+  auto info = GeometryInfo::fromWktLiteral(word);
+  // Store the parsed geometry of a long enough literal (this also counts the
+  // invalid ones that are long enough, see `ParsedGeometriesWriter`).
+  parsedGeometries.store(word, info);
+  if (!info.has_value()) {
+    ++numInvalidGeometries;
+    return invalidGeoInfoBuffer;
+  }
+  if (!info.value().getMetricArea().isValid()) {
+    ++numInvalidPolygonArea;
+  }
+  return absl::bit_cast<GeometryInfoBuffer>(info.value());
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::WordWriter::flushBatch() {
+  if (currentBatch_.empty()) {
+    return;
+  }
+  // Bound the number of batches in flight (each holds its words in memory).
+  // The oldest batches are typically long done, so this rarely waits.
+  const size_t maxNumPendingBatches =
+      2 * ad_utility::globalExecutorNumThreads();
+  while (pendingBatches_.size() >= maxNumPendingBatches) {
+    pendingBatches_.front().get();
+    pendingBatches_.pop_front();
+  }
+  // Compute the `GeometryInfo` of every word of the batch and write it to its
+  // position in the `geoInfoFile_`, or write a zero buffer of the same size
+  // (indicating an invalid geometry), so that direct access by position stays
+  // possible.
+  //
+  // NOTE: The positioned `File::write` is a `pwrite`, so the batches can write
+  // concurrently.
+  auto computeAndWrite = [this, words = std::move(currentBatch_),
+                          firstPosition = firstPositionOfCurrentBatch_]() {
+    // The records of the batch are contiguous in the file, so they are
+    // written with a single call.
+    std::vector<GeometryInfoBuffer> records;
+    records.reserve(words.size());
+    for (const auto& word : words) {
+      records.push_back(computeGeoInfoRecord(word, numInvalidGeometries_,
+                                             numInvalidPolygonArea_,
+                                             parsedGeometries_));
+    }
+    auto offset =
+        static_cast<off_t>(geoInfoHeader + firstPosition * geoInfoOffset);
+    geoInfoFile_.write(records.data(), records.size() * geoInfoOffset, offset);
+  };
+  pendingBatches_.push_back(
+      boost::asio::post(ad_utility::globalExecutor(),
+                        boost::asio::use_future(std::move(computeAndWrite))));
+  currentBatch_.clear();
+  currentBatchSize_ = 0;
 }
 
 // ____________________________________________________________________________
@@ -222,18 +304,16 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   // `WordWriterBase` ensures that this is not called twice and we thus do not
   // try to close the file handle twice
   underlyingWordWriter_->finish();
-  geoInfoFile_.close();
-  parsedGeometriesFile_.close();
-
-  if (numParsedGeometries_ + numParsedGeometriesSkipped_ > 0) {
-    AD_LOG_INFO << "Stored the parsed geometries of " << numParsedGeometries_
-                << " of the "
-                << numParsedGeometries_ + numParsedGeometriesSkipped_
-                << " WKT literals with at least " << parsedGeometriesMinLength_
-                << " bytes (the others are invalid geometries or cannot be "
-                   "parsed by libspatialjoin)"
-                << std::endl;
+  // Wait for the batches on the thread pool (and rethrow their exceptions)
+  // before the file is closed.
+  flushBatch();
+  for (auto& batch : pendingBatches_) {
+    batch.get();
   }
+  pendingBatches_.clear();
+  geoInfoFile_.close();
+  parsedGeometries_.finish();
+
   if (numInvalidGeometries_ > 0) {
     AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
                 << " invalid WKT literal"
@@ -258,16 +338,157 @@ GeoVocabulary<V>::WordWriter::~WordWriter() {
 
 // ____________________________________________________________________________
 template <typename V>
+GeoVocabulary<V>::BlockWriter::BlockWriter(
+    const V& vocabulary, const std::string& filename,
+    std::optional<ad_utility::GeoCellGrid> grid,
+    size_t parsedGeometriesMinLength)
+    : underlyingWriter_{vocabulary.makeBlockWriterPtr(filename)},
+      geoInfoFile_{getGeoInfoFilename(filename), "w"},
+      grid_{grid},
+      parsedGeometries_{filename, parsedGeometriesMinLength} {
+  // The header, with a positioned write, see `WordWriter::WordWriter`.
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+uint64_t GeoVocabulary<V>::BlockWriter::indexOf(uint64_t position,
+                                                std::string_view word) const {
+  if (!grid_.has_value()) {
+    return position;
+  }
+  // The same cell as `WordWriter::operator()` assigns, see there.
+  return grid_->indexFromCellAndPosition(grid_->cellIndexFromWktLiteral(word),
+                                         position);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::BlockWriter::precomputePayload(
+    std::string_view word, ql::span<char> payload) const {
+  AD_CONTRACT_CHECK(payload.size() == geoInfoOffset);
+  ql::ranges::copy(computeGeoInfoRecord(word, numInvalidGeometries_,
+                                        numInvalidPolygonArea_,
+                                        parsedGeometries_),
+                   payload.begin());
+}
+
+// ____________________________________________________________________________
+template <typename V>
+AppendBlock GeoVocabulary<V>::BlockWriter::prepare(WordBlock block) {
+  AD_CONTRACT_CHECK(block.payloadSize_ == geoInfoOffset);
+  const uint64_t firstPosition = block.firstPosition_;
+  std::vector<GeometryInfoBuffer> records;
+  // The cells of the first and the last word (only with a grid).
+  std::optional<GeoCellGrid::CellIndex> firstCellIndex;
+  std::optional<GeoCellGrid::CellIndex> lastCellIndex;
+  // The records come precomputed with the block (see `precomputePayload`); with
+  // a grid, check that the cells are non-decreasing within the block, see
+  // `WordWriter::operator()`.
+  records.reserve(block.numWords());
+  for (size_t i = 0; i < block.numWords(); ++i) {
+    std::string_view word = block.word(i);
+    // NOTE: The size of the payload has been checked at the beginning.
+    ql::ranges::copy(block.payload(i), records.emplace_back().begin());
+    if (grid_.has_value()) {
+      const auto& record = records.back();
+      std::optional<GeometryInfo> info;
+      if (record != invalidGeoInfoBuffer) {
+        info = absl::bit_cast<GeometryInfo>(record);
+      }
+      auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
+      AD_CONTRACT_CHECK(
+          !lastCellIndex.has_value() || lastCellIndex.value() <= cellIndex,
+          "WKT literals were not passed to the GeoVocabulary in "
+          "the order of their geo grid cells");
+      if (!firstCellIndex.has_value()) {
+        firstCellIndex = cellIndex;
+      }
+      lastCellIndex = cellIndex;
+    }
+  }
+  return [this, firstPosition, records = std::move(records), firstCellIndex,
+          lastCellIndex,
+          appendUnderlying =
+              underlyingWriter_->prepare(std::move(block))]() mutable {
+    appendRecords(firstPosition, std::move(records), firstCellIndex,
+                  lastCellIndex, std::move(appendUnderlying));
+  };
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::BlockWriter::appendRecords(
+    uint64_t firstPosition, std::vector<GeometryInfoBuffer> records,
+    std::optional<GeoCellGrid::CellIndex> firstCellIndex,
+    std::optional<GeoCellGrid::CellIndex> lastCellIndex,
+    AppendBlock appendUnderlying) {
+  AD_CONTRACT_CHECK(firstPosition == numWords_);
+  const size_t numWords = records.size();
+  if (grid_.has_value() && numWords > 0) {
+    // Keep one position free, see `WordWriter::operator()`.
+    AD_CONTRACT_CHECK(numWords_ + numWords < grid_->maxNumWords(),
+                      "Too many WKT literals for the configured geo cell "
+                      "grid, please rebuild with a smaller grid level");
+    AD_CONTRACT_CHECK(!lastCellIndex_.has_value() ||
+                          lastCellIndex_.value() <= firstCellIndex.value(),
+                      "WKT literals were not passed to the GeoVocabulary in "
+                      "the order of their geo grid cells");
+    lastCellIndex_ = lastCellIndex;
+  }
+  auto offset = static_cast<off_t>(geoInfoHeader + numWords_ * geoInfoOffset);
+  numWords_ += numWords;
+  std::move(appendUnderlying)();
+  // The records are written by the pool, see `WordWriter::flushBatch` for
+  // the bound on the writes in flight.
+  const size_t maxNumPendingWrites = 2 * ad_utility::globalExecutorNumThreads();
+  while (pendingWrites_.size() >= maxNumPendingWrites) {
+    pendingWrites_.front().get();
+    pendingWrites_.pop_front();
+  }
+  pendingWrites_.push_back(boost::asio::post(
+      ad_utility::globalExecutor(),
+      boost::asio::use_future([this, records = std::move(records), offset]() {
+        geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
+                           offset);
+      })));
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::BlockWriter::finishImpl() {
+  underlyingWriter_->finish();
+  // Wait for the writes on the pool (and rethrow their exceptions) before the
+  // file is closed.
+  for (auto& write : pendingWrites_) {
+    write.get();
+  }
+  pendingWrites_.clear();
+  geoInfoFile_.close();
+  parsedGeometries_.finish();
+  if (numInvalidGeometries_ > 0) {
+    AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
+                << " invalid WKT literal"
+                << (numInvalidGeometries_ == 1 ? "" : "s") << std::endl;
+  }
+  if (numInvalidPolygonArea_ > 0) {
+    AD_LOG_WARN << "Geometry preprocessing could not compute the area for "
+                << numInvalidPolygonArea_ << " malformed polygon geometr"
+                << (numInvalidPolygonArea_ == 1 ? "y" : "ies") << std::endl;
+  }
+}
+
+// ____________________________________________________________________________
+template <typename V>
 std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
     uint64_t position) const {
   AD_CONTRACT_CHECK(position < size());
-  // Allocate the required number of bytes
-  std::array<uint8_t, geoInfoOffset> buffer;
-  void* ptr = &buffer;
-
-  // Read into the buffer
-  geoInfoFile_.read(ptr, geoInfoOffset,
-                    geoInfoHeader + position * geoInfoOffset);
+  // Read into a buffer of the current size (records of older versions are
+  // smaller, see `GEOMETRY_INFO_VERSION`).
+  const size_t recordSize = ad_utility::geometryInfoSize(geoInfoVersion_);
+  GeometryInfoBuffer buffer{};
+  geoInfoFile_.read(buffer.data(), recordSize,
+                    geoInfoHeader + position * recordSize);
 
   // If all bytes are zero, this record on disk represents an invalid geometry.
   // The `GeometryInfo` class makes the guarantee that it can not have an
@@ -276,20 +497,87 @@ std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
     return std::nullopt;
   }
 
-  // Interpret the buffer as a `GeometryInfo` object
-  return absl::bit_cast<GeometryInfo>(buffer);
+  return GeometryInfo::fromSerialized(
+      ql::span<const uint8_t>{buffer.data(), recordSize}, geoInfoVersion_);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::ParsedGeometriesWriter::ParsedGeometriesWriter(
+    const std::string& filename, size_t minLength)
+    : file_{getParsedGeometriesFilename(filename), "w"}, minLength_{minLength} {
+  fileSize_ = file_.write(&ad_utility::PARSED_GEOMETRY_VERSION,
+                          sizeof(ad_utility::PARSED_GEOMETRY_VERSION));
+
+  // The sweeper that computes the parsed geometries, if any are to be stored.
+  // Its temporary files (which it deletes itself) go next to the vocabulary.
+  if (minLength_ > 0) {
+    ql::filesystem::path path{filename};
+    std::string dir = path.parent_path().string();
+    sweeper_ = std::make_unique<sj::Sweeper>(
+        ParsedGeometry::sweeperConfig(), dir.empty() ? "." : dir,
+        absl::StrCat(path.filename().string(), ".spatialjoin"));
+  }
+}
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::ParsedGeometriesWriter::~ParsedGeometriesWriter() = default;
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::ParsedGeometriesWriter::store(
+    std::string_view word, std::optional<GeometryInfo>& info) {
+  if (minLength_ == 0 || word.size() < minLength_) {
+    return;
+  }
+  if (!info.has_value()) {
+    ++numSkipped_;
+    return;
+  }
+
+  // Parse the literal and append it to the file, see the class comment.
+  std::lock_guard lock{mutex_};
+  auto parsed = ParsedGeometry::fromWktLiteral(word, *sweeper_);
+  if (!parsed.has_value()) {
+    ++numSkipped_;
+    return;
+  }
+  std::string bytes = parsed.value().toBytes();
+  uint64_t numBytes = bytes.size();
+  info.value().setParsedGeometryOffset(fileSize_);
+  fileSize_ += file_.write(&numBytes, sizeof(numBytes));
+  fileSize_ += file_.write(bytes.data(), bytes.size());
+  ++numStored_;
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::ParsedGeometriesWriter::finish() {
+  file_.close();
+  if (numStored_ + numSkipped_ > 0) {
+    AD_LOG_INFO << "Stored the parsed geometries of " << numStored_
+                << " of the " << numStored_ + numSkipped_
+                << " WKT literals with at least " << minLength_
+                << " bytes (the others are invalid geometries or cannot be "
+                   "parsed by libspatialjoin)"
+                << std::endl;
+  }
 }
 
 // ____________________________________________________________________________
 template <typename V>
 std::optional<ParsedGeometry> GeoVocabulary<V>::getParsedGeometry(
     uint64_t index) const {
+  if (!parsedGeometriesFile_.isOpen()) {
+    return std::nullopt;
+  }
   auto info = getGeoInfo(index);
   if (!info.has_value() || info.value().getParsedGeometryOffset() < 0) {
     return std::nullopt;
   }
 
-  // Read the number of bytes and then the bytes (see the `WordWriter`).
+  // Read the number of bytes and then the bytes (see `ParsedGeometriesWriter`).
   uint64_t offset = info.value().getParsedGeometryOffset();
   uint64_t numBytes = 0;
   parsedGeometriesFile_.read(&numBytes, sizeof(numBytes), offset);

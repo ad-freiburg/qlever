@@ -11,11 +11,16 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H
 
+#include <atomic>
 #include <cstdint>
+#include <deque>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -75,22 +80,30 @@ class GeoVocabulary {
   std::optional<GeoCellGrid> grid_;
 
   // The file with the parsed geometries (see `ParsedGeometry`), each stored
-  // at the offset given by the `GeometryInfo` of its word.
+  // at the offset given by the `GeometryInfo` of its word. Only open if the
+  // `geoInfoFile_` has a version with parsed geometries, see
+  // `firstVersionWithParsedGeometries`.
   ad_utility::File parsedGeometriesFile_;
 
   // The words of at least this length (in bytes) get a parsed geometry when
-  // the vocabulary is built (0 = none), see `WordWriter`.
+  // the vocabulary is built (0 = none), see `ParsedGeometriesWriter`.
   size_t parsedGeometriesMinLength_ = 0;
 
   // See `endIndex`, computed once when the vocabulary is opened.
   uint64_t endIndex_ = 0;
+
+  // The `GeometryInfo` version of the opened `geoInfoFile_`, see
+  // `GEOMETRY_INFO_VERSION` for the versions that can be read.
+  uint64_t geoInfoVersion_ = ad_utility::GEOMETRY_INFO_VERSION;
 
   // TODO<ullingerc> Possibly add in-memory cache of bounding boxes here
 
   // Filename suffix for geometry information file
   static constexpr std::string_view geoInfoSuffix = ".geoinfo";
 
-  // Offset per index inside the geometry information file
+  // Offset per index inside the geometry information file of the current
+  // version. When reading a file of an older version, the offset is
+  // `geometryInfoSize(geoInfoVersion_)`.
   static constexpr size_t geoInfoOffset = sizeof(GeometryInfo);
 
   // Serialized version of `GeometryInfo`
@@ -106,6 +119,25 @@ class GeoVocabulary {
   // Filename suffix for the parsed geometries file, which starts with the
   // `ad_utility::PARSED_GEOMETRY_VERSION` as header.
   static constexpr std::string_view parsedGeometriesSuffix = ".parsedgeoms";
+
+  // The first `GEOMETRY_INFO_VERSION` whose `GeometryInfo` has the offset of
+  // the parsed geometry, and whose vocabulary has the parsed geometries file.
+  static constexpr uint64_t firstVersionWithParsedGeometries = 7;
+
+ public:
+  class ParsedGeometriesWriter;
+
+ private:
+  // Compute the serialized `GeometryInfo` of the WKT literal `word`, or the
+  // `invalidGeoInfoBuffer` if the `word` cannot be parsed. Increment the
+  // respective counter for an invalid geometry and for a polygon whose area
+  // could not be computed. For a long enough literal, also store its parsed
+  // geometry via `parsedGeometries` and put its offset into the record. This
+  // is the per-word work that the `WordWriter` and the `BlockWriter` share.
+  static GeometryInfoBuffer computeGeoInfoRecord(
+      std::string_view word, std::atomic<size_t>& numInvalidGeometries,
+      std::atomic<size_t>& numInvalidPolygonArea,
+      ParsedGeometriesWriter& parsedGeometries);
 
  public:
   // The constructor is defined in the `.cpp` file, where it checks the
@@ -138,7 +170,7 @@ class GeoVocabulary {
 
   // Set the minimum length of the words that get a parsed geometry when the
   // vocabulary is built (see `ParsedGeometry`, 0 = none). Must be called
-  // before `makeDiskWriterPtr`.
+  // before `makeDiskWriterPtr` or `makeBlockWriterPtr`.
   void setParsedGeometriesMinLength(size_t minLength) {
     parsedGeometriesMinLength_ = minLength;
   }
@@ -236,11 +268,60 @@ class GeoVocabulary {
   // ___________________________________________________________________________
   void open(const std::string& filename);
 
+  // The writer of the file of the parsed geometries (see `ParsedGeometry`),
+  // shared by the `WordWriter` and the `BlockWriter`: for a valid WKT literal
+  // of at least `minLength` bytes (0 = none), `store` parses it with a sweeper
+  // of `libspatialjoin`, appends the parsed geometry to the file (its number of
+  // bytes, then the bytes) and sets its offset in the `GeometryInfo` of the
+  // literal. Both writers compute the `GeometryInfo`s on the global thread
+  // pool, so `store` is thread-safe: the sweeper and the file are used under a
+  // mutex. The order of the parsed geometries in the file is therefore not
+  // deterministic, which does not matter, because each `GeometryInfo` stores
+  // its own offset.
+  class ParsedGeometriesWriter {
+   private:
+    ad_utility::File file_;
+    size_t minLength_;
+    uint64_t fileSize_ = 0;
+    // Only if `minLength_` is not 0.
+    std::unique_ptr<sj::Sweeper> sweeper_;
+    std::mutex mutex_;
+    // The literals of at least the minimum length that got a parsed geometry,
+    // and those that did not (because they are invalid, or because
+    // `libspatialjoin` yields no geometry for them), which `finish` logs.
+    std::atomic<size_t> numStored_ = 0;
+    std::atomic<size_t> numSkipped_ = 0;
+
+   public:
+    // Create the file (`filename` plus `parsedGeometriesSuffix`) and write its
+    // header. The sweeper writes its temporary files next to `filename`.
+    ParsedGeometriesWriter(const std::string& filename, size_t minLength);
+
+    // Defined in the `.cpp` file, where `sj::Sweeper` is complete.
+    ~ParsedGeometriesWriter();
+
+    // See above. `info` is the `GeometryInfo` of the `word`, `std::nullopt` if
+    // the geometry is invalid.
+    void store(std::string_view word, std::optional<GeometryInfo>& info);
+
+    // Close the file and log the counters.
+    void finish();
+  };
+
   // Custom word writer, which precomputes and writes geometry info along with
   // the words. With a grid, it also checks that the words arrive ordered by
   // cell and puts the cell index into the upper bits of the returned indices.
+  //
+  // The `GeometryInfo` of a word (which for a large polygon costs a parse and
+  // several s2 computations) is not computed on the calling thread, but in
+  // batches on the global thread pool (see `util/GlobalExecutor.h`): the
+  // position of a word in the `geoInfoFile_` is known as soon as the word
+  // arrives, so its record can be written whenever its batch is done. The
+  // calling thread only computes the cell of a word (with a grid), which
+  // needs no more than the bounding box.
+  //
   // For the words of at least `parsedGeometriesMinLength` bytes, it also
-  // stores the parsed geometry (see `ParsedGeometry`).
+  // stores the parsed geometry (see `ParsedGeometriesWriter`).
   class WordWriter : public WordWriterBase {
    private:
     // The writer of the underlying vocabulary, which stores the strings.
@@ -250,32 +331,28 @@ class GeoVocabulary {
     ad_utility::File geoInfoFile_;
     // The grid, or `std::nullopt` if the index of a word is its position.
     std::optional<GeoCellGrid> grid_;
-    // The file for the parsed geometries, the minimum length of the words
-    // stored there (0 = none), and the number of bytes written to the file so
-    // far (the offset of the next parsed geometry).
-    ad_utility::File parsedGeometriesFile_;
-    size_t parsedGeometriesMinLength_;
-    uint64_t parsedGeometriesFileSize_ = 0;
-    // The sweeper of `libspatialjoin` that computes the parsed geometries,
-    // only if the minimum length is not 0.
-    std::unique_ptr<sj::Sweeper> sweeper_;
+    // The writer of the parsed geometries (see `ParsedGeometriesWriter`).
+    ParsedGeometriesWriter parsedGeometries_;
     // The cell of the previous word (only with a grid), to check the order.
     std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
     // The number of words written so far (the position of the next word).
     uint64_t numWords_ = 0;
-    // Counters for the warnings that `finishImpl` prints.
-    size_t numInvalidGeometries_ = 0;
-    size_t numInvalidPolygonArea_ = 0;
-    // Counters for the words of at least the minimum length that got a parsed
-    // geometry, and that did not (because they are invalid, or because
-    // `libspatialjoin` yields no geometry for them), which `finishImpl` logs.
-    size_t numParsedGeometries_ = 0;
-    size_t numParsedGeometriesSkipped_ = 0;
+    // Counters for the warnings that `finishImpl` prints. Atomic, because the
+    // batches on the thread pool increment them.
+    std::atomic<size_t> numInvalidGeometries_ = 0;
+    std::atomic<size_t> numInvalidPolygonArea_ = 0;
+    // The words whose `GeometryInfo` has not been computed yet, and the
+    // position (in the `geoInfoFile_`) of the first of them.
+    std::vector<std::string> currentBatch_;
+    uint64_t firstPositionOfCurrentBatch_ = 0;
+    size_t currentBatchSize_ = 0;
+    // The batches that are being computed on the thread pool, oldest first.
+    std::deque<std::future<void>> pendingBatches_;
 
    public:
-    // Initialize the `geoInfoFile_` and the `parsedGeometriesFile_` by
+    // Initialize the `geoInfoFile_` and the file of the parsed geometries by
     // writing their headers and open a word writer on the underlying
-    // vocabulary. The sweeper writes its temporary files next to `filename`.
+    // vocabulary.
     WordWriter(const UnderlyingVocabulary& vocabulary,
                const std::string& filename, std::optional<GeoCellGrid> grid,
                size_t parsedGeometriesMinLength);
@@ -289,6 +366,77 @@ class GeoVocabulary {
     void finishImpl() override;
 
     ~WordWriter() override;
+
+   private:
+    // Hand the `currentBatch_` to the thread pool, which computes the
+    // `GeometryInfo` of its words and writes the records to the
+    // `geoInfoFile_`. Before that, wait for the oldest pending batches if too
+    // many of them are in flight, so that the memory stays bounded and an
+    // exception from a batch does not go unnoticed for long.
+    void flushBatch();
+  };
+
+  // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`),
+  // which writes the same files. The geometry info record of a word is
+  // computed by `precomputePayload` and arrives with the block as its payload.
+  // The append step writes the records of a block to their position in the
+  // `geoInfoFile_`, by a task on the global thread pool.
+  //
+  // NOTE: With a grid, `indexOf` computes the cell of a word from the literal
+  // (exactly as `WordWriter::operator()`). The order of the cells is checked
+  // in `prepare` within a block and in the append step across blocks.
+  class BlockWriter : public BlockWriterBase {
+   private:
+    std::unique_ptr<BlockWriterBase> underlyingWriter_;
+    ad_utility::File geoInfoFile_;
+    std::optional<GeoCellGrid> grid_;
+    std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
+    uint64_t numWords_ = 0;
+    // Counters for the warnings that `finishImpl` prints. Atomic, because
+    // `precomputePayload` runs on any thread.
+    mutable std::atomic<size_t> numInvalidGeometries_ = 0;
+    mutable std::atomic<size_t> numInvalidPolygonArea_ = 0;
+    // The writer of the parsed geometries, see `precomputePayload`. `mutable`,
+    // because `precomputePayload` is `const` (it is thread-safe, see there).
+    mutable ParsedGeometriesWriter parsedGeometries_;
+    // The writes of the records that are running on the pool, oldest first;
+    // bounded, see `appendRecords`.
+    std::deque<std::future<void>> pendingWrites_;
+
+   public:
+    // Constructor, see `WordWriter`.
+    BlockWriter(const UnderlyingVocabulary& vocabulary,
+                const std::string& filename, std::optional<GeoCellGrid> grid,
+                size_t parsedGeometriesMinLength);
+
+    size_t blockSize() const override { return underlyingWriter_->blockSize(); }
+    uint64_t indexOf(uint64_t position, std::string_view word) const override;
+    // The geometry info record of a word, see `precomputePayload`.
+    size_t precomputedPayloadSize() const override { return geoInfoOffset; }
+    void precomputePayload(std::string_view word,
+                           ql::span<char> payload) const override;
+    AppendBlock prepare(WordBlock block) override;
+
+    // Finish if that has not happened yet, so that no write is left running
+    // on the pool.
+    ~BlockWriter() override {
+      ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                    "Calling `finish` from the destructor of "
+                                    "`GeoVocabulary::BlockWriter`");
+    }
+
+   private:
+    void finishImpl() override;
+
+    // The append step of a block (see `prepare`): check the cells of its
+    // first and last word (only with a grid) against the previous block,
+    // append the block to the underlying vocabulary (via `appendUnderlying`),
+    // and write its `records` to their position in the `geoInfoFile_`.
+    void appendRecords(uint64_t firstPosition,
+                       std::vector<GeometryInfoBuffer> records,
+                       std::optional<GeoCellGrid::CellIndex> firstCellIndex,
+                       std::optional<GeoCellGrid::CellIndex> lastCellIndex,
+                       AppendBlock appendUnderlying);
   };
 
   // The files of the underlying vocabulary, which is stored under the base
@@ -308,6 +456,13 @@ class GeoVocabulary {
       const std::string& filename) const {
     return std::make_unique<WordWriter>(literals_, filename, grid_,
                                         parsedGeometriesMinLength_);
+  }
+
+  // ___________________________________________________________________________
+  std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) const {
+    return std::make_unique<BlockWriter>(literals_, filename, grid_,
+                                         parsedGeometriesMinLength_);
   }
 
   // ___________________________________________________________________________

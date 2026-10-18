@@ -2,8 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/base/casts.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <cstring>
+#include <fstream>
 
 #include "../../GeometryInfoTestHelpers.h"
 #include "VocabularyTestHelpers.h"
@@ -61,6 +66,9 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         // Out of range literal
         "\"POLYGON((1 1, 2 2, 3 450))\""
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        // Literal that is only valid in lenient parsing mode
+        "\"LINESTRING(1 1, 2 a, 3 3)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         // Valid WKT literals
         "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), "
         "POLYGON((2 4, 4 4, 4 2, 2 2)))\""
@@ -93,6 +101,15 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     };
 
     checkGeoVocabContents(geoVocab);
+
+    // The literal that is only valid in lenient parsing mode is treated as an
+    // invalid geometry.
+    auto leniencyIdx =
+        geoVocab.lower_bound("\"LINESTRING(1 1, 2 a", ql::ranges::less{});
+    ASSERT_EQ(leniencyIdx.word(),
+              "\"LINESTRING(1 1, 2 a, 3 3)\""
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+    EXPECT_EQ(geoVocab.getGeoInfo(leniencyIdx.index()), std::nullopt);
 
     // Test further methods
     ASSERT_EQ(geoVocab.size(), testLiterals.size());
@@ -222,6 +239,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
                    {{2, 2}, {4, 4}},
                    {3, 3},
                    {1},
+                   SourceCrsType{util::geo::CRSType::CRS84},
                    getLengthForTesting(exampleGeoLit),
                    getAreaForTesting(exampleGeoLit)};
   EXPECT_GEOMETRYINFO(gi.value(), exp);
@@ -241,7 +259,8 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   ASSERT_FALSE(nonGeoVocab.getGeoInfo(VocabIndex::make(0)).has_value());
 }
 
-// _____________________________________________________________________________
+// Test that a geoinfo file whose version is outside the loadable range cannot
+// be opened.
 TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
   const VocabularyType geoSplitVocabType{
       VocabularyType::Enum::OnDiskCompressedGeoSplit};
@@ -255,21 +274,137 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
   (*wordCallback)("\"test\"@en", true);
   wordCallback->finish();
 
-  // Overwrite the geoinfo file with an invalid header
+  // Overwrite the geoinfo file with an invalid header, too old or too new.
   const std::string geometryFilename = absl::StrCat(filename, ".geometry");
-  ad_utility::File geoInfoFile{
-      AnyGeoVocab::getGeoInfoFilename(geometryFilename), "w"};
-  uint64_t fakeHeader = 0;
-  geoInfoFile.write(&fakeHeader, 8);
-  geoInfoFile.close();
+  for (uint64_t fakeHeader :
+       {uint64_t{0}, MIN_LOADABLE_GEOMETRY_INFO_VERSION - 1,
+        GEOMETRY_INFO_VERSION + 1}) {
+    ad_utility::File geoInfoFile{
+        AnyGeoVocab::getGeoInfoFilename(geometryFilename), "w"};
+    geoInfoFile.write(&fakeHeader, 8);
+    geoInfoFile.close();
 
-  // Opening the vocabulary should throw an exception
+    // Opening the vocabulary should throw an exception
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        vocabulary.readFromFile(filename),
+        ::testing::HasSubstr(
+            absl::StrCat("The geometry info version of ",
+                         AnyGeoVocab::getGeoInfoFilename(geometryFilename),
+                         " is ", fakeHeader, ", which is incompatible")));
+  }
+}
+
+// Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
+// content, is read with the source CRS zeroed and the serialization type `WKT`.
+TEST(GeoVocabularyTest, ReadVersion5) {
+  // Write a `GeoVocabulary` of the current version.
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+  std::vector<std::string> literals{
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"Invalid\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+  };
+  ql::ranges::sort(literals);
+  {
+    AnyGeoVocab writerVocab;
+    auto ww = writerVocab.makeDiskWriterPtr(filename);
+    for (const auto& lit : literals) {
+      (*ww)(lit, true);
+    }
+    ww->finish();
+  }
+
+  // Turn the geoinfo file into one of version 5: its records are the first
+  // `geometryInfoSize(5)` bytes of the records of the current version (the
+  // fields of later versions are appended), and in version 5, the bytes
+  // `[28, 32)` of a valid record could contain arbitrary content.
+  const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
+  std::string currentContents;
+  {
+    std::ifstream in{geoInfoFilename, std::ios::binary};
+    currentContents.assign(std::istreambuf_iterator<char>{in}, {});
+  }
+  constexpr size_t recordSize = 48;
+  static_assert(geometryInfoSize(5) == recordSize);
+  constexpr size_t currentRecordSize = sizeof(GeometryInfo);
+  ASSERT_EQ(currentContents.size(),
+            sizeof(uint64_t) + literals.size() * currentRecordSize);
+  std::string contents = currentContents.substr(0, sizeof(uint64_t));
+  for (size_t i = 0; i < literals.size(); ++i) {
+    contents.append(currentContents,
+                    sizeof(uint64_t) + i * currentRecordSize, recordSize);
+  }
+  const uint64_t version5 = 5;
+  std::memcpy(contents.data(), &version5, sizeof(version5));
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto record = contents.begin() + sizeof(uint64_t) + i * recordSize;
+    if (std::any_of(record, record + recordSize,
+                    [](char c) { return c != 0; })) {
+      std::fill(record + 28, record + 32, '\xab');
+    }
+  }
+  {
+    std::ofstream out{geoInfoFilename, std::ios::binary | std::ios::trunc};
+    out << contents;
+  }
+
+  // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
+  // the source CRS "not computed" and the serialization type `WKT`.
+  AnyGeoVocab geoVocab;
+  geoVocab.open(filename);
+  using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto expected = GeometryInfo::fromWktLiteral(literals[i]);
+    auto actual = geoVocab.getGeoInfo(i);
+    ASSERT_EQ(actual.has_value(), expected.has_value());
+    if (expected.has_value()) {
+      EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
+      EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
+      auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
+      std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
+      EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
+    }
+  }
+}
+
+// Test that a geoinfo file whose size does not match its version and the number
+// of words is rejected. This is the case for the files of pre-release builds
+// with parsed geometries, which have the version 6 in their header (like the
+// released version 6), but records of the size of version 7.
+TEST(GeoVocabularyTest, RejectFileWithWrongRecordSize) {
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+  std::vector<std::string> literals{
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+  };
+  ql::ranges::sort(literals);
+  {
+    AnyGeoVocab writerVocab;
+    auto ww = writerVocab.makeDiskWriterPtr(filename);
+    for (const auto& lit : literals) {
+      (*ww)(lit, true);
+    }
+    ww->finish();
+  }
+  static_assert(sizeof(GeometryInfo) != geometryInfoSize(6));
+
+  // Change only the version in the header of the geoinfo file to 6.
+  const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
+  {
+    std::fstream file{geoInfoFilename,
+                      std::ios::binary | std::ios::in | std::ios::out};
+    const uint64_t version6 = 6;
+    file.write(reinterpret_cast<const char*>(&version6), sizeof(version6));
+  }
+  AnyGeoVocab geoVocab;
   AD_EXPECT_THROW_WITH_MESSAGE(
-      vocabulary.readFromFile(filename),
-      ::testing::HasSubstr(
-          absl::StrCat("The geometry info version of ",
-                       AnyGeoVocab::getGeoInfoFilename(geometryFilename),
-                       " is 0, which is incompatible")));
+      geoVocab.open(filename),
+      ::testing::AllOf(::testing::HasSubstr("geometry info version 6"),
+                       ::testing::HasSubstr("Please rebuild your index")));
 }
 
 // Test that the vocabulary stores the parsed geometries (see `ParsedGeometry`)
