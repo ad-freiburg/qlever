@@ -160,8 +160,6 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
       (isConstantResult<S1> && isConstantResult<S2>);
-  VectorWithMemoryLimit<Id> result{context->_allocator};
-  result.reserve(resultSize);
 
   // TODO<joka921> Make this simpler by factoring out the whole binary search
   // stuff.
@@ -199,9 +197,17 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
 
   // A `SetOfIntervals` (the result of, for example, a comparison that was
   // evaluated using binary search) stores one boolean per row. Its comparison
-  // with another `SetOfIntervals` or a boolean constant can be computed
-  // directly on the intervals. A `SetOfIntervals` is never the first argument
-  // when the second argument is a constant (see `AreComparable`).
+  // with another `SetOfIntervals` or a boolean constant is computed directly
+  // on the intervals.
+  //
+  // NOTE 1: A `SetOfIntervals` is never the first argument when the second
+  // argument is a constant (see `AreComparable`).
+  //
+  // NOTE 2: A row for which the comparison that produced the `SetOfIntervals`
+  // was an error (for example because the variable is unbound) is not in the
+  // set, that is, it counts as `false`. So `(?x = <x>) = false` is true for
+  // such a row, where the evaluation row by row yields UNDEF. The same holds
+  // for `!` on a `SetOfIntervals` (see `UnaryNegateExpression`).
   if constexpr (StoresBoolean<S1> && StoresBoolean<S2>) {
     return compareSetsOfIntervals<Comp>(value1, value2);
   } else if constexpr (ad_utility::isSimilar<S1, Id> && StoresBoolean<S2>) {
@@ -216,6 +222,8 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
     }
   }
 
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.reserve(resultSize);
   auto [generatorA, generatorB] =
       getGenerators(AD_FWD(value1), AD_FWD(value2), resultSize, context);
   auto itA = generatorA.begin();

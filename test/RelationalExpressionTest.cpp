@@ -893,7 +893,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
       {{{2, 3}}, 3});
 }
 
-// Comparisons with a `SetOfIntervals` (the result of, for example, a
+// Test comparisons with a `SetOfIntervals` (the result of, for example, a
 // comparison that was evaluated using binary search on a sorted input).
 TEST(RelationalExpression, SetOfIntervals) {
   auto T = Id::makeFromBool(true);
@@ -925,9 +925,9 @@ TEST(RelationalExpression, SetOfIntervals) {
   expectSet(makeExpression<LT>(set, other), S{{{2, 3}}, 3});
   expectSet(makeExpression<GE>(set, other), S{{{0, 2}}, 3});
   expectSet(makeInExpression(set, T), set);
-  // An `IN` with several elements combines the results with an `OR`. The type
-  // erased expressions don't use the optimizations between set-of-interval,
-  // but always return a fully materialized vector.
+  // An `IN` with several elements combines the results with an `OR`, which
+  // for type-erased expressions (`CHEAPER_COMPILATION`) always returns a
+  // materialized vector instead of a `SetOfIntervals`.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
   auto expectIds = [](auto expression, std::vector<Id> expected) {
     EXPECT_THAT(expression.evaluate(&testContext().context),
@@ -940,14 +940,12 @@ TEST(RelationalExpression, SetOfIntervals) {
 #endif
 
   // Other comparisons are evaluated row by row.
-  auto vec = [](std::vector<Id> ids) {
-    VectorWithMemoryLimit<Id> result{makeAllocator()};
-    ql::ranges::copy(ids, std::back_inserter(result));
-    return result;
-  };
-  testWithExplicitIdResult<GT>(set, vec({T, F, F}), {F, T, F});
-  testWithExplicitIdResult<NE>(vec({T, F, F}), set, {F, T, F});
-  testWithExplicitIdResult<LE>(set, vec({F, F, T}), {F, F, T});
+  testWithExplicitIdResult<GT>(
+      set, VectorWithMemoryLimit<Id>({T, F, F}, makeAllocator()), {F, T, F});
+  testWithExplicitIdResult<NE>(
+      VectorWithMemoryLimit<Id>({T, F, F}, makeAllocator()), set, {F, T, F});
+  testWithExplicitIdResult<LE>(
+      set, VectorWithMemoryLimit<Id>({F, F, T}, makeAllocator()), {F, F, T});
   // A constant that is not a boolean is incompatible with the booleans.
   auto U = Id::makeUndefined();
   testWithExplicitIdResult<NE>(IntId(1), set, {U, U, U});
