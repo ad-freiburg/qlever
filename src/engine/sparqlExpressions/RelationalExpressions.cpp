@@ -71,11 +71,14 @@ CPP_template(typename S1, typename S2)(
 // Efficiently (using binary search) computes the result of `aVal Comparator
 // valueId` for each `ValueId` that the Variable `variable` is bound to. This
 // only works, if the input (as stored in the `context`) is sorted by the
-// Variable `variable`. Return
-// `std::nullopt` if the result of the comparison is UNDEF for at least one row
-// (e.g. because the row is UNDEF or its datatype is incompatible with
-// `valueId`), because a `SetOfIntervals` can only represent `true` and `false`,
-// or if the binary search can't evaluate the comparison correctly (see below).
+// Variable `variable`. Return `std::nullopt` if the binary search cannot
+// compute the correct result, the caller then evaluates the comparison row by
+// row.
+//
+// NOTE: This is the case if the result is UNDEF for at least one row (because
+// the row is UNDEF or its datatype is incompatible with `valueId`), as a
+// `SetOfIntervals` can only represent `true` and `false`. It is also the case
+// for comparisons other than `EQ` and `NE` with an encoded IRI (see below).
 template <Comparison Comp>
 std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
     const Variable& variable, ValueId valueId,
@@ -114,10 +117,10 @@ std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
     return valueIdComparators::getRangesForId(begin, end, valueId, comparison);
   };
 
-  // The ranges only contain rows with a datatype that is compatible with
-  // `valueId`. Every such row is either equal or not equal to `valueId`, so if
-  // the ranges for `EQ` and `NE` together don't cover all rows, then the result
-  // is UNDEF for some rows.
+  // Return `std::nullopt` if the result is UNDEF for some row. The ranges only
+  // contain rows with a datatype that is compatible with `valueId`, and every
+  // such row is either equal or not equal to `valueId`, so the ranges for `EQ`
+  // and `NE` together cover all rows exactly if no row is UNDEF.
   auto numRows = [](const auto& ranges) {
     return ::ranges::accumulate(
         ranges, size_t{0}, std::plus<>{},

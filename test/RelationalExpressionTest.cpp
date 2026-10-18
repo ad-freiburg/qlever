@@ -810,7 +810,7 @@ TEST(RelationalExpression, VariableAndVariable) {
 
 // `rightValue` must be a constant. Sort the `IdTable` of the `TestContext`
 // `ctx` by the variable `leftValue` and then check that the expression
-// `leftValue Comparator rightValue`, when evaluated on this sortest `IdTable`
+// `leftValue Comparator rightValue`, when evaluated on this sorted `IdTable`
 // yields the `expected` result. If the type of `expected` is `SetOfIntervals`,
 // this indicates that the expression was evaluated using binary search on the
 // sorted table. If it is `std::vector<Id>`, the result contains UNDEF values,
@@ -888,12 +888,12 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<NE>(
       vocab, IdOrLocalVocabEntry{lve("\"älpha\"")}, {{{0, 1}, {2, 3}}, 3});
 
-  // Note: vocab entries and numeric values are not compatible, so every
-  // comparison returns UNDEF.
+  // Vocab entries and numeric values are not compatible, so every comparison
+  // returns UNDEF.
   testSortedVariableAndConstant<LE>(vocab, inf, std::vector{U, U, U});
   testSortedVariableAndConstant<NE>(vocab, 3.2, std::vector{U, U, U});
 
-  // Note: The comparison of the IRI in `?mixed` with a numeric value and of the
+  // The comparison of the IRI in `?mixed` with a numeric value and of the
   // numeric values with an IRI is UNDEF.
   testSortedVariableAndConstant<NE>(mixed, 1.0,
                                     std::vector{B(false), B(true), U});
@@ -906,9 +906,9 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
       std::vector{U, U, B(true)});
 }
 
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3716
-// Rows for which a comparison with a sorted variable is UNDEF must stay UNDEF
-// when the result is negated, they must not become `true`.
+// Test that rows for which a comparison with a sorted variable is UNDEF stay
+// UNDEF when the result is negated and do not become `true` (regression test
+// for issue #3716).
 TEST(RelationalExpression, NegatedComparisonWithSortedVariableAndUndef) {
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
@@ -932,9 +932,9 @@ TEST(RelationalExpression, NegatedComparisonWithSortedVariableAndUndef) {
                   ::testing::ElementsAre(U, U, U)));
 }
 
-// Encoded IRIs are ordered by their encoding, which differs from their semantic
-// order (see issue #2448), so only `EQ` and `NE` may be evaluated using binary
-// search.
+// Test that for encoded IRIs only `EQ` and `NE` are evaluated using binary
+// search (they are ordered by their encoding, which differs from their semantic
+// order, see issue #2448).
 TEST(RelationalExpression, EncodedValsWithSortedVariable) {
   auto E = [](uint64_t i) { return Id::makeFromEncodedVal(i); };
   TestContext ctx;
