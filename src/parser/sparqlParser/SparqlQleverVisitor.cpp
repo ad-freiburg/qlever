@@ -191,7 +191,7 @@ std::string Visitor::currentTimeAsXsdString() {
 ExpressionPtr Visitor::processIriFunctionCall(
     const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
     const antlr4::ParserRuleContext* ctx) {
-  std::string_view functionName = asStringViewUnsafe(iri.getContent());
+  std::string_view functionName = iri.getContent();
   std::string_view prefixName;
   // Helper lambda that checks if `functionName` starts with the given prefix.
   // If yes, remove the prefix from `functionName` and set
@@ -269,6 +269,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"metricArea", &makeMetricAreaExpression},
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
+      {"asGeoJSON", &makeAsGeoJsonExpression},
   };
   using enum SpatialJoinType::Enum;
   static const BinaryFuncTable geoBinaryFuncs{
@@ -1367,11 +1368,11 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                              EXTERNAL_VALUES_IRI_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(ctx,
                                                                     serviceIri);
-  } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+  } else if (ql::starts_with(serviceIri.getContent(),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
                                                                   serviceIri);
-  } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+  } else if (ql::starts_with(serviceIri.getContent(),
                              MATERIALIZED_VIEW_IRI_WITHOUT_BRACKETS)) {
     return visitMagicServiceQuery<parsedQuery::MaterializedViewQuery>(
         ctx, serviceIri);
@@ -1618,7 +1619,7 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
   }
   auto iri =
       TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
-  baseIri_ = qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
+  baseIri_ = qlever::util::ParsedUri{iri.getContent()};
 }
 
 // ____________________________________________________________________________________
@@ -1911,9 +1912,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  auto visibleVariables = std::move(visibleVariables_);
-  GraphPatternOperation operation{
-      parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // As every group starts with no visible variables, these are exactly the
+  // variables of the patterns that precede the MINUS clause in its group.
+  auto visibleVariables = std::exchange(visibleVariables_, {});
+  auto child = visit(ctx->groupGraphPattern());
+  GraphPatternOperation operation{parsedQuery::Minus{
+      std::move(child), ad_utility::removeDuplicates(visibleVariables_),
+      ad_utility::removeDuplicates(visibleVariables)}};
   // Make sure that the variables from the minus graph pattern are NOT added to
   // visible variables.
   visibleVariables_ = std::move(visibleVariables);

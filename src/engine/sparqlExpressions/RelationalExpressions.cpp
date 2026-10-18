@@ -330,9 +330,8 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // TODO<joka921> Check that the language string doesn't contain a datatype
     // etc.
     // TODO<joka921> Is this even allowed by the grammar?
-    return LangFilterData{
-        std::move(optVar.value()),
-        {std::string{asStringViewUnsafe(langPtr->value().getContent())}}};
+    return LangFilterData{std::move(optVar.value()),
+                          {std::string{langPtr->value().getContent()}}};
   };
 
   const auto& child1 = children_[0];
@@ -604,7 +603,7 @@ InExpression::getLanguageFilterExpression() const {
     if (!langPtr) {
       return std::nullopt;
     }
-    languages.emplace(asStringViewUnsafe(langPtr->value().getContent()));
+    languages.emplace(langPtr->value().getContent());
   }
 
   return LangFilterData{std::move(optVar.value()), std::move(languages)};

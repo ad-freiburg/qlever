@@ -51,8 +51,14 @@ namespace ad_utility::vocabulary_merger {
 // blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
 // compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
 //
-// The merging is organized as a pipeline of four threads, which communicate
-// via task queues, such that all of them can work concurrently:
+// The partial vocabularies are merged by the parallel block merge (see
+// `util/parallelBlockMerge/ParallelBlockMerge.h`) on the global thread pool:
+// the words are split into ranges by the block index of the partial
+// vocabulary files (see `index/vocabulary_merger/PartialVocabularyFile.h`),
+// each range is merged by a chunk of its own, and the merged blocks arrive in
+// the order of the vocabulary on the thread that calls this function. Behind
+// the merge, the work is organized as a pipeline of four threads, which
+// communicate via task queues, such that all of them can work concurrently:
 //
 // 1. The thread that calls `mergeVocabulary` obtains the merged words in
 //    sorted order and eliminates the duplicates (a word typically occurs in

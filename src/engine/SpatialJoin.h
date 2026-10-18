@@ -175,6 +175,8 @@ class SpatialJoin : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // Get the internal variable names of bounding box columns.
   static std::pair<Variable, Variable> getBoundingBoxColumnNames(

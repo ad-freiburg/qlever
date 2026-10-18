@@ -172,10 +172,9 @@ struct StringValueGetter : Mixin<StringValueGetter> {
                                         const EvaluationContext*) const;
 
   // TODO<joka921> probably we should return a reference or a view here.
-  // TODO<joka921> use a `NormalizedStringView` inside the expressions.
   std::optional<std::string> operator()(const LiteralOrIri& s,
                                         const EvaluationContext*) const {
-    return std::string(asStringViewUnsafe(s.getContent()));
+    return std::string(s.getContent());
   }
 };
 
@@ -316,7 +315,7 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
     if (s.isIri()) {
       return std::nullopt;
     }
-    return std::string{asStringViewUnsafe(s.getContent())};
+    return std::string{s.getContent()};
   }
 };
 
@@ -437,7 +436,7 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
       [[maybe_unused]] const EvaluationContext*) const {
     if (litOrIri.isLiteral()) {
       if (litOrIri.hasLanguageTag()) {
-        return std::string(asStringViewUnsafe(litOrIri.getLanguageTag()));
+        return std::string(litOrIri.getLanguageTag());
       }
       // If we encounter a literal without a language tag, we return an empty
       // string by the definition of the Sparql-standard.

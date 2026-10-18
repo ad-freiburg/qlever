@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/HashMap.h"
 
 // Forward declaration
@@ -23,36 +24,46 @@ namespace qlever::binary_export {
 // A helper class for the efficient binary export, that collects the unique
 // non-trivial IDs (IDs that point to literals or IRIs that are not encoded
 // directly in the ID) for a batch of IDs. It assigns a unique index to each of
-// those IDs, and at the end of a batch resolves all of the unique IDs to the
-// corresponding strings.
+// those IDs and resolves it to its string right away, so the size of a batch
+// is known.
 class StringMapping {
-  // Store the actual mapping from an ID to the unique index (wrt the current
-  // batch). (The first newly inserted ID will get index 0, the second ID 1, and
-  // so on.)
-  // TODO<RobinTF, joka921> consider mapping from `Id::T` instead of `Id` to get
-  // a cheaper lookup.
-  ad_utility::HashMap<Id, uint64_t> stringMapping_;
+  const Index* index_;
+  // Only required for the signature of `idToLiteralOrIri`. A `LocalVocabIndex`
+  // directly points to its word, so the local vocab is never accessed. It is a
+  // member, because constructing a `LocalVocab` allocates.
+  LocalVocab dummyLocalVocab_;
+  // Map the bits of an ID to its unique index wrt the current batch (the first
+  // ID gets index 0, the second ID 1, and so on). Using the bits is cheaper
+  // than `Id`, whose hash looks up a `LocalVocabIndex` in the vocabulary. The
+  // same word with two different IDs is then sent twice, which is harmless.
+  ad_utility::HashMap<Id::T, uint64_t> stringMapping_;
+  // The string of the ID with index `i` is at position `i`.
+  // TODO<joka921, RobinTF> Store the strings contiguously in a single buffer
+  // (e.g. a monotonic buffer with `string_view`s or offsets) to avoid one
+  // allocation per string.
+  std::vector<std::string> strings_;
+  // The total size of the strings in `strings_`.
+  size_t numBytes_ = 0;
 
  public:
-  // Create a vector with `stringMapping_.size()` entries as follows: For each
-  // of the unique `IDs` in the `stringMapping_` resolve the ID to a string via
-  // `ql::exportIds::idToLiteralOrIri`. the result will be stored at
-  // position `stringMapping_[ID]` in the result, so the vector will be sorted
-  // by the order in which `remapId` was called for the IDs.
-  // Calling `flush` also clears the `stringMapping_`, which means that the
-  // indices will be reused thereafter.
-  std::vector<std::string> flush(const Index& index);
+  explicit StringMapping(const Index& index) : index_{&index} {}
+
+  // Return the strings of the current batch (ordered by their index) and start
+  // a new batch. The indices of the new batch again start at 0, so an index
+  // returned by `remapId` refers to a string of its batch only.
+  std::vector<std::string> takeStrings();
 
   // Remap an `Id` to another `Id` which internally uses the `LocalVocab`
   // datatype, but instead of a pointer it uses the index provided by the
-  // `stringMapping_`. If `remapId` was previously called for the same ID, the
-  // same result index will be used, otherwise the next free index will be
-  // assigned.
+  // `stringMapping_`. If `remapId` was previously called for the same ID in
+  // this batch, the same index will be used, otherwise the next free index.
   Id remapId(Id id);
 
-  // Return the number of distinct `ID`s for which `remapId` has been called
-  // since the last call to `flush()`.
+  // The number of distinct IDs in the current batch.
   size_t size() const { return stringMapping_.size(); }
+
+  // The total size of the strings of the current batch in bytes.
+  size_t numBytes() const { return numBytes_; }
 
   // Const access to the string mapping.
   const auto& stringMappingForTesting() const { return stringMapping_; }
