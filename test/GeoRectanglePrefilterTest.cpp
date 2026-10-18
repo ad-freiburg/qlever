@@ -24,8 +24,8 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
+#include "global/Id.h"
 #include "global/RuntimeParameters.h"
-#include "global/ValueId.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/GeoRectangle.h"
 
