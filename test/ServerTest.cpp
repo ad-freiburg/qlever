@@ -106,7 +106,8 @@ TEST(ServerTest, getQueryId) {
                                     QueryOperation::QUERY);
 }
 
-// _____________________________________________________________________________
+// Test that the timeout timer cancels the handle at the deadline and does not
+// if it is cancelled before.
 TEST(ServerTest, cancelAfterDeadline) {
   using namespace std::chrono_literals;
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
@@ -135,7 +136,8 @@ TEST(ServerTest, cancelAfterDeadline) {
   EXPECT_FALSE(handle->isCancelled());
 }
 
-// _____________________________________________________________________________
+// Test that the `RunAfter` of the server runs its task after the delay, can
+// be reused and rejects overlapping waits.
 TEST(ServerTest, makeWatchDogRunAfter) {
   using namespace std::chrono_literals;
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};

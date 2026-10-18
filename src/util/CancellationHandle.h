@@ -1,6 +1,6 @@
 // Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// 2023 - 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -169,6 +169,7 @@ class CancellationHandle : public NoCopy {
   // Make sure internal state is set back to
   // `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
   // in the console that would otherwise be triggered by the watchdog.
+  //
   // NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
   // or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   CPP_template(typename StateFunc)(
@@ -262,10 +263,11 @@ class CancellationHandle : public NoCopy {
   }
 
   // Return true if this cancellation handle has been cancelled, false
-  // otherwise. Note: Make sure to not use this value to set any other atomic
-  // value with relaxed memory ordering, as this may lead to out-of-thin-air
-  // values. If the watchdog is enabled, this will please it and print
+  // otherwise. If the watchdog is enabled, this will please it and print
   // a warning with the filename and line of the caller.
+  //
+  // NOTE: Make sure to not use this value to set any other atomic value with
+  // relaxed memory ordering, as this may lead to out-of-thin-air values.
   AD_ALWAYS_INLINE bool isCancelled([[maybe_unused]] ad_utility::source_location
                                         location = AD_CURRENT_SOURCE_LOC()) {
     if constexpr (CancellationEnabled) {

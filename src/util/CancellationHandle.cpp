@@ -1,6 +1,6 @@
 // Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// 2023 - 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -77,6 +77,8 @@ void CancellationHandle<Mode>::registerWatchDog(
                         "The watch dog of a `CancellationHandle` must only be "
                         "registered once.");
     }
+    // The `RunAfter` is shared because each step calls it while the next step
+    // already has to capture it.
     runWatchDogStep(std::move(handle),
                     std::make_shared<RunAfter>(std::move(runAfter)));
   }

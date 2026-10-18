@@ -1,6 +1,6 @@
 // Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// 2023 - 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 // 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -193,10 +193,10 @@ TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
   EXPECT_NO_THROW(CancellationHandle<ENABLED>{});
 }
 
-// _____________________________________________________________________________
-
 namespace ad_utility {
 
+// Test that the watch dog advances the state step by step and that a check
+// resets it.
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
   auto handle = std::make_shared<CancellationHandle<ENABLED>>();
   FakeRunAfter fake;
@@ -224,8 +224,7 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
   EXPECT_EQ(fake.tasks_.size(), 1);
 }
 
-// _____________________________________________________________________________
-
+// Test that the watch dog leaves a cancelled handle alone and stops.
 TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
   for (auto reason : {MANUAL, TIMEOUT}) {
     auto handle = std::make_shared<CancellationHandle<ENABLED>>();
@@ -240,8 +239,8 @@ TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
   }
 }
 
-// _____________________________________________________________________________
-
+// Test that the watch dog neither keeps the handle alive nor runs on after the
+// handle is destroyed.
 TEST(CancellationHandle, verifyWatchDogEndsIfHandleIsDestroyed) {
   auto handle = std::make_shared<CancellationHandle<ENABLED>>();
   std::weak_ptr<CancellationHandle<ENABLED>> weakHandle = handle;
@@ -255,8 +254,8 @@ TEST(CancellationHandle, verifyWatchDogEndsIfHandleIsDestroyed) {
   EXPECT_TRUE(fake.tasks_.empty());
 }
 
-// _____________________________________________________________________________
-
+// Test that the watch dog can be registered only once and only for a live
+// handle.
 TEST(CancellationHandle, verifyWatchDogCanOnlyBeRegisteredOnce) {
   auto handle = std::make_shared<CancellationHandle<ENABLED>>();
   FakeRunAfter fake;
@@ -484,8 +483,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr(expectedLocation)));
 }
 
-// _____________________________________________________________________________
-
+// Test that nothing is scheduled for a handle that is already cancelled.
 TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled) {
   auto handle = std::make_shared<CancellationHandle<ENABLED>>();
   handle->cancel(MANUAL);
@@ -506,8 +504,7 @@ TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   EXPECT_NO_THROW(handle.throwIfCancelled());
 }
 
-// _____________________________________________________________________________
-
+// Test that `registerWatchDog` is a no-op in the `DISABLED` mode.
 TEST(CancellationHandle, expectDisabledHandleDoesNotRegisterWatchDog) {
   auto handle = std::make_shared<CancellationHandle<DISABLED>>();
   FakeRunAfter fake;
@@ -515,8 +512,8 @@ TEST(CancellationHandle, expectDisabledHandleDoesNotRegisterWatchDog) {
   EXPECT_TRUE(fake.tasks_.empty());
 }
 
-// _____________________________________________________________________________
-
+// Test that `registerWatchDog` is a no-op in the `NO_WATCH_DOG` mode, also when
+// called twice.
 TEST(CancellationHandle, expectNoWatchDogHandleDoesNotRegisterWatchDog) {
   auto handle = std::make_shared<CancellationHandle<NO_WATCH_DOG>>();
   FakeRunAfter fake;
