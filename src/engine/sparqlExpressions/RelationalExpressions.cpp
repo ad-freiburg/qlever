@@ -123,6 +123,36 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   return {std::move(intervals), context->size()};
 }
 
+// Compute `a Comp b` for the booleans stored in `a` and `b` at the same row
+// (where `false < true`).
+template <Comparison Comp>
+ad_utility::SetOfIntervals compareSetsOfIntervals(
+    const ad_utility::SetOfIntervals& a, const ad_utility::SetOfIntervals& b) {
+  using enum Comparison;
+  using Intersection = ad_utility::SetOfIntervals::Intersection;
+  using Union = ad_utility::SetOfIntervals::Union;
+  using Complement = ad_utility::SetOfIntervals::Complement;
+  if constexpr (Comp == LT) {
+    return Intersection{}(Complement{}(a), b);
+  } else if constexpr (Comp == LE) {
+    return Union{}(Complement{}(a), b);
+  } else if constexpr (Comp == GT) {
+    return Intersection{}(a, Complement{}(b));
+  } else if constexpr (Comp == GE) {
+    return Union{}(a, Complement{}(b));
+  } else {
+    // The rows where exactly one of `a` and `b` is true.
+    auto differ =
+        Intersection{}(Union{}(a, b), Complement{}(Intersection{}(a, b)));
+    if constexpr (Comp == NE) {
+      return differ;
+    } else {
+      static_assert(Comp == EQ);
+      return Complement{}(std::move(differ));
+    }
+  }
+}
+
 // The actual comparison function for the `SingleExpressionResult`'s which are
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
@@ -135,8 +165,6 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
       (isConstantResult<S1> && isConstantResult<S2>);
-  VectorWithMemoryLimit<Id> result{context->_allocator};
-  result.reserve(resultSize);
 
   // TODO<joka921> Make this simpler by factoring out the whole binary search
   // stuff.
@@ -172,6 +200,29 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
     }
   }
 
+  // A `SetOfIntervals` (the result of, for example, a comparison that was
+  // evaluated using binary search) stores one boolean per row. Its comparison
+  // with another `SetOfIntervals` or a boolean constant is computed directly
+  // on the intervals.
+  //
+  // NOTE: A `SetOfIntervals` is never the first argument when the second
+  // argument is a constant (see `AreComparable`).
+  if constexpr (StoresBoolean<S1> && StoresBoolean<S2>) {
+    return compareSetsOfIntervals<Comp>(value1, value2);
+  } else if constexpr (ad_utility::isSimilar<S1, Id> && StoresBoolean<S2>) {
+    if (value1.getDatatype() == Datatype::Bool) {
+      // The constant is a set that contains either all rows or none.
+      ad_utility::SetOfIntervals constant{{}, value2.size()};
+      if (value1.getBool()) {
+        constant =
+            ad_utility::SetOfIntervals::Complement{}(std::move(constant));
+      }
+      return compareSetsOfIntervals<Comp>(constant, value2);
+    }
+  }
+
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.reserve(resultSize);
   auto [generatorA, generatorB] =
       getGenerators(AD_FWD(value1), AD_FWD(value2), resultSize, context);
   auto itA = generatorA.begin();
@@ -202,16 +253,6 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
   } else {
     return result;
   }
-}
-
-// The relational comparisons like `less than` are not useful for booleans and
-// thus currently throw an exception.
-CPP_template(Comparison, typename A,
-             typename B)(requires(StoresBoolean<A> || StoresBoolean<B>)) Id
-    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
-  throw std::runtime_error(
-      "Relational expressions like <, >, == are currently not supported for "
-      "boolean arguments");
 }
 
 CPP_template(Comparison Comp, typename A,
@@ -296,9 +337,8 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // TODO<joka921> Check that the language string doesn't contain a datatype
     // etc.
     // TODO<joka921> Is this even allowed by the grammar?
-    return LangFilterData{
-        std::move(optVar.value()),
-        {std::string{asStringViewUnsafe(langPtr->value().getContent())}}};
+    return LangFilterData{std::move(optVar.value()),
+                          {std::string{langPtr->value().getContent()}}};
   };
 
   const auto& child1 = children_[0];
@@ -605,7 +645,7 @@ InExpression::getLanguageFilterExpression() const {
     if (!langPtr) {
       return std::nullopt;
     }
-    languages.emplace(asStringViewUnsafe(langPtr->value().getContent()));
+    languages.emplace(langPtr->value().getContent());
   }
 
   return LangFilterData{std::move(optVar.value()), std::move(languages)};

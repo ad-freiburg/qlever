@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "util/CompilerWarnings.h"
 #include "util/GTestHelpers.h"
 #include "util/Generator.h"
 #include "util/Generators.h"
@@ -100,6 +101,13 @@ TEST(Generators, generatorFromActionWithCallbackCreatesProperGenerator) {
   EXPECT_EQ(counter, 3);
 }
 
+// GCC 13 produces false-positive `-Warray-bounds` and `-Wstringop-overflow`
+// warnings for the message construction of an `AD_CORRECTNESS_CHECK` in
+// `generatorFromActionWithCallback` when it is inlined into the following test
+// (only when compiled with the precompiled headers of the unit tests).
+DISABLE_ARRAY_BOUNDS_WARNINGS
+DISABLE_STRINGOP_OVERFLOW_WARNINGS
+
 // Test that in `generatorFromActionWithCallback` the inner and outer thread
 // run mutually exclusive.
 TEST(Generators, generatorFromActionWithCallbackThreadSafety) {
@@ -119,6 +127,8 @@ TEST(Generators, generatorFromActionWithCallbackThreadSafety) {
   }
   EXPECT_EQ(counter, 2 * numValues);
 }
+GCC_REENABLE_WARNINGS
+GCC_REENABLE_WARNINGS
 
 // _____________________________________________________________________________
 TEST(Generators, generatorFromActionWithCallbackAbortsProperly) {

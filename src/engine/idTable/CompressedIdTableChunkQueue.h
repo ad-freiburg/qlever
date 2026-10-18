@@ -60,14 +60,16 @@ namespace ad_utility::compressedIdTable {
 //
 // THREAD SAFETY: All the state of this queue is confined to a strand of its
 // own, onto which its operations schedule themselves, so they may be initiated
-// from anywhere. Nothing ever blocks that strand, as the compression, the
-// decompression and the I/O all run on the `ioExecutor`.
+// from anywhere. Nothing ever blocks that strand, as the compression and the
+// writes run on the `ioExecutor`, and the reads and the decompression are left
+// to the consumer, see `deferSpilledBlock`.
 //
 // LIFETIME: This queue and its spill file have to outlive every operation of
 // them that is in flight. The operations of this class itself use a raw `this`
 // and rely on the `CompressedIdTableBlockStorage`, whose operations hold a
 // `shared_ptr` to the queue for their whole duration. The spill file is shared
-// with the I/O that runs on the `ioExecutor` and may outlive the queue.
+// with the writes that run on the `ioExecutor` and with the readers of the
+// deferred blocks, and may outlive the queue.
 template <size_t NumCols = 0>
 class ChunkQueue : public NoCopyNoMove,
                    public std::enable_shared_from_this<ChunkQueue<NumCols>> {
@@ -75,6 +77,7 @@ class ChunkQueue : public NoCopyNoMove,
   using Block = IdTableStatic<NumCols>;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
+  using DeferredBlock = parallelBlockMerge::DeferredBlock<Block>;
   using Strand = parallelBlockMerge::Strand;
 
  private:
@@ -117,14 +120,14 @@ class ChunkQueue : public NoCopyNoMove,
   bool wasFinished_ = false;
 
  public:
-  // Construct from the `ioExecutor` on which the compression, the
-  // decompression and the I/O are run and from which the strand of this queue
-  // is derived, the `allocator` for the blocks that are read back, the name of
-  // the file to spill to (which is overwritten if it already exists and deleted
-  // again as soon as this queue is done with it), the `compressionLevel` that
-  // the spilled blocks are stored with, and the number of blocks that are kept
-  // in memory before this queue starts spilling. That number may be zero, in
-  // which case every block is spilled.
+  // Construct from the `ioExecutor` on which the compression and the writes
+  // are run and from which the strand of this queue is derived, the `allocator`
+  // for the blocks that are read back, the name of the file to spill to (which
+  // is overwritten if it already exists and deleted again as soon as this queue
+  // is done with it), the `compressionLevel` that the spilled blocks are stored
+  // with, and the number of blocks that are kept in memory before this queue
+  // starts spilling. That number may be zero, in which case every block is
+  // spilled.
   ChunkQueue(net::any_io_executor ioExecutor, AllocatorWithLimit<Id> allocator,
              std::string filename,
              CompressedBlockFile::CompressionLevel compressionLevel,
@@ -141,16 +144,22 @@ class ChunkQueue : public NoCopyNoMove,
   // it if this queue already buffers `maxBufferedBlocks` blocks. Complete with
   // whether the block was stored at all, see
   // `BlockStorageConcept::storeBlock`.
+  //
+  // If `mayKeepInMemory` is `false`, then the `block` is spilled even if this
+  // queue has room for it.
   template <typename CompletionToken>
-  auto storeBlock(OptionalBlock block, CompletionToken&& completionToken) {
+  auto storeBlock(OptionalBlock block, bool mayKeepInMemory,
+                  CompletionToken&& completionToken) {
     return net::co_spawn(
         strand_,
-        [](ChunkQueue* self, OptionalBlock block) -> net::awaitable<bool> {
+        [](ChunkQueue* self, OptionalBlock block,
+           bool mayKeepInMemory) -> net::awaitable<bool> {
           AD_CORRECTNESS_CHECK(self->strand_.running_in_this_thread());
           // The end-of-chunk sentinel is never spilled, because it occupies no
           // memory and the consumer needs it to make progress.
           if (!block.has_value() ||
-              self->numBlocksInMemory_ < self->maxBufferedBlocks_) {
+              (mayKeepInMemory &&
+               self->numBlocksInMemory_ < self->maxBufferedBlocks_)) {
             self->enqueueBlockWithoutSpilling(std::move(block));
             co_return true;
           }
@@ -159,13 +168,14 @@ class ChunkQueue : public NoCopyNoMove,
           // co_await`.
           bool wasStored = co_await self->spillBlock(std::move(block).value());
           co_return wasStored;
-        }(this, std::move(block)),
+        }(this, std::move(block), mayKeepInMemory),
         AD_FWD(completionToken));
   }
 
-  // Remove the front of this queue, reading it back from the file if it was
-  // spilled, and suspend if this queue is currently empty, see
-  // `BlockStorageConcept::getBlock`.
+  // Remove the front of this queue, and suspend if this queue is currently
+  // empty, see `BlockStorageConcept::getBlock`. A block that was spilled is
+  // handed out as a `DeferredBlock` that reads it back from the file, see
+  // `deferSpilledBlock`.
   template <typename CompletionToken>
   auto getBlock(CompletionToken&& completionToken) {
     return net::co_spawn(strand_, getBlockImpl(), AD_FWD(completionToken));
@@ -218,11 +228,8 @@ class ChunkQueue : public NoCopyNoMove,
       co_return GetResult::cancelled();
     }
     if (std::holds_alternative<BlockMetadata>(entry)) {
-      // See the NOTE at `storeBlock` for why this is not `co_return
-      // co_await`.
-      GetResult result =
-          co_await readSpilledBlock(std::get<BlockMetadata>(std::move(entry)));
-      co_return result;
+      co_return GetResult::fromDeferredBlock(
+          deferSpilledBlock(std::get<BlockMetadata>(std::move(entry))));
     }
     OptionalBlock block = std::get<OptionalBlock>(std::move(entry));
     if (!block.has_value()) {
@@ -283,29 +290,30 @@ class ChunkQueue : public NoCopyNoMove,
     co_return true;
   }
 
-  // The body of `getBlockImpl` for an entry that was spilled: read that block
-  // back from the file of this queue on the `ioExecutor_`.
-  net::awaitable<GetResult> readSpilledBlock(BlockMetadata metadata) {
-    // NOTE: A spilled entry can only exist if this queue has a file, and that
-    // file is passed on as a `shared_ptr`, so finishing this queue concurrently
-    // cannot delete it while it is being read.
+  // The body of `getBlockImpl` for an entry that was spilled: return a
+  // `DeferredBlock` that reads that block back from the file of this queue
+  // when it is materialized. The read is deliberately *not* done here, but left
+  // to the consumer, which thereby can read several consecutive blocks
+  // concurrently, see `parallelBlockMerge::DeferredBlock`.
+  //
+  // NOTE: The reader shares the file of this queue, which is therefore only
+  // deleted once the last reader is gone, even if this queue is finished
+  // before. The consumer (see `detail::BlockPrefetcher`) materializes and
+  // destroys the reader on its executor, so that expensive deletion never runs
+  // on `strand_`, see the IMPORTANT note at `finish`.
+  //
+  // PRECONDITION: This runs on `strand_`.
+  DeferredBlock deferSpilledBlock(BlockMetadata metadata) const {
+    // NOTE: A spilled entry can only exist if this queue has a file.
     AD_CORRECTNESS_CHECK(spillFile_ != nullptr);
-    // NOTE: A named variable and not a temporary, see the NOTE at `spillBlock`.
-    auto readFromFile = [file = spillFile_, metadata = std::move(metadata),
-                         allocator = allocator_] {
-      // NOTE: This runs on the plain `ioExecutor_` and may therefore
-      // overlap with other reads and with a write of the same file, which
-      // is safe, because a `CompressedBlockFile` synchronizes its
-      // operations internally.
-      //
-      // NOTE: The block is wrapped in an `std::optional`, because
-      // `runFunctionOnExecutor` requires a default-constructible result and
-      // an `IdTable` is not default-constructible.
-      return OptionalBlock{readBlock<NumCols>(*file, metadata, allocator)};
-    };
-    OptionalBlock block = co_await runFunctionOnExecutor(
-        ioExecutor_, std::move(readFromFile), net::use_awaitable);
-    co_return GetResult::fromBlock(std::move(block).value());
+    return DeferredBlock::fromReader([file = spillFile_,
+                                      metadata = std::move(metadata),
+                                      allocator = allocator_]() -> Block {
+      // NOTE: This may run concurrently with other reads and with a write
+      // of the same file, which is safe, because a `CompressedBlockFile`
+      // synchronizes its operations internally.
+      return readBlock<NumCols>(*file, metadata, allocator);
+    });
   }
 
   // Return the file that this queue spills to, creating it if this is its first

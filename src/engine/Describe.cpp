@@ -216,15 +216,16 @@ IdTable Describe::getIdsToDescribe(const Result& result,
                     getIndex(), localVocab));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
-      // the WHERE clause to `idsToDescribe`.
+      // the WHERE clause to `idsToDescribe`. Unbound values (e.g. from an
+      // `OPTIONAL` or `UNDEF` in a `VALUES` clause) have nothing to describe.
       const auto& var = std::get<Variable>(resource);
       auto column = subtree_->getVariableColumnOrNullopt(var);
       if (!column.has_value()) {
         continue;
       }
-      for (Id id : result.idTableView().getColumn(column.value())) {
-        idsToDescribe.insert(id);
-      }
+      ql::ranges::copy_if(result.idTableView().getColumn(column.value()),
+                          std::inserter(idsToDescribe, idsToDescribe.end()),
+                          Id::isDefinedL);
     }
   }
 

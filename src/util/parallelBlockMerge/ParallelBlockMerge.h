@@ -211,8 +211,8 @@ auto parallelBlockMergeToSink(
       detail::ParallelMergeState<moveElements, Input, Comparator, Sink>;
   AD_CONTRACT_CHECK(static_cast<bool>(executor),
                     "The executor of a parallel block merge must not be empty");
-  auto chunkBoundaries =
-      computeChunkBoundaries(input, comparator, options.targetNumChunks());
+  auto chunkBoundaries = computeChunkBoundaries(
+      input, comparator, options.targetNumChunks(), options.firstChunkSize);
   size_t numChunks = chunkBoundaries.size();
   size_t maxNumChunksInFlight = options.numChunksInFlight(numChunks);
   // NOTE: The input, the comparator, the options, the cancellation handle, and
@@ -236,7 +236,7 @@ auto parallelBlockMergeToSink(
 // The `storageFactory` decides where the finished output blocks live between
 // the producer of a chunk and the consumer, see the `BlockStorageConcept`. A
 // storage that keeps them in memory (see
-// `test/parallelBlockMerge/InMemoryBlockStorage.h`) makes a producer whose
+// `util/parallelBlockMerge/InMemoryBlockStorage.h`) makes a producer whose
 // chunk is far ahead of the consumer suspend, whereas one that spills them to
 // disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it run
 // ahead.
