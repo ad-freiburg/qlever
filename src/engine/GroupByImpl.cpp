@@ -219,7 +219,7 @@ class LazyGroupByRange
     // context, that have the values of the `currentGroupBlock` in the
     // correct columns.
     IdTable idTable{inWidth_, ad_utility::makeAllocatorWithLimit<Id>(
-                                  1_B * sizeof(Id) * inWidth_)};
+                                  1_B * BYTES_PER_ID_COLUMN_ENTRY * inWidth_)};
     idTable.emplace_back();
     for (const auto& [colIdx, value] : currentGroupBlock_) {
       idTable.at(0, colIdx) = value;
@@ -504,7 +504,7 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
+  IdRef resultEntry = result->operator()(resultRow, resultColumn);
 
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.

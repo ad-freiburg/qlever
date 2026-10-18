@@ -665,16 +665,6 @@ FetchContent_Declare(
 )
 
 
-if (USE_PARALLEL)
-    include(FindOpenMP)
-    if (OPENMP_FOUND)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-        add_compile_definitions(_PARALLEL_SORT)
-    endif ()
-endif ()
-
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
     add_compile_definitions(_QLEVER_NO_TIMING_TESTS)
