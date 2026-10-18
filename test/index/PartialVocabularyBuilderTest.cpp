@@ -117,8 +117,8 @@ class MockIndex {
     ProcessedTriple result;
     if (triple.object_.isLiteral() &&
         triple.object_.getLiteral().hasLanguageTag()) {
-      result.langtag_ = std::string(
-          asStringViewUnsafe(triple.object_.getLiteral().getLanguageTag()));
+      result.langtag_ =
+          std::string(triple.object_.getLiteral().getLanguageTag());
     }
     result.triple_ =
         Triple{std::move(triple.subject_), std::move(triple.predicate_),

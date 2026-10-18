@@ -159,7 +159,7 @@ nlohmann::json DeltaTriples::vacuum(
         [isInternal, this, &removeFromAllPermutations,
          deletions = std::move(deletions),
          insertions = std::move(insertions)]() {
-          auto& state = getState<isInternal>();
+          auto& state = getState<isInternal.value>();
           removeFromAllPermutations(deletions, state.triplesDeleted_,
                                     isInternal);
           removeFromAllPermutations(insertions, state.triplesInserted_,
@@ -260,8 +260,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
           AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
           return std::move(optionalPredicate.value().getIri());
         });
-    auto langtag =
-        asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag());
+    auto langtag = optionalLiteralOrIri.value().getLanguageTag();
     auto specialPredicate = predicate.withLanguageTag(langtag);
     Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
                              index_, localVocab_);

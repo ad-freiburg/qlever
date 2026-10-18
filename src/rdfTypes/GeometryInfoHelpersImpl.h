@@ -76,7 +76,7 @@ static_assert(isVector<Collection<CoordType>>);
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
-  return std::string{asStringViewUnsafe(lit.getContent())};
+  return std::string{lit.getContent()};
 }
 
 // Adds quotation marks and the `geo:wktLiteral` datatype to a given string
@@ -91,10 +91,11 @@ inline std::string addDatatype(const std::string_view wkt) {
 // Tries to extract the geometry type and parse the geometry given by a WKT
 // literal with quotes and datatype using `pb_util`. The coordinates are
 // projected to `projCrs` while parsing (from the CRS named by the IRI at the
-// start of the literal, or CRS84 if there is no such IRI). If `strict` is set,
-// invalid WKT throws a `WKTParseException` instead of being parsed leniently.
-inline ParseResult parseWkt(const std::string_view& wkt,
-                            CRSType projCrs = defaultCrs, bool strict = false) {
+// start of the literal, or CRS84 if there is no such IRI). The WKT is parsed
+// in the strict mode of `pb_util`: invalid WKT throws a `WKTParseException`.
+inline ParseResult parseWktOrThrow(const std::string_view& wkt,
+                                   CRSType projCrs = defaultCrs) {
+  constexpr bool strict = true;
   auto wktLiteral = removeDatatype(wkt);
   auto c = wktLiteral.c_str();
   std::optional<ParsedWkt> parsed = std::nullopt;
@@ -166,19 +167,12 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       default:
-        if (strict) {
-          throw WKTParseException("Unsupported WKT geometry type");
-        }
-        break;
+        throw WKTParseException("Unsupported WKT geometry type");
     }
   } catch (const WKTParseException&) {
-    // Report invalid WKT to the caller.
-    //
-    // NOTE: `pb_util` throws this exception only in strict mode. Should a
-    // future version throw it in lenient mode too, the check makes that
-    // visible instead of silently treating it like any other parse error
-    // in the handler below.
-    AD_CORRECTNESS_CHECK(strict);
+    // Report invalid WKT to the caller (`WKTParseException` is derived from
+    // `std::runtime_error`, so without this handler it would be swallowed by
+    // the one below).
     throw;
   } catch (const std::runtime_error& error) {
     AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
@@ -193,6 +187,21 @@ inline ParseResult parseWkt(const std::string_view& wkt,
     crsType = CRSType::UNSUPPORTED;
   }
   return ParseResult{std::move(parsed), type, projCrs, crsType};
+}
+
+// Like `parseWktOrThrow`, but invalid WKT yields a `ParseResult` without a
+// geometry instead of throwing. In SPARQL, this corresponds to an expression
+// error, see GeoSPARQL 1.1, Section 10.9.1.
+inline ParseResult parseWkt(const std::string_view& wkt,
+                            CRSType projCrs = defaultCrs) {
+  try {
+    return parseWktOrThrow(wkt, projCrs);
+  } catch (const WKTParseException& error) {
+    AD_LOG_DEBUG << "Invalid WKT literal `" << wkt << "`: " << error.what()
+                 << std::endl;
+    return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
+                       CRSType::UNSUPPORTED};
+  }
 }
 
 // Convert a point from `pb_util` to a `GeoPoint`
@@ -288,6 +297,29 @@ inline constexpr auto SF_WKT_TYPE_IRI = []() {
 inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   if (type < 8) {
     return SF_WKT_TYPE_IRI.at(type);
+  }
+  return std::nullopt;
+}
+
+namespace detail::crsStrings {
+constexpr inline std::string_view crs84 =
+    "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
+constexpr inline std::string_view wgs84 =
+    "http://www.opengis.net/def/crs/EPSG/0/4326";
+constexpr inline std::string_view webMerc =
+    "http://www.opengis.net/def/crs/EPSG/0/3857";
+}  // namespace detail::crsStrings
+inline constexpr auto CRS_TYPE_IRI = []() {
+  using namespace detail::crsStrings;
+  return std::array<std::optional<std::string_view>, 4>{
+      std::nullopt,  // Invalid CRS
+      crs84, wgs84, webMerc};
+}();
+
+// Lookup the IRI for a given CRS type in the array of prepared IRIs.
+inline std::optional<std::string_view> crsTypeToIri(uint16_t type) {
+  if (type < CRS_TYPE_IRI.size()) {
+    return CRS_TYPE_IRI.at(type);
   }
   return std::nullopt;
 }
