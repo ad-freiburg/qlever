@@ -3381,6 +3381,59 @@ TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
                            h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
 }
 
+// Test that a join that is pushed into the children of a `UNION` at the root
+// of a subquery does not join on the variables that the subquery hides.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3688.
+TEST(QueryPlanner, distributiveJoinInUnionKeepsHiddenVariablesHidden) {
+  // With `strip-columns` disabled, the `UNION` (the root of the subquery) only
+  // hides `?z`, which is still visible in its children. The join that is pushed
+  // into the children must not join on this `?z`.
+  auto cleanupDistributive =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  auto cleanupStrip =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+  auto qec = ad_utility::testing::getQec("<a> <b> <c> . <a> <b> <d> .");
+
+  // Plan `SELECT * { { SELECT ?x ?q { <left> UNION <right> } } ?x ?q ?z }` and
+  // check that every candidate plan yields `expectedSize` rows.
+  auto test = [&qec](std::string_view left, std::string_view right,
+                     size_t expectedSize,
+                     ad_utility::source_location sourceLocation =
+                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(sourceLocation);
+    QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+    auto query = parseQuery(absl::StrCat("SELECT * { { SELECT ?x ?q { ", left,
+                                         " UNION ", right, " } } ?x ?q ?z }"));
+    auto plans = qp.createExecutionTrees(query);
+
+    // Make sure that the plan with the join pushed into the `UNION` is among
+    // the candidates, so that this test actually tests something.
+    EXPECT_TRUE(ql::ranges::any_of(plans, [](const auto& plan) {
+      return std::dynamic_pointer_cast<Union>(plan._qet->getRootOperation()) !=
+             nullptr;
+    }));
+    for (const auto& plan : plans) {
+      qec->clearCacheUnpinnedOnly();
+      EXPECT_THAT(*plan._qet, h::hasVariables({"?x", "?q", "?z"}));
+      EXPECT_EQ(plan._qet->getResult()->idTableView().size(), expectedSize);
+    }
+  };
+
+  // The hidden `?z` only appears in the left or the right branch. The subquery
+  // yields `(<a>, <b>)` twice and the empty solution once, each of which is
+  // compatible with both triples.
+  test("{ ?x ?q ?z }", "{ }", 6);
+  test("{ }", "{ ?x ?q ?z }", 6);
+  // The hidden `?z` appears in both branches. The subquery yields `(<a>, <b>)`
+  // four times, each of which is compatible with both triples.
+  test("{ ?x ?q ?z }", "{ ?x ?q ?z }", 8);
+  // Same, but `?z` is bound to different columns in the two branches. The right
+  // branch yields `(<c>, <b>)` and `(<d>, <b>)`, which are compatible with
+  // neither triple.
+  test("{ ?x ?q ?z }", "{ ?z ?q ?x }", 4);
+}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
