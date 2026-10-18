@@ -51,8 +51,14 @@ namespace ad_utility::vocabulary_merger {
 // blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
 // compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
 //
-// The merging is organized as a pipeline of four threads, which communicate
-// via task queues, such that all of them can work concurrently:
+// The partial vocabularies are merged by the parallel block merge (see
+// `util/parallelBlockMerge/ParallelBlockMerge.h`) on the global thread pool:
+// the words are split into ranges by the block index of the partial
+// vocabulary files (see `index/vocabulary_merger/PartialVocabularyFile.h`),
+// each range is merged by a chunk of its own, and the merged blocks arrive in
+// the order of the vocabulary on the thread that calls this function. Behind
+// the merge, the work is organized as a pipeline of four threads, which
+// communicate via task queues, such that all of them can work concurrently:
 //
 // 1. The thread that calls `mergeVocabulary` obtains the merged words in
 //    sorted order and eliminates the duplicates (a word typically occurs in
@@ -106,9 +112,11 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
 // For each of the IdTriples in `input`: map its Ids using the `map` and
 // serialize the resulting batch of Id triples to the file `filename`, which is
-// created and closed by this function. Counterpart of `readMappedIdsFromFile`.
+// created and closed by this function. `input` is only passed by reference so
+// that the caller can reuse its memory; its contents are unspecified
+// afterwards. Counterpart of `readMappedIdsFromFile`.
 void writeMappedIdsToFile(
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
     const HashMap<uint64_t, uint64_t>& map, const std::string& filename);
 
 // Read back the Id triples that `writeMappedIdsToFile` has written to the file
@@ -134,19 +142,6 @@ void writePartialVocabularyToFile(const ItemVec& els,
  * size of the hash map
  */
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
-
-// _____________________________________________________________________________________________________________
-/**
- * @brief Sort the input in-place according to the strings as compared by the
- * StringComparator
- * @tparam A binary Function object to compare strings (e.g.
- * std::less<std::string>())
- * @param doParallelSort if true and USE_PARALLEL_SORT is true, use the gnu
- * parallel extension for sorting.
- */
-template <class StringSortComparator>
-void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
-                     bool doParallelSort);
 }  // namespace ad_utility::vocabulary_merger
 
 #include "index/VocabularyMergerImpl.h"

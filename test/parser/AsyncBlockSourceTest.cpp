@@ -8,6 +8,7 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -169,7 +170,8 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
         pool.get_executor(),
         std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
                                               filename),
-        findDigitFollowedByLetter, "a digit followed by a letter");
+        findDigitFollowedByLetter, "a digit followed by a letter", filename,
+        false);
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1'}, {'c', 'd', 'e', '2', '3'}, {'f', 'g', 'h'}};
     auto actual = drainAllBlocks(buf);
@@ -182,10 +184,18 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
         pool.get_executor(),
         std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
                                               filename),
-        findXToZ, "a letter from x to z");
+        findXToZ, "a letter from x to z", filename, false);
+    // The error names the boundary that was looked for and the input that it
+    // was not found in (see issue #3288). It must not suggest disabling
+    // parallel parsing, because this input is not parsed in parallel.
     EXPECT_THAT(
         drainBlocks(buf).errorMessage_,
-        ::testing::Optional(::testing::ContainsRegex("No statement boundary")));
+        ::testing::Optional(::testing::AllOf(
+            ::testing::HasSubstr(
+                absl::StrCat("Could not split the input \"", filename, "\"")),
+            ::testing::HasSubstr("a letter from x to z"),
+            ::testing::HasSubstr("use `--parser-buffer-size`"),
+            ::testing::Not(::testing::HasSubstr("--parallel-parsing")))));
   }
   {
     // The same example but with a larger blocksize, s.t. the complete input
@@ -195,7 +205,7 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
         pool.get_executor(),
         std::make_unique<qp::FileBlockSource>(pool.get_executor(), 100_B,
                                               filename),
-        findXToZ, "a letter from x to z");
+        findXToZ, "a letter from x to z", filename, false);
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
     auto actual = drainAllBlocks(buf);
@@ -223,7 +233,8 @@ TEST(AsyncStatementBoundaryBlockSource, LongLookahead) {
         pool.get_executor(),
         std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
                                               filename),
-        findDigitFollowedByLetter, "a digit followed by a letter");
+        findDigitFollowedByLetter, "a digit followed by a letter", filename,
+        false);
     std::vector<qp::ByteBlock> expected{{'a', 'b', 'c', 'd', 'e', 'f', '1'}};
     expected.emplace_back(2000, 'x');
     auto actual = drainAllBlocks(buf);
@@ -277,7 +288,8 @@ TEST(AsyncStatementBoundaryBlockSource,
       std::vector<ScriptedBlockSource::Step>{
           ScriptedBlockSource::Step{std::string{"boom from initial fetch"}}});
   qp::AsyncStatementBoundaryBlockSource buf(
-      pool.get_executor(), std::move(inner), findXToZ, "a letter from x to z");
+      pool.get_executor(), std::move(inner), findXToZ, "a letter from x to z",
+      "testInput", false);
   EXPECT_THAT(
       drainBlocks(buf).errorMessage_,
       ::testing::Optional(::testing::HasSubstr("boom from initial fetch")));
@@ -297,8 +309,9 @@ TEST(AsyncStatementBoundaryBlockSource, ForwardsExceptionFromPeek) {
       std::vector<ScriptedBlockSource::Step>{
           ScriptedBlockSource::Step{qp::ByteBlock{'a', 'b', 'c', 'd'}},
           ScriptedBlockSource::Step{std::string{"boom from peek"}}});
-  qp::AsyncStatementBoundaryBlockSource buf(
-      pool.get_executor(), std::move(inner), findNever, "never found");
+  qp::AsyncStatementBoundaryBlockSource buf(pool.get_executor(),
+                                            std::move(inner), findNever,
+                                            "never found", "testInput", false);
   EXPECT_THAT(drainBlocks(buf).errorMessage_,
               ::testing::Optional(::testing::HasSubstr("boom from peek")));
 }
@@ -320,7 +333,8 @@ TEST(AsyncStatementBoundaryBlockSource,
     throw std::runtime_error{"boom from findEndPosition"};
   };
   qp::AsyncStatementBoundaryBlockSource buf(
-      pool.get_executor(), std::move(inner), findThrows, "throwing finder");
+      pool.get_executor(), std::move(inner), findThrows, "throwing finder",
+      "testInput", false);
   EXPECT_THAT(
       drainBlocks(buf).errorMessage_,
       ::testing::Optional(::testing::HasSubstr("boom from findEndPosition")));

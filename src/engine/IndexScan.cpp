@@ -7,6 +7,7 @@
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_join.h>
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -115,7 +116,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
-  determineMultiplicities();
+  // NOTE: The multiplicities are determined lazily (see `getMultiplicity`),
+  // because they may depend on the size estimate, which some callers only set
+  // after construction (see `makeCopyWithPrefilteredScanSpecAndBlocks`).
 }
 
 // _____________________________________________________________________________
@@ -371,9 +374,9 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = permutation().scan(scanSpecAndBlocks_, additionalColumns(),
-                                       cancellationHandle_,
-                                       locatedTriplesState(), getLimitOffset());
+  IdTable idTable = permutation().scan(
+      scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
+      locatedTriplesState(), executor(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
@@ -415,6 +418,36 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
     return {false, permutation().numTriples()};
   }
 
+  // For a scan with a fixed first column and two variables (think `?s <p> ?o`
+  // in the PSO permutation), the number of rows is stored in the per-relation
+  // metadata, if the relation is large enough to have such an entry. Use it,
+  // as summing up the block sizes below is linear in the number of blocks of
+  // the relation, which can be large. If a block of the relation has located
+  // triples, the estimate is the same, but marked as inexact. This is also
+  // what the general case below computes, because it counts the located
+  // triples of a block as inserted and as deleted at the same time (see
+  // `LocatedTriplesPerBlock::numTriples`). Prefiltered scans and small
+  // relations that share a block with other relations (and hence have no
+  // metadata entry) use the general case.
+  if (numVariables() == 2 && !scanSpecAndBlocksIsPrefiltered_) {
+    const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
+    AD_CORRECTNESS_CHECK(col0Id.has_value());
+    auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
+    if (metadata.has_value()) {
+      const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
+      AD_CORRECTNESS_CHECK(ql::ranges::begin(blocks) !=
+                           ql::ranges::end(blocks));
+      size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
+      size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
+      bool hasLocatedTriples =
+          permutation()
+              .getLocatedTriplesForPermutation(locatedTriplesState())
+              .containsLocatedTriplesInBlockRange(firstBlockIndex,
+                                                  lastBlockIndex);
+      return {!hasLocatedTriples, metadata->numRows_};
+    }
+  }
+
   // For other scans, sum up the size estimates for each block.
   //
   // NOTE: Starting from C++20, we could use `std::midpoint` to compute the
@@ -439,23 +472,89 @@ size_t IndexScan::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void IndexScan::determineMultiplicities() {
-  multiplicity_ = [this]() -> std::vector<float> {
-    const auto& idx = getIndex();
-    if (numVariables_ == 0) {
-      return {};
-    } else if (numVariables_ == 1) {
-      // There are no duplicate triples in RDF and two elements are fixed.
-      return {1.0f};
-    } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
+std::vector<float> IndexScan::computeMultiplicitiesForIndex() const {
+  const auto& idx = getIndex();
+  std::vector<float> result;
+  if (numVariables_ == 1) {
+    // There are no duplicate triples in RDF and two elements are fixed.
+    result = {1.0f};
+  } else if (numVariables_ == 2) {
+    result = idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
                                    locatedTriplesState());
+  } else if (numVariables_ == 3) {
+    result = idx.getMultiplicities(permutation());
+  }
+  result.resize(result.size() + additionalColumns_.size(), 1.0f);
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<float> IndexScan::computeMultiplicitiesForView(
+    const MaterializedView& view) const {
+  // View statistics differ from the index statistics (duplicate rows, data in
+  // additional columns), so estimate a column's multiplicity as the number of
+  // rows of the scan divided by its number of distinct values in the view.
+  auto numRows = static_cast<float>(sizeEstimate_);
+
+  // With a fixed first column, the relation metadata has the exact number of
+  // rows and the exact multiplicity of the second column. Use the exact number
+  // of rows, unless the scan is prefiltered (then it has fewer rows than the
+  // relation, so use its size estimate, which for a small relation can still
+  // exceed the relation). Only for a small relation (computed on demand) is
+  // the third column's multiplicity also exact, the stored one of a large
+  // relation is a copy of the second's.
+  //
+  // NOTE: The size estimate of a small relation (one that shares its block
+  // with other relations) is a fixed fraction of the block size (see
+  // `small-index-scan-size-estimate-divisor`) and can be much smaller than the
+  // relation.
+  std::optional<CompressedRelationMetadata> relation;
+  bool isSmallRelation = false;
+  if (numVariables_ == 2) {
+    Id col0Id = scanSpecAndBlocks_.scanSpec_.col0Id().value();
+    isSmallRelation =
+        !permutation().metaData().getMetaDataIfPresent(col0Id).has_value();
+    relation = permutation().getMetadata(col0Id, locatedTriplesState());
+    // No metadata means that the relation (and thus the scan) is empty.
+    if (!relation.has_value()) {
+      numRows = 0.0f;
+    } else if (scanSpecAndBlocksIsPrefiltered_) {
+      numRows =
+          std::min(numRows, static_cast<float>(relation.value().numRows_));
     } else {
-      AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation());
+      numRows = static_cast<float>(relation.value().numRows_);
     }
-  }();
-  multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
+  }
+
+  auto multiplicity = [&](ColumnIndex col) {
+    if (relation.has_value() && col == 1) {
+      return relation.value().getCol1Multiplicity();
+    }
+    if (relation.has_value() && col == 2 && isSmallRelation) {
+      return relation.value().getCol2Multiplicity();
+    }
+    auto numDistinct = view.numDistinct(col).value_or(0);
+    return numDistinct == 0
+               ? 1.0f
+               : std::max(1.0f, numRows / static_cast<float>(numDistinct));
+  };
+
+  // The (unstripped) result consists of the last `numVariables_` of the first
+  // three columns of the view, followed by the additional columns.
+  std::vector<float> result;
+  for (ColumnIndex col = 3 - numVariables_; col < 3; ++col) {
+    result.push_back(multiplicity(col));
+  }
+  ql::ranges::transform(additionalColumns_, std::back_inserter(result),
+                        multiplicity);
+  return result;
+}
+
+// _____________________________________________________________________________
+void IndexScan::determineMultiplicities() {
+  auto view = permutation().materializedView();
+  multiplicity_ = view != nullptr ? computeMultiplicitiesForView(*view)
+                                  : computeMultiplicitiesForIndex();
 
   if (varsToKeep_.has_value()) {
     std::vector<float> actualMultiplicites;
@@ -520,7 +619,7 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
   auto lazyScanAllCols = permutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
-      cancellationHandle_, locatedTriplesState(), getLimitOffset());
+      cancellationHandle_, locatedTriplesState(), executor(), getLimitOffset());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
       ad_utility::CachingTransformInputRange{
@@ -599,8 +698,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange
-IndexScan::lazyScanForJoinOfColumnWithScan(
-    ql::span<const Id> joinColumn) const {
+IndexScan::lazyScanForJoinOfColumnWithScan(ConstIdColumnRef joinColumn) const {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
 
@@ -869,6 +967,21 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
 }
 
 // _____________________________________________________________________________
+Result::LazyResult IndexScan::chunkedIndexScanWithRuntimeInfo(
+    size_t numBlocksAll) {
+  using enum RuntimeInformation::SendPriority;
+  auto scan = makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
+      getLazyScan());
+  scan->details().numBlocksAll_ = numBlocksAll;
+  updateRuntimeInfoForLazyScan(scan->details(), Always);
+  return Result::LazyResult{ad_utility::CachingTransformInputRange(
+      *scan, [this, scan](auto& table) mutable {
+        updateRuntimeInfoForLazyScan(scan->details(), IfDue);
+        return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+      })};
+}
+
+// _____________________________________________________________________________
 Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
@@ -880,19 +993,8 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
        metadata = LazyScanMetadata{}]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
-          auto scan =
-              makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
-                  getLazyScan());
-          scan->details().numBlocksAll_ =
-              getMetadataForScan().value().sizeBlockMetadata_;
-          updateRuntimeInfoForLazyScan(scan->details(), Always);
-          return LoopControl::breakWithYieldAll(
-              ad_utility::CachingTransformInputRange(
-                  *scan, [this, scan](auto& table) mutable {
-                    updateRuntimeInfoForLazyScan(scan->details(), IfDue);
-                    return Result::IdTableVocabPair{std::move(table),
-                                                    LocalVocab{}};
-                  }));
+          return LoopControl::breakWithYieldAll(chunkedIndexScanWithRuntimeInfo(
+              state->metaBlocks_.sizeBlockMetadata_));
         }
 
         auto& pendingBlocks = state->pendingBlocks_;
@@ -945,11 +1047,25 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
             Result::LazyResult{}};
   }
 
+  // `getLazyScan` ignores prefiltered blocks for a scan with a LIMIT or OFFSET,
+  // so read such a scan once and pass the input through unfiltered.
+  if (!getLimitOffset().isUnconstrained()) {
+    return {std::move(input), chunkedIndexScanWithRuntimeInfo(
+                                  metaBlocks.value().sizeBlockMetadata_)};
+  }
+
   auto state = makeShared<SharedGeneratorState>(
       SharedGeneratorState{std::move(input), joinColumn,
                            std::move(metaBlocks.value()), filterJoinSide});
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<IndexScan> IndexScan::getIfSupportsPrefilteredJoin(
+    const QueryExecutionTree& tree) {
+  auto scan = std::dynamic_pointer_cast<IndexScan>(tree.getRootOperation());
+  return scan && scan->numVariables() > 0 ? scan : nullptr;
 }
 
 // _____________________________________________________________________________
@@ -999,24 +1115,37 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
   // Check if all variables required for the `BIND` expression are covered by
   // this `IndexScan`.
-  const auto& visibleVars = computePermutationColumnIndices();
+  //
+  // NOTE: `scanColumns` also contains columns that are hidden (e.g. by a
+  // subquery). This is fine, because
+  // `QueryExecutionTree::makeTreeWithBindColumn` already refuses a `BIND` whose
+  // expression uses a hidden variable, and it also hides the hidden variables
+  // again in the new tree that we construct from scratch below.
+  const auto& scanColumns = computePermutationColumnIndices();
   bool allVarsCovered = ql::ranges::all_of(
       bind._expression.containedVariables(),
-      [&visibleVars](const auto* v) { return visibleVars.contains(*v); });
+      [&scanColumns](const auto* v) { return scanColumns.contains(*v); });
   if (!allVarsCovered) {
     return std::nullopt;
   }
 
-  // Check that the target variable of the `BIND` is not used already by this
-  // `IndexScan`.
-  if (visibleVars.contains(bind._target)) {
+  // Check that the target variable of the `BIND` is not read already by this
+  // `IndexScan`, not even into a column that is stripped away or hidden by a
+  // subquery.
+  auto isTarget = [&bind](const auto& var) { return var == bind._target; };
+  if (ql::ranges::any_of(getPermutedTriple(),
+                         [&isTarget](const TripleComponent* component) {
+                           return component->isVariable() &&
+                                  isTarget(component->getVariable());
+                         }) ||
+      ql::ranges::any_of(additionalVariables_, isTarget)) {
     return std::nullopt;
   }
 
   // Check the `BIND` cache of the underlying `MaterializedView` for the `BIND`
   // expression's cache key.
   auto targetCol =
-      view->lookupBindTargetColumn(bind._expression.getCacheKey(visibleVars));
+      view->lookupBindTargetColumn(bind._expression.getCacheKey(scanColumns));
   if (!targetCol.has_value()) {
     return std::nullopt;
   }
@@ -1108,7 +1237,9 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
   VariableToColumnMap map;
-  const auto& varToColInResult = getExternallyVisibleVariableColumns();
+  // NOTE: The internally visible variables also contain the variables that are
+  // hidden if this scan is the root of a subquery.
+  const auto& varToColInResult = getInternallyVisibleVariableColumns();
 
   auto addVar = [this, &varToColInResult, &map](const Variable& var,
                                                 ColumnIndex col) {

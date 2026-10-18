@@ -10,6 +10,7 @@
 #include <array>
 #include <stdexcept>
 
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -301,9 +302,14 @@ template <typename S>
 constexpr bool usesAlignedSerialization =
     detail::UsesAlignedSerializationImpl<std::decay_t<S>>::value;
 
-// Concept for serializers that support zero-copy reads by providing direct
-// access to the underlying buffer.
-// Note: The concept currently only checks for the existence of the functions,
+// Concept for serializers that provide direct access to the underlying buffer
+// (`getSpanToBytes`), so that bytes can be read without copying them. This is
+// enough for zero-copy reads of data without alignment requirements, see
+// `zeroCopyDeserializeToStringView` in `SerializeString.h`. For the zero-copy
+// reads of trivially serializable values, which have to be aligned, see
+// `ZeroCopyReadSerializer` below.
+//
+// NOTE: The concept currently only checks for the existence of the functions,
 // but leaves the return types unchecked, because the syntax in C++17 mode for
 // those checks is very very verbose.
 template <typename S>
@@ -313,10 +319,18 @@ CPP_requires(zeroCopyReadSerializerRequires,
                                        s.getCurrentPosition(), s.skip(numBytes),
                                        concepts::requires_<ReadSerializer<S>>));
 
+// The concept for the requirements above.
+template <typename S>
+CPP_concept SpanReadSerializer =
+    ReadSerializer<S> && CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+
+// Concept for serializers that support zero-copy reads of trivially
+// serializable values, which additionally requires that the serializer uses
+// aligned serialization (see `zeroCopyDeserializeToSpan` in
+// `SerializeVector.h`).
 template <typename S>
 CPP_concept ZeroCopyReadSerializer =
-    ReadSerializer<S> && usesAlignedSerialization<S> &&
-    CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+    SpanReadSerializer<S> && usesAlignedSerialization<S>;
 
 // Concept that checks whether a type `T` provides a static
 // `fromZeroCopyDeserializer(S&)` factory for the zero-copy read serializer `S`.
@@ -339,7 +353,7 @@ CPP_template(typename T, typename S)(
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       static constexpr std::array<char, alignment> zeros = {0};
       serializer.serializeBytes(zeros.data(), padding);
@@ -355,7 +369,7 @@ CPP_template(typename T, typename S)(
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       serializer.skip(padding);
     }
@@ -370,7 +384,9 @@ CPP_template(typename T, typename S)(
 // NOTE: The `serializer` has to support `get/setSerializationPosition`, which
 // not all `WriteSerializer`s do. For a `BufferedWriteSerializer` (which cannot
 // simply seek, because a part of the data might still be sitting in its
-// buffer) there is a dedicated overload in `BufferedSerializer.h`.
+// buffer) there is a dedicated overload in `BufferedSerializer.h`, and for a
+// `ByteBufferWriteSerializer` (which has no seekable position, but a buffer
+// that can be patched in place) in `ByteBufferSerializer.h`.
 CPP_template(typename S, typename T)(
     requires WriteSerializer<S>) void serializeAtPosition(S& serializer,
                                                           uint64_t position,

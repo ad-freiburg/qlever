@@ -18,6 +18,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
@@ -32,7 +33,7 @@ using namespace deltaTriplesTestHelpers;
 using ad_utility::testing::encodedIriManager;
 
 constexpr auto iri = [](std::string_view s) -> TripleComponent {
-  return TripleComponent{TripleComponent::Iri::fromIriref(s)};
+  return TripleComponent{ad_utility::testing::iri(s)};
 };
 
 constexpr auto lit = [](std::string s) -> TripleComponent {
@@ -437,9 +438,12 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   auto a = iri("<a>");
   auto b = iri("<b>");
   auto lp = iri(LANGUAGE_PREDICATE);
-  auto de = TripleComponent{ad_utility::convertLangtagToEntityUri("de")};
-  auto en = TripleComponent{ad_utility::convertLangtagToEntityUri("en")};
-  auto es = TripleComponent{ad_utility::convertLangtagToEntityUri("es")};
+  auto de =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("de")};
+  auto en =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("en")};
+  auto es =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("es")};
   EXPECT_THAT(deltaTriples,
               TriplesAre({{a, b, TripleComponent{1}},
                           {a, b, lit("\"abc\"")},

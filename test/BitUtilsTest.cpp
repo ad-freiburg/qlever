@@ -8,9 +8,11 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "util/BitUtils.h"
+#include "util/GTestHelpers.h"
 
 namespace {
 using namespace ad_utility;
@@ -28,7 +30,11 @@ TEST(BitUtils, bitMaskForLowerBits) {
   ASSERT_EQ(bitMaskForLowerBits(64), std::numeric_limits<uint64_t>::max());
 
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForLowerBits(i), std::out_of_range);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        bitMaskForLowerBits(i),
+        ::testing::HasSubstr(
+            absl::StrCat("mask for more than 64 bits required, but was ", i)),
+        ad_utility::Exception);
   }
 }
 
@@ -45,8 +51,14 @@ TEST(BitUtils, bitMaskForHigherBits) {
     ASSERT_EQ(bitMaskForHigherBits(i), expected);
   }
 
+  // NOTE: `bitMaskForHigherBits` forwards `64 - i` to `bitMaskForLowerBits`,
+  // so the error message reports that (underflowed) value.
   for (size_t i = 65; i < 2048; ++i) {
-    ASSERT_THROW(bitMaskForHigherBits(i), std::out_of_range);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        bitMaskForHigherBits(i),
+        ::testing::HasSubstr(absl::StrCat(
+            "mask for more than 64 bits required, but was ", uint64_t{64} - i)),
+        ad_utility::Exception);
   }
 }
 
@@ -105,6 +117,31 @@ TEST(BitUtils, forEachSetBit) {
     return idx < 1;
   });
   EXPECT_THAT(stoppedEarly, ::testing::ElementsAre(0, 1));
+}
+
+// _____________________________________________________________________________
+TEST(BitUtils, alignUp) {
+  // An offset that already has the alignment is unchanged, everything in
+  // between is rounded up to the next multiple.
+  static_assert(alignUp(0, 8) == 0);
+  static_assert(alignUp(1, 8) == 8);
+  static_assert(alignUp(8, 8) == 8);
+  static_assert(alignUp(9, 8) == 16);
+  // An alignment of one never pads.
+  for (uint64_t offset : {uint64_t{0}, uint64_t{1}, uint64_t{12345}}) {
+    EXPECT_EQ(alignUp(offset, 1), offset);
+  }
+  // The alignment may also be large.
+  EXPECT_EQ(alignUp(1, uint64_t{1} << 40), uint64_t{1} << 40);
+
+  // An alignment that is not a power of two is a precondition violation, which
+  // is only checked if the expensive checks are enabled.
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    for (size_t alignment : {size_t{0}, size_t{3}, size_t{12}}) {
+      AD_EXPECT_THROW_WITH_MESSAGE(alignUp(16, alignment),
+                                   ::testing::HasSubstr("has_single_bit"));
+    }
+  }
 }
 
 }  // namespace

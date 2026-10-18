@@ -49,21 +49,22 @@ TEST(SparqlExpressionGenerators, resultGeneratorSetOfIntervals) {
   auto t = Id::makeFromBool(true);
   auto f = Id::makeFromBool(false);
   {
-    ad_utility::SetOfIntervals s{{{1, 3}, {3, 3}, {3, 4}, {5, 6}}};
+    ad_utility::SetOfIntervals s{{{1, 3}, {3, 3}, {3, 4}, {5, 6}}, 10};
     auto generator = sparqlExpression::detail::resultGenerator(s, 10);
     std::vector<Id> res;
     ql::ranges::copy(generator, std::back_inserter(res));
     EXPECT_THAT(res, ::testing::ElementsAre(f, t, t, t, f, t, f, f, f, f));
   }
   {
-    ad_utility::SetOfIntervals s{{{0, 3}, {3, 3}, {3, 4}, {8, 10}}};
+    ad_utility::SetOfIntervals s{{{0, 3}, {3, 3}, {3, 4}, {8, 10}}, 10};
     auto generator = sparqlExpression::detail::resultGenerator(s, 10);
     std::vector<Id> res;
     ql::ranges::copy(generator, std::back_inserter(res));
     EXPECT_THAT(res, ::testing::ElementsAre(t, t, t, t, f, f, f, f, t, t));
   }
   {
-    ad_utility::SetOfIntervals s{{{3, 11}}};
+    // The size of the set must match the requested number of elements.
+    ad_utility::SetOfIntervals s{{{3, 9}}, 9};
     auto consumeGen = [&]() {
       auto gen = sparqlExpression::detail::resultGenerator(s, 10);
       for (auto&& unused : gen) {
@@ -72,6 +73,6 @@ TEST(SparqlExpressionGenerators, resultGeneratorSetOfIntervals) {
     };
     AD_EXPECT_THROW_WITH_MESSAGE(
         consumeGen(), ::testing::HasSubstr(
-                          "exceeds the total size of the evaluation context"));
+                          "does not match the size of the evaluation context"));
   }
 }

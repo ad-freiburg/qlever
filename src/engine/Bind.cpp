@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
+#include "util/views/ChunkedIotaView.h"
 
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,
@@ -103,8 +104,8 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Bind::getChildrenImpl() const {
-  return {_subtree.get()};
+qlm::vector<QueryExecutionTree*> Bind::getChildrenImpl() const {
+  return {{_subtree.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -130,16 +131,14 @@ Result Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTableView().size() > CHUNK_SIZE) {
-      auto chunks = ::ranges::views::chunk(
-          ::ranges::views::iota(size_t{0}, subRes->idTableView().size()),
-          CHUNK_SIZE);
+      auto chunks = ad_utility::chunkedIotaView(
+          size_t{0}, subRes->idTableView().size(), CHUNK_SIZE);
       auto f = [applyBind = std::move(applyBind),
                 subRes = std::move(subRes)](const auto& chunk) {
         // Make a deep copy of the local vocab from `subRes` and then add to it
         // (in case BIND adds a new word or words).
         LocalVocab outVocab = subRes->getCopyOfLocalVocab();
-        auto start = chunk.front();
-        auto end = start + ::ranges::size(chunk);
+        auto [start, end] = chunk;
         IdTable idTable = applyBind(
             Bind::cloneSubView(subRes->idTableView(), {start, end}), &outVocab);
 
@@ -248,5 +247,23 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+  return cloneWithNewChildren({_subtree->clone()});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Bind::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Bind>(_executionContext, std::move(children.at(0)),
+                                _bind);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // This `BIND`'s expression sees the target as unbound, but after the push
+  // down it wouldn't.
+  if (_bind._expression.isVariableContained(bind._target)) {
+    return std::nullopt;
+  }
+  return pushDownBindToAnyChild(bind, {_subtree});
 }

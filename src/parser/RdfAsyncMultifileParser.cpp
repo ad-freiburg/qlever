@@ -31,11 +31,11 @@ RdfAsyncMultifileParser::RdfAsyncMultifileParser(
     const ql::any_io_executor& executor,
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
-    ad_utility::MemorySize bufferSize, bool useRelaxedParsing)
+    ad_utility::MemorySize bufferSize, RdfParserSettings settings)
     : AsyncRdfParserBase{executor},
       encodedIriManager_{encodedIriManager},
       bufferSize_{bufferSize},
-      useRelaxedParsing_{useRelaxedParsing},
+      settings_{settings},
       fileState_{FileState{std::move(files)}} {}
 
 namespace {
@@ -51,19 +51,20 @@ std::unique_ptr<AsyncRdfParserBase> makeFileParserForInnerParser(
     const ql::any_io_executor& executor,
     const qlever::InputFileSpecification& spec,
     ad_utility::MemorySize bufferSize,
-    const EncodedIriManager* encodedIriManager, TripleComponent graph) {
+    const EncodedIriManager* encodedIriManager, TripleComponent graph,
+    RdfParserSettings settings) {
   if (spec.parseInParallel_) {
     return std::make_unique<RdfAsyncParallelParser<InnerParser>>(
-        executor, spec, bufferSize, encodedIriManager, graph);
+        executor, spec, bufferSize, encodedIriManager, graph, settings);
   }
   // NOTE: The inner parser is created lazily (see `AsyncSerialParserAdapter`),
   // so that this function stays cheap.
   return std::make_unique<AsyncSerialParserAdapter>(
       executor,
-      [spec, bufferSize, encodedIriManager,
-       graph = std::move(graph)]() -> std::unique_ptr<RdfParserBase> {
+      [spec, bufferSize, encodedIriManager, graph = std::move(graph),
+       settings]() -> std::unique_ptr<RdfParserBase> {
         return std::make_unique<RdfStreamParser<InnerParser>>(
-            spec, bufferSize, encodedIriManager, graph);
+            spec, bufferSize, encodedIriManager, graph, settings);
       });
 }
 }  // namespace
@@ -82,13 +83,14 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
             std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
                                NQuadParser<TokenizerT>>;
         return makeFileParserForInnerParser<InnerParser>(
-            executor(), spec, bufferSize_, encodedIriManager_, graph);
+            executor(), spec, bufferSize_, encodedIriManager_, graph,
+            settings_);
       }};
   // The call to `callFixedSize` lifts the runtime booleans to compile-time
-  // integers, exactly like `makeSingleRdfParser` in `RdfParser.cpp` (which
-  // this function mirrors for the asynchronous parsers).
+  // integers, exactly like `makeStreamParserForSingleFile` in `RdfParser.cpp`
+  // (which this function mirrors for the asynchronous parsers).
   return ad_utility::callFixedSize(
-      std::array{useRelaxedParsing_ ? 1 : 0,
+      std::array{settings_.useRelaxedParsing_ ? 1 : 0,
                  spec.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
       makeParserImpl);
 }
@@ -158,7 +160,7 @@ void RdfAsyncMultifileParser::releaseFile(const std::shared_ptr<OpenFile>& file,
 
 // _____________________________________________________________________________
 net::awaitable<RdfAsyncMultifileParser::OptionalTriples>
-RdfAsyncMultifileParser::getBatchCoroutine() {
+RdfAsyncMultifileParser::getBatchCoroutine(std::vector<TurtleTriple> buffer) {
   for (;;) {
     // Another call has failed in the meantime, so there is nothing left to
     // parse.
@@ -183,13 +185,21 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
       absl::Cleanup release = [this, &file, &wasExhausted] {
         releaseFile(file, wasExhausted);
       };
-      auto batch = co_await file->parser_->asyncGetBatch(net::use_awaitable);
+      auto batch = co_await file->parser_->asyncGetBatch(std::move(buffer),
+                                                         net::use_awaitable);
       wasExhausted = !batch.has_value();
       if (batch.has_value()) {
         co_return batch;
       }
       // The picked file turned out to be already exhausted; try again with
-      // (possibly) another file.
+      // (possibly) another file. That call got the buffer and did not return
+      // it, so the next one starts with a fresh (empty) one. This costs one
+      // buffer per exhausted file, which only matters if there are many more
+      // files than concurrent calls and those files additionally consist of
+      // very few batches each. The buffer could in principle also be returned
+      // for an exhausted file, but that would require `asyncGetBatch` to
+      // complete with something more explicit than an `optional<vector>`,
+      // which is not worth it for now.
       continue;
     } catch (...) {
       // Only the first error is propagated to its caller, all subsequent
@@ -203,6 +213,8 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
 }
 
 // _____________________________________________________________________________
-void RdfAsyncMultifileParser::asyncGetBatchImpl(Handler handler) {
-  net::co_spawn(executor(), getBatchCoroutine(), std::move(handler));
+void RdfAsyncMultifileParser::asyncGetBatchImpl(
+    std::vector<TurtleTriple> buffer, Handler handler) {
+  net::co_spawn(executor(), getBatchCoroutine(std::move(buffer)),
+                std::move(handler));
 }

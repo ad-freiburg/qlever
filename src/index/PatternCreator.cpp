@@ -4,7 +4,9 @@
 
 #include "index/PatternCreator.h"
 
-#include <iomanip>
+#include <absl/strings/str_format.h>
+
+#include <ostream>
 
 #include "global/SpecialIds.h"
 
@@ -160,12 +162,14 @@ void PatternCreator::printStatistics(
               << " [all]" << std::endl;
   AD_LOG_INFO << "Total number of distinct subject-predicate pairs: "
               << numDistinctSubjectPredicatePairs_ << std::endl;
-  AD_LOG_INFO << "Average number of predicates per subject: " << std::fixed
-              << std::setprecision(1)
-              << patternStatistics.avgNumDistinctPredicatesPerSubject_
+  AD_LOG_INFO << "Average number of predicates per subject: "
+              << absl::StrFormat(
+                     "%.1f",
+                     patternStatistics.avgNumDistinctPredicatesPerSubject_)
               << std::endl;
-  AD_LOG_INFO << "Average number of subjects per predicate: " << std::fixed
-              << std::setprecision(0)
-              << patternStatistics.avgNumDistinctSubjectsPerPredicate_
+  AD_LOG_INFO << "Average number of subjects per predicate: "
+              << absl::StrFormat(
+                     "%.0f",
+                     patternStatistics.avgNumDistinctSubjectsPerPredicate_)
               << std::endl;
 }

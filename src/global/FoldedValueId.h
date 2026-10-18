@@ -1,0 +1,605 @@
+//  Copyright 2022, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
+#ifndef QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
+#define QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
+
+#include <absl/strings/str_cat.h>
+
+#include <cstdint>
+#include <limits>
+
+#include "backports/functional.h"
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
+#include "global/Constants.h"
+#include "global/Datatype.h"
+#include "global/IndexTypes.h"
+#include "rdfTypes/GeoPoint.h"
+#include "util/Algorithm.h"
+#include "util/BitUtils.h"
+#include "util/DateYearDuration.h"
+#include "util/NBitInteger.h"
+#include "util/Serializer/Serializer.h"
+#include "util/SourceLocation.h"
+
+namespace foldedValueId {
+
+// Encode values of different types (the types from the `Datatype` enum in
+// `Datatype.h`) using 4 bits for the datatype and 60 bits for the value.
+class ValueId {
+ public:
+  using T = uint64_t;
+  static constexpr T numDatatypeBits = 4;
+  static constexpr T numDataBits = 64 - numDatatypeBits;
+
+  using IntegerType = ad_utility::NBitInteger<numDataBits>;
+
+  // The maximum value for the unsigned types that are used as indices
+  // (currently VocabIndex, LocalVocabIndex and Text).
+  static constexpr T maxIndex = (1ull << numDataBits) - 1;
+
+  // The smallest double > 0 that will not be rounded to zero by the precision
+  // loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
+  // double <0 that will not be rounded to zero.
+  // Note: This constant is currently only used in unit tests, and cannot be
+  // computed at compile time in C++17.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  static constexpr double minPositiveDouble =
+      absl::bit_cast<double>(1ull << numDatatypeBits);
+#endif
+
+  // The largest representable integer value.
+  static constexpr int64_t maxInt = IntegerType::max();
+  // All types that store strings. Together, the IDs of all the items of these
+  // types form a consecutive range of IDs when sorted. Within this range, the
+  // IDs are ordered by their string values, not by their IDs (and hence also
+  // not by their types).
+  // TODO<joka921> `SecondaryVocabIndex` also stores strings, but it is
+  // deliberately not listed here (yet): the IDs of that type are directly
+  // adjacent to the ones listed here, but they are *not* ordered by their
+  // string value, so listing them here would break the semantic (that is, by
+  // string value) comparison of IDs in `ValueIdComparators.h`. Teaching that
+  // comparison about the secondary vocabulary is a separate step.
+  static constexpr std::array<Datatype, 2> stringTypes_{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex};
+
+  // The datatypes that the position of a word in the vocabularies of an index
+  // can have, see `LocalVocabEntry::positionInVocab()`. The comparison of an
+  // `Id` of type `LocalVocabIndex` with an `Id` of one of these types requires
+  // that position (which may be expensive to compute); for all other datatypes
+  // the comparison of the bits already yields the correct result, see
+  // `compareThreeWay` below.
+  static constexpr std::array<Datatype, 3> datatypesOfPositionInVocab_{
+      Datatype::VocabIndex, Datatype::SecondaryVocabIndex,
+      Datatype::EncodedVal};
+
+  // A mapping that decides if a Datatype is bitwise comparable or not. See
+  // `canBeComparedBitwise()` below.
+  static constexpr std::array<bool, 13> isTypeBitwiseComparable_{
+      true, true, true, true, true, false, true,
+      true, true, true, true, true, true};
+
+  // Assert that the types in `stringTypes_` are directly adjacent. This is
+  // required to make the comparison of IDs in `ValueIdComparators.h` work.
+  static constexpr Datatype maxStringType_ = ql::ranges::max(stringTypes_);
+  static constexpr Datatype minStringType_ = ql::ranges::min(stringTypes_);
+  static_assert(static_cast<size_t>(maxStringType_) -
+                    static_cast<size_t>(minStringType_) + 1 ==
+                stringTypes_.size());
+
+  // Assert that `VocabIndex`, `LocalVocabIndex`, and `SecondaryVocabIndex` are
+  // directly adjacent, in this order. The comparison of an `Id` of type
+  // `LocalVocabIndex` with an `Id` of an unrelated datatype relies on this, see
+  // `compareThreeWay` below.
+  static_assert(static_cast<size_t>(Datatype::LocalVocabIndex) ==
+                static_cast<size_t>(Datatype::VocabIndex) + 1);
+  static_assert(static_cast<size_t>(Datatype::SecondaryVocabIndex) ==
+                static_cast<size_t>(Datatype::LocalVocabIndex) + 1);
+
+  // Assert that the size of an encoded GeoPoint equals the available bits in a
+  // ValueId.
+  static_assert(numDataBits == GeoPoint::numDataBits);
+
+  // This exception is thrown if we try to store a value of an index type
+  // (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
+  // `maxIndex`.
+  struct IndexTooLargeException : public std::exception {
+   private:
+    std::string errorMessage_;
+
+   public:
+    explicit IndexTooLargeException(
+        T tooBigValue,
+        ad_utility::source_location s = AD_CURRENT_SOURCE_LOC()) {
+      errorMessage_ = absl::StrCat(
+          s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
+          " is bigger than what the maxIndex of ValueId allows.");
+    }
+
+    const char* what() const noexcept override { return errorMessage_.c_str(); }
+  };
+
+  // A struct that represents the single undefined value. This is required for
+  // generic code like in the `visit` method.
+  struct UndefinedType {};
+
+ private:
+  // The actual bits.
+  T _bits;
+
+ public:
+  // Default construction of an uninitialized id.
+  ValueId() = default;
+
+  // Comparison is performed directly on the underlying representation. Note
+  // that because the type bits are the most significant bits, all values of
+  // the same `Datatype` will be adjacent to each other. Unsigned index types
+  // are also ordered correctly. Signed integers are ordered as follows: first
+  // the positive integers in order and then the negative integers in order.
+  // For doubles it is first the positive doubles in order, then the negative
+  // doubles in reversed order. This is a direct consequence of comparing the
+  // bit representation of these values as unsigned integers.
+  // NOTE: An `Id` of type `LocalVocabIndex` does not carry its value in its
+  // bits (they are a pointer), so it is ordered by the position that its word
+  // has in the vocabularies of the index (see
+  // `LocalVocabEntry::positionInVocab`). That position only has to be looked up
+  // if the other `Id` is of one of the datatypes that such a position can have
+  // (`datatypesOfPositionInVocab_`, see there). For all other datatypes the
+  // comparison of the bits already yields the same result, because
+  // `LocalVocabIndex` is directly adjacent to `VocabIndex` and
+  // `SecondaryVocabIndex` (see the `static_assert`s above), so an `Id` of any
+  // other datatype compares to the datatype bits of a `LocalVocabIndex` exactly
+  // like it compares to the datatype bits of the position. NOTE: The single
+  // exception is a word that is stored as an encoded IRI (see
+  // `LocalVocabContext::encodeAsId`), whose position is of type `EncodedVal`,
+  // which is *not* adjacent to `LocalVocabIndex`. Comparing such a word to an
+  // `Id` of an unrelated datatype hence deviates from comparing the positions.
+  // This is a pre-existing inconsistency of the encoded IRIs that is tracked
+  // separately, see the note at `valueIdComparators::detail::compareIdsImpl`.
+  // NOTE: This is only `constexpr` in C++20 mode. GCC 8, which the C++17 CI job
+  // uses, rejects the branches below in a relaxed-constexpr function
+  // ("expression `<statement>` is not a constant expression"), and nothing
+  // compares `Id`s at compile time anyway.
+  QL_CONSTEXPR auto compareThreeWay(const ValueId& other) const {
+    using enum Datatype;
+    auto type = getDatatype();
+    auto otherType = other.getDatatype();
+    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+      return ql::compareThreeWay(_bits, other._bits);
+    }
+    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
+      return ql::compareThreeWay(*getLocalVocabIndex(),
+                                 *other.getLocalVocabIndex());
+    }
+
+    // Exactly one of the types is `LocalVocabIndex`. If the other one is a type
+    // that a position in the vocabularies can have, then compare that position,
+    // else fall through to the comparison of the bits, see the note above.
+    // NOTE: GCC 11 issues a false positive warning here, so we try to avoid it
+    // by being over-explicit about the branches here.
+    if (isDatatypeOfPositionInVocab(type) && otherType == LocalVocabIndex) {
+      return comparePositionInVocabToLocalVocab(
+          LocalVocabEntry::IdProxy::make(getBits()),
+          other.getLocalVocabIndex());
+    } else if (type == LocalVocabIndex &&
+               isDatatypeOfPositionInVocab(otherType)) {
+      auto inverseOrder = comparePositionInVocabToLocalVocab(
+          LocalVocabEntry::IdProxy::make(other.getBits()),
+          getLocalVocabIndex());
+
+      return ql::compareThreeWay(0, inverseOrder);
+    }
+
+    return ql::compareThreeWay(_bits, other._bits);
+  }
+  // NOTE: All the comparison operators are `QL_CONSTEXPR` and not `constexpr`,
+  // because they call `compareThreeWay` above, see the note there.
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_QL_CONSTEXPR(ValueId)
+
+  friend QL_CONSTEXPR bool operator==(const ValueId& left,
+                                      const ValueId& right) {
+    return ql::compareThreeWay(left, right) == 0;
+  }
+  friend QL_CONSTEXPR bool operator!=(const ValueId& left,
+                                      const ValueId& right) {
+    return !(left == right);
+  }
+
+  // When there are no local vocab entries, then comparison can only be done
+  // on the underlying bits, which allows much better code generation (e.g.
+  // vectorization). In particular, this method should for example be used
+  // during index building.
+  // NOTE: This is only `constexpr` in C++20 mode, for the same reason as
+  // `compareThreeWay` above.
+  QL_CONSTEXPR auto compareWithoutLocalVocab(const ValueId& other) const {
+    // NOTE: If this static assertion is violated at some point, make sure to
+    // check all callers of this function if they are still correct.
+    static_assert(isOnlyLocalVocabNotBitwiseComparable);
+    AD_EXPENSIVE_CHECK(canBeComparedBitwise());
+    AD_EXPENSIVE_CHECK(other.canBeComparedBitwise());
+    return ql::compareThreeWay(_bits, other._bits);
+  }
+
+  // Get the underlying bit representation, e.g. for compression etc.
+  [[nodiscard]] constexpr T getBits() const noexcept { return _bits; }
+  // Construct from the underlying bit representation. `bits` must have been
+  // obtained by a call to `getBits()` on a valid `ValueId`.
+  static constexpr ValueId fromBits(T bits) noexcept { return {bits}; }
+
+  // Get the datatype.
+  [[nodiscard]] constexpr Datatype getDatatype() const noexcept {
+    return static_cast<Datatype>(_bits >> numDataBits);
+  }
+
+  // Create a `ValueId` of the `Undefined` type. There is only one such ID and
+  // it is guaranteed to be smaller than all IDs of other types. This helps
+  // implementing the correct join behavior in presence of undefined values.
+  constexpr static ValueId makeUndefined() noexcept { return {0}; }
+
+  // Returns an object of `UndefinedType`. In many scenarios this function is
+  // unnecessary because `getDatatype() == Undefined` already identifies the
+  // single undefined value correctly, but it is very useful for generic code
+  // like the `visit` member function.
+  [[nodiscard]] constexpr UndefinedType getUndefined() const noexcept {
+    return {};
+  }
+  QL_CONSTEXPR bool isUndefined() const noexcept {
+    return *this == makeUndefined();
+  }
+
+  // Create a `ValueId` for a double value. The conversion will reduce the
+  // precision of the mantissa of an IEEE double precision floating point
+  // number from 53 to 49 significant bits.
+  // NOTE: This function and `getDouble` below are only `constexpr` in C++20
+  // mode, where `absl::bit_cast` is `std::bit_cast`. In C++17 mode it falls
+  // back to a `memcpy`, see also the note on `minPositiveDouble` above.
+  static QL_CONSTEXPR ValueId makeFromDouble(double d) {
+    auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
+    return addDatatypeBits(shifted, Datatype::Double);
+  }
+  // Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
+  // Double` then the result is unspecified.
+  [[nodiscard]] QL_CONSTEXPR double getDouble() const noexcept {
+    return absl::bit_cast<double>(_bits << numDatatypeBits);
+  }
+
+  // Create a `ValueId` for a signed integer value. Integers in the range
+  // [-2^59, 2^59-1] can be represented. Integers outside of this range will
+  // overflow according to the semantics of `NBitInteger<60>`.
+  static constexpr ValueId makeFromInt(int64_t i) {
+    auto nbit = IntegerType::toNBit(i);
+    return addDatatypeBits(nbit, Datatype::Int);
+  }
+
+  // Obtain the signed integer that this `ValueId` encodes. If `getDatatype()
+  // != Int` then the result is unspecified.
+  [[nodiscard]] constexpr int64_t getInt() const noexcept {
+    return IntegerType::fromNBit(_bits);
+  }
+
+  // Create a `ValueId` for a boolean value.
+  static constexpr ValueId makeFromBool(bool b) noexcept {
+    auto bits = static_cast<T>(b);
+    return addDatatypeBits(bits, Datatype::Bool);
+  }
+
+  // Create a `ValueId` for a boolean value, represented as "0" or "1" instead
+  // of "false" or "true".
+  static constexpr ValueId makeBoolFromZeroOrOne(bool b) noexcept {
+    auto bits = static_cast<T>(b);
+    bits |= static_cast<T>(true) << 1;
+    return addDatatypeBits(bits, Datatype::Bool);
+  }
+
+  // Obtain the boolean value.
+  [[nodiscard]] constexpr bool getBool() const noexcept {
+    return static_cast<bool>(removeDatatypeBits(_bits) & 1);
+  }
+
+  // Obtain the boolean value as a string view. In particular, return either
+  // `true`, `false`, `0` , or `1`, depending on whether the value was created
+  // via `makeFromBool` or `makeBoolFromZeroOrOne` (see above).
+  constexpr std::string_view getBoolLiteral() const noexcept {
+    bool value = getBool();
+    if (_bits & 0b10) {
+      return value ? "1" : "0";
+    }
+    return value ? "true" : "false";
+  }
+
+  // Create a `ValueId` for an unsigned index of one of the index types (see
+  // `global/IndexTypes.h`). These types can
+  // represent values in the range [0, 2^60]. When `index` is outside of this
+  // range, and `IndexTooLargeException` is thrown.
+  static constexpr ValueId makeFromVocabIndex(VocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::VocabIndex);
+  }
+
+  static constexpr ValueId makeFromEncodedVal(uint64_t idx) {
+    return makeFromIndex(idx, Datatype::EncodedVal);
+  }
+
+  static constexpr ValueId makeFromTextRecordIndex(TextRecordIndex index) {
+    return makeFromIndex(index.get(), Datatype::TextRecordIndex);
+  }
+  static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
+    // The last `numDatatypeBits` of a `LocalVocabIndex` are always zero, so we
+    // can reuse them for the datatype.
+    static_assert(alignof(decltype(*index)) >= (1u << numDatatypeBits));
+    return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits,
+                         Datatype::LocalVocabIndex);
+  }
+  static constexpr ValueId makeFromWordVocabIndex(WordVocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::WordVocabIndex);
+  }
+  static constexpr ValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
+    return makeFromIndex(index.get(), Datatype::BlankNodeIndex);
+  }
+  static constexpr ValueId makeFromSecondaryVocabIndex(
+      SecondaryVocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::SecondaryVocabIndex);
+  }
+
+  // Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()`
+  // is not the index type that the respective getter below is named after, then
+  // the result is unspecified.
+  [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
+    return VocabIndex::make(removeDatatypeBits(_bits));
+  }
+
+  [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
+    return removeDatatypeBits(_bits);
+  }
+
+  [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
+    return TextRecordIndex::make(removeDatatypeBits(_bits));
+  }
+  [[nodiscard]] LocalVocabIndex getLocalVocabIndex() const noexcept {
+    return reinterpret_cast<LocalVocabIndex>(_bits << numDatatypeBits);
+  }
+  [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
+    return WordVocabIndex::make(removeDatatypeBits(_bits));
+  }
+
+  [[nodiscard]] constexpr BlankNodeIndex getBlankNodeIndex() const noexcept {
+    return BlankNodeIndex::make(removeDatatypeBits(_bits));
+  }
+
+  [[nodiscard]] constexpr SecondaryVocabIndex getSecondaryVocabIndex()
+      const noexcept {
+    return SecondaryVocabIndex::make(removeDatatypeBits(_bits));
+  }
+
+  // Store or load a `Date` object.
+  // NOTE: These functions cannot be `constexpr`, because
+  // `DateYearOrDuration` is not a literal type.
+  static ValueId makeFromDate(DateYearOrDuration d) noexcept {
+    return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
+  }
+
+  DateYearOrDuration getDate() const noexcept {
+    return absl::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
+  }
+
+  // TODO<joka921> implement dates
+
+  // Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
+  static ValueId makeFromGeoPoint(GeoPoint p) {
+    return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
+  }
+
+  // Obtain a new `GeoPoint` object representing the pair of coordinates that
+  // this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
+  // is unspecified.
+  GeoPoint getGeoPoint() const {
+    T bits = removeDatatypeBits(_bits);
+    return GeoPoint::fromBitRepresentation(bits);
+  }
+
+  // An ID is considered trivial, if its datatype is trivial (see
+  // `isDatatypeTrivial` above).
+  constexpr bool isTrivial() const { return isDatatypeTrivial(getDatatype()); }
+
+  // Return true iff `datatype` is one of the datatypes that the position of a
+  // word in the vocabularies can have, see `datatypesOfPositionInVocab_`.
+  constexpr static bool isDatatypeOfPositionInVocab(Datatype datatype) {
+    return ad_utility::contains(datatypesOfPositionInVocab_, datatype);
+  }
+
+  // An `Id` is considered bitwise comparable if the mapping at
+  // `isTypeBitwiseComparable_` says so. This is currently the case for all
+  // datatypes except for the local vocab index.
+  constexpr bool canBeComparedBitwise() const {
+    static_assert(isOnlyLocalVocabNotBitwiseComparable);
+    return isTypeBitwiseComparable_.at(static_cast<size_t>(getDatatype()));
+  }
+
+  // Constant to be used in `static_assert` statements to indicate that
+  // behavior is relying on the local vocab entry to be the only datatype that
+  // is not bitwise comparable.
+  constexpr static bool isOnlyLocalVocabNotBitwiseComparable =
+      isTypeBitwiseComparable_.size() ==
+          static_cast<size_t>(Datatype::MaxValue) + 1 &&
+      !isTypeBitwiseComparable_.at(
+          static_cast<size_t>(Datatype::LocalVocabIndex));
+
+  // Return the smallest and largest possible `ValueId` wrt the underlying
+  // representation
+  constexpr static ValueId min() noexcept {
+    return {std::numeric_limits<T>::min()};
+  }
+  constexpr static ValueId max() noexcept {
+    return {std::numeric_limits<T>::max()};
+  }
+
+  // Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
+  // and `ad_utility::HashMap`
+  template <typename H>
+  friend H AbslHashValue(H h, const ValueId& id) {
+    // Adding 0/1 to the hash is required to ensure that for two unequal
+    // elements the hash expansions of neither is a suffix of the other.This is
+    // a property that absl requires for hashes. The hash expansion is the list
+    // of simpler values actually being hashed (here: bits or hash expansion of
+    // the LocalVocabEntry).
+    if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      static_assert(isOnlyLocalVocabNotBitwiseComparable);
+      return H::combine(std::move(h), id._bits, 0);
+    }
+    auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
+    if (upper != lower) {
+      return H::combine(std::move(h), lower.get(), 0);
+    }
+    return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
+  }
+
+  // Enable the serialization of `ValueId` in the `ad_utility::serialization`
+  // framework.
+  template <typename T>
+  friend void allowTrivialSerialization(ValueId, T);
+
+  // Similar to `std::visit` for `std::variant`. First gets the datatype and
+  // then calls `visitor(getTYPE)` where `getTYPE` is the correct getter method
+  // for the datatype (e.g. `getDouble` for `Datatype::Double`). Visitor must
+  // be callable with all of the possible return types of the `getTYPE`
+  // functions.
+  // TODO<joka921> This currently still has limited functionality because
+  // VocabIndex, LocalVocabIndex, TextRecordIndex,  and EncodedVal are all of
+  // the same type `uint64_t` and the visitor cannot distinguish between them.
+  // Create strong types for these indices and make the `ValueId` class use
+  // them.
+  template <typename Visitor>
+  decltype(auto) visit(Visitor&& visitor) const {
+    switch (getDatatype()) {
+      case Datatype::Undefined:
+        return std::invoke(visitor, getUndefined());
+      case Datatype::Bool:
+        return std::invoke(visitor, getBool());
+      case Datatype::Double:
+        return std::invoke(visitor, getDouble());
+      case Datatype::Int:
+        return std::invoke(visitor, getInt());
+      case Datatype::EncodedVal:
+        return std::invoke(visitor, getEncodedVal());
+      case Datatype::VocabIndex:
+        return std::invoke(visitor, getVocabIndex());
+      case Datatype::LocalVocabIndex:
+        return std::invoke(visitor, getLocalVocabIndex());
+      case Datatype::TextRecordIndex:
+        return std::invoke(visitor, getTextRecordIndex());
+      case Datatype::WordVocabIndex:
+        return std::invoke(visitor, getWordVocabIndex());
+      case Datatype::Date:
+        return std::invoke(visitor, getDate());
+      case Datatype::GeoPoint:
+        return std::invoke(visitor, getGeoPoint());
+      case Datatype::BlankNodeIndex:
+        return std::invoke(visitor, getBlankNodeIndex());
+      case Datatype::SecondaryVocabIndex:
+        return std::invoke(visitor, getSecondaryVocabIndex());
+    }
+    AD_FAIL();
+  }
+
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
+  friend std::ostream& operator<<(std::ostream& ostr, const ValueId& id) {
+    ostr << toString(id.getDatatype())[0] << ':';
+    if (id.getDatatype() == Datatype::Undefined) {
+      return ostr << id.getBits();
+    }
+
+    auto visitor = [&ostr](auto&& value) {
+      using T = decltype(value);
+      if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
+        // already handled above
+        AD_FAIL();
+      } else if constexpr (ad_utility::SimilarToAny<T, double, int64_t,
+                                                    uint64_t>) {
+        ostr << std::to_string(value);
+      } else if constexpr (ad_utility::isSimilar<T, bool>) {
+        ostr << (value ? "true" : "false");
+      } else if constexpr (ad_utility::isSimilar<T, DateYearOrDuration>) {
+        ostr << value.toStringAndType().first;
+      } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
+        ostr << value.toStringRepresentation();
+      } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
+        AD_CORRECTNESS_CHECK(value != nullptr);
+        ostr << value->toStringRepresentation();
+      } else {
+        // `T` is one of the remaining index types, all of which wrap a
+        // `uint64_t` (see `global/IndexTypes.h`).
+        ostr << std::to_string(value.get());
+      }
+    };
+    id.visit(visitor);
+    return ostr;
+  }
+
+  // Lambdas that forward to the member function of the same name (without the
+  // suffix `L`). Unlike a pointer-to-member like `&Id::isUndefined`, they also
+  // work for proxy types that provide the same member functions, like the
+  // elements of a column view that does not store `Id`s.
+  static constexpr auto isUndefinedL = [](const auto& id) {
+    return id.isUndefined();
+  };
+
+  static constexpr auto isDefinedL = [](const auto& id) {
+    return !id.isUndefined();
+  };
+
+  static constexpr auto getBitsL = [](const auto& id) { return id.getBits(); };
+
+  static constexpr auto getDatatypeL = [](const auto& id) {
+    return id.getDatatype();
+  };
+
+ private:
+  // Compare the bits of an `Id` whose datatype is one of
+  // `datatypesOfPositionInVocab_` with a `LocalVocabIndex`. For details see
+  // `LocalVocabEntry::positionInVocab()`.
+  static ql::strong_ordering comparePositionInVocabToLocalVocab(
+      LocalVocabEntry::IdProxy otherId, ::LocalVocabIndex localVocabIndex) {
+    auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
+    if (otherId < lowerBound) {
+      return ql::strong_ordering::less;
+    } else if (otherId >= upperBound) {
+      return ql::strong_ordering::greater;
+    } else {
+      return ql::strong_ordering::equal;
+    }
+  }
+
+  // Private constructor that implicitly converts from the underlying
+  // representation. Used in the implementation of the static factory methods
+  // `Double()`, `Int()` etc.
+  constexpr ValueId(T bits) : _bits{bits} {}
+
+  // Set the first 4 bits of `bits` to a 4-bit representation of `type`.
+  // Requires that the first four bits of `bits` are all zero.
+  static constexpr ValueId addDatatypeBits(T bits, Datatype type) {
+    auto mask = static_cast<T>(type) << numDataBits;
+    return {bits | mask};
+  }
+
+  // Set the datatype bits of `bits` to zero.
+  static constexpr T removeDatatypeBits(T bits) noexcept {
+    auto mask = ad_utility::bitMaskForLowerBits(numDataBits);
+    return bits & mask;
+  }
+
+  // Helper function for the implementation of the unsigned index types.
+  static constexpr ValueId makeFromIndex(T id, Datatype type) {
+    if (id > maxIndex) {
+      throw IndexTooLargeException(id);
+    }
+    return addDatatypeBits(id, type);
+  }
+};
+
+}  // namespace foldedValueId
+
+#endif  // QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H

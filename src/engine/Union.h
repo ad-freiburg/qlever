@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 
 class Union : public Operation {
@@ -65,8 +66,8 @@ class Union : public Operation {
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {_subtrees[0].get(), _subtrees[1].get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtrees[0].get(), _subtrees[1].get()}, allocator()};
   }
 
  public:
@@ -153,6 +154,15 @@ class Union : public Operation {
   Result::LazyResult computeResultKeepOrder(
       bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
+
+  // If a `BIND` is to be pushed down into a `UNION`, it must be pushed into all
+  // children of the `UNION`.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
+  // ___________________________________________________________________________
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // ___________________________________________________________________________
   std::optional<std::shared_ptr<QueryExecutionTree>>

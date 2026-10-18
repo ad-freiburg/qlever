@@ -9,10 +9,12 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <algorithm>
 #include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -30,13 +32,17 @@
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
+#include "index/GeoPointEncoding.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
 #include "index/InputFileSpecification.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/Allocator.h"
+#include "util/Executor.h"
+#include "util/GlobalExecutor.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
@@ -99,6 +105,14 @@ struct IndexBuilderConfig : CommonConfig {
   // The default chunk size is large enough for most input sets.
   std::optional<ad_utility::MemorySize> parserBufferSize_;
 
+  // The number of rows of one block of the permutations (and of the other
+  // sorted lists of the index). It determines the granularity at which they
+  // are read: an index scan always reads whole blocks, so smaller blocks make
+  // selective scans read fewer rows, at the price of more block metadata
+  // (which is held in RAM) and a slightly larger index. The default is a
+  // compromise that favors large scans; see `DEFAULT_INDEX_ROWS_PER_BLOCK`.
+  std::optional<size_t> indexRowsPerBlock_;
+
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.
@@ -119,9 +133,20 @@ struct IndexBuilderConfig : CommonConfig {
   ad_utility::VocabularyType vocabType_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // How geo points are encoded in the `Id`s of the index, see
+  // `ad_utility::GeoPointEncoding`. The encoding `LatMajor` is deprecated.
+  ad_utility::GeoPointEncoding geoPointEncoding_{
+      ad_utility::GeoPointEncoding::ZOrder};
+
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
+
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`). Must be at least 1. Defaults to the number of
+  // hardware threads of the machine (`std::thread::hardware_concurrency()`
+  // returns `0` if that number cannot be determined, hence the `max`).
+  size_t numThreads_ = std::max<size_t>(1, std::thread::hardware_concurrency());
 
   // A list of regexes for IRIs that should be treated as blank nodes. During
   // index building, an IRI that is fully matched by one of these regexes (via
@@ -149,6 +174,20 @@ struct IndexBuilderConfig : CommonConfig {
   // https://github.com/ad-freiburg/qlever/pull/2299 for the details and
   // limitations regarding the correctness of FILTER and ORDER BY.
   std::vector<std::string> prefixesForIdEncodedIris_;
+
+  // Patterns for IRIs that are more complex than a prefix followed by a single
+  // number, for example `<http://example.org/range_536870912_50_25P>`, where
+  // several numbers are separated by fixed strings, and where the individual
+  // numbers may have bits that are always known (see
+  // `encodedIri::Pattern` in `index/vocabulary/EncodedIriPattern.h`
+  // for the details and for an example). Such IRIs are also encoded directly in
+  // the internal ID, with the same benefits and limitations as the
+  // `prefixesForIdEncodedIris_` above. The patterns are stored in the index
+  // and restored from it, so they don't have to be specified again when the
+  // index is loaded. The order of the patterns determines the IDs of the
+  // encoded IRIs, so two index builds only produce the same IDs if the
+  // patterns are given in the same order.
+  std::vector<encodedIri::Pattern> patternsForIdEncodedIris_;
 
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index
@@ -303,6 +342,9 @@ class Qlever {
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
   qlever::Allocator<Id> allocator_;
+  // The executor on which the queries and index rebuilds of this instance run
+  // their parallel work, see `executor()`.
+  qlever::Executor executor_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
@@ -331,13 +373,26 @@ class Qlever {
   // or the `.meta-data.json`, need to exist); the instance must then be
   // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
   // before it can answer queries. The memory limit from `config` is enforced
-  // and cache eviction is wired into the allocator.
-  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
+  // and cache eviction is wired into the allocator. The queries and index
+  // rebuilds of this instance run their parallel work on the `executor`.
+  //
+  // NOTE: Neither this constructor nor the computation of a query must be
+  // called from a thread of the `executor`, because they block while waiting
+  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`, which
+  // also run when the sort performance estimates are computed here).
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false,
+                  qlever::Executor executor = ad_utility::globalExecutor());
 
   // Same as above, but with a caller-provided allocator (e.g. a
   // platform-injected memory pool). The allocator is used as-is; the memory
   // limit from `config` is *not* applied on top of it.
-  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator);
+  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
+         qlever::Executor executor = ad_utility::globalExecutor());
+
+  // The executor on which the queries and index rebuilds of this instance run
+  // their parallel work (unless a different one is passed to
+  // `createQueryExecutionContext`).
+  const qlever::Executor& executor() const { return executor_; }
 
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see
@@ -573,18 +628,32 @@ class Qlever {
   }
 
   // Load a blob previously written by
-  // `serializeVocabAndNamedCacheToCompressedBlob`. For details see
-  // `NamedCachedQueryBlobManager::deserialize`.
+  // `serializeVocabAndNamedCacheToCompressedBlob`, and return an error instead
+  // of throwing if the blob cannot be decompressed, or if its header or its
+  // index format version is missing or incompatible. For details (in
+  // particular which failures are still reported by an exception) see
+  // `NamedCachedQueryBlobManager::tryToDeserialize`.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
-  // query is answered. Must not be called more than once on the same
-  // instance.
-  void deserializeVocabAndNamedCacheFromCompressedBlob(
+  // query is answered. Must not be called more than once on the same instance,
+  // except after a call that left this instance unchanged (see
+  // `NamedCachedQueryBlobManager::tryToDeserialize`).
+  std::optional<NamedCachedQueryBlobManager::BlobError>
+  tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
       ql::span<const char> blob,
       ql::pmr::polymorphic_allocator<char> allocator = {}) {
     // Note: `polymorphic_allocator` is cheap to copy and has no
     // dedicated move operations.
+    return blobManager_.tryToDeserialize(*this, blob, allocator);
+  }
+
+  // Same as `tryToDeserializeVocabAndNamedCacheFromCompressedBlob`, but throw
+  // instead of returning an error. For details see
+  // `NamedCachedQueryBlobManager::deserialize`.
+  void deserializeVocabAndNamedCacheFromCompressedBlob(
+      ql::span<const char> blob,
+      ql::pmr::polymorphic_allocator<char> allocator = {}) {
     blobManager_.deserialize(*this, blob, allocator);
   }
 
@@ -593,9 +662,10 @@ class Qlever {
 
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
-  // consistent state.
+  // consistent state. The `executor` is the one on which the query runs its
+  // parallel work (see `QueryExecutionContext::executor`).
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
-      std::shared_ptr<IndexAndViews> indexAndViews,
+      std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false,
       QueryExecutionContext::DisableCaching disableCaching =

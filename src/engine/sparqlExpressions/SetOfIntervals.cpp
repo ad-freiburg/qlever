@@ -8,6 +8,16 @@
 
 namespace ad_utility {
 // ___________________________________________________________________________
+SetOfIntervals::SetOfIntervals(Vec intervals, size_t size)
+    : _intervals{std::move(intervals)}, size_{size} {
+  AD_CONTRACT_CHECK(
+      ql::ranges::all_of(
+          _intervals,
+          [size](const auto& interval) { return interval.second <= size; }),
+      "An interval of a `SetOfIntervals` ends after the size of the set.");
+}
+
+// ___________________________________________________________________________
 SetOfIntervals SetOfIntervals::SortAndCheckDisjointAndNonempty(
     SetOfIntervals input) {
   auto& vec = input._intervals;
@@ -27,11 +37,12 @@ SetOfIntervals SetOfIntervals::SortAndCheckDisjointAndNonempty(
 // ___________________________________________________________________________
 SetOfIntervals SetOfIntervals::Intersection::operator()(
     SetOfIntervals A, SetOfIntervals B) const {
+  AD_CONTRACT_CHECK(A.size() == B.size());
   // First sort by the beginning of the interval
   A = SortAndCheckDisjointAndNonempty(std::move(A));
   B = SortAndCheckDisjointAndNonempty(std::move(B));
 
-  SetOfIntervals result;
+  SetOfIntervals result{{}, A.size()};
   auto itA = A._intervals.begin();
   auto itB = B._intervals.begin();
 
@@ -78,10 +89,11 @@ SetOfIntervals SetOfIntervals::Intersection::operator()(
 // __________________________________________________________________________
 SetOfIntervals SetOfIntervals::Union::operator()(SetOfIntervals A,
                                                  SetOfIntervals B) const {
+  AD_CONTRACT_CHECK(A.size() == B.size());
   // First sort by the beginning of the interval
   A = SortAndCheckDisjointAndNonempty(std::move(A));
   B = SortAndCheckDisjointAndNonempty(std::move(B));
-  SetOfIntervals result;
+  SetOfIntervals result{{}, A.size()};
   auto itA = A._intervals.begin();
   auto itB = B._intervals.begin();
 
@@ -138,11 +150,11 @@ SetOfIntervals SetOfIntervals::Union::operator()(SetOfIntervals A,
 SetOfIntervals SetOfIntervals::CheckSortedAndDisjointAndSimplify(
     const SetOfIntervals& inputSet) {
   auto& inputVec = inputSet._intervals;
+  SetOfIntervals result{{}, inputSet.size()};
   if (inputVec.empty()) {
-    return {};
+    return result;
   }
   auto current = inputVec[0];
-  SetOfIntervals result;
   for (size_t i = 1; i < inputVec.size(); ++i) {
     AD_CONTRACT_CHECK(inputVec[i].first >= current.second);
     if (inputVec[i].first == current.second) {
@@ -159,7 +171,7 @@ SetOfIntervals SetOfIntervals::CheckSortedAndDisjointAndSimplify(
 // ____________________________________________________________________________
 SetOfIntervals SetOfIntervals::Complement::operator()(SetOfIntervals s) const {
   s = SortAndCheckDisjointAndNonempty(s);
-  SetOfIntervals result;
+  SetOfIntervals result{{}, s.size()};
   auto& intervals = result._intervals;
 
   size_t lastElement = 0;
@@ -171,9 +183,8 @@ SetOfIntervals SetOfIntervals::Complement::operator()(SetOfIntervals s) const {
     }
     lastElement = end;
   }
-  AD_CONTRACT_CHECK(lastElement <= s.upperBound);
-  if (lastElement < SetOfIntervals::upperBound) {
-    intervals.emplace_back(lastElement, SetOfIntervals::upperBound);
+  if (lastElement < s.size()) {
+    intervals.emplace_back(lastElement, s.size());
   }
   return result;
 }

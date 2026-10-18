@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
 #define QLEVER_SRC_UTIL_STRINGUTILS_H
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -15,6 +16,7 @@
 #include "backports/span.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
+#include "util/Exception.h"
 #include "util/UnicodeSupport.h"
 
 namespace ad_utility {
@@ -203,10 +205,9 @@ inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
 
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and_def
-        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
-            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
-                                       std::string_view separator) {
+    requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
+        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
   auto begin = std::begin(r);
   auto end = std::end(r);
 
@@ -230,8 +231,8 @@ CPP_template_def(typename Range)(
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
-    lazyStrJoin(Range&& r, std::string_view separator) {
+        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+std::string lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);
   return std::move(stream).str();
@@ -285,6 +286,39 @@ constexpr std::string_view constexprStrCat() {
   const auto& b =
       detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;
   return {b.data(), b.size() - 1};
+}
+
+// A lookup table that stores for each of the 256 possible byte values whether
+// it is contained in a given set of characters, see `makeCharLookupTable`.
+using CharLookupTable = std::array<bool, 256>;
+
+// Create a `CharLookupTable` in which exactly the entries for the characters in
+// `chars` are `true`.
+constexpr CharLookupTable makeCharLookupTable(std::string_view chars) {
+  CharLookupTable table{};
+  for (char c : chars) {
+    table[static_cast<unsigned char>(c)] = true;
+  }
+  return table;
+}
+
+// Same as `view.find_first_of(chars, pos)` with
+// `table == makeCharLookupTable(chars)`, but faster: `find_first_of` rescans
+// `chars` for each character of `view` (in libstdc++ with a call to `memchr`
+// each time), whereas the table needs a single lookup per character. `pos` must
+// not be greater than `view.size()`.
+//
+// NOTE: This function is defined in the header, because it is used in hot
+// loops where inlining matters.
+inline size_t findFirstOfWithLookupTable(std::string_view view,
+                                         const CharLookupTable& table,
+                                         size_t pos = 0) {
+  AD_EXPENSIVE_CHECK(pos <= view.size());
+  auto rest = view.substr(pos);
+  auto it = ql::ranges::find_if(
+      rest, [&table](char c) { return table[static_cast<unsigned char>(c)]; });
+  return it == rest.end() ? std::string_view::npos
+                          : pos + static_cast<size_t>(it - rest.begin());
 }
 
 // Truncates the operation string. The length is computed in codepoints, not in

@@ -48,7 +48,7 @@ class Join : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   bool columnOriginatesFromGraphOrUndef(
@@ -59,6 +59,10 @@ class Join : public Operation {
 
  private:
   std::unique_ptr<JoinImpl> impl_;
+
+  // Delegate to the `isDeterministicImpl()` of the implementation only. The
+  // subtree is covered by `Operation::isDeterministic()` via the forwarded
+  // children, see the comment in `GroupBy.h`.
   [[nodiscard]] bool isDeterministicImpl() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   uint64_t getSizeEstimateBeforeLimit() override;

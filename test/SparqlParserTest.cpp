@@ -12,8 +12,9 @@
 #include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
-#include "util/Conversions.h"
+#include "rdfTypes/Iri.h"
 #include "util/ParsedQueryTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace m = matchers;
@@ -1037,6 +1038,96 @@ TEST(ParserTest, isAggregatingQuery) {
       parseQuery("SELECT ?a ?b WHERE { ?a <rel> ?b }").isAggregatingQuery());
 }
 
+// Test `ParsedQuery::isDeterministic()` for all the places where a
+// non-deterministic expression can occur.
+TEST(ParserTest, isDeterministic) {
+  auto isDeterministic = [](std::string query) {
+    return parseQuery(std::move(query)).isDeterministic();
+  };
+  EXPECT_TRUE(isDeterministic(
+      "SELECT * { ?a <rel> ?b FILTER(?b > 3) BIND(?b + 1 AS ?c) }"));
+  EXPECT_TRUE(
+      isDeterministic("SELECT * { ?a <rel> ?b FILTER EXISTS { ?b ?p ?o } }"));
+  EXPECT_TRUE(
+      isDeterministic("SELECT * { { ?a <rel> ?b } UNION { ?a <rel2> ?b } }"));
+
+  // Non-deterministic expressions in all the places where they can occur.
+  EXPECT_FALSE(
+      isDeterministic("SELECT * { ?a <rel> ?b FILTER(RAND() < 0.5) }"));
+  EXPECT_FALSE(isDeterministic("SELECT * { ?a <rel> ?b BIND(UUID() AS ?c) }"));
+  EXPECT_FALSE(isDeterministic("SELECT ?a (RAND() AS ?c) { ?a <rel> ?b }"));
+  EXPECT_FALSE(isDeterministic("SELECT * { ?a <rel> ?b } ORDER BY RAND()"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT ?a { ?a <rel> ?b } GROUP BY ?a HAVING (SUM(RAND()) > 1)"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT ?a { ?a <rel> ?b } GROUP BY ?a HAVING (RAND() < 0.5)"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { ?a <rel> ?b OPTIONAL { BIND(BNODE() AS ?c) } }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { { ?a <rel> ?b } UNION { BIND(STRUUID() AS ?c) } }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { { BIND(STRUUID() AS ?c) } UNION { ?a <rel> ?b } }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { ?a <rel> ?b { SELECT ?c { BIND(RAND() AS ?c) } } }"));
+  // With a `GROUP BY` and a trailing `VALUES`, an alias that uses a `VALUES`
+  // variable is computed after the join with the `VALUES` (see
+  // `moveAliasesAfterPostQueryValues`).
+  EXPECT_FALSE(isDeterministic(
+      "SELECT ?a (RAND() + ?v AS ?c) { ?a <rel> ?b } GROUP BY ?a "
+      "VALUES ?v { 1 }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { ?a <rel> ?b FILTER EXISTS { BIND(RAND() AS ?c) } }"));
+
+  // A `SERVICE` is deterministic iff its results are cached.
+  std::string serviceQuery =
+      "SELECT * { SERVICE <http://example.org/sparql> { ?a <rel> ?b } }";
+  EXPECT_FALSE(isDeterministic(serviceQuery));
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheServiceResults_>(
+          true);
+  EXPECT_TRUE(isDeterministic(serviceQuery));
+
+  // Magic services with a child graph pattern depend on it.
+  auto pathSearch = [](std::string_view child) {
+    return absl::StrCat(
+        "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+        "SELECT * { SERVICE pathSearch: {"
+        "_:p pathSearch:algorithm pathSearch:allPaths ;"
+        "pathSearch:source <x> ; pathSearch:target <z> ;"
+        "pathSearch:pathColumn ?path ; pathSearch:edgeColumn ?edge ;"
+        "pathSearch:start ?start ; pathSearch:end ?end ."
+        "{ SELECT * { ",
+        child, " } } } }");
+  };
+  EXPECT_TRUE(isDeterministic(pathSearch("?start <p> ?end")));
+  EXPECT_FALSE(
+      isDeterministic(pathSearch("?start <p> ?end BIND(RAND() AS ?r)")));
+  EXPECT_TRUE(isDeterministic(
+      "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * { ?e <p> ?z SERVICE qlss: {"
+      "_:config qlss:left ?e ; qlss:right ?z ; qlss:maxDistance 500 ;"
+      "qlss:algorithm qlss:s2 . } }"));
+
+  // External values are never deterministic.
+  EXPECT_FALSE(isDeterministic(
+      "PREFIX qlext: <https://qlever.cs.uni-freiburg.de/external-values/>"
+      "SELECT * { SERVICE qlext: { _:b qlext:name \"myId\" ;"
+      "qlext:variable ?x . } }"));
+
+  // `Describe`, `TransPath` and `Load` never occur in the argument of an
+  // `EXISTS`, the only place where `isDeterministic()` is called.
+  auto expectUnreachable = [](p::GraphPatternOperation op) {
+    ParsedQuery::GraphPattern pattern;
+    pattern._graphPatterns.push_back(std::move(op));
+    AD_EXPECT_THROW_WITH_MESSAGE(std::ignore = pattern.isDeterministic(),
+                                 ::testing::HasSubstr("unreachable"));
+  };
+  expectUnreachable(p::Describe{});
+  expectUnreachable(p::TransPath{});
+  expectUnreachable(p::Load{
+      TripleComponent::Iri::fromIriref("<https://example.org>"), false});
+}
+
 // _____________________________________________________________________________
 TEST(ParserTest, Bind) {
   ParsedQuery pq = parseQuery("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }");
@@ -1198,8 +1289,7 @@ TEST(ParserTest, Group) {
 // _____________________________________________________________________________
 TEST(ParserTest, LanguageFilterPostProcessing) {
   auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
-    return PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-        iri(iriString), std::move(langTag)));
+    return PropertyPath::fromIri(iri(iriString).withLanguageTag(langTag));
   };
   {
     ParsedQuery q = parseQuery(
@@ -1285,10 +1375,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     SparqlTriple tripleA{Var{"?y"},
                          PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-                         ad_utility::convertLangtagToEntityUri("en")};
+                         ad_utility::triple_component::Iri::fromLangtag("en")};
     SparqlTriple tripleB{Var{"?y"},
                          PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-                         ad_utility::convertLangtagToEntityUri("de")};
+                         ad_utility::triple_component::Iri::fromLangtag("de")};
 
     auto hasSingleTriple = [](const SparqlTriple& triple) {
       return AD_FIELD(
@@ -1331,7 +1421,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                   Var{"?y"},
                   PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
                                             "builtin-functions/langtag>")),
-                  ad_utility::convertLangtagToEntityUri("en")}),
+                  ad_utility::triple_component::Iri::fromLangtag("en")}),
               triples[1]);
   }
   {
@@ -1347,7 +1437,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     EXPECT_THAT(patterns[2].getBasic()._triples,
                 ::testing::ElementsAre(SparqlTriple{
                     Var{"?y"}, PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-                    ad_utility::convertLangtagToEntityUri("en")}));
+                    ad_utility::triple_component::Iri::fromLangtag("en")}));
   }
 
   // Test that the language filter never changes triples with
