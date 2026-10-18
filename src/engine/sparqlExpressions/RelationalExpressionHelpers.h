@@ -42,7 +42,8 @@ CPP_concept StoresStrings = ad_utility::SimilarTo<ValueType<T>, std::string>;
 
 // Concept that requires that `T` logically stores boolean values.
 template <typename T>
-CPP_concept StoresBoolean = std::is_same_v<T, ad_utility::SetOfIntervals>;
+CPP_concept StoresBoolean =
+    ad_utility::SimilarTo<T, ad_utility::SetOfIntervals>;
 
 // Concept that requires that `T` logically stores `ValueId`s.
 template <typename T>
@@ -57,15 +58,10 @@ template <typename A, typename B>
 CPP_concept AreIncomparable = (StoresNumeric<A> && StoresStrings<B>) ||
                               (StoresNumeric<B> && StoresStrings<A>);
 
-// True iff any of `A, B` is `StoresBoolean` (see above).
-template <typename A, typename B>
-CPP_concept AtLeastOneIsBoolean = StoresBoolean<A> || StoresBoolean<B>;
-
 // The types for which comparisons like `<` are supported and not always false.
 template <typename A, typename B>
 CPP_concept AreComparable =
-    !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
-    (StoresValueId<A> || !StoresValueId<B>);
+    !AreIncomparable<A, B> && (StoresValueId<A> || !StoresValueId<B>);
 
 // Apply the given `Comparison` to `a` and `b`. For example, if the `Comparison`
 // is `LT`, returns `a < b`. Note that the second template argument `Dummy` is

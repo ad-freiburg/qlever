@@ -76,7 +76,7 @@ static_assert(isVector<Collection<CoordType>>);
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
-  return std::string{asStringViewUnsafe(lit.getContent())};
+  return std::string{lit.getContent()};
 }
 
 // Adds quotation marks and the `geo:wktLiteral` datatype to a given string
@@ -297,6 +297,29 @@ inline constexpr auto SF_WKT_TYPE_IRI = []() {
 inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   if (type < 8) {
     return SF_WKT_TYPE_IRI.at(type);
+  }
+  return std::nullopt;
+}
+
+namespace detail::crsStrings {
+constexpr inline std::string_view crs84 =
+    "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
+constexpr inline std::string_view wgs84 =
+    "http://www.opengis.net/def/crs/EPSG/0/4326";
+constexpr inline std::string_view webMerc =
+    "http://www.opengis.net/def/crs/EPSG/0/3857";
+}  // namespace detail::crsStrings
+inline constexpr auto CRS_TYPE_IRI = []() {
+  using namespace detail::crsStrings;
+  return std::array<std::optional<std::string_view>, 4>{
+      std::nullopt,  // Invalid CRS
+      crs84, wgs84, webMerc};
+}();
+
+// Lookup the IRI for a given CRS type in the array of prepared IRIs.
+inline std::optional<std::string_view> crsTypeToIri(uint16_t type) {
+  if (type < CRS_TYPE_IRI.size()) {
+    return CRS_TYPE_IRI.at(type);
   }
   return std::nullopt;
 }

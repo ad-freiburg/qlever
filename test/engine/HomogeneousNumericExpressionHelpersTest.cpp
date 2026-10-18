@@ -98,6 +98,40 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
   }
 };
 
+// Test that `hasNonNumericOperand` rejects exactly the non-numeric `Id`s, and
+// only for functions with `undefForNonNumeric` and the `NumericValueGetter`.
+TEST_F(HomogeneousNumericExpressionHelpersTest, NonNumericFallbackEligibility) {
+  // `MakeNumericExpression` opts in, an arbitrary function does not.
+  using Function = MakeNumericExpression<std::multiplies<>>;
+  using Getters = std::tuple<NumericValueGetter>;
+  static_assert(undefForNonNumeric<Function>);
+  static_assert(!undefForNonNumeric<TestNumericAdd>);
+
+  // Integers, doubles and booleans are numeric.
+  for (auto value :
+       {I(1), D(2.5), Id::makeFromBool(true), Id::makeFromBool(false)}) {
+    EXPECT_FALSE((hasNonNumericOperand<Function, Getters>(value)));
+  }
+
+  // All other datatypes are rejected, but not for a function without the
+  // property or for a getter other than `NumericValueGetter`.
+  for (auto value :
+       {Id::makeUndefined(), Id::makeFromVocabIndex(VocabIndex::make(4)),
+        Id::makeFromGeoPoint(GeoPoint{1.0, 2.0})}) {
+    EXPECT_TRUE((hasNonNumericOperand<Function, Getters>(value)));
+    EXPECT_FALSE((hasNonNumericOperand<TestNumericAdd, Getters>(value)));
+    EXPECT_FALSE(
+        (hasNonNumericOperand<Function, std::tuple<NumericOrDateValueGetter>>(
+            value)));
+  }
+
+  // One non-numeric operand among several is enough.
+  EXPECT_TRUE(
+      (hasNonNumericOperand<Function,
+                            std::tuple<NumericValueGetter, NumericValueGetter>>(
+          I(1), Id::makeUndefined())));
+}
+
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedValueGetters) {
   struct UnsupportedValueGetter {};

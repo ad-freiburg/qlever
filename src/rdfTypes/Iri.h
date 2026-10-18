@@ -18,7 +18,6 @@
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
-#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 #include "util/ParsedUri.h"
 
@@ -105,7 +104,7 @@ class BasicIri {
 
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
-  NormalizedStringView getContent() const;
+  std::string_view getContent() const;
 };
 
 // Owning IRI type (stores its own `std::string`).

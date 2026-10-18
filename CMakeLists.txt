@@ -893,7 +893,7 @@ endif ()
 # Warnings about incorrect combination of CMake variables
 
 if (LOGLEVEL_NAME MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE STREQUAL "ENABLED")
-  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL_NAME}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
+  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL_NAME}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but the server still runs a watchdog that decides when to print those messages)")
 endif ()
 
 add_subdirectory(src/parser)
