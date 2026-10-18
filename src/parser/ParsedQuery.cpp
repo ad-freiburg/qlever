@@ -114,21 +114,19 @@ void ParsedQuery::addSolutionModifiers(
   // Without a `GROUP BY` clause, an aggregate in the `SELECT`, `HAVING`, or
   // `ORDER BY` clause groups all solutions into a single group (SPARQL 1.1,
   // sec. 18.2.4.1).
-  auto containsAggregate =
-      [](const sparqlExpression::SparqlExpressionPimpl& expression) {
-        return expression.containsAggregate();
-      };
+  using sparqlExpression::SparqlExpressionPimpl;
   const bool isExplicitGroupBy = !_groupByVariables.empty();
   const bool hasAggregateInSelectOrHaving =
-      ql::ranges::any_of(getAliases(), containsAggregate,
+      ql::ranges::any_of(getAliases(),
+                         &SparqlExpressionPimpl::containsAggregate,
                          &Alias::_expression) ||
-      ql::ranges::any_of(modifiers.havingClauses_, containsAggregate,
+      ql::ranges::any_of(modifiers.havingClauses_,
+                         &SparqlExpressionPimpl::containsAggregate,
                          &SparqlFilter::expression_);
   const bool hasAggregateInOrderBy = ql::ranges::any_of(
-      modifiers.orderBy_.orderKeys,
-      [&containsAggregate](const OrderKey& orderKey) {
+      modifiers.orderBy_.orderKeys, [](const OrderKey& orderKey) {
         auto* key = std::get_if<ExpressionOrderKey>(&orderKey);
-        return key != nullptr && containsAggregate(key->expression_);
+        return key != nullptr && key->expression_.containsAggregate();
       });
   const bool isImplicitGroupBy =
       !isExplicitGroupBy &&
@@ -676,7 +674,7 @@ void ParsedQuery::addHavingClauseWithoutGroupBy(
       }));
   addWarning(
       "A HAVING clause without GROUP BY and without aggregates is equivalent "
-      "to a FILTER in the WHERE clause. Consider using FILTER instead");
+      "to a FILTER in the WHERE clause. Consider using FILTER instead.");
 
   // Without grouping, `HAVING(E)` is `Filter(E, P)` with `P` the `WHERE` clause
   // (SPARQL 1.1, sec. 18.2.4.2). The trailing `VALUES` and the `SELECT`

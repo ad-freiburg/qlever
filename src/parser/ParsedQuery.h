@@ -241,10 +241,10 @@ class ParsedQuery {
   void addGroupByClause(std::vector<GroupKey> groupKeys,
                         InternalVariableGenerator internalVariableGenerator);
 
-  // Add the `havingClause` to the query. With a (explicit or implicit)
+  // Add the `havingClause` to the query. With an explicit or implicit
   // `GROUP BY` (`isGroupBy`), each expression becomes an internal alias (using
-  // `internalVariableGenerator`), else see `addHavingClauseWithoutGroupBy`.
-  // Variables that are not visible yield a warning (or exception, see
+  // `internalVariableGenerator`). Without, see `addHavingClauseWithoutGroupBy`.
+  // Variables that are not visible yield a warning (or an exception, see
   // `addWarningOrThrow`). `postQueryValues` is only used for the warnings.
   void addHavingClause(
       std::vector<SparqlFilter> havingClause, bool isGroupBy,
