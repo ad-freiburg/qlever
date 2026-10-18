@@ -19,6 +19,7 @@
 
 #include "backports/concepts.h"
 #include "engine/CallFixedSize.h"
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
 #include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/NumericOperandClassification.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -198,23 +199,17 @@ ExpressionResult evaluateHomogeneousNumericOperation(
 // return the same value for every index.
 template <typename Operand>
 ValueId getIdAt(const Operand& operand, size_t index) {
-  using OperandType = std::decay_t<Operand>;
-
   static_assert(supportsNumericFastPathOperand<Operand>(),
                 "Unsupported operand representation for numeric fast path");
-
-  if constexpr (isVectorResult<OperandType>) {
-    return operand[index];
-  } else {
-    return operand;
-  }
+  return getValueAt(operand, index);
 }
 
 // The fallback path for the speculative evaluation below when a pair of
 // operands does not match the majority types. Integer and double combinations
 // are dispatched explicitly because this was measurably faster than always
-// using the generic fallback. Eligible operations reject unsupported datatypes
-// directly; booleans and other operations retain the regular value getters.
+// using the generic fallback. Functions with `undefForNonNumeric` return UNDEF
+// directly for non-numeric datatypes (see `hasNonNumericOperand`); all other
+// rows (in particular booleans) use the regular value getters.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(

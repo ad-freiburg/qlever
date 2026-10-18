@@ -189,8 +189,14 @@ class NaryExpressionStronglyTyped
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
-      // Reject known unsupported numeric inputs before invoking the indexed
-      // getters. Otherwise pass the converted values to the N-ary function.
+      // Return UNDEF directly for rows with a non-numeric operand of a numeric
+      // function, otherwise pass the converted values to the N-ary function.
+      //
+      // NOTE: The `if constexpr` is required although `hasNonNumericOperand`
+      // already checks `undefForNonNumeric` at compile time: `computeValue` has
+      // a deduced return type, and for functions that return a different type
+      // (e.g. `IdOrLiteralOrIri` for the string functions), the `Id` branch
+      // would not compile.
       auto computeValue = [&](size_t i) {
         if constexpr (undefForNonNumeric<typename NaryOperation::Function>) {
           const bool nonNumeric = std::apply(

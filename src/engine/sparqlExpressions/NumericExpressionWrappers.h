@@ -67,8 +67,9 @@ struct MakeNumericExpression {
 // If `undefForNonNumeric<Function>` is true, `Function` must always return an
 // undefined ID when any argument is non-numeric. Expressions use this property
 // to return UNDEF for such inputs without evaluating the function.
-// This property is opt-in and independent of `supportsNumericFastPath`:
-// date-aware operations also support homogeneous numeric execution, but can
+//
+// NOTE: This property is opt-in and independent of `supportsNumericFastPath`.
+// Date-aware operations also support homogeneous numeric execution, but can
 // return defined results for non-numeric dates.
 template <typename Function>
 inline constexpr bool undefForNonNumeric = false;
@@ -80,11 +81,13 @@ inline constexpr bool
 // Return true if any of `values` is a raw ID with a non-numeric datatype, its
 // corresponding getter in `ValueGetters` is `NumericValueGetter`, and
 // `undefForNonNumeric<Function>` is true. `ValueGetters` is a tuple with one
-// getter type per value, in the same order as `values`.
-// This allows evaluation to return UNDEF before applying the value getters.
-// NumericValueGetter accepts booleans as integers, so they are not rejected.
-// Other getters and non-ID arguments return false; in particular, date-aware
-// getters must retain their own handling of non-numeric dates.
+// getter type per value, in the same order as `values`. The result of the
+// expression for such a row is UNDEF, which the callers return without
+// applying the value getters.
+//
+// NOTE: `NumericValueGetter` accepts booleans as integers, so they are not
+// rejected. Other getters and non-ID arguments return false; in particular,
+// date-aware getters keep their own handling of non-numeric dates.
 template <typename Function, typename ValueGetters, typename... Values>
 bool hasNonNumericOperand(const Values&... values) {
   return [&]<size_t... I>(std::index_sequence<I...>) {

@@ -42,8 +42,9 @@ decltype(auto) convertToVectorOrConstant(T&& value,
   }
 }
 
-// Return the raw value at `i` from a vector, or the constant itself. Unlike
-// numeric operand access, this also supports non-ID expression results.
+// Return the raw value at `i` of a vector operand, or the constant itself.
+// Works for every vector or constant result type (unlike `getIdAt` in
+// `HomogeneousNumericExpressionHelpers.h`, which is restricted to `Id`s).
 template <typename Operand>
 decltype(auto) getValueAt(const Operand& operand, size_t i) {
   if constexpr (isVectorResult<std::decay_t<Operand>>) {
