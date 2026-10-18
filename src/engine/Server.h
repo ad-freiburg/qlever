@@ -483,11 +483,15 @@ class Server {
   /// The returned callback can be used to prevent this task from executing
   /// either because the `cancellationHandle` has been aborted by some other
   /// means or because the task has been completed successfully.
-  auto cancelAfterDeadline(
+  absl::AnyInvocable<void()> cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-      TimeLimit timeLimit)
-      -> QL_CONCEPT_OR_NOTHING(
-          ad_utility::InvocableWithExactReturnType<void>) auto;
+      TimeLimit timeLimit);
+  FRIEND_TEST(ServerTest, cancelAfterDeadline);
+
+  /// Return the `RunAfter` for the watchdog of a single `CancellationHandle`,
+  /// which runs the steps of the watchdog on the `timerExecutor_`.
+  ad_utility::CancellationHandle<>::RunAfter makeWatchDogRunAfter();
+  FRIEND_TEST(ServerTest, makeWatchDogRunAfter);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
