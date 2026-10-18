@@ -62,8 +62,7 @@ struct ExtractStrTimezone {
       return Id::makeUndefined();
     }
     auto timezoneStr = d.value().getStrTimezone();
-    return LiteralOrIri{Literal::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(timezoneStr))};
+    return LiteralOrIri{Literal::literalWithNormalizedContent(timezoneStr)};
   }
 };
 
