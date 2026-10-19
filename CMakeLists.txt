@@ -327,8 +327,10 @@ FetchContent_Declare(
 ################################
 FetchContent_Declare(
         spatialjoin
-        GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 5d1c09eef18bd122cadd9144870fd6bee53d4057
+        # TODO<ullingerc> Temporary: point back to `ad-freiburg/spatialjoin`
+        # once the strict `parseWKTGeometry` is merged there.
+        GIT_REPOSITORY https://github.com/ullingerc/spatialjoin
+        GIT_TAG 55a48c335cebe29bfee863165f941a91ff988025
         SYSTEM
         EXCLUDE_FROM_ALL
 )
