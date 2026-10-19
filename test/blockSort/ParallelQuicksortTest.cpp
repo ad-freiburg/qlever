@@ -25,9 +25,11 @@
 #include <functional>
 #include <future>
 #include <memory>
+#include <numeric>
 #include <random>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -39,6 +41,7 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/CancellationHandle.h"
 #include "util/blockSort/ParallelQuicksort.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
@@ -264,13 +267,20 @@ void runOnPool(net::awaitable<void> awaitable) {
       .get();
 }
 
-// Sort `values` with `parallelQuicksort` on the shared thread pool.
+// Sort `values` with `parallelQuicksort` on the shared thread pool, or with
+// `serialQuicksort` if `serial` is set, both not cancellable.
 template <typename Values>
 void runSortOn(typename Values::Container& values,
                const FuzzCompare<typename Values::Less>& comp,
-               size_t maxElementsPerTask) {
+               size_t maxElementsPerTask, bool serial = false) {
   auto range = Values::range(values);
-  SortState state{comp, maxElementsPerTask, threadPool().get_executor()};
+  if (serial) {
+    serialQuicksort(range.begin(), range.end(), comp, maxElementsPerTask,
+                    ad_utility::noop);
+    return;
+  }
+  SortState state{comp, maxElementsPerTask, threadPool().get_executor(),
+                  ad_utility::noop};
   runOnPool(parallelQuicksort(state, range.begin(), range.end()));
 }
 
@@ -278,9 +288,9 @@ void runSortOn(typename Values::Container& values,
 // parameters and shapes, and expect the result of `std::sort`. With
 // `withFailures`, the comparator throws at a random point (or not at all if the
 // sort needs fewer comparisons), in which case the exception has to reach the
-// caller.
+// caller. With `serial`, `serialQuicksort` is fuzzed instead.
 template <typename Values>
-void fuzzSort(size_t numIterations, bool withFailures) {
+void fuzzSort(size_t numIterations, bool withFailures, bool serial) {
   auto seed = std::random_device{}();
   SCOPED_TRACE(absl::StrCat("seed=", seed));
   std::mt19937_64 gen{seed};
@@ -295,7 +305,8 @@ void fuzzSort(size_t numIterations, bool withFailures) {
     auto shape = static_cast<Shape>(random(0, numShapes - 1));
     SCOPED_TRACE(absl::StrCat(
         "iteration=", iteration, " shape=", static_cast<int>(shape),
-        " numKeys=", numKeys, " maxElementsPerTask=", maxElementsPerTask));
+        " numKeys=", numKeys, " maxElementsPerTask=", maxElementsPerTask,
+        " serial=", serial));
     auto keys = makeKeys(shape, numKeys, gen);
     auto values = Values::fromKeys(keys);
 
@@ -313,7 +324,7 @@ void fuzzSort(size_t numIterations, bool withFailures) {
     // may or may not throw, hence no `AD_EXPECT_THROW_WITH_MESSAGE`.
     bool threw = false;
     try {
-      runSortOn<Values>(values, comp, maxElementsPerTask);
+      runSortOn<Values>(values, comp, maxElementsPerTask, serial);
     } catch (const TestException& e) {
       EXPECT_STREQ(e.what(), comparisonFailed);
       threw = true;
@@ -326,17 +337,24 @@ void fuzzSort(size_t numIterations, bool withFailures) {
   }
 }
 
-// The fuzzer for one value type, with and without failures, and the rejection
-// of too small tasks (a task must sort at least 16 elements on its own, see
-// `computePivotAndMoveToFront`) with the same comparator.
+// The fuzzer for one value type, parallel and serial, with and without
+// failures, and the rejection of too small tasks (a task must sort at least 16
+// elements on its own, see `computePivotAndMoveToFront`) with the same
+// comparator.
 template <typename Values>
 void testValueType(size_t numIterations) {
-  fuzzSort<Values>(numIterations, false);
-  fuzzSort<Values>(numIterations, true);
+  for (bool serial : {false, true}) {
+    fuzzSort<Values>(numIterations, false, serial);
+    fuzzSort<Values>(numIterations, true, serial);
+  }
   AD_EXPECT_THROW_WITH_MESSAGE(
       (SortState{FuzzCompare<typename Values::Less>{}, 15,
-                 threadPool().get_executor()}),
+                 threadPool().get_executor(), ad_utility::noop}),
       ::testing::HasSubstr("maxElementsPerTask_ >= 16"));
+  auto values = Values::fromKeys({3, 1, 2});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runSortOn<Values>(values, {}, 15, true),
+      ::testing::HasSubstr("maxElementsPerPart >= 16"));
 }
 
 // Spawn a child into `group` that only finishes 50 ms after it has started,
@@ -384,22 +402,18 @@ net::awaitable<void> setFlag(std::atomic<bool>& flag) {
 
 }  // namespace
 
-// _____________________________________________________________________________
 // Small elements that are cheap to move.
 TEST(ParallelQuicksort, uint32) { testValueType<Uint32Values>(400); }
 
-// _____________________________________________________________________________
 // Elements that are not trivially copyable.
 TEST(ParallelQuicksort, strings) { testValueType<StringValues>(200); }
 
-// _____________________________________________________________________________
 // The rows of an `IdTable` with a static and a dynamic number of columns.
 TEST(ParallelQuicksort, idTableRows) {
   testValueType<IdTableValues<3>>(150);
   testValueType<IdTableValues<0>>(150);
 }
 
-// _____________________________________________________________________________
 // The default number of elements per task shrinks with the size of the
 // elements, down to a minimum.
 TEST(ParallelQuicksort, defaultMaxElementsPerTask) {
@@ -411,7 +425,118 @@ TEST(ParallelQuicksort, defaultMaxElementsPerTask) {
             size_t{1} << 13);
 }
 
-// _____________________________________________________________________________
+// The parallel and the serial quicksort throw a `CancellationException` when
+// their handle is cancelled before or during the sort, and otherwise sort.
+TEST(ParallelQuicksort, cancellation) {
+  using ad_utility::CancellationException;
+  using ad_utility::CancellationHandle;
+  using ad_utility::CancellationState;
+  constexpr size_t maxElementsPerTask = 64;
+  std::mt19937_64 gen{3};
+  auto keys = makeKeys(Shape::Random, 100 * maxElementsPerTask, gen);
+  auto expected = keys;
+  ql::ranges::sort(expected);
+
+  // Sort a copy of the `keys` with the comparator `comp` and the `handle`.
+  auto sortParallel = [&keys](CancellationHandle<>& handle, auto comp) {
+    auto values = Uint32Values::fromKeys(keys);
+    SortState state{comp, maxElementsPerTask, threadPool().get_executor(),
+                    [&handle] { handle.throwIfCancelled(); }};
+    runOnPool(parallelQuicksort(state, values.begin(), values.end()));
+    return Uint32Values::toKeys(values);
+  };
+  auto sortSerial = [&keys](CancellationHandle<>& handle, auto comp) {
+    auto values = Uint32Values::fromKeys(keys);
+    serialQuicksort(values.begin(), values.end(), comp, maxElementsPerTask,
+                    [&handle] { handle.throwIfCancelled(); });
+    return Uint32Values::toKeys(values);
+  };
+
+  auto test = [&expected](auto sort) {
+    CancellationHandle<> handle;
+    EXPECT_EQ(sort(handle, std::less<>{}), expected);
+    handle.cancel(CancellationState::MANUAL);
+    EXPECT_THROW(sort(handle, std::less<>{}), CancellationException);
+    // Cancelled by the comparator during the first partition.
+    CancellationHandle<> handle2;
+    std::atomic<size_t> numComparisons = 0;
+    auto cancellingLess = [&handle2, &numComparisons](uint32_t a, uint32_t b) {
+      if (++numComparisons == 100) {
+        handle2.cancel(CancellationState::TIMEOUT);
+      }
+      return a < b;
+    };
+    EXPECT_THROW(sort(handle2, cancellingLess), CancellationException);
+  };
+  test(sortParallel);
+  test(sortSerial);
+}
+
+// The linear passes call `checkCancellation` once per
+// `ELEMENTS_PER_CANCELLATION_CHECK` elements (and after the last, partial
+// chunk), and an exception of `checkCancellation` aborts them.
+TEST(ParallelQuicksort, linearPassesCheckCancellation) {
+  auto throwing = [] { throw TestException{"cancelled"}; };
+  size_t numChecks = 0;
+  auto counting = [&numChecks] { ++numChecks; };
+  constexpr size_t big = 3 * ELEMENTS_PER_CANCELLATION_CHECK;
+  std::vector<uint32_t> ascending(big);
+  std::iota(ascending.begin(), ascending.end(), 0u);
+  auto descending = ascending;
+  ql::ranges::reverse(descending);
+  std::less<> less;
+
+  EXPECT_TRUE(isSorted(ascending.begin(), ascending.end(), less, counting));
+  EXPECT_EQ(numChecks, 3);
+  numChecks = 0;
+  EXPECT_TRUE(
+      isDescending(descending.begin(), descending.end(), less, counting));
+  EXPECT_EQ(numChecks, 3);
+  numChecks = 0;
+  auto values = descending;
+  reverseRange(values.begin(), values.end(), counting);
+  EXPECT_EQ(values, ascending);
+  EXPECT_EQ(numChecks, 3);
+  EXPECT_THROW(std::ignore =
+                   isSorted(ascending.begin(), ascending.end(), less, throwing),
+               TestException);
+  EXPECT_THROW(reverseRange(values.begin(), values.end(), throwing),
+               TestException);
+
+  // An inversion is found anywhere, and ranges of any size are reversed.
+  values = ascending;
+  std::swap(values[ELEMENTS_PER_CANCELLATION_CHECK - 1],
+            values[ELEMENTS_PER_CANCELLATION_CHECK]);
+  EXPECT_FALSE(isSorted(values.begin(), values.end(), less, counting));
+  for (size_t size : {size_t{0}, size_t{1}, size_t{7}, big + 1}) {
+    std::vector<uint32_t> input(size);
+    std::iota(input.begin(), input.end(), 0u);
+    auto expected = input;
+    ql::ranges::reverse(expected);
+    reverseRange(input.begin(), input.end(), counting);
+    EXPECT_EQ(input, expected) << size;
+  }
+
+  // The partition of a big range.
+  values = ascending;
+  ql::ranges::shuffle(values, std::mt19937_64{5});
+  auto copy = values;
+  computePivotAndMoveToFront(values.begin(), values.end(), less);
+  EXPECT_THROW(std::ignore =
+                   hoarePartition(values.begin(), values.end(), less, throwing),
+               TestException);
+  // Even a cancelled partition keeps all elements.
+  ql::ranges::sort(values);
+  EXPECT_EQ(values, ascending);
+  computePivotAndMoveToFront(copy.begin(), copy.end(), less);
+  auto [leftEnd, rightBegin] =
+      hoarePartition(copy.begin(), copy.end(), less, ad_utility::noop);
+  EXPECT_TRUE(ql::ranges::all_of(copy.begin(), leftEnd,
+                                 [&](uint32_t x) { return x <= *leftEnd; }));
+  EXPECT_TRUE(ql::ranges::all_of(rightBegin, copy.end(),
+                                 [&](uint32_t x) { return x >= *leftEnd; }));
+}
+
 // `median3` sorts its three elements in place and returns the middle one, for
 // all orders of the elements, also with duplicates.
 TEST(ParallelQuicksort, median3) {
@@ -428,7 +553,6 @@ TEST(ParallelQuicksort, median3) {
   }
 }
 
-// _____________________________________________________________________________
 // Concurrent sorts on the same executor don't interfere.
 TEST(ParallelQuicksort, concurrentSortsOnTheSameExecutor) {
   constexpr size_t numSorts = 4;
@@ -452,7 +576,6 @@ TEST(ParallelQuicksort, concurrentSortsOnTheSameExecutor) {
   }
 }
 
-// _____________________________________________________________________________
 // If both the body and a child throw, the first of the two exceptions reaches
 // the caller.
 TEST(TaskGroup, keepsFirstException) {
@@ -476,7 +599,6 @@ TEST(TaskGroup, keepsFirstException) {
       TestException);
 }
 
-// _____________________________________________________________________________
 // `withChildren` runs all children and waits for them, also for those that are
 // still running when the body is done.
 TEST(TaskGroup, waitsForChildren) {
@@ -504,7 +626,6 @@ TEST(TaskGroup, waitsForChildren) {
   EXPECT_TRUE(grandchildRan);
 }
 
-// _____________________________________________________________________________
 // The first exception of the body or of a child reaches the caller, but only
 // after all children have finished, and it stops the sort.
 TEST(TaskGroup, propagatesExceptions) {
@@ -547,7 +668,6 @@ TEST(TaskGroup, propagatesExceptions) {
   EXPECT_TRUE(flag);
 }
 
-// _____________________________________________________________________________
 // Once the sort is stopped, spawned children don't start anymore.
 TEST(TaskGroup, skipsChildrenWhenStopped) {
   ql::any_io_executor executor = threadPool().get_executor();
@@ -567,7 +687,6 @@ TEST(TaskGroup, skipsChildrenWhenStopped) {
   EXPECT_FALSE(ran);
 }
 
-// _____________________________________________________________________________
 // The parent is resumed on the executor of its coroutine (here a strand), not
 // on the thread of the child that finished last. Without children, the parent
 // is resumed from within `join()`, which is a separate code path.
