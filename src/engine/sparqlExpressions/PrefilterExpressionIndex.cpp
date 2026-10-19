@@ -700,7 +700,7 @@ BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
   return getRangesForDatatypes(idRange, blockRange, isNegated_,
-                               getDatatypes(Datatype));
+                               getDatatypes<Datatype>());
 }
 
 //______________________________________________________________________________
@@ -737,8 +737,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // prefilter above does not cover them and we have to add their datatype range
   // explicitly. Otherwise, blocks that consist entirely of encoded IRIs would
   // be incorrectly pruned.
-  auto encodedIriRanges = getRangesForDatatypes(idRange, blockRange, isNegated_,
-                                                getDatatypes(IsDatatype::IRI));
+  auto encodedIriRanges = getRangesForDatatypes(
+      idRange, blockRange, isNegated_, getDatatypes<IsDatatype::IRI>());
   // `IRI = vocabIri || encodedIri` (an intersection under negation, see the
   // helper for details).
   return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
@@ -758,8 +758,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   // TODO<joka921> Just as for `IsDatatype::IRI` above, the literals of a
   // secondary vocabulary are not covered, because their `Id`s sort after the
   // `< <>` bound that is used here. See the note there.
-  auto inlinedRanges = getRangesForDatatypes(idRange, blockRange, isNegated_,
-                                             getDatatypes(IsDatatype::LITERAL));
+  auto inlinedRanges = getRangesForDatatypes(
+      idRange, blockRange, isNegated_, getDatatypes<IsDatatype::LITERAL>());
   auto nonInlinedRanges =
       make<LessThanExpression>(
           LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))

@@ -87,10 +87,10 @@ CPP_class_template(typename NaryOperation,
   // getters must be consistent with this.
   ExpressionResult evaluate(EvaluationContext* context) const override {
     using namespace prefilterExpressions;
-    if constexpr (isExactlyDatatypes(Datatype)) {
+    if constexpr (isExactlyDatatypes<Datatype>) {
       AD_CORRECTNESS_CHECK(this->children().size() == 1);
       auto result = evaluateDatatypesWithBinarySearch(
-          *this->children()[0], context, getDatatypes(Datatype), false);
+          *this->children()[0], context, getDatatypes<Datatype>(), false);
       if (result.has_value()) {
         return std::move(result.value());
       }
