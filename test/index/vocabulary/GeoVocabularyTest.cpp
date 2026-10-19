@@ -370,9 +370,7 @@ TEST(GeoVocabularyTest, ReadVersion5) {
 }
 
 // Test that a geoinfo file whose size does not match its version and the number
-// of words is rejected. This is the case for the files of pre-release builds
-// with parsed geometries, which have the version 6 in their header (like the
-// released version 6), but records of the size of version 7.
+// of words is rejected.
 TEST(GeoVocabularyTest, RejectFileWithWrongRecordSize) {
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
   auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
@@ -390,21 +388,98 @@ TEST(GeoVocabularyTest, RejectFileWithWrongRecordSize) {
     }
     ww->finish();
   }
-  static_assert(sizeof(GeometryInfo) != geometryInfoSize(6));
+  static_assert(sizeof(GeometryInfo) != geometryInfoSize(5));
 
-  // Change only the version in the header of the geoinfo file to 6.
+  // Change only the version in the header of the geoinfo file to 5.
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
+  {
+    std::fstream file{geoInfoFilename,
+                      std::ios::binary | std::ios::in | std::ios::out};
+    const uint64_t version5 = 5;
+    file.write(reinterpret_cast<const char*>(&version5), sizeof(version5));
+  }
+  AnyGeoVocab geoVocab;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      geoVocab.open(filename),
+      ::testing::AllOf(::testing::HasSubstr("geometry info version 5"),
+                       ::testing::HasSubstr("Please rebuild your index")));
+}
+
+// Test that a geoinfo file of the serving branch before 2026-10-19 (version 6
+// in the header, records of version 7, arbitrary content in the bytes
+// `[28, 32)`) is read as version 7 with these bytes zeroed, and that its
+// parsed geometries can be used.
+TEST(GeoVocabularyTest, ReadOldServingFile) {
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+  std::vector<std::string> literals{
+      "\"POLYGON((7.8 48.0, 7.9 48.0, 7.9 48.1, 7.8 48.1, 7.8 48.0))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"Invalid\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+  };
+  ql::ranges::sort(literals);
+  {
+    AnyGeoVocab writerVocab;
+    writerVocab.setParsedGeometriesMinLength(100);
+    auto ww = writerVocab.makeDiskWriterPtr(filename);
+    for (const auto& lit : literals) {
+      (*ww)(lit, true);
+    }
+    ww->finish();
+  }
+
+  // Remember the records as written, then turn the file into one of the old
+  // serving branch.
+  using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
+  std::vector<std::optional<Bytes>> expected;
+  {
+    AnyGeoVocab geoVocab;
+    geoVocab.open(filename);
+    for (size_t i = 0; i < literals.size(); ++i) {
+      auto info = geoVocab.getGeoInfo(i);
+      expected.push_back(
+          info.has_value() ? std::optional{absl::bit_cast<Bytes>(info.value())}
+                           : std::nullopt);
+    }
+  }
+  const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
+  static_assert(sizeof(GeometryInfo) == 56);
   {
     std::fstream file{geoInfoFilename,
                       std::ios::binary | std::ios::in | std::ios::out};
     const uint64_t version6 = 6;
     file.write(reinterpret_cast<const char*>(&version6), sizeof(version6));
+    for (size_t i = 0; i < literals.size(); ++i) {
+      if (!expected[i].has_value()) {
+        continue;
+      }
+      file.seekp(sizeof(uint64_t) + i * sizeof(GeometryInfo) + 28);
+      file.write("\x97\x70\x00\x00", 4);
+    }
   }
+
+  // Read the file: the bytes `[28, 32)` are zero, everything else (including
+  // the offset of the parsed geometry) is as written.
   AnyGeoVocab geoVocab;
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      geoVocab.open(filename),
-      ::testing::AllOf(::testing::HasSubstr("geometry info version 6"),
-                       ::testing::HasSubstr("Please rebuild your index")));
+  geoVocab.open(filename);
+  size_t numParsed = 0;
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto actual = geoVocab.getGeoInfo(i);
+    ASSERT_EQ(actual.has_value(), expected[i].has_value());
+    if (!actual.has_value()) {
+      continue;
+    }
+    EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
+    EXPECT_EQ(actual.value().getSerializationType(), SerializationType::WKT);
+    auto expectedBytes = expected[i].value();
+    std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
+    EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
+    numParsed += geoVocab.getParsedGeometry(i).has_value();
+  }
+  EXPECT_EQ(numParsed, 1);
+  geoVocab.close();
 }
 
 // Test that the vocabulary stores the parsed geometries (see `ParsedGeometry`)
