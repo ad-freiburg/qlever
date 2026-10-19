@@ -78,16 +78,23 @@ template <typename Function, bool NanOrInfToUndef>
 inline constexpr bool
     undefForNonNumeric<MakeNumericExpression<Function, NanOrInfToUndef>> = true;
 
+// If true, Function returns UNDEF for any input outside numeric values and
+// dates. This separate opt-in permits dates for NumericOrDateValueGetter while
+// retaining the numeric-only property above for NumericValueGetter.
+template <typename Function>
+inline constexpr bool undefForNonNumericOrDate = false;
+
 // Return true if any of `values` is a raw ID with a non-numeric datatype, its
-// corresponding getter in `ValueGetters` is `NumericValueGetter`, and
-// `undefForNonNumeric<Function>` is true. `ValueGetters` is a tuple with one
-// getter type per value, in the same order as `values`. The result of the
-// expression for such a row is UNDEF, which the callers return without
-// applying the value getters.
+// corresponding getter is NumericValueGetter, and undefForNonNumeric is true.
+// For NumericOrDateValueGetter with undefForNonNumericOrDate, dates are also
+// accepted and all other unsupported ID datatypes are rejected. `ValueGetters`
+// is a tuple with one getter type per value, in the same order as `values`. The
+// result of the expression for such a row is UNDEF, which the callers return
+// without applying the value getters.
 //
 // NOTE: `NumericValueGetter` accepts booleans as integers, so they are not
-// rejected. Other getters and non-ID arguments return false; in particular,
-// date-aware getters keep their own handling of non-numeric dates.
+// rejected. Other getters and non-ID arguments return false. Date IDs
+// keep their original arithmetic, including invalid/incompatible date subtypes.
 template <typename Function, typename ValueGetters, typename... Values>
 bool hasNonNumericOperand(const Values&... values) {
   return [&]<size_t... I>(std::index_sequence<I...>) {
@@ -98,6 +105,13 @@ bool hasNonNumericOperand(const Values&... values) {
         using enum Datatype;
         const auto type = value.getDatatype();
         return type != Int && type != Double && type != Bool;
+      } else if constexpr (undefForNonNumericOrDate<Function> &&
+                           std::is_same_v<Getter, NumericOrDateValueGetter> &&
+                           std::is_same_v<std::decay_t<decltype(value)>,
+                                          ValueId>) {
+        using enum Datatype;
+        const auto type = value.getDatatype();
+        return type != Int && type != Double && type != Bool && type != Date;
       } else {
         return false;
       }

@@ -14,6 +14,7 @@
 #include <array>
 #include <cstddef>
 #include <optional>
+#include <tuple>
 #include <type_traits>
 
 #include "backports/concepts.h"
@@ -23,26 +24,35 @@
 
 namespace sparqlExpression::detail::homogeneousNumeric {
 
-// Helpers for classifying numeric operands by their homogeneous and majority
-// datatypes for use by the numeric fast paths.
+// Helpers for classifying numeric and optionally date operands by their
+// homogeneous and majority datatypes in a single pass over each operand.
 
-// A numeric datatype supported by the optimized numeric evaluation paths.
-// `Other` represents values that cannot be represented as `Int` or `Double`.
-enum class NumericType {
-  Int,
-  Double,
-  Other,
-};
+// Datatypes supported by typed expression evaluation. Date denotes the full
+// DateYearOrDuration representation, including dateTimes, durations and years.
+// Other denotes a datatype without a typed fast path for the selected getters.
+enum class NumericType { Int, Double, Date, Other };
 
-// Classification of a numeric operand. `homogeneousType_` is `Int` or `Double`
-// only if every value has that datatype. Otherwise it is `Other`.
-// `majorityType_` is `Int` or `Double` if that datatype is the unique most
-// common datatype in the operand. Otherwise it is `Other`. It is used for
-// speculative evaluation.
+// The homogeneous type is supported only if every value has that datatype.
+// The majority type is supported only if it is the unique most common datatype
+// in the operand, even when it occurs in fewer than half of the rows.
+// The same pass also records whether generic fallback needs unsupported-ID
+// checks.
 struct NumericOperandClassification {
   NumericType homogeneousType_ = NumericType::Other;
   NumericType majorityType_ = NumericType::Other;
+  // Whether fallback must check for getter-unsupported IDs. Booleans are
+  // getter-supported; unknown/empty classifications retain the checks.
+  bool hasUnsupported_ = true;
 };
+
+// Enable date classification/dispatch only when every getter accepts dates.
+// Other getter combinations retain numeric dispatch and their generic fallback.
+template <typename ValueGetters>
+inline constexpr bool supportsDateOperands = false;
+
+template <typename... ValueGetters>
+inline constexpr bool supportsDateOperands<std::tuple<ValueGetters...>> =
+    (... && std::is_same_v<ValueGetters, NumericOrDateValueGetter>);
 
 // Whether a value getter can participate in the homogeneous numeric fast path.
 template <typename ValueGetter>
@@ -67,102 +77,120 @@ constexpr bool supportsNumericFastPathOperand() {
   }
 }
 
-// Classify a column by determining whether all values have the same numeric
-// datatype and whether an integer or double is the unique most common datatype.
+// Map an ID datatype to a supported typed value. Date is enabled only for
+// date-aware getters; booleans retain the generic getter's numeric conversion.
+template <bool IncludeDates = false>
+constexpr NumericType numericTypeForDatatype(Datatype type) {
+  switch (type) {
+    case Datatype::Int:
+      return NumericType::Int;
+    case Datatype::Double:
+      return NumericType::Double;
+    case Datatype::Date:
+      if constexpr (IncludeDates) {
+        return NumericType::Date;
+      }
+      return NumericType::Other;
+    default:
+      return NumericType::Other;
+  }
+}
+
+// Classify a column in one pass, counting supported and competing datatypes
+// together. Each small block is read once into datatype tags. Homogeneous
+// blocks need one histogram update; two-type blocks aggregate both counts.
+// This preserves efficient classification of numeric/date columns and common
+// numeric/UNDEF mixtures. Other mixed blocks reuse the tags to count each type.
+// IncludeDates enables Date alongside Int and Double. Empty input is untyped.
+template <bool IncludeDates = false>
 inline NumericOperandClassification classifyNumericOperand(
     ConstIdColumnRef values, const EvaluationContext* context) {
   if (values.empty()) {
     return {};
   }
-
-  size_t numInts = 0;
-  size_t numDoubles = 0;
-
-  ad_utility::chunkedForLoop<100'000>(
-      0, values.size(),
-      [&values, &numInts, &numDoubles](size_t i) {
-        const auto type = values[i].getDatatype();
-        numInts += static_cast<size_t>(type == Datatype::Int);
-        numDoubles += static_cast<size_t>(type == Datatype::Double);
-      },
-      [context]() { context->cancellationHandle_->throwIfCancelled(); });
-
-  NumericOperandClassification result;
-
-  if (numInts == values.size()) {
-    result.homogeneousType_ = NumericType::Int;
-  } else if (numDoubles == values.size()) {
-    result.homogeneousType_ = NumericType::Double;
-  }
-
-  if (numInts == numDoubles) {
-    return result;
-  }
-
-  const auto majorityType =
-      numInts > numDoubles ? NumericType::Int : NumericType::Double;
-  const auto majorityCount = std::max(numInts, numDoubles);
-
-  // If more than half of all values have this datatype, it is necessarily the
-  // unique most common datatype.
-  if (majorityCount > values.size() / 2) {
-    result.majorityType_ = majorityType;
-    return result;
-  }
-
-  // Otherwise, check whether some non-numeric datatype occurs at least as often
-  // as the numeric candidate.
-  // The second scan is worthwhile for cases where a numeric datatype is the
-  // unique most common datatype but does not exceed 50% of the input. There are
-  // still possible refinements, for example treating datatypes that
-  // unconditionally lead to `UNDEF` separately.
-  //
-  // NOTE: For operands without a numeric majority the classification is wasted
-  // work. Measured with `SparqlExpressionBenchmark` on 100k rows x 50, the
-  // first scan costs about 2 ms and both scans about 3 ms, which makes such
-  // expressions 3 to 7 percent slower than the generic path.
+  context->cancellationHandle_->throwIfCancelled();
   constexpr size_t numDatatypes = static_cast<size_t>(Datatype::MaxValue) + 1;
-  std::array<size_t, numDatatypes> datatypeCounts{};
-
-  ad_utility::chunkedForLoop<100'000>(
-      0, values.size(),
-      [&values, &datatypeCounts](size_t i) {
-        const auto type = values[i].getDatatype();
-        if (type != Datatype::Int && type != Datatype::Double) {
-          ++datatypeCounts[static_cast<size_t>(type)];
+  std::array<size_t, numDatatypes> counts{};
+  constexpr size_t blockSize = 32;
+  ad_utility::chunkedForLoop<100'000 / blockSize>(
+      0, values.size() / blockSize,
+      [&](size_t block) {
+        std::array<Datatype, blockSize> types;
+        for (size_t i = 0; i < blockSize; ++i) {
+          types[i] = values[block * blockSize + i].getDatatype();
+        }
+        unsigned differences = 0;
+        for (auto type : types) {
+          differences |=
+              static_cast<unsigned>(type) ^ static_cast<unsigned>(types[0]);
+        }
+        if (differences == 0) {
+          counts[static_cast<size_t>(types[0])] += blockSize;
+        } else {
+          const auto first = static_cast<unsigned>(types[0]);
+          // For exactly two types, the XOR differences recover the second.
+          // It is only a candidate until both counts account for the block.
+          const auto second = first ^ differences;
+          size_t firstCount = 0;
+          size_t secondCount = 0;
+          for (auto type : types) {
+            firstCount += static_cast<unsigned>(type) == first;
+            secondCount += static_cast<unsigned>(type) == second;
+          }
+          if (firstCount + secondCount == blockSize) {
+            counts[first] += firstCount;
+            counts[second] += secondCount;
+          } else {
+            for (auto type : types) {
+              ++counts[static_cast<size_t>(type)];
+            }
+          }
         }
       },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
-
-  size_t maxOtherCount = 0;
-  for (const auto count : datatypeCounts) {
-    maxOtherCount = std::max(maxOtherCount, count);
+  // Count the final incomplete block without reading beyond the column.
+  for (size_t i = values.size() / blockSize * blockSize; i < values.size();
+       ++i) {
+    ++counts[static_cast<size_t>(values[i].getDatatype())];
   }
 
-  if (majorityCount > maxOtherCount) {
-    result.majorityType_ = majorityType;
+  size_t supported = counts[static_cast<size_t>(Datatype::Int)] +
+                     counts[static_cast<size_t>(Datatype::Double)] +
+                     counts[static_cast<size_t>(Datatype::Bool)];
+  if constexpr (IncludeDates) {
+    supported += counts[static_cast<size_t>(Datatype::Date)];
   }
-
+  const bool hasUnsupported = supported != values.size();
+  const auto largest = std::max_element(counts.begin(), counts.end());
+  const auto candidate = numericTypeForDatatype<IncludeDates>(
+      static_cast<Datatype>(largest - counts.begin()));
+  NumericOperandClassification result{NumericType::Other, NumericType::Other,
+                                      hasUnsupported};
+  if (candidate == NumericType::Other) {
+    return result;
+  }
+  if (*largest == values.size()) {
+    return {candidate, candidate, hasUnsupported};
+  }
+  if (std::count(counts.begin(), counts.end(), *largest) == 1) {
+    result.majorityType_ = candidate;
+  }
   return result;
 }
 
-// Classify a single `ValueId` and use its numeric datatype as both the
-// homogeneous and majority type.
+// Classify a single ValueId and use its supported datatype as both the
+// homogeneous and majority type. Date is supported only with IncludeDates.
+template <bool IncludeDates = false>
 inline NumericOperandClassification classifyNumericOperand(ValueId value) {
-  switch (value.getDatatype()) {
-    using enum NumericType;
-    case Datatype::Int:
-      return {Int, Int};
-    case Datatype::Double:
-      return {Double, Double};
-    default:
-      return {};
-  }
+  const auto type = numericTypeForDatatype<IncludeDates>(value.getDatatype());
+  const bool hasUnsupported =
+      type == NumericType::Other && value.getDatatype() != Datatype::Bool;
+  return {type, type, hasUnsupported};
 }
 
 // Classify a supported operand representation. Constants are classified
 // directly, while vector-like operands are viewed as spans of `ValueId`.
-template <typename Operand>
+template <bool IncludeDates = false, typename Operand>
 inline NumericOperandClassification classifyNumericOperand(
     const Operand& operand, const EvaluationContext* context) {
   using OperandType = std::decay_t<Operand>;
@@ -172,23 +200,23 @@ inline NumericOperandClassification classifyNumericOperand(
       "Unsupported operand representation for numeric classification");
 
   if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
-    return classifyNumericOperand(operand);
+    return classifyNumericOperand<IncludeDates>(operand);
   } else {
-    return classifyNumericOperand(
+    return classifyNumericOperand<IncludeDates>(
         ConstIdColumnRef{operand.data(), operand.size()}, context);
   }
 }
 
 // Classify all operands and determine both their homogeneous and majority
-// numeric datatypes.
-template <typename... Operands>
+// supported datatypes, including Date when IncludeDates is true.
+template <bool IncludeDates = false, typename... Operands>
 inline auto classifyNumericOperands(const EvaluationContext* context,
                                     const Operands&... operands) {
   return std::array<NumericOperandClassification, sizeof...(Operands)>{
-      classifyNumericOperand(operands, context)...};
+      classifyNumericOperand<IncludeDates>(operands, context)...};
 }
 
-// Extract the numeric type selected by `projection` from every operand.
+// Extract the supported type selected by projection from every operand.
 // Return `std::nullopt` if any operand has type `Other`.
 template <size_t N, typename Projection>
 std::optional<std::array<NumericType, N>> getNumericTypes(
@@ -207,7 +235,7 @@ std::optional<std::array<NumericType, N>> getNumericTypes(
   return types;
 }
 
-// Return the homogeneous numeric type of every operand if all operands are
+// Return the homogeneous supported type of every operand if all operands are
 // homogeneous. Otherwise return `std::nullopt`.
 template <size_t N>
 std::optional<std::array<NumericType, N>> getHomogeneousNumericTypes(
@@ -217,7 +245,7 @@ std::optional<std::array<NumericType, N>> getHomogeneousNumericTypes(
   });
 }
 
-// Return the majority numeric type of every operand if all operands have one.
+// Return the majority supported type of every operand if all have one.
 // Otherwise return `std::nullopt`.
 template <size_t N>
 std::optional<std::array<NumericType, N>> getMajorityNumericTypes(

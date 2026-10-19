@@ -834,46 +834,64 @@ TEST(SparqlExpression, homogeneousDateNaryDispatch) {
   testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, dates);
 }
 
-TEST(SparqlExpression, homogeneousDateDispatchBypassesVariants) {
-  // Only the typed overload exists: invoking the generic function with the
-  // getter's NumericOrDateValue variant would fail to compile.
+// Homogeneous and speculative date execution share the same typed getter.
+TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
+  namespace hn = sparqlExpression::detail::homogeneousNumeric;
   struct TypedOnly {
     Id operator()(DateYearOrDuration, DateYearOrDuration) const { return I(7); }
   };
-  using Getter = sparqlExpression::detail::NumericOrDateValueGetter;
   TestContext outerContext;
   auto& context = outerContext.context;
   context._endIndex = 2;
   const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
   V<Id> dates{{date, date}, alloc};
-  auto result =
-      sparqlExpression::detail::homogeneousDate::tryEvaluate<TypedOnly, Getter,
-                                                             Getter>(
-          dates, date, &context);
   ConstIdColumnRef column{dates.data(), dates.size()};
-  EXPECT_TRUE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
-               TypedOnly, Getter, Getter>(column, date, &context)));
-  EXPECT_FALSE(
-      (sparqlExpression::detail::homogeneousDate::tryEvaluate<
-          TypedOnly, sparqlExpression::detail::NumericValueGetter, Getter>(
-          dates, date, &context)));
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ((std::get<V<Id>>(*result)), (V<Id>{{I(7), I(7)}, alloc}));
-  EXPECT_FALSE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
-                TypedOnly, Getter, Getter>(dates, I(1), &context)));
-  dates[1] = U;
-  EXPECT_FALSE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
-                TypedOnly, Getter, Getter>(dates, date, &context)));
+  auto result =
+      hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
+                                              DateYearOrDuration>(
+          std::tie(column, date), &context);
+  EXPECT_EQ((std::get<V<Id>>(result)), (V<Id>{{I(7), I(7)}, alloc}));
+  EXPECT_EQ(hn::getPrimitiveNumericValue<DateYearOrDuration>(date),
+            date.getDate());
+  EXPECT_EQ(hn::datatypeForNumericType<DateYearOrDuration>(), Datatype::Date);
+  EXPECT_EQ(hn::numericTypeToIndex<true>(hn::NumericType::Date), 2);
+  EXPECT_ANY_THROW(hn::numericTypeToIndex(hn::NumericType::Date));
   V<Id> empty{alloc};
   context._endIndex = 0;
-  EXPECT_FALSE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
-                TypedOnly, Getter, Getter>(empty, date, &context)));
+  EXPECT_EQ(hn::classifyNumericOperand<true>(empty, &context).majorityType_,
+            hn::NumericType::Other);
   context._endIndex = 2;
-  dates[1] = date;
   context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
-  EXPECT_THROW((sparqlExpression::detail::homogeneousDate::tryEvaluate<
-                   TypedOnly, Getter, Getter>(dates, date, &context)),
-               ad_utility::CancellationException);
+  EXPECT_THROW(
+      (hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
+                                               DateYearOrDuration>(
+          std::tie(dates, date), &context)),
+      ad_utility::CancellationException);
+}
+
+TEST(SparqlExpression, speculativeDateArithmetic) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  const Id start = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01Z");
+  const Id end =
+      Dat(DateYearOrDuration::parseXsdDatetime, "2020-01-02T01:00:00+01:00");
+  const Id day = Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P1D");
+  const Id zero = Dat(DateYearOrDuration::parseXsdDayTimeDuration, "PT0S");
+  // Each operand has a date majority; undefined/numeric rows take the shared
+  // speculative slow path without changing dateTime/date subtraction semantics.
+  V<Id> left{{end, end, U, I(8), end, end, end}, alloc};
+  V<Id> right{{start, start, start, I(3), U, start, start}, alloc};
+  testMinus(V<Id>{{day, day, U, I(5), U, day, day}, alloc}, left, right);
+  testMinus(V<Id>{{day, day, U, U, day, day, day}, alloc}, left, start);
+  testMinus(V<Id>{{zero, zero, U, U, zero, zero, zero}, alloc}, end, left);
+  // Date-aware undefined rejection also applies without any supported majority.
+  testMinus(V<Id>{{U, U, U, U}, alloc}, V<Id>{{U, Voc(4), B(true), end}, alloc},
+            V<Id>{{end, end, end, U}, alloc});
+  testMinus(U, U, end);
+  testMinus(U, end, Voc(4));
+  // Booleans still convert to integers in a date-aware expression.
+  testMinus(V<Id>{{day, day, I(0)}, alloc}, V<Id>{{end, end, B(true)}, alloc},
+            V<Id>{{start, start, B(true)}, alloc});
+#endif
 }
 
 TEST(SparqlExpression, arithmeticOperators) {

@@ -11,7 +11,6 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/sparqlExpressions/ExpressionResultHelpers.h"
-#include "engine/sparqlExpressions/HomogeneousDateExpressionHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -137,38 +136,33 @@ class NaryExpressionStronglyTyped
 
       using ConvertedOperands = decltype(convertedOperands);
 
-      // Keep typed date dispatch separate from numerics for date-aware
-      // operations evaluated through the strongly typed N-ary infrastructure.
-      if constexpr (sizeof...(Operands) == 2 && !resultIsConstant) {
-        if (auto result = homogeneousDate::tryEvaluate<
-                typename NaryOperation::Function,
-                std::tuple_element_t<0, ValueGetters>,
-                std::tuple_element_t<1, ValueGetters>>(
-                std::get<0>(convertedOperands), std::get<1>(convertedOperands),
-                context)) {
-          return std::move(*result);
-        }
-      }
-
+      // Keep per-row rejection only when the classifier cannot rule out
+      // unsupported IDs. Functions without an UNDEF property don't use this.
+      [[maybe_unused]] bool checkUnsupported = true;
       constexpr bool useNumericFastPath =
           canUseNumericFastPath<ValueGetters, ConvertedOperands>();
 
-      // For numeric N-ary expressions, first try homogeneous execution, then a
-      // speculative majority-type path. Fall back to the generic indexed
+      // For numeric/date N-ary expressions, first try homogeneous execution,
+      // then a speculative majority-type path. Fall back to the generic indexed
       // evaluation if neither optimization applies.
       if constexpr (useNumericFastPath && !resultIsConstant) {
+        constexpr bool includeDates =
+            homogeneousNumeric::supportsDateOperands<ValueGetters>;
         auto classifications = std::apply(
             [context](const auto&... values) {
-              return homogeneousNumeric::classifyNumericOperands(context,
-                                                                 values...);
+              return homogeneousNumeric::classifyNumericOperands<includeDates>(
+                  context, values...);
             },
             convertedOperands);
+        checkUnsupported = ql::ranges::any_of(
+            classifications,
+            [](const auto& operand) { return operand.hasUnsupported_; });
 
         auto homogeneousTypes =
             homogeneousNumeric::getHomogeneousNumericTypes(classifications);
 
         if (homogeneousTypes.has_value()) {
-          return homogeneousNumeric::dispatchNumericTypes(
+          return homogeneousNumeric::dispatchNumericTypes<includeDates>(
               homogeneousTypes.value(),
               [&convertedOperands,
                context]<typename... NumericTypes>(NumericTypes...) {
@@ -182,7 +176,7 @@ class NaryExpressionStronglyTyped
             homogeneousNumeric::getMajorityNumericTypes(classifications);
 
         if (majorityTypes.has_value()) {
-          return homogeneousNumeric::dispatchNumericTypes(
+          return homogeneousNumeric::dispatchNumericTypes<includeDates>(
               majorityTypes.value(),
               [&convertedOperands,
                context]<typename... NumericTypes>(NumericTypes...) {
@@ -203,8 +197,8 @@ class NaryExpressionStronglyTyped
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
-      // Return UNDEF directly for rows with a non-numeric operand of a numeric
-      // function, otherwise pass the converted values to the N-ary function.
+      // Return UNDEF directly for unsupported operands of numeric/date-aware
+      // functions, otherwise pass the converted values to the N-ary function.
       //
       // NOTE: The `if constexpr` is required although `hasNonNumericOperand`
       // already checks `undefForNonNumeric` at compile time: `computeValue` has
@@ -212,14 +206,18 @@ class NaryExpressionStronglyTyped
       // (e.g. `IdOrLiteralOrIri` for the string functions), the `Id` branch
       // would not compile.
       auto computeValue = [&](size_t i) {
-        if constexpr (undefForNonNumeric<typename NaryOperation::Function>) {
-          const bool nonNumeric = std::apply(
-              [i](const auto&... values) {
-                return hasNonNumericOperand<typename NaryOperation::Function,
-                                            ValueGetters>(
-                    getValueAt(values, i)...);
-              },
-              convertedOperands);
+        if constexpr (undefForNonNumeric<typename NaryOperation::Function> ||
+                      undefForNonNumericOrDate<
+                          typename NaryOperation::Function>) {
+          const bool nonNumeric =
+              checkUnsupported &&
+              std::apply(
+                  [i](const auto&... values) {
+                    return hasNonNumericOperand<
+                        typename NaryOperation::Function, ValueGetters>(
+                        getValueAt(values, i)...);
+                  },
+                  convertedOperands);
           if (nonNumeric) {
             return Id::makeUndefined();
           }

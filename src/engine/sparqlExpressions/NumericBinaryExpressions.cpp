@@ -75,6 +75,8 @@ struct AddImpl {
     return Id::makeUndefined();
   }
 };
+template <>
+inline constexpr bool undefForNonNumericOrDate<AddImpl> = true;
 BINARY_EXPRESSION(AddExpression, FV<AddImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
@@ -115,6 +117,8 @@ struct SubtractImpl {
     return Id::makeUndefined();
   }
 };
+template <>
+inline constexpr bool undefForNonNumericOrDate<SubtractImpl> = true;
 BINARY_EXPRESSION(SubtractExpression,
                   FV<SubtractImpl, NumericOrDateValueGetter>);
 

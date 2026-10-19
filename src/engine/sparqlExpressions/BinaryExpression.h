@@ -15,7 +15,6 @@
 #include <utility>
 
 #include "engine/sparqlExpressions/ExpressionResultHelpers.h"
-#include "engine/sparqlExpressions/HomogeneousDateExpressionHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "util/ChunkedForLoop.h"
@@ -55,24 +54,24 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
-    if (auto result = homogeneousDate::tryEvaluate<Function, LeftValueGetter,
-                                                   RightValueGetter>(
-            left, right, context)) {
-      return std::move(*result);
-    }
-
-    // Use the homogeneous numeric fast path when both operands and value
-    // getters support it.
+    // Classification can prove that every ID is accepted by the getters,
+    // even when a mixed column has no unique majority type.
+    bool checkUnsupported = true;
+    // Use the shared numeric/date fast paths when both operands and value
+    // getters support typed execution.
     if constexpr (supportsNumericFastPath<LeftValueGetter> &&
                   supportsNumericFastPath<RightValueGetter> &&
                   supportsNumericFastPathOperand<Left>() &&
                   supportsNumericFastPathOperand<Right>()) {
+      constexpr bool includeDates = supportsDateOperands<ValueGetters>;
       const auto classifications =
-          classifyNumericOperands(context, left, right);
+          classifyNumericOperands<includeDates>(context, left, right);
+      checkUnsupported = classifications[0].hasUnsupported_ ||
+                         classifications[1].hasUnsupported_;
 
       if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications);
           homogeneousTypes.has_value()) {
-        return dispatchNumericTypes(
+        return dispatchNumericTypes<includeDates>(
             homogeneousTypes.value(),
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
@@ -87,7 +86,7 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
 
       if (auto majorityTypes = getMajorityNumericTypes(classifications);
           majorityTypes.has_value()) {
-        return dispatchNumericTypes(
+        return dispatchNumericTypes<includeDates>(
             majorityTypes.value(),
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
@@ -110,8 +109,10 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
 
     ad_utility::chunkedForLoop<1000>(
         0, context->size(),
-        [&left, &right, &result, &function, &getLeft, &getRight](size_t i) {
-          if (hasNonNumericOperand<Function, ValueGetters>(
+        [&left, &right, &result, &function, &getLeft, &getRight,
+         checkUnsupported](size_t i) {
+          if (checkUnsupported &&
+              hasNonNumericOperand<Function, ValueGetters>(
                   getValueAt(left, i), getValueAt(right, i))) {
             result.push_back(Id::makeUndefined());
             return;
