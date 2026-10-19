@@ -391,14 +391,17 @@ constexpr std::string_view freiburgPoint = "POINT(7.841295 47.997731)";
 
 // Pin the result of the query `SELECT * { ?s2 <asWKT> ?geo2 }` on `qlever`
 // under the name `geoPin`, with a cached geometry index on `?geo2` with the
-// given `simplificationErrorInMeters`.
+// given `simplificationErrorInMeters`. If a different `geoVariable` is given,
+// it is used instead of `?geo2` (also in the query).
 void pinGeoResult(
     Qlever& qlever,
-    std::optional<double> simplificationErrorInMeters = std::nullopt) {
+    std::optional<double> simplificationErrorInMeters = std::nullopt,
+    std::string_view geoVariable = "?geo2") {
   qlever.queryAndPinResultWithName(
-      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"},
-                                               simplificationErrorInMeters},
-      "SELECT * { ?s2 <asWKT> ?geo2 }");
+      QueryExecutionContext::PinResultWithName{
+          "geoPin", Variable{std::string{geoVariable}},
+          simplificationErrorInMeters},
+      absl::StrCat("SELECT * { ?s2 <asWKT> ", geoVariable, " }"));
 }
 
 // Load the `compressedBlob` into a fresh `Qlever` instance that has NO index
@@ -1176,15 +1179,21 @@ std::unique_ptr<Qlever> makeWeeklySource(const IndexBuilderConfig& config) {
   return std::make_unique<Qlever>(engineConfig);
 }
 
+// The options for the entry "geoPin" of the weekly tests (see `pinGeoResult`).
+struct GeoPinOptions {
+  std::optional<double> simplificationErrorInMeters_ = std::nullopt;
+  std::string variable_ = "?geo2";
+};
+
 // Drop and recompute the named results of the weekly tests: one with a geo
-// index (with the `geoPinSimplification`, see `pinGeoResult`), one with new
-// words, one that is unaffected by the updates, and one that is neither sorted
-// nor affected by the updates.
-void pinWeeklyResults(
-    Qlever& source, std::optional<double> geoPinSimplification = std::nullopt) {
+// index (with the `geoPinOptions`, see `pinGeoResult`), one with new words, one
+// that is unaffected by the updates, and one that is neither sorted nor
+// affected by the updates.
+void pinWeeklyResults(Qlever& source, const GeoPinOptions& geoPinOptions = {}) {
   source.clearNamedResultCache();
   source.clearQueryResultCache();
-  pinGeoResult(source, geoPinSimplification);
+  pinGeoResult(source, geoPinOptions.simplificationErrorInMeters_,
+               geoPinOptions.variable_);
   source.queryAndPinResultWithName(
       "plain", "SELECT ?s ?o WHERE { ?s <p> ?o } ORDER BY DESC(?o)");
   source.queryAndPinResultWithName("stable",
@@ -1255,6 +1264,19 @@ auto hasSimplification(std::optional<double> simplificationErrorInMeters) {
 }
 
 // Store a copy of the named cache `entry` under the `name` in the named result
+// cache of `qlever`, after `modify` has been applied to the copy.
+template <typename Modify>
+void storeModifiedCopy(Qlever& qlever, const std::string& name,
+                       const NamedResultCache::Value& entry,
+                       const Modify& modify) {
+  NamedResultCache::Value copy{entry.result_,         entry.varToColMap_,
+                               entry.resultSortedOn_, entry.localVocab_.clone(),
+                               entry.cacheKey_,       entry.cachedGeoIndex_};
+  modify(copy);
+  qlever.namedResultCache().store(name, std::move(copy));
+}
+
+// Store a copy of the named cache `entry` under the `name` in the named result
 // cache of `qlever`, in which the geo index is replaced by the `geoIndex`, and
 // the table by the `table` (if given).
 void storeWithGeoIndex(Qlever& qlever, const std::string& name,
@@ -1262,11 +1284,12 @@ void storeWithGeoIndex(Qlever& qlever, const std::string& name,
                        std::optional<SpatialJoinCachedIndex> geoIndex,
                        std::optional<ExplicitIdTableOperation::IdTableOrView>
                            table = std::nullopt) {
-  qlever.namedResultCache().store(
-      name, NamedResultCache::Value{std::move(table).value_or(entry.result_),
-                                    entry.varToColMap_, entry.resultSortedOn_,
-                                    entry.localVocab_.clone(), entry.cacheKey_,
-                                    std::move(geoIndex)});
+  storeModifiedCopy(qlever, name, entry, [&](NamedResultCache::Value& copy) {
+    copy.cachedGeoIndex_ = std::move(geoIndex);
+    if (table.has_value()) {
+      copy.result_ = std::move(table).value();
+    }
+  });
 }
 
 // Write a blob from the `source` with the `config`, and expect that it is
@@ -1336,13 +1359,11 @@ struct WeekOne {
 };
 
 // Build the index of the weekly tests and return the state after the first
-// week, where the geo index of the entry "geoPin" has the
-// `geoPinSimplification`.
-WeekOne setUpWeekOne(
-    std::optional<double> geoPinSimplification = std::nullopt) {
+// week, where the entry "geoPin" is pinned with the `geoPinOptions`.
+WeekOne setUpWeekOne(const GeoPinOptions& geoPinOptions = {}) {
   auto source = makeWeeklySource(buildTestIndex(weeklyTestData()));
   ad_utility::testing::applyUpdateToEngine(*source, weekOneUpdate());
-  pinWeeklyResults(*source, geoPinSimplification);
+  pinWeeklyResults(*source, geoPinOptions);
   auto baseBlob = source->serializeVocabAndNamedCacheToCompressedBlob();
   auto base = loadBlob(baseBlob);
   return {std::move(source), std::move(baseBlob), std::move(base)};
@@ -1523,8 +1544,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutMatchingBaseEntry) {
 
 namespace {
 // Write the blob of the second week of the weekly tests incrementally against a
-// base that was written in the first week with the given `baseSimplification`
-// of the geo index of the entry "geoPin" (see `setUpWeekOne`), where
+// base that was written in the first week with the given `baseGeoPinOptions`
+// for the entry "geoPin" (see `setUpWeekOne`), where
 // `modifyBase` is applied to the instance that the base blob was loaded into.
 // Expect that the geo index of the entry "geoPin" is not extended from the base
 // (and hence has a single segment, in contrast to the extension, see
@@ -1532,11 +1553,10 @@ namespace {
 // blob that was written without a base.
 template <typename ModifyBase>
 void expectGeoIndexNotExtended(
-    const ModifyBase& modifyBase,
-    std::optional<double> baseSimplification = std::nullopt,
+    const ModifyBase& modifyBase, const GeoPinOptions& baseGeoPinOptions = {},
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
-  auto [source, baseBlob, base] = setUpWeekOne(baseSimplification);
+  auto [source, baseBlob, base] = setUpWeekOne(baseGeoPinOptions);
   modifyBase(*base);
   advanceToWeekTwo(*source);
   auto incremental = roundTrip(*source, incrementalConfig(*base));
@@ -1565,7 +1585,72 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentSimplification) {
       [](Qlever& base) {
         EXPECT_THAT(geoIndexOf(base), hasSimplification(50.0));
       },
-      50.0);
+      GeoPinOptions{50.0});
+}
+
+// _____________________________________________________________________________
+// If the table of the base entry has a different number of columns (here: an
+// additional column without a variable), the geo index is not extended.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentNumberOfColumns) {
+  expectGeoIndexNotExtended([](Qlever& base) {
+    auto entry = base.namedResultCache().get("geoPin");
+    storeModifiedCopy(
+        base, "geoPin", *entry, [](NamedResultCache::Value& copy) {
+          auto view = ExplicitIdTableOperation::viewOf(copy.result_);
+          IdTable table{view.numColumns() + 1,
+                        ad_utility::makeUnlimitedAllocator<Id>()};
+          table.resize(view.numRows());
+          for (size_t col = 0; col < view.numColumns(); ++col) {
+            ql::ranges::copy(view.getColumn(col), table.getColumn(col).begin());
+          }
+          ql::ranges::copy(view.getColumn(0),
+                           table.getColumn(view.numColumns()).begin());
+          copy.result_ = std::make_shared<const IdTable>(std::move(table));
+        });
+  });
+}
+
+// _____________________________________________________________________________
+// If the geo index of the base entry is on a different variable (here: `?geom`
+// instead of `?geo2`, with the same number of columns), the geo index is not
+// extended.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentGeometryColumn) {
+  expectGeoIndexNotExtended(
+      [](Qlever& base) {
+        EXPECT_EQ(geoIndexOf(base).getGeometryColumn(), Variable{"?geom"});
+      },
+      GeoPinOptions{std::nullopt, "?geom"});
+}
+
+// _____________________________________________________________________________
+// If the variables of the base entry differ (here: `?s2` is renamed), the geo
+// index is not extended.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentVariables) {
+  expectGeoIndexNotExtended([](Qlever& base) {
+    auto entry = base.namedResultCache().get("geoPin");
+    storeModifiedCopy(base, "geoPin", *entry,
+                      [](NamedResultCache::Value& copy) {
+                        auto column = copy.varToColMap_.at(Variable{"?s2"});
+                        copy.varToColMap_.erase(Variable{"?s2"});
+                        copy.varToColMap_[Variable{"?subject"}] = column;
+                      });
+  });
+}
+
+// _____________________________________________________________________________
+// If the sort order of the base entry differs, the geo index is not extended.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentSortOrder) {
+  expectGeoIndexNotExtended([](Qlever& base) {
+    auto entry = base.namedResultCache().get("geoPin");
+    storeModifiedCopy(base, "geoPin", *entry,
+                      [](NamedResultCache::Value& copy) {
+                        if (copy.resultSortedOn_.empty()) {
+                          copy.resultSortedOn_.push_back(0);
+                        } else {
+                          copy.resultSortedOn_.clear();
+                        }
+                      });
+  });
 }
 
 // _____________________________________________________________________________
@@ -1590,6 +1675,61 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithNonCanonicalBase) {
     storeWithGeoIndex(base, "geoPin", *entry, std::move(geoIndex),
                       std::make_shared<const IdTable>(std::move(table)));
   });
+}
+
+// _____________________________________________________________________________
+// An update that only deletes a row of the geo-indexed result leaves its rows
+// in canonical order (no `Id` has to be rewritten), so the geo index is
+// extended from the base without permuting the rows of the updated entry.
+TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
+  auto source = makeWeeklySource(buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 47.9975175)\"",
+      wktSuffix, " .\n",
+      "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 47.9975307)\"",
+      wktSuffix, " .\n")));
+  pinGeoResult(*source);
+  auto base = roundTrip(*source);
+  ASSERT_THAT(geoIndexOf(*base), hasStats(1, 4, 4, 4));
+
+  ad_utility::testing::applyUpdateToEngine(*source, weekTwoDelete());
+  source->clearNamedResultCache();
+  source->clearQueryResultCache();
+  pinGeoResult(*source);
+  // The rows of the updated entry need no permutation, which is the case that
+  // this test is about.
+  auto updated = source->namedResultCache().get("geoPin");
+  ASSERT_FALSE(namedCacheSecondaryVocab::canonicalizeWithPermutation(
+                   *updated, SecondaryVocabulary{}, source->allocator())
+                   .oldRowOfNewRow_.has_value());
+
+  // The segment of the base is reused, the shape of `<s1>` is dead.
+  const std::string expected = "?s2\n<s2>\n<s3>\n<s4>\n";
+  expectGeoBlobRoundTrip(*source, incrementalConfig(*base),
+                         Manager::formatVersionWithSecondaryVocab,
+                         hasStats(1, 4, 3, 3), expected);
+  expectGeoBlobRoundTrip(*source, {},
+                         Manager::formatVersionWithoutSecondaryVocab,
+                         hasStats(1, 3, 3, 3), expected);
+}
+
+// _____________________________________________________________________________
+// A geo index without any shapes (the pinned query has an empty result) can be
+// extended, and is not compacted.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithEmptyGeoIndex) {
+  auto source = makeWeeklySource(buildTestIndex("<m> <p> <o> ."));
+  pinGeoResult(*source);
+  ASSERT_THAT(geoIndexOf(*source), hasStats(1, 0, 0, 0));
+  auto base = roundTrip(*source);
+  // Both thresholds are as strict as possible, so any dead shape or additional
+  // segment would lead to a compaction.
+  auto incremental =
+      roundTrip(*source, incrementalConfig(*base, /*maxGeoSegments=*/1,
+                                           /*maxDeadShapeRatio=*/0.0));
+  EXPECT_THAT(geoIndexOf(*incremental), hasStats(1, 0, 0, 0));
+  EXPECT_EQ(incremental->query(spatialJoinQuery(freiburgPoint),
+                               ad_utility::MediaType::tsv),
+            "?s2\n");
 }
 
 // _____________________________________________________________________________
