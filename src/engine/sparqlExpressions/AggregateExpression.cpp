@@ -35,8 +35,8 @@ struct EvaluateOnChildOperand {
       return std::move(optionalResult.value());
     }
 
-    // The number of values we aggregate.
-    auto inputSize = getResultSize(*context, operand);
+    // The number of values we aggregate (one per row, also for constants).
+    size_t inputSize = context->size();
 
     // If there are no values, return the neutral element. It is important to
     // handle this case separately, because the following code only works if

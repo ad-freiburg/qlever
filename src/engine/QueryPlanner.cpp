@@ -71,7 +71,6 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
-#include "global/ValueId.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -91,7 +90,7 @@ using SubtreePlan = QueryPlanner::SubtreePlan;
 
 template <typename Operation, typename... Args>
 SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
-  return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
+  return {qec, qec->makeShared<Operation>(qec, AD_FWD(args)...)};
 }
 
 // Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
@@ -185,8 +184,8 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   // GROUP BY (Either the pattern trick or a "normal" GROUP BY)
   if (patternTrickTuple.has_value()) {
-    plans.emplace_back(getPatternTrickRow(pq.selectClause(), plans,
-                                          patternTrickTuple.value()));
+    plans.emplace_back(
+        getPatternTrickRow(pq.getAliases(), plans, patternTrickTuple.value()));
   } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
@@ -195,6 +194,25 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // HAVING
   if (!pq._havingClauses.empty()) {
     plans.emplace_back(getHavingRow(pq, plans));
+    checkCancellation();
+  }
+
+  // Apply trailing `VALUES` clause of a query with `GROUP BY` (without
+  // `GROUP BY`, it is part of the root graph pattern). As in the SPARQL 1.1
+  // spec (sec. 18.2.4.3), this happens after `GROUP BY` and `HAVING`, but
+  // before `DISTINCT` and `ORDER BY`. Then compute the aliases that use its
+  // variables.
+  auto& postValues = pq.postQueryValuesClause_;
+  if (postValues.has_value()) {
+    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
+    checkCancellation();
+  }
+  for (const auto& bind : pq.postQueryValuesBinds_) {
+    std::vector<SubtreePlan> row;
+    for (const auto& plan : plans.back()) {
+      row.push_back(makeSubtreePlan<Bind>(_qec, plan._qet, bind));
+    }
+    plans.push_back(std::move(row));
     checkCancellation();
   }
 
@@ -213,14 +231,6 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     // just add an order by / sort to every previous result if needed.
     // If the ordering is perfect already, just copy the plan.
     plans.emplace_back(getOrderByRow(pq, plans));
-    checkCancellation();
-  }
-
-  // Apply trailing `VALUES` clause
-  auto& postValues = pq.postQueryValuesClause_;
-  if (postValues.has_value() &&
-      !postValues.value()._inlineValues._variables.empty()) {
-    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }
 
@@ -354,12 +364,10 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const p::SelectClause& selectClause,
-    const vector<vector<SubtreePlan>>& dpTab,
+    const std::vector<Alias>& aliases, const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
   const vector<SubtreePlan>& previous = dpTab.back();
-  auto aliases = selectClause.getAliases();
 
   vector<SubtreePlan> added;
 
@@ -421,12 +429,8 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
+  const auto& aliases = pq.getAliases();
   for (auto& parent : previous) {
-    std::vector<Alias> aliases;
-    if (pq.hasSelectClause()) {
-      aliases = pq.selectClause().getAliases();
-    }
-
     // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
     // group by the graph variable.
     auto groupVariables = pq._groupByVariables;
@@ -439,8 +443,8 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
-        _qec, groupVariables, std::move(aliases), parent._qet);
+    SubtreePlan groupByPlan =
+        makeSubtreePlan<GroupBy>(_qec, groupVariables, aliases, parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
@@ -934,7 +938,7 @@ auto QueryPlanner::seedWithScansAndText(
             return std::make_unique<VariableExpression>(std::move(variable));
           };
           addFilter(SparqlFilter{
-              SparqlExpressionPimpl{std::make_shared<EqualExpression>(
+              SparqlExpressionPimpl{_qec->makeShared<EqualExpression>(
                                         std::array<SparqlExpression::Ptr, 2>{
                                             makeVarExpr(graphVariable),
                                             makeVarExpr(internalVariable)}),
@@ -1392,28 +1396,23 @@ template <QueryPlanner::FilterMode mode>
 void QueryPlanner::applyFiltersIfPossible(
     vector<SubtreePlan>& row,
     const FiltersAndOptionalSubstitutes& filters) const {
-  // Apply every filter possible.
-  // It is possible when,
-  // 1) the filter has not already been applied
-  // 2) all variables in the filter are covered by the query so far
-  // New 06 May 2016:
-  // There is a problem with the so-called (name may be changed)
-  // TextOperationWithFilter ops: This method applies SPARQL filters
-  // to all the leaf TextOperations (when feasible) and thus
-  // prevents the special case from being applied when subtrees are merged.
-  // Fix: Also copy (CHANGE not all plans but TextOperation) without applying
-  // the filter. Problem: If the method gets called multiple times, plans with
-  // filters May be duplicated. To prevent this, calling code has to ensure
-  // That the method is only called once on each row. Similarly this affects
-  // the (albeit rare) fact that a filter is directly applicable after a scan
-  // of a huge relation where a subsequent join with a small result could be
-  // translated into one or more scans directly. This also helps with cases
-  // where applying the filter later is better. Finally, the replace flag can
-  // be set to enforce that all filters are applied. This should be done for
-  // the last row in the DPTab so that no filters are missed.
+  // For each plan in `row`, apply every filter that is not applied to it yet
+  // and whose variables are all always defined in the plan (not just present,
+  // see the NOTE at the check below). Whether the unfiltered plan is kept or
+  // replaced depends on `mode`, see `FilterMode`.
+  //
+  // NOTE 1: In the `KeepUnfiltered` mode, the filtered plan is added as a
+  // candidate next to the unfiltered one, because applying a filter later can
+  // be cheaper (for example, when a join with a small result makes the large
+  // side much smaller first). Each row must be passed to this function only
+  // once, otherwise such candidates are added twice.
+  //
+  // NOTE 2: The `ApplyAllFiltersAndReplaceUnfiltered` mode applies all
+  // remaining filters regardless of their variables. It is used for the final
+  // plans of a group graph pattern, so that no filter is missed.
 
-  // Note: we are first collecting the newly added plans and then adding them
-  // in one go. Changing `row` inside the loop would invalidate the iterators.
+  // The new plans are collected first and added to `row` in one go at the
+  // end, because adding them inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
     for (const auto& [i, filterAndSubst] :
@@ -1438,7 +1437,8 @@ void QueryPlanner::applyFiltersIfPossible(
            ql::ranges::any_of(
                filterAndSubst.filter_.expression_.containedVariables(),
                [&plan](const auto& variable) {
-                 return plan._qet->isVariableCovered(*variable);
+                 return plan._qet->getRootOperation()->isVariableAlwaysDefined(
+                     *variable);
                }))) {
         // Apply filter substitution
         auto jcs = getJoinColumns(filterAndSubst.substitute_.value(), plan);
@@ -1477,13 +1477,26 @@ void QueryPlanner::applyFiltersIfPossible(
           // not generate a regular `FILTER` for it.
           continue;
         }
+        // Apply a non-deterministic filter (e.g. `RAND() < 0.5`) only at the
+        // end of the group graph pattern, so that it's evaluated per result
+        // row.
+        if (!filterAndSubst.filter_.expression_.isDeterministic()) {
+          continue;
+        }
       }
+      // Apply the filter to `plan` only if all its variables are always
+      // defined there, not just present (see
+      // `Operation::areVariablesAlwaysDefined`).
+      //
+      // NOTE: A variable that might be UNDEF in `plan` (for example, from a
+      // `VALUES` clause with `UNDEF`, a `UNION`, or an `OPTIONAL` in a
+      // subquery) can still be bound by a later join. The filter has to see
+      // the bound value, so it may only be applied after that join. This
+      // happens at the latest at the end of the group graph pattern, in the
+      // `ApplyAllFiltersAndReplaceUnfiltered` mode.
       if (applyAll ||
-          ql::ranges::all_of(
-              filterAndSubst.filter_.expression_.containedVariables(),
-              [&plan](const auto& variable) {
-                return plan._qet->isVariableCovered(*variable);
-              })) {
+          plan._qet->getRootOperation()->areVariablesAlwaysDefined(
+              filterAndSubst.filter_.expression_.containedVariables())) {
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
             _qec, plan._qet, filterAndSubst.filter_.expression_);
@@ -2325,7 +2338,7 @@ void QueryPlanner::applyConstantGeometryPrefilters(
                               const Variable& variable) -> std::optional<bool> {
     const auto* scan =
         dynamic_cast<const IndexScan*>(plan._qet->getRootOperation().get());
-    if (scan == nullptr || !plan._qet->isVariableCovered(variable)) {
+    if (scan == nullptr || !plan._qet->containsVariable(variable)) {
       return std::nullopt;
     }
     auto sortedVariable =
@@ -2656,6 +2669,31 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
+
+// Return the `child` of `unionOperation`, with the variables that the
+// `unionOperation` hides (because it is the root of a subquery) also hidden.
+// Otherwise a join with the child would also join on (or duplicate) these
+// variables.
+std::shared_ptr<QueryExecutionTree> childWithHiddenVariablesHidden(
+    const Union& unionOperation,
+    const std::shared_ptr<QueryExecutionTree>& child) {
+  const auto& visibleInUnion =
+      unionOperation.getExternallyVisibleVariableColumns();
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(
+      child->getVariableColumns() | ql::views::keys |
+          ql::views::filter([&visibleInUnion](const Variable& var) {
+            return visibleInUnion.contains(var);
+          }),
+      std::back_inserter(visibleVariables));
+  if (visibleVariables.size() == child->getVariableColumns().size()) {
+    return child;
+  }
+  // The child might be shared with other plans, so we must not modify it.
+  auto result = child->clone();
+  result->getRootOperation()->setSelectedVariablesForSubquery(visibleVariables);
+  return result;
+}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2710,10 +2748,14 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
         mapColumnsInUnion(flipped, *unionOperation, jcs);
 
     auto joinedLeft = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->leftChild()), other,
-        leftMapping);
+        cloneWithNewTree(thisPlan,
+                         childWithHiddenVariablesHidden(
+                             *unionOperation, unionOperation->leftChild())),
+        other, leftMapping);
     auto joinedRight = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->rightChild()),
+        cloneWithNewTree(thisPlan,
+                         childWithHiddenVariablesHidden(
+                             *unionOperation, unionOperation->rightChild())),
         cloneWithNewTree(other, other._qet->clone()), rightMapping);
 
     for (const auto& leftPlan : joinedLeft) {
@@ -3171,53 +3213,99 @@ qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
 }
 
 // _____________________________________________________________________________
+ad_utility::HashSet<Variable>
+QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
+  ad_utility::HashSet<Variable> variables;
+  // The triples have not been turned into plans yet.
+  candidateTriples_.collectAllContainedVariables(variables);
+  for (const auto& row : candidatePlans_) {
+    AD_CORRECTNESS_CHECK(!row.empty());
+    // All plans of a row bind the same variables, up to internal ones, see the
+    // TODO in `visitGroupOptionalOrMinus`.
+    for (const auto& variable :
+         row.front()._qet->getVariableColumns() | ql::views::keys) {
+      variables.insert(variable);
+    }
+  }
+  return variables;
+}
+
+// _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    std::vector<SubtreePlan>& candidates, const Variables& variables) {
+    std::vector<SubtreePlan>& candidates, const Variables& variables,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   using enum SubtreePlan::Type;
-  bool areVariablesUnconnected = ql::ranges::all_of(
-      variables,
-      [this](const Variable& var) { return !boundVariables_.contains(var); });
+  auto type = candidates[0].type;
+  if (type != MINUS && type != OPTIONAL) {
+    return false;
+  }
+  // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so an
+  // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
+  // triples only get their `?g` column when they are planned (contains-word and
+  // materialized views are not allowed inside a `GRAPH` clause).
+  //
+  // For a MINUS on the other hand, `?g` only counts as a shared variable if it
+  // is in scope on both sides without the implicit graph columns of the index
+  // scans. Otherwise, the MINUS would remove all rows of every graph in which
+  // its pattern matches. If the MINUS is connected via other variables, it
+  // is still joined on `?g`, as the patterns are evaluated per graph.
+  auto previousVariables = getVariablesOfPreviousPatterns();
+  if (const auto& graphVariable = planner_.activeGraphVariable_;
+      graphVariable.has_value()) {
+    if (type == OPTIONAL && !candidateTriples_._triples.empty()) {
+      previousVariables.insert(graphVariable.value());
+    } else if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
+      previousVariables.erase(graphVariable.value());
+    }
+  }
+  bool areVariablesUnconnected =
+      ql::ranges::none_of(variables, [&previousVariables](const Variable& var) {
+        return previousVariables.contains(var);
+      });
   if (!areVariablesUnconnected) {
     return false;
   }
   // A MINUS clause that doesn't share any variable with the preceding
   // patterns behaves as if it isn't there.
-  auto type = candidates[0].type;
   if (type == MINUS) {
+    planner_.warnings_.emplace_back(
+        "A MINUS clause that shares no variables with the patterns before it "
+        "has no effect and is ignored. Use FILTER NOT EXISTS if you want to "
+        "remove all results whenever the pattern of the MINUS clause matches.");
     return true;
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
   // patterns behaves as if it is joined with the neutral element.
-  if (type == OPTIONAL) {
-    auto& newPlans = candidatePlans_.emplace_back();
-    ql::ranges::for_each(
-        candidates, [this, &newPlans](const SubtreePlan& plan) {
-          auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          // Note: It is important that we do NOT copy the filter and
-          // textLimit IDs, as they originate from the inner scope of the
-          // OPTIONAL clause and have been already completely dealt with.
-          // This was the cause of
-          // https://github.com/ad-freiburg/qlever/issues/2194.
-          newPlans.push_back(std::move(joinedPlan));
-        });
-    return true;
-  }
-  return false;
+  //
+  // NOTE: The filter and text limit IDs of the plans are deliberately not
+  // copied. They originate from the inner scope of the OPTIONAL clause and have
+  // already been dealt with completely, copying them was the cause of
+  // https://github.com/ad-freiburg/qlever/issues/2194.
+  auto& newPlans = candidatePlans_.emplace_back();
+  ql::ranges::for_each(candidates, [this, &newPlans](const SubtreePlan& plan) {
+    newPlans.push_back(makeSubtreePlan<NeutralOptional>(qec_, plan._qet));
+  });
+  return true;
 }
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
-    std::vector<SubtreePlan>&& candidates) {
+    std::vector<SubtreePlan>&& candidates,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!candidates.empty());
 
   // Optionals that occur before any of their variables have been bound,
   // actually behave like ordinary (Group)GraphPatterns.
+  // TODO<RobinTF> The candidates can differ in their internal variables (e.g.
+  // the bounding box columns of a `SpatialJoin`), so taking the variables of
+  // the first candidate (here and in `getVariablesOfPreviousPatterns`) is not
+  // clean. This should be fixed.
   auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
-  bool specialCaseHandled =
-      handleUnconnectedMinusOrOptional(candidates, variables);
+  bool specialCaseHandled = handleUnconnectedMinusOrOptional(
+      candidates, variables, isGraphVariableInScopeOnBothSidesOfMinus);
 
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
@@ -3393,11 +3481,18 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
+    const auto& graphVariable = planner_.activeGraphVariable_;
+    bool isGraphVariableInScopeOnBothSides =
+        graphVariable.has_value() &&
+        ad_utility::contains(arg.visibleVariables_, graphVariable.value()) &&
+        ad_utility::contains(arg.visibleVariablesOfPrecedingPatterns_,
+                             graphVariable.value());
     auto candidates = planner_.optimize(&arg._child);
     for (auto& c : candidates) {
       c.type = SubtreePlan::MINUS;
     }
-    visitGroupOptionalOrMinus(std::move(candidates));
+    visitGroupOptionalOrMinus(std::move(candidates),
+                              isGraphVariableInScopeOnBothSides);
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
   } else if constexpr (std::is_same_v<T, p::Describe>) {
@@ -3465,8 +3560,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
     if (getRuntimeParameter<
             &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
       // Consider pushing down the `BIND` into the subtree.
-      auto pushedDownPlan =
-          a._qet->getRootOperation()->makeTreeWithBindColumn(v);
+      auto pushedDownPlan = a._qet->makeTreeWithBindColumn(v);
       if (pushedDownPlan.has_value()) {
         // We can replace this `BIND` with a plan that contains an additional
         // scan column with equivalent values, for example from a materialized
@@ -3541,7 +3635,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
   for (auto& sub : candidatesIn) {
     auto pathSearch =
-        std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
+        qec_->makeShared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }
@@ -3589,7 +3683,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
         right = std::move(sub._qet);
       }
       auto spatialJoin =
-          std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+          qec_->makeShared<SpatialJoin>(qec_, config, std::nullopt, right);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };
@@ -3629,7 +3723,7 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
   auto externalValues =
-      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+      qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
@@ -3748,6 +3842,8 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
 void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
   auto tree = planner_.createExecutionTree(describe.whereClause_.get(), true);
+  // Like for a subquery, LIMIT and OFFSET apply to the WHERE clause.
+  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(std::vector{std::move(describeOp)});
@@ -3789,10 +3885,12 @@ QueryPlanner::findApplicableReplacementPlans(
     uint64_t nodesCoveredByReplacementPlans = 0;
     for (auto& plans : applicableReplacementPlans | ql::views::reverse) {
       ql::erase_if(plans, [&](SubtreePlan& plan) {
-        bool res =
-            (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) != 0;
+        // Only plans that are kept may block later plans.
+        if (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) {
+          return true;
+        }
         nodesCoveredByReplacementPlans |= plan._idsOfIncludedNodes;
-        return res;
+        return false;
       });
     }
   }

@@ -56,8 +56,6 @@ class SparqlQleverVisitor {
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
   using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
-  using SubQueryAndMaybeValues =
-      std::pair<parsedQuery::Subquery, std::optional<parsedQuery::Values>>;
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, std::vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
@@ -131,6 +129,10 @@ class SparqlQleverVisitor {
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
+  // The trailing `VALUES` clause of the top-level query. It is visited before
+  // the query itself, because `ParsedQuery::addSolutionModifiers` needs it.
+  std::optional<parsedQuery::Values> postQueryValues_;
+
   // In most contexts, blank node labels in a SPARQL query are actually
   // variables. But sometimes they are in fact blank node labels (e.g. in
   // CONSTRUCT or UPDATE templates) and sometimes they are simply forbidden by
@@ -166,6 +168,23 @@ class SparqlQleverVisitor {
   // it.
   ad_utility::HashSet<std::string> allBlankNodeLabels_{};
   ad_utility::HashSet<std::string> blankNodeLabelsInCurrentBasicGraphPattern_{};
+
+  // If the runtime parameter `throw-on-invalid-wkt` is set, WKT literals that
+  // are given inline in the query and passed to a geo function are parsed
+  // strictly (invalid WKT is an error). This also applies to `VALUES` in the
+  // same group as the geo function, so we remember the variables passed to geo
+  // functions in the current group.
+  ad_utility::HashSet<Variable> geoFunctionArgVariables_{};
+
+  // Report an error if one of `args` (the arguments of a geo function) is an
+  // invalid WKT literal, and remember the variables among `args`.
+  void checkGeoFunctionArgs(const std::vector<ExpressionPtr>& args,
+                            const antlr4::ParserRuleContext* ctx);
+
+  // Report an error if a `VALUES` clause in `ops` binds a variable from
+  // `geoFunctionArgVariables_` to an invalid WKT literal.
+  void checkWktInValues(const std::vector<GraphPatternOperation>& ops,
+                        const antlr4::ParserRuleContext* ctx) const;
 
   // Report an error if the blank node label `label` (including the leading
   // `_:`) has already been used in a different basic graph pattern. Otherwise,
@@ -255,7 +274,7 @@ class SparqlQleverVisitor {
       Parser::IncludeClauseContext* includeCtx,
       Parser::GroupGraphPatternContext* ctx);
 
-  SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
+  parsedQuery::Subquery visit(Parser::SubSelectContext* ctx);
 
   parsedQuery::SelectClause visit(Parser::SelectClauseContext* ctx);
 
@@ -602,7 +621,7 @@ class SparqlQleverVisitor {
 
   static bool visit(Parser::BooleanLiteralContext* ctx);
 
-  static RdfEscaping::NormalizedRDFString visit(Parser::StringContext* ctx);
+  static std::string visit(Parser::StringContext* ctx);
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
@@ -685,9 +704,9 @@ class SparqlQleverVisitor {
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
-  static ExpressionPtr processIriFunctionCall(
-      const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
-      const antlr4::ParserRuleContext*);
+  ExpressionPtr processIriFunctionCall(const TripleComponent::Iri& iri,
+                                       std::vector<ExpressionPtr> argList,
+                                       const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);
 

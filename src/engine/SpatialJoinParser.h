@@ -15,7 +15,7 @@
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/Index.h"
 #include "rdfTypes/GeoRectangle.h"
 

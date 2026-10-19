@@ -164,9 +164,8 @@ CPP_template_def(typename W,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename F)(
-    requires WordBatchCallback<
-        F>) void WordBatchBuilder::finish(const F& batchCallback) {
+CPP_template_def(typename F)(requires WordBatchCallback<F>)
+void WordBatchBuilder::finish(const F& batchCallback) {
   // No further words can arrive, so the word that is held back can now be
   // committed.
   commitPendingWord();
@@ -174,9 +173,8 @@ CPP_template_def(typename F)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename F)(
-    requires WordBatchCallback<
-        F>) void WordBatchBuilder::flush(const F& batchCallback) {
+CPP_template_def(typename F)(requires WordBatchCallback<F>)
+void WordBatchBuilder::flush(const F& batchCallback) {
   if (currentBatch_.empty()) {
     return;
   }

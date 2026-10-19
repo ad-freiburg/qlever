@@ -44,16 +44,14 @@ const std::string partialVocabBasename = "vocab-";
 // them as not external.
 template <typename Range>
 void writePartialVocabularyFile(const std::string& path, const Range& words) {
-  ad_utility::serialization::FileWriteSerializer partialVocab(path);
-  partialVocab << words.size();
+  ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{path};
   size_t localIdx = 0;
   for (const auto& word : words) {
-    partialVocab << std::string_view{word};
-    partialVocab << false;
-    partialVocab << localIdx;
-    partialVocab << uint64_t{0};  // the geo sort key
+    partialVocab(std::string_view{word},
+                 PartialVocabIndexWithExternalFlag{localIdx, false});
     ++localIdx;
   }
+  partialVocab.finish();
 }
 }  // namespace
 
@@ -129,20 +127,19 @@ class MergeVocabularyTest : public ::testing::Test {
          true}};
 
     // open files for partial Vocabularies
-    ad_utility::serialization::FileWriteSerializer partial0(path0_);
-    ad_utility::serialization::FileWriteSerializer partial1(path1_);
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partial0{path0_};
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partial1{path1_};
 
     auto writePartialVocabulary = [](auto& partialVocab,
                                      const auto& tripleComponents,
                                      IdMap* idMap) {
       // write first partial vocabulary
-      partialVocab << tripleComponents.size();
       size_t localIdx = 0;
       for (auto w : tripleComponents) {
         auto globalId = w.index_;
         w.index_ = localIdx;
-        partialVocab << w;
-        partialVocab << uint64_t{0};  // the geo sort key
+        partialVocab(w.iriOrLiteral(), PartialVocabIndexWithExternalFlag{
+                                           w.index_, w.isExternal()});
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -335,14 +332,11 @@ TEST(MergeVocabulary, geoSortKeyOrder) {
   };
   // Write the given (word, geo sort key) pairs as a partial vocabulary file.
   auto writeFile = [](const std::string& path, const auto& wordsAndKeys) {
-    ad_utility::serialization::FileWriteSerializer partialVocab(path);
-    partialVocab << wordsAndKeys.size();
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{path};
     size_t localIdx = 0;
     for (const auto& [word, key] : wordsAndKeys) {
-      partialVocab << std::string_view{word};
-      partialVocab << false;
-      partialVocab << localIdx;
-      partialVocab << key;
+      partialVocab(std::string_view{word},
+                   PartialVocabIndexWithExternalFlag{localIdx, false}, key);
       ++localIdx;
     }
   };
@@ -508,28 +502,19 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   // which is the only word of the second partial vocabulary, there marked as
   // external.
   {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[0]};
-    partialVocab << numWords;
     for (size_t i = 0; i + 1 < numWords; ++i) {
-      partialVocab << absl::StrFormat("\"word%08d\"", i);
-      partialVocab << false;
-      partialVocab << i;
-      partialVocab << uint64_t{0};  // the geo sort key
+      partialVocab(absl::StrFormat("\"word%08d\"", i),
+                   PartialVocabIndexWithExternalFlag{i, false});
     }
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << false;
-    partialVocab << numWords - 1;
-    partialVocab << uint64_t{0};  // the geo sort key
+    partialVocab("\"zzz\"",
+                 PartialVocabIndexWithExternalFlag{numWords - 1, false});
   }
   {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[1]};
-    partialVocab << size_t{1};
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << true;
-    partialVocab << size_t{0};
-    partialVocab << uint64_t{0};  // the geo sort key
+    partialVocab("\"zzz\"", PartialVocabIndexWithExternalFlag{0, true});
   }
 
   std::vector<std::pair<std::string, bool>> vocabulary;
