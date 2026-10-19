@@ -314,6 +314,7 @@ class Vocabulary {
           using T = std::decay_t<decltype(vocab)>;
           vocab = T::fromZeroCopyDeserializer(serializer);
         });
+    computePrefixRanges();
   }
 
   // Serialize the currently held vocabulary to `serializer`, in a format that
@@ -335,6 +336,10 @@ class Vocabulary {
   }
 
  private:
+  // Compute `prefixRangesIris_` and `prefixRangesLiterals_` for the currently
+  // held words. Must be called whenever the words are (re)loaded.
+  void computePrefixRanges();
+
   // Apply `function` to the vocabulary that actually holds the words, i.e. to
   // the vocabulary below the wrapping `UnicodeVocabulary` (whose comparator
   // plays no role for a zero-copy blob and is therefore neither written nor
