@@ -28,7 +28,6 @@
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MergeBlock.h"
-#include "index/vocabulary_merger/QueueWord.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
@@ -47,16 +46,6 @@ inline auto BN = ad_utility::testing::BlankNodeId;
 
 // A `WordComparator` that simply compares the words lexicographically.
 constexpr std::less<> lessThan{};
-
-// Create the `QueueWord` for the occurrence of `word` with the given
-// `localIndex` in the partial vocabulary `partialFileId`.
-inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
-    std::string word, bool isExternal, size_t partialFileId,
-    uint64_t localIndex) {
-  return ad_utility::vocabulary_merger::detail::QueueWord{
-      TripleComponentWithIndex{std::move(word), isExternal, localIndex},
-      partialFileId};
-}
 
 // The buffer pools (see `index/vocabulary_merger/MergeBlock.h`) of the blocks
 // that the helpers below create. Their buffers are small, so that a block of a
