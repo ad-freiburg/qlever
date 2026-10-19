@@ -18,7 +18,6 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "index/vocabulary/EncodedIriManager.h"
-#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 
 namespace ql::exportIds {
@@ -149,7 +148,7 @@ std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
   std::string excerpt = index.getTextExcerpt(id.getTextRecordIndex());
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(excerpt))};
+          excerpt)};
 }
 
 // _____________________________________________________________________________

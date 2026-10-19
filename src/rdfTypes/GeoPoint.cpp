@@ -9,7 +9,6 @@
 #include <type_traits>
 
 #include "global/Constants.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
@@ -65,10 +64,8 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
 std::optional<GeoPoint> GeoPoint::parseFromLiteral(
     const ad_utility::triple_component::Literal& value, bool checkDatatype) {
   if (!checkDatatype ||
-      (value.hasDatatype() &&
-       value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL))) {
-    auto [lng, lat] = ad_utility::detail::parseWktPoint(
-        asStringViewUnsafe(value.getContent()));
+      (value.hasDatatype() && value.getDatatype() == GEO_WKT_LITERAL)) {
+    auto [lng, lat] = ad_utility::detail::parseWktPoint(value.getContent());
     if (!std::isnan(lng) && !std::isnan(lat)) {
       return GeoPoint{lat, lng};
     }
