@@ -55,10 +55,13 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
                          std::optional<BoundingBox> boundingBox);
 
   // Accumulate the counters across all threads. They count the number of
-  // geometries skipped by bounding box prefilter and the number of parsed (that
-  // is, not skipped) geometries respectively.
+  // geometries skipped by bounding box prefilter, the number of parsed (that
+  // is, not skipped) geometries, and the number of the parsed geometries that
+  // were taken from the index in their parsed form (see `ParsedGeometry`)
+  // respectively.
   size_t getPrefilterCounter();
   size_t getParseCounter();
+  size_t getFromIndexCounter();
 
  protected:
   void processQueue(size_t t) override;
@@ -67,10 +70,12 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // Members are named `_member`, not `member_` for consistency with the base
   // class from `libspatialjoin`.
 
-  // The vectors `_numSkipped` and `_numParsed` hold the number of geometries
-  // that were skipped by prefilter or actually parsed for each of the threads.
+  // The vectors `_numSkipped`, `_numParsed` and `_numFromIndex` hold the
+  // number of geometries that were skipped by prefilter, actually parsed, or
+  // taken from the index in their parsed form for each of the threads.
   std::vector<size_t> _numSkipped;
   std::vector<size_t> _numParsed;
+  std::vector<size_t> _numFromIndex;
 
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;

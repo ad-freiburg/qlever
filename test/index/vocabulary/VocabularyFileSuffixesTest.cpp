@@ -168,7 +168,7 @@ TEST(VocabularyFileSuffixes, allVocabularyTypesForIndexBuilding) {
        ".words.external.offsets", ".codebooks", ".geometry.words.internal",
        ".geometry.words.internal.ids", ".geometry.words.external",
        ".geometry.words.external.offsets", ".geometry.codebooks",
-       ".geometry.geoinfo"});
+       ".geometry.geoinfo", ".geometry.parsedgeoms"});
 
   // All the vocabulary types that can be used for index building are covered
   // by the checks above.

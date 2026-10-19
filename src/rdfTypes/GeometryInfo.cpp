@@ -37,7 +37,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(serializationType_) + sizeof(metricLength_) +
-                    sizeof(metricArea_));
+                    sizeof(metricArea_) + sizeof(parsedGeometryOffset_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -150,6 +150,10 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
   if (version == 5) {
     info.sourceCrs_ = SourceCrsType{0};
     info.serializationType_ = SerializationType::WKT;
+  }
+  // The records before version 7 have no parsed geometry offset.
+  if (version < 7) {
+    info.parsedGeometryOffset_ = -1;
   }
   return info;
 }

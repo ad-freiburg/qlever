@@ -12,12 +12,14 @@
 
 #include "../../GeometryInfoTestHelpers.h"
 #include "VocabularyTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "gmock/gmock.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/File.h"
 
 namespace {
@@ -314,18 +316,26 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     ww->finish();
   }
 
-  // Turn the geoinfo file into one of version 5: the version 6 has the same
-  // record size, but in version 5, the bytes `[28, 32)` of a valid record could
-  // contain arbitrary content.
+  // Turn the geoinfo file into one of version 5: its records are the first
+  // `geometryInfoSize(5)` bytes of the records of the current version (the
+  // fields of later versions are appended), and in version 5, the bytes
+  // `[28, 32)` of a valid record could contain arbitrary content.
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
-  std::string contents;
+  std::string currentContents;
   {
     std::ifstream in{geoInfoFilename, std::ios::binary};
-    contents.assign(std::istreambuf_iterator<char>{in}, {});
+    currentContents.assign(std::istreambuf_iterator<char>{in}, {});
   }
   constexpr size_t recordSize = 48;
   static_assert(geometryInfoSize(5) == recordSize);
-  ASSERT_EQ(contents.size(), sizeof(uint64_t) + literals.size() * recordSize);
+  constexpr size_t currentRecordSize = sizeof(GeometryInfo);
+  ASSERT_EQ(currentContents.size(),
+            sizeof(uint64_t) + literals.size() * currentRecordSize);
+  std::string contents = currentContents.substr(0, sizeof(uint64_t));
+  for (size_t i = 0; i < literals.size(); ++i) {
+    contents.append(currentContents, sizeof(uint64_t) + i * currentRecordSize,
+                    recordSize);
+  }
   const uint64_t version5 = 5;
   std::memcpy(contents.data(), &version5, sizeof(version5));
   for (size_t i = 0; i < literals.size(); ++i) {
@@ -357,6 +367,90 @@ TEST(GeoVocabularyTest, ReadVersion5) {
       EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
     }
   }
+}
+
+// Test that a geoinfo file whose size does not match its version and the number
+// of words is rejected. This is the case for the files of pre-release builds
+// with parsed geometries, which have the version 6 in their header (like the
+// released version 6), but records of the size of version 7.
+TEST(GeoVocabularyTest, RejectFileWithWrongRecordSize) {
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+  std::vector<std::string> literals{
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+  };
+  ql::ranges::sort(literals);
+  {
+    AnyGeoVocab writerVocab;
+    auto ww = writerVocab.makeDiskWriterPtr(filename);
+    for (const auto& lit : literals) {
+      (*ww)(lit, true);
+    }
+    ww->finish();
+  }
+  static_assert(sizeof(GeometryInfo) != geometryInfoSize(6));
+
+  // Change only the version in the header of the geoinfo file to 6.
+  const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
+  {
+    std::fstream file{geoInfoFilename,
+                      std::ios::binary | std::ios::in | std::ios::out};
+    const uint64_t version6 = 6;
+    file.write(reinterpret_cast<const char*>(&version6), sizeof(version6));
+  }
+  AnyGeoVocab geoVocab;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      geoVocab.open(filename),
+      ::testing::AllOf(::testing::HasSubstr("geometry info version 6"),
+                       ::testing::HasSubstr("Please rebuild your index")));
+}
+
+// Test that the vocabulary stores the parsed geometries (see `ParsedGeometry`)
+// of exactly the valid literals with at least the configured length.
+TEST(GeoVocabularyTest, ParsedGeometries) {
+  // A polygon with two rings, a shorter line, and an invalid literal longer
+  // than the polygon.
+  std::vector<std::string> literals{
+      "\"POLYGON((7.8 48.0, 7.9 48.0, 7.9 48.1, 7.8 48.1, 7.8 48.0), "
+      "(7.82 48.02, 7.88 48.02, 7.88 48.08, 7.82 48.08, 7.82 48.02))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"LINESTRING(7.8 48.0, 7.9 48.1)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"POLYGON((1 1, 2 2, 3 450, 1 1, 2 2, 3 450, 1 1, 2 2, 3 450, 1 1, "
+      "2 2, 3 450, 1 1, 2 2, 3 450, 1 1, 2 2, 3 450, 1 1, 2 2, 3 450))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  ql::ranges::sort(literals);
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+
+  // Build the vocabulary with a minimum length between the line and the
+  // polygon.
+  AnyGeoVocab geoVocab;
+  geoVocab.setParsedGeometriesMinLength(100);
+  auto wordWriter = geoVocab.makeDiskWriterPtr(filename);
+  for (const auto& literal : literals) {
+    (*wordWriter)(literal, true);
+  }
+  wordWriter->finish();
+  geoVocab.open(filename);
+
+  // Only the polygon has a parsed geometry (one part), and only its geometry
+  // info has an offset.
+  for (size_t i = 0; i < literals.size(); ++i) {
+    bool isPolygon = ql::starts_with(literals[i], "\"POLYGON((7.8");
+    auto parsed = geoVocab.getParsedGeometry(i);
+    EXPECT_EQ(parsed.has_value(), isPolygon) << literals[i];
+    if (parsed.has_value()) {
+      EXPECT_EQ(parsed.value().parts().size(), 1);
+    }
+    auto info = geoVocab.getGeoInfo(i);
+    if (info.has_value()) {
+      EXPECT_EQ(info.value().getParsedGeometryOffset() >= 0, isPolygon);
+    }
+  }
+  geoVocab.close();
 }
 
 // _____________________________________________________________________________

@@ -186,6 +186,16 @@ size_t& Index::rowsPerBlock() { return pimpl_->rowsPerBlock(); }
 const size_t& Index::rowsPerBlock() const { return pimpl_->rowsPerBlock(); }
 
 // ____________________________________________________________________________
+size_t& Index::parsedGeometriesMinLength() {
+  return pimpl_->parsedGeometriesMinLength();
+}
+
+// ____________________________________________________________________________
+const size_t& Index::parsedGeometriesMinLength() const {
+  return pimpl_->parsedGeometriesMinLength();
+}
+
+// ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {
   return pimpl_->setOnDiskBase(onDiskBase);
 }
