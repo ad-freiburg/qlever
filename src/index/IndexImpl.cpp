@@ -624,20 +624,26 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    // The merger orders the words by the geo sort keys stored in the partial
-    // vocabularies (see `mergeVocabulary`), so the comparator here is the one
-    // without the geo cell layer.
-    auto sortPred = [&cmp = vocab_.getCaseComparator()](std::string_view a,
-                                                        std::string_view b) {
+    // The merger orders the words by their geo sort keys, which it computes
+    // once per word (see `mergeVocabulary`), so the comparator here is the
+    // one without the geo cell layer. Without a grid, no keys are computed.
+    const auto& cmp = vocab_.getCaseComparator();
+    auto sortPred = [&cmp](std::string_view a, std::string_view b) {
       return cmp.compareWithoutGeoCellGrid(
                  a, b, TripleComponentComparator::Level::TOTAL) < 0;
     };
+    std::function<uint64_t(std::string_view)> geoSortKeyFn = nullptr;
+    if (cmp.getGeoCellGrid().has_value()) {
+      geoSortKeyFn = [&cmp](std::string_view word) {
+        return cmp.geoSortKey(word);
+      };
+    }
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabularies, sortPred, wordCallback,
-        memoryLimitIndexBuilding(), blankNodeIriRegexes_);
+        memoryLimitIndexBuilding(), blankNodeIriRegexes_, geoSortKeyFn);
     wordCallback.finish();
     return mergedVocabMeta;
   }();
