@@ -290,7 +290,8 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
     // `LocalVocabEntry` would instead yield a `LocalVocabIndex`, for which the
     // prefiltering only searches the range of the vocabulary `Id`s (see
     // `getRangesForIndexTypes`), which contains no encoded IRIs.
-    return makeIdOrLocalVocabEntry(iriExpr->value(), context);
+    return makeIdOrLocalVocabEntry(
+        ad_utility::triple_component::LiteralOrIri{iriExpr->value()}, context);
   } else {
     return std::nullopt;
   }
