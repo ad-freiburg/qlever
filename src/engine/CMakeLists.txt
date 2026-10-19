@@ -16,7 +16,8 @@ add_library(engine
         CountConnectedSubgraphs.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp EmptyPath.cpp
+        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
+        NamedResultCacheSerializer.cpp EmptyPath.cpp
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp

@@ -176,6 +176,27 @@ NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
 }
 
 // _____________________________________________________________________________
+void NamedCachedQueryBlobManager::skipVocabulary(
+    ad_utility::serialization::ByteBufferReadSerializerT<
+        true, ql::span<const char>>& serializer,
+    const nlohmann::json& metadata) {
+  // The same default as in `IndexImpl::applyConfiguration`.
+  ad_utility::VocabularyType type{
+      ad_utility::VocabularyType::Enum::OnDiskCompressed};
+  if (auto it = metadata.find("vocabulary-type"); it != metadata.end()) {
+    type = static_cast<ad_utility::VocabularyType>(*it);
+  }
+  // Read the vocabulary zero-copy into a scratch object, which only advances
+  // the `serializer`, and discard it again.
+  PolymorphicVocabulary vocab;
+  vocab.resetToType(type);
+  vocab.applyToZeroCopyCapableVocabulary("Skipping", [&serializer](auto& v) {
+    using T = std::decay_t<decltype(v)>;
+    [[maybe_unused]] T scratch = T::fromZeroCopyDeserializer(serializer);
+  });
+}
+
+// _____________________________________________________________________________
 std::vector<char> NamedCachedQueryBlobManager::compressBlob(
     ql::span<const char> uncompressedBlob) {
   return ZstdWrapper::compress(uncompressedBlob.data(),

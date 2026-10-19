@@ -119,7 +119,7 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(
 
 // ____________________________________________________________________________
 SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
-    Variable geometryColumn, const std::string& encodedSegment,
+    Variable geometryColumn, std::string_view encodedSegment,
     const ad_utility::HashMap<size_t, size_t>& shapeToRow, size_t numRows) {
   constexpr size_t segmentIdx = 0;
   std::vector rowToShape(numRows, NO_SHAPE);
@@ -136,6 +136,17 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
   segments.push_back(decodeSegment(encodedSegment));
   return SpatialJoinCachedIndex{std::move(geometryColumn), std::nullopt,
                                 std::move(segments), std::move(rowToShape)};
+}
+
+// _____________________________________________________________________________
+SpatialJoinCachedIndex::Layout SpatialJoinCachedIndex::parseLayout(
+    ad_utility::serialization::LayoutReadSerializer& reader, size_t numRows,
+    uint16_t entriesFormatVersion) {
+  Layout layout;
+  layout.whole_ = reader.recordRange([&] {
+    layout = readFromSerializer(reader, numRows, entriesFormatVersion);
+  });
+  return layout;
 }
 
 // ____________________________________________________________________________

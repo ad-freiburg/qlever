@@ -21,6 +21,7 @@
 #include "util/AlignedAllocator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UninitializedAllocator.h"
+#include "util/json.h"
 
 namespace qlever {
 
@@ -233,6 +234,24 @@ class NamedCachedQueryBlobManager {
   static FormatVersionOrError tryToSkipAndVerifyBlobHeader(
       ad_utility::serialization::ByteBufferReadSerializerT<
           true, ql::span<const char>>& serializer);
+
+  // Skip the main vocabulary of a decompressed blob, which `serialize` writes
+  // directly after the metadata JSON (via
+  // `IndexImpl::writeVocabularyToZeroCopyBlob`, or filtered, see
+  // `writeMetadataAndFilteredVocabulary` in the implementation), advancing
+  // `serializer` past it. The current position of the `serializer` has to be
+  // the start of the vocabulary. The vocabulary implementation whose format is
+  // skipped is the one given by the `"vocabulary-type"` of the `metadata` JSON
+  // of the blob (with the same default as in `IndexImpl::applyConfiguration`),
+  // which is also what `tryToDeserialize` sets up before it reads the
+  // vocabulary. Nothing but zero-copy views into the buffer of the
+  // `serializer` is constructed, and those are discarded again. Throw if that
+  // vocabulary implementation cannot be read from a zero-copy blob, or if the
+  // input is corrupt or truncated.
+  static void skipVocabulary(
+      ad_utility::serialization::ByteBufferReadSerializerT<
+          true, ql::span<const char>>& serializer,
+      const nlohmann::json& metadata);
 };
 
 }  // namespace qlever
