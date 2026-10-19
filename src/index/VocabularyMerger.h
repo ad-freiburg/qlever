@@ -127,8 +127,9 @@ IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
 /**
  * @brief Serialize an `ItemVec` to a binary file
  *
- * For each string first writes the size of the string (64 bits). Then the
- * actual string content (no trailing zero) and then the Id (sizeof(Id)
+ * First writes the number of entries. Then, for each entry, the word (its
+ * size and then its content, without a trailing zero), the external flag, the
+ * index, and the geo sort key.
  *
  * @param entries The input
  * @param fileName will write to this file. If it exists it will be overwritten
@@ -139,8 +140,12 @@ void writePartialVocabularyToFile(const ItemVec& entries,
 /**
  * @brief Take a HashMap of strings to Ids and insert all its elements into a
  * single vector. No reordering or deduplication is done, so result.size() ==
- * size of the hash map
+ * size of the hash map. The `geoSortKeyFn` computes the geo sort key of each
+ * word (see `ItemVecEntry`); the overload without it sets all keys to 0.
  */
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn);
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
 }  // namespace ad_utility::vocabulary_merger
 

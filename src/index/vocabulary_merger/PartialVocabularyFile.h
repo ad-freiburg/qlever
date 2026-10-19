@@ -42,9 +42,11 @@
 // vocabularies. A file consists of the following four parts, in this order:
 //
 // 1. The number of words, as a `uint64_t`.
-// 2. The words, in the order of the vocabulary. Each word is serialized as a
-//    `TripleComponentWithIndex`, that is, the word itself, its external flag
-//    and its local index. The words are grouped into blocks: a block ends
+// 2. The words, in the order of the vocabulary (by geo sort key first, see
+//    `ItemVecEntry`). Each word is serialized as a `TripleComponentWithIndex`,
+//    that is, the word itself, its external flag and its local index,
+//    followed by its geo sort key as a `uint64_t`. The words are grouped into
+//    blocks: a block ends
 //    after the word that makes it at least `PARTIAL_VOCAB_BLOCK_SIZE` bytes
 //    long. The blocks are only visible through the block index (part 3), the
 //    words themselves are stored back to back.
@@ -52,9 +54,7 @@
 //    `PartialVocabularyBlockMetadata` of every block.
 // 4. The offset of the block index (part 3) in the file, as a `uint64_t`.
 //
-// The words are stored exactly as before the block index existed, so a reader
-// that only wants the words (part 1, then that many words) still works. The
-// block index is what the merge needs: the first and the last word of every
+// The block index is what the merge needs: the first and the last word of every
 // block, without reading the block, so that it can split the runs into
 // independent chunks by their words alone and then read only the blocks that a
 // chunk needs, see `PartialVocabularyRunsInput`. This is how `mergeVocabulary`
@@ -62,14 +62,16 @@
 namespace ad_utility::vocabulary_merger {
 
 // The metadata of a single block of words, see above. The first and the last
-// word are stored in full, because the merge compares them with the words of
-// other partial vocabularies.
+// word are stored in full, with their geo sort keys, because the merge compares
+// them with the words of other partial vocabularies.
 struct PartialVocabularyBlockMetadata {
   uint64_t offset_ = 0;
   uint64_t numBytes_ = 0;
   uint64_t numWords_ = 0;
   TripleComponentWithIndex first_;
   TripleComponentWithIndex last_;
+  uint64_t firstGeoSortKey_ = 0;
+  uint64_t lastGeoSortKey_ = 0;
 
   AD_SERIALIZE_FRIEND_FUNCTION(PartialVocabularyBlockMetadata) {
     serializer | arg.offset_;
@@ -77,13 +79,15 @@ struct PartialVocabularyBlockMetadata {
     serializer | arg.numWords_;
     serializer | arg.first_;
     serializer | arg.last_;
+    serializer | arg.firstGeoSortKey_;
+    serializer | arg.lastGeoSortKey_;
   }
 };
 
 // Write a partial vocabulary file. The words have to be pushed in the order of
 // the vocabulary, each with its local index and its external flag (bundled in
-// a `PartialVocabIndexWithExternalFlag`), and `finish()` (which the destructor
-// calls if necessary) writes the block index.
+// a `PartialVocabIndexWithExternalFlag`) and its geo sort key, and `finish()`
+// (which the destructor calls if necessary) writes the block index.
 class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
  private:
   serialization::FileWriteSerializer file_;
@@ -119,12 +123,14 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
 
   // Add the next word.
   void operator()(std::string_view word,
-                  PartialVocabIndexWithExternalFlag indexAndExternalFlag) {
+                  PartialVocabIndexWithExternalFlag indexAndExternalFlag,
+                  uint64_t geoSortKey = 0) {
     AD_CONTRACT_CHECK(!finishWasCalled_);
     offsetOfLastWord_ = currentBlock_.getCurrentPosition();
     currentBlock_ << word;
     currentBlock_ << indexAndExternalFlag.isExternal();
     currentBlock_ << indexAndExternalFlag.id();
+    currentBlock_ << geoSortKey;
     ++numWordsInBlock_;
     ++numWords_;
     if (currentBlock_.getCurrentPosition() >=
@@ -155,24 +161,29 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
     }
     const auto& bytes = currentBlock_.data();
     file_.serializeBytes(bytes.data(), bytes.size());
+    auto [first, firstGeoSortKey] = wordInCurrentBlock(0);
+    auto [last, lastGeoSortKey] = wordInCurrentBlock(offsetOfLastWord_);
     blocks_.push_back({offset_, bytes.size(), numWordsInBlock_,
-                       wordInCurrentBlock(0),
-                       wordInCurrentBlock(offsetOfLastWord_)});
+                       std::move(first), std::move(last), firstGeoSortKey,
+                       lastGeoSortKey});
     offset_ += bytes.size();
     currentBlock_.clear();
     numWordsInBlock_ = 0;
   }
 
-  // Read the word that starts at the `offset` in the current block back out of
-  // the serialized bytes of the block.
-  TripleComponentWithIndex wordInCurrentBlock(size_t offset) const {
+  // Read the word that starts at the `offset` in the current block, and its
+  // geo sort key, back out of the serialized bytes of the block.
+  std::pair<TripleComponentWithIndex, uint64_t> wordInCurrentBlock(
+      size_t offset) const {
     const auto& bytes = currentBlock_.data();
     AD_CORRECTNESS_CHECK(offset < bytes.size());
     serialization::ByteBufferReadSerializerT reader{
         ql::span<const char>{bytes.data() + offset, bytes.size() - offset}};
     TripleComponentWithIndex word;
     reader >> word;
-    return word;
+    uint64_t geoSortKey = 0;
+    reader >> geoSortKey;
+    return {std::move(word), geoSortKey};
   }
 };
 
@@ -345,7 +356,8 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
         ql::make_unique_for_overwrite<char[]>(numBoundaryBytes);
     auto makeElement = [&run, runIdx, numBoundaryBytes,
                         numBytesStored = size_t{0}](
-                           const TripleComponentWithIndex& word) mutable {
+                           const TripleComponentWithIndex& word,
+                           uint64_t geoSortKey) mutable {
       const auto& bytes = word.iriOrLiteral();
       AD_CORRECTNESS_CHECK(numBytesStored + bytes.size() <= numBoundaryBytes);
       char* storage = run.boundaryWords_.get() + numBytesStored;
@@ -356,14 +368,15 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
       element.isExternal_ = word.isExternal();
       element.index_ = word.index_;
       element.partialFileId_ = static_cast<uint32_t>(runIdx);
+      element.geoSortKey_ = geoSortKey;
       return element;
     };
     run.blocks_.reserve(blocks.size());
     for (const auto& block : blocks) {
       AD_CORRECTNESS_CHECK(block.numWords_ > 0);
       run.blocks_.push_back({block.offset_, block.numBytes_, block.numWords_,
-                             makeElement(block.first_),
-                             makeElement(block.last_)});
+                             makeElement(block.first_, block.firstGeoSortKey_),
+                             makeElement(block.last_, block.lastGeoSortKey_)});
     }
     return run;
   }

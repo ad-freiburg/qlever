@@ -49,6 +49,9 @@ struct MergeWord {
   uint32_t partialFileId_ = 0;
   // Whether the word will be externalized.
   bool isExternal_ = false;
+  // The geo sort key of the word, which orders the merge before the word
+  // itself (0 for all words without a geo cell grid, see `ItemVecEntry`).
+  uint64_t geoSortKey_ = 0;
 
   [[nodiscard]] bool& isExternal() { return isExternal_; }
   [[nodiscard]] const bool& isExternal() const { return isExternal_; }
@@ -68,7 +71,8 @@ struct MergeWord {
   // Read a word of the partial vocabulary `partialFileId` from the
   // `serializer`, in the format that `PartialVocabularyWriter` (see
   // `index/vocabulary_merger/PartialVocabularyFile.h`) writes: the word as a
-  // string, its external flag and its local index. The word is not copied, but
+  // string, its external flag, its local index and its geo sort key. The word
+  // is not copied, but
   // points into the buffer of the `serializer`, which therefore has to outlive
   // the returned `MergeWord` (and must not move its buffer).
   CPP_template(typename S)(
@@ -78,6 +82,7 @@ struct MergeWord {
     word.word_ = serialization::zeroCopyDeserializeToStringView(serializer);
     serializer >> word.isExternal_;
     serializer >> word.index_;
+    serializer >> word.geoSortKey_;
     word.partialFileId_ = partialFileId;
     return word;
   }
