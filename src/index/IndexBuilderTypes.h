@@ -149,7 +149,7 @@ using ItemMap =
 // An entry of an `ItemVec` (see below): a word of a partial vocabulary with
 // its index and external flag, plus the geo sort key of the word (see
 // `TripleComponentComparator::geoSortKey`), which is 0 unless a geo cell grid
-// is configured and the word is a WKT literal. The key is stored because
+// is configured and the word is a WKT literal. The key is kept here because
 // computing it means parsing the literal, which should happen once per word
 // and not once per comparison during sorting.
 struct ItemVecEntry {

@@ -317,9 +317,9 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
                                {L(4), V(2)}}));  // <http://ex/cherry>
 }
 
-// Test that the merge orders by the geo sort keys stored in the partial
-// vocabularies first (see `ItemVecEntry`) and by the comparator second, and
-// that the order check considers the keys.
+// Test that the merge orders by the geo sort keys of the words first (which
+// it computes with the given function when it reads a word) and by the
+// comparator second, and that the order check considers the keys.
 TEST(MergeVocabulary, geoSortKeyOrder) {
   std::string basePath = gtestCurrentTestName();
   absl::Cleanup cleanup = [&basePath] {
@@ -330,15 +330,21 @@ TEST(MergeVocabulary, geoSortKeyOrder) {
       }
     }
   };
-  // Write the given (word, geo sort key) pairs as a partial vocabulary file.
-  auto writeFile = [](const std::string& path, const auto& wordsAndKeys) {
+  // Write the given words as a partial vocabulary file, and remember the geo
+  // sort key of each word for the `geoSortKeyFn` below.
+  ad_utility::HashMap<std::string, uint64_t> keys;
+  auto writeFile = [&keys](const std::string& path, const auto& wordsAndKeys) {
     ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{path};
     size_t localIdx = 0;
     for (const auto& [word, key] : wordsAndKeys) {
       partialVocab(std::string_view{word},
-                   PartialVocabIndexWithExternalFlag{localIdx, false}, key);
+                   PartialVocabIndexWithExternalFlag{localIdx, false});
+      keys[std::string{word}] = key;
       ++localIdx;
     }
+  };
+  auto geoSortKeyFn = [&keys](std::string_view word) {
+    return keys.at(std::string{word});
   };
   std::string file0 = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0);
   std::string file1 = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1);
@@ -355,7 +361,7 @@ TEST(MergeVocabulary, geoSortKeyOrder) {
   using P = std::pair<std::string_view, uint64_t>;
   writeFile(file0, std::vector<P>{{"\"a\"", 0}, {"\"z\"", 0}, {"\"x\"", 13}});
   writeFile(file1, std::vector<P>{{"\"b\"", 0}, {"\"w\"", 4}, {"\"y\"", 13}});
-  mergeVocabulary(basePath, 2, lessThan, wordCallback, 1_GB);
+  mergeVocabulary(basePath, 2, lessThan, wordCallback, 1_GB, {}, geoSortKeyFn);
   EXPECT_THAT(mergedWords, ::testing::ElementsAre("\"a\"", "\"b\"", "\"z\"",
                                                   "\"w\"", "\"x\"", "\"y\""));
 
@@ -369,7 +375,8 @@ TEST(MergeVocabulary, geoSortKeyOrder) {
     writeFile(file0, std::vector<P>{{"\"a\"", 13}, {"\"b\"", 4}});
     writeFile(file1, std::vector<P>{});
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        mergeVocabulary(basePath, 2, lessThan, wordCallback, 1_GB),
+        mergeVocabulary(basePath, 2, lessThan, wordCallback, 1_GB, {},
+                        geoSortKeyFn),
         ::testing::HasSubstr("vocabulary order violated"),
         ad_utility::Exception);
   }
