@@ -146,9 +146,22 @@ class PartialVocabIndexWithExternalFlag {
 using ItemMap =
     ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag>;
 
+// An entry of an `ItemVec` (see below): a word of a partial vocabulary with
+// its index and external flag.
+struct ItemVecEntry {
+  ItemVecEntry() = default;
+  ItemVecEntry(std::string_view word,
+               PartialVocabIndexWithExternalFlag idAndFlag)
+      : word_{word}, idAndFlag_{idAndFlag} {}
+  // The word (a view into the buffer of the partial vocabulary).
+  std::string_view word_;
+  // The index of the word in the partial vocabulary and its external flag,
+  // see `PartialVocabIndexWithExternalFlag`.
+  PartialVocabIndexWithExternalFlag idAndFlag_;
+};
+
 // A vector that stores the same values as the hash map.
-using ItemVec =
-    std::vector<std::pair<std::string_view, PartialVocabIndexWithExternalFlag>>;
+using ItemVec = std::vector<ItemVecEntry>;
 
 // A buffer that very efficiently handles a set of strings that is deallocated
 // at once when the buffer goes out of scope or `clear` is called.

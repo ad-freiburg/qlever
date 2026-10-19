@@ -100,10 +100,10 @@ ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
  * strings that were connected to x and y in the input were identical. Also
  * modifies the input Ids to their mapped values.
  *
- * @param els  Must be sorted(at least duplicates must be adjacent) according to
- * the strings and the Ids must be unique to work correctly.
+ * @param entries  Must be sorted(at least duplicates must be adjacent)
+ * according to the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries);
 
 // The triples that were mapped using a single partial vocabulary are stored in
 // a file of their own (see `unsortedTriplesFilename`). The following two
@@ -125,15 +125,15 @@ IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
     const std::string& filename);
 
 /**
- * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
+ * @brief Serialize an `ItemVec` to a binary file
  *
  * For each string first writes the size of the string (64 bits). Then the
  * actual string content (no trailing zero) and then the Id (sizeof(Id)
  *
- * @param els The input
+ * @param entries The input
  * @param fileName will write to this file. If it exists it will be overwritten
  */
-void writePartialVocabularyToFile(const ItemVec& els,
+void writePartialVocabularyToFile(const ItemVec& entries,
                                   const std::string& fileName);
 
 /**
