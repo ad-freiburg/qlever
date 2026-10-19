@@ -13,6 +13,7 @@
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/post.hpp>
 #include <exception>
+#include <tuple>
 #include <utility>
 
 #include "backports/asio.h"
@@ -20,11 +21,13 @@
 namespace ad_utility {
 
 // Wrap a completion `handler` with the signature
-// `void(std::exception_ptr, Payload)` such that it is never run inline, but
+// `void(std::exception_ptr, Payload...)` such that it is never run inline, but
 // always `post`ed onto the executor that is associated with it (or onto
 // `defaultExecutor`, if it has none of its own). The resulting handler may
 // hence safely be invoked directly, in particular from within a strand,
-// because the actual work of `handler` then runs outside of that strand.
+// because the actual work of `handler` then runs outside of that strand. The
+// `Payload` may also be empty, then the signature is
+// `void(std::exception_ptr)`.
 //
 // NOTE: This is not the same as `boost::asio::bind_executor`, for three
 // reasons. First, `bind_executor` only *associates* an executor with a
@@ -37,18 +40,25 @@ namespace ad_utility {
 // even an honored association only leads to a `dispatch`, which may still run
 // the handler inline if the current thread already runs on that executor,
 // which would defeat the very purpose of this function.
-template <typename Payload, typename Handler>
+template <typename... Payload, typename Handler>
 auto makeHandlerExecutorAware(Handler handler,
                               const ql::any_io_executor& defaultExecutor) {
   auto executor =
       boost::asio::get_associated_executor(handler, defaultExecutor);
   return [handler = std::move(handler), executor](std::exception_ptr exception,
-                                                  Payload payload) mutable {
-    boost::asio::post(executor, [handler = std::move(handler),
-                                 exception = std::move(exception),
-                                 payload = std::move(payload)]() mutable {
-      std::move(handler)(std::move(exception), std::move(payload));
-    });
+                                                  Payload... payload) mutable {
+    // NOTE: The payload is captured as a `std::tuple`, because capturing a
+    // parameter pack by move requires C++20.
+    boost::asio::post(
+        executor,
+        [handler = std::move(handler), exception = std::move(exception),
+         payload = std::tuple<Payload...>{std::move(payload)...}]() mutable {
+          std::apply(
+              [&handler, &exception](auto&... args) {
+                std::move(handler)(std::move(exception), std::move(args)...);
+              },
+              payload);
+        });
   };
 }
 

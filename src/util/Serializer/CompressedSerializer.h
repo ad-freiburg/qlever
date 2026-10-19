@@ -46,9 +46,9 @@ CPP_template(typename CompressionFunction)(
       : compressionFunction_{std::move(compressionFunction)} {}
 
   CPP_template_2(typename UnderlyingSerializer)(
-      requires WriteSerializer<UnderlyingSerializer>) void
-  operator()(ql::span<const char> block,
-             UnderlyingSerializer& underlyingSerializer) {
+      requires WriteSerializer<UnderlyingSerializer>)
+  void operator()(ql::span<const char> block,
+                  UnderlyingSerializer& underlyingSerializer) {
     size_t uncompressedSize = block.size();
     underlyingSerializer << uncompressedSize;
     std::invoke(compressionFunction_, block, compressedBuffer_);

@@ -895,7 +895,7 @@ TEST(CartesianProductJoin, distinctCollapsesChildWithoutSelectedColumn) {
       std::dynamic_pointer_cast<CartesianProductJoin>(tree->getRootOperation());
   ASSERT_TRUE(cpj);
   for (auto* child : cpj->getChildren()) {
-    if (child->isVariableCovered(Variable{"?a"})) {
+    if (child->containsVariable(Variable{"?a"})) {
       EXPECT_TRUE(
           std::dynamic_pointer_cast<Distinct>(child->getRootOperation()));
     } else {
