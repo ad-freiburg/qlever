@@ -158,7 +158,8 @@ CPP_template(typename T)(
 // If it is an ID (possibly contained in the `IdOrLocalVocabEntry` variant),
 // then the `matchId` matcher from above is used, else we test for equality.
 template <typename T>
-requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
+requires(!isVectorResult<T>)
+auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLocalVocabEntry>) {
@@ -214,18 +215,13 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   LocalVocab localVocab;
   IdTable table{alloc};
 
-  // Get the size of `operand`: size for a vector, 1 otherwise. For a
-  // `SetOfIntervals`, this actually returns the *minimal* size of an
-  // `EvaluationContext` that can expand the `SetOfIntervals`. This is used to
-  // implement test cases where all the inputs are `SetOfIntervals` or constant,
-  // and the result is NOT a `SetOfIntervals`.
+  // Get the size of `operand`: size for a vector or a `SetOfIntervals`, 1
+  // otherwise.
   auto getResultSize = [](const auto& operand) -> size_t {
     using T = std::decay_t<decltype(operand)>;
-    if constexpr (isVectorResult<T>) {
+    if constexpr (isVectorResult<T> ||
+                  std::is_same_v<T, ad_utility::SetOfIntervals>) {
       return operand.size();
-    } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-      return operand._intervals.empty() ? size_t{0}
-                                        : operand._intervals.back().second;
     }
     return 1;
   };
@@ -300,6 +296,41 @@ struct TestNaryExpressionVec {
   }
 };
 
+struct TestTernaryAddImpl {
+  template <typename A, typename B, typename C>
+  auto operator()(A a, B b, C c) const {
+    if constexpr (ql::concepts::same_as<std::decay_t<A>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<B>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<C>, int64_t>) {
+      return a + b + c;
+    } else {
+      return static_cast<double>(a) + static_cast<double>(b) +
+             static_cast<double>(c);
+    }
+  }
+};
+
+using TestTernaryAdd =
+    sparqlExpression::detail::MakeNumericExpression<TestTernaryAddImpl>;
+
+using TestTernaryAddOperation = sparqlExpression::detail::Operation<
+    3, sparqlExpression::detail::FV<
+           TestTernaryAdd, sparqlExpression::detail::NumericValueGetter>>;
+
+class TestTernaryAddExpression
+    : public sparqlExpression::detail::NaryExpression<TestTernaryAddOperation> {
+ public:
+  using sparqlExpression::detail::NaryExpression<
+      TestTernaryAddOperation>::NaryExpression;
+};
+
+auto makeTestTernaryAddExpression = [](SparqlExpression::Ptr a,
+                                       SparqlExpression::Ptr b,
+                                       SparqlExpression::Ptr c) {
+  return std::make_unique<TestTernaryAddExpression>(std::move(a), std::move(b),
+                                                    std::move(c));
+};
+
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
 auto testPlus = testBinaryExpressionCommutative<&makeAddExpression>;
@@ -357,15 +388,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{t, t, t, t, t, t}, alloc};
     testOr(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{0, 6}}};
+    S resultAsSet = S{{{0, 6}}, 6};
     testOr(resultAsSet, s1, s2);
 #endif
   }
@@ -382,15 +413,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{f, f, f, t, f, f}, alloc};
     testAnd(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{3, 4}}};
+    S resultAsSet = S{{{3, 4}}, 6};
     testAnd(resultAsSet, s1, s2);
 #endif
   }
@@ -482,6 +513,33 @@ TEST(SparqlExpression, multiplyExpressionWithVariable) {
                           sparqlExpressionResultMatcher(expected)));
 }
 
+// Test that `canUseNumericFastPath` accepts exactly the combinations of
+// numeric value getters with `ValueId` vectors or constants (also outside a
+// constant-expression context, because coverage tools don't track compile-time
+// uses).
+TEST(SparqlExpression, canUseNumericFastPath) {
+  using sparqlExpression::detail::canUseNumericFastPath;
+  using sparqlExpression::detail::NumericOrDateValueGetter;
+  using sparqlExpression::detail::NumericValueGetter;
+  using sparqlExpression::detail::StringValueGetter;
+
+  // Numeric value getters on `ValueId` vectors and constants.
+  EXPECT_TRUE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                     std::tuple<ValueId>>()));
+  EXPECT_TRUE((canUseNumericFastPath<
+               std::tuple<NumericValueGetter, NumericOrDateValueGetter>,
+               std::tuple<V<ValueId>, ValueId>>()));
+
+  // A non-numeric value getter or an operand that is not a `ValueId`.
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<StringValueGetter>,
+                                      std::tuple<ValueId>>()));
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                      std::tuple<IdOrLocalVocabEntry>>()));
+  EXPECT_FALSE(
+      (canUseNumericFastPath<std::tuple<NumericValueGetter, NumericValueGetter>,
+                             std::tuple<ValueId, V<IdOrLocalVocabEntry>>>()));
+}
+
 // _____________________________________________________________________________
 TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
   V<Id> ints{{I(1), I(-2), I(3)}, alloc};
@@ -535,6 +593,101 @@ TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
   // generic path; the result must be the same either way.
   V<Id> tied{{I(1), D(2.0), U}, alloc};
   testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
+}
+
+// Test the numeric fast paths of `NaryExpression` on a ternary addition: the
+// homogeneous path, the speculative majority-type path with its per-row
+// fallback, and the generic fallback.
+TEST(SparqlExpression, naryNumericFastPaths) {
+  // Homogeneous integer operands.
+  {
+    V<Id> left{{I(1), I(2), I(3), I(4)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), I(113), I(114)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // Homogeneous operands with different numeric types.
+  {
+    V<Id> left{{I(1), I(2), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{D(0.5), D(1.5), D(2.5)}, alloc};
+
+    V<Id> expected{{D(11.5), D(13.5), D(15.5)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // An operand with an integer majority: the single double row is computed by
+  // the per-row fallback of the speculative path.
+  {
+    V<Id> left{{I(1), I(2), D(3.0), I(4), I(5)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), D(113.0), I(114), I(115)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // No majority type, hence the generic fallback.
+  {
+    V<Id> left{{I(1), D(2.0), I(3), D(4.0)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), D(112.0), I(113), D(114.0)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // A boolean row is computed by the per-row fallback, which treats `true` as
+  // the number 1.
+  {
+    V<Id> left{{I(1), B(true), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(111), I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // A row with an unsupported datatype is computed by the per-row fallback and
+  // yields `UNDEF`.
+  {
+    V<Id> left{{I(1), Voc(4), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), U, I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+}
+
+// Test that the generic evaluation loop of `NaryExpression` checks for
+// cancellation (`STR` on an `Id` vector takes that loop).
+TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
+  TestContext outerContext;
+  auto& context = outerContext.context;
+  V<Id> input{{I(1), I(2), I(3)}, alloc};
+  context._endIndex = input.size();
+  auto expression = makeStrExpression(std::make_unique<SingleUseExpression>(
+      ExpressionResult{std::move(input)}));
+
+  context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(expression->evaluate(&context),
+               ad_utility::CancellationException);
 }
 
 // _____________________________________________________________________________________
@@ -611,7 +764,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testPlus(minus22, mixed, D(-2.2));
 
   using S = ad_utility::SetOfIntervals;
-  S alternating{{{0, 2}, {3, 4}}};
+  S alternating{{{0, 2}, {3, 4}}, 4};
   V<Id> alternatingTimes2{{I(2), I(2), I(0), I(2)}, alloc};
 
   testMultiply(times2, mixed, I(2));
@@ -1287,6 +1440,25 @@ TEST(SparqlExpression, unaryNegate) {
   // Empty strings are considered to be true.
   checkNegate(idOrLitOrStringVec({"true", "false", "", "blibb"}),
               Ids{B(false), B(false), B(true), B(false)});
+
+  // The negation of a `SetOfIntervals` lies within the range of the set, so it
+  // can also be used as the input of other expressions. This used to fail (see
+  // https://github.com/ad-freiburg/qlever/issues/3559).
+  using S = ad_utility::SetOfIntervals;
+  S set{{{0, 2}}, 4};
+  // The type erased expressions don't use the optimizations for
+  // `SetOfIntervals`, but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+  checkNegate(set, Ids{B(false), B(false), B(true), B(true)});
+#else
+  checkNegate(set, S{{{2, 4}}, 4});
+#endif
+  auto makeNegateOr = [](SparqlExpression::Ptr a, SparqlExpression::Ptr b) {
+    return makeOrExpression(makeUnaryNegateExpression(std::move(a)),
+                            std::move(b));
+  };
+  testNaryExpression(makeNegateOr, Ids{B(true), B(false), B(true), B(true)},
+                     set, Ids{B(true), B(false), B(false), B(true)});
 }
 
 // _____________________________________________________________________________________
@@ -1926,6 +2098,63 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       geoLit("LINESTRING(0 0,10 0)"),
   };
   checkSimplify(expected, geometries, tolerances);
+
+  // The function `geof:asGeoJSON`.
+  auto checkAsGeoJson = testUnaryExpression<&makeAsGeoJsonExpression>;
+  auto geoJsonLit = [](std::string_view content) {
+    return IdOrLocalVocabEntry{lit(
+        content, "^^<http://www.opengis.net/ont/geosparql#geoJSONLiteral>")};
+  };
+  checkAsGeoJson(
+      IdOrLocalVocabEntryVec{
+          U,
+          IdOrLocalVocabEntry{lit("NotAGeometry")},
+          geoLit("NOTWKT(1 2)"),
+          geoLit("POINT(1 2)"),
+          geoLit("LINESTRING(1 2,3 4.5)"),
+          // The rings of the polygon are closed explicitly in GeoJSON. The
+          // inner ring is oriented clockwise when parsing.
+          geoLit("POLYGON((0 0,10 0,10 10,0 0),(1 1,2 1,2 2))"),
+          geoLit("MULTIPOINT((1 2),(3 4))"),
+          geoLit("MULTILINESTRING((1 2,3 4),(5 6,7 8))"),
+          geoLit("MULTIPOLYGON(((0 0,1 0,1 1,0 0)),((2 2,3 2,3 3,2 2)))"),
+          geoLit("GEOMETRYCOLLECTION(POINT(1 2),LINESTRING(1 2,3 4))"),
+      },
+      IdOrLocalVocabEntryVec{
+          U,
+          U,
+          U,
+          geoJsonLit(R"({"type":"Point","coordinates":[1.0,2.0]})"),
+          geoJsonLit(
+              R"({"type":"LineString","coordinates":[[1.0,2.0],[3.0,4.5]]})"),
+          geoJsonLit(
+              R"({"type":"Polygon","coordinates":[[[0.0,0.0],[10.0,0.0],)"
+              R"([10.0,10.0],[0.0,0.0]],[[2.0,2.0],[2.0,1.0],[1.0,1.0],)"
+              R"([2.0,2.0]]]})"),
+          geoJsonLit(
+              R"({"type":"MultiPoint","coordinates":[[1.0,2.0],[3.0,4.0]]})"),
+          geoJsonLit(R"({"type":"MultiLineString","coordinates":)"
+                     R"([[[1.0,2.0],[3.0,4.0]],[[5.0,6.0],[7.0,8.0]]]})"),
+          geoJsonLit(R"({"type":"MultiPolygon","coordinates":)"
+                     R"([[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,0.0]]],)"
+                     R"([[[2.0,2.0],[3.0,2.0],[3.0,3.0],[2.0,2.0]]]]})"),
+          geoJsonLit(R"({"type":"GeometryCollection","geometries":)"
+                     R"([{"type":"Point","coordinates":[1.0,2.0]},)"
+                     R"({"type":"LineString","coordinates":)"
+                     R"([[1.0,2.0],[3.0,4.0]]}]})"),
+      });
+
+  // The coordinates of a `GeoPoint` (stored with limited precision) are
+  // rounded to six decimals, so the decoding artifacts do not show.
+  checkAsGeoJson(
+      IdOrLocalVocabEntryVec{
+          IdOrLocalVocabEntry{Id::makeFromGeoPoint(GeoPoint{2.5, 1.5})},
+          IdOrLocalVocabEntry{Id::makeFromGeoPoint(GeoPoint{48.0012341, -7.1})},
+      },
+      IdOrLocalVocabEntryVec{
+          geoJsonLit(R"({"type":"Point","coordinates":[1.5,2.5]})"),
+          geoJsonLit(R"({"type":"Point","coordinates":[-7.1,48.001234]})"),
+      });
 }
 
 // ________________________________________________________________________________________

@@ -19,10 +19,11 @@
 #include <cstddef>
 #include <exception>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
-#include "./InMemoryBlockStorage.h"
+#include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 
 using namespace ad_utility::parallelBlockMerge;
 
@@ -73,7 +74,7 @@ void get(Storage& storage, size_t chunkIndex, GetOutcomes& outcomes,
           outcomes.sawSentinel_ = true;
           return;
         }
-        outcomes.blocks_.push_back(std::move(result).get());
+        outcomes.blocks_.push_back(std::move(result).get().materialize());
         if (keepGoing) {
           get(storage, chunkIndex, outcomes, keepGoing);
         }
@@ -122,7 +123,39 @@ TEST(GetResult, theThreeStates) {
   EXPECT_FALSE(withBlock.wasCancelled());
   EXPECT_FALSE(withBlock.isEndOfChunk());
   EXPECT_TRUE(withBlock.hasValue());
-  EXPECT_THAT(std::move(withBlock).get(), ::testing::ElementsAre(1, 2, 3));
+  EXPECT_THAT(std::move(withBlock).get().materialize(),
+              ::testing::ElementsAre(1, 2, 3));
+
+  // A deferred block is only read once it is materialized.
+  bool wasRead = false;
+  Result deferred = Result::fromDeferredBlock(
+      DeferredBlock<Block>::fromReader([&wasRead]() -> Block {
+        wasRead = true;
+        return Block{4, 5};
+      }));
+  EXPECT_TRUE(deferred.hasValue());
+  auto deferredBlock = std::move(deferred).get();
+  EXPECT_FALSE(deferredBlock.isInMemory());
+  EXPECT_FALSE(wasRead);
+  EXPECT_THAT(std::move(deferredBlock).materialize(),
+              ::testing::ElementsAre(4, 5));
+  EXPECT_TRUE(wasRead);
+}
+
+// _____________________________________________________________________________
+TEST(DeferredBlock, inMemoryAndFromReader) {
+  auto inMemory = DeferredBlock<Block>::fromBlock(Block{1, 2});
+  EXPECT_TRUE(inMemory.isInMemory());
+  EXPECT_THAT(std::move(inMemory).materialize(), ::testing::ElementsAre(1, 2));
+
+  // The exception of a reader is propagated by `materialize`.
+  auto failing = DeferredBlock<Block>::fromReader(
+      []() -> Block { throw std::runtime_error{"read failed"}; });
+  EXPECT_FALSE(failing.isInMemory());
+  EXPECT_THROW(std::move(failing).materialize(), std::runtime_error);
+
+  // A null reader is rejected.
+  EXPECT_ANY_THROW(DeferredBlock<Block>::fromReader(nullptr));
 }
 
 // _____________________________________________________________________________
@@ -255,6 +288,64 @@ TEST(InMemoryBlockStorage, theSentinelDropsTheChunk) {
   runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
   EXPECT_TRUE(gets.sawSentinel_);
   EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
+}
+
+// Test that with `releaseChunkOnConsumption`, storing the end-of-chunk sentinel
+// only completes once the consumer has retrieved it.
+TEST(InMemoryBlockStorage, releaseChunkOnConsumption) {
+  net::io_context ioContext;
+  auto strand = net::make_strand(ioContext.get_executor());
+  Storage storage{strand, 2, /*releaseChunkOnConsumption=*/true};
+  StoreOutcomes stores;
+  GetOutcomes gets;
+  runOnStrand(ioContext, strand, [&] {
+    store(storage, 0, Storage::OptionalBlock{Block{1}}, stores);
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
+  });
+  // The block was stored, the sentinel is buffered but its store has not
+  // completed, because nobody has retrieved it yet.
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true));
+  runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
+  EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(Block{1}));
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true));
+  // Retrieving the sentinel completes the store of the sentinel.
+  runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
+  EXPECT_TRUE(gets.sawSentinel_);
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true, true));
+  EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
+}
+
+// Test that a producer that waits for the consumption of its sentinel is woken
+// up by `cancelAll` as well.
+TEST(InMemoryBlockStorage, cancelAllWakesUpAProducerWaitingForConsumption) {
+  net::io_context ioContext;
+  auto strand = net::make_strand(ioContext.get_executor());
+  Storage storage{strand, 2, /*releaseChunkOnConsumption=*/true};
+  StoreOutcomes stores;
+  runOnStrand(ioContext, strand, [&] {
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
+  });
+  EXPECT_TRUE(stores.wasStored_.empty());
+  runOnStrand(ioContext, strand, [&] { storage.cancelAll(); });
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(false));
+}
+
+// Test that a producer whose sentinel the channel has already accepted when
+// `cancelAll` runs is woken up as well. The completion of the send is posted,
+// so `cancelAll` can run before the producer starts to wait for the
+// acknowledgement, and that wait must then not be started at all.
+TEST(InMemoryBlockStorage, cancelAllRightAfterTheSentinelWasStored) {
+  net::io_context ioContext;
+  auto strand = net::make_strand(ioContext.get_executor());
+  Storage storage{strand, 2, /*releaseChunkOnConsumption=*/true};
+  StoreOutcomes stores;
+  // The store and the cancellation run in the same step of the strand, so the
+  // cancellation precedes the posted completion of the send.
+  runOnStrand(ioContext, strand, [&] {
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
+    storage.cancelAll();
+  });
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(false));
 }
 
 // _____________________________________________________________________________

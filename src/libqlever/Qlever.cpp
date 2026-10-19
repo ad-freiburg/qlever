@@ -42,19 +42,22 @@
 namespace qlever {
 
 // _____________________________________________________________________________
-Qlever::Qlever(const EngineConfig& config, bool skipLoading)
+Qlever::Qlever(const EngineConfig& config, bool skipLoading,
+               qlever::Executor executor)
     : Qlever(config, skipLoading,
              qlever::makeAllocatorWithLimit<Id>(
                  config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numMemoryToAllocate);
-                 })) {}
+                 }),
+             std::move(executor)) {}
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
-               Allocator<Id> allocator)
+               Allocator<Id> allocator, qlever::Executor executor)
     : allocator_{std::move(allocator)},
+      executor_{std::move(executor)},
       indexAndViews_{std::make_shared<IndexAndViews>(
           Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
@@ -101,17 +104,22 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning), unless
-  // the user disabled this (potentially expensive) step.
+  // the user disabled this (potentially expensive) step. The samples are sorted
+  // like the sorts of the queries themselves (see `IdTableUtils::sort` and
+  // `QueryExecutionContext::makeSortConfig`).
   if (config.computeSortPerformanceEstimators_) {
     sortPerformanceEstimator_.computeEstimatesExpensively(
-        allocator_, index.numTriples().normalAndInternal_() *
-                        PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+        allocator_,
+        index.numTriples().normalAndInternal_() *
+            PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100,
+        QueryExecutionContext::makeSortConfig(executor_));
   }
 
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
     try {
-      auto qec = createQueryExecutionContext(indexAndViewsSnapshot());
+      auto qec =
+          createQueryExecutionContext(indexAndViewsSnapshot(), executor_);
       materializedViewsManager.loadView(viewName, qec.get());
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
@@ -172,6 +180,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         ad_utility::GeoCellGrid{static_cast<uint8_t>(config.geoCellGridLevel_),
                                 config.geoCellGridScheme_});
   }
+  index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
                                               config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(
@@ -379,8 +388,8 @@ ParsedQueryAndContext Qlever::parseQuery(
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
   auto qecPtr = createQueryExecutionContext(
-      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
-      pinResult, disableCaching_);
+      indexAndViewsSnapshot(), executor_, std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching_);
 
   auto parsedQuery = SparqlParser::parseQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
@@ -394,8 +403,8 @@ ParsedQueryAndContext Qlever::bindParsedQuery(
     ParsedQuery parsedQuery, std::function<void(std::string)> updateCallback,
     bool pinSubtrees, bool pinResult) const {
   auto qecPtr = createQueryExecutionContext(
-      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
-      pinResult, disableCaching_);
+      indexAndViewsSnapshot(), executor_, std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching_);
   return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
 }
 
@@ -497,7 +506,7 @@ bool Qlever::unloadMaterializedView(const std::string& name) const {
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
   auto indexAndViews = indexAndViewsSnapshot();
-  auto qec = createQueryExecutionContext(indexAndViews);
+  auto qec = createQueryExecutionContext(indexAndViews, executor_);
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 }
 
@@ -509,15 +518,15 @@ void Qlever::deleteMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
-    std::shared_ptr<IndexAndViews> indexAndViews,
+    std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult,
     QueryExecutionContext::DisableCaching disableCaching) const {
   auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
   return std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching);
+      &namedResultCache_, std::move(viewsManager), std::move(executor),
+      std::move(updateCallback), pinSubtrees, pinResult, disableCaching);
 }
 
 // ___________________________________________________________________________
@@ -666,7 +675,7 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
           .getCurrentLocatedTriplesSharedStateWithVocab();
   auto mapping =
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
-                         ownedBlocks, handle, logFileName);
+                         ownedBlocks, handle, executor_, logFileName);
   auto indexAndViews = std::make_shared<IndexAndViews>(
       Index{allocator()}, MaterializedViewsManager{});
   auto& [newIndex, newManager] = *indexAndViews;

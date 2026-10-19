@@ -17,6 +17,7 @@
 #include <ctre-unicode.hpp>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
@@ -39,8 +40,8 @@ BasicIri<isOwning>::BasicIri(StorageType iri) : iri_{std::move(iri)} {}
 
 // ____________________________________________________________________________
 template <bool isOwning>
-NormalizedStringView BasicIri<isOwning>::getContent() const {
-  return asNormalizedStringViewUnsafe(iri_).substr(1, iri_.size() - 2);
+std::string_view BasicIri<isOwning>::getContent() const {
+  return std::string_view{iri_}.substr(1, iri_.size() - 2);
 }
 
 // ____________________________________________________________________________
@@ -114,7 +115,7 @@ Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
 
 // ____________________________________________________________________________
 Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
-  auto prefixContent = asStringViewUnsafe(prefix.getContent());
+  auto prefixContent = prefix.getContent();
   // Fast path: if the suffix contains no escape sequences (by far the most
   // common case), it can be concatenated directly, without materializing the
   // unescaped suffix in a separate string first.
