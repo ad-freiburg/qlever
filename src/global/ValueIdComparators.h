@@ -333,26 +333,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   return std::move(rangeFilter).getResult();
 }
 
-// This function is part of the implementation of `getRangesForEqualIds`. See
-// the documentation there.
-template <typename RandomIt>
-inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
-    RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
-    Comparison comparison) {
-  auto [beginOfType, endOfType] =
-      getRangeForDatatype(begin, end, valueIdBegin.getDatatype());
-
-  RangeFilter<RandomIt> rangeFilter{comparison};
-  auto eqBegin =
-      std::lower_bound(beginOfType, endOfType, valueIdBegin, &compareByBits);
-  auto eqEnd =
-      std::lower_bound(beginOfType, endOfType, valueIdEnd, &compareByBits);
-  rangeFilter.addSmaller(beginOfType, eqBegin);
-  rangeFilter.addEqual(eqBegin, eqEnd);
-  rangeFilter.addGreater(eqEnd, endOfType);
-  return std::move(rangeFilter).getResult();
-}
-
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
 template <typename RandomIt>
@@ -435,51 +415,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
       return detail::simplifyRanges(
           detail::getRangesForIndexTypes(begin, end, valueId, comparison),
           removeEmptyRanges);
-  }
-  AD_FAIL();
-}
-
-// Similar to `getRangesForId` above but takes a range [valueIdBegin,
-// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
-// `valueIdEnd` must have the same datatype which must be one of the index
-// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CONTRACT_CHECK`
-// will fail at runtime.
-template <typename RandomIt>
-inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
-    RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
-    Comparison comparison) {
-  // For an explanation of the case `valueIdBegin == valueIdEnd`, see the
-  // documentation of a similar check in `compareIds` below.
-  AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
-  // This lambda enforces the invariants `non-empty` and `sorted` and also
-  // merges directly adjacent ranges.
-  auto typeBegin = valueIdBegin.getDatatype();
-  auto typeEnd = valueIdEnd.getDatatype();
-  AD_CONTRACT_CHECK(typeBegin == typeEnd ||
-                    (ad_utility::contains(Id::stringTypes_, typeBegin) &&
-                     ad_utility::contains(Id::stringTypes_, typeEnd)));
-  switch (valueIdBegin.getDatatype()) {
-    case Datatype::Double:
-    case Datatype::Int:
-    case Datatype::Bool:
-    case Datatype::Undefined:
-    case Datatype::Date:
-    case Datatype::GeoPoint:
-    case Datatype::BlankNodeIndex:
-      AD_FAIL();
-    // TODO<joka921> check what the correct behavior is here.
-    case Datatype::EncodedVal:
-    case Datatype::VocabIndex:
-    case Datatype::LocalVocabIndex:
-    case Datatype::WordVocabIndex:
-    case Datatype::TextRecordIndex:
-      // TODO<joka921> For the `SecondaryVocabIndex` type this is not yet
-      // finally correct (for the same reason as in `getRangesForId` above), but
-      // will be corrected in a follow-up PR, see the detailed note in
-      // `compareIdsImpl` below.
-    case Datatype::SecondaryVocabIndex:
-      return detail::simplifyRanges(detail::getRangesForIndexTypes(
-          begin, end, valueIdBegin, valueIdEnd, comparison));
   }
   AD_FAIL();
 }
@@ -658,67 +593,6 @@ inline ComparisonResult compareIds(ValueId a, ValueId b,
       return compare(std::greater_equal{});
     case GT:
       return compare(std::greater{});
-    default:
-      AD_FAIL();
-  }
-}
-
-// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
-// are considered to be equal.
-template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef>
-inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
-                                            ValueId bEnd,
-                                            Comparison comparison) {
-  // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are
-  // compared to "pseudo"-IDs that represent words that are not part of the
-  // vocabulary. In this case the ID `bBegin` is the ID of the smallest
-  // vocabulary entry that is larger than the non-existing word that it
-  // represents.
-  AD_CONTRACT_CHECK(bBegin <= bEnd);
-
-  static constexpr auto mode = comparisonForIncompatibleTypes;
-
-  // The comparison for `equal` is also used for the `not equal` case, so we
-  // factor it out.
-  auto compareEqual = [&]() {
-    return toBoolNotUndef(detail::compareIdsImpl<mode>(
-               a, bBegin, std::greater_equal<>())) &&
-           toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>()));
-  };
-  using enum Comparison;
-  switch (comparison) {
-    case LT:
-      return detail::compareIdsImpl<mode>(a, bBegin, std::less<>());
-    case LE:
-      return detail::compareIdsImpl<mode>(a, bEnd, std::less<>());
-    case EQ: {
-      if constexpr (mode == ComparisonForIncompatibleTypes::AlwaysUndef) {
-        bool typesAreCompatible =
-            detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
-        return typesAreCompatible ? fromBool(compareEqual())
-                                  : ComparisonResult::Undef;
-      } else {
-        return fromBool(compareEqual());
-      }
-    }
-    case NE: {
-      // If the datatypes are not compatible then we always yield `false`. This
-      // is the correct behavior for SPARQL filters where this is called an
-      // `expression error`.
-      bool typesAreCompatible =
-          detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
-      if constexpr (mode == ComparisonForIncompatibleTypes::AlwaysUndef) {
-        return typesAreCompatible ? fromBool(!compareEqual())
-                                  : ComparisonResult::Undef;
-      } else {
-        return fromBool(!typesAreCompatible || !compareEqual());
-      }
-    }
-    case GE:
-      return detail::compareIdsImpl<mode>(a, bBegin, std::greater_equal<>());
-    case GT:
-      return detail::compareIdsImpl<mode>(a, bEnd, std::greater_equal<>());
     default:
       AD_FAIL();
   }
