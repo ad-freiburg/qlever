@@ -25,8 +25,8 @@ using ad_utility::vocabulary_merger::writePartialVocabularyToFile;
 
 // Helper to conveniently create an entry for `ItemVec`.
 ItemVec::value_type makeEntry(std::string_view word, bool isExternalized,
-                              uint64_t id, uint64_t geoSortKey = 0) {
-  return {word, PartialVocabIndexWithExternalFlag{id, isExternalized},
+                              uint64_t index, uint64_t geoSortKey = 0) {
+  return {word, PartialVocabIndexWithExternalFlag{index, isExternalized},
           geoSortKey};
 }
 
