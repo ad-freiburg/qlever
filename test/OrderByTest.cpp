@@ -440,6 +440,18 @@ TEST(OrderBy, clone) {
   EXPECT_EQ(clone->getDescriptor(), orderBy.getDescriptor());
 }
 
+// Matcher function to test `sortIndices_`
+auto hasSortedVariables(OrderBy::SortedVariables expectedVariables) {
+  return ::testing::Truly(
+      [expectedVariables = std::move(expectedVariables)](
+          const QueryExecutionTree* tree) {
+        auto orderBy =
+            std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
+        return orderBy &&
+               orderBy->getSortedVariables() == expectedVariables;
+      });
+}
+
 // Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
 // variables plus the variables the `OrderBy` compares on, translates
 // `sortIndices_` accordingly, and adds a `StripColumns` for the compared
@@ -463,18 +475,21 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
     AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
     return std::move(tree).value();
   };
+  auto getResultTable = [](const QueryExecutionTree* tree) {
+    return tree->getResult(false)->idTableView();
+  };
 
   // `OrderBy` `?b`, only `?b` requested: the result has only `?b`, the
   // `OrderBy` now sorts on column 0.
   {
     auto tree = strip({{1, false}}, {V{"?b"}});
-    auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
-    ASSERT_TRUE(orderBy);
-    EXPECT_EQ(orderBy->getSortedVariables(),
-              OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}));
-    auto expectedResult = makeIdTableFromVector({{1}, {2}, {4}, {6}});
-    EXPECT_THAT(tree.get(), isStrippedColumns<OrderBy>(std::vector{V{"?b"}},
-                                         std::cref(expectedResult)));
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(
+            hasVariables({V{"?b"}}),
+            hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}),
+            ::testing::ResultOf(getResultTable,
+                                matchesIdTableFromVector({{1}, {2}, {4}, {6}}))));
   }
 
   // `OrderBy` on `?b`, `?a`, `?b` and `?d` requested: `?c` is stripped
@@ -501,26 +516,31 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
   // a `StripColumns` on top removes `?b`.
   {
     auto tree = strip({{1, true}}, {V{"?c"}});
-    auto expectedResult = makeIdTableFromVector({{5}, {5}, {3}, {3}});
-    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(std::vector{V{"?c"}},
-                                         std::cref(expectedResult)));
-    auto orderBy =
-        std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation()->getChildren().at(0)->getRootOperation());
-    ASSERT_TRUE(orderBy);
-    EXPECT_EQ(orderBy->getSortedVariables(),
-              OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Desc}}));
-    expectedResult = makeIdTableFromVector({{6, 5}, {4, 5}, {2, 3}, {1, 3}});
-    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0), isStrippedColumns<OrderBy>(std::vector{V{"?b"}, V{"?c"}},
-                                          std::cref(expectedResult)));
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(
+            hasRootOperation<StripColumns>(), hasVariables({V{"?c"}}),
+            ::testing::ResultOf(getResultTable,
+                                matchesIdTableFromVector({{5}, {5}, {3}, {3}}))));
+
+    EXPECT_THAT(
+        tree->getRootOperation()->getChildren().at(0),
+        ::testing::AllOf(
+            hasVariables({V{"?b"}, V{"?c"}}),
+            hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Desc}}),
+            ::testing::ResultOf(getResultTable,
+                                matchesIdTableFromVector({{6, 5}, {4, 5}, {2, 3}, {1, 3}}))));
   }
 
   // All variables requested: nothing is stripped and the indices stay.
   {
     auto tree = strip({{1, false}}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
-    auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
-    ASSERT_TRUE(orderBy);
-    EXPECT_EQ(orderBy->getSortedVariables(),
-              OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}));
-    EXPECT_THAT(tree->getVariableColumns(), SizeIs(4));
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(
+            hasVariables({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}),
+            hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}),
+            ::testing::ResultOf(getResultTable,
+                                matchesIdTableFromVector({{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 4, 5, 4}, {1, 6, 5, 1}}))));
   }
 }
