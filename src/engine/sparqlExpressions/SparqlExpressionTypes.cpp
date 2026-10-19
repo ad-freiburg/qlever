@@ -6,8 +6,6 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 
-#include "index/LocalVocabContext.h"
-
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
@@ -15,24 +13,6 @@ void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
   ad_utility::visitIf(
       var, [os](const ValueId& s) { *os << s; },
       [os](const auto& s) { *os << s.toStringRepresentation(); });
-}
-
-// _____________________________________________________________________________
-IdOrLocalVocabEntry makeIdOrLocalVocabEntry(
-    ad_utility::triple_component::LiteralOrIri word,
-    const LocalVocabContext& context) {
-  if (word.isIri()) {
-    if (auto id = context.encodeAsId(word.toStringRepresentation())) {
-      return id.value();
-    }
-  }
-  return LocalVocabEntry{std::move(word), context};
-}
-
-// _____________________________________________________________________________
-bool isEncodableIri(const LocalVocabEntry& entry) {
-  return entry.isIri() &&
-         entry.getContext().encodeAsId(entry.toStringRepresentation());
 }
 
 // _____________________________________________________________________________

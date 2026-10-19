@@ -22,7 +22,13 @@
 
 namespace prefilterExpressions {
 
-using LVE = LocalVocabEntry;
+// Return the smallest possible IRI `<>`.
+static IdOrLocalVocabEntry smallestIri(const IndexImpl& index) {
+  return toIdOrLocalVocabEntry(
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "<>"),
+      index.getLocalVocabContext());
+}
 
 // HELPER FUNCTIONS
 
@@ -494,9 +500,8 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
 
   // Set lower reference.
   const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
-  const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
-      LVE::fromStringRepresentation("<>", index.getLocalVocabContext()),
-      localVocab);
+  const auto& beginIdIri =
+      getValueIdFromIdOrLocalVocabEntry(smallestIri(index), localVocab);
 
   // The `vocab.prefixRanges` returns the correct bounds only for preindexed
   // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,
@@ -737,8 +742,7 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // in order. The smallest possible IRI is represented by "<>", we use its
   // corresponding ValueId later on as a lower bound.
   auto vocabIriRanges =
-      make<GreaterThanExpression>(
-          LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))
+      make<GreaterThanExpression>(smallestIri(index))
           ->evaluateImpl(index, idRange, blockRange, isNegated_);
   // (2) Encoded IRIs: These sort *after* all vocabulary IRIs, so the `> <>`
   // prefilter above does not cover them and we have to add their datatype range
@@ -796,8 +800,7 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   auto inlinedRanges =
       getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
   auto nonInlinedRanges =
-      make<LessThanExpression>(
-          LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))
+      make<LessThanExpression>(smallestIri(index))
           ->evaluateImpl(index, idRange, blockRange, isNegated_);
 
   // `LITERAL = inlined || nonInlined` (an intersection under negation, see the

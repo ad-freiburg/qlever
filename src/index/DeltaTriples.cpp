@@ -817,9 +817,16 @@ void DeltaTriples::remapId(
       // *re-anchored* copy (anchored to the new index, with an empty position
       // cache) into the local vocab and rewrite the id, so that no entry of the
       // new index references the old index, which is destroyed after the swap.
-      id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(),
-                          index.getLocalVocabContext()}));
+      // NOTE: The new index might encode the word directly in an `Id`.
+      auto idOrEntry =
+          toIdOrLocalVocabEntry(id.getLocalVocabIndex()->asLiteralOrIri(),
+                                index.getLocalVocabContext());
+      if (auto* entry = std::get_if<LocalVocabEntry>(&idOrEntry)) {
+        id = Id::makeFromLocalVocabIndex(
+            localVocab.getIndexAndAddIfNotContained(std::move(*entry)));
+      } else {
+        id = std::get<Id>(idOrEntry);
+      }
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(

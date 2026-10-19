@@ -1352,7 +1352,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   ASSERT_THAT(entries, ::testing::SizeIs(1));
   const LocalVocabEntry* carried = entries.at(0);
   ASSERT_NE(carried, nullptr);
-  EXPECT_EQ(&carried->getContext(), &newIndex.getLocalVocabContext());
+  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getLocalVocabContext());
   EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(), "\"zzz\"");
 
   // The carried entry must behave exactly like a fresh entry that was created

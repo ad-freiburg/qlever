@@ -16,6 +16,7 @@
 #include "global/Id.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
+#include "index/TripleComponentConversions.h"
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -130,9 +131,17 @@ CPP_template(typename Serializer)(
   for (uint64_t i = 0; i < size; ++i) {
     auto id = readValue<Id::T>(serializer);
     auto s = readValue<std::string>(serializer);
-    auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(std::move(s), context));
-    mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
+    auto idOrEntry = toIdOrLocalVocabEntry(
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            std::move(s)),
+        context);
+    if (auto* entry = std::get_if<LocalVocabEntry>(&idOrEntry)) {
+      mapping.emplace(
+          id, Id::makeFromLocalVocabIndex(
+                  vocab.getIndexAndAddIfNotContained(std::move(*entry))));
+    } else {
+      mapping.emplace(id, std::get<Id>(idOrEntry));
+    }
   }
   return {std::move(vocab), std::move(mapping)};
 }

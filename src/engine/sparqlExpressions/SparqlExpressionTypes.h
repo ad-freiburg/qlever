@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/ContainersWithAllocator.h"
@@ -35,25 +36,11 @@ using ad_utility::VectorWithMemoryLimit;
 // `ExpressionResult`. `IdOrLiteralOrIri` is the lighter type that expression
 // helpers can return without needing vocab position bounds; it gets promoted
 // to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
-using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using IdOrLocalVocabEntry = ::IdOrLocalVocabEntry;
 using IdOrLiteralOrIri =
     std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 // Printing for GTest.
 void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
-
-// Wrap `word` in a `LocalVocabEntry`, unless it is an IRI that can be encoded
-// directly in an `Id` (see `LocalVocabContext::encodeAsId`), in which case
-// return that `Id`. Does not look up the vocabulary of the index.
-//
-// NOTE: Create every IRI of an expression result via this function. The index
-// only contains the encoded `Id` of such an IRI, so a `LocalVocabEntry` of it
-// would not match it, e.g. in joins.
-IdOrLocalVocabEntry makeIdOrLocalVocabEntry(
-    ad_utility::triple_component::LiteralOrIri word,
-    const LocalVocabContext& context);
-
-// Return true iff `makeIdOrLocalVocabEntry` would encode `entry` as an `Id`.
-bool isEncodableIri(const LocalVocabEntry& entry);
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -221,7 +208,8 @@ CPP_template(typename T, typename LocalVocabT)(
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
-            AD_EXPENSIVE_CHECK(!isEncodableIri(el));
+            // NOTE: `el` cannot be an IRI that has to be encoded as an `Id`,
+            // see `toIdOrLocalVocabEntry`.
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
           } else {
@@ -406,7 +394,7 @@ using PromoteToLocalVocabEntry =
                        T>;
 
 // Helper function to upgrade the variant type from `IdOrLiteralOrIri` to
-// `IdOrLocalVocabEntry` using `makeIdOrLocalVocabEntry`. For other types, the
+// `IdOrLocalVocabEntry` using `toIdOrLocalVocabEntry`. For other types, the
 // functor just returns the input as is.
 template <typename T>
 decltype(auto) promoteToLocalVocabEntry(T&& value,
@@ -416,7 +404,7 @@ decltype(auto) promoteToLocalVocabEntry(T&& value,
         ad_utility::OverloadCallOperator{
             [](Id id) -> IdOrLocalVocabEntry { return id; },
             [&context](auto&& literalOrIri) -> IdOrLocalVocabEntry {
-              return makeIdOrLocalVocabEntry(AD_FWD(literalOrIri), context);
+              return toIdOrLocalVocabEntry(AD_FWD(literalOrIri), context);
             }},
         AD_FWD(value));
   } else {

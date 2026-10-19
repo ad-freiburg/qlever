@@ -458,12 +458,12 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
-  using Value = IdOrLocalVocabEntry;
+  using Value = IdOrLiteralOrIri;
   using Mixin<IriOrUriValueGetter>::operator();
-  IdOrLocalVocabEntry operator()(ValueId id,
-                                 const EvaluationContext* context) const;
-  IdOrLocalVocabEntry operator()(const LiteralOrIri& litOrIri,
-                                 const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(ValueId id,
+                              const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
+                              const EvaluationContext* context) const;
 };
 
 // Value getter similar to `IriOrUriValueGetter`. Parses the base IRI once so
