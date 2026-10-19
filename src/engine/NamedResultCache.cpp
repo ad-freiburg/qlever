@@ -44,12 +44,9 @@ auto NamedResultCache::get(const Key& name) const
 // _____________________________________________________________________________
 auto NamedResultCache::getIfContained(const Key& name) const
     -> std::shared_ptr<const Value> {
-  // For the `wlock` see the comment in `get` above.
-  auto lock = cache_.wlock();
-  if (!lock->contains(name)) {
-    return nullptr;
-  }
-  return (*lock)[name];
+  // For the `wlock` see the comment in `get` above. The `operator[]` of the
+  // underlying cache returns `nullptr` if the `name` is not contained.
+  return (*cache_.wlock())[name];
 }
 
 // _____________________________________________________________________________

@@ -82,14 +82,6 @@ IdTable permuteRows(const IdTableView<0>& table,
 // particular, for the permutation `oldRowOfNewRow`, this is `newRowOfOldRow`.
 std::vector<size_t> invertPermutation(ql::span<const size_t> permutation);
 
-// Return the values of `valueOfNewRow` (one value per row of a table after the
-// permutation `oldRowOfNewRow`, see `permuteRows`) in the order of the rows
-// before the permutation: element `oldRowOfNewRow[i]` of the result is
-// `valueOfNewRow[i]`. `oldRowOfNewRow` has to be a permutation of the numbers
-// `0, ..., valueOfNewRow.size() - 1`.
-std::vector<size_t> toOldRowOrder(ql::span<const size_t> valueOfNewRow,
-                                  ql::span<const size_t> oldRowOfNewRow);
-
 // Match the rows of the `target` table to the rows of the `base` table: return
 // a vector that contains for each row of `target` the row of `base` that is
 // equal to it (bitwise identical in all columns, see above), or `noMatchingRow`

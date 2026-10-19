@@ -74,7 +74,8 @@ struct BlobSerializationConfig {
     // `maxDeadShapeRatio_`, then the extended index is discarded and the entry
     // is written with its own geo index, as it was built when the entry was
     // pinned (it may itself consist of several segments if the live instance
-    // was loaded from a blob).
+    // was loaded from a blob). `maxGeoSegments_` has to be at least 1, and
+    // `maxDeadShapeRatio_` has to be between 0 and 1.
     size_t maxGeoSegments_ = 8;
     double maxDeadShapeRatio_ = 0.3;
   };

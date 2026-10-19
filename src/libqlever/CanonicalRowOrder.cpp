@@ -184,18 +184,6 @@ std::vector<size_t> invertPermutation(ql::span<const size_t> permutation) {
 }
 
 // _____________________________________________________________________________
-std::vector<size_t> toOldRowOrder(ql::span<const size_t> valueOfNewRow,
-                                  ql::span<const size_t> oldRowOfNewRow) {
-  AD_CONTRACT_CHECK(valueOfNewRow.size() == oldRowOfNewRow.size());
-  std::vector<size_t> valueOfOldRow(valueOfNewRow.size());
-  for (size_t newRow : ad_utility::integerRange(valueOfNewRow.size())) {
-    AD_CONTRACT_CHECK(oldRowOfNewRow[newRow] < valueOfOldRow.size());
-    valueOfOldRow[oldRowOfNewRow[newRow]] = valueOfNewRow[newRow];
-  }
-  return valueOfOldRow;
-}
-
-// _____________________________________________________________________________
 std::vector<size_t> alignRows(IdColumns base, IdColumns target,
                               ql::span<const ColumnIndex> resultSortedOn) {
   AD_CONTRACT_CHECK(base.size() == target.size());

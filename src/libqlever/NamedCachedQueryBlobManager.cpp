@@ -247,12 +247,17 @@ SpatialJoinCachedIndex extendGeoIndexFromBase(
   // build the index for the rows of `updated` (visiting them in canonical
   // order), and permute its rows to canonical order.
   const auto& permutation = updatedRowOfCanonicalRow.value();
-  auto baseRowOfUpdatedRow =
-      canonicalRowOrder::toOldRowOrder(baseRowOfCanonicalRow, permutation);
+  auto canonicalRowOfUpdatedRow =
+      canonicalRowOrder::invertPermutation(permutation);
+  std::vector<size_t> baseRowOfUpdatedRow(canonicalRowOfUpdatedRow.size());
+  ql::ranges::transform(canonicalRowOfUpdatedRow, baseRowOfUpdatedRow.begin(),
+                        [&baseRowOfCanonicalRow](size_t canonicalRow) {
+                          return baseRowOfCanonicalRow.at(canonicalRow);
+                        });
   return SpatialJoinCachedIndex::forUpdatedTable(
              baseGeoIndex, baseRowOfUpdatedRow, updatedView, column, index,
              permutation)
-      .withPermutedRows(canonicalRowOrder::invertPermutation(permutation));
+      .withPermutedRows(std::move(canonicalRowOfUpdatedRow));
 }
 
 // Return true iff the `extended` geo index of the named result `key` exceeds
@@ -337,6 +342,13 @@ std::shared_ptr<Qlever::IndexAndViews> vocabSourceForBlob(
   }
   AD_CONTRACT_CHECK(incremental->base_ != nullptr,
                     "The base of an incremental blob must not be null");
+  AD_CONTRACT_CHECK(incremental->maxGeoSegments_ >= 1,
+                    "The maximal number of segments of the geo index of an "
+                    "incremental blob must be at least 1");
+  AD_CONTRACT_CHECK(incremental->maxDeadShapeRatio_ >= 0.0 &&
+                        incremental->maxDeadShapeRatio_ <= 1.0,
+                    "The maximal ratio of dead shapes in the geo index of an "
+                    "incremental blob must be between 0 and 1");
   AD_CONTRACT_CHECK(
       indexAndViews->index_.getImpl().secondaryVocab() == nullptr,
       "An incremental blob can only be written from an instance without a "

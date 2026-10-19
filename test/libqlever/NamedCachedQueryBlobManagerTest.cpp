@@ -1132,64 +1132,68 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
 }
 
 namespace {
-// Helpers for the tests of incremental blobs below, which simulate a weekly
-// producer: one `Qlever` instance (the "source") receives updates and pins the
-// same named results again each week, and each week's blob is written with the
-// previous blob (loaded into another `Qlever` instance) as its base.
+// Helpers for the tests of incremental blobs below, which simulate a producer
+// of a sequence of blobs: one `Qlever` instance (the "source") receives two
+// updates, after each of which it pins the same named results again, and each
+// blob is written with the previous blob (loaded into another `Qlever`
+// instance) as its base.
 
 constexpr std::string_view wktSuffix =
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 // The data of the index of the source: two rail segments in Freiburg, and
-// triples that are not touched by the weekly updates.
-std::string weeklyTestData() {
+// triples that are not touched by the updates.
+std::string incrementalTestData() {
   return absl::StrCat(freiburgSegmentsS1S2,
                       "<m> <p> \"old literal\" .\n<m> <q> <fixed> .\n");
 }
 
-// The updates of the first and second week. The first week adds the new words
-// `<a>`, `"new literal"` and a linestring in Berlin (which is a new word as
-// well). The second week deletes the segment `<s1>`, adds a linestring in
-// Hamburg, and the new words `<b>`, `<y>`, and `"another"`, where the latter
-// is sorted before the new words of the first week in the secondary vocabulary.
-std::string weekOneUpdate() {
+// The first and the second update. The first update adds the new words `<a>`,
+// `"new literal"` and a linestring in Berlin (which is a new word as well). The
+// second update deletes the segment `<s1>`, adds a linestring in Hamburg, and
+// the new words `<b>`, `<y>`, and `"another"`, where the latter is sorted
+// before the new words of the first update in the secondary vocabulary.
+std::string firstUpdate() {
   return absl::StrCat(
       "INSERT DATA { <a> <p> \"new literal\" . <a> <asWKT> "
       "\"LINESTRING(13.4363731 52.5100129,13.4350587 52.5105704)\"",
       wktSuffix, " }");
 }
-std::string weekTwoDelete() {
+std::string secondUpdateDelete() {
   return absl::StrCat(
       "DELETE DATA { <s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8413293 "
       "47.9974942)\"",
       wktSuffix, " }");
 }
-std::string weekTwoInsert() {
+std::string secondUpdateInsert() {
   return absl::StrCat(
       "INSERT DATA { <b> <asWKT> \"LINESTRING(9.9 53.5,9.91 53.51)\"",
       wktSuffix, " . <b> <p> \"another\" . <m> <p> <y> }");
 }
 
-// Create the `Qlever` source instance for the weekly tests. The updates are not
-// persisted, so that the instance can be created repeatedly from the same
-// index.
-std::unique_ptr<Qlever> makeWeeklySource(const IndexBuilderConfig& config) {
+// Create the `Qlever` source instance for the incremental tests. The updates
+// are not persisted, so that the instance can be created repeatedly from the
+// same index.
+std::unique_ptr<Qlever> makeIncrementalSource(
+    const IndexBuilderConfig& config) {
   EngineConfig engineConfig{config};
   engineConfig.persistUpdates_ = false;
   return std::make_unique<Qlever>(engineConfig);
 }
 
-// The options for the entry "geoPin" of the weekly tests (see `pinGeoResult`).
+// The options for the entry "geoPin" of the incremental tests (see
+// `pinGeoResult`).
 struct GeoPinOptions {
   std::optional<double> simplificationErrorInMeters_ = std::nullopt;
   std::string variable_ = "?geo2";
 };
 
-// Drop and recompute the named results of the weekly tests: one with a geo
+// Drop and recompute the named results of the incremental tests: one with a geo
 // index (with the `geoPinOptions`, see `pinGeoResult`), one with new words, one
 // that is unaffected by the updates, and one that is neither sorted nor
 // affected by the updates.
-void pinWeeklyResults(Qlever& source, const GeoPinOptions& geoPinOptions = {}) {
+void pinIncrementalResults(Qlever& source,
+                           const GeoPinOptions& geoPinOptions = {}) {
   source.clearNamedResultCache();
   source.clearQueryResultCache();
   pinGeoResult(source, geoPinOptions.simplificationErrorInMeters_,
@@ -1203,8 +1207,8 @@ void pinWeeklyResults(Qlever& source, const GeoPinOptions& geoPinOptions = {}) {
       "SELECT ?x ?y { VALUES (?x ?y) { (3 1) (1 2) (2 0) (1 1) (1 2) } }");
 }
 
-// The names of the entries that `pinWeeklyResults` pins.
-const std::vector<std::string> weeklyEntryNames{"geoPin", "plain", "stable",
+// The names of the entries that `pinIncrementalResults` pins.
+const std::vector<std::string> pinnedEntryNames{"geoPin", "plain", "stable",
                                                 "ints"};
 
 // Load the `compressedBlob` into a fresh `Qlever` instance without index.
@@ -1314,7 +1318,10 @@ std::unique_ptr<Qlever> expectGeoBlobRoundTrip(
   return loaded;
 }
 
-// Expect that both `Qlever`s answer all queries of the weekly tests equally.
+// Expect that both `Qlever`s answer all queries of the incremental tests
+// equally. The answers are compared as (sorted) TSV strings, because the two
+// instances are different and in general assign different `Id`s to the same
+// words, so there is no easier way to compare them.
 void expectSameAnswers(
     Qlever& a, Qlever& b,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -1339,7 +1346,7 @@ void expectAllEntriesCanonical(
     const Qlever& qlever,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
-  for (const auto& name : weeklyEntryNames) {
+  for (const auto& name : pinnedEntryNames) {
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
     EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
@@ -1349,32 +1356,33 @@ void expectAllEntriesCanonical(
   }
 }
 
-// The state of the weekly tests after the first week: the `source_` (with the
-// update of the first week applied and the weekly results pinned), the blob
+// The state of the incremental tests after the first update: the `source_`
+// (with the first update applied and the named results pinned), the blob
 // `baseBlob_` written from it, and the `base_` into which that blob was loaded.
-struct WeekOne {
+struct AfterFirstUpdate {
   std::unique_ptr<Qlever> source_;
   std::vector<char> baseBlob_;
   std::unique_ptr<Qlever> base_;
 };
 
-// Build the index of the weekly tests and return the state after the first
-// week, where the entry "geoPin" is pinned with the `geoPinOptions`.
-WeekOne setUpWeekOne(const GeoPinOptions& geoPinOptions = {}) {
-  auto source = makeWeeklySource(buildTestIndex(weeklyTestData()));
-  ad_utility::testing::applyUpdateToEngine(*source, weekOneUpdate());
-  pinWeeklyResults(*source, geoPinOptions);
+// Build the index of the incremental tests and return the state after the
+// first update, where the entry "geoPin" is pinned with the `geoPinOptions`.
+AfterFirstUpdate setUpAfterFirstUpdate(
+    const GeoPinOptions& geoPinOptions = {}) {
+  auto source = makeIncrementalSource(buildTestIndex(incrementalTestData()));
+  ad_utility::testing::applyUpdateToEngine(*source, firstUpdate());
+  pinIncrementalResults(*source, geoPinOptions);
   auto baseBlob = source->serializeVocabAndNamedCacheToCompressedBlob();
   auto base = loadBlob(baseBlob);
   return {std::move(source), std::move(baseBlob), std::move(base)};
 }
 
-// Apply the updates of the second week to the `source`, and pin the weekly
-// results again.
-void advanceToWeekTwo(Qlever& source) {
-  ad_utility::testing::applyUpdateToEngine(source, weekTwoDelete());
-  ad_utility::testing::applyUpdateToEngine(source, weekTwoInsert());
-  pinWeeklyResults(source);
+// Apply the second update to the `source`, and pin the named results of the
+// incremental tests again.
+void applySecondUpdate(Qlever& source) {
+  ad_utility::testing::applyUpdateToEngine(source, secondUpdateDelete());
+  ad_utility::testing::applyUpdateToEngine(source, secondUpdateInsert());
+  pinIncrementalResults(source);
 }
 }  // namespace
 
@@ -1383,7 +1391,7 @@ void advanceToWeekTwo(Qlever& source) {
 // also shows that the encoding of the segments of a geo index is stable under a
 // decode-encode round trip.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutChangesIsIdentical) {
-  auto [source, baseBlob, base] = setUpWeekOne();
+  auto [source, baseBlob, base] = setUpAfterFirstUpdate();
   expectAllEntriesCanonical(*base);
 
   // The base has to be a blob with a secondary vocabulary and a geo index.
@@ -1419,8 +1427,8 @@ TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
 // incremental blob extends the geo index of the base, and answers all queries
 // like a blob that was written without a base.
 TEST(NamedCachedQueryBlobManager, incrementalBlobAfterUpdate) {
-  auto [source, baseBlob, base] = setUpWeekOne();
-  advanceToWeekTwo(*source);
+  auto [source, baseBlob, base] = setUpAfterFirstUpdate();
+  applySecondUpdate(*source);
   auto incrementalBlob = source->serializeVocabAndNamedCacheToCompressedBlob(
       incrementalConfig(*base));
   EXPECT_NE(decompressedBytes(incrementalBlob), decompressedBytes(baseBlob));
@@ -1464,8 +1472,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobAfterUpdate) {
 // If the geo index would consist of too many segments or have too many dead
 // shapes, then it is compacted.
 TEST(NamedCachedQueryBlobManager, incrementalBlobCompactsGeoIndex) {
-  auto [source, baseBlob, base] = setUpWeekOne();
-  advanceToWeekTwo(*source);
+  auto [source, baseBlob, base] = setUpAfterFirstUpdate();
+  applySecondUpdate(*source);
   auto plain = roundTrip(*source);
 
   // Too many segments.
@@ -1490,16 +1498,16 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobCompactsGeoIndex) {
 // _____________________________________________________________________________
 // The words of the secondary vocabulary of the base keep their `Id`s.
 TEST(NamedCachedQueryBlobManager, incrementalBlobKeepsSecondaryVocabIds) {
-  auto [source, baseBlob, base] = setUpWeekOne();
-  advanceToWeekTwo(*source);
+  auto [source, baseBlob, base] = setUpAfterFirstUpdate();
+  applySecondUpdate(*source);
   auto next = roundTrip(*source, incrementalConfig(*base));
 
   const auto* baseVocab = secondaryVocabOf(*base);
   const auto* nextVocab = secondaryVocabOf(*next);
   ASSERT_NE(baseVocab, nullptr);
   ASSERT_NE(nextVocab, nullptr);
-  // The Hamburg linestring of the second week is sorted before the words of
-  // the first week, but the words of the first week keep their `Id`s.
+  // The Hamburg linestring of the second update is sorted before the words of
+  // the first update, but the words of the first update keep their `Id`s.
   const std::string berlin = absl::StrCat(
       "\"LINESTRING(13.4363731 52.5100129,13.4350587 52.5105704)\"", wktSuffix);
   const std::string hamburg =
@@ -1514,8 +1522,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobKeepsSecondaryVocabIds) {
     ASSERT_TRUE(baseVocab->getId(word).has_value()) << word;
     EXPECT_EQ(baseVocab->getId(word), nextVocab->getId(word)) << word;
   }
-  // The `Id`s in the entries are stable as well: all rows of the first week
-  // that still exist in the second week are the same `Id`s.
+  // The `Id`s in the entries are stable as well: all rows after the first
+  // update that still exist after the second update are the same `Id`s.
   auto subjectsOf = [](const Qlever& qlever) {
     return columnsOfPinnedResult(qlever, "plain").at(0);
   };
@@ -1531,21 +1539,22 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobKeepsSecondaryVocabIds) {
 // _____________________________________________________________________________
 // An entry without a counterpart in the base is written with a fresh geo index.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutMatchingBaseEntry) {
-  auto sourceConfig = buildTestIndex(weeklyTestData());
-  auto source = makeWeeklySource(sourceConfig);
+  auto sourceConfig = buildTestIndex(incrementalTestData());
+  auto source = makeIncrementalSource(sourceConfig);
   source->queryAndPinResultWithName("stable",
                                     "SELECT ?s ?p WHERE { ?s ?p <fixed> }");
   auto base = roundTrip(*source);
-  pinWeeklyResults(*source);
+  pinIncrementalResults(*source);
   auto blob = roundTrip(*source, incrementalConfig(*base));
   EXPECT_THAT(geoIndexOf(*blob), hasStats(1, 2, 2, 2));
   expectAllEntriesCanonical(*blob);
 }
 
 namespace {
-// Write the blob of the second week of the weekly tests incrementally against a
-// base that was written in the first week with the given `baseGeoPinOptions`
-// for the entry "geoPin" (see `setUpWeekOne`), where
+// Write the blob after the second update of the incremental tests
+// incrementally against a base that was written after the first update with
+// the given `baseGeoPinOptions` for the entry "geoPin" (see
+// `setUpAfterFirstUpdate`), where
 // `modifyBase` is applied to the instance that the base blob was loaded into.
 // Expect that the geo index of the entry "geoPin" is not extended from the base
 // (and hence has a single segment, in contrast to the extension, see
@@ -1556,9 +1565,9 @@ void expectGeoIndexNotExtended(
     const ModifyBase& modifyBase, const GeoPinOptions& baseGeoPinOptions = {},
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
-  auto [source, baseBlob, base] = setUpWeekOne(baseGeoPinOptions);
+  auto [source, baseBlob, base] = setUpAfterFirstUpdate(baseGeoPinOptions);
   modifyBase(*base);
-  advanceToWeekTwo(*source);
+  applySecondUpdate(*source);
   auto incremental = roundTrip(*source, incrementalConfig(*base));
   auto plain = roundTrip(*source);
   EXPECT_THAT(geoIndexOf(*incremental), hasStats(1, 3, 3, 3));
@@ -1682,7 +1691,7 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithNonCanonicalBase) {
 // in canonical order (no `Id` has to be rewritten), so the geo index is
 // extended from the base without permuting the rows of the updated entry.
 TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
-  auto source = makeWeeklySource(buildTestIndex(absl::StrCat(
+  auto source = makeIncrementalSource(buildTestIndex(absl::StrCat(
       freiburgSegmentsS1S2,
       "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 47.9975175)\"",
       wktSuffix, " .\n",
@@ -1692,7 +1701,7 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
   auto base = roundTrip(*source);
   ASSERT_THAT(geoIndexOf(*base), hasStats(1, 4, 4, 4));
 
-  ad_utility::testing::applyUpdateToEngine(*source, weekTwoDelete());
+  ad_utility::testing::applyUpdateToEngine(*source, secondUpdateDelete());
   source->clearNamedResultCache();
   source->clearQueryResultCache();
   pinGeoResult(*source);
@@ -1717,7 +1726,7 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
 // A geo index without any shapes (the pinned query has an empty result) can be
 // extended, and is not compacted.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithEmptyGeoIndex) {
-  auto source = makeWeeklySource(buildTestIndex("<m> <p> <o> ."));
+  auto source = makeIncrementalSource(buildTestIndex("<m> <p> <o> ."));
   pinGeoResult(*source);
   ASSERT_THAT(geoIndexOf(*source), hasStats(1, 0, 0, 0));
   auto base = roundTrip(*source);
@@ -1748,6 +1757,33 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsSecondaryVocab) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       loaded->serializeVocabAndNamedCacheToCompressedBlob(nullBase),
       ::testing::HasSubstr("must not be null"));
+}
+
+// _____________________________________________________________________________
+// The compaction thresholds of an incremental blob have to be in a valid range.
+TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsInvalidThresholds) {
+  auto source = makeIncrementalSource(buildTestIndex("<m> <p> <o> ."));
+  auto base = roundTrip(*source);
+  auto expectThrows = [&](size_t maxGeoSegments, double maxDeadShapeRatio,
+                          std::string_view message,
+                          ad_utility::source_location loc =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        source->serializeVocabAndNamedCacheToCompressedBlob(
+            incrementalConfig(*base, maxGeoSegments, maxDeadShapeRatio)),
+        ::testing::HasSubstr(message));
+  };
+  expectThrows(0, 0.3, "must be at least 1");
+  expectThrows(8, -0.1, "must be between 0 and 1");
+  expectThrows(8, 1.1, "must be between 0 and 1");
+  expectThrows(8, std::numeric_limits<double>::quiet_NaN(),
+               "must be between 0 and 1");
+  // The boundaries of the valid range are allowed.
+  EXPECT_NO_THROW(source->serializeVocabAndNamedCacheToCompressedBlob(
+      incrementalConfig(*base, 1, 0.0)));
+  EXPECT_NO_THROW(source->serializeVocabAndNamedCacheToCompressedBlob(
+      incrementalConfig(*base, 1, 1.0)));
 }
 
 // _____________________________________________________________________________
