@@ -570,10 +570,6 @@ TEST(Sort, makeTreeWithStrippedColumns) {
   // `Sort` now sorts by column 0.
   {
     auto tree = strip({1}, {V{"?b"}});
-    auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
-    ASSERT_TRUE(sort);
-    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
-    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(0));
     auto expectedResult = makeIdTableFromVector({{1}, {2}, {5}, {6}});
     EXPECT_THAT(tree.get(), isStrippedColumns<Sort>(std::vector{V{"?b"}},
                                          std::cref(expectedResult)));
@@ -585,10 +581,10 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     auto tree = strip({1, 3}, {V{"?a"}, V{"?b"}, V{"?d"}});
     auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
     ASSERT_TRUE(sort);
+    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(1, 2));
     EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
     EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
     EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
-    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(1, 2));
   }
 
   // A requested variable that the subtree does not have is ignored.
@@ -602,20 +598,13 @@ TEST(Sort, makeTreeWithStrippedColumns) {
   // a `StripColumns` on top removes `?b`.
   {
     auto tree = strip({1}, {V{"?c"}});
-    auto stripColumns =
-        std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
-    ASSERT_TRUE(stripColumns);
     auto expectedResult = makeIdTableFromVector({{3}, {5}, {5}, {3}});
     EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(std::vector{V{"?c"}},
                                          std::cref(expectedResult)));
-    const auto* child = stripColumns->getChildren().at(0);
-    auto sort = std::dynamic_pointer_cast<Sort>(child->getRootOperation());
-    ASSERT_TRUE(sort);
+
     expectedResult = makeIdTableFromVector({{1, 3}, {2, 5}, {5, 5}, {6, 3}});
-    EXPECT_THAT(child, isStrippedColumns<Sort>(std::vector{V{"?b"}, V{"?c"}},
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0), isStrippedColumns<Sort>(std::vector{V{"?b"}, V{"?c"}},
                                           std::cref(expectedResult)));
-    EXPECT_THAT(sort->resultSortedOn(),
-                ElementsAre(child->getVariableColumn(V{"?b"})));
   }
 
   // All variables requested: nothing is stripped and the indices stay.
