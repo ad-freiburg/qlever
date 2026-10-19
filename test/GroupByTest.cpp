@@ -3623,16 +3623,22 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
               false, std::make_unique<VariableExpression>(Variable{"?b"})),
           "SUM(?b)"},
       Variable{"?sumB"});
+  auto getResultTable = [](const QueryExecutionTree* tree) {
+    return tree->getResult(false)->idTableView();
+  };
 
   // `GroupBy` `?a` and compute alias `?sumB` from `?b`. `?a` and `?sumB`
   // requested: the result has `?a` and `?sumB`.
   {
     auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
-    auto expectedResult =
-        makeIdTableFromVector({{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}});
-    EXPECT_THAT(tree.get(),
-                isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?sumB"}},
-                                           std::cref(expectedResult)));
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(
+            hasRootOperation<GroupBy>(), hasVariables({V{"?a"}, V{"?sumB"}}),
+            ::testing::ResultOf(
+                getResultTable,
+                matchesIdTableFromVector(
+                    {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}}))));
   }
 
   // `GroupBy` `?b` and `?c` and compute alias `?sumB` from `?b`. `?b`, `?c` and
@@ -3662,18 +3668,24 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   // removes `?a`.
   {
     auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?c"}, V{"?sumB"}});
-    auto expectedResult =
-        makeIdTableFromVector({{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}});
-    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(
-                                std::vector{V{"?c"}, V{"?sumB"}},
-                                std::cref(expectedResult)));
+    EXPECT_THAT(tree.get(),
+                ::testing::AllOf(
+                    hasRootOperation<StripColumns>(),
+                    hasVariables({V{"?c"}, V{"?sumB"}}),
+                    ::testing::ResultOf(
+                        getResultTable,
+                        matchesIdTableFromVector(
+                            {{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}}))));
 
-    expectedResult = makeIdTableFromVector(
-        {{I(1), I(5), I(2)}, {I(3), I(5), I(5)}, {I(6), I(3), I(12)}});
     EXPECT_THAT(
         tree->getRootOperation()->getChildren().at(0),
-        isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}, V{"?sumB"}},
-                                   std::cref(expectedResult)));
+        ::testing::AllOf(hasRootOperation<GroupBy>(),
+                         hasVariables({V{"?a"}, V{"?c"}, V{"?sumB"}}),
+                         ::testing::ResultOf(
+                             getResultTable,
+                             matchesIdTableFromVector({{I(1), I(5), I(2)},
+                                                       {I(3), I(5), I(5)},
+                                                       {I(6), I(3), I(12)}}))));
   }
 
   // All variables requested: nothing is stripped and result has additional
@@ -3681,15 +3693,17 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   {
     auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, {alias},
                       {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}});
-    auto expectedResult =
-        makeIdTableFromVector({{I(6), I(6), I(3), I(6), I(6)},
-                               {I(6), I(6), I(3), I(5), I(6)},
-                               {I(3), I(5), I(5), I(4), I(5)},
-                               {I(1), I(2), I(5), I(1), I(2)}});
-    EXPECT_THAT(tree.get(),
-                isStrippedColumns<GroupBy>(
-                    std::vector{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}},
-                    std::cref(expectedResult)));
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(
+            hasRootOperation<GroupBy>(),
+            hasVariables({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}}),
+            ::testing::ResultOf(
+                getResultTable,
+                matchesIdTableFromVector({{I(1), I(2), I(5), I(1), I(2)},
+                                          {I(3), I(5), I(5), I(4), I(5)},
+                                          {I(6), I(6), I(3), I(5), I(6)},
+                                          {I(6), I(6), I(3), I(6), I(6)}}))));
   }
 
   // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?a` and `?c`
@@ -3697,11 +3711,13 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   // `GroupBy` operation, as its target is not requested.
   {
     auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?a"}, V{"?c"}});
-    auto expectedResult =
-        makeIdTableFromVector({{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}});
-    EXPECT_THAT(tree.get(),
-                isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}},
-                                           std::cref(expectedResult)));
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(hasVariables({V{"?a"}, V{"?c"}}),
+                         ::testing::ResultOf(
+                             getResultTable,
+                             matchesIdTableFromVector(
+                                 {{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}}))));
     auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
     ASSERT_TRUE(groupBy);
     EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});
