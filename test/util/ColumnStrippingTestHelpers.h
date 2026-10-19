@@ -10,9 +10,9 @@
 #ifndef QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H
 #define QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H
 
-#include <algorithm>
-
 #include <gmock/gmock.h>
+
+#include <algorithm>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -26,15 +26,14 @@ auto hasRootOperation() {
 }
 
 inline auto hasVariables(std::vector<Variable> expectedVariables) {
-  return ::testing::Truly(
-      [expectedVariables = std::move(expectedVariables)](
-          const QueryExecutionTree* tree) {
-        const auto& columns = tree->getVariableColumns();
-        return columns.size() == expectedVariables.size() &&
-               std::ranges::all_of(expectedVariables, [&](const auto& variable) {
-                 return columns.contains(variable);
-               });
-      });
+  return ::testing::Truly([expectedVariables = std::move(expectedVariables)](
+                              const QueryExecutionTree* tree) {
+    const auto& columns = tree->getVariableColumns();
+    return columns.size() == expectedVariables.size() &&
+           std::ranges::all_of(expectedVariables, [&](const auto& variable) {
+             return columns.contains(variable);
+           });
+  });
 }
 
 template <typename Operation>
