@@ -11,6 +11,7 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/sparqlExpressions/ExpressionResultHelpers.h"
+#include "engine/sparqlExpressions/HomogeneousDateExpressionHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -135,6 +136,19 @@ class NaryExpressionStronglyTyped
           std::tuple{convertToVectorOrConstant(AD_FWD(operands), context)...};
 
       using ConvertedOperands = decltype(convertedOperands);
+
+      // Keep typed date dispatch separate from numerics for date-aware
+      // operations evaluated through the strongly typed N-ary infrastructure.
+      if constexpr (sizeof...(Operands) == 2 && !resultIsConstant) {
+        if (auto result = homogeneousDate::tryEvaluate<
+                typename NaryOperation::Function,
+                std::tuple_element_t<0, ValueGetters>,
+                std::tuple_element_t<1, ValueGetters>>(
+                std::get<0>(convertedOperands), std::get<1>(convertedOperands),
+                context)) {
+          return std::move(*result);
+        }
+      }
 
       constexpr bool useNumericFastPath =
           canUseNumericFastPath<ValueGetters, ConvertedOperands>();

@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "engine/sparqlExpressions/ExpressionResultHelpers.h"
+#include "engine/sparqlExpressions/HomogeneousDateExpressionHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "util/ChunkedForLoop.h"
@@ -54,6 +55,12 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
+    if (auto result = homogeneousDate::tryEvaluate<Function, LeftValueGetter,
+                                                   RightValueGetter>(
+            left, right, context)) {
+      return std::move(*result);
+    }
+
     // Use the homogeneous numeric fast path when both operands and value
     // getters support it.
     if constexpr (supportsNumericFastPath<LeftValueGetter> &&

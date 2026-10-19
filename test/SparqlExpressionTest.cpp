@@ -728,6 +728,154 @@ TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
 }
 
 // _____________________________________________________________________________________
+// Exercise typed date execution and compare subtype combinations with the
+// constant (generic getter) path. Datatype::Date is a storage tag, not an RDF
+// datatype: date/dateTime, durations, invalid dates and large years retain the
+// original arithmetic semantics.
+TEST(SparqlExpression, homogeneousDateArithmetic) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Date + duration is directional in the current implementation.
+  auto testPlus = std::bind_front(testNaryExpression, &makeAddExpression);
+  auto date = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDate, value);
+  };
+  auto datetime = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDatetime, value);
+  };
+  auto duration = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDayTimeDuration, value);
+  };
+  const Id day = duration("P1D");
+  const Id zero = duration("PT0S");
+  const Id first = date("2020-01-01");
+  const Id second = date("2020-01-02");
+  testMinus(day, second, first);
+  testMinus(V<Id>{{day, day}, alloc}, V<Id>{{second, second}, alloc}, first);
+  testMinus(V<Id>{{day, day}, alloc}, second, V<Id>{{first, first}, alloc});
+  testMinus(V<Id>{{day, zero}, alloc}, V<Id>{{second, first}, alloc},
+            V<Id>{{first, first}, alloc});
+  testMinus(V<Id>{{day, zero}, alloc},
+            V<Id>{{datetime("2020-01-02T00:00:00Z"),
+                   datetime("2020-01-01T01:00:00+01:00")},
+                  alloc},
+            datetime("2020-01-01T00:00:00Z"));
+  // Existing date +/- duration arithmetic returns a dateTime at midnight.
+  const Id firstMidnight = datetime("2020-01-01T00:00:00");
+  const Id secondMidnight = datetime("2020-01-02T00:00:00");
+  testPlus(V<Id>{{secondMidnight, secondMidnight}, alloc},
+           V<Id>{{first, first}, alloc}, day);
+  testMinus(V<Id>{{firstMidnight, firstMidnight}, alloc},
+            V<Id>{{second, second}, alloc}, day);
+  testMinus(V<Id>{{zero, zero}, alloc}, V<Id>{{day, day}, alloc}, day);
+  testPlus(V<Id>{{duration("P2D"), duration("P2D")}, alloc},
+           V<Id>{{day, day}, alloc}, day);
+
+  const std::vector<Id> values{first,
+                               second,
+                               datetime("2020-01-01T12:00:00Z"),
+                               datetime("2020-01-01T13:00:00+01:00"),
+                               datetime("2020-01-01T12:00:00"),
+                               date("2020-02-30"),
+                               date("12000-01-01"),
+                               day,
+                               duration("-PT1S"),
+                               duration("P1048575D")};
+  for (Id left : values) {
+    for (Id right : values) {
+      auto difference = left.getDate() - right.getDate();
+      auto sum = left.getDate() + right.getDate();
+      Id expectedMinus = difference ? Id::makeFromDate(*difference) : U;
+      Id expectedPlus = sum ? Id::makeFromDate(*sum) : U;
+      testMinus(expectedMinus, left, right);
+      testPlus(expectedPlus, left, right);
+      testMinus(V<Id>{{expectedMinus, expectedMinus}, alloc},
+                V<Id>{{left, left}, alloc}, right);
+      testPlus(V<Id>{{expectedPlus, expectedPlus}, alloc},
+               V<Id>{{left, left}, alloc}, right);
+    }
+  }
+  // Sharing the storage tag does not erase subtype distinctions.
+  testMinus(V<Id>{{day, U}, alloc}, V<Id>{{second, day}, alloc}, first);
+  testPlus(V<Id>{{secondMidnight, duration("P2D")}, alloc},
+           V<Id>{{first, day}, alloc}, day);
+  testMinus(V<Id>{{U, U}, alloc}, V<Id>{{first, second}, alloc},
+            IdOrLocalVocabEntry{lit("not a date")});
+  // A Date first row must not incorrectly classify the rest of the column.
+  testMinus(V<Id>{{day, U, U, U, U}, alloc},
+            V<Id>{{second, I(2), B(true), U, Voc(4)}, alloc}, first);
+  testMinus(V<Id>{{U, day}, alloc}, V<Id>{{I(2), second}, alloc}, first);
+#endif
+}
+
+// The generic overload fails if N-ary dispatch applies the variant getter.
+struct TestTypedDateFunction {
+  Id operator()(DateYearOrDuration, DateYearOrDuration) const { return I(7); }
+  Id operator()(sparqlExpression::detail::NumericOrDateValue,
+                sparqlExpression::detail::NumericOrDateValue) const {
+    ADD_FAILURE() << "Generic date variant dispatch was used";
+    return U;
+  }
+};
+
+TEST(SparqlExpression, homogeneousDateNaryDispatch) {
+  using Op = sparqlExpression::detail::Operation<
+      2, sparqlExpression::detail::FV<
+             TestTypedDateFunction,
+             sparqlExpression::detail::NumericOrDateValueGetter>>;
+  auto factory = [](SparqlExpression::Ptr left, SparqlExpression::Ptr right) {
+    return std::make_unique<
+        sparqlExpression::detail::NaryExpressionStronglyTyped<Op>>(
+        std::move(left), std::move(right));
+  };
+  Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
+  V<Id> dates{{date, date}, alloc};
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, date);
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, date, dates);
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, dates);
+}
+
+TEST(SparqlExpression, homogeneousDateDispatchBypassesVariants) {
+  // Only the typed overload exists: invoking the generic function with the
+  // getter's NumericOrDateValue variant would fail to compile.
+  struct TypedOnly {
+    Id operator()(DateYearOrDuration, DateYearOrDuration) const { return I(7); }
+  };
+  using Getter = sparqlExpression::detail::NumericOrDateValueGetter;
+  TestContext outerContext;
+  auto& context = outerContext.context;
+  context._endIndex = 2;
+  const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
+  V<Id> dates{{date, date}, alloc};
+  auto result =
+      sparqlExpression::detail::homogeneousDate::tryEvaluate<TypedOnly, Getter,
+                                                             Getter>(
+          dates, date, &context);
+  ConstIdColumnRef column{dates.data(), dates.size()};
+  EXPECT_TRUE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
+               TypedOnly, Getter, Getter>(column, date, &context)));
+  EXPECT_FALSE(
+      (sparqlExpression::detail::homogeneousDate::tryEvaluate<
+          TypedOnly, sparqlExpression::detail::NumericValueGetter, Getter>(
+          dates, date, &context)));
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ((std::get<V<Id>>(*result)), (V<Id>{{I(7), I(7)}, alloc}));
+  EXPECT_FALSE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
+                TypedOnly, Getter, Getter>(dates, I(1), &context)));
+  dates[1] = U;
+  EXPECT_FALSE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
+                TypedOnly, Getter, Getter>(dates, date, &context)));
+  V<Id> empty{alloc};
+  context._endIndex = 0;
+  EXPECT_FALSE((sparqlExpression::detail::homogeneousDate::tryEvaluate<
+                TypedOnly, Getter, Getter>(empty, date, &context)));
+  context._endIndex = 2;
+  dates[1] = date;
+  context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW((sparqlExpression::detail::homogeneousDate::tryEvaluate<
+                   TypedOnly, Getter, Getter>(dates, date, &context)),
+               ad_utility::CancellationException);
+}
+
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
   // `DivideExpression`.
