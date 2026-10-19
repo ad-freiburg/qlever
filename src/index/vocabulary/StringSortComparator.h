@@ -270,12 +270,9 @@ class TripleComponentComparatorImpl {
                             const Level level = Level::QUARTERNARY) const {
     // With a geo cell grid, WKT literals come after all other words and are
     // ordered by their grid cell (see `geoSortKey`).
-    if (geoCellGrid_.has_value()) {
-      auto keyA = geoSortKey(a);
-      auto keyB = geoSortKey(b);
-      if (keyA != keyB) {
-        return keyA < keyB ? -1 : 1;
-      }
+    int cmp = compareGeoSortKeys(a, b);
+    if (cmp != 0) {
+      return cmp;
     }
     return compareWithoutGeoCellGrid(a, b, level);
   }
@@ -299,8 +296,11 @@ class TripleComponentComparatorImpl {
   bool isLessInTotalWithExternalFlag(std::string_view a, bool aIsExternal,
                                      std::string_view b,
                                      bool bIsExternal) const {
-    return isLessInTotalWithExternalFlagAndGeoSortKeys(
-        a, aIsExternal, geoSortKey(a), b, bIsExternal, geoSortKey(b));
+    int cmp = compare(a, b, Level::TOTAL);
+    if (cmp != 0) {
+      return cmp < 0;
+    }
+    return aIsExternal && !bIsExternal;
   }
 
   // The geo cell grid of the vocabulary, if it has one (see `GeoVocabulary`).
@@ -327,6 +327,30 @@ class TripleComponentComparatorImpl {
       return 0;
     }
     return 1 + geoCellGrid_->cellIndexFromWktLiteral(word);
+  }
+
+  // Compare two words by their geo sort key (see `geoSortKey`), return value
+  // according to `std::strcmp`. The result is 0 whenever the geo cell grid
+  // does not distinguish the two words (there is no grid, neither word is a
+  // WKT literal, or both are and have the same key). The keys are only
+  // computed if both words are WKT literals (if only one of them is, it comes
+  // last whatever its key).
+  [[nodiscard]] int compareGeoSortKeys(std::string_view a,
+                                       std::string_view b) const {
+    if (!geoCellGrid_.has_value()) {
+      return 0;
+    }
+    bool aIsWkt = ad_utility::isWktLiteral(a);
+    bool bIsWkt = ad_utility::isWktLiteral(b);
+    if (aIsWkt != bIsWkt) {
+      return aIsWkt ? 1 : -1;
+    }
+    if (!aIsWkt) {
+      return 0;
+    }
+    auto keyA = geoSortKey(a);
+    auto keyB = geoSortKey(b);
+    return keyA == keyB ? 0 : (keyA < keyB ? -1 : 1);
   }
 
   // Like `isLessInTotalWithExternalFlag`, but with the geo sort keys of the
