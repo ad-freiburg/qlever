@@ -35,7 +35,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     steps:
       - name: 'Download artifact'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         # The following script is taken from the link stated at the
         # beginning of this file. It manually downloads an artifact
         # from another workflow.
@@ -99,7 +99,7 @@ jobs:
       - name: "Move coverage file to original location"
         run: mkdir build && mkdir build/test && mv coverage.lcov build/test
       - name: "Upload coverage report"
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ${{github.workspace}}/build/test/coverage.lcov
           # Fail if the file above is missing, instead of silently searching for

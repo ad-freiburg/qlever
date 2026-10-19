@@ -36,11 +36,11 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v2
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
-          tool-cache: false
+          preinstalled-runtimes: false
           android: true
           dotnet: true
           haskell: true
@@ -104,7 +104,7 @@ jobs:
           rm -rf ${{github.workspace}}/rewriter-build
 
       - name: Upload the rewritten sources
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rewritten-sources
           path: src
@@ -187,7 +187,7 @@ jobs:
         # Replace `src` by the output of the `rewrite-using-enum` job. The
         # rewritten code is valid C++17 as well as C++20, so both matrix entries
         # use it.
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: rewritten-sources
           path: src
