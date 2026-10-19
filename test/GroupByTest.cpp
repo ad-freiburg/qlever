@@ -3632,7 +3632,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     ASSERT_TRUE(groupBy);
     auto expectedResult =
         makeIdTableFromVector({{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}});
-    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?a"}, V{"?sumB"}},
+    EXPECT_THAT(tree.get(), isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?sumB"}},
                                          std::cref(expectedResult)));
   }
 
@@ -3654,7 +3654,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto stripColumns =
         std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
     ASSERT_TRUE(stripColumns);
-    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?c"}, V{"?sumB"}},
+    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(std::vector{V{"?c"}, V{"?sumB"}},
                                          std::cref(expectedResult)));
     const auto* child = stripColumns->getChildren().at(0);
     auto groupBy =
@@ -3663,7 +3663,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     expectedResult = makeIdTableFromVector(
         {{I(1), I(5), I(2)}, {I(3), I(5), I(5)}, {I(6), I(3), I(12)}});
     EXPECT_THAT(child,
-                HasOperationResult(std::vector{V{"?a"}, V{"?c"}, V{"?sumB"}},
+                isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}, V{"?sumB"}},
                                    std::cref(expectedResult)));
   }
 
@@ -3689,7 +3689,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     ASSERT_TRUE(groupBy);
     auto expectedResult =
         makeIdTableFromVector({{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}});
-    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?a"}, V{"?c"}},
+    EXPECT_THAT(tree.get(), isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}},
                                          std::cref(expectedResult)));
     EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});
   }

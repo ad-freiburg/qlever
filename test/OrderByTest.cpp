@@ -471,7 +471,7 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
     auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
     ASSERT_TRUE(orderBy);
     auto expectedResult = makeIdTableFromVector({{1}, {2}, {4}, {6}});
-    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?b"}},
+    EXPECT_THAT(tree.get(), isStrippedColumns<OrderBy>(std::vector{V{"?b"}},
                                          std::cref(expectedResult)));
     EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
     EXPECT_EQ(orderBy->getSortedVariables(),
@@ -508,7 +508,7 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
         std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
     ASSERT_TRUE(stripColumns);
     auto expectedResult = makeIdTableFromVector({{5}, {5}, {3}, {3}});
-    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?c"}},
+    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(std::vector{V{"?c"}},
                                          std::cref(expectedResult)));
 
     const auto* child = stripColumns->getChildren().at(0);
@@ -516,7 +516,7 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
         std::dynamic_pointer_cast<OrderBy>(child->getRootOperation());
     ASSERT_TRUE(orderBy);
     expectedResult = makeIdTableFromVector({{6, 5}, {4, 5}, {2, 3}, {1, 3}});
-    EXPECT_THAT(child, HasOperationResult(std::vector{V{"?b"}, V{"?c"}},
+    EXPECT_THAT(child, isStrippedColumns<OrderBy>(std::vector{V{"?b"}, V{"?c"}},
                                           std::cref(expectedResult)));
     EXPECT_EQ(orderBy->getSortedVariables(),
               OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Desc}}));
