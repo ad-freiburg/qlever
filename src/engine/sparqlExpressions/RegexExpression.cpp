@@ -41,7 +41,7 @@ std::optional<std::string_view> getConstantLiteralContent(
   if (!literalExpression) {
     return std::nullopt;
   }
-  return asStringViewUnsafe(literalExpression->value().getContent());
+  return literalExpression->value().getContent();
 }
 
 // _____________________________________________________________________________
@@ -121,7 +121,7 @@ class RegexExpression : public RegexExpressionBase {
     prefilterVec.emplace_back(
         std::make_unique<prefilterExpressions::PrefixRegexExpression>(
             TripleComponent::Literal::literalWithNormalizedContent(
-                asNormalizedStringViewUnsafe(prefix_->second))),
+                prefix_->second)),
         prefix_->first);
     return prefilterVec;
   }

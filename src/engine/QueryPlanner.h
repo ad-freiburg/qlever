@@ -13,11 +13,14 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <vector>
 
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/RuntimeInformation.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
@@ -54,8 +57,8 @@ class QueryPlanner {
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq,
-                                         bool isSubquery = false);
+  std::shared_ptr<QueryExecutionTree> createExecutionTree(
+      ParsedQuery& pq, bool isSubquery = false);
 
   class TripleGraph {
    public:
@@ -148,14 +151,14 @@ class QueryPlanner {
    public:
     enum Type { BASIC, OPTIONAL, MINUS };
 
-    explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
+    explicit SubtreePlan(std::shared_ptr<QueryExecutionTree> qet)
+        : _qet{std::move(qet)} {}
 
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
                 std::shared_ptr<Operation> operation)
-        : _qet{std::make_shared<QueryExecutionTree>(qec,
-                                                    std::move(operation))} {}
+        : _qet{qec->makeShared<QueryExecutionTree>(qec, std::move(operation))} {
+    }
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<Result> _cachedResult;
@@ -255,6 +258,12 @@ class QueryPlanner {
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
+  // How each connected component of the query graph was planned, in the order
+  // in which they were planned (see `ConnectedComponentPlanningInfo`).
+  const std::vector<ConnectedComponentPlanningInfo>& planningInfo() const {
+    return planningInfo_;
+  }
+
   // Create a set of possible execution trees for the given parsed query. The
   // best (cheapest) execution tree according to the QueryPlanner is part of
   // that set. When the query has no `ORDER BY` clause, the set contains one
@@ -285,6 +294,14 @@ class QueryPlanner {
   // are then passed on to the created `QueryExecutionTree` such that they can
   // be reported as part of the query result if desired.
   std::vector<std::string> warnings_;
+
+  // See `planningInfo()`.
+  std::vector<ConnectedComponentPlanningInfo> planningInfo_;
+
+  // The number of candidate plans that `merge` created so far, for the
+  // `numCandidatePlans_` of `planningInfo_`. It is `mutable` because `merge`
+  // and the functions that call it are `const`.
+  mutable size_t numCandidatePlans_ = 0;
 
   std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
@@ -488,7 +505,7 @@ class QueryPlanner {
       const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getPatternTrickRow(
-      const parsedQuery::SelectClause& selectClause,
+      const std::vector<Alias>& aliases,
       const vector<vector<SubtreePlan>>& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
@@ -668,10 +685,12 @@ class QueryPlanner {
     // with each other and with the contents of  `candidatePlans_`
     parsedQuery::BasicGraphPattern candidateTriples_{};
 
-    // The variables that have been bound by the children of the `rootPattern_`
-    // which we have dealt with so far.
-    // TODO<joka921> verify that we get no false positives with plans that
-    // create no single binding for a variable "by accident".
+    // The variables that have been used by the children of the `rootPattern_`
+    // which we have dealt with so far. They must not be the target of a later
+    // BIND.
+    //
+    // NOTE: This includes the variables of MINUS clauses, which are not part
+    // of the result, see `getVariablesOfPreviousPatterns` for those.
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // The filters of the `rootPattern_`, wrapped for `applyFiltersIfPossible`.
@@ -714,20 +733,43 @@ class QueryPlanner {
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
 
+    // Return the variables of the results of the children of the
+    // `rootPattern_` which we have dealt with so far. Such a variable might be
+    // undefined in all rows of the result, which is fine, as only the absence
+    // of shared variables leads to a special case.
+    ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
+
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    // For the meaning of `isGraphVariableInScopeOnBothSidesOfMinus` see
+    // `visitGroupOptionalOrMinus`.
     template <typename Variables>
-    bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
-                                          const Variables& variables);
+    bool handleUnconnectedMinusOrOptional(
+        std::vector<SubtreePlan>& candidates, const Variables& variables,
+        bool isGraphVariableInScopeOnBothSidesOfMinus);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
     // braces. This leads to all of those clauses currently being an
     // optimization border (The braces are planned individually).
     // The distinction between "normal" groups, OPTIONALs and MINUS clauses
-    // is made via the type member of the `SubtreePlan`s.
-    void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
+    // is made via the type member of the `SubtreePlan`s. For a MINUS clause
+    // inside a `GRAPH ?g {...}` clause,
+    // `isGraphVariableInScopeOnBothSidesOfMinus` has to be true iff `?g` is in
+    // scope in the MINUS clause and in the patterns before it. For all other
+    // clauses it is ignored.
+    void visitGroupOptionalOrMinus(
+        std::vector<SubtreePlan>&& candidates,
+        bool isGraphVariableInScopeOnBothSidesOfMinus = false);
+
+    // Helper function for `graphPatternOperationVisitor`. For a
+    // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in
+    // every candidate: if a candidate does not already contain a column for
+    // `graphVar`, cross-join it with all graphs that could possibly match (see
+    // `DistinctGraphs::makeAllGraphs`).
+    void bindGraphVariableIfUnbound(const Variable& graphVar,
+                                    std::vector<SubtreePlan>& candidates);
 
     // This function finds a set of candidates that unite all the different
     // `candidatePlans_` and `candidateTriples_`. It then replaces the contents
@@ -777,6 +819,8 @@ class QueryPlanner {
   static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
       ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
       bool useGreedyPlanning);
+  FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
+              findApplicableReplacementPlansGreedyOverlap);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples

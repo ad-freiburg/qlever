@@ -83,6 +83,22 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
 }
 
 // ____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {left_, right_}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> ExistsJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<ExistsJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)),
+      existsVariable_);
+}
+
+// ____________________________________________________________________________
 float ExistsJoin::getMultiplicity(size_t col) {
   // The multiplicities of all columns except the last one are the same as in
   // `left_`.
@@ -176,10 +192,10 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
   bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
-        return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
-                                   &Id::isUndefined)) ||
-               (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
-                                   &Id::isUndefined));
+        return ql::ranges::any_of(joinColumnsRight.getColumn(col),
+                                  Id::isUndefinedL) ||
+               ql::ranges::any_of(joinColumnsLeft.getColumn(col),
+                                  Id::isUndefinedL);
       });
 
   // Nothing to do for the actual matches.
@@ -248,7 +264,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // variable), skip it. This can happen because some `FILTER`s (which may
     // contain `EXISTS` functions) are applied multiple times (for example,
     // when there are OPTIONAL joins in the query).
-    if (subtree->isVariableCovered(exists.variable())) {
+    if (subtree->containsVariable(exists.variable())) {
       continue;
     }
 
@@ -274,8 +290,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
                          const VariableOrderKey& key) {
                        return columns.at(key.variable_).columnIndex_;
                      });
-    auto tree =
-        std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
+    auto tree = qp.createExecutionTree(pq);
     // Hide non-visible variables in the subtree, so that they are not
     // accidentally joined, ideally collisions wouldn't happen in the first
     // place, but since we're creating our own instance of `QueryPlanner` we
@@ -567,11 +582,9 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
 
 // _____________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
-        ql::concepts::convertible_to<
-            ql::ranges::range_value_t<Range>,
-            bool>) void ExistsJoin::addExistsColumn(IdTable& idTable,
-                                                    Range&& range) const {
+    requires ql::ranges::input_range<Range> && ql::ranges::sized_range<Range> &&
+    ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
+void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
   idTable.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(AD_FWD(range),

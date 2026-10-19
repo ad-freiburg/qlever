@@ -55,21 +55,14 @@ std::optional<Id> toValueIdIfNotString(
 
 // ____________________________________________________________________________
 std::string toRdfLiteral(const TripleComponent& tripleComponent) {
-  if (tripleComponent.isVariable()) {
-    return tripleComponent.getVariable().name();
-  } else if (tripleComponent.isString()) {
-    return tripleComponent.getString();
-  } else if (tripleComponent.isLiteral()) {
-    return tripleComponent.getLiteral().toStringRepresentation();
-  } else if (tripleComponent.isIri()) {
-    return tripleComponent.getIri().toStringRepresentation();
-  } else {
-    EncodedIriManager ev;
-    auto [value, type] = ql::exportIds::idToStringAndTypeForEncodedValue(
-                             toValueIdIfNotString(tripleComponent, &ev).value())
-                             .value();
-    return absl::StrCat("\"", value, "\"^^<", type, ">");
+  if (auto view = toRdfLiteralView(tripleComponent)) {
+    return std::string{view.value()};
   }
+  EncodedIriManager ev;
+  auto [value, type] = ql::exportIds::idToStringAndTypeForEncodedValue(
+                           toValueIdIfNotString(tripleComponent, &ev).value())
+                           .value();
+  return absl::StrCat("\"", value, "\"^^<", type, ">");
 }
 
 // _____________________________________________________________________________

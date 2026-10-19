@@ -183,6 +183,9 @@ constexpr inline std::string_view hasWord{"has-word"};
 }  // namespace constants::details::strings
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::langtag>();
+// The prefix of QLever's internal representation of a language-tagged
+// predicate, which is the language tag enclosed in `@`, e.g. `@en@<...>`.
+constexpr inline std::string_view LANGUAGE_TAGGED_PREDICATE_PREFIX = "@";
 constexpr inline std::string_view HAS_WORD_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::hasWord>();
 
@@ -238,6 +241,8 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline std::string_view GEO_WKT_LITERAL =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+constexpr inline std::string_view GEO_JSON_LITERAL =
+    "http://www.opengis.net/ont/geosparql#geoJSONLiteral";
 namespace string_constants::detail {
 constexpr inline std::string_view geo_literal_prefix = "\"^^<";
 }  // namespace string_constants::detail
@@ -333,30 +338,6 @@ constexpr inline size_t ADDITIONAL_COLUMN_GRAPH_ID = 3;
 constexpr inline size_t ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN = 4;
 constexpr inline size_t ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN = 5;
 
-#ifdef _PARALLEL_SORT
-constexpr inline bool USE_PARALLEL_SORT = true;
-#include <parallel/algorithm>
-namespace ad_utility {
-template <typename... Args>
-auto parallel_sort(Args&&... args) {
-  return __gnu_parallel::sort(std::forward<Args>(args)...);
-}
-using parallel_tag = __gnu_parallel::parallel_tag;
-
-}  // namespace ad_utility
-
-#else
-constexpr inline bool USE_PARALLEL_SORT = false;
-namespace ad_utility {
-template <typename... Args>
-auto parallel_sort([[maybe_unused]] Args&&... args) {
-  throw std::runtime_error(
-      "Triggered the parallel sort although it was disabled. Please report to "
-      "the developers!");
-}
-using parallel_tag = int;
-}  // namespace ad_utility
-#endif
 /// ANSI escape sequence for bold text in the console
 constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.

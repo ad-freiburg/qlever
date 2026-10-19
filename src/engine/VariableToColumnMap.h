@@ -5,10 +5,18 @@
 #ifndef QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 #define QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 
+#include <string>
+#include <type_traits>
+#include <vector>
+
+#include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 // TODO<joka921> We have a cyclic dependency between `Id.h` and
 // `VariableToColumnMap.h`.
@@ -69,6 +77,58 @@ inline auto makePossiblyUndefinedColumn =
 // with the column index.
 using VariableToColumnMap =
     ad_utility::HashMap<Variable, ColumnIndexAndTypeInfo>;
+
+// Write the `map` to the `serializer`, or read it from the `serializer`,
+// depending on the direction of the `serializer`.
+//
+// NOTE: A `VariableToColumnMap` cannot be (de)serialized by the generic
+// serialization of a `HashMap`, because `Variable` is not
+// default-constructible and hence cannot be read back entry by entry. For
+// consistency, the writing side is handled manually as well, so that the
+// format does not depend on the internals of the `HashMap` serialization.
+//
+// NOTE 2: The entries are written sorted by the name of the variable, so that
+// identical contents always yield identical bytes (which a byte-level
+// comparison of serialized data relies on, for example the comparison of two
+// serialized named result caches). The reading side does not depend on that
+// order.
+CPP_template(typename S, typename T)(
+    requires ad_utility::SimilarTo<
+        T, VariableToColumnMap>) void serializeDeterministically(S& serializer,
+                                                                 T&& map) {
+  if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+    serializer << map.size();
+    std::vector<const VariableToColumnMap::value_type*> sortedEntries;
+    sortedEntries.reserve(map.size());
+    for (const auto& entry : map) {
+      sortedEntries.push_back(&entry);
+    }
+    ql::ranges::sort(sortedEntries, {},
+                     [](const auto* entry) -> const std::string& {
+                       return entry->first.name();
+                     });
+    for (const auto* entry : sortedEntries) {
+      serializer << entry->first;
+      serializer << entry->second;
+    }
+  } else {
+    static_assert(!std::is_const_v<std::remove_reference_t<T>>,
+                  "Reading a `VariableToColumnMap` requires a mutable map");
+    size_t numEntries;
+    serializer >> numEntries;
+    map.clear();
+    for (size_t i = 0; i < numEntries; ++i) {
+      // NOTE: A `Variable` is not default-constructible and requires a
+      // non-empty name, so we have to read it into a dummy variable.
+      Variable variable{"?dummy"};
+      serializer >> variable;
+      ColumnIndexAndTypeInfo columnInfo{0,
+                                        ColumnIndexAndTypeInfo::AlwaysDefined};
+      serializer >> columnInfo;
+      map[std::move(variable)] = columnInfo;
+    }
+  }
+}
 
 // The same function, but works on `VariableToColumnMapWithTypeInfo`
 std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>

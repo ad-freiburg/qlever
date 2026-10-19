@@ -12,6 +12,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 class Filter : public Operation {
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
@@ -45,24 +46,30 @@ class Filter : public Operation {
   size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtree.get()}, allocator()};
   }
 
+ public:
   bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
   float getMultiplicity(size_t col) override {
     return _subtree->getMultiplicity(col);
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override {
-    return _subtree->getVariableColumns();
-  }
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   // The method is directly invoked with the construction of this `Filter`
   // object. Its implementation retrieves <PrefilterExpression, Variable> pairs
@@ -79,12 +86,12 @@ class Filter : public Operation {
       requires IdTableLike<
           Table>) void computeFilterImpl(IdTable& dynamicResultTable,
                                          Table&& input,
-                                         std::vector<ColumnIndex> sortedBy)
+                                         qlm::vector<ColumnIndex> sortedBy)
       const;
 
   // Run `computeFilterImpl` on the provided IdTable.
   CPP_template(typename Table)(requires IdTableLike<Table>) IdTable
-      filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
+      filterIdTable(qlm::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_FILTER_H

@@ -28,7 +28,6 @@
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
-#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
@@ -42,8 +41,8 @@
 #include "engine/spatialJoinAlgorithms/S2GeometryAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
 #include "global/Constants.h"
+#include "global/Id.h"
 #include "global/RuntimeParameters.h"
-#include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/AllocatorWithLimit.h"
@@ -71,7 +70,7 @@ SpatialJoin::SpatialJoin(
     AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
 
     auto key = config_.rightCacheName_.value();
-    childRight_ = std::make_shared<QueryExecutionTree>(
+    childRight_ = qec->makeShared<QueryExecutionTree>(
         qec, qec->namedResultCache().getOperation(key, qec));
 
     // Early check that the query was pinned together with a geometry index
@@ -104,13 +103,12 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     const Variable& varOfChild) const {
   std::shared_ptr<SpatialJoin> sj;
   if (varOfChild == config_.left_) {
-    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       std::move(child), childRight_,
-                                       substitutesFilterOp_);
+    sj = makeShared<SpatialJoin>(getExecutionContext(), config_,
+                                 std::move(child), childRight_,
+                                 substitutesFilterOp_);
   } else if (varOfChild == config_.right_) {
-    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       childLeft_, std::move(child),
-                                       substitutesFilterOp_);
+    sj = makeShared<SpatialJoin>(getExecutionContext(), config_, childLeft_,
+                                 std::move(child), substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
   }
@@ -155,8 +153,8 @@ std::optional<De9imFilterString> SpatialJoin::getDe9imFilter() const {
 }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
-  std::vector<QueryExecutionTree*> result;
+qlm::vector<QueryExecutionTree*> SpatialJoin::getChildrenImpl() const {
+  qlm::vector<QueryExecutionTree*> result{allocator()};
   auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
     if (child) {
       result.push_back(child.get());
@@ -640,25 +638,56 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
+  return cloneWithNewChildren({childLeft_ ? childLeft_->clone() : nullptr,
+                               childRight_ ? childRight_->clone() : nullptr});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> SpatialJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  // A child that is not (yet) attached is represented by `nullptr`.
+  auto toOptional = [](std::shared_ptr<QueryExecutionTree>& child)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    if (child == nullptr) {
+      return std::nullopt;
+    }
+    return std::move(child);
+  };
   return std::make_unique<SpatialJoin>(
-      _executionContext, config_,
-      childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
-      childRight_ ? std::optional{childRight_->clone()} : std::nullopt,
-      substitutesFilterOp_);
+      _executionContext, config_, toOptional(children.at(0)),
+      toOptional(children.at(1)), substitutesFilterOp_);
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, {childLeft_, childRight_},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
-        auto& left = newChildren.at(0);
-        auto& right = newChildren.at(1);
-        return ad_utility::makeExecutionTree<SpatialJoin>(
-            _executionContext, config_, std::move(left), std::move(right),
-            substitutesFilterOp_);
-      });
+  // The left child keeps all its columns.
+  if (childLeft_ != nullptr) {
+    if (auto result = pushDownBindToChild(bind, {childLeft_, childRight_}, 0)) {
+      return result;
+    }
+  }
+  if (childRight_ == nullptr) {
+    return std::nullopt;
+  }
+  if (config_.payloadVariables_.isAll()) {
+    return pushDownBindToChild(bind, {childLeft_, childRight_}, 1);
+  }
+  // Only the payload variables of the right child are kept, so the target has
+  // to become one of them. `pushDownBindToChild` rebuilds the `SpatialJoin`
+  // from the `config_` of the object it is called on.
+  //
+  // NOTE: The temporary `SpatialJoin` is only half-valid: its payload contains
+  // the target, but its right child doesn't (yet). This is fine as long as
+  // `pushDownBindToChild` never computes the variable columns of the operation
+  // it is called on (only those of the children and of the result of
+  // `cloneWithNewChildren`). Otherwise, `computeVariableToColumnMap` would warn
+  // (or even throw) that the payload variable is missing in the right child.
+  auto config = config_;
+  config.payloadVariables_.addVariable(bind._target);
+  return SpatialJoin{_executionContext, std::move(config), childLeft_,
+                     childRight_, substitutesFilterOp_}
+      .pushDownBindToChild(bind, {childLeft_, childRight_}, 1);
 }
 
 // _____________________________________________________________________________
@@ -694,19 +723,18 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   auto makeVariableExpr = [](const Variable& var) {
     return std::make_unique<sparqlExpression::VariableExpression>(var);
   };
-  auto singleBindPushDown = [&makeVariableExpr](
-                                auto factory,
-                                std::shared_ptr<QueryExecutionTree> child,
-                                const Variable& geomVar,
-                                const Variable& targetVar) {
-    return child->getRootOperation()->makeTreeWithBindColumn(parsedQuery::Bind{
-        sparqlExpression::SparqlExpressionPimpl{
-            factory(makeVariableExpr(geomVar)),
-            // The expression descriptor is not important as this
-            // `SparqlExpressionPimpl` is only used for `BIND` push down.
-            "Dummy descriptor for BIND push-down"},
-        targetVar});
-  };
+  auto singleBindPushDown =
+      [&makeVariableExpr](auto factory,
+                          std::shared_ptr<QueryExecutionTree> child,
+                          const Variable& geomVar, const Variable& targetVar) {
+        return child->makeTreeWithBindColumn(parsedQuery::Bind{
+            sparqlExpression::SparqlExpressionPimpl{
+                factory(makeVariableExpr(geomVar)),
+                // The expression descriptor is not important as this
+                // `SparqlExpressionPimpl` is only used for `BIND` push down.
+                "Dummy descriptor for BIND push-down"},
+            targetVar});
+      };
 
   // Factory functions to construct `BIND` instances for the bounding box
   // functions.
@@ -741,7 +769,7 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   if (!left.has_value() && !right.has_value()) {
     return std::nullopt;
   }
-  return std::make_shared<SpatialJoin>(
+  return makeShared<SpatialJoin>(
       _executionContext, config_,
       // Potentially unchanged child retrieved with `value_or`.
       left.value_or(childLeft_), right.value_or(childRight_),

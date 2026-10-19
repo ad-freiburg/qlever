@@ -163,13 +163,13 @@ ExpressionResult PrefixMatchExpression::evaluate(
       // Return the empty result as an empty `SetOfIntervals` instead of as an
       // empty range.
       if (lower != upper) {
-        resultSetOfIntervals.push_back(
-            ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
+        resultSetOfIntervals.push_back(ad_utility::SetOfIntervals{
+            {{lower - beg, upper - beg}}, context->size()});
       }
       checkCancellation(context);
     }
     return ::ranges::accumulate(resultSetOfIntervals,
-                                ad_utility::SetOfIntervals{},
+                                ad_utility::SetOfIntervals{{}, context->size()},
                                 ad_utility::SetOfIntervals::Union{});
   }
 
@@ -222,8 +222,7 @@ PrefixMatchExpression::getPrefilterExpressionForMetadata(
   std::vector<PrefilterExprVariablePair> prefilterVec;
   prefilterVec.emplace_back(
       std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-          TripleComponent::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(prefix_))),
+          TripleComponent::Literal::literalWithNormalizedContent(prefix_)),
       variable_);
   return prefilterVec;
 }
@@ -248,8 +247,7 @@ SparqlExpression::Ptr makePrefixMatchExpression(
   const auto& stringLiteral = stringLiteralExpression->value();
   detail::ensureIsSimpleLiteral(stringLiteral, "ql:prefix-match");
   return std::make_unique<PrefixMatchExpression>(
-      std::move(string),
-      std::string{asStringViewUnsafe(stringLiteral.getContent())},
+      std::move(string), std::string{stringLiteral.getContent()},
       variableExpression->value());
 }
 

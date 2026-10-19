@@ -6,7 +6,9 @@
 #include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
+#include <future>
 #include <optional>
+#include <thread>
 
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
@@ -15,7 +17,6 @@
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -29,24 +30,7 @@
 #include "util/metrics/Metrics.h"
 
 using nlohmann::json;
-
-namespace {
 using namespace ad_utility::testing;
-// Expect that `call()` throws an `HttpError` with status 403 Forbidden and
-// with a message that matches `messageMatcher`.
-auto expectForbiddenError = [](auto call, auto messageMatcher,
-                               ad_utility::source_location l =
-                                   AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(l);
-  try {
-    call();
-    FAIL() << "Expected an `HttpError` to be thrown";
-  } catch (const HttpError& e) {
-    EXPECT_EQ(e.status(), boost::beast::http::status::forbidden);
-    EXPECT_THAT(e.what(), messageMatcher);
-  }
-};
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
@@ -122,6 +106,58 @@ TEST(ServerTest, getQueryId) {
                                     QueryOperation::QUERY);
 }
 
+// Test that the timeout timer cancels the handle at the deadline and does not
+// if it is cancelled before.
+TEST(ServerTest, cancelAfterDeadline) {
+  using namespace std::chrono_literals;
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
+
+  // The deadline is reached, so the handle is cancelled.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // The returned callback owns the timer, so it has to be kept alive.
+  auto cancelTimeout = server.cancelAfterDeadline(handle, 1ms);
+  auto giveUp = std::chrono::steady_clock::now() + 10s;
+  while (!handle->isCancelled() && std::chrono::steady_clock::now() < giveUp) {
+    std::this_thread::sleep_for(1ms);
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle->throwIfCancelled(),
+                                        ::testing::HasSubstr("timed out"),
+                                        ad_utility::CancellationException);
+
+  // The timer is cancelled before the deadline, so the handle is not.
+  handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  server.cancelAfterDeadline(handle, 1h)();
+  // Cancelling the timer has queued its handler on the single timer thread, so
+  // it has run once a task that is posted afterwards has run.
+  std::promise<void> handlerHasRun;
+  boost::asio::post(server.timerExecutor_,
+                    [&handlerHasRun]() { handlerHasRun.set_value(); });
+  handlerHasRun.get_future().wait();
+  EXPECT_FALSE(handle->isCancelled());
+}
+
+// Test that the `RunAfter` of the server runs its task after the delay, can
+// be reused and rejects overlapping waits.
+TEST(ServerTest, makeWatchDogRunAfter) {
+  using namespace std::chrono_literals;
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
+  auto runAfter = server.makeWatchDogRunAfter();
+
+  // The task is run, and the timer can be reused once it has.
+  for (size_t i = 0; i < 2; ++i) {
+    auto taskHasRun = std::make_shared<std::promise<void>>();
+    runAfter(1ms, [taskHasRun]() { taskHasRun->set_value(); });
+    EXPECT_EQ(taskHasRun->get_future().wait_for(10s),
+              std::future_status::ready);
+  }
+
+  // `RunAfter` must not be called while a previous wait is still pending.
+  runAfter(1h, []() {});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runAfter(1ms, []() {}),
+      ::testing::HasSubstr("must not be called while a previous wait"));
+}
+
 // _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
   using namespace ad_utility::websocket;
@@ -183,7 +219,7 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
   const qlever::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
 
   // Execute the update
@@ -275,12 +311,13 @@ TEST(ServerTest, configurePinnedResultWithName) {
   qec->pinResultWithName() = std::nullopt;
 
   // Pinning without a valid access token is rejected with 403 Forbidden.
-  expectForbiddenError(
+  serverTestHelpers::expectHttpError(
       [&] {
         Server::configurePinnedResultWithName(
             QueryExecutionContext::PinResultWithName{"test_query_name"}, false,
             *qec);
       },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
@@ -295,14 +332,16 @@ TEST(ServerTest, checkAccessToken) {
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
   // An invalid access token results in a 403 Forbidden response.
-  expectForbiddenError(
+  serverTestHelpers::expectHttpError(
       [&] { server.checkAccessToken("invalidAccessToken"); },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr("Access token was provided but it was invalid"));
 
   // Same when the server was started without `--access-token` at all.
   Server serverWithoutToken{4322, 1, "", config};
-  expectForbiddenError(
+  serverTestHelpers::expectHttpError(
       [&] { serverWithoutToken.checkAccessToken("someToken"); },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr("Access token was provided but server was started "
                          "without --access-token"));
 
@@ -465,6 +504,9 @@ TEST(ServerTest, metricsEndpoint) {
       "qlever_sparql_operation_errors_total";
   std::string_view qleverIndexRebuildInProgress =
       "qlever_index_rebuild_in_progress";
+  std::string_view qleverIndexNumTriples = "qlever_index_num_triples";
+  Label inserted{"type", "inserted"};
+  Label deleted{"type", "deleted"};
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -477,6 +519,19 @@ TEST(ServerTest, metricsEndpoint) {
                      IsZero(qleverSparqlOperationStartedTotal, query),
                      IsZero(qleverSparqlOperationRunning, update),
                      IsZero(qleverSparqlOperationRunning, query)));
+  // The delta triples are also reported per type (inserted or deleted), and
+  // the number of triples in the index does not change with updates.
+  ExpectMetricsChange(
+      testing::AllOf(IsZero(qleverDeltaTriples),
+                     IsZero(qleverDeltaTriples, inserted),
+                     IsZero(qleverDeltaTriples, deleted),
+                     MetricIs(qleverIndexNumTriples, "1")),
+      UpdateRequest(
+          "INSERT DATA { <d> <e> <f> } ; DELETE DATA { <a> <b> <c> }"),
+      testing::AllOf(MetricIs(qleverDeltaTriples, "2"),
+                     MetricIs(qleverDeltaTriples, "1", inserted),
+                     MetricIs(qleverDeltaTriples, "1", deleted),
+                     MetricIs(qleverIndexNumTriples, "1")));
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -665,6 +720,36 @@ TEST(ServerTest, vacuumDeltaTriples) {
   ASSERT_TRUE(body.has_value());
   EXPECT_EQ(body.value()["external"]["insertionsRemoved"], 1);
   expectCounts(DeltaTriplesCount{0, 0});
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, processCommands) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown `cmd=` value results in a 400 Bad Request response.
+  expectHttpError(
+      [&] { server.process(makeGetRequest("/?cmd=not-a-real-command")); },
+      boost::beast::http::status::bad_request,
+      testing::HasSubstr(
+          "Unknown value \"not-a-real-command\" for parameter \"cmd\""));
+}
+
+// Test that a request with neither a known URL parameter nor a known path is
+// answered with an error response.
+TEST(ServerTest, unknownParametersAndPath) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown URL parameter results in a 400 Bad Request response.
+  auto response = server.process(makeGetRequest("/?nexistepas=1"));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown query parameters"));
+
+  // An unknown path without URL parameters results in a 404 Not Found response.
+  response = server.process(makeGetRequest("/nexistepas"));
+  EXPECT_THAT(response, StatusIs(http::status::not_found));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown path"));
 }
 
 // _____________________________________________________________________________

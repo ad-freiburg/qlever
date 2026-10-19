@@ -33,7 +33,6 @@
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/ValueId.h"
 #include "index/ExportIds.h"
 #include "index/LocalVocabEntry.h"
 #include "parser/PayloadVariables.h"
@@ -248,10 +247,8 @@ std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
   QueryPlanner qp{qec, sharedHandle};
 
-  auto leftChild =
-      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqLeft));
-  auto rightChild =
-      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqRight));
+  auto leftChild = qp.createExecutionTree(pqLeft);
+  auto rightChild = qp.createExecutionTree(pqRight);
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(

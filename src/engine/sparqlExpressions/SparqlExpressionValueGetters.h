@@ -15,7 +15,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
@@ -173,10 +172,9 @@ struct StringValueGetter : Mixin<StringValueGetter> {
                                         const EvaluationContext*) const;
 
   // TODO<joka921> probably we should return a reference or a view here.
-  // TODO<joka921> use a `NormalizedStringView` inside the expressions.
   std::optional<std::string> operator()(const LiteralOrIri& s,
                                         const EvaluationContext*) const {
-    return std::string(asStringViewUnsafe(s.getContent()));
+    return std::string(s.getContent());
   }
 };
 
@@ -211,11 +209,17 @@ struct LiteralValueGetterWithoutStrFunction
 };
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
+//
+// NOTE: For this and all the `is...` getters below, the result for UNDEF is
+// UNDEF, because an unbound argument is an error in SPARQL.
 template <Datatype datatype>
 struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
   using Value = Id;
   using Mixin<IsValueIdValueGetter>::operator();
   Id operator()(Id id, const EvaluationContext*) const {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
     return Id::makeFromBool(id.getDatatype() == datatype);
   }
 
@@ -230,6 +234,9 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
   using Value = Id;
   using Mixin<IsNumericValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
     Datatype datatype = id.getDatatype();
     return Id::makeFromBool(datatype == Datatype::Double ||
                             datatype == Datatype::Int);
@@ -317,7 +324,7 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
     if (s.isIri()) {
       return std::nullopt;
     }
-    return std::string{asStringViewUnsafe(s.getContent())};
+    return std::string{s.getContent()};
   }
 };
 
@@ -438,7 +445,7 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
       [[maybe_unused]] const EvaluationContext*) const {
     if (litOrIri.isLiteral()) {
       if (litOrIri.hasLanguageTag()) {
-        return std::string(asStringViewUnsafe(litOrIri.getLanguageTag()));
+        return std::string(litOrIri.getLanguageTag());
       }
       // If we encounter a literal without a language tag, we return an empty
       // string by the definition of the Sparql-standard.

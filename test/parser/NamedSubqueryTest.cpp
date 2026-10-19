@@ -61,9 +61,9 @@ void expectEquivalent(std::string queryWithNamedSubqueries,
       std::move(queryWithNamedSubqueries), qec);
   auto treeB =
       queryPlannerTestHelpers::parseAndPlan(std::move(expandedQuery), qec);
-  auto rowsA = canonicalResult(treeA);
+  auto rowsA = canonicalResult(*treeA);
   EXPECT_GT(rowsA.size(), 0u);
-  EXPECT_EQ(rowsA, canonicalResult(treeB));
+  EXPECT_EQ(rowsA, canonicalResult(*treeB));
 }
 
 }  // namespace
@@ -169,7 +169,7 @@ TEST(NamedSubquery, repeatedIncludeHasIdenticalCacheKey) {
       " }",
       qec);
   // Descend to the `UNION` and compare the cache keys of its two children.
-  const QueryExecutionTree* unionTree = &tree;
+  const QueryExecutionTree* unionTree = tree.get();
   while (unionTree->getRootOperation()->getChildren().size() == 1) {
     unionTree = unionTree->getRootOperation()->getChildren().at(0);
   }

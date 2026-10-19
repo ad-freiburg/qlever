@@ -121,11 +121,29 @@ class VocabularyInMemory
     void finishImpl() override { writer_.finish(); }
   };
 
+  // All the words are stored in a single file under the base filename itself.
+  static FileSuffixes fileSuffixes() { return {""}; }
+
   // Return a `unique_ptr<WordWriter>` that directly writes the words to the
   // given `filename`. The words are not materialized in RAM, but the vocabulary
   // later has to be explicitly initialized via `open(filename)`.
   static auto makeDiskWriterPtr(const std::string& filename) {
     return std::make_unique<WordWriter>(filename);
+  }
+
+  // The block writer of this vocabulary simply feeds its `WordWriter` word by
+  // word (see `BlockWriterBase`).
+  static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    return makeBlockWriterFromWordWriter(makeDiskWriterPtr(filename));
+  }
+
+  // The `ParallelWordWriterBase` of this (single) vocabulary, for a
+  // `Vocabulary` that is built directly on it (see `Vocabulary.h`).
+  static std::unique_ptr<ParallelWordWriterBase> makeParallelWriterPtr(
+      const std::string& filename) {
+    return std::make_unique<SingleVocabularyParallelWriter>(
+        makeBlockWriterPtr(filename));
   }
 
   // Clear the vocabulary.

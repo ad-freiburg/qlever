@@ -13,12 +13,12 @@
 #include <absl/container/inlined_vector.h>
 
 #include "engine/NamedResultCache.h"
-#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -216,7 +216,11 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](Result::GeneratorState state) {
+        [this](Result::GeneratorState state,
+               std::chrono::microseconds duration) {
+          // The call that exhausted the generator did not yield a chunk, but
+          // its time still belongs to this operation.
+          updateRuntimeStats(false, 0, getResultWidth(), duration);
           runtimeInfo().status_ = [state]() {
             using enum Result::GeneratorState;
             switch (state) {
@@ -317,7 +321,7 @@ std::shared_ptr<const Result> Operation::getResult(
 
   if (isRoot) {
     // Reset runtime info, tests may reuse Operation objects.
-    _runtimeInfo = std::make_shared<RuntimeInformation>();
+    _runtimeInfo = makeShared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
@@ -360,7 +364,7 @@ std::shared_ptr<const Result> Operation::getResult(
       if (computationMode == ComputationMode::ONLY_IF_CACHED) {
         return nullptr;
       }
-      return std::make_shared<Result>(runComputation(timer, computationMode));
+      return makeShared<Result>(runComputation(timer, computationMode));
     }
 
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
@@ -479,10 +483,11 @@ void Operation::storeToNamedResultCache(const Result& result) {
   auto valueForNamedResultCache = NamedResultCache::Value{
       std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
-      result.sortedBy(),
-      result.localVocab().clone(),
-      getCacheKey(),
-      geoIndex()};
+      // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
+      // migrated to `qlm::vector` throughout the Operation hierarchy.
+      std::vector<ColumnIndex>{result.sortedBy().begin(),
+                               result.sortedBy().end()},
+      result.localVocab().clone(), getCacheKey(), geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
 
@@ -589,6 +594,16 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 // __________________________________________________________________
 void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
   limitOffset_.mergeLimitAndOffset(limitOffsetClause);
+  // The new limit changes the size estimates and thereby possibly the sort
+  // order (see the caution note in the header), so a previously cached value
+  // must be discarded. Operations that merely forward the claim of a child
+  // (e.g. `Bind`) read the child's cache via
+  // `QueryExecutionTree::resultSortedOn`, so a stale value would otherwise
+  // survive the re-reading during the repair described in the header.
+  {
+    std::lock_guard l{_resultSortedColumnsMutex};
+    _resultSortedColumns.reset();
+  }
   // We can safely ignore members that are not `_offset` and `_limit` since
   // they are unused by subclasses of `Operation`.
   onLimitOffsetChanged(limitOffsetClause);
@@ -748,16 +763,26 @@ uint64_t Operation::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
+void Operation::keepHiddenVariablesHidden(
+    Operation& replacement,
+    std::optional<Variable> additionalVisibleVariable) const {
+  // Nothing is hidden if the externally visible variables were never set.
+  if (!variableToColumnMap_ || !externallyVisibleVariableToColumnMap_) {
+    return;
+  }
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
+                   std::back_inserter(visibleVariables));
+  if (additionalVisibleVariable.has_value()) {
+    visibleVariables.push_back(std::move(additionalVisibleVariable).value());
+  }
+  replacement.setSelectedVariablesForSubquery(visibleVariables);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
-
-  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
-    // Make sure previously hidden variables remain hidden.
-    std::vector<Variable> visibleVariables;
-    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
-                     std::back_inserter(visibleVariables));
-    result->setSelectedVariablesForSubquery(visibleVariables);
-  }
+  keepHiddenVariablesHidden(*result);
   result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
@@ -780,7 +805,13 @@ std::unique_ptr<Operation> Operation::clone() const {
     return true;
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
-  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
+  // Compare the actual mappings, not the lazily computed caches: the original
+  // might already have computed its mapping, while the clone has not. The
+  // externally visible mappings differ if the clone lost hidden variables.
+  AD_CORRECTNESS_CHECK(getInternallyVisibleVariableColumns() ==
+                       result->getInternallyVisibleVariableColumns());
+  AD_CORRECTNESS_CHECK(getExternallyVisibleVariableColumns() ==
+                       result->getExternallyVisibleVariableColumns());
   // For deterministic operations the cache key must be identical in the clone.
   // Non-deterministic operations (BNODE, RAND, UUID, SERVICE, LOAD) may
   // legitimately produce a different cache key on each instantiation, so we
@@ -864,14 +895,106 @@ bool Operation::isDeterministic() const {
 }
 
 // _____________________________________________________________________________
-bool Operation::coversVariables(
+bool Operation::isVariableAlwaysDefined(const Variable& variable) const {
+  auto columnInfo =
+      ad_utility::findOptional(getExternallyVisibleVariableColumns(), variable);
+  return columnInfo.has_value() &&
+         columnInfo->mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+}
+
+// _____________________________________________________________________________
+bool Operation::areVariablesAlwaysDefined(
     const std::vector<const Variable*>& variables) const {
-  const auto& varToCol = getExternallyVisibleVariableColumns();
-  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
-    return varToCol.contains(*v) &&
-           varToCol.at(*v).mightContainUndef_ ==
-               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  return ql::ranges::all_of(
+      variables, [this](const auto v) { return isVariableAlwaysDefined(*v); });
+}
+
+// _____________________________________________________________________________
+bool Operation::areVariablesVisible(
+    const std::vector<const Variable*>& variables) const {
+  const auto& visibleVariables = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(variables, [&visibleVariables](const auto v) {
+    return visibleVariables.contains(*v);
   });
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Operation::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>>) const {
+  AD_THROW(absl::StrCat("`cloneWithNewChildren` is not implemented for ",
+                        getDescriptor()));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Operation::pushDownBindToChild(
+    const parsedQuery::Bind& bind,
+    std::vector<std::shared_ptr<QueryExecutionTree>> children,
+    size_t childIndex) const {
+  auto& child = children.at(childIndex);
+  AD_CORRECTNESS_CHECK(child != nullptr);
+
+  // Return true iff any of the `children` (except the one at `excludedIndex`,
+  // if given) contains `var`. Compare by position, not by identity: the same
+  // tree might be used twice.
+  auto childrenContain = [&children](const Variable& var,
+                                     std::optional<size_t> excludedIndex) {
+    for (size_t i = 0; i < children.size(); ++i) {
+      const auto& c = children[i];
+      if (i != excludedIndex && c != nullptr && c->containsVariable(var)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Refuse if any child contains the target.
+  //
+  // NOTE: For the chosen child, this is also checked (including its hidden
+  // variables) by `QueryExecutionTree::makeTreeWithBindColumn` below, but we
+  // check all children here for clarity.
+  if (childrenContain(bind._target, std::nullopt)) {
+    return std::nullopt;
+  }
+
+  // Refuse if the chosen child might see different values for the expression
+  // variables than this operation does (see the header).
+  auto canComputeExpression = ql::ranges::all_of(
+      bind._expression.containedVariables(),
+      [&child, &childrenContain, childIndex](const Variable* var) {
+        return child->getRootOperation()->isVariableAlwaysDefined(*var) ||
+               (child->containsVariable(*var) &&
+                !childrenContain(*var, childIndex));
+      });
+  if (!canComputeExpression) {
+    return std::nullopt;
+  }
+
+  // Push the `BIND` into the chosen child and rebuild this operation with the
+  // new child.
+  auto newChild = child->makeTreeWithBindColumn(bind);
+  if (!newChild.has_value()) {
+    return std::nullopt;
+  }
+  child = std::move(newChild.value());
+  return _executionContext->makeShared<QueryExecutionTree>(
+      _executionContext, cloneWithNewChildren(std::move(children)));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Operation::pushDownBindToAnyChild(
+    const parsedQuery::Bind& bind,
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+      children, [](const auto& child) { return child != nullptr; }));
+  for (size_t i = 0; i < children.size(); ++i) {
+    if (auto result = pushDownBindToChild(bind, children, i)) {
+      return result;
+    }
+  }
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________

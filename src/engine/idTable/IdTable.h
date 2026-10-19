@@ -250,12 +250,16 @@ class IdTable {
   // TODO<joka921> implement a facility (probably via inheritance) where we can
   // also implement the deleted copy operations for C++17
 #ifndef QLEVER_CPP_17
+  // The `RequiresClausePosition` of our `.clang-format` would put the
+  // `= delete` and `= default` on separate lines.
+  // clang-format off
   IdTable(const IdTable&) requires(!isView) = delete;
   IdTable& operator=(const IdTable&) requires(!isView) = delete;
 
   //  Views are copyable, as they are cheap to copy.
   IdTable(const IdTable&) requires isView = default;
   IdTable& operator=(const IdTable&) requires isView = default;
+  // clang-format on
 
 #else
   IdTable(const IdTable&) = default;
@@ -816,9 +820,19 @@ class IdTable {
             ql::ranges::fill(getColumn(i).subspan(oldSize), defaultValue);
             return;
           }
-          ql::ranges::copy(
-              table.getColumn(mappedIndex).subspan(begin, numInserted),
-              getColumn(i).begin() + oldSize);
+          // NOTE: Deliberately use `std::copy` instead of
+          // `ql::ranges::copy`, because only the former is reliably turned
+          // into a `std::memmove` for trivially copyable value types like
+          // `Id` (see the `static_assert` in `global/Id.h`). libstdc++ misses
+          // this optimization for `std::ranges::copy` before version 13.4
+          // (GCC bug 116754; 13.3 is the default on Ubuntu 24.04), and the
+          // `range-v3` implementation that `ql::ranges` uses in C++17 mode
+          // never has it at all. Without the `std::memmove` the compilers
+          // emit a scalar loop, which is significantly slower.
+          auto sourceColumn =
+              table.getColumn(mappedIndex).subspan(begin, numInserted);
+          std::copy(sourceColumn.begin(), sourceColumn.end(),
+                    getColumn(i).begin() + oldSize);
         });
   }
 
@@ -1007,5 +1021,18 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+// Type aliases for the columns of an `IdTable` (a mutable view, a read-only
+// view, and an owning column) and for the references to a single element (a
+// mutable and a const one). Currently just aliases for `ql::span<Id>`,
+// `ql::span<const Id>`, `std::vector<Id>`, `Id&` and `const Id&`; a later
+// commit switches them to storage-efficient split-column types and proxies,
+// once `IdTable` stores the payload and datatype of each `Id` in separate
+// arrays.
+using IdColumnRef = ql::span<Id>;
+using ConstIdColumnRef = ql::span<const Id>;
+using IdColumn = std::vector<Id>;
+using IdRef = Id&;
+using ConstIdRef = const Id&;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

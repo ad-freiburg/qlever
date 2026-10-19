@@ -9,6 +9,7 @@
 
 #include "global/RuntimeParameters.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/BlankNodeAdder.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
@@ -102,8 +103,7 @@ Result Load::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
-  ad_utility::httpUtils::Url url{
-      asStringViewUnsafe(loadClause_.iri_.getContent())};
+  ad_utility::httpUtils::Url url{loadClause_.iri_.getContent()};
   AD_LOG_INFO << "Loading RDF dataset from " << url.asString() << std::endl;
   HttpOrHttpsResponse response = getResultFunction_(
       url, cancellationHandle_, boost::beast::http::verb::get, "", "", "", 0);
@@ -146,10 +146,19 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
     body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
   }
   parser.setInputStream(body);
-  LocalVocab lv;
+  // The RDF parsers represent blank nodes as plain strings, which the
+  // conversions in `TripleComponentConversions.h` cannot handle. The
+  // `BlankNodeAdder` maps them to blank node `Id`s, consistently within this
+  // `LOAD` and distinct from the blank nodes of any other operation. Its
+  // `LocalVocab` also holds the blank node blocks alive, so it is the
+  // `LocalVocab` of the result.
+  BlankNodeAdder blankNodeAdder{getIndex().getBlankNodeManager(),
+                                getExecutionContext()->getAllocator()};
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  auto toId = [this, &lv](TripleComponent&& tc) {
-    return toValueId(std::move(tc), getIndex(), lv);
+  auto toId = [this, &blankNodeAdder](TripleComponent&& tc) {
+    auto component = blankNodeAdder.resolveParsedComponent(std::move(tc));
+    return toValueId(std::move(component), getIndex(),
+                     blankNodeAdder.localVocab_);
   };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
     result.push_back(
@@ -158,7 +167,8 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
                    toId(std::move(triple.object_))});
     checkCancellation();
   }
-  return Result{std::move(result), resultSortedOn(), std::move(lv)};
+  return Result{std::move(result), resultSortedOn(),
+                std::move(blankNodeAdder.localVocab_)};
 }
 
 // _____________________________________________________________________________

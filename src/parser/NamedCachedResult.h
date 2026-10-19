@@ -26,7 +26,7 @@ class NamedCachedResult : public MagicServiceQuery {
   void addGraph(const GraphPatternOperation& childGraphPattern) override;
 
   // Return the name of the magic service type.
-  constexpr std::string_view name() const override {
+  QL_CONSTEXPR std::string_view name() const override {
     return "named cached result";
   }
 

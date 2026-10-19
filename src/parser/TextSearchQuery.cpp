@@ -134,7 +134,7 @@ void TextSearchQuery::predStringTextSearch(const Variable& subjectVar,
 void TextSearchQuery::predStringContainsWord(
     const Variable& subjectVar, const TripleComponent::Literal& objectLiteral) {
   configVarToConfigs_[subjectVar].isWordSearch_ = true;
-  std::string_view literal = asStringViewUnsafe(objectLiteral.getContent());
+  std::string_view literal = objectLiteral.getContent();
   if (literal.empty()) {
     throw TextSearchException(
         "The predicate <word> shouldn't have an empty literal as "
@@ -149,7 +149,7 @@ void TextSearchQuery::predStringContainsEntity(const Variable& subjectVar,
   configVarToConfigs_[subjectVar].isWordSearch_ = false;
   if (object.isLiteral()) {
     configVarToConfigs_[subjectVar].entity_ =
-        std::string(asStringViewUnsafe(object.getLiteral().getContent()));
+        std::string(object.getLiteral().getContent());
   } else if (object.isVariable()) {
     configVarToConfigs_[subjectVar].entity_ = object.getVariable();
   } else if (object.isIri()) {

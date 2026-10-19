@@ -35,10 +35,13 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParseException.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
+#include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -58,7 +61,8 @@ using ad_utility::MediaType;
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
-    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
+    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -67,7 +71,11 @@ Server::Server(
       queryThreadPool_{numThreads},
       rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
-      metricsReader_(std::move(metricsReader)) {
+      metricsReader_(std::move(metricsReader)),
+      indexRebuildIdTracker_(
+          indexRebuildIdTracker
+              ? std::move(indexRebuildIdTracker)
+              : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   initializeServerMetrics(config.memoryLimit_);
@@ -91,8 +99,7 @@ void Server::initializeServerMetrics(
                           .getCurrentLocatedTriplesSharedState()
                           ->counts_;
         AD_CORRECTNESS_CHECK(counts.has_value());
-        auto [ins, del] = counts.value();
-        return ins + del;
+        return counts.value();
       },
       [this]() -> int64_t { return allocator().amountMemoryLeft().getBytes(); },
       [this]() -> int64_t {
@@ -102,7 +109,10 @@ void Server::initializeServerMetrics(
       [this]() -> int64_t {
         return static_cast<int64_t>(rebuildInProgress_.load());
       },
-      memoryLimit);
+      memoryLimit,
+      [this]() -> int64_t {
+        return indexAndViewsSnapshot()->index_.numTriples().normal;
+      });
   metrics_->registerCallbacks();
 }
 
@@ -124,10 +134,11 @@ void Server::configureQueryEventLog(const ql::filesystem::path& path) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>) Server::ResponseT
-    Server::reportHttpError(std::string_view message, http::status status,
-                            const RequestT& request,
-                            const MetricLabel& errorType) const {
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Server::ResponseT Server::reportHttpError(std::string_view message,
+                                          http::status status,
+                                          const RequestT& request,
+                                          const MetricLabel& errorType) const {
   using namespace ad_utility::httpUtils;
   AD_LOG_ERROR << message << std::endl;
   metrics_->httpErrors_->Add(1, {errorType});
@@ -142,12 +153,13 @@ CPP_template_def(typename RequestT, typename SendT)(
   using namespace ad_utility::httpUtils;
 
   auto sendWithAccessControlHeaders =
-      [&send](auto response) -> boost::asio::awaitable<void> {
+      [&send](ResponseT response,
+              net::any_io_executor bodyExecutor) -> Awaitable<void> {
     response.set(http::field::access_control_allow_origin, "*");
     response.set(http::field::access_control_allow_headers, "*");
     response.set(http::field::access_control_allow_methods,
                  "GET, POST, OPTIONS");
-    co_return co_await send(std::move(response));
+    co_return co_await send(std::move(response), std::move(bodyExecutor));
   };
 
   if (request.method() == http::verb::options) {
@@ -155,7 +167,8 @@ CPP_template_def(typename RequestT, typename SendT)(
     AD_LOG_INFO << "Request received via " << request.method()
                 << ", allowing everything" << std::endl;
     co_return co_await sendWithAccessControlHeaders(
-        createOkResponse("", request, MediaType::textPlain));
+        createOkResponse("", request, MediaType::textPlain),
+        co_await net::this_coro::executor);
   }
 
   // The C++ standard forbids a suspend point (`co_await`) inside a `catch`
@@ -174,7 +187,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   }
   if (errorResponse.has_value()) {
     co_return co_await sendWithAccessControlHeaders(
-        std::move(errorResponse.value()));
+        std::move(errorResponse.value()), co_await net::this_coro::executor);
   }
 }
 
@@ -264,12 +277,20 @@ class QueryAlreadyInUseError : public std::runtime_error {
                            "' is already in use!"} {}
 };
 
+namespace {
+// Return an executor for a single query, which runs at most
+// `max-num-threads-per-query` tasks on the `executor` at the same time.
+qlever::Executor makeQueryExecutor(qlever::Executor executor) {
+  return ad_utility::makeConcurrencyLimitedExecutor(
+      std::move(executor),
+      getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
+}
+}  // namespace
+
 // _____________________________________________________________________________
-auto Server::cancelAfterDeadline(
+absl::AnyInvocable<void()> Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-    TimeLimit timeLimit)
-    -> QL_CONCEPT_OR_NOTHING(
-        ad_utility::InvocableWithExactReturnType<void>) auto {
+    TimeLimit timeLimit) {
   // The timer must not be moved once `async_wait` has registered a
   // `wait_op` against its implementation: the queued op references the
   // original impl by address, and moving the timer leaves the op
@@ -278,12 +299,38 @@ auto Server::cancelAfterDeadline(
   auto timer = std::make_shared<net::steady_timer>(timerExecutor_, timeLimit);
 
   timer->async_wait([cancellationHandle = std::move(cancellationHandle)](
-                        const boost::system::error_code&) {
+                        const boost::system::error_code& error) {
+    // The timer was cancelled via the returned callback.
+    if (error == boost::asio::error::operation_aborted) {
+      return;
+    }
     if (auto pointer = cancellationHandle.lock()) {
       pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
   });
   return [timer = std::move(timer)]() { timer->cancel(); };
+}
+
+// _____________________________________________________________________________
+ad_utility::CancellationHandle<>::RunAfter Server::makeWatchDogRunAfter() {
+  // All steps reuse one timer, which is safe because they never overlap
+  // (see `RunAfter`). The pending `task` keeps the timer alive, and the
+  // `shared_ptr` keeps it from moving (see `cancelAfterDeadline`).
+  return [timer = std::make_shared<net::steady_timer>(timerExecutor_)](
+             std::chrono::milliseconds delay, absl::AnyInvocable<void()> task) {
+    size_t numCancelledWaits = timer->expires_after(delay);
+    AD_CORRECTNESS_CHECK(numCancelledWaits == 0,
+                         "`RunAfter` must not be called while a previous "
+                         "wait of the watchdog timer is still pending.");
+    timer->async_wait(
+        [task = std::move(task)](const boost::system::error_code&) mutable {
+          // The error is only set if the timer is cancelled or destroyed
+          // during the wait, which can't happen (see above). Even then,
+          // running the step early would be harmless, whereas throwing
+          // here would terminate the server, so we don't assert.
+          task();
+        });
+  };
 }
 
 // _____________________________________________________________________________
@@ -293,7 +340,8 @@ auto Server::setupCancellationHandle(
                              CancellationHandleAndTimeoutTimerCancel>) auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  cancellationHandle->startWatchDog();
+  ad_utility::CancellationHandle<>::registerWatchDog(cancellationHandle,
+                                                     makeWatchDogRunAfter());
   absl::Cleanup cancelCancellationHandle{
       cancelAfterDeadline(cancellationHandle, timeLimit)};
   return CancellationHandleAndTimeoutTimerCancel{
@@ -328,7 +376,7 @@ auto Server::prepareOperation(
        resultPinning = std::move(resultPinning),
        accessTokenOk](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
-            std::move(indexAndViews),
+            std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
@@ -397,19 +445,14 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
 
   // Extract query body.
-  auto query = std::visit(
+  auto query = ad_utility::visitIf(
+      operation, [](const Query& op) -> Query { return op; },
       [](const auto& op) -> Query {
-        using T = std::decay_t<decltype(op)>;
-        if constexpr (std::is_same_v<T, Query>) {
-          return op;
-        } else {
-          static_assert(
-              ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
-          throw std::runtime_error(
-              "Action 'write-materialized-view' requires a 'SELECT' query.");
-        }
-      },
-      operation);
+        static_assert(ad_utility::SimilarToAny<decltype(op), Update,
+                                               GraphStoreOperation, None>);
+        throw std::runtime_error(
+            "Action 'write-materialized-view' requires a 'SELECT' query.");
+      });
 
   // Extract time limit.
   auto timeLimit =
@@ -443,7 +486,8 @@ nlohmann::json Server::processLoadMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
-  auto qec = qlever().createQueryExecutionContext(indexAndViews);
+  auto qec = qlever().createQueryExecutionContext(
+      indexAndViews, makeQueryExecutor(qlever().executor()));
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 
   return json{{"materialized-view-loaded", name}};
@@ -455,23 +499,39 @@ nlohmann::json Server::processDeleteMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
-  // Snapshot again instead of reusing the snapshot taken at the beginning of
-  // `process()` (see `clear-delta-triples` above for the same pattern), so
-  // that we delete the view from the index that is currently being served
-  // and not from a stale one that a concurrent rebuild has swapped out in the
-  // meantime. Deleting from a stale manager is not unsafe (the rebuild called
-  // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
-  // `deleteView` throw), it would just needlessly fail.
-  indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name);
+  // `Qlever::deleteMaterializedView` takes a fresh snapshot instead of reusing
+  // the one taken at the beginning of `process()` (see `clear-delta-triples`
+  // above for the same pattern), so that the view is deleted from the index
+  // that is currently being served and not from a stale one that a concurrent
+  // rebuild has swapped out in the meantime. Deleting from a stale manager is
+  // not unsafe (rebuild called `MaterializedViewsManager::retireOnDiskFiles` on
+  // it, which makes `deleteView` throw), it would just needlessly fail.
+  qlever().deleteMaterializedView(name);
 
   return json{{"materialized-view-deleted", name}};
 }
 
 // _____________________________________________________________________________
+nlohmann::json Server::processUnloadMaterializedView(
+    const ParamValueMap& parameters) const {
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Unloading");
+
+  // `Qlever::unloadMaterializedView` takes a fresh snapshot for the same reason
+  // as in `processDeleteMaterializedView` above (unloading from a stale
+  // manager would silently leave the view loaded in the served one). Report
+  // whether the view was actually loaded, so that a request with a wrong
+  // name does not look like a success.
+  bool wasLoaded = qlever().unloadMaterializedView(name);
+
+  return json{{"materialized-view-unloaded", name}, {"was-loaded", wasLoaded}};
+}
+
+// _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::ResponseT Server::processPing(std::optional<std::string> msg,
-                                          const RequestT& request) const {
+Server::ResponseT Server::processPing(std::optional<std::string> msg,
+                                      const RequestT& request) const {
   using namespace ad_utility::httpUtils;
   if (msg.has_value()) {
     AD_LOG_INFO << "Alive check with message \"" << msg.value() << "\""
@@ -484,15 +544,19 @@ CPP_template_def(typename RequestT)(
 }
 
 namespace {
-// Helpers used only by `Server::process` below, for dispatching its `cmd=`
-// URL parameter.
+// Helpers used by `Server::processCommands` below to dispatch its `cmd=` URL
+// parameter, and by other command/setting handlers in this file.
 namespace serverProcessHelpers {
+using namespace ad_utility::url_parser;
+using namespace ad_utility::httpUtils;
 // Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
-// the log message and whether it requires a valid access token.
+// the log message, whether it requires a valid access token, and whether it
+// accepts (and uses) an additional query/update alongside `cmd=`.
 struct CommandMeta {
   std::string_view name_;
   std::string_view description_;
   bool requiresAuth_;
+  bool supportsOperation_ = false;
 };
 
 constexpr std::array commands = {
@@ -510,10 +574,12 @@ constexpr std::array commands = {
     CommandMeta{"get-index-id", "get index ID", false},
     CommandMeta{"dump-active-queries", "dump active queries", true},
     CommandMeta{"rebuild-index", "rebuilding index", true},
-    CommandMeta{"write-materialized-view", "write materialized view", true},
+    CommandMeta{"write-materialized-view", "write materialized view", true,
+                true},
     CommandMeta{"load-materialized-view", "explicitly load materialized view",
                 true},
     CommandMeta{"delete-materialized-view", "delete materialized view", true},
+    CommandMeta{"unload-materialized-view", "unload materialized view", true},
 };
 
 // Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
@@ -527,16 +593,27 @@ void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
   }
 }
 
+// Throw a 400 `HttpError` if `operation` is not `None`; `actionName` names the
+// command being checked, for the error message.
+void requireNoOperation(const sparqlOperation::Operation& operation,
+                        std::string_view actionName) {
+  if (!std::holds_alternative<sparqlOperation::None>(operation)) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        absl::StrCat("cmd=", actionName,
+                     " does not accept an additional query or update"));
+  }
+}
+
 // Check if `paramName=<newValue>` is set in `parameters`. If so, verify the
 // access token (using `actionName` if given, `paramName` otherwise for the
 // error message on invalid access), log the `<newValue>` and return it. Return
 // `std::nullopt` if no such parameter is found.
 std::optional<std::string> checkAndLogParameterSetting(
-    const ad_utility::url_parser::ParamValueMap& parameters,
-    std::string_view paramName, bool accessTokenOk,
+    const ParamValueMap& parameters, std::string_view paramName,
+    bool accessTokenOk,
     std::optional<std::string_view> actionName = std::nullopt) {
-  auto value = ad_utility::url_parser::checkParameter(parameters, paramName,
-                                                      std::nullopt);
+  auto value = checkParameter(parameters, paramName, std::nullopt);
   if (value.has_value()) {
     requireValidAccessToken(accessTokenOk, actionName.value_or(paramName));
     AD_LOG_INFO << "Setting \"" << paramName << "\" to: \"" << value.value()
@@ -545,22 +622,36 @@ std::optional<std::string> checkAndLogParameterSetting(
   return value;
 }
 
-// Create a bound version of `checkParameter` with `parameters` as the first
-// bound argument.
-auto makeCheckParameter(
-    const ad_utility::url_parser::ParamValueMap& parameters) {
-  return absl::bind_front(&ad_utility::url_parser::checkParameter,
-                          std::cref(parameters));
+// Create a factory for a bound version of `createJsonResponse` with
+// `request` as the second bound argument.
+CPP_template(typename RequestT)(
+    requires HttpRequest<RequestT>) auto makeJsonResponseFactory(const RequestT&
+                                                                     request) {
+  return [&request](const nlohmann::json& j) {
+    return createJsonResponse(j, request);
+  };
 }
 
-// Look up metadata for `cmd` in `commands`, run the access-token check (if
-// required), and log it. `cmd` must name an entry in `commands`. It always
-// comes from a literal used in the `process()` dispatch below.
-void dispatchLog(std::string_view cmd, bool accessTokenOk) {
+// Create a bound version of `checkParameter` with `parameters` as the first
+// bound argument.
+auto makeCheckParameter(const ParamValueMap& parameters) {
+  return absl::bind_front(&checkParameter, std::cref(parameters));
+}
+
+// Look up `cmd`'s metadata in `commands`, run its pre-dispatch checks — the
+// access-token check (if required) and the additional-query/update check —
+// and log that it is being processed. `cmd` must name an entry in
+// `commands`. It always comes from a literal used in the `processCommands()`
+// dispatch below.
+void checkAndLogCommand(std::string_view cmd, bool accessTokenOk,
+                        const sparqlOperation::Operation& operation) {
   auto it = ql::ranges::find(commands, cmd, &CommandMeta::name_);
   AD_CORRECTNESS_CHECK(it != commands.end());
   if (it->requiresAuth_) {
     requireValidAccessToken(accessTokenOk, it->name_);
+  }
+  if (!it->supportsOperation_) {
+    requireNoOperation(operation, it->name_);
   }
   AD_LOG_INFO << "Processing command \"" << it->name_
               << "\": " << it->description_ << std::endl;
@@ -570,8 +661,9 @@ void dispatchLog(std::string_view cmd, bool accessTokenOk) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>) Server::ResponseT
-    Server::processMetrics(bool accessTokenOk, const RequestT& request) const {
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Server::ResponseT Server::processMetrics(bool accessTokenOk,
+                                         const RequestT& request) const {
   using namespace ad_utility::httpUtils;
   serverProcessHelpers::requireValidAccessToken(accessTokenOk, "metrics");
   if (!metricsReader_) {
@@ -597,6 +689,112 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     return std::nullopt;
   }
   return nlohmann::json(globalRuntimeParameters.rlock()->toMap());
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
+    const SharedIndexAndView& indexAndViews, const ParamValueMap& parameters,
+    const SparqlOperation& operation, bool accessTokenOk,
+    const ad_utility::Timer& requestTimer, RequestT& request) {
+  using namespace ad_utility::httpUtils;
+  using namespace responseJson;
+  using namespace serverProcessHelpers;
+
+  const auto& index = indexAndViews->index_;
+
+  auto checkParameter = makeCheckParameter(parameters);
+
+  // Check if `cmd=<cmd>` is set in `parameters`. If so, log this information
+  // via `checkAndLogCommand()` (which also throws if the command requires a
+  // valid access token that wasn't given, or if `cmd` was combined with a
+  // query/update it doesn't support) and return true. Return false
+  // otherwise.
+  auto commandIs = [accessTokenOk, &checkParameter,
+                    &operation](std::string_view cmd) {
+    if (checkParameter("cmd", std::string{cmd})) {
+      checkAndLogCommand(cmd, accessTokenOk, operation);
+      return true;
+    }
+    return false;
+  };
+
+  auto makeJsonResponse = makeJsonResponseFactory(request);
+
+  // We wrap `j` in a `ProcessCommandsResult` always via
+  // `makeJsonResponse()`.
+  auto makeCommandResult = [&makeJsonResponse](const json& j) {
+    return ProcessCommandsResult{makeJsonResponse(j)};
+  };
+
+  // We call `composeCacheStats()` always with the same parameters:
+  // `qlever().cache()` and `qlever().namedResultCache()`.
+  auto cacheStats = [&cache = qlever().cache(),
+                     &namedResultCache = qlever().namedResultCache(),
+                     &makeCommandResult]() {
+    return makeCommandResult(composeCacheStats(cache, namedResultCache));
+  };
+
+  if (!checkParameter("cmd", std::nullopt).has_value()) {
+    // No `cmd=` URL parameter at all, so there is nothing to do here.
+    co_return ProcessCommandsResult{};
+  } else if (commandIs("stats")) {
+    co_return makeCommandResult(composeIndexStats(index));
+  } else if (commandIs("cache-stats")) {
+    co_return cacheStats();
+  } else if (commandIs("clear-cache")) {
+    cache().clearUnpinnedOnly();
+    co_return cacheStats();
+  } else if (commandIs("clear-cache-complete")) {
+    cache().clearAll();
+    co_return cacheStats();
+  } else if (commandIs("clear-named-cache")) {
+    namedResultCache().clear();
+    co_return cacheStats();
+  } else if (commandIs("clear-delta-triples")) {
+    auto countAfterClear = co_await processClearDeltaTriples();
+    co_return makeCommandResult(json(countAfterClear));
+  } else if (commandIs("vacuum-delta-triples")) {
+    auto vacuumStats = co_await processVacuumDeltaTriples(
+        checkParameter("timeout", std::nullopt), accessTokenOk);
+    co_return makeCommandResult(vacuumStats);
+  } else if (commandIs("get-settings")) {
+    co_return makeCommandResult(json(globalRuntimeParameters.rlock()->toMap()));
+  } else if (commandIs("get-index-id")) {
+    co_return ProcessCommandsResult{
+        createOkResponse(index.getIndexId(), request, MediaType::textPlain)};
+  } else if (commandIs("dump-active-queries")) {
+    auto activeQueries = nlohmann::json::object();
+    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
+      activeQueries[nlohmann::json(key)] = std::move(value);
+    }
+    co_return makeCommandResult(activeQueries);
+  } else if (commandIs("rebuild-index")) {
+    auto rebuildIndexResponse =
+        co_await processRebuildIndex(parameters, request);
+    co_return ProcessCommandsResult{std::move(rebuildIndexResponse)};
+  } else if (commandIs("write-materialized-view")) {
+    auto materializedViewStats = co_await processWriteMaterializedView(
+        parameters, operation, accessTokenOk, requestTimer);
+    // Flag that this command already consumed the query operation, so
+    // `process()` doesn't also try to run it as a regular query.
+    co_return ProcessCommandsResult{makeJsonResponse(materializedViewStats),
+                                    true};
+  } else if (commandIs("load-materialized-view")) {
+    co_return makeCommandResult(
+        processLoadMaterializedView(parameters, indexAndViews));
+  } else if (commandIs("delete-materialized-view")) {
+    co_return makeCommandResult(processDeleteMaterializedView(parameters));
+  } else if (commandIs("unload-materialized-view")) {
+    co_return makeCommandResult(processUnloadMaterializedView(parameters));
+  } else {
+    // `cmd` is set but didn't match any of the commands above.
+    throw HttpError(boost::beast::http::status::bad_request,
+                    absl::StrCat(R"(Unknown value ")",
+                                 checkParameter("cmd", std::nullopt).value(),
+                                 R"(" for parameter "cmd")"));
+  }
 }
 
 // _____________________________________________________________________________
@@ -643,8 +841,9 @@ CPP_template_def(typename RequestT, typename SendT)(
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
     // Workaround for a GCC 15/16 bug: the hidden object of a by-value
-    // structured binding is not destroyed when the coroutine frame is
-    // destroyed while suspended (gcc.gnu.org bug 124584).
+    // structured binding in a coroutine is not always destroyed at the end
+    // of its scope, for example when it is initialized by a `co_await` or
+    // lives across one (gcc.gnu.org bug 124584).
     auto preparedOp = prepareOperation(operationName, operationString,
                                        std::move(messageSender), parameters,
                                        timeLimit, accessTokenOk, clientIp);
@@ -738,22 +937,28 @@ CPP_template_def(typename RequestT, typename SendT)(
         std::move(operationString), tracer);
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
+    // All the responses below are cheap to compute, so their bodies can be
+    // serialized on the executor of this coroutine.
+    auto ioExecutor = co_await net::this_coro::executor;
     // If there was no "query", but any of the URL parameters processed before
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
     if (response.has_value()) {
-      return send(std::move(response.value()));
+      co_return co_await send(std::move(response.value()), ioExecutor);
     }
 
     // At this point, if there is a "?" in the query string, it means that there
     // are URL parameters which QLever does not know or did not process.
     if (request.target().find("?") != std::string::npos) {
-      return send(createBadRequestResponse("Unknown query parameters",
-                                           std::move(request)));
+      co_return co_await send(
+          createBadRequestResponse("Unknown query parameters",
+                                   std::move(request)),
+          ioExecutor);
     }
     // No path matched up until this point, so return 404 to indicate the client
     // made an error and the server will not serve anything else.
-    return send(createNotFoundResponse("Unknown path", std::move(request)));
+    co_return co_await send(
+        createNotFoundResponse("Unknown path", std::move(request)), ioExecutor);
   };
 
   co_return co_await processOperation(
@@ -812,89 +1017,18 @@ CPP_template_def(typename RequestT, typename SendT)(
             parameters, paramName, accessTokenOk);
       };
 
-  // Check if the current command is selected in the parameters from the
-  // `parsedHttpRequest.parameters_`. If so, log this information via
-  // `dispatchLog()` and return true. Return false otherwise.
-  auto commandIs = [accessTokenOk, &checkParameter](std::string_view cmd) {
-    if (checkParameter("cmd", std::string{cmd})) {
-      dispatchLog(cmd, accessTokenOk);
-      return true;
-    }
-    return false;
-  };
-
-  // We call `createJsonResponse` always with the same `request` parameter.
-  auto jsonResponse = [&request](const json& j) {
-    return createJsonResponse(j, request);
-  };
-
-  // We call `composeCacheStats()` always with the same parameters:
-  // `qlever().cache()` and `qlever().namedResultCache()`.
-  auto cacheStats = [&cache = qlever().cache(),
-                     &namedResultCache = qlever().namedResultCache()]() {
-    return composeCacheStats(cache, namedResultCache);
-  };
-  std::optional<http::response<streamable_body>> response;
-
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
   // one. In particular, if there is a "query" parameter, it will be processed
   // last and its result returned.
   //
-  // Some parameters require that "access-token" is set correctly. If not, that
-  // parameter is ignored.
-  if (commandIs("stats")) {
-    response = jsonResponse(composeIndexStats(index));
-  } else if (commandIs("cache-stats")) {
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache")) {
-    cache().clearUnpinnedOnly();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-cache-complete")) {
-    cache().clearAll();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-named-cache")) {
-    namedResultCache().clear();
-    response = jsonResponse(cacheStats());
-  } else if (commandIs("clear-delta-triples")) {
-    auto countAfterClear = co_await processClearDeltaTriples();
-    response = jsonResponse(json(countAfterClear));
-  } else if (commandIs("vacuum-delta-triples")) {
-    auto vacuumStats = co_await processVacuumDeltaTriples(
-        checkParameter("timeout", std::nullopt), accessTokenOk);
-    response = jsonResponse(vacuumStats);
-  } else if (commandIs("get-settings")) {
-    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
-  } else if (commandIs("get-index-id")) {
-    response =
-        createOkResponse(index.getIndexId(), request, MediaType::textPlain);
-  } else if (commandIs("dump-active-queries")) {
-    auto json = nlohmann::json::object();
-    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
-      json[nlohmann::json(key)] = std::move(value);
-    }
-    response = jsonResponse(json);
-  } else if (commandIs("rebuild-index")) {
-    response = co_await processRebuildIndex(parameters, request);
-  } else if (commandIs("write-materialized-view")) {
-    auto materializedViewStats = co_await processWriteMaterializedView(
-        parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer);
-    response = jsonResponse(materializedViewStats);
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("load-materialized-view")) {
-    response =
-        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  } else if (commandIs("delete-materialized-view")) {
-    response = jsonResponse(processDeleteMaterializedView(parameters));
-    // Prevent regular query processing by removing the query from the
-    // request.
-    parsedHttpRequest.operation_ = None{};
-  }
+  // Some parameters require that "access-token" is set correctly. If not, an
+  // `HttpError` with status 403 Forbidden is thrown. A `cmd=` combined with a
+  // query/update it doesn't support throws a 400 Bad Request instead.
+  auto commandResult = co_await processCommands(
+      indexAndViews, parameters, parsedHttpRequest.operation_, accessTokenOk,
+      requestTimer, request);
+  std::optional<ResponseT> response = std::move(commandResult.response_);
 
   // Ping with or without message.
   if (parsedHttpRequest.path_ == "/ping") {
@@ -906,22 +1040,34 @@ CPP_template_def(typename RequestT, typename SendT)(
     response = processMetrics(accessTokenOk, request);
   }
 
+  auto makeJsonResponse = makeJsonResponseFactory(request);
+
   // Set description of KB index.
   if (auto description = checkAndLogParameterSetting("index-description")) {
     index.setKbName(description.value());
-    response = jsonResponse(composeIndexStats(index));
+    response = makeJsonResponse(composeIndexStats(index));
   }
 
   // Set description of text index.
   if (auto description = checkAndLogParameterSetting("text-description")) {
     index.setTextName(description.value());
-    response = jsonResponse(composeIndexStats(index));
+    response = makeJsonResponse(composeIndexStats(index));
   }
 
   // Set one or several of the runtime parameters.
   if (auto updatedSettings =
           processSetRuntimeParameters(parameters, accessTokenOk)) {
-    response = jsonResponse(updatedSettings.value());
+    response = makeJsonResponse(updatedSettings.value());
+  }
+
+  // A command that has already consumed the query (currently only
+  // `write-materialized-view`, which uses it as the view-defining query and
+  // executes it inside `processCommands`) must not have it run again as a
+  // regular query below, which would also overwrite `response`. All other
+  // commands reject a query or update in `processCommands`, so for them the
+  // operation is `None` here anyway.
+  if (commandResult.queryOperationWasConsumed_) {
+    parsedHttpRequest.operation_ = None{};
   }
 
   co_return co_await processSparqlOperation(
@@ -947,9 +1093,9 @@ Server::PlannedQuery Server::planQuery(
       std::move(operation), qec, std::move(handle), timeLimit, requestTimer);
 
   const auto& qet = plannedQuery.queryExecutionTree();
-  const auto& runtimeInfoWholeQuery =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  auto timeForQueryPlanning = runtimeInfoWholeQuery.timeQueryPlanning;
+  const auto& queryPlanningInfo =
+      qet.getRootOperation()->getQueryPlanningInfo();
+  auto timeForQueryPlanning = queryPlanningInfo.timeQueryPlanning;
   AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
               << " ms" << std::endl;
   AD_LOG_TRACE << qet.getCacheKey() << std::endl;
@@ -959,10 +1105,10 @@ Server::PlannedQuery Server::planQuery(
 // _____________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::websocket::OwningQueryId Server::getQueryId(
-        const RequestT& request, std::string_view query,
-        ad_utility::websocket::QueryOperation operationType,
-        std::string_view clientIp) {
+ad_utility::websocket::OwningQueryId Server::getQueryId(
+    const RequestT& request, std::string_view query,
+    ad_utility::websocket::QueryOperation operationType,
+    std::string_view clientIp) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
@@ -982,10 +1128,21 @@ CPP_template_def(typename RequestT, typename SendT)(
     Awaitable<void> Server::sendStreamableResponse(
         const RequestT& request, SendT& send, MediaType mediaType,
         const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-        SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
-      requestTimer, std::move(cancellationHandle));
+        SharedCancellationHandle cancellationHandle) {
+  // `computeResult` already computes the first block of the result (see
+  // `convertStreamGeneratorForChunkedTransfer`), which might take arbitrarily
+  // long, so it must not run on the threads of the `HttpServer`. For the same
+  // reason as in `processQuery`, the coroutine is stored in an explicit
+  // variable instead of directly `co_await`-ing it.
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [&plannedQuery, mediaType, &requestTimer, &cancellationHandle]() {
+        return ExportQueryExecutionTrees::computeResult(
+            plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(),
+            mediaType, requestTimer, cancellationHandle);
+      },
+      cancellationHandle);
+  auto responseGenerator = co_await std::move(coroutine);
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -995,7 +1152,9 @@ CPP_template_def(typename RequestT, typename SendT)(
             std::move(response));
   }
   try {
-    co_await send(std::move(response));
+    // The result of the query is computed lazily while the response is being
+    // sent, so compute it on the same thread pool as the query planning.
+    co_await send(std::move(response), queryThreadPool_.get_executor());
   } catch (const boost::system::system_error& e) {
     // "Broken Pipe" errors are thrown and reported by `streamable_body`,
     // so we can safely ignore these kind of exceptions. In practice this
@@ -1029,11 +1188,11 @@ CPP_template_def(typename RequestT, typename SendT)(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::websocket::MessageSender Server::createMessageSender(
-        const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-        const RequestT& request, std::string_view operationString,
-        ad_utility::websocket::QueryOperation operationType,
-        std::string_view clientIp) {
+ad_utility::websocket::MessageSender Server::createMessageSender(
+    const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+    const RequestT& request, std::string_view operationString,
+    ad_utility::websocket::QueryOperation operationType,
+    std::string_view clientIp) {
   auto queryHubLock = queryHub.lock();
   AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
@@ -1181,8 +1340,8 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
       plannedQuery.parsedQuery()._originalString);
   response["status"] = "OK";
   response["warnings"] = warnings;
-  response["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  response["runtimeInformation"]["meta"] =
+      nlohmann::ordered_json(qet.getRootOperation()->getQueryPlanningInfo());
   response["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(qet.getRootOperation()->runtimeInfo());
   auto setIfHasValue = [&response, &updateMetadata](
@@ -1339,7 +1498,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   for (auto& middleware : responseMiddlewares) {
     response = middleware.applyUpdate(std::move(response), metadatas);
   }
-  co_await send(std::move(response));
+  // The body of the response is a single string, so it can be serialized on
+  // the executor of this coroutine.
+  co_await send(std::move(response), co_await net::this_coro::executor);
   co_return;
 }
 
@@ -1414,25 +1575,10 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     // 304.
     auto resp =
         createResponseWithEmptyBody(responseStatus, request, std::nullopt);
-    co_return co_await send(std::move(resp));
+    co_return co_await send(std::move(resp), co_await net::this_coro::executor);
   }
   if (exceptionErrorMsg) {
-    AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
-    if (metadata) {
-      // The `coloredError()` message might fail because of the
-      // different Unicode handling of QLever and ANTLR. Make sure to
-      // detect this case so that we can fix it if it happens.
-      try {
-        AD_LOG_ERROR << metadata.value().coloredError() << std::endl;
-      } catch (const std::exception& e) {
-        exceptionErrorMsg.value().append(absl::StrCat(
-            " Highlighting an error for the command line log failed: ",
-            e.what()));
-        AD_LOG_ERROR << "Failed to highlight error in operation. " << e.what()
-                     << std::endl;
-        AD_LOG_ERROR << metadata.value().query_ << std::endl;
-      }
-    }
+    logErrorAndHighlightedMetadata(exceptionErrorMsg.value(), metadata);
     auto errorResponseJson = responseJson::composeError(
         operationString, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
@@ -1444,7 +1590,8 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     }
     auto errResponse =
         createJsonResponse(errorResponseJson, request, responseStatus);
-    co_return co_await send(std::move(errResponse));
+    co_return co_await send(std::move(errResponse),
+                            co_await net::this_coro::executor);
   }
 }
 
@@ -1609,8 +1756,8 @@ Awaitable<qlever::IndexSwapConfig> Server::rebuildIndex(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<Server::ResponseT> Server::processRebuildIndex(
-        const ParamValueMap& parameters, const RequestT& request) {
+Awaitable<Server::ResponseT> Server::processRebuildIndex(
+    const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
@@ -1634,7 +1781,15 @@ Server::rebuildIndexUnlessInProgress(
   if (rebuildInProgress_.exchange(true)) {
     co_return std::nullopt;
   }
-  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+  indexRebuildIdTracker_->markStart();
+  // Clear the ID and release `rebuildInProgress_` when this index rebuild
+  // ends, no matter how it ends. The order matters: the next rebuild might
+  // start immediately when `rebuildInProgress_` is set to false, in which case
+  // a later `markEnd` would clear that rebuild's ID instead of this one's.
+  absl::Cleanup cleanup{[this]() {
+    indexRebuildIdTracker_->markEnd();
+    rebuildInProgress_.store(false);
+  }};
   co_return co_await rebuildIndex(std::move(rebuildTmpDir),
                                   std::move(rebuildPreviousIndexDir));
 }

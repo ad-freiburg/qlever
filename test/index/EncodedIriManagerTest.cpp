@@ -143,19 +143,21 @@ TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
 }
 
 // _____________________________________________________________________________
-TEST(EncodedIriManager, toStringWithGivenPrefix) {
-  auto str = EncodedIriManager::toStringWithGivenPrefix(
-      EncodedIriManager::encodeDecimalToNBit("7643"), "<blibb_");
-  EXPECT_EQ(str, "<blibb_7643>");
-}
-
-// _____________________________________________________________________________
 TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EncodedIriManager em{{"blabb", "blubb"}};
   auto id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
       1, EncodedIriManager::encodeDecimalToNBit("7643"));
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
+
+// The encoding is usable in a constant expression. This is not only a nice
+// property, but also required: a `constexpr` function that can never yield a
+// constant expression is ill-formed, and several compilers reject it (see the
+// note in `NibbleEncoding.h`).
+// The digit `1` is stored as the nibble `2` in the leftmost nibble.
+static_assert(EncodedIriManager::encodeDecimalToNBit("1") ==
+              uint64_t{2} << (EncodedIriManager::NumBitsEncoding -
+                              EncodedIriManager::NibbleSize));
 
 // _____________________________________________________________________________
 TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
@@ -259,4 +261,220 @@ TEST(EncodedIriManager, HardcodedPrefixesJson) {
   ASSERT_TRUE(id2.has_value());
 }
 
+// _____________________________________________________________________________
+TEST(EncodedIriManager, noPrefixesAtAll) {
+  // The default `EncodedIriManager` always contains the `AlwaysOnPrefixes`, so
+  // an explicit instantiation with `NoHardcodedPrefixes` (the default for the
+  // third template parameter) is required to obtain a manager with a truly
+  // empty list of prefixes.
+  using Manager = EncodedIriManagerImpl<Id::numDataBits, 8>;
+
+  // Calls the default constructor.
+  Manager em;
+  EXPECT_TRUE(em.patterns_.empty());
+  EXPECT_FALSE(em.encode("<http://example.org/42>").has_value());
+
+  // Calls the constructor with an explicitly empty list of prefixes.
+  Manager em2{std::vector<std::string>{}};
+  EXPECT_TRUE(em2.patterns_.empty());
+  EXPECT_FALSE(em2.encode("<http://example.org/42>").has_value());
+}
+
+using encodedIri::Part;
+using encodedIri::Pattern;
+
+// The patterns that are used in the tests below, see
+// `EncodedIriPatternTest.cpp` for a detailed description of their constraints
+// and for the tests of the patterns themselves. The tests in this file only
+// test the interplay of the patterns with the `EncodedIriManager`, in
+// particular the assignment of the tags and the JSON format of the manager.
+constexpr std::string_view basePrefix = "http://example.org/map#";
+
+// Build the IRI `<http://example.org/map#rest>`.
+std::string mapIri(std::string_view rest) {
+  return absl::StrCat("<", basePrefix, rest, ">");
+}
+
+Pattern rangePattern() {
+  return Pattern{
+      absl::StrCat(basePrefix, "range_"),
+      {Part{32, {{29, 32, 1}}, "_"}, Part{8, {}, "_"}, Part{8, {}, "P"}}};
+}
+
+Pattern refPattern(std::string_view name) {
+  return Pattern{absl::StrCat(basePrefix, name),
+                 {Part{64, {{17, 32, 0}, {61, 64, 1}}, "_"}, Part{4, {}, ""}}};
+}
+
+// Expect that the `iri` can be encoded by the `manager` and that decoding the
+// result yields the `iri` again.
+void expectRoundTrip(const EncodedIriManager& manager, const std::string& iri,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  auto id = manager.encode(iri);
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(manager.toString(id.value()), iri);
+}
+
+// Expect that the `iri` cannot be encoded by the `manager`.
+void expectNotEncodable(
+    const EncodedIriManager& manager, const std::string& iri,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  EXPECT_FALSE(manager.encode(iri).has_value());
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, SeveralPatternsWithTheSamePrefix) {
+  // Two alternative patterns for the same prefix: the first number either is a
+  // 64-bit number with fixed bits and is followed by a number smaller than 16,
+  // or it is an arbitrary 32-bit number that is followed by an 18-bit number.
+  // They are simply stored with different tags.
+  Pattern first = refPattern("stopLoc_");
+  Pattern second{absl::StrCat(basePrefix, "stopLoc_"),
+                 {Part{32, {}, "_"}, Part{18, {}, ""}}};
+  EncodedIriManager em{{}, {first, second}};
+
+  auto tagOf = [&em](const std::string& iri) {
+    auto id = em.encode(iri);
+    AD_CONTRACT_CHECK(id.has_value());
+    return EncodedIriManager::splitIntoPrefixIdxAndPayload(id.value()).first;
+  };
+
+  // Only matches the first pattern. Note that the tag 0 is taken by the
+  // hardcoded prefix for the graphs that QLever creates itself.
+  expectRoundTrip(em, mapIri("stopLoc_2343140642651111426_7"));
+  EXPECT_EQ(tagOf(mapIri("stopLoc_2343140642651111426_7")), 1);
+  // Only matches the second pattern.
+  expectRoundTrip(em, mapIri("stopLoc_4294967295_262143"));
+  expectRoundTrip(em, mapIri("stopLoc_545554944_0"));
+  EXPECT_EQ(tagOf(mapIri("stopLoc_545554944_0")), 2);
+
+  expectRoundTrip(em, mapIri("stopLoc_2305843009213693952_0"));
+
+  // Matches neither of the patterns: the first number is too large for the
+  // second pattern and doesn't have the required bits for the first one.
+  expectNotEncodable(em, mapIri("stopLoc_4294967296_0"));
+  // The second number is too large for both patterns.
+  expectNotEncodable(em, mapIri("stopLoc_545554944_262144"));
+  expectNotEncodable(em, mapIri("stopLoc_2343140642651111426_262144"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, PlainPrefixesAndPatternsTogether) {
+  EncodedIriManager em{{"http://example.org/id/"}, {rangePattern()}};
+  expectRoundTrip(em, "<http://example.org/id/12345>");
+  // Leading zeros are preserved by the digit encoding of a plain prefix.
+  expectRoundTrip(em, "<http://example.org/id/000123>");
+  expectRoundTrip(em, mapIri("range_545554944_0_0P"));
+
+  // The plain prefixes (and the hardcoded ones) come first, so the pattern gets
+  // the last tag.
+  auto id = em.encode(mapIri("range_545554944_0_0P"));
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(EncodedIriManager::splitIntoPrefixIdxAndPayload(id.value()).first,
+            em.patterns_.size() - 1);
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, illegalPatterns) {
+  using namespace ::testing;
+  using V = std::vector<std::string>;
+  using P = std::vector<Pattern>;
+  auto expectThrow = [](Pattern pattern, const std::string& message,
+                        ad_utility::source_location l =
+                            AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{}, P{std::move(pattern)}),
+                                 HasSubstr(message));
+  };
+  // The prefix of a pattern is specified without the leading `<`, which the
+  // manager adds itself.
+  expectThrow(Pattern{"<http://example.org/", {Part{8, {}, ""}}},
+              "enclosed in angle brackets");
+  // The patterns are checked against the number of payload bits of the
+  // manager (see `validatePattern` in `EncodedIriPatternTest.cpp`).
+  expectThrow(Pattern{"http://example.org/", {Part{53, {}, ""}}},
+              "it requires 53 bits, but only 52 bits are available");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, patternsJson) {
+  EncodedIriManager em{{"http://example.org/id/"},
+                       {rangePattern(), refPattern("laneRef_")}};
+  nlohmann::json j = em;
+  // As soon as a general pattern is used, the extended format is written.
+  EXPECT_TRUE(j.contains("patterns"));
+  EXPECT_FALSE(j.contains("prefixes-with-leading-angle-brackets"));
+  auto em2 = j.get<EncodedIriManager>();
+  EXPECT_EQ(em, em2);
+  expectRoundTrip(em2, "<http://example.org/id/12345>");
+  expectRoundTrip(em2, mapIri("range_545554944_0_0P"));
+  expectRoundTrip(em2, mapIri("laneRef_2343140642651111426_0"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, plainPrefixesUseTheLegacyJsonFormat) {
+  // Without general patterns, the JSON format of the index metadata is
+  // unchanged, which keeps the compatibility with existing indices.
+  EncodedIriManager em{{"http://example.org/id/"}};
+  nlohmann::json j = em;
+  EXPECT_TRUE(j.contains("prefixes-with-leading-angle-brackets"));
+  EXPECT_FALSE(j.contains("patterns"));
+  EXPECT_EQ(j["prefixes-with-leading-angle-brackets"],
+            nlohmann::json({"<http://example.org/id/",
+                            absl::StrCat("<", AlwaysOnPrefixes::value.at(0))}));
+  auto em2 = j.get<EncodedIriManager>();
+  EXPECT_EQ(em, em2);
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, aPatternWithFewerDigitsIsNotPlain) {
+  // A pattern that uses the digit encoding, but with fewer bits than a plain
+  // prefix, must not be written in the legacy format, which would silently
+  // widen it to the full number of payload bits.
+  EncodedIriManager em{
+      {},
+      {Pattern{"http://example.org/",
+               {Part{16, {}, "", encodedIri::NumberEncoding::Nibbles}}}}};
+  nlohmann::json j = em;
+  EXPECT_TRUE(j.contains("patterns"));
+  EXPECT_EQ(j.get<EncodedIriManager>(), em);
+  expectRoundTrip(em, "<http://example.org/1234>");
+  expectNotEncodable(em, "<http://example.org/12345>");
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, tooManyPrefixesInJson) {
+  // The number of patterns is also checked when they are read from the index,
+  // because there are only `2 ^ 8` tags.
+  std::vector<std::string> prefixes;
+  for (size_t i = 0; i < 300; ++i) {
+    prefixes.push_back(absl::StrCat("<prefix", i, "bla"));
+  }
+  nlohmann::json j;
+  j["prefixes-with-leading-angle-brackets"] = prefixes;
+  AD_EXPECT_THROW_WITH_MESSAGE(j.get<EncodedIriManager>(),
+                               ::testing::HasSubstr("which is too many"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, invalidPatternsInJsonAreDetected) {
+  using namespace ::testing;
+  nlohmann::json j = EncodedIriManager{{}, {rangePattern()}};
+  j["patterns"][0]["parts"][0]["num-bits"] = 65;
+  AD_EXPECT_THROW_WITH_MESSAGE(j.get<EncodedIriManager>(),
+                               HasSubstr("only 1 to 64 bits are supported"));
+}
+
+// _____________________________________________________________________________
+TEST(EncodedIriManager, tooManyDigits) {
+  // The manager encodes at most `NumDigits` digits. Note that `encode` never
+  // triggers this, because it rejects too long digit sequences beforehand (see
+  // `EncodedIriManager::encode`).
+  using M = EncodedIriManager;
+  EXPECT_NO_THROW(M::encodeDecimalToNBit(std::string(M::NumDigits, '9')));
+  EXPECT_THROW(M::encodeDecimalToNBit(std::string(M::NumDigits + 1, '9')),
+               std::out_of_range);
+}
 }  // namespace
