@@ -138,9 +138,7 @@ CPP_template(typename S)(requires StoresStringOrId<S>) Id
 // `StoresStringOrId` concept) according to the specified comparison (see
 // `ValueIdComparators.h` for details). The `EvaluationContext` is required to
 // compare strings to Ids.
-template <valueIdComparators::Comparison Comp,
-          valueIdComparators::ComparisonForIncompatibleTypes
-              comparisonForIncompatibleTypes>
+template <valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
     [](const auto& a, const auto& b, const EvaluationContext* ctx)
     -> CPP_ret(valueIdComparators::ComparisonResult)(
@@ -152,8 +150,8 @@ inline const auto compareIdsOrStrings =
                 ad_utility::isSimilar<LocalVocabEntry, U>) {
     return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
   } else {
-    return valueIdComparators::compareIds<comparisonForIncompatibleTypes>(
-        makeValueId(a, ctx), makeValueId(b, ctx), Comp);
+    return valueIdComparators::compareIds(makeValueId(a, ctx),
+                                          makeValueId(b, ctx), Comp);
   }
 };
 }  // namespace sparqlExpression

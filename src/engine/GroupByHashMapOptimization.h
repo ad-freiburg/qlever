@@ -86,7 +86,7 @@ struct ExtremumAggregationData {
     }
 
     // Only copy the `value` if it replaces the current one.
-    using MinMax = sparqlExpression::detail::MinMaxLambdaForAllTypes<Comp>;
+    using MinMax = sparqlExpression::detail::MinMaxForAllTypes<Comp>;
     if (MinMax::comesFirst(value, currentValue_, ctx)) {
       currentValue_ = value;
     }

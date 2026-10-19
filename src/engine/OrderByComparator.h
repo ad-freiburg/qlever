@@ -24,10 +24,12 @@
 
 // The order of `ORDER BY` (https://www.w3.org/TR/sparql11-query/#modOrderBy),
 // which the standard also uses for `MIN` and `MAX`. First by the kind of RDF
-// term: unbound < blank nodes < IRIs < literals, then within one kind by
-// `compareIds` in the `CompareByType` mode (which e.g. puts numbers before
-// strings, the standard leaves that open), except that an `Int` and a `Double`
-// are compared exactly (see `compareIntAndDouble`).
+// term: unbound < blank nodes < IRIs < literals. Within one kind, numbers
+// (`Int` and `Double`) are compared exactly (see `compareIntAndDouble`), with
+// all NaNs equal to each other and after all other numbers. All other `Id`s
+// with compatible datatypes are compared by `compareIds`, and `Id`s with
+// incompatible datatypes by their datatype (which e.g. puts numbers before
+// strings, the standard leaves that open).
 //
 // NOTE: Encoded IRIs (`EncodedVal`) are ordered by their encoding (#2448),
 // which can even break the strict weak ordering, see
@@ -97,34 +99,58 @@ class OrderByComparator {
     if (kindA != kindB) {
       return kindA < kindB ? -1 : 1;
     }
-    // Compare an `Int` and a `Double` exactly. A NaN is left to `compareIds`,
-    // which puts it after all numbers.
-    Datatype typeA = a.getDatatype();
-    Datatype typeB = b.getDatatype();
-    if (typeA == Datatype::Int && typeB == Datatype::Double &&
-        !std::isnan(b.getDouble())) {
-      return ad_utility::compareIntAndDouble(a.getInt(), b.getDouble());
-    }
-    if (typeA == Datatype::Double && typeB == Datatype::Int &&
-        !std::isnan(a.getDouble())) {
-      return -ad_utility::compareIntAndDouble(b.getInt(), a.getDouble());
-    }
-    if (isLessThan(a, b)) {
-      return -1;
-    }
-    return isLessThan(b, a) ? 1 : 0;
+    return compareWithinKind(a, b);
   }
 
   // Return true iff `a` comes before `b`.
   bool operator()(Id a, Id b) const { return compare(a, b) < 0; }
 
  private:
-  // The order within one kind of RDF terms.
-  static bool isLessThan(Id a, Id b) {
+  // The order within one kind of RDF terms, see the class comment.
+  static int compareWithinKind(Id a, Id b) {
+    Datatype typeA = a.getDatatype();
+    Datatype typeB = b.getDatatype();
+    auto isNumeric = [](Datatype type) {
+      return type == Datatype::Int || type == Datatype::Double;
+    };
+    if (isNumeric(typeA) && isNumeric(typeB)) {
+      return compareNumbers(a, b);
+    }
     using namespace valueIdComparators;
-    return toBoolNotUndef(
-        compareIds<ComparisonForIncompatibleTypes::CompareByType>(
-            a, b, Comparison::LT));
+    auto isLessThan = compareIds(a, b, Comparison::LT);
+    // `Undef` means that the datatypes are incompatible.
+    if (isLessThan == ComparisonResult::Undef) {
+      return typeA < typeB ? -1 : (typeA > typeB ? 1 : 0);
+    }
+    if (isLessThan == ComparisonResult::True) {
+      return -1;
+    }
+    return toBoolNotUndef(compareIds(b, a, Comparison::LT)) ? 1 : 0;
+  }
+
+  // Compare two `Id`s of type `Int` or `Double`.
+  static int compareNumbers(Id a, Id b) {
+    auto isNan = [](Id id) {
+      return id.getDatatype() == Datatype::Double && std::isnan(id.getDouble());
+    };
+    bool aIsNan = isNan(a);
+    bool bIsNan = isNan(b);
+    if (aIsNan || bIsNan) {
+      return static_cast<int>(aIsNan) - static_cast<int>(bIsNan);
+    }
+    auto compareThreeWay = [](auto x, auto y) { return (x > y) - (x < y); };
+    bool aIsInt = a.getDatatype() == Datatype::Int;
+    bool bIsInt = b.getDatatype() == Datatype::Int;
+    if (aIsInt && bIsInt) {
+      return compareThreeWay(a.getInt(), b.getInt());
+    }
+    if (aIsInt) {
+      return ad_utility::compareIntAndDouble(a.getInt(), b.getDouble());
+    }
+    if (bIsInt) {
+      return -ad_utility::compareIntAndDouble(b.getInt(), a.getDouble());
+    }
+    return compareThreeWay(a.getDouble(), b.getDouble());
   }
 };
 

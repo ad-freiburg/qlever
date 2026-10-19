@@ -272,20 +272,12 @@ TEST_F(ValueIdComparators, IndexTypes) {
 TEST_F(ValueIdComparators, undefinedWithItself) {
   auto u = ValueId::makeUndefined();
   using enum ComparisonResult;
-  using enum ComparisonForIncompatibleTypes;
   ASSERT_EQ(compareIds(u, u, Comparison::LT), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::LE), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::EQ), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::NE), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::GT), Undef);
   ASSERT_EQ(compareIds(u, u, Comparison::GE), Undef);
-
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LT), False);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LE), True);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::EQ), True);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::NE), False);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GT), False);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GE), True);
 }
 
 // _______________________________________________________________________

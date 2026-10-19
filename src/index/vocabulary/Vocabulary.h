@@ -179,6 +179,10 @@ class Vocabulary {
     return prefixRangesLiterals_.contain(index);
   }
 
+  // Return the index of the first IRI, or `size()` if there is none. All
+  // literals come before it.
+  IndexT getBeginOfIris() const { return prefixRangesIris_.ranges()[0].first; }
+
   bool shouldBeExternalized(std::string_view word) const;
 
   bool shouldEntityBeExternalized(std::string_view word) const;

@@ -10,7 +10,6 @@
 #ifndef QLEVER_SRC_INDEX_LOCALVOCABCONTEXTIMPL_H
 #define QLEVER_SRC_INDEX_LOCALVOCABCONTEXTIMPL_H
 
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -21,7 +20,6 @@
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "util/BlankNodeManager.h"
-#include "util/CopyableSynchronization.h"
 
 // The only implementation of the `LocalVocabContext` interface. It stores
 // exactly the three things that the interface needs, and in particular does not
@@ -45,12 +43,6 @@ class LocalVocabContextImpl : public LocalVocabContext {
   // secondary vocabulary is only set while the index is being read, see
   // `IndexImpl::secondaryVocab()`.
   const SecondaryVocabularyPtr* secondaryVocab_;
-  // The cache for `getBeginOfIrisInVocabulary()`, computed on first use,
-  // because the vocabulary is read after this object is constructed.
-  static constexpr uint64_t beginOfIrisNotComputed_ =
-      std::numeric_limits<uint64_t>::max();
-  mutable ad_utility::CopyableAtomic<uint64_t> beginOfIris_{
-      beginOfIrisNotComputed_};
 
  public:
   LocalVocabContextImpl(const RdfsVocabulary* vocabulary,

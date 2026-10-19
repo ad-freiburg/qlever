@@ -7,7 +7,6 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_AGGREGATEEXPRESSION_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_AGGREGATEEXPRESSION_H
 
-#include "engine/OrderByComparator.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -193,7 +192,7 @@ class AvgExpression : public AvgExpressionBase {
 // Aggregate expression for MIN and MAX, which the standard defines via the
 // order of `ORDER BY` (`ASC` resp. `DESC`), see `OrderByComparator`.
 template <valueIdComparators::Comparison comparison>
-struct MinMaxLambdaForAllTypes {
+struct MinMaxForAllTypes {
   static_assert(comparison == valueIdComparators::Comparison::LT ||
                 comparison == valueIdComparators::Comparison::GT);
 
@@ -202,8 +201,8 @@ struct MinMaxLambdaForAllTypes {
   // because the same function serves both directions.
   template <typename T>
   static bool comesFirst(const T& a, const T& b, const EvaluationContext* ctx) {
-    int result = OrderByComparator{ctx->getLocalVocabContext()}.compare(
-        makeValueId(a, ctx), makeValueId(b, ctx));
+    int result = ctx->orderByComparator_.compare(makeValueId(a, ctx),
+                                                 makeValueId(b, ctx));
     return comparison == valueIdComparators::Comparison::LT ? result < 0
                                                             : result > 0;
   }
@@ -216,12 +215,10 @@ struct MinMaxLambdaForAllTypes {
     return comesFirst(a, b, ctx) ? std::move(a) : std::move(b);
   }
 };
-using MinLambdaForAllTypes =
-    MinMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
-using MaxLambdaForAllTypes =
-    MinMaxLambdaForAllTypes<valueIdComparators::Comparison::GT>;
-using MinExpressionBase = AGG_EXP<MinLambdaForAllTypes, ActualValueGetter>;
-using MaxExpressionBase = AGG_EXP<MaxLambdaForAllTypes, ActualValueGetter>;
+using MinForAllTypes = MinMaxForAllTypes<valueIdComparators::Comparison::LT>;
+using MaxForAllTypes = MinMaxForAllTypes<valueIdComparators::Comparison::GT>;
+using MinExpressionBase = AGG_EXP<MinForAllTypes, ActualValueGetter>;
+using MaxExpressionBase = AGG_EXP<MaxForAllTypes, ActualValueGetter>;
 class MinExpression : public MinExpressionBase {
   using MinExpressionBase::MinExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }

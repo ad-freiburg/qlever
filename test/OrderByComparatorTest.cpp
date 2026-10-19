@@ -40,9 +40,6 @@ TEST(OrderByComparator, beginOfIrisInVocabulary) {
     EXPECT_EQ(i < beginOfIris.get(), ql::starts_with(word, '"'))
         << i << ' ' << word;
   }
-  // A second call returns the same value.
-  EXPECT_EQ(qec->getLocalVocabContext().getBeginOfIrisInVocabulary(),
-            beginOfIris);
 }
 
 // _____________________________________________________________________________

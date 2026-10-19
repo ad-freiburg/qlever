@@ -122,7 +122,7 @@ struct RowRange {
 // from the semantic order as follows (see `valueIdComparators::compareByBits`):
 // ints are `[0 .. max, min .. -1]`, doubles are `[0.0 .. +inf, NaN, -0.0 ..
 // -inf, -NaN]`, where the sign bit of a `NaN` may be set as well. `ORDER BY`
-// puts all `NaN`s after all other doubles (see `makeComparatorForNans`) and
+// puts all `NaN`s after all other doubles (see `OrderByComparator`) and
 // `Undefined` before everything else.
 std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     ConstIdColumnRef column) {
@@ -188,7 +188,7 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   //
   // NOTE: The SPARQL standard does not say where `NaN`s go. Putting them last
   // is how the regular comparator of `ORDER BY` does it (see
-  // `makeComparatorForNans`).
+  // `OrderByComparator`).
   ranges.push_back({firstNegative, firstNegativeNan, true});
   ranges.push_back({firstDefined, firstPositiveNan, false});
   ranges.push_back({firstPositiveNan, firstNegative, false});
@@ -282,17 +282,20 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // by it, it might be more efficient to first sort by the ID values and then
   // "repair" the order in linear time, like `computeResultForSortedInput` does
   // for an input that is already sorted, or even to return lazy generators
-  // that yield the repaired order.
+  // that yield the repaired order. Besides the numbers, such a repair would
+  // also have to move the IRIs of the vocabulary before its literals, which
+  // come first in the internal order (see `OrderByComparator`).
   //
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
   //
   // TODO<joka921> If we know, that all the sort columns contain only datatypes
-  // for which the `internal` order is also the `semantic` order, or if a column
-  // only contains a single datatype, then we can use more efficient
-  // implementations here. So far, this is only done for a single sort column
-  // with an input that is already sorted and contains only ints or only
-  // doubles, see `computeResultForSortedInput`.
+  // for which the `internal` order is also the `semantic` order, then we can
+  // use more efficient implementations here. Note that a single datatype is
+  // not enough: e.g. for `VocabIndex`, the internal order puts all literals
+  // before all IRIs, but `ORDER BY` puts the IRIs first. So far, this is only
+  // done for a single sort column with an input that is already sorted and
+  // contains only ints or only doubles, see `computeResultForSortedInput`.
   //
   OrderByComparator orderByComparator{
       getExecutionContext()->getLocalVocabContext()};
