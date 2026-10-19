@@ -442,14 +442,11 @@ TEST(OrderBy, clone) {
 
 // Matcher function to test `sortIndices_`
 auto hasSortedVariables(OrderBy::SortedVariables expectedVariables) {
-  return ::testing::Truly(
-      [expectedVariables = std::move(expectedVariables)](
-          const QueryExecutionTree* tree) {
-        auto orderBy =
-            std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
-        return orderBy &&
-               orderBy->getSortedVariables() == expectedVariables;
-      });
+  return ::testing::Truly([expectedVariables = std::move(expectedVariables)](
+                              const QueryExecutionTree* tree) {
+    auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
+    return orderBy && orderBy->getSortedVariables() == expectedVariables;
+  });
 }
 
 // Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
@@ -488,8 +485,8 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
         ::testing::AllOf(
             hasVariables({V{"?b"}}),
             hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}),
-            ::testing::ResultOf(getResultTable,
-                                matchesIdTableFromVector({{1}, {2}, {4}, {6}}))));
+            ::testing::ResultOf(getResultTable, matchesIdTableFromVector(
+                                                    {{1}, {2}, {4}, {6}}))));
   }
 
   // `OrderBy` on `?b`, `?a`, `?b` and `?d` requested: `?c` is stripped
@@ -520,16 +517,17 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
         tree.get(),
         ::testing::AllOf(
             hasRootOperation<StripColumns>(), hasVariables({V{"?c"}}),
-            ::testing::ResultOf(getResultTable,
-                                matchesIdTableFromVector({{5}, {5}, {3}, {3}}))));
+            ::testing::ResultOf(getResultTable, matchesIdTableFromVector(
+                                                    {{5}, {5}, {3}, {3}}))));
 
     EXPECT_THAT(
         tree->getRootOperation()->getChildren().at(0),
         ::testing::AllOf(
             hasVariables({V{"?b"}, V{"?c"}}),
             hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Desc}}),
-            ::testing::ResultOf(getResultTable,
-                                matchesIdTableFromVector({{6, 5}, {4, 5}, {2, 3}, {1, 3}}))));
+            ::testing::ResultOf(
+                getResultTable,
+                matchesIdTableFromVector({{6, 5}, {4, 5}, {2, 3}, {1, 3}}))));
   }
 
   // All variables requested: nothing is stripped and the indices stay.
@@ -541,6 +539,9 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
             hasVariables({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}),
             hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}),
             ::testing::ResultOf(getResultTable,
-                                matchesIdTableFromVector({{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 4, 5, 4}, {1, 6, 5, 1}}))));
+                                matchesIdTableFromVector({{6, 1, 3, 6},
+                                                          {2, 2, 3, 5},
+                                                          {3, 4, 5, 4},
+                                                          {1, 6, 5, 1}}))));
   }
 }
