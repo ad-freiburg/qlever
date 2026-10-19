@@ -223,4 +223,11 @@ struct SpatialJoinConfiguration {
 // estimated number of results.
 static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
 
+// The cost of the exact geometry test for one candidate pair of the
+// `LIBSPATIALJOIN` algorithm, in the units of the cost estimates (one unit is
+// about the cost of moving one row in a sort). Measured on polygon data: a
+// spatial join with millions of candidate pairs spends about 1.5 us per pair,
+// a sort about 1 ns per unit of its `n log n` estimate.
+static const size_t SPATIAL_JOIN_COST_PER_CANDIDATE = 1000;
+
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H

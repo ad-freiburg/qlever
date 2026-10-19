@@ -78,8 +78,12 @@ ad_utility::HashMap<size_t, double> findRowsWithinDistance(
 // ____________________________________________________________________________
 Result S2PointPolylineAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
-      params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              numRowsBeforeBlockPrefilterLeft, numRowsBeforeBlockPrefilterRight,
+              timeBlockPrefilter] = params_;
+  (void)numRowsBeforeBlockPrefilterLeft;
+  (void)numRowsBeforeBlockPrefilterRight;
+  (void)timeBlockPrefilter;
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
