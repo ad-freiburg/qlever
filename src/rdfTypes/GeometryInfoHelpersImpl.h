@@ -248,12 +248,6 @@ inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
                       defaultCrs, projCrs);
 }
 
-// Project the coordinates of a `GeoPoint` to another coordinate reference
-// system using an util point as an intermediate step.
-inline GeoPoint projectGeoPointToCrs(const GeoPoint& point, CRSType projCrs) {
-  return utilPointToGeoPoint(geoPointToUtilPoint(point, projCrs));
-}
-
 // Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
 // (without quotes or datatype).
 inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
@@ -590,6 +584,15 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Project the coordinates of a `GeoPoint` to another coordinate reference
+// system and return as WKT string.
+// TODO <yarox-1> use utils new getWKT with `projCrs`instead of
+// `geoPointToUtilPoint`.
+inline std::optional<std::string> geoPointToWktInCrs(const GeoPoint& point,
+                                                     CRSType projCrs) {
+  return utilGeomToWkt(geoPointToUtilPoint(point, projCrs));
+}
 
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
 // 7946). The input is expected to be in CRS84, as GeoJSON only supports this

@@ -172,7 +172,8 @@ class WktMetricLength {
 // Get the centroid of a geometry.
 class WktCentroid {
  public:
-  ValueId operator()(const std::optional<GeometryInfo>& geom) const;
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeometryInfo>& geom) const;
 };
 
 // Get the bounding box of a geometry.

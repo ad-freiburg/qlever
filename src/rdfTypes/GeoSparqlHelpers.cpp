@@ -20,6 +20,8 @@
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 
 namespace {
@@ -118,7 +120,8 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
 }  // namespace detail
 
 // _____________________________________________________________________________
-ValueId WktCentroid::operator()(const std::optional<GeometryInfo>& geom) const {
+sparqlExpression::IdOrLiteralOrIri WktCentroid::operator()(
+    const std::optional<GeometryInfo>& geom) const {
   if (!geom.has_value()) {
     return ValueId::makeUndefined();
   }
@@ -129,9 +132,17 @@ ValueId WktCentroid::operator()(const std::optional<GeometryInfo>& geom) const {
     return ValueId::makeUndefined();
   }
   Centroid centroid = geom.value().getCentroid();
-  return ValueId::makeFromGeoPoint(ad_utility::detail::projectGeoPointToCrs(
+
+  auto resultWkt = ad_utility::detail::geoPointToWktInCrs(
       centroid.centroid(),
-      static_cast<::util::geo::CRSType>(sourceCrs.value().type())));
+      static_cast<::util::geo::CRSType>(sourceCrs.value().type()));
+  if (!resultWkt.has_value()) {
+    return ValueId::makeUndefined();
+  }
+  auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
+      resultWkt.value());
+  lit.addDatatype(detail::wktLiteralIri);
+  return {ad_utility::triple_component::LiteralOrIri{std::move(lit)}};
 }
 
 }  // namespace ad_utility
