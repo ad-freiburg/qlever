@@ -131,8 +131,8 @@ class NaryExpressionStronglyTyped
 
       using ValueGetters = typename NaryOperation::ValueGetters;
 
-      auto convertedOperands =
-          std::tuple{convertToVectorOrConstant(AD_FWD(operands), context)...};
+      auto convertedOperands = std::make_tuple(
+          convertToVectorOrConstant(AD_FWD(operands), context)...);
 
       using ConvertedOperands = decltype(convertedOperands);
 
