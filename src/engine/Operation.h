@@ -385,6 +385,15 @@ class Operation {
   void recursivelySetCancellationHandle(
       SharedCancellationHandle cancellationHandle);
 
+ protected:
+  // Set the cancellation handle of this operation (not of its children).
+  // Operations that delegate to another `Operation` that is not a child (like
+  // `Join` to `JoinImpl`) must override this to also set its handle.
+  virtual void setCancellationHandle(SharedCancellationHandle handle) {
+    cancellationHandle_ = std::move(handle);
+  }
+
+ public:
   template <typename Rep, typename Period>
   void recursivelySetTimeConstraint(
       std::chrono::duration<Rep, Period> duration) {

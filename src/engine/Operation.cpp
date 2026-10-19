@@ -105,9 +105,9 @@ void Operation::recursivelySetCancellationHandle(
     SharedCancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(cancellationHandle);
   forAllDescendants([&cancellationHandle](auto child) {
-    child->getRootOperation()->cancellationHandle_ = cancellationHandle;
+    child->getRootOperation()->setCancellationHandle(cancellationHandle);
   });
-  cancellationHandle_ = std::move(cancellationHandle);
+  setCancellationHandle(std::move(cancellationHandle));
 }
 
 // ________________________________________________________________________
