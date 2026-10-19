@@ -1569,6 +1569,43 @@ TEST(IdTable, rowReferenceWithMutableAndConstProxies) {
   EXPECT_EQ(*constRow[1].id_, V(4));
 }
 
+// _____________________________________________________________________________
+TEST(IdTable, cloneWithChunkOperation) {
+  IdTable table{2, makeAllocator()};
+  for (size_t i = 0; i < 10; ++i) {
+    table.push_back({V(i), V(100 + i)});
+  }
+  size_t numCalls = 0;
+  auto countCalls = [&numCalls]() { ++numCalls; };
+
+  // 10 rows in chunks of 3 rows are 4 chunks per column.
+  IdTable clone = table.clone(countCalls, 3);
+  EXPECT_EQ(clone, table);
+  EXPECT_EQ(numCalls, 8);
+
+  // The same for a view, which results in an owning table.
+  numCalls = 0;
+  IdTable cloneOfView = table.asStaticView<0>().clone(countCalls, 100);
+  EXPECT_EQ(cloneOfView, table);
+  EXPECT_EQ(numCalls, 2);
+
+  // `moveOrClone` only calls the `chunkOperation` if it actually clones.
+  numCalls = 0;
+  EXPECT_EQ(table.moveOrClone(countCalls, 3), table);
+  EXPECT_EQ(numCalls, 8);
+  numCalls = 0;
+  EXPECT_EQ(table.asStaticView<0>().moveOrClone(countCalls, 3), table);
+  EXPECT_EQ(numCalls, 8);
+  numCalls = 0;
+  IdTable moved = std::move(clone).moveOrClone(countCalls, 3);
+  EXPECT_EQ(moved, table);
+  EXPECT_EQ(numCalls, 0);
+
+  // Exceptions from the `chunkOperation` are propagated.
+  auto throwException = []() { throw std::runtime_error{"cancelled"}; };
+  EXPECT_THROW(table.clone(throwException), std::runtime_error);
+}
+
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 

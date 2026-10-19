@@ -14,6 +14,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/TransitivePathGraphSearch.h"
 #include "index/TripleComponentConversions.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 
@@ -249,6 +250,9 @@ class TransitivePathImpl : public TransitivePathBase {
            ::ranges::views::enumerate(tableColumn.startNodes_)) {
         for (const auto& [startNode, graphId] :
              tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
+          // The graph search only checks for cancellation per visited node,
+          // which doesn't happen for start nodes without successors.
+          checkCancellation();
           // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
           // where both `?g` variables are not the same.
           if (startsWithGraphVariable && startNode != graphId) {
@@ -308,16 +312,20 @@ class TransitivePathImpl : public TransitivePathBase {
     // var -> var
     if (startSide.isVariable()) {
       if (graphVariable_.has_value()) {
-        for (const auto& [id, graph] : ::ranges::views::zip(
-                 sub.getColumn(startSide.subCol_),
-                 sub.getColumn(
-                     subtree_->getVariableColumn(graphVariable_.value())))) {
-          result.emplace(id, graph);
-        }
+        ad_utility::chunkedForEach(
+            ::ranges::views::zip(sub.getColumn(startSide.subCol_),
+                                 sub.getColumn(subtree_->getVariableColumn(
+                                     graphVariable_.value()))),
+            [&result](const auto& idAndGraph) {
+              const auto& [id, graph] = idAndGraph;
+              result.emplace(id, graph);
+            },
+            cancellationChecker());
       } else {
-        for (Id id : sub.getColumn(startSide.subCol_)) {
-          result.emplace(id, Id::makeUndefined());
-        }
+        ad_utility::chunkedForEach(
+            sub.getColumn(startSide.subCol_),
+            [&result](Id id) { result.emplace(id, Id::makeUndefined()); },
+            cancellationChecker());
       }
       return result;
     }

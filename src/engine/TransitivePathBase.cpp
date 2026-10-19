@@ -23,6 +23,7 @@
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Values.h"
 #include "global/RuntimeParameters.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
 namespace {
@@ -168,21 +169,26 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
     if (idTable.has_value()) {
       inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
-    for (Id linkedNode : linkedNodes) {
-      table.emplace_back();
-      table(outputRow, startSideCol) = node;
-      table(outputRow, targetSideCol) = linkedNode;
+    // NOTE: A single node can be linked to millions of nodes.
+    ad_utility::chunkedForEach(
+        linkedNodes,
+        [this, &table, &outputRow, &inputView, startSideCol, targetSideCol,
+         node = node, graph = graph, inputRow = inputRow](Id linkedNode) {
+          table.emplace_back();
+          table(outputRow, startSideCol) = node;
+          table(outputRow, targetSideCol) = linkedNode;
 
-      if (inputView.has_value()) {
-        copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                               inputRow, outputRow);
-      }
-      if (graphVariable_.has_value()) {
-        table(outputRow, table.numColumns() - 1) = graph;
-      }
+          if (inputView.has_value()) {
+            copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
+                                                   inputRow, outputRow);
+          }
+          if (graphVariable_.has_value()) {
+            table(outputRow, table.numColumns() - 1) = graph;
+          }
 
-      outputRow++;
-    }
+          outputRow++;
+        },
+        cancellationChecker());
 
     if (yieldOnce) {
       mergedVocab.mergeWith(localVocab);

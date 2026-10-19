@@ -9,6 +9,7 @@
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
+#include "util/ChunkedForLoop.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/ParallelExecutor.h"
 
@@ -183,17 +184,22 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   // Note: In contrast to `computePatternTrick` the subjects don't have to be
   // deduplicated, because the `ql:has-pattern` relation contains exactly one
   // triple per entity.
-  auto countPatterns = [&patternCounts, &patterns,
+  auto countPatterns = [this, &patternCounts, &patterns,
                         patternColumn](const auto& idTable) {
-    for (Id patternId : idTable.getColumn(patternColumn)) {
-      AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
-      size_t patternIdx = patternId.getInt();
-      if (patternIdx >= patterns.size()) {
-        AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
-        patternIdx = patterns.size();
-      }
-      patternCounts[patternIdx]++;
-    }
+    // A materialized `idTable` contains the complete `ql:has-pattern`
+    // relation, so check for cancellation within the loop.
+    ad_utility::chunkedForEach(
+        idTable.getColumn(patternColumn),
+        [&patternCounts, &patterns](Id patternId) {
+          AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
+          size_t patternIdx = patternId.getInt();
+          if (patternIdx >= patterns.size()) {
+            AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
+            patternIdx = patterns.size();
+          }
+          patternCounts[patternIdx]++;
+        },
+        cancellationChecker());
   };
   // The subresult is lazy unless it was already fully materialized (for
   // example because it was read from the cache).

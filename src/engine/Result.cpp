@@ -488,9 +488,6 @@ const IdTableView<0>& Result::idTableView() const {
 }
 
 // _____________________________________________________________________________
-IdTable Result::cloneIdTable() const { return idTableView().clone(); }
-
-// _____________________________________________________________________________
 Result::LazyResult Result::idTables() const {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   const auto& container = std::get<GenContainer>(data_);

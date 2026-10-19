@@ -5,11 +5,20 @@
 #ifndef QLEVER_CHUNKEDFORLOOP_H
 #define QLEVER_CHUNKEDFORLOOP_H
 
+#include <algorithm>
 #include <cstdint>
+#include <functional>
 
 #include "backports/algorithm.h"
+#include "util/Exception.h"
 
 namespace ad_utility {
+
+// The number of elements between two cancellation checks in loops over large
+// inputs that don't check after every element (e.g. via `chunkedForLoop`).
+// Small enough for loops that need a vocabulary lookup per element, and large
+// enough to make the checks negligible for cheap elements.
+constexpr inline std::size_t CANCELLATION_CHECK_CHUNK_SIZE = 10'000;
 
 namespace detail {
 
@@ -125,6 +134,41 @@ CPP_template(typename T, typename R, typename ChunkOperationFunc)(
   }
   ql::ranges::fill(begin, end, value);
   chunkOperation();
+}
+// Call `action` for each element of the `range`, like a range-based `for` loop,
+// and call `chunkOperation` (e.g. a cancellation check) after every
+// `chunkSize` elements, and once at the end if the `range` is not empty.
+CPP_template(typename R, typename Action, typename ChunkOpT)(
+    requires ql::ranges::input_range<R> CPP_and ql::concepts::invocable<
+        ChunkOpT>) inline void chunkedForEach(R&& range, const Action& action,
+                                              const ChunkOpT& chunkOperation,
+                                              std::size_t chunkSize =
+                                                  CANCELLATION_CHECK_CHUNK_SIZE) {
+  AD_CONTRACT_CHECK(chunkSize != 0);
+  auto it = ql::ranges::begin(range);
+  if constexpr (ql::ranges::random_access_range<R> &&
+                ql::ranges::sized_range<R>) {
+    // The loop over a chunk needs no counter, like a plain loop.
+    auto remaining = static_cast<std::size_t>(ql::ranges::size(range));
+    while (remaining > 0) {
+      auto numElements = std::min(remaining, chunkSize);
+      auto chunkEnd =
+          it + static_cast<ql::ranges::range_difference_t<R>>(numElements);
+      for (; it != chunkEnd; ++it) {
+        std::invoke(action, *it);
+      }
+      remaining -= numElements;
+      std::invoke(chunkOperation);
+    }
+  } else {
+    auto end = ql::ranges::end(range);
+    while (it != end) {
+      for (std::size_t i = 0; i < chunkSize && it != end; ++i, ++it) {
+        std::invoke(action, *it);
+      }
+      std::invoke(chunkOperation);
+    }
+  }
 }
 }  // namespace ad_utility
 

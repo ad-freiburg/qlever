@@ -247,7 +247,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
            ql::ranges::any_of(left.getColumn(leftCol), Id::isUndefinedL);
   });
 
-  auto checkCancellationLambda = [this] { checkCancellation(); };
+  auto checkCancellationLambda = cancellationChecker();
 
   const size_t numOutOfOrder = [&]() {
     if (isCheap) {
