@@ -127,3 +127,60 @@ TEST(CompressionTest, NonThrowingFunctions) {
                                                    decomp.data(), numBytes),
               VariantWith<Error>(_));
 }
+
+// _____________________________________________________________________________
+TEST(CompressionTest, CompressWithReference) {
+  // A pseudo-random reference, and data that mostly consists of pieces of it.
+  std::vector<char> reference(100'000);
+  unsigned state = 12345;
+  for (auto& byte : reference) {
+    state = state * 1103515245u + 12345u;
+    byte = static_cast<char>(state >> 16);
+  }
+  std::vector<char> data(reference.begin() + 60'000, reference.end());
+  data.insert(data.end(), reference.begin(), reference.begin() + 30'000);
+  std::string inserted = "some bytes that are not in the reference";
+  data.insert(data.end(), inserted.begin(), inserted.end());
+
+  auto compressed = ZstdWrapper::compressWithReference(reference, data, 19);
+  // Random bytes are incompressible without the reference, but with it the
+  // data costs only a few bytes.
+  EXPECT_LT(compressed.size(), 200u);
+  EXPECT_GT(ZstdWrapper::compress(data.data(), data.size(), 19).size(),
+            data.size() * 9 / 10);
+  EXPECT_EQ(
+      ZstdWrapper::getUncompressedSize(compressed.data(), compressed.size()),
+      data.size());
+  EXPECT_EQ(ZstdWrapper::decompressWithReference(reference, compressed), data);
+  std::vector<char> buffer(data.size());
+  auto size = ZstdWrapper::tryToDecompressWithReference(
+      reference, compressed, buffer.data(), buffer.size());
+  EXPECT_EQ(std::get<size_t>(size), data.size());
+  EXPECT_EQ(buffer, data);
+
+  // A too small buffer and garbage are reported as errors.
+  EXPECT_TRUE(std::holds_alternative<ZstdWrapper::Error>(
+      ZstdWrapper::tryToDecompressWithReference(reference, compressed,
+                                                buffer.data(), 10)));
+  std::vector<char> garbage(50, 'x');
+  EXPECT_TRUE(std::holds_alternative<ZstdWrapper::Error>(
+      ZstdWrapper::tryToDecompressWithReference(reference, garbage,
+                                                buffer.data(), buffer.size())));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ZstdWrapper::decompressWithReference(reference, garbage),
+      HasSubstr("does not start with a valid ZSTD frame header"));
+
+  // Empty reference and empty data work like plain compression.
+  auto plain = ZstdWrapper::compressWithReference({}, data, 3);
+  EXPECT_EQ(ZstdWrapper::decompressWithReference({}, plain), data);
+  auto empty = ZstdWrapper::compressWithReference(reference, {}, 3);
+  EXPECT_TRUE(ZstdWrapper::decompressWithReference(reference, empty).empty());
+
+  // A wrong reference does not yield the data (and is either an error or
+  // garbage, which the caller has to detect via a checksum).
+  std::vector<char> wrongReference(reference.rbegin(), reference.rend());
+  auto wrong = ZstdWrapper::tryToDecompressWithReference(
+      wrongReference, compressed, buffer.data(), buffer.size());
+  EXPECT_TRUE(std::holds_alternative<ZstdWrapper::Error>(wrong) ||
+              buffer != data);
+}
