@@ -211,16 +211,18 @@ inline auto valueGetterGenerator =
   return makeGenerator(AD_FWD(input), numElements, context, transformation);
 };
 
-// Return a lambda that takes a `LocalVocabEntry` and converts it to an `Id` via
-// `LocalVocab::getEncodedIdOrAddIfNotContained`.
+// Return a lambda that takes a `LocalVocabEntry` and converts it to an `Id` by
+// adding it to the `localVocab`.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
   return [localVocab](const LocalVocabEntry& entry) {
-    return localVocab->getEncodedIdOrAddIfNotContained(entry);
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);
+    return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   };
 }
 
-// Return the `Id` if the passed `value` contains one, alternatively convert the
-// literal or iri in the `value` via `makeStringResultGetter`.
+// Return the `Id` if the passed `value` contains one, alternatively add the
+// literal or iri in the `value` to the `localVocab` and return the newly
+// created `Id` instead.
 Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
                         LocalVocab* localVocab);
 

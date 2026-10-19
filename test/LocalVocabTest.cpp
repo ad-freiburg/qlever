@@ -164,55 +164,6 @@ TEST(LocalVocab, getIdAndAddIfNotContained) {
 }
 
 // _____________________________________________________________________________
-TEST(LocalVocab, getEncodedIdOrAddIfNotContained) {
-  using namespace ad_utility::testing;
-  TestIndexConfig config{"<subject> <predicate> <http://example.org/42>"};
-  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
-  auto* qec = getQec(std::move(config));
-  const auto& context = qec->getLocalVocabContext();
-  LocalVocab localVocab;
-
-  // An encodable IRI yields its encoded `Id` and is not stored in the local
-  // vocab, no matter whether it is passed as an lvalue or an rvalue.
-  auto encodable =
-      LocalVocabEntry::fromIriref("<http://example.org/69>", context);
-  auto expectedId = qec->getIndex()
-                        .encodedIriManager()
-                        .encode(encodable.toStringRepresentation())
-                        .value();
-  // NOTE: We compare the bits, because `Id::operator==` also considers a
-  // `LocalVocabIndex` of the same IRI to be equal.
-  EXPECT_EQ(localVocab.getEncodedIdOrAddIfNotContained(encodable).getBits(),
-            expectedId.getBits());
-  EXPECT_EQ(
-      localVocab.getEncodedIdOrAddIfNotContained(LocalVocabEntry{encodable})
-          .getBits(),
-      expectedId.getBits());
-  EXPECT_TRUE(localVocab.empty());
-
-  // All other words are stored in the local vocab, even if they are part of the
-  // vocabulary of the index (which is not looked up), and even if they are
-  // literals with the content of an encodable IRI.
-  auto checkAdded = [&](const LocalVocabEntry& word, size_t expectedSize) {
-    auto id = localVocab.getEncodedIdOrAddIfNotContained(word);
-    ASSERT_EQ(id.getDatatype(), Datatype::LocalVocabIndex);
-    EXPECT_EQ(*id.getLocalVocabIndex(), word);
-    EXPECT_EQ(localVocab.size(), expectedSize);
-    // Asking a second time doesn't add the word again.
-    EXPECT_EQ(localVocab.getEncodedIdOrAddIfNotContained(LocalVocabEntry{word})
-                  .getBits(),
-              id.getBits());
-    EXPECT_EQ(localVocab.size(), expectedSize);
-  };
-  checkAdded(LocalVocabEntry::fromIriref("<subject>", context), 1);
-  checkAdded(LocalVocabEntry::fromIriref("<http://example.org/5a>", context),
-             2);
-  checkAdded(
-      LocalVocabEntry::literalWithoutQuotes("<http://example.org/69>", context),
-      3);
-}
-
-// _____________________________________________________________________________
 TEST(LocalVocab, clone) {
   auto* qec = ad_utility::testing::getQec();
   // Create a small local vocabulary.

@@ -98,20 +98,6 @@ class LocalVocab {
   // the same word coming from the data.
   Id getIdAndAddIfNotContained(const LocalVocabEntry& word);
 
-  // Like `getIdAndAddIfNotContained`, but only return an `Id` that doesn't
-  // reference a local vocab if `word` can be encoded directly in an `Id` (see
-  // `LocalVocabContext::encodeAsId`). This is cheap because, unlike
-  // `getIdAndAddIfNotContained`, it doesn't look up `word` in the vocabulary of
-  // the index.
-  //
-  // NOTE: Use this for words that are computed by expressions. The encoded
-  // `Id` is the only representation of an encodable IRI in the index, and a
-  // `LocalVocabIndex` of such an IRI is ordered inconsistently with the `Id`s
-  // of the index (see the note at `LocalVocabEntry::compareThreeWay`), which
-  // breaks e.g. joins.
-  Id getEncodedIdOrAddIfNotContained(const LocalVocabEntry& word);
-  Id getEncodedIdOrAddIfNotContained(LocalVocabEntry&& word);
-
   // Like `getIndexAndAddIfNotContained`, but if the `LocalVocabEntry` is not
   // contained in any of the sets, do not add it and return `std::nullopt`.
   std::optional<LocalVocabIndex> getIndexOrNullopt(
@@ -254,10 +240,6 @@ class LocalVocab {
   // and `getIndexOrNullopt` above.
   template <typename WordT>
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
-
-  // Common implementation of the two `getEncodedIdOrAddIfNotContained`.
-  template <typename WordT>
-  Id getEncodedIdOrAddIfNotContainedImpl(WordT&& word);
 };
 
 #endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H
