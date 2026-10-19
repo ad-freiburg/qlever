@@ -215,6 +215,11 @@ class IndexImpl {
   // from their string representation) via `setBlankNodeIriRegexes`.
   ad_utility::RegexSet blankNodeIriRegexes_;
 
+  // The geo cell grid for WKT literals (see `GeoCellGrid`), only relevant
+  // during index building. When reading an index, the grid comes from its
+  // configuration.
+  std::optional<ad_utility::GeoCellGrid> geoCellGridForIndexBuilding_;
+
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
@@ -424,6 +429,21 @@ class IndexImpl {
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
+  }
+
+  // Set the geo cell grid for WKT literals (see `GeoCellGrid`), which is
+  // stored in the index configuration. A grid requires the vocabulary type
+  // `OnDiskCompressedGeoSplit`. Only relevant during index building.
+  void setGeoCellGridForIndexBuilding(
+      std::optional<ad_utility::GeoCellGrid> grid) {
+    geoCellGridForIndexBuilding_ = grid;
+    if (grid.has_value()) {
+      configurationJson_["geo-cell-grid-level"] = grid->level();
+      configurationJson_["geo-cell-grid-scheme"] = grid->scheme();
+    } else {
+      configurationJson_.erase("geo-cell-grid-level");
+      configurationJson_.erase("geo-cell-grid-scheme");
+    }
   }
 
   // Set the encoding of the geo points for the index build; see
