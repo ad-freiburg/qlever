@@ -1837,8 +1837,8 @@ void IndexImpl::writePartialVocabulary(
         vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlag(
-              a.word_, a.idAndFlag_.isExternal(), b.word_,
-              b.idAndFlag_.isExternal());
+              a.word_, a.indexAndFlag_.isExternal(), b.word_,
+              b.indexAndFlag_.isExternal());
         });
   }
   auto mapping = [&]() {
@@ -1852,7 +1852,8 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
     vec.erase(std::unique(vec.begin(), vec.end(),
                           [](const auto& a, const auto& b) {
-                            return a.idAndFlag_.id() == b.idAndFlag_.id();
+                            return a.indexAndFlag_.index() ==
+                                   b.indexAndFlag_.index();
                           }),
               vec.end());
   }
