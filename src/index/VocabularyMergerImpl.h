@@ -185,16 +185,16 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries) {
   // This value will overflow on the first entry.
   size_t nextWordId = -1;
   for (auto& entry : entries) {
-    auto& idAndExternal = entry.idAndFlag_;
-    auto id = idAndExternal.id();
+    auto& indexAndFlag = entry.indexAndFlag_;
+    auto index = indexAndFlag.index();
     if (lastWord != entry.word_) {
       nextWordId++;
       lastWord = entry.word_;
     }
-    auto inserted = res.try_emplace(id, nextWordId).second;
+    auto inserted = res.try_emplace(index, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
-    idAndExternal = PartialVocabIndexWithExternalFlag{
-        nextWordId, idAndExternal.isExternal()};
+    indexAndFlag = PartialVocabIndexWithExternalFlag{nextWordId,
+                                                     indexAndFlag.isExternal()};
   }
   return res;
 }
@@ -266,7 +266,7 @@ inline void writePartialVocabularyToFile(const ItemVec& entries,
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   PartialVocabularyWriter writer{fileName};
   for (const auto& entry : entries) {
-    writer(entry.word_, entry.idAndFlag_, entry.geoSortKey_);
+    writer(entry.word_, entry.indexAndFlag_, entry.geoSortKey_);
   }
   writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";

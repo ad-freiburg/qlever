@@ -129,7 +129,7 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
     offsetOfLastWord_ = currentBlock_.getCurrentPosition();
     currentBlock_ << word;
     currentBlock_ << indexAndExternalFlag.isExternal();
-    currentBlock_ << indexAndExternalFlag.id();
+    currentBlock_ << indexAndExternalFlag.index();
     currentBlock_ << geoSortKey;
     ++numWordsInBlock_;
     ++numWords_;
