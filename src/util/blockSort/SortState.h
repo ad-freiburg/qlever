@@ -205,7 +205,7 @@ class SortState {
   // Throws if the sort has been cancelled (e.g. a `CancellationException`), or
   // does nothing (`ad_utility::Noop`) if the sort can't be cancelled. Every
   // task calls it when it starts, so it is called concurrently.
-  CheckCancellation checkCancellation_;
+  [[no_unique_address]] CheckCancellation checkCancellation_;
 
   // A sort by `cmp` on `executor` whose tasks sort at most `maxElementsPerTask`
   // elements on their own, and call `checkCancellation` when they start.
