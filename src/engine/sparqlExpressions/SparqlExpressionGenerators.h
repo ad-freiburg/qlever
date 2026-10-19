@@ -215,6 +215,7 @@ inline auto valueGetterGenerator =
 // adding it to the `localVocab`.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
   return [localVocab](const LocalVocabEntry& entry) {
+    AD_EXPENSIVE_CHECK(!isEncodableIri(entry));
     auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);
     return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   };

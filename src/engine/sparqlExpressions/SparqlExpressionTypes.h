@@ -41,6 +41,20 @@ using IdOrLiteralOrIri =
 // Printing for GTest.
 void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os);
 
+// Wrap `word` in a `LocalVocabEntry`, unless it is an IRI that can be encoded
+// directly in an `Id` (see `LocalVocabContext::encodeAsId`), in which case
+// return that `Id`. Does not look up the vocabulary of the index.
+//
+// NOTE: Create every IRI of an expression result via this function. The index
+// only contains the encoded `Id` of such an IRI, so a `LocalVocabEntry` of it
+// would not match it, e.g. in joins.
+IdOrLocalVocabEntry makeIdOrLocalVocabEntry(
+    ad_utility::triple_component::LiteralOrIri word,
+    const LocalVocabContext& context);
+
+// Return true iff `makeIdOrLocalVocabEntry` would encode `entry` as an `Id`.
+bool isEncodableIri(const LocalVocabEntry& entry);
+
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
@@ -207,6 +221,7 @@ CPP_template(typename T, typename LocalVocabT)(
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
+            AD_EXPENSIVE_CHECK(!isEncodableIri(el));
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
           } else {
@@ -391,8 +406,8 @@ using PromoteToLocalVocabEntry =
                        T>;
 
 // Helper function to upgrade the variant type from `IdOrLiteralOrIri` to
-// `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
-// For other types, the functor just returns the input as is.
+// `IdOrLocalVocabEntry` using `makeIdOrLocalVocabEntry`. For other types, the
+// functor just returns the input as is.
 template <typename T>
 decltype(auto) promoteToLocalVocabEntry(T&& value,
                                         const LocalVocabContext& context) {
@@ -401,7 +416,7 @@ decltype(auto) promoteToLocalVocabEntry(T&& value,
         ad_utility::OverloadCallOperator{
             [](Id id) -> IdOrLocalVocabEntry { return id; },
             [&context](auto&& literalOrIri) -> IdOrLocalVocabEntry {
-              return {LocalVocabEntry{AD_FWD(literalOrIri), context}};
+              return makeIdOrLocalVocabEntry(AD_FWD(literalOrIri), context);
             }},
         AD_FWD(value));
   } else {

@@ -44,3 +44,42 @@ TEST(SparqlExpressionTypes, printIdOrString) {
   PrintTo(idOrString, &str);
   ASSERT_EQ(str.str(), "\"bimm\"");
 }
+
+// _____________________________________________________________________________
+TEST(SparqlExpressionTypes, makeIdOrLocalVocabEntry) {
+  using namespace ad_utility::testing;
+  using ad_utility::triple_component::Iri;
+  using ad_utility::triple_component::Literal;
+  using ad_utility::triple_component::LiteralOrIri;
+  TestIndexConfig config{"<subject> <predicate> <http://example.org/42>"};
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+
+  // An encodable IRI yields its encoded `Id`.
+  auto encodable = Iri::fromIriref("<http://example.org/69>");
+  auto expectedId = qec->getIndex()
+                        .encodedIriManager()
+                        .encode(encodable.toStringRepresentation())
+                        .value();
+  auto result = makeIdOrLocalVocabEntry(LiteralOrIri{encodable}, context);
+  ASSERT_TRUE(std::holds_alternative<Id>(result));
+  // Compare the bits, as `Id::operator==` also matches a `LocalVocabIndex`.
+  EXPECT_EQ(std::get<Id>(result).getBits(), expectedId.getBits());
+
+  // Everything else becomes a `LocalVocabEntry`, including IRIs from the
+  // vocabulary and literals that look like an encodable IRI.
+  auto expectEntry = [&context](LiteralOrIri word) {
+    auto result = makeIdOrLocalVocabEntry(word, context);
+    ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(result));
+    const auto& entry = std::get<LocalVocabEntry>(result);
+    EXPECT_EQ(entry, word);
+    EXPECT_FALSE(isEncodableIri(entry));
+  };
+  expectEntry(LiteralOrIri{Iri::fromIriref("<subject>")});
+  expectEntry(LiteralOrIri{Iri::fromIriref("<http://example.org/5a>")});
+  expectEntry(
+      LiteralOrIri{Literal::literalWithoutQuotes("<http://example.org/69>")});
+
+  EXPECT_TRUE(isEncodableIri(LocalVocabEntry{encodable, context}));
+}
