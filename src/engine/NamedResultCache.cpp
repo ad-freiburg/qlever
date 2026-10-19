@@ -63,6 +63,11 @@ size_t NamedResultCache::numEntries() const {
 }
 
 // _____________________________________________________________________________
+bool NamedResultCache::contains(const Key& name) const {
+  return cache_.rlock()->contains(name);
+}
+
+// _____________________________________________________________________________
 NamedResultCache::Entries NamedResultCache::getAllEntriesSortedByKey() const {
   // NOTE: We need the (non-const) `wlock` here, because the `operator[]` of the
   // underlying cache is non-const, see the comment in `get` above.

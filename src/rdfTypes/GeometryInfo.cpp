@@ -23,17 +23,19 @@ namespace ad_utility {
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries,
-                           MetricLength metricLength, MetricArea metricArea)
+                           SourceCrsType sourceCrs, MetricLength metricLength,
+                           MetricArea metricArea)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
       numGeometries_{numGeometries.numGeometries()},
+      sourceCrs_{sourceCrs},
       metricLength_{metricLength},
       metricArea_{metricArea} {
   // The binary representation must not contain implicit padding, see the
   // `static_assert` after the class in `GeometryInfo.h`.
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
-                    sizeof(numGeometries_) + sizeof(reservedSourceCrs_) +
+                    sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(serializationType_) + sizeof(metricLength_) +
                     sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
@@ -49,6 +51,11 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
+
+  AD_CORRECTNESS_CHECK(sourceCrs.type() <= util::geo::CRSType::WEB_MERCATOR,
+                       "CRS Type out of range");
+  AD_CORRECTNESS_CHECK(sourceCrs.type() != util::geo::CRSType::UNSUPPORTED,
+                       "CRS Type indicates invalid/unsupported geometry");
 
   AD_CORRECTNESS_CHECK(
       boundingBox.lowerLeft().getLat() <= boundingBox.upperRight().getLat() &&
@@ -89,12 +96,17 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{wktType,   boundingBox.value(), centroid.value(),
-                      {numGeom}, metricLength,        MetricArea{area}};
+  return GeometryInfo{
+      wktType,         boundingBox.value(),      centroid.value(),
+      {numGeom},       SourceCrsType{sourceCrs}, metricLength,
+      MetricArea{area}};
 }
 
 // ____________________________________________________________________________
 GeometryType::GeometryType(uint8_t type) : type_{type} {}
+
+// ____________________________________________________________________________
+SourceCrsType::SourceCrsType(uint16_t type) : type_{type} {}
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(double length) : length_{length} {
@@ -113,6 +125,16 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
+std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
+    std::string_view wkt) {
+  auto crsType = detail::getCRSType(detail::removeDatatype(wkt));
+  if (crsType == util::geo::CRSType::UNSUPPORTED) {
+    return std::nullopt;
+  }
+  return SourceCrsType{crsType};
+}
+
+// ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
                                           uint64_t version) {
   AD_CONTRACT_CHECK(isLoadableGeometryInfoVersion(version));
@@ -123,10 +145,10 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
   auto info = absl::bit_cast<GeometryInfo>(buffer);
   // In version 5, the bytes of these fields were padding with arbitrary
   // content. Zero means "not computed" (and `WKT` for the serialization type),
-  // like in every record of version 6 (see the rules at
-  // `GEOMETRY_INFO_VERSION`).
+  // like in the records of version 6 written before `sourceCrs_` was taken into
+  // use (see the rules at `GEOMETRY_INFO_VERSION`).
   if (version == 5) {
-    info.reservedSourceCrs_ = 0;
+    info.sourceCrs_ = SourceCrsType{0};
     info.serializationType_ = SerializationType::WKT;
   }
   return info;
@@ -144,10 +166,13 @@ bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {
-      util::geo::WKTType::POINT, {point, point},  Centroid{point}, {1},
-      MetricLength{0.0},         MetricArea{0.0},
-  };
+  return {util::geo::WKTType::POINT,
+          {point, point},
+          Centroid{point},
+          {1},
+          SourceCrsType{util::geo::CRSType::CRS84},
+          MetricLength{0.0},
+          MetricArea{0.0}};
 }
 
 // ____________________________________________________________________________
@@ -158,8 +183,21 @@ GeometryType GeometryInfo::getWktType() const {
 }
 
 // ____________________________________________________________________________
+std::optional<SourceCrsType> GeometryInfo::getSourceCrsType() const {
+  if (sourceCrs_.type() == 0) {
+    return std::nullopt;
+  }
+  return sourceCrs_;
+}
+
+// ____________________________________________________________________________
 std::optional<std::string_view> GeometryType::asIri() const {
   return detail::wktTypeToIri(type_);
+}
+
+// ____________________________________________________________________________
+std::optional<std::string_view> SourceCrsType::asIri() const {
+  return detail::crsTypeToIri(type_);
 }
 
 // ____________________________________________________________________________
@@ -256,8 +294,8 @@ double BoundingBox::getBoundingCoordinate() const {
   } else if constexpr (RequestedCoordinate == MAX_Y) {
     return upperRight_.getLat();
   } else {
-    // Unfortunately, we cannot use a `static_assert` here because some compiler
-    // versions don't like it.
+    // Unfortunately, we cannot use a `static_assert` here because some
+    // compiler versions don't like it.
     AD_FAIL();
   }
 }
@@ -304,7 +342,7 @@ std::optional<SerializationType> GeometryInfo::getSerializationType(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
     requires RequestedInfoT<RequestedInfo>)
-RequestedInfo GeometryInfo::getRequestedInfo() const {
+std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return *this;
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
@@ -313,6 +351,8 @@ RequestedInfo GeometryInfo::getRequestedInfo() const {
     return getBoundingBox();
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return getWktType();
+  } else if constexpr (std::is_same_v<RequestedInfo, SourceCrsType>) {
+    return getSourceCrsType();
   } else if constexpr (std::is_same_v<RequestedInfo, NumGeometries>) {
     return getNumGeometries();
   } else if constexpr (std::is_same_v<RequestedInfo, MetricLength>) {
@@ -327,15 +367,24 @@ RequestedInfo GeometryInfo::getRequestedInfo() const {
 }
 
 // Explicit instantiations
-template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>() const;
-template Centroid GeometryInfo::getRequestedInfo<Centroid>() const;
-template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>() const;
-template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
-template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
-template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
-template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
-template SerializationType GeometryInfo::getRequestedInfo<SerializationType>()
+template std::optional<GeometryInfo>
+GeometryInfo::getRequestedInfo<GeometryInfo>() const;
+template std::optional<Centroid> GeometryInfo::getRequestedInfo<Centroid>()
     const;
+template std::optional<BoundingBox>
+GeometryInfo::getRequestedInfo<BoundingBox>() const;
+template std::optional<GeometryType>
+GeometryInfo::getRequestedInfo<GeometryType>() const;
+template std::optional<SourceCrsType>
+GeometryInfo::getRequestedInfo<SourceCrsType>() const;
+template std::optional<NumGeometries>
+GeometryInfo::getRequestedInfo<NumGeometries>() const;
+template std::optional<MetricLength>
+GeometryInfo::getRequestedInfo<MetricLength>() const;
+template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>()
+    const;
+template std::optional<SerializationType>
+GeometryInfo::getRequestedInfo<SerializationType>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
@@ -350,6 +399,8 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
     return GeometryInfo::getBoundingBox(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return GeometryInfo::getWktType(wkt);
+  } else if constexpr (std::is_same_v<RequestedInfo, SourceCrsType>) {
+    return GeometryInfo::getSourceCrsType(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, NumGeometries>) {
     return GeometryInfo::getNumGeometries(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, MetricLength>) {
@@ -372,6 +423,8 @@ template std::optional<BoundingBox> GeometryInfo::getRequestedInfo<BoundingBox>(
     std::string_view wkt);
 template std::optional<GeometryType>
 GeometryInfo::getRequestedInfo<GeometryType>(std::string_view wkt);
+template std::optional<SourceCrsType>
+GeometryInfo::getRequestedInfo<SourceCrsType>(std::string_view wkt);
 template std::optional<NumGeometries>
 GeometryInfo::getRequestedInfo<NumGeometries>(std::string_view wkt);
 template std::optional<MetricLength>
