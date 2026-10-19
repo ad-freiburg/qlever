@@ -3630,14 +3630,17 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
     auto expectedResult =
         makeIdTableFromVector({{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}});
-    EXPECT_THAT(tree.get(), isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?sumB"}},
-                                         std::cref(expectedResult)));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?sumB"}},
+                                           std::cref(expectedResult)));
   }
 
-    // `GroupBy` `?b` and `?c` and compute alias `?sumB` from `?b`. `?b`, `?c` and `?sumB`
+  // `GroupBy` `?b` and `?c` and compute alias `?sumB` from `?b`. `?b`, `?c` and
+  // `?sumB`
   // requested: `?b` and `?d` are stripped and the columns are renumbered.
   {
-    auto tree = strip({V{"?b"}, V{"?c"}}, {alias}, {V{"?b"}, V{"?c"}, V{"?sumB"}});
+    auto tree =
+        strip({V{"?b"}, V{"?c"}}, {alias}, {V{"?b"}, V{"?c"}, V{"?sumB"}});
     auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
     ASSERT_TRUE(groupBy);
     EXPECT_THAT(groupBy->resultSortedOn(), ElementsAre(0, 1));
@@ -3661,13 +3664,15 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?c"}, V{"?sumB"}});
     auto expectedResult =
         makeIdTableFromVector({{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}});
-    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(std::vector{V{"?c"}, V{"?sumB"}},
-                                         std::cref(expectedResult)));
+    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(
+                                std::vector{V{"?c"}, V{"?sumB"}},
+                                std::cref(expectedResult)));
 
     expectedResult = makeIdTableFromVector(
         {{I(1), I(5), I(2)}, {I(3), I(5), I(5)}, {I(6), I(3), I(12)}});
-    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
-                isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}, V{"?sumB"}},
+    EXPECT_THAT(
+        tree->getRootOperation()->getChildren().at(0),
+        isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}, V{"?sumB"}},
                                    std::cref(expectedResult)));
   }
 
@@ -3676,10 +3681,15 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   {
     auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, {alias},
                       {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}});
-    EXPECT_THAT(tree->getVariableColumns(), SizeIs(5));
-    EXPECT_THAT(tree->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?c"}),
-                                     Key(V{"?d"}), Key(V{"?sumB"})));
+    auto expectedResult =
+        makeIdTableFromVector({{I(6), I(6), I(3), I(6), I(6)},
+                               {I(6), I(6), I(3), I(5), I(6)},
+                               {I(3), I(5), I(5), I(4), I(5)},
+                               {I(1), I(2), I(5), I(1), I(2)}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    std::vector{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}},
+                    std::cref(expectedResult)));
   }
 
   // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?a` and `?c`
@@ -3689,8 +3699,9 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?a"}, V{"?c"}});
     auto expectedResult =
         makeIdTableFromVector({{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}});
-    EXPECT_THAT(tree.get(), isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}},
-                                         std::cref(expectedResult)));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(std::vector{V{"?a"}, V{"?c"}},
+                                           std::cref(expectedResult)));
     auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
     ASSERT_TRUE(groupBy);
     EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});

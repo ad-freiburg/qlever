@@ -572,7 +572,7 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     auto tree = strip({1}, {V{"?b"}});
     auto expectedResult = makeIdTableFromVector({{1}, {2}, {5}, {6}});
     EXPECT_THAT(tree.get(), isStrippedColumns<Sort>(std::vector{V{"?b"}},
-                                         std::cref(expectedResult)));
+                                                    std::cref(expectedResult)));
   }
 
   // `Sort` by `?b` and `?d`, `?a`, `?b` and `?d` requested: `?c` is stripped
@@ -599,20 +599,23 @@ TEST(Sort, makeTreeWithStrippedColumns) {
   {
     auto tree = strip({1}, {V{"?c"}});
     auto expectedResult = makeIdTableFromVector({{3}, {5}, {5}, {3}});
-    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(std::vector{V{"?c"}},
-                                         std::cref(expectedResult)));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(std::vector{V{"?c"}},
+                                                std::cref(expectedResult)));
 
     expectedResult = makeIdTableFromVector({{1, 3}, {2, 5}, {5, 5}, {6, 3}});
-    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0), isStrippedColumns<Sort>(std::vector{V{"?b"}, V{"?c"}},
-                                          std::cref(expectedResult)));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Sort>(std::vector{V{"?b"}, V{"?c"}},
+                                        std::cref(expectedResult)));
   }
 
   // All variables requested: nothing is stripped and the indices stay.
   {
     auto tree = strip({0}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
-    auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
-    ASSERT_TRUE(sort);
-    EXPECT_THAT(tree->getVariableColumns(), SizeIs(4));
-    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(0));
+    expectedResult = makeIdTableFromVector(
+        {{1, 2, 5, 1}, {2, 6, 3, 5}, {3, 5, 5, 4}, {6, 1, 3, 6}});
+    EXPECT_THAT(tree.get(), isStrippedColumns<Sort>(
+                                std::vector{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
+                                std::cref(expectedResult)));
   }
 }
