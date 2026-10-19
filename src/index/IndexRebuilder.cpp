@@ -301,7 +301,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
                   mappedId = Id::makeUndefined(),
-                  vocabHint = size_t{0}](Id& id) mutable {
+                  vocabHint = size_t{0}](IdRef id) mutable {
     if (lastId.getBits() == id.getBits()) {
       id = mappedId;
       return;
@@ -575,15 +575,19 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     maxConcurrentPairs = numberOfPairs;
   }
   namespace net = boost::asio;
-  net::thread_pool threadPool{patternThreads + 2 * maxConcurrentPairs};
 
   // Collect the first exception thrown by any worker so it can be rethrown to
   // the caller after `threadPool.join()`. Without this, exceptions escaping a
   // `net::post` handler call `std::terminate` and exceptions from a detached
-  // `co_spawn` are silently swallowed. NOTE: `exceptionCollector` must outlive
-  // `threadPool`, since the worker callables capture a pointer to it via
-  // `wrap()` / `std::ref`; the declaration order here guarantees that.
+  // `co_spawn` are silently swallowed.
+  //
+  // NOTE: `exceptionCollector` must be declared before `threadPool`, since the
+  // worker callables capture a pointer to it via `wrap()` / `std::ref`. If an
+  // exception unwinds this scope while workers are still running, the
+  // destructor of `threadPool` joins them, and they must still find a live
+  // collector.
   ad_utility::ExceptionCollector exceptionCollector;
+  net::thread_pool threadPool{patternThreads + 2 * maxConcurrentPairs};
 
   if (index.usePatterns()) {
     net::post(threadPool, exceptionCollector.wrap([&newIndex, &index,

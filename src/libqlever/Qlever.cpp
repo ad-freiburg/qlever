@@ -103,11 +103,15 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning), unless
-  // the user disabled this (potentially expensive) step.
+  // the user disabled this (potentially expensive) step. The samples are sorted
+  // like the sorts of the queries themselves (see `IdTableUtils::sort` and
+  // `QueryExecutionContext::makeSortConfig`).
   if (config.computeSortPerformanceEstimators_) {
     sortPerformanceEstimator_.computeEstimatesExpensively(
-        allocator_, index.numTriples().normalAndInternal_() *
-                        PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+        allocator_,
+        index.numTriples().normalAndInternal_() *
+            PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100,
+        QueryExecutionContext::makeSortConfig(executor_));
   }
 
   // Preload materialized views as requested by the user.

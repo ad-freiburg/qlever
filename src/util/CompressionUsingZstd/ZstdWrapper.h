@@ -5,14 +5,19 @@
 #ifndef QLEVER_SRC_UTIL_COMPRESSIONUSINGZSTD_ZSTDWRAPPER_H
 #define QLEVER_SRC_UTIL_COMPRESSIONUSINGZSTD_ZSTDWRAPPER_H
 
+#include <absl/numeric/bits.h>
 #include <absl/strings/str_cat.h>
 #include <zstd.h>
 
+#include <algorithm>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "util/Exception.h"
 
 class ZstdWrapper {
@@ -109,7 +114,123 @@ class ZstdWrapper {
         "error during decompression : ");
   }
 
+  // Compress `data` with `reference` as a "prefix dictionary": the compressor
+  // may refer to any byte sequence of the `reference`, so the result is small
+  // if `data` mostly consists of pieces of the `reference` (this is the same
+  // as `zstd --patch-from`). Decompression requires the identical `reference`
+  // (see `tryToDecompressWithReference`). Long distance matching is enabled
+  // and the window is made large enough to cover the `reference` and `data`,
+  // so references into the whole `reference` are possible. The frame stores
+  // the size of `data`. The `compressionLevel` is the usual ZSTD level
+  // (1 to 22); the high levels (19 and above) give noticeably smaller
+  // results for this use case and are still fast enough for data in the range
+  // of a few hundred megabytes.
+  static std::vector<char> compressWithReference(ql::span<const char> reference,
+                                                 ql::span<const char> data,
+                                                 int compressionLevel) {
+    // NOTE: ZSTD silently ignores a reference that overlaps with the data in
+    // memory (it then compresses without the reference), so in that case
+    // compress a copy of the data.
+    if (!reference.empty() && !data.empty() &&
+        reference.data() < data.data() + data.size() &&
+        data.data() < reference.data() + reference.size()) {
+      std::vector<char> copy{data.begin(), data.end()};
+      return compressWithReference(reference, copy, compressionLevel);
+    }
+    std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> context{
+        ZSTD_createCCtx(), &ZSTD_freeCCtx};
+    AD_CONTRACT_CHECK(context != nullptr);
+    auto set = [&context](ZSTD_cParameter parameter, int value) {
+      checkError(ZSTD_CCtx_setParameter(context.get(), parameter, value));
+    };
+    set(ZSTD_c_compressionLevel, compressionLevel);
+    set(ZSTD_c_windowLog, windowLogFor(reference.size() + data.size()));
+    set(ZSTD_c_enableLongDistanceMatching, 1);
+    set(ZSTD_c_contentSizeFlag, 1);
+    checkError(
+        ZSTD_CCtx_refPrefix(context.get(), reference.data(), reference.size()));
+    std::vector<char> result(ZSTD_compressBound(data.size()));
+    auto compressedSize = checkError(ZSTD_compress2(
+        context.get(), result.data(), result.size(), data.data(), data.size()));
+    result.resize(compressedSize);
+    return result;
+  }
+
+  // Decompress data that was compressed by `compressWithReference` with the
+  // same `reference` into `buffer` (which has to be large enough for the
+  // decompressed data), and return the number of decompressed bytes. Report an
+  // error if the decompression fails, for example because the compressed data
+  // is corrupted or the buffer is too small. NOTE: A wrong `reference` is not
+  // necessarily detected (the result is then garbage), so a checksum of the
+  // decompressed data should be verified by the caller.
+  static SizeOrError tryToDecompressWithReference(
+      ql::span<const char> reference, ql::span<const char> compressed,
+      char* buffer, size_t bufferCapacity) noexcept {
+    std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> context{
+        ZSTD_createDCtx(), &ZSTD_freeDCtx};
+    if (context == nullptr) {
+      return Error{"Could not create a ZSTD decompression context"};
+    }
+    auto check = [](size_t result) -> std::optional<Error> {
+      if (ZSTD_isError(result)) {
+        return Error{ZSTD_getErrorName(result)};
+      }
+      return std::nullopt;
+    };
+    // Allow the largest window, because the compressor chose the window such
+    // that it covers the reference (see `compressWithReference`).
+    if (auto error = check(ZSTD_DCtx_setParameter(
+            context.get(), ZSTD_d_windowLogMax,
+            ZSTD_dParam_getBounds(ZSTD_d_windowLogMax).upperBound))) {
+      return error.value();
+    }
+    if (auto error = check(ZSTD_DCtx_refPrefix(context.get(), reference.data(),
+                                               reference.size()))) {
+      return error.value();
+    }
+    auto decompressedSize =
+        ZSTD_decompressDCtx(context.get(), buffer, bufferCapacity,
+                            compressed.data(), compressed.size());
+    if (auto error = check(decompressedSize)) {
+      return error.value();
+    }
+    return decompressedSize;
+  }
+
+  // Same as `tryToDecompressWithReference`, but return the decompressed data
+  // (whose size is taken from the frame header) as a vector, and throw a
+  // descriptive exception instead of reporting an error.
+  static std::vector<char> decompressWithReference(
+      ql::span<const char> reference, ql::span<const char> compressed) {
+    std::vector<char> result(
+        getUncompressedSize(compressed.data(), compressed.size()));
+    auto size =
+        valueOrThrow(tryToDecompressWithReference(reference, compressed,
+                                                  result.data(), result.size()),
+                     "error during decompression with a reference: ");
+    AD_CORRECTNESS_CHECK(size == result.size());
+    return result;
+  }
+
  private:
+  // Throw a `std::runtime_error` if `result` is a ZSTD error code, else return
+  // it unchanged.
+  static size_t checkError(size_t result) {
+    if (ZSTD_isError(result)) {
+      throw std::runtime_error{
+          absl::StrCat("ZSTD error: ", ZSTD_getErrorName(result))};
+    }
+    return result;
+  }
+
+  // The smallest `ZSTD_c_windowLog` such that the window covers `numBytes`
+  // bytes (clamped to the range that ZSTD allows).
+  static int windowLogFor(size_t numBytes) {
+    int log = numBytes <= 1 ? 1 : absl::bit_width(numBytes - 1);
+    auto bounds = ZSTD_cParam_getBounds(ZSTD_c_windowLog);
+    return std::clamp(log, bounds.lowerBound, bounds.upperBound);
+  }
+
   // Return the size of the `result`, or throw a `std::runtime_error` with the
   // `messagePrefix` followed by the message of the error of the `result`.
   static size_t valueOrThrow(const SizeOrError& result,
