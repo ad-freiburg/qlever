@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 #include <util/geo/Geo.h>
@@ -420,6 +421,21 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
   for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
                    litInvalidCoord, litInvalidCrsIri, litPointEmpty}) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+
+  // Edge cases from https://github.com/ad-freiburg/util/issues/20: signed and
+  // exponent notation are valid, degenerate geometries and trailing garbage
+  // are not.
+  auto wkt = [](std::string_view s) {
+    return absl::StrCat(
+        "\"", s, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  };
+  for (auto s : {"POINT(1e3 2)", "POINT(1.5e-3 2)", "POINT(+1 -2)"}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
+  }
+  for (auto s : {"POINT(1 2, 3 4)", "POINT(1 2 foo)", "LINESTRING(1 2)",
+                 "MULTILINESTRING((1 1, 2 2), (3 3))"}) {
+    EXPECT_FALSE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
   }
 
   // All geometry computations use the strict mode, so they don't skip the
