@@ -28,6 +28,7 @@
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/GeoPointEncoding.h"
 #include "index/GraphNameManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -46,6 +47,7 @@
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
+#include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
@@ -197,6 +199,17 @@ class IndexImpl {
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // The encoding of the geo points of the index (only relevant during index
+  // building, see `ad_utility::GeoPointEncoding`). When an index is loaded, the
+  // encoding is taken from its configuration.
+  ad_utility::GeoPointEncoding geoPointEncodingForIndexBuilding_{
+      ad_utility::GeoPointEncoding::ZOrder};
+
+  // The encoding of the geo points of the loaded index (see
+  // `applyGeoPointEncoding`).
+  ad_utility::GeoPointEncoding geoPointEncodingOfLoadedIndex_{
+      ad_utility::GeoPointEncoding::ZOrder};
+
   // Compiled regexes for IRIs that should be treated as blank nodes during
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
@@ -298,20 +311,19 @@ class IndexImpl {
   // the `Id`s of a secondary vocabulary are only valid for the very vocabulary
   // that they were created for.
   //
-  // TODO<joka921> Nothing sets this yet, except for unit tests. It will be set
-  // when the index is read from disk, together with the persisted data that
-  // the words belong to; until then the only way to obtain a secondary
-  // vocabulary is `setSecondaryVocabForTesting`.
+  // This is set when a blob that contains a secondary vocabulary is loaded
+  // (see `NamedCachedQueryBlobManager::deserialize`), and by tests (via
+  // `TestIndexConfig::secondaryVocabWords`, see
+  // `test/util/IndexTestHelpers.h`). It has to be set before the first query is
+  // answered (in particular, before any `LocalVocabEntry` computes its position
+  // in the vocabulary, see `positionInVocab()`), and is immutable afterwards.
   const SecondaryVocabulary* secondaryVocab() const {
     return secondaryVocab_.get();
   }
 
-  // Set the secondary vocabulary, see above. NOTE: Tests that need an index
-  // with a secondary vocabulary should not call this directly, but set
-  // `TestIndexConfig::secondaryVocabWords` (see
-  // `test/util/IndexTestHelpers.h`), such that the vocabulary is part of the
-  // index right from its creation.
-  void setSecondaryVocabForTesting(
+  // Set the secondary vocabulary, see above. PRECONDITION: Must only be called
+  // before the first query is answered (e.g. right after construction).
+  void setSecondaryVocab(
       std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
     secondaryVocab_ = std::move(secondaryVocab);
   }
@@ -348,6 +360,27 @@ class IndexImpl {
   // does not itself read from disk, factored out so that a configuration
   // obtained from elsewhere (e.g. a serialized blob) can be applied directly.
   void applyConfiguration(const nlohmann::json& configuration);
+
+  // Check whether the index format version that is stored in the
+  // `configuration` JSON (index metadata) is compatible with this version of
+  // QLever. Return `std::nullopt` if it is, and a message that describes the
+  // incompatibility otherwise. Throw no exception for any `configuration`
+  // (except for allocation failures), so that this check can also be used by
+  // code that must not throw. `applyConfiguration` throws an exception with the
+  // returned message.
+  std::optional<std::string> checkIndexFormatVersion(
+      const nlohmann::json& configuration) const;
+
+  // Set the encoding of the geo points of the process (see
+  // `GeoPoint::encoding`) to the encoding of the index that is being loaded,
+  // as recorded in its configuration. Part of `applyConfiguration`.
+  void applyGeoPointEncoding();
+
+  // Return false if the loaded index certainly contains no geo point (as an
+  // `Id` of type `GeoPoint` in its permutations), and true otherwise. Reads
+  // the metadata of the blocks and at most one block, see the implementation
+  // for details. Takes the updates into account.
+  bool mayContainGeoPoints() const;
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
@@ -396,6 +429,13 @@ class IndexImpl {
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
+  }
+
+  // Set the encoding of the geo points for the index build; see
+  // `ad_utility::GeoPointEncoding` for details.
+  void setGeoPointEncodingForIndexBuilding(
+      ad_utility::GeoPointEncoding encoding) {
+    geoPointEncodingForIndexBuilding_ = encoding;
   }
 
   // __________________________________________________________________________
@@ -735,12 +775,12 @@ class IndexImpl {
                                         bool internal) const;
 
   // Create a `CompressedRelationWriter` and a callback that adds the metadata
-  // of large relations to the `metaData` object. If `numWriterThreads` is
-  // set, it overrides the number of compress/write threads of the writer
-  // (see the `CompressedRelationWriter` constructor).
+  // of large relations to the `metaData` object. The writer compresses and
+  // writes its blocks on the `executor` (see the `CompressedRelationWriter`
+  // constructor).
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
       IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
-      std::optional<size_t> numWriterThreads = std::nullopt) const;
+      qlever::Executor executor) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
@@ -754,14 +794,14 @@ class IndexImpl {
   // columns in the relation (usually 4, sometimes 6 with patterns).
   // `fileName` is the base name of the files to write to (without suffixes).
   // `sortedTriples` is an input range that provides the triples in the correct
-  // order. If `numWriterThreads` is set, it overrides the number of
-  // compress/write threads (see `getWriterAndCallback`).
+  // order. The blocks are compressed and written on the `executor` (see
+  // `getWriterAndCallback`).
   // Return the number of triples written and the metadata for the written
   // permutation.
   std::tuple<size_t, IndexMetaData> createPermutationImpl(
       size_t numColumns, const std::string& fileName,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      std::optional<size_t> numWriterThreads = std::nullopt);
+      qlever::Executor executor);
 
  protected:
   // _______________________________________________________________________
@@ -813,13 +853,15 @@ class IndexImpl {
   // `permutation` specifies which permutation to write.
   // `internal` specifies whether this is an internal permutation and adjusts
   // the filename of the generated file on disk accordingly.
+  // The blocks are compressed and written on the `executor`, by at most
+  // `rebuild-permutation-writer-num-threads` threads at the same time.
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
   // OSP/OPS) and the metadata for the written permutation.
   std::pair<size_t, IndexMetaData> createPermutationWithoutMetadata(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      const Permutation& permutation, bool internal);
+      const Permutation& permutation, bool internal, qlever::Executor executor);
 
   // Finalize the writing of a permutation by appending the metadata to
   // the corresponding file on disk.
@@ -1082,11 +1124,14 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state. `progress` is called (possibly from several
-  // threads) with the number of newly scanned rows; this is used by the index
-  // rebuild for progress reporting and defaults to a no-op.
+  // triples shared state. The permutations are scanned on the `executor`, each
+  // scan by at most `rebuild-index-scan-num-threads` threads at the
+  // same time. `progress` is called (possibly from several threads) with the
+  // number of newly scanned rows; this is used by the index rebuild for
+  // progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
       const LocatedTriplesSharedState& locatedTriplesSharedState,
+      qlever::Executor executor,
       const std::function<void(size_t)>& progress = ad_utility::noop) const;
 };
 

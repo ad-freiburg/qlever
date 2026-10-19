@@ -12,6 +12,7 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/deferred.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 #include <exception>
 #include <future>
@@ -171,6 +172,27 @@ std::optional<std::string> getErrorMessageOfCoroutine(Executor&& executor,
   return getErrorMessageOfAsyncOperation(boost::asio::co_spawn(
       AD_FWD(executor), std::move(awaitable), boost::asio::deferred));
 }
+
+// Run every handler of the `context` that is ready to run, and keep doing that
+// until nothing is left to run. Afterwards all the operations that were
+// initiated before have either completed or are suspended.
+//
+// NOTE: This deliberately uses `poll` and not `run`, because `run` would never
+// return while an operation is still suspended (a suspended operation counts as
+// outstanding work). The `restart` is required because an `io_context` stops
+// itself as soon as it runs out of work, after which `poll` would do nothing at
+// all.
+inline void pollUntilQuiescent(boost::asio::io_context& context) {
+  while (true) {
+    if (context.stopped()) {
+      context.restart();
+    }
+    if (context.poll() == 0) {
+      return;
+    }
+  }
+}
+
 }  // namespace ad_utility::testing
 
 #endif  // QLEVER_TEST_UTIL_ASIOTESTHELPERS_H

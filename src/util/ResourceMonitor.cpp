@@ -242,7 +242,7 @@ std::string formatTsvRow(const Sample& sample) {
 bool rotateLogIfHeaderOutdated(const ql::filesystem::path& path) {
   std::string firstLine;
   {
-    std::ifstream existingFile{path};
+    std::ifstream existingFile{path.string()};
     std::getline(existingFile, firstLine);
   }
   if (firstLine == tsvHeader) {

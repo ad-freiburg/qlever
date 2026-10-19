@@ -53,17 +53,62 @@ TEST(RuntimeParameters, setFromAssignment) {
   EXPECT_EQ(params.serviceMaxRedirects_.get(), 5u);
 }
 
-// Test that the value `0` is rejected for `lazy-index-scan-num-threads`
-// (the implementation of the lazy scans requires at least one thread).
-TEST(RuntimeParameters, lazyIndexScanNumThreadsIsStrictlyPositive) {
+// Test that the value `0` is rejected for
+// `lazy-index-scan-num-blocks-in-flight` (a lazy scan reads at least one block
+// ahead of its consumer).
+TEST(RuntimeParameters, lazyIndexScanNumBlocksInFlightIsStrictlyPositive) {
   RuntimeParameters params;
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      params.setFromAssignment("lazy-index-scan-num-threads=0"),
-      AllOf(HasSubstr("lazy-index-scan-num-threads"),
+      params.setFromAssignment("lazy-index-scan-num-blocks-in-flight=0"),
+      AllOf(HasSubstr("lazy-index-scan-num-blocks-in-flight"),
             HasSubstr("strictly positive")),
       std::runtime_error);
-  EXPECT_NO_THROW(params.setFromAssignment("lazy-index-scan-num-threads=1"));
-  EXPECT_EQ(params.lazyIndexScanNumThreads_.get(), 1u);
+  EXPECT_NO_THROW(
+      params.setFromAssignment("lazy-index-scan-num-blocks-in-flight=1"));
+  EXPECT_EQ(params.lazyIndexScanNumBlocksInFlight_.get(), 1u);
+}
+
+// Test the default of `max-num-threads-per-query` and that the value `0` is
+// rejected (a query has to be able to run at least one task).
+TEST(RuntimeParameters, maxNumThreadsPerQueryIsStrictlyPositive) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.maxNumThreadsPerQuery_.get(), 6u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("max-num-threads-per-query=0"),
+      AllOf(HasSubstr("max-num-threads-per-query"),
+            HasSubstr("strictly positive")),
+      std::runtime_error);
+  EXPECT_NO_THROW(params.setFromAssignment("max-num-threads-per-query=1"));
+  EXPECT_EQ(params.maxNumThreadsPerQuery_.get(), 1u);
+}
+
+// Test the default of `permutation-writer-num-blocks-in-flight` and that the
+// value `0` is rejected (a writer has to keep at least one block in flight).
+TEST(RuntimeParameters, permutationWriterNumBlocksInFlightIsStrictlyPositive) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.permutationWriterNumBlocksInFlight_.get(), 4u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("permutation-writer-num-blocks-in-flight=0"),
+      AllOf(HasSubstr("permutation-writer-num-blocks-in-flight"),
+            HasSubstr("strictly positive")),
+      std::runtime_error);
+  EXPECT_NO_THROW(
+      params.setFromAssignment("permutation-writer-num-blocks-in-flight=1"));
+  EXPECT_EQ(params.permutationWriterNumBlocksInFlight_.get(), 1u);
+}
+
+// Test the default of `sort-num-tasks-in-flight` and that the value `0` is
+// rejected (unlike for other parameters, `0` does not mean "no limit").
+TEST(RuntimeParameters, sortNumTasksInFlightIsStrictlyPositive) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.sortNumTasksInFlight_.get(), 3u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("sort-num-tasks-in-flight=0"),
+      AllOf(HasSubstr("sort-num-tasks-in-flight"),
+            HasSubstr("strictly positive")),
+      std::runtime_error);
+  EXPECT_NO_THROW(params.setFromAssignment("sort-num-tasks-in-flight=1"));
+  EXPECT_EQ(params.sortNumTasksInFlight_.get(), 1u);
 }
 
 // Test that `getKeys` and `toMap` (the building blocks of
