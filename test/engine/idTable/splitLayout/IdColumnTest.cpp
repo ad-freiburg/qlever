@@ -187,6 +187,7 @@ TEST(IdColumnTest, algorithmsOnColumns) {
   // function can also be called with an `Id&` (`std::iter_value_t&`), which
   // cannot be converted to an `IdRef`. `std::for_each` and range-based `for`
   // loops do not have this requirement.
+  // TODO <pas-kes>: fix this test once the new SplitLayoutId is available.
   const Id one = Id::makeFromInt(1);
   std::for_each(view.begin(), view.end(), [one](IdRef id) { id = one; });
   for (size_t i = 0; i < view.size(); ++i) {
