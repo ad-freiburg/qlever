@@ -1408,19 +1408,17 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
   // Match the `SpatialJoin` from the `FILTER` with the given distance variable
   // and unit of the distance column.
   auto sj = [&](std::optional<V> distanceVariable,
-                UnitOfMeasurement unit = UnitOfMeasurement::METERS) {
+                std::optional<UnitOfMeasurement> unit = std::nullopt) {
     return ::testing::AllOf(
         h::spatialJoinFilterSubstitute(
             500, -1, V{"?y"}, V{"?b"}, std::move(distanceVariable),
             PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
             SpatialJoinType::WITHIN_DIST, std::nullopt, scan("?x", "<p>", "?y"),
             scan("?a", "<p>", "?b")),
-        h::RootOperation<SpatialJoin>(AD_PROPERTY(
-            SpatialJoin, onlyForTestingGetConfig,
-            AD_FIELD(SpatialJoinConfiguration, task_,
-                     ::testing::VariantWith<LibSpatialJoinConfig>(
-                         AD_FIELD(LibSpatialJoinConfig, distanceUnit_,
-                                  ::testing::Eq(unit)))))));
+        h::RootOperation<SpatialJoin>(
+            AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
+                        AD_FIELD(SpatialJoinConfiguration, distanceUnit_,
+                                 ::testing::Eq(unit)))));
   };
   std::string_view filter = "geof:distance(?y, ?b) <= 0.5";
 
@@ -1430,7 +1428,8 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
             sj(V{"?d"}, UnitOfMeasurement::KILOMETERS));
   h::expect(query(filter, "geof:distance(?b, ?y)"),
             sj(V{"?d"}, UnitOfMeasurement::KILOMETERS));
-  h::expect(query(filter, "geof:metricDistance(?y, ?b)"), sj(V{"?d"}));
+  h::expect(query(filter, "geof:metricDistance(?y, ?b)"),
+            sj(V{"?d"}, UnitOfMeasurement::METERS));
   h::expect(query("geof:metricDistance(?y, ?b) <= 500",
                   "geof:distance(?y, ?b, <http://qudt.org/vocab/unit/MI>)"),
             sj(V{"?d"}, UnitOfMeasurement::MILES));

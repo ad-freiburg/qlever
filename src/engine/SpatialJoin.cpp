@@ -727,7 +727,7 @@ SpatialJoin::makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const {
 
   auto config = config_;
   config.distanceVariable_ = bind._target;
-  std::get<LibSpatialJoinConfig>(config.task_).distanceUnit_ = call->unit_;
+  config.distanceUnit_ = call->unit_;
   return _executionContext->makeShared<QueryExecutionTree>(
       _executionContext, std::make_unique<SpatialJoin>(
                              _executionContext, std::move(config), childLeft_,
