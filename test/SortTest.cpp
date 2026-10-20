@@ -565,20 +565,14 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
     return std::move(tree).value();
   };
-  auto getResultTable = [](const QueryExecutionTree* tree) {
-    return tree->getResult(false)->idTableView();
-  };
 
   // `Sort` on `?b`, only `?b` requested: the result has only `?b`, the
   // `Sort` now sorts by column 0.
   {
     auto tree = strip({1}, {V{"?b"}});
-    EXPECT_THAT(
-        tree.get(),
-        ::testing::AllOf(hasRootOperation<Sort>(), hasVariables({V{"?b"}}),
-                         ::testing::ResultOf(
-                             getResultTable,
-                             matchesIdTableFromVector({{1}, {2}, {5}, {6}}))));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Sort>(
+                    {V{"?b"}}, matchesIdTableFromVector({{1}, {2}, {5}, {6}})));
   }
 
   // `Sort` by `?b` and `?d`, `?a`, `?b` and `?d` requested: `?c` is stripped
@@ -604,20 +598,14 @@ TEST(Sort, makeTreeWithStrippedColumns) {
   // a `StripColumns` on top removes `?b`.
   {
     auto tree = strip({1}, {V{"?c"}});
-    EXPECT_THAT(
-        tree.get(),
-        ::testing::AllOf(
-            hasRootOperation<StripColumns>(), hasVariables({V{"?c"}}),
-            ::testing::ResultOf(getResultTable, matchesIdTableFromVector(
-                                                    {{3}, {5}, {5}, {3}}))));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?c"}}, matchesIdTableFromVector({{3}, {5}, {5}, {3}})));
 
-    EXPECT_THAT(
-        tree->getRootOperation()->getChildren().at(0),
-        ::testing::AllOf(
-            hasRootOperation<Sort>(), hasVariables({V{"?b"}, V{"?c"}}),
-            ::testing::ResultOf(
-                getResultTable,
-                matchesIdTableFromVector({{1, 3}, {2, 5}, {5, 5}, {6, 3}}))));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Sort>({V{"?b"}, V{"?c"}},
+                                        matchesIdTableFromVector(
+                                            {{1, 3}, {2, 5}, {5, 5}, {6, 3}})));
   }
 
   // All variables requested: nothing is stripped and the indices stay.
@@ -625,13 +613,9 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     auto tree = strip({0}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
     EXPECT_THAT(
         tree.get(),
-        ::testing::AllOf(
-            hasRootOperation<Sort>(),
-            hasVariables({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}),
-            ::testing::ResultOf(getResultTable,
-                                matchesIdTableFromVector({{1, 2, 5, 1},
-                                                          {2, 6, 3, 5},
-                                                          {3, 5, 5, 4},
-                                                          {6, 1, 3, 6}}))));
+        isStrippedColumns<Sort>(
+            {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
+            matchesIdTableFromVector(
+                {{1, 2, 5, 1}, {2, 6, 3, 5}, {3, 5, 5, 4}, {6, 1, 3, 6}})));
   }
 }
