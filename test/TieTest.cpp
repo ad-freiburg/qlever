@@ -302,3 +302,147 @@ TEST(Tie, tieElementOfProxiesReturnedByValue) {
   expectTieElement<splitLayout::ConstIdRef&&, splitLayout::ConstIdRef>();
   expectTieElement<const splitLayout::ConstIdRef, splitLayout::ConstIdRef>();
 }
+
+namespace {
+// The following helpers take `Table` as one of `IdTable`, `IdTableStatic<N>` or
+// `IdTableView<N>`. A view only has const references.
+template <typename Table>
+constexpr bool hasProxyConstRowReferences() {
+  return qlever::isProxy<typename Table::const_row_reference> &&
+         qlever::isProxy<typename Table::const_row_reference::Base>;
+}
+template <typename Table>
+constexpr bool hasProxyRowReferences() {
+  return hasProxyConstRowReferences<Table>() &&
+         qlever::isProxy<typename Table::row_reference> &&
+         qlever::isProxy<typename Table::row_reference::Base>;
+}
+template <int... numColumns>
+constexpr bool staticTablesHaveProxyRowReferences() {
+  return (hasProxyRowReferences<IdTableStatic<numColumns>>() && ...);
+}
+template <int... numColumns>
+constexpr bool viewsHaveProxyConstRowReferences() {
+  return (hasProxyConstRowReferences<IdTableView<numColumns>>() && ...);
+}
+
+// A proxy `R` that is returned by value is stored by value, an lvalue stays a
+// reference. If `R` was no proxy, the first three cases would not compile.
+template <typename R>
+void expectProxyIsStoredByValue() {
+  expectTieElement<R, R>();
+  expectTieElement<R&&, R>();
+  expectTieElement<const R, R>();
+  expectTieElement<R&, R&>();
+  expectTieElement<const R&, const R&>();
+}
+
+template <typename Table>
+void expectRowReferencesAreStoredByValue() {
+  expectProxyIsStoredByValue<typename Table::const_row_reference>();
+  expectProxyIsStoredByValue<typename Table::const_row_reference::Base>();
+  if constexpr (!Table::isView) {
+    expectProxyIsStoredByValue<typename Table::row_reference>();
+    expectProxyIsStoredByValue<typename Table::row_reference::Base>();
+  }
+}
+
+// Tie two rows of the `table` (which has at least three columns and two rows)
+// via the const base class of its row references, which can be moved into the
+// tuple. This is also what the `operator[]` of the table returns with
+// `libstdc++`.
+template <typename Table>
+void expectTieConstRowReferencesByValue(const Table& table) {
+  using ConstRef = typename Table::const_row_reference::Base;
+  auto tied = ad_utility::tie(ConstRef{&table, 0}, ConstRef{&table, 1});
+  static_assert(std::is_same_v<decltype(tied), std::tuple<ConstRef, ConstRef>>);
+
+  // The proxies in the tuple refer to the rows of the table.
+  EXPECT_EQ(std::get<0>(tied).rowIndex(), 0u);
+  EXPECT_EQ(std::get<1>(tied).rowIndex(), 1u);
+  for (size_t column = 0; column < 3; ++column) {
+    EXPECT_EQ(std::get<0>(tied)[column], table(0, column));
+    EXPECT_EQ(std::get<1>(tied)[column], table(1, column));
+  }
+
+  // An lvalue stays a reference, in contrast to the proxies above.
+  ConstRef row{&table, 0};
+  auto lvalueTied = ad_utility::tie(row);
+  static_assert(std::is_same_v<decltype(lvalueTied), std::tuple<ConstRef&>>);
+  EXPECT_EQ(&std::get<0>(lvalueTied), &row);
+}
+
+// Like above for the mutable base class: The proxies in the tuple can also
+// change the table (this is only allowed for rvalues), and see its changes.
+template <typename Table>
+void expectTieRowReferencesByValue(Table& table) {
+  using Ref = typename Table::row_reference::Base;
+  auto tied = ad_utility::tie(Ref{&table, 0}, Ref{&table, 1});
+  static_assert(std::is_same_v<decltype(tied), std::tuple<Ref, Ref>>);
+
+  EXPECT_EQ(std::get<1>(tied).rowIndex(), 1u);
+  std::move(std::get<1>(tied))[1] = intId(1000);
+  EXPECT_EQ(table(1, 1), intId(1000));
+  table(0, 2) = intId(2000);
+  EXPECT_EQ(std::get<0>(tied)[2], intId(2000));
+
+  Ref row{&table, 0};
+  auto lvalueTied = ad_utility::tie(row);
+  static_assert(std::is_same_v<decltype(lvalueTied), std::tuple<Ref&>>);
+  EXPECT_EQ(&std::get<0>(lvalueTied), &row);
+
+  expectTieConstRowReferencesByValue(std::as_const(table));
+}
+
+IdTable makeTableForRowReferences() {
+  IdTable table{3, ad_utility::testing::makeAllocator()};
+  table.push_back({intId(1), intId(2), intId(3)});
+  table.push_back({intId(4), intId(5), intId(6)});
+  return table;
+}
+}  // namespace
+
+// The row references of the `IdTable`s (and their base classes, which is what
+// the `operator[]` of a table returns with `libstdc++`) are marked as proxies
+// for all kinds of tables, ...
+TEST(Tie, rowReferencesAreProxies) {
+  static_assert(hasProxyRowReferences<IdTable>());
+  static_assert(staticTablesHaveProxyRowReferences<1, 2, 3, 4, 5, 17>());
+  static_assert(viewsHaveProxyConstRowReferences<0, 1, 2, 3, 4, 5, 17>());
+
+  // ... in contrast to rows (the value type), tables and views.
+  static_assert(!qlever::isProxy<IdTable::row_type>);
+  static_assert(!qlever::isProxy<columnBasedIdTable::Row<Id, 3>>);
+  static_assert(!qlever::isProxy<IdTable>);
+  static_assert(!qlever::isProxy<IdTableStatic<3>>);
+  static_assert(!qlever::isProxy<IdTableView<3>>);
+}
+
+// As proxies, the row references are stored by value when `tie` gets them as
+// rvalues, while lvalues stay references, like for the `IdRef`s above.
+TEST(Tie, tieElementOfRowReferences) {
+  expectRowReferencesAreStoredByValue<IdTable>();
+  expectRowReferencesAreStoredByValue<IdTableStatic<1>>();
+  expectRowReferencesAreStoredByValue<IdTableStatic<3>>();
+  expectRowReferencesAreStoredByValue<IdTableStatic<17>>();
+  expectRowReferencesAreStoredByValue<IdTableView<0>>();
+  expectRowReferencesAreStoredByValue<IdTableView<3>>();
+  expectRowReferencesAreStoredByValue<IdTableView<17>>();
+}
+
+// `tie` of the base classes of the row references, for a dynamic and a static
+// table and a view.
+TEST(Tie, tieRowReferences) {
+  auto table = makeTableForRowReferences();
+  expectTieRowReferencesByValue(table);
+
+  auto other = makeTableForRowReferences();
+  auto staticTable = std::move(other).toStatic<3>();
+  IdTableStatic<3> staticTableWrapper{std::move(staticTable)};
+  expectTieRowReferencesByValue(staticTableWrapper);
+
+  auto view = table.asStaticView<3>();
+  expectTieConstRowReferencesByValue(view);
+  auto dynamicView = table.asStaticView<0>();
+  expectTieConstRowReferencesByValue(dynamicView);
+}
