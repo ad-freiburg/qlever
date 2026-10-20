@@ -211,10 +211,8 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable\n";
-      if (config_.distanceUnit_.has_value()) {
-        os << "distanceUnit: "
-           << static_cast<int>(config_.distanceUnit_.value()) << "\n";
-      }
+      os << "distanceUnit: " << static_cast<int>(config_.distanceUnit_.value())
+         << "\n";
     }
 
     // Selected payload variables

@@ -270,9 +270,8 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   SpatialJoinConfiguration config{
       task, left_.value(), right_.value(), distanceVariable_,
       pv,   algo,          rightCacheName_};
-  config.distanceUnit_ = distanceUnit_;
-  if (distanceVariable_.has_value() && !distanceUnit_.has_value()) {
-    config.distanceUnit_ = UnitOfMeasurement::METERS;
+  if (distanceVariable_.has_value()) {
+    config.distanceUnit_ = distanceUnit_.value_or(UnitOfMeasurement::METERS);
   }
   return config;
 }
