@@ -74,6 +74,43 @@ TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
   ASSERT_EQ(parent.getOperationCostEstimate(), 45);
 }
 
+// Test that the time of a child that was optimized out is taken from its
+// children, which may have been computed after the child was marked.
+TEST(RuntimeInformation, getOperationTimeWithOptimizedOutChild) {
+  // A parent with a computed child and an optimized-out child, whose only
+  // child was computed after the marking, so the stored time of the
+  // optimized-out child is still zero.
+  auto grandchild = std::make_shared<RuntimeInformation>();
+  grandchild->totalTime_ = 5ms;
+  auto optimizedOut = std::make_shared<RuntimeInformation>();
+  optimizedOut->status_ = RuntimeInformation::Status::optimizedOut;
+  optimizedOut->totalTime_ = 0ms;
+  optimizedOut->children_.push_back(grandchild);
+  auto child = std::make_shared<RuntimeInformation>();
+  child->totalTime_ = 2ms;
+  RuntimeInformation parent;
+  parent.totalTime_ = 10ms;
+  parent.children_ = {child, optimizedOut};
+
+  // The grandchild's time is subtracted, 3 == 10 - 2 - 5.
+  EXPECT_EQ(parent.getOperationTime(), 3ms);
+
+  // Optimized-out operations may be nested, the time is still that of the
+  // first computed descendants.
+  auto nested = std::make_shared<RuntimeInformation>();
+  nested->status_ = RuntimeInformation::Status::optimizedOut;
+  nested->children_.push_back(optimizedOut);
+  parent.children_ = {child, nested};
+  EXPECT_EQ(parent.getOperationTime(), 3ms);
+
+  // An optimized-out child without children keeps its stored time.
+  auto leaf = std::make_shared<RuntimeInformation>();
+  leaf->status_ = RuntimeInformation::Status::optimizedOut;
+  leaf->totalTime_ = 4ms;
+  parent.children_ = {child, leaf};
+  EXPECT_EQ(parent.getOperationTime(), 4ms);
+}
+
 // ________________________________________________________________
 TEST(RuntimeInformation, setColumnNames) {
   RuntimeInformation rti;

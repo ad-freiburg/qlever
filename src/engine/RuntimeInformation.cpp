@@ -139,6 +139,25 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   }
 }
 
+// Return the time spent computing the subtree of `rti`, including `rti`
+// itself.
+//
+// NOTE: An operation that was optimized out has no time of its own, and its
+// `totalTime_` is a snapshot of its children's times taken when it was marked
+// (see `Operation::updateRuntimeInformationWhenOptimizedOut`), which is before
+// the children are computed. So for such an operation, the time of its subtree
+// is the current sum over its children.
+static std::chrono::microseconds getSubtreeTime(const RuntimeInformation& rti) {
+  if (rti.status_ != RuntimeInformation::Status::optimizedOut ||
+      rti.children_.empty()) {
+    return rti.totalTime_;
+  }
+  auto timesOfChildren = rti.children_ | ql::views::transform([](auto& child) {
+                           return getSubtreeTime(*child);
+                         });
+  return ::ranges::accumulate(timesOfChildren, 0us);
+}
+
 // __________________________________________________________________________
 std::chrono::microseconds RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
@@ -147,8 +166,9 @@ std::chrono::microseconds RuntimeInformation::getOperationTime() const {
     // If a child was computed during the query planning, the time spent
     // computing that child is *not* included in this operation's
     // `totalTime_`. That's why we skip such children in the following loop.
-    auto timesOfChildren =
-        children_ | ql::views::transform(&RuntimeInformation::totalTime_);
+    auto timesOfChildren = children_ | ql::views::transform([](auto& child) {
+                             return getSubtreeTime(*child);
+                           });
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
     return std::max(0us,
