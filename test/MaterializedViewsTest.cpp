@@ -1791,10 +1791,12 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     EXPECT_THAT(actual, matchesIdTable(expected));
 
     // No push down if query rewriting using materialized views is disabled.
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
-    qpExpect(qlv(), simpleBind,
-             h::Bind(viewScanNoBind, "2 * ?o + 1", V{"?bind"}));
+    {
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+      qpExpect(qlv(), simpleBind,
+               h::Bind(viewScanNoBind, "2 * ?o + 1", V{"?bind"}));
+    }
   }
 
   // A `BIND` is pushed down through a `Join` operation.
@@ -2796,9 +2798,11 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
 
   // No bounding box columns if query rewriting using materialized views is
   // disabled.
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
-  EXPECT_FALSE(hasBoundingBoxColumns());
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+    EXPECT_FALSE(hasBoundingBoxColumns());
+  }
 }
 
 // _____________________________________________________________________________
