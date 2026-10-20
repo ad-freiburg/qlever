@@ -477,9 +477,29 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   // `treeAndCol_` member.
   auto assignTreeAndColToSide = [&](auto& col, auto& side,
                                     bool resetPlaceholder) {
+    // Obtain the variable of a column.
+    auto getVar = [&op](const std::optional<size_t> col) {
+      return col.has_value()
+                 ? std::optional<Variable>(
+                       op->getVariableAndInfoByColumnIndex(col.value()).first)
+                 : std::nullopt;
+    };
+    // Set a new column for a side (since they might get mixed up by
+    // `matchWithKnowledgeGraph`).
+    auto updateCol = [&op](auto& col, const auto& var, auto& side) {
+      if (col.has_value()) {
+        col = op->getVariableColumn(var.value());
+        side.treeAndCol_ = {op, col.value()};
+      }
+    };
     if (col.has_value()) {
+      auto leftVar = getVar(leftCol);
+      auto rightVar = getVar(rightCol);
       op = matchWithKnowledgeGraph(col.value(), op);
-      side.treeAndCol_ = {op, col.value()};
+      // Update the side columns indices which might get messed up by
+      // `EmptyPath` operations added by `matchWithKnowedgeGraph`.
+      updateCol(leftCol, leftVar, lhs);
+      updateCol(rightCol, rightVar, rhs);
     }
     // Remove placeholder tree if binding actual tree.
     else if (resetPlaceholder || !side.isVariable()) {
