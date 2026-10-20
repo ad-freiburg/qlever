@@ -1918,7 +1918,6 @@ TEST(SpatialJoin, DistanceUnit) {
         SpatialJoinAlgorithm::BOUNDING_BOX}) {
     auto trace = generateLocationTrace(AD_CURRENT_SOURCE_LOC(),
                                        std::string{algorithm.toString()});
-    auto [native, cacheKeyNative] = run(algorithm, std::nullopt);
     auto [meters, cacheKeyMeters] = run(algorithm, METERS);
     auto [kilometers, cacheKeyKilometers] = run(algorithm, KILOMETERS);
     auto [miles, cacheKeyMiles] = run(algorithm, MILES);
@@ -1939,17 +1938,14 @@ TEST(SpatialJoin, DistanceUnit) {
                  ad_utility::detail::kilometerToUnit(kilometers[i], MILES));
     }
 
-    // Without a unit, the native unit of the algorithm is used.
-    EXPECT_EQ(native, algorithm == SpatialJoinAlgorithm::LIBSPATIALJOIN
-                          ? meters
-                          : kilometers);
-
     // The unit is part of the cache key.
-    EXPECT_EQ(
-        (ad_utility::HashSet<std::string>{cacheKeyNative, cacheKeyMeters,
-                                          cacheKeyKilometers, cacheKeyMiles}
-             .size()),
-        4);
+    EXPECT_EQ((ad_utility::HashSet<std::string>{
+                  cacheKeyMeters, cacheKeyKilometers, cacheKeyMiles}
+                   .size()),
+              3);
+
+    // A distance variable requires a unit.
+    EXPECT_ANY_THROW(run(algorithm, std::nullopt));
   }
 }
 

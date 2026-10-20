@@ -331,10 +331,12 @@ Result BoundingBoxAlgorithm::run() {
         // as midpoints, the additional runtime can be saved in that case
         if (useMidpointForAreas_) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                              rowRight, distance);
+                              rowRight,
+                              kilometersToDistanceId(distance.getDouble()));
         } else if (pairs.insert(AddedPair{rowLeft, rowRight}).second) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                              rowRight, distance);
+                              rowRight,
+                              kilometersToDistanceId(distance.getDouble()));
         }
       }
     });

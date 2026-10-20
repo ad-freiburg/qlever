@@ -160,9 +160,8 @@ struct SpatialJoinConfiguration {
   // s2-point-polyline algorithm)
   std::optional<std::string> rightCacheName_ = std::nullopt;
 
-  // The unit of the values in the column of the `distanceVariable_`. If not
-  // given, the native unit of the chosen algorithm is used (meters for
-  // `libspatialjoin`, kilometers for all other algorithms).
+  // The unit of the values in the column of the `distanceVariable_`. Must be
+  // set iff the `distanceVariable_` is set.
   std::optional<UnitOfMeasurement> distanceUnit_ = std::nullopt;
 
   // Extract the maximum distance constraint from `task_`, if the task type
