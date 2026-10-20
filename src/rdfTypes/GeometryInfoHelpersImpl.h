@@ -554,32 +554,44 @@ struct ParseGeoPointOrWktVisitor {
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
 // Helper to convert a geometry from `pb_util` to a WKT string.
+// Optionally specify a coordinate reference system to which the input will be
+// projected.
 struct UtilGeomToWktVisitor {
   // Visitor for `std::optional` inputs.
   template <typename T>
-  std::optional<std::string> operator()(const std::optional<T>& opt) const {
+  std::optional<std::string> operator()(const std::optional<T>& opt,
+                                        CRSType projCrs = defaultCrs) const {
     if (!opt.has_value()) {
       return std::nullopt;
     }
-    return UtilGeomToWktVisitor{}(opt.value());
+    return UtilGeomToWktVisitor{}(opt.value(), projCrs);
   }
 
   // Visitor for the `ParsedWkt` variant.
-  std::optional<std::string> operator()(const ParsedWkt& variant) const {
-    return std::visit(UtilGeomToWktVisitor{}, variant);
+  std::optional<std::string> operator()(const ParsedWkt& variant,
+                                        CRSType projCrs = defaultCrs) const {
+    return std::visit(
+        [projCrs](const auto& var) {
+          return UtilGeomToWktVisitor{}(var, projCrs);
+        },
+        variant);
   }
 
   // Visitor for each of the `pb_util` geometry types.
   CPP_template(typename T)(
       requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
-  operator()(const T& geom) const {
-    return getWKT(geom);
+  operator()(const T& geom, CRSType projCrs = defaultCrs) const {
+    return getWKT(geom, defaultCrs, projCrs);
   }
 
   // Visitor for the custom container type `AnyGeometry`.
-  std::optional<std::string> operator()(
-      const AnyGeometry<CoordType>& geom) const {
-    return visitAnyGeometry(UtilGeomToWktVisitor{}, geom);
+  std::optional<std::string> operator()(const AnyGeometry<CoordType>& geom,
+                                        CRSType projCrs = defaultCrs) const {
+    return visitAnyGeometry(
+        [projCrs](const auto& var) {
+          return UtilGeomToWktVisitor{}(var, projCrs);
+        },
+        geom);
   }
 };
 
@@ -587,11 +599,9 @@ static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 
 // Project the coordinates of a `GeoPoint` to another coordinate reference
 // system and return as WKT string.
-// TODO <yarox-1> use utils new getWKT with `projCrs`instead of
-// `geoPointToUtilPoint`.
 inline std::optional<std::string> geoPointToWktInCrs(const GeoPoint& point,
                                                      CRSType projCrs) {
-  return utilGeomToWkt(geoPointToUtilPoint(point, projCrs));
+  return utilGeomToWkt(geoPointToUtilPoint(point), projCrs);
 }
 
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
@@ -868,8 +878,8 @@ struct MetricDistanceVisitor {
     if (!a.parsedWkt_.has_value() || !b.parsedWkt_.has_value()) {
       return std::nullopt;
     }
-    AD_CORRECTNESS_CHECK(a.actualCrs_ == WEB_MERCATOR);
-    AD_CORRECTNESS_CHECK(b.actualCrs_ == WEB_MERCATOR);
+    AD_CORRECTNESS_CHECK(a.actualCrs_ == CRSType::WEB_MERCATOR);
+    AD_CORRECTNESS_CHECK(b.actualCrs_ == CRSType::WEB_MERCATOR);
     return MetricDistanceVisitor{}(a.parsedWkt_.value(), b.parsedWkt_.value());
   }
 

@@ -52,9 +52,12 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
-  AD_CORRECTNESS_CHECK(sourceCrs.type() <= util::geo::CRSType::WEB_MERCATOR,
-                       "CRS Type out of range");
-  AD_CORRECTNESS_CHECK(sourceCrs.type() != util::geo::CRSType::UNSUPPORTED,
+  AD_CORRECTNESS_CHECK(
+      sourceCrs.type() <=
+          static_cast<uint16_t>(util::geo::CRSType::WEB_MERCATOR),
+      "CRS Type out of range");
+  AD_CORRECTNESS_CHECK(sourceCrs.type() != static_cast<uint16_t>(
+                                               util::geo::CRSType::UNSUPPORTED),
                        "CRS Type indicates invalid/unsupported geometry");
 
   AD_CORRECTNESS_CHECK(
@@ -96,10 +99,13 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{
-      wktType,         boundingBox.value(),      centroid.value(),
-      {numGeom},       SourceCrsType{sourceCrs}, metricLength,
-      MetricArea{area}};
+  return GeometryInfo{wktType,
+                      boundingBox.value(),
+                      centroid.value(),
+                      {numGeom},
+                      SourceCrsType{static_cast<uint16_t>(sourceCrs)},
+                      metricLength,
+                      MetricArea{area}};
 }
 
 // ____________________________________________________________________________
@@ -131,7 +137,7 @@ std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
   if (crsType == util::geo::CRSType::UNSUPPORTED) {
     return std::nullopt;
   }
-  return SourceCrsType{crsType};
+  return SourceCrsType{static_cast<uint16_t>(crsType)};
 }
 
 // ____________________________________________________________________________
@@ -170,7 +176,7 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
           {point, point},
           Centroid{point},
           {1},
-          SourceCrsType{util::geo::CRSType::CRS84},
+          SourceCrsType{static_cast<uint16_t>(util::geo::CRSType::CRS84)},
           MetricLength{0.0},
           MetricArea{0.0}};
 }
