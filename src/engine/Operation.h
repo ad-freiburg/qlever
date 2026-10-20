@@ -184,10 +184,10 @@ class Operation {
   std::vector<std::string> collectWarnings() const;
 
   // Add a warning to the `Operation`. The warning will be returned by
-  // `collectWarnings()` above.
-  void addWarning(std::string warning) const {
-    warnings_.wlock()->push_back(std::move(warning));
-  }
+  // `collectWarnings()` above. It is also added to the `warnings` detail of the
+  // runtime information, so that it is part of the live updates (e.g. via
+  // websocket) and survives cache hits.
+  void addWarning(std::string warning) const;
 
   // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a

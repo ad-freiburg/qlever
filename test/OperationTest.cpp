@@ -293,6 +293,54 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
 }
 
 // _____________________________________________________________________________
+TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
+  // An operation that adds a warning during its computation.
+  struct WarningOperation : ValuesForTesting {
+    using ValuesForTesting::ValuesForTesting;
+    Result computeResult(bool requestLaziness) override {
+      addWarning("during computation");
+      return ValuesForTesting::computeResult(requestLaziness);
+    }
+  };
+  auto warningsOfUpdate = [this](size_t i) {
+    return nlohmann::json::parse(jsonHistory.at(i))["details"]["warnings"];
+  };
+
+  // Computed: A warning from before the computation (e.g. from the query
+  // planning) is part of all updates, the one from the computation is part of
+  // the final update.
+  {
+    WarningOperation op{&qec, makeIdTableFromVector({{1}}), {Variable{"?x"}}};
+    op.addWarning("before computation");
+    op.getResult(true);
+    ASSERT_FALSE(jsonHistory.empty());
+    EXPECT_EQ(warningsOfUpdate(0),
+              nlohmann::json(std::vector{"before computation"}));
+    EXPECT_EQ(warningsOfUpdate(jsonHistory.size() - 1),
+              nlohmann::json(
+                  std::vector{"before computation", "during computation"}));
+    EXPECT_THAT(op.collectWarnings(),
+                ElementsAre("before computation", "during computation"));
+  }
+
+  // Read from the cache: The warnings of the original computation are kept in
+  // the runtime information, in addition to the new one.
+  jsonHistory.clear();
+  {
+    WarningOperation op{&qec, makeIdTableFromVector({{1}}), {Variable{"?x"}}};
+    op.addWarning("other");
+    op.getResult(true);
+    EXPECT_NE(op.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(warningsOfUpdate(jsonHistory.size() - 1),
+              nlohmann::json(std::vector{"before computation",
+                                         "during computation", "other"}));
+    // TODO<ullingerc> `collectWarnings` (used for the `warnings` of the
+    // result) should also include the warnings of the original computation.
+    EXPECT_THAT(op.collectWarnings(), ElementsAre("other"));
+  }
+}
+
+// _____________________________________________________________________________
 
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   auto qec = getQec();
