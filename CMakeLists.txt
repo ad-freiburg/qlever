@@ -328,6 +328,8 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
+        # This is deliberately not the latest commit, as that will require further changes left to a
+        # separate PR.
         GIT_TAG 68ba609077d9423a97c0f636f422ff50c4fffa70
         SYSTEM
         EXCLUDE_FROM_ALL
