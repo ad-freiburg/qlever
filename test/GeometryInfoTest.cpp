@@ -1,6 +1,7 @@
 // Copyright 2025 - 2026 The QLever Authors, in particular:
 //
 // 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
