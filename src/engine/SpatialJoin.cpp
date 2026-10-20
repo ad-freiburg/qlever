@@ -113,12 +113,11 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     AD_THROW("variable does not match");
   }
 
-  // If the `SpatialJoin` is now fully constructed and query rewriting is
+  // If the `SpatialJoin` is now fully constructed and `BIND` push down is
   // allowed, try to push down `BIND`s to retrieve bounding box columns from the
   // children.
   if (sj->isConstructed() &&
-      getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+      getRuntimeParameter<&RuntimeParameters::enableBindPushDown_>()) {
     if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
       sj = sjWithBoundingBoxes.value();
     }

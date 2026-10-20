@@ -1109,7 +1109,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // Currently only materialized views can provide precomputed `BIND`s.
   auto view = permutation().materializedView();
-  if (!view) {
+  if (!view || _executionContext->disableMaterializedViewRewriting()) {
     return std::nullopt;
   }
 

@@ -1789,6 +1789,21 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto actual = getQueryResultAsIdTable(std::string{simpleBind});
     auto expected = getQueryResultAsIdTable("SELECT (3 AS ?bind) {}");
     EXPECT_THAT(actual, matchesIdTable(expected));
+
+    // No push down if `BIND` push down or query rewriting using materialized
+    // views is disabled.
+    auto noPushDown = h::Bind(viewScanNoBind, "2 * ?o + 1", V{"?bind"});
+    {
+      auto cleanup =
+          setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
+              false);
+      qpExpect(qlv(), simpleBind, noPushDown);
+    }
+    {
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+      qpExpect(qlv(), simpleBind, noPushDown);
+    }
   }
 
   // A `BIND` is pushed down through a `Join` operation.
@@ -2774,6 +2789,32 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     const auto& runtimeInfo = qet.getRootOperation()->runtimeInfo().details_;
     ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
     EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
+  }
+
+  // Return true iff the children of the `SpatialJoin` of the
+  // `spatialJoinQuery` have the bounding box columns.
+  auto hasBoundingBoxColumns = [&]() {
+    auto plannedQuery = qlv.parseAndPlanQuery(spatialJoinQuery);
+    auto children =
+        plannedQuery.queryExecutionTree().getRootOperation()->getChildren();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
+    return children[0]->containsVariable(V{"?_ql_sj_ll_geometry1"}) &&
+           children[1]->containsVariable(V{"?_ql_sj_ll_geometry2"});
+  };
+  EXPECT_TRUE(hasBoundingBoxColumns());
+
+  // No bounding box columns if `BIND` push down or query rewriting using
+  // materialized views is disabled.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
+            false);
+    EXPECT_FALSE(hasBoundingBoxColumns());
+  }
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+    EXPECT_FALSE(hasBoundingBoxColumns());
   }
 }
 
