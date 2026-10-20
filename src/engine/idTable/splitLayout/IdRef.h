@@ -87,7 +87,7 @@ class BasicIdRefImpl {
     // Implicit conversion to the legacy `Id`, e.g. to store the referenced
     // value in a variable, or to pass it to a function that expects a real
     // `Id`.
-    /*implicit*/ operator Id() const {
+    QL_EXPLICIT(false) operator Id() const {
       return idFromBitsCompat({*datatype_, *payload_});
     }
 
@@ -339,7 +339,7 @@ class BasicIdRef
   // through to the referenced slot, not to the proxy's own state, which is
   // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
   CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
-      const Id id) const {
+      const Id id) {
     auto [datatype, payload] = getBitsCompat(id);
     *this->payload_ = payload;
     *this->datatype_ = datatype;
