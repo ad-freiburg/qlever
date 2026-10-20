@@ -3392,8 +3392,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
-    if (getRuntimeParameter<
-            &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+    if (getRuntimeParameter<&RuntimeParameters::enableBindPushDown_>()) {
       // Consider pushing down the `BIND` into the subtree.
       auto pushedDownPlan = a._qet->makeTreeWithBindColumn(v);
       if (pushedDownPlan.has_value()) {
