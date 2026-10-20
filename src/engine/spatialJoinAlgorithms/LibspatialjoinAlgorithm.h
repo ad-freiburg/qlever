@@ -39,6 +39,7 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
                                  spatialJoin),
         boundingBoxColsLeft_{std::move(boundingBoxColsLeft)},
         boundingBoxColsRight_{std::move(boundingBoxColsRight)} {}
+
   Result run() override;
 
   // This helper functions parses WKT geometries from the given `column` in
