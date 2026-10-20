@@ -18,7 +18,6 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
-#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -1446,13 +1445,7 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
   notReplaced("geof:distance(?y, \"POINT(1 2)\")");
   notReplaced("STR(?y)");
 
-  // The `BIND` is not replaced if `BIND` push down is disabled.
-  {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
-            false);
-    notReplaced("geof:distance(?y, ?b)");
-  }
+  notReplaced("geof:distance(?y, ?b) + 0");
 
   // The `BIND` is not replaced if the `SpatialJoin` does not compute the
   // distances.
@@ -1482,11 +1475,10 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
   addPoint("<b3>", "<q>", "8.40000 48.00000");
   auto qec = ad_utility::testing::getQec(kg);
 
-  // Compute the result of the `query` with or without `BIND` push down.
-  auto compute = [&](std::string_view bind, bool enableBindPushDown) {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
-            enableBindPushDown);
+  // Compute the result of the query with the given `BIND` expression, which is
+  // expected to be replaced by the distance variable of the `SpatialJoin` iff
+  // `expectReplaced` is true.
+  auto compute = [&](std::string_view bind, bool expectReplaced) {
     qec->clearCacheUnpinnedOnly();
     auto qet = h::parseAndPlan(
         absl::StrCat(
@@ -1496,7 +1488,7 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
             bind, " AS ?d) } ORDER BY ?a ?b"),
         qec);
     EXPECT_EQ(absl::StrContains(qet->getCacheKey(), "withDistanceVariable"),
-              enableBindPushDown);
+              expectReplaced);
     return qet->getResult()->idTableView().clone();
   };
 
@@ -1505,7 +1497,8 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
         "geof:metricDistance(?x, ?y)",
         "geof:distance(?x, ?y, <http://qudt.org/vocab/unit/MI>)"}) {
     auto trace = generateLocationTrace(AD_CURRENT_SOURCE_LOC(), bind);
-    auto expected = compute(bind, false);
+    // Adding `0` prevents the replacement, but doesn't change the values.
+    auto expected = compute(absl::StrCat(bind, " + 0"), false);
     auto actual = compute(bind, true);
     // `<a3>` and `<b3>` are too far away from the others.
     ASSERT_EQ(expected.numRows(), 4);
