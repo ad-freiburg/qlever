@@ -228,11 +228,6 @@ struct RuntimeParameters {
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
 
-  // If set, the query planner tries to push `BIND`s down into their child
-  // operations, which can compute them more efficiently (e.g. a materialized
-  // view, if `enable-materialized-view-query-rewrite` is also set).
-  Bool enableBindPushDown_{true, "enable-bind-push-down"};
-
   // When matching materialized views using pattern-based query rewriting, the
   // maximum number of candidate assignments tried by the backtracking
   // algorithm. `0` disables pattern-based rewriting.
