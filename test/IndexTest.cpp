@@ -1068,6 +1068,29 @@ TEST(IndexTest, parallelParsingFromSettingsFile) {
                                ::testing::HasSubstr("multiline string"));
 }
 
+// Building an index from a type-erased range of input files.
+TEST(IndexTest, createFromFilesTypeErased) {
+  std::string basename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&basename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+  ad_utility::makeOfstream(basename + ".ttl") << "<s> <p> <o1>, <o2> .\n";
+  {
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.getImpl().createFromFiles(
+        ad_utility::InputRangeTypeErased{
+            std::vector<qlever::InputFileSpecification>{
+                {basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}}},
+        1);
+  }
+  Index index = makeIndexWithTestSettings();
+  index.createFromOnDiskIndex(basename, false);
+  EXPECT_EQ(index.numTriples().normal, 2u);
+}
+
 TEST(IndexTest, getBlankNodeManager) {
   // The `blankNodeManager_` is initialized after initializing the Index itself.
   // Therefore we expect a throw when the getter is called by an
