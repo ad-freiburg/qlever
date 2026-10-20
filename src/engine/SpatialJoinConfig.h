@@ -56,11 +56,6 @@ struct LibSpatialJoinConfig {
   std::optional<double> maxDist_;
   std::optional<De9imFilterString> de9imFilter_;
 
-  // The unit of the values in the distance column (only relevant for the
-  // `WITHIN_DIST` join type with a distance variable). The `maxDist_` is always
-  // given in meters.
-  UnitOfMeasurement distanceUnit_ = UnitOfMeasurement::METERS;
-
   // For join types other than `WITHIN_DIST`/`DE9IM`, where neither
   // `maxDist_` nor `de9imFilter_` apply.
   explicit LibSpatialJoinConfig(SpatialJoinType joinType)
@@ -164,6 +159,11 @@ struct SpatialJoinConfiguration {
   // Cache name for precomputed right child with s2 index (only for
   // s2-point-polyline algorithm)
   std::optional<std::string> rightCacheName_ = std::nullopt;
+
+  // The unit of the values in the column of the `distanceVariable_`. If not
+  // given, the native unit of the chosen algorithm is used (meters for
+  // `libspatialjoin`, kilometers for all other algorithms).
+  std::optional<UnitOfMeasurement> distanceUnit_ = std::nullopt;
 
   // Extract the maximum distance constraint from `task_`, if the task type
   // specifies one. Every task type has a (possibly always-empty) `maxDist_`

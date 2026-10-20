@@ -44,6 +44,11 @@ class SpatialJoinAlgorithmBase {
                            size_t rowRight, Id distance,
                            bool swapLeftAndRight = false) const;
 
+  // The unit of the distances passed to `addResultTableEntry`.
+  virtual UnitOfMeasurement nativeDistanceUnit() const {
+    return UnitOfMeasurement::KILOMETERS;
+  }
+
   // Calls the `cancellationWrapper` which throws if the query has been
   // cancelled.
   void throwIfCancelled() const;
