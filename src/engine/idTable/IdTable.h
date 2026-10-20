@@ -1045,7 +1045,7 @@ inline constexpr bool isRowReferenceBase<
 template <template <typename, ad_utility::IsConst> class Ref, typename Table,
           ad_utility::IsConst isConstTag>
 inline constexpr bool qlever::isProxy<Ref<Table, isConstTag>> =
-    detail::isRowReferenceBase<Ref, Table, isConstTag>;
+    ::detail::isRowReferenceBase<Ref, Table, isConstTag>;
 
 // Check that the un/restricted RowReferences are specialized via isProxy, for
 // example for the dynamic and the static tables and for views.
