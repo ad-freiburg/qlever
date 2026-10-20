@@ -12,7 +12,6 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CompilerWarnings.h"
-#include "util/Log.h"
 
 using re2::RE2;
 using namespace std::string_literals;
@@ -240,14 +239,10 @@ struct SkipWhitespaceAndCommentsMixin {
   bool skipComments() {
     auto v = self().view();
     if (ql::starts_with(v, '#')) {
+      // Blocks of the input always end after a newline, so a comment without
+      // a newline is at the end of the input, which also ends the comment.
       auto pos = v.find('\n');
-      if (pos == std::string::npos) {
-        // TODO<joka921>: This should rather yield an error.
-        AD_LOG_INFO << "Warning, unfinished comment found while parsing"
-                    << std::endl;
-      } else {
-        self()._data.remove_prefix(pos + 1);
-      }
+      self()._data.remove_prefix(pos == std::string::npos ? v.size() : pos + 1);
       return true;
     }
     return false;
