@@ -370,6 +370,12 @@ TEST(TokenizerTest, WhitespaceAndComments) {
     tok.reset(s3.data(), s3.size());
     tok.skipWhitespaceAndComments();
     ASSERT_TRUE(tok.data().empty());
+
+    // A plain `\r` also ends a comment.
+    std::string s4("#comment\r<x>");
+    tok.reset(s4.data(), s4.size());
+    tok.skipWhitespaceAndComments();
+    ASSERT_EQ(tok.data().data() - s4.data(), 9);
   }
 
   {
@@ -390,6 +396,12 @@ TEST(TokenizerTest, WhitespaceAndComments) {
     tok.reset(s3.data(), s3.size());
     tok.skipWhitespaceAndComments();
     ASSERT_TRUE(tok.data().empty());
+
+    // A plain `\r` also ends a comment.
+    std::string s4("#comment\r<x>");
+    tok.reset(s4.data(), s4.size());
+    tok.skipWhitespaceAndComments();
+    ASSERT_EQ(tok.data().data() - s4.data(), 9);
   }
 }
 

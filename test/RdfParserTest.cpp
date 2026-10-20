@@ -1129,6 +1129,8 @@ TEST(RdfParserTest, commentAtEndOfInputWithoutNewline) {
   forAllParsers(testWithParser, "<s> <p> <o> .\n# comment", expected);
   forAllParsers(testWithParser, "<s> <p> <o> . # comment", expected);
   forAllParsers(testWithParser, "# comment", std::vector<TurtleTriple>{});
+  // A plain `\r` also ends a comment.
+  forAllParsers(testWithParser, "# comment\r<s> <p> <o> .", expected);
 }
 
 // The same, but with a comment that is larger than the buffer, such that the

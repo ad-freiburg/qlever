@@ -12,6 +12,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CompilerWarnings.h"
+#include "util/StringUtils.h"
 
 using re2::RE2;
 using namespace std::string_literals;
@@ -239,9 +240,12 @@ struct SkipWhitespaceAndCommentsMixin {
   bool skipComments() {
     auto v = self().view();
     if (ql::starts_with(v, '#')) {
-      // Blocks of the input always end after a newline, so a comment without
-      // a newline is at the end of the input, which also ends the comment.
-      auto pos = v.find('\n');
+      // Turtle allows both `\n` and `\r` as end of line. Blocks of the input
+      // always end after one of them, so a comment without an end of line is
+      // at the end of the input, which also ends the comment.
+      static constexpr ad_utility::CharLookupTable endOfLineTable =
+          ad_utility::makeCharLookupTable("\r\n");
+      auto pos = ad_utility::findFirstOfWithLookupTable(v, endOfLineTable);
       self()._data.remove_prefix(pos == std::string::npos ? v.size() : pos + 1);
       return true;
     }
