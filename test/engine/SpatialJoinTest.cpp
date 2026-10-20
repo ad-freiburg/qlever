@@ -1395,6 +1395,10 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
                              HasKeyMatching("num-geoms-parsed", Eq(3)),
                              HasKeyMatching("num-geoms-invalid", Eq(2))));
+  EXPECT_THAT(spatialJoin->collectWarnings(),
+              Contains(HasSubstr(
+                  "Spatial Join of ?a and ?b using contains: skipped rows with "
+                  "invalid or unsupported geometry literals (?b: 2)")));
 }
 
 }  // namespace invalidGeometries
