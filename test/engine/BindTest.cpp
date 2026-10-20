@@ -245,6 +245,58 @@ INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
                                              : "UndefinedVariable";
                          });
 
+// Test a `BIND` whose target is only computed for the rows where a given
+// variable is bound.
+TEST(Bind, onlyIfBound) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable a{"?a"}, g{"?g"}, b{"?b"};
+  auto U = Id::makeUndefined();
+  auto I = ad_utility::testing::IntId;
+  auto makeBind = [&](std::optional<Variable> onlyIfBound) {
+    auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{I(1), I(7)}, {I(2), U}, {I(3), I(8)}}),
+        Vars{a, g});
+    return Bind{
+        qec,
+        std::move(valuesTree),
+        {SparqlExpressionPimpl{std::make_unique<VariableExpression>(a), "?a"},
+         b},
+        std::move(onlyIfBound)};
+  };
+
+  // The target is UNDEF where `?g` is UNDEF, and the result column might
+  // contain UNDEF although the expression is always defined.
+  Bind bind = makeBind(g);
+  expectBindYieldsIdTable(
+      qec, bind,
+      makeIdTableFromVector(
+          {{I(1), I(7), I(1)}, {I(2), U, U}, {I(3), I(8), I(3)}}));
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  EXPECT_EQ(bind.getExternallyVisibleVariableColumns().at(b).mightContainUndef_,
+            PossiblyUndefined);
+  EXPECT_THAT(bind.getDescriptor(),
+              ::testing::HasSubstr("only if ?g is bound"));
+
+  // Without the restriction, the target is always defined.
+  Bind plainBind = makeBind(std::nullopt);
+  expectBindYieldsIdTable(
+      qec, plainBind,
+      makeIdTableFromVector(
+          {{I(1), I(7), I(1)}, {I(2), U, I(2)}, {I(3), I(8), I(3)}}));
+  EXPECT_EQ(
+      plainBind.getExternallyVisibleVariableColumns().at(b).mightContainUndef_,
+      AlwaysDefined);
+
+  // The restriction is part of the cache key and is kept by `clone`.
+  EXPECT_NE(bind.getCacheKey(), plainBind.getCacheKey());
+  auto clone = bind.clone();
+  EXPECT_EQ(clone->getCacheKey(), bind.getCacheKey());
+  EXPECT_EQ(dynamic_cast<Bind&>(*clone).onlyIfBound(), g);
+
+  // The variable must be one of the subtree.
+  EXPECT_THROW(makeBind(Variable{"?notThere"}), ad_utility::Exception);
+}
+
 // _____________________________________________________________________________
 TEST(Bind, isDeterministic) {
   auto* qec = ad_utility::testing::getQec();

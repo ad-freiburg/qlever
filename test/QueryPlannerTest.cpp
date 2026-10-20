@@ -717,6 +717,52 @@ TEST(QueryPlanner, testSimpleOptional) {
                       scan("?a", "<rel3>", "?d")));
 }
 
+// Test that a `BIND` at the end of an OPTIONAL group is evaluated above the
+// `OptionalJoin`, restricted to the rows where the pattern matched.
+TEST(QueryPlanner, BindAtEndOfOptionalIsMovedAboveOptionalJoin) {
+  auto scan = h::IndexScanFromStrings;
+  Variable a{"?a"}, b{"?b"}, c{"?c"}, d{"?d"}, e{"?e"};
+
+  // The target is computed above the join, only where `?c` (which is always
+  // defined when the pattern matches) is bound.
+  h::expect(
+      "SELECT * { ?a <p> ?b OPTIONAL { ?a <q> ?c BIND(STRLEN(?c) AS ?d) } }",
+      h::Bind(h::OptionalJoin(scan("?a", "<p>", "?b"), scan("?a", "<q>", "?c")),
+              "STRLEN(?c)", d, c));
+
+  // Several `BIND`s at the end of the group are all moved, in their order.
+  h::expect(
+      "SELECT * { ?a <p> ?b OPTIONAL { ?a <q> ?c BIND(STRLEN(?c) AS ?d) "
+      "BIND(?d + 1 AS ?e) } }",
+      h::Bind(h::Bind(h::OptionalJoin(scan("?a", "<p>", "?b"),
+                                      scan("?a", "<q>", "?c")),
+                      "STRLEN(?c)", d, c),
+              "?d + 1", e, c));
+
+  // The expression uses a variable that the pattern does not bind (it is
+  // unbound inside the group, but bound by the left side), so the `BIND`
+  // stays inside the group.
+  h::expect(
+      "SELECT * { ?a <p> ?b OPTIONAL { ?a <q> ?c BIND(STRLEN(?b) AS ?d) } }",
+      h::OptionalJoin(scan("?a", "<p>", "?b"),
+                      h::Bind(scan("?a", "<q>", "?c"), "STRLEN(?b)", d)));
+
+  // All variables of the pattern are shared with the left side, so there is
+  // no variable that is UNDEF exactly for the rows without a match.
+  h::expect(
+      "SELECT * { ?a <p> ?b OPTIONAL { ?a <q> ?b BIND(STRLEN(?b) AS ?d) } }",
+      h::OptionalJoin(scan("?a", "<p>", "?b"),
+                      h::Bind(scan("?a", "<q>", "?b"), "STRLEN(?b)", d)));
+
+  // The `BIND` is not at the end of the group.
+  h::expect(
+      "SELECT * { ?a <p> ?b OPTIONAL { ?a <q> ?c BIND(STRLEN(?c) AS ?d) "
+      "FILTER(?d > 1) } }",
+      h::OptionalJoin(scan("?a", "<p>", "?b"),
+                      h::Filter("?d > 1", h::Bind(scan("?a", "<q>", "?c"),
+                                                  "STRLEN(?c)", d))));
+}
+
 TEST(QueryPlanner, SimpleTripleOneVariable) {
   using enum Permutation::Enum;
 
