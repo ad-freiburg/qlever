@@ -1790,20 +1790,11 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto expected = getQueryResultAsIdTable("SELECT (3 AS ?bind) {}");
     EXPECT_THAT(actual, matchesIdTable(expected));
 
-    // No push down if `BIND` push down or query rewriting using materialized
-    // views is disabled.
-    auto noPushDown = h::Bind(viewScanNoBind, "2 * ?o + 1", V{"?bind"});
-    {
-      auto cleanup =
-          setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
-              false);
-      qpExpect(qlv(), simpleBind, noPushDown);
-    }
-    {
-      auto cleanup = setRuntimeParameterForTest<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
-      qpExpect(qlv(), simpleBind, noPushDown);
-    }
+    // No push down if query rewriting using materialized views is disabled.
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+    qpExpect(qlv(), simpleBind,
+             h::Bind(viewScanNoBind, "2 * ?o + 1", V{"?bind"}));
   }
 
   // A `BIND` is pushed down through a `Join` operation.
@@ -2803,19 +2794,11 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   };
   EXPECT_TRUE(hasBoundingBoxColumns());
 
-  // No bounding box columns if `BIND` push down or query rewriting using
-  // materialized views is disabled.
-  {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
-            false);
-    EXPECT_FALSE(hasBoundingBoxColumns());
-  }
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
-    EXPECT_FALSE(hasBoundingBoxColumns());
-  }
+  // No bounding box columns if query rewriting using materialized views is
+  // disabled.
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+  EXPECT_FALSE(hasBoundingBoxColumns());
 }
 
 // _____________________________________________________________________________
