@@ -328,6 +328,8 @@ TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
   jsonHistory.clear();
   {
     WarningOperation op{&qec, makeIdTableFromVector({{1}}), {Variable{"?x"}}};
+    // Already part of the cached warnings, so it must not be duplicated.
+    op.addWarning("before computation");
     op.addWarning("other");
     op.getResult(true);
     EXPECT_NE(op.runtimeInfo().cacheStatus_, CacheStatus::computed);
@@ -336,7 +338,8 @@ TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
                                          "during computation", "other"}));
     // TODO<ullingerc> `collectWarnings` (used for the `warnings` of the
     // result) should also include the warnings of the original computation.
-    EXPECT_THAT(op.collectWarnings(), ElementsAre("other"));
+    EXPECT_THAT(op.collectWarnings(),
+                ElementsAre("before computation", "other"));
   }
 }
 
