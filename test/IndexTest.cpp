@@ -1038,6 +1038,36 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   }
 }
 
+// `parallel-parsing` in the settings file is respected when building an index
+// from a single input file that does not specify parallel parsing.
+TEST(IndexTest, parallelParsingFromSettingsFile) {
+  std::string basename = gtestCurrentTestName();
+  std::string settingsFilename = basename + ".settings.json";
+  absl::Cleanup cleanup = [&basename, &settingsFilename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+    ad_utility::deleteFile(settingsFilename);
+  };
+  // The parallel parser does not support multiline literals.
+  ad_utility::makeOfstream(basename + ".ttl")
+      << "<s> <p> \"\"\"multiline\nliteral\"\"\" .\n";
+  auto buildIndex = [&](bool parallelParsing) {
+    ad_utility::makeOfstream(settingsFilename)
+        << nlohmann::json{{"parallel-parsing", parallelParsing}};
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.setSettingsFile(settingsFilename);
+    index.createFromFiles(
+        {qlever::InputFileSpecification{
+            basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
+        1);
+  };
+  EXPECT_NO_THROW(buildIndex(false));
+  AD_EXPECT_THROW_WITH_MESSAGE(buildIndex(true),
+                               ::testing::HasSubstr("multiline string"));
+}
+
 TEST(IndexTest, getBlankNodeManager) {
   // The `blankNodeManager_` is initialized after initializing the Index itself.
   // Therefore we expect a throw when the getter is called by an

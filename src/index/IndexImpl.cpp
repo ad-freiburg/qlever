@@ -425,15 +425,23 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files, size_t numThreads) {
+  prepareIndexBuild();
+  // Only now `useParallelParser_` is read from the settings file.
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
-                  numThreads);
+  createFromFilesAfterPreparation(
+      ad_utility::InputRangeTypeErased{std::move(files)}, numThreads);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
+  prepareIndexBuild();
+  createFromFilesAfterPreparation(std::move(files), numThreads);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::prepareIndexBuild() {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -460,7 +468,12 @@ void IndexImpl::createFromFiles(
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
+}
 
+// _____________________________________________________________________________
+void IndexImpl::createFromFilesAfterPreparation(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
 
@@ -1758,7 +1771,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count("parallel-parsing")) {
     useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
   }
-  if (useParallelParser_) {
+  if (useParallelParser_.value_or(false)) {
     AD_LOG_INFO << WARNING_PARALLEL_PARSING << std::endl;
   }
 
