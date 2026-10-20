@@ -379,7 +379,10 @@ Result LibspatialjoinAlgorithm::run() {
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
   // Collect the results and add them to the result table. For `WITHIN_DIST`,
-  // also add the distance for each pair of objects in the result.
+  // also add the distance for each pair of objects in the result, converted
+  // from meters to the requested unit.
+  auto distanceUnit =
+      std::get<LibSpatialJoinConfig>(config_.task_).distanceUnit_;
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
       throwIfCancelled();
@@ -388,6 +391,10 @@ Result LibspatialjoinAlgorithm::run() {
       double dist = 0;
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         dist = resultDists[t][i];
+        if (distanceUnit != UnitOfMeasurement::METERS) {
+          dist =
+              ad_utility::detail::kilometerToUnit(dist / 1000.0, distanceUnit);
+        }
       }
       addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
                           res.second, Id::makeFromDouble(dist), swapBack);

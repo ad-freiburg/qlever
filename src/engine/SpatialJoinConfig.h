@@ -23,6 +23,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/EnumWithStrings.h"
 #include "util/Exception.h"
+#include "util/UnitOfMeasurement.h"
 
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
@@ -54,6 +55,11 @@ struct LibSpatialJoinConfig {
   SpatialJoinType joinType_;
   std::optional<double> maxDist_;
   std::optional<De9imFilterString> de9imFilter_;
+
+  // The unit of the values in the distance column (only relevant for the
+  // `WITHIN_DIST` join type with a distance variable). The `maxDist_` is always
+  // given in meters.
+  UnitOfMeasurement distanceUnit_ = UnitOfMeasurement::METERS;
 
   // For join types other than `WITHIN_DIST`/`DE9IM`, where neither
   // `maxDist_` nor `de9imFilter_` apply.

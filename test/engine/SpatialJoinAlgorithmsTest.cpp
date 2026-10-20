@@ -1874,6 +1874,60 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
 }
 
 // _____________________________________________________________________________
+TEST(SpatialJoin, LibspatialJoinDistanceUnit) {
+  std::string kg;
+  addPoint(kg, "1", "\"Uni Freiburg TF\"",
+           makePointLiteral("7.83505", "48.01267"));
+  addPoint(kg, "2", "\"Minster Freiburg\"",
+           makePointLiteral("7.85298", "47.99557"));
+  auto qec = buildQec(kg);
+  Variable distVar{"?dist"};
+
+  // Compute a `WITHIN_DIST` spatial join with the given distance unit and
+  // return the distances of all result rows and the cache key.
+  auto run = [&](UnitOfMeasurement unit) {
+    LibSpatialJoinConfig task{SpatialJoinType::WITHIN_DIST, 5000, std::nullopt};
+    task.distanceUnit_ = unit;
+    auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec,
+        SpatialJoinConfiguration{task, Variable{"?geo1"}, Variable{"?geo2"},
+                                 distVar, PayloadVariables::all(),
+                                 SpatialJoinAlgorithm::LIBSPATIALJOIN},
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"}),
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"}));
+    auto result = spatialJoinTree->getResult();
+    auto col = spatialJoinTree->getVariableColumn(distVar);
+    std::vector<double> dists;
+    for (const auto& row : result->idTableView()) {
+      dists.push_back(row[col].getDouble());
+    }
+    ql::ranges::sort(dists);
+    return std::pair{dists, spatialJoinTree->getCacheKey()};
+  };
+
+  auto [meters, cacheKeyMeters] = run(UnitOfMeasurement::METERS);
+  auto [kilometers, cacheKeyKilometers] = run(UnitOfMeasurement::KILOMETERS);
+  auto [miles, cacheKeyMiles] = run(UnitOfMeasurement::MILES);
+
+  // Both points with themselves, and the two points with each other in both
+  // directions (about 2.3 km apart).
+  ASSERT_EQ(meters.size(), 4);
+  ASSERT_EQ(kilometers.size(), 4);
+  ASSERT_EQ(miles.size(), 4);
+  EXPECT_NEAR(meters.back(), 2300, 100);
+  for (size_t i = 0; i < meters.size(); ++i) {
+    EXPECT_DOUBLE_EQ(kilometers[i], meters[i] / 1000);
+    EXPECT_DOUBLE_EQ(miles[i], ad_utility::detail::kilometerToUnit(
+                                   meters[i] / 1000, UnitOfMeasurement::MILES));
+  }
+
+  // The unit is part of the cache key.
+  EXPECT_NE(cacheKeyMeters, cacheKeyKilometers);
+  EXPECT_NE(cacheKeyMeters, cacheKeyMiles);
+  EXPECT_NE(cacheKeyKilometers, cacheKeyMiles);
+}
+
+// _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   std::string kg;
   addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);

@@ -206,6 +206,13 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable\n";
+      const auto* libSpatialJoinConfig =
+          std::get_if<LibSpatialJoinConfig>(&config_.task_);
+      if (libSpatialJoinConfig != nullptr &&
+          libSpatialJoinConfig->distanceUnit_ != UnitOfMeasurement::METERS) {
+        os << "distanceUnit: "
+           << static_cast<int>(libSpatialJoinConfig->distanceUnit_) << "\n";
+      }
     }
 
     // Selected payload variables
