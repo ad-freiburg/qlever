@@ -4,6 +4,7 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
@@ -17,6 +18,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -1391,6 +1393,132 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                           scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       scan("?a", "<p>", "?b")),
                   "1", Variable{"?unrelated"})));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto query = [](std::string_view filter, std::string_view bind) {
+    return absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE { ?a <p> ?b . ?x <p> ?y . FILTER(",
+        filter, ") BIND(", bind, " AS ?d) }");
+  };
+  // Match the `SpatialJoin` from the `FILTER` with the given distance variable
+  // and unit of the distance column.
+  auto sj = [&](std::optional<V> distanceVariable,
+                UnitOfMeasurement unit = UnitOfMeasurement::METERS) {
+    return ::testing::AllOf(
+        h::spatialJoinFilterSubstitute(
+            500, -1, V{"?y"}, V{"?b"}, std::move(distanceVariable),
+            PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+            SpatialJoinType::WITHIN_DIST, std::nullopt, scan("?x", "<p>", "?y"),
+            scan("?a", "<p>", "?b")),
+        h::RootOperation<SpatialJoin>(AD_PROPERTY(
+            SpatialJoin, onlyForTestingGetConfig,
+            AD_FIELD(SpatialJoinConfiguration, task_,
+                     ::testing::VariantWith<LibSpatialJoinConfig>(
+                         AD_FIELD(LibSpatialJoinConfig, distanceUnit_,
+                                  ::testing::Eq(unit)))))));
+  };
+  std::string_view filter = "geof:distance(?y, ?b) <= 0.5";
+
+  // The `BIND` is replaced by the distance variable of the `SpatialJoin`, with
+  // the unit of the `BIND` expression, and the arguments in any order.
+  h::expect(query(filter, "geof:distance(?y, ?b)"),
+            sj(V{"?d"}, UnitOfMeasurement::KILOMETERS));
+  h::expect(query(filter, "geof:distance(?b, ?y)"),
+            sj(V{"?d"}, UnitOfMeasurement::KILOMETERS));
+  h::expect(query(filter, "geof:metricDistance(?y, ?b)"), sj(V{"?d"}));
+  h::expect(query("geof:metricDistance(?y, ?b) <= 500",
+                  "geof:distance(?y, ?b, <http://qudt.org/vocab/unit/MI>)"),
+            sj(V{"?d"}, UnitOfMeasurement::MILES));
+
+  // The `BIND` is not replaced if its expression is not the distance between
+  // the join variables in a known unit of length.
+  auto notReplaced = [&](std::string_view bind) {
+    h::expect(query(filter, bind), h::Bind(sj(std::nullopt), bind, V{"?d"}));
+  };
+  notReplaced("geof:distance(?y, ?a)");
+  notReplaced("geof:distance(?y, ?y)");
+  notReplaced("geof:distance(?y, ?b, ?a)");
+  notReplaced("geof:distance(?y, ?b, <http://qudt.org/vocab/unit/M2>)");
+  notReplaced("geof:distance(?y, \"POINT(1 2)\")");
+  notReplaced("STR(?y)");
+
+  // The `BIND` is not replaced if `BIND` push down is disabled.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
+            false);
+    notReplaced("geof:distance(?y, ?b)");
+  }
+
+  // The `BIND` is not replaced if the `SpatialJoin` does not compute the
+  // distances.
+  h::expect(
+      query("geof:sfIntersects(?y, ?b)", "geof:distance(?y, ?b)"),
+      h::Bind(
+          h::spatialJoinFilterSubstitute(
+              -1, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::INTERSECTS,
+              std::nullopt, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+          "geof:distance(?y, ?b)", V{"?d"}));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
+  std::string kg;
+  auto addPoint = [&kg](std::string_view subject, std::string_view predicate,
+                        std::string_view point) {
+    absl::StrAppend(&kg, subject, " ", predicate, " \"POINT(", point, ")\"^^<",
+                    GEO_WKT_LITERAL, "> .\n");
+  };
+  addPoint("<a1>", "<p>", "7.83505 48.01267");
+  addPoint("<a2>", "<p>", "7.85298 47.99557");
+  addPoint("<a3>", "<p>", "7.80000 48.10000");
+  addPoint("<b1>", "<q>", "7.84000 48.00000");
+  addPoint("<b2>", "<q>", "7.90000 47.98000");
+  addPoint("<b3>", "<q>", "8.40000 48.00000");
+  auto qec = ad_utility::testing::getQec(kg);
+
+  // Compute the result of the `query` with or without `BIND` push down.
+  auto compute = [&](std::string_view bind, bool enableBindPushDown) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::enableBindPushDown_>(
+            enableBindPushDown);
+    qec->clearCacheUnpinnedOnly();
+    auto qet = h::parseAndPlan(
+        absl::StrCat(
+            "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+            "SELECT ?a ?b ?d WHERE { ?a <p> ?x . ?b <q> ?y . "
+            "FILTER(geof:distance(?x, ?y) <= 10) BIND(",
+            bind, " AS ?d) } ORDER BY ?a ?b"),
+        qec);
+    EXPECT_EQ(absl::StrContains(qet->getCacheKey(), "withDistanceVariable"),
+              enableBindPushDown);
+    return qet->getResult()->idTableView().clone();
+  };
+
+  for (std::string_view bind :
+       {"geof:distance(?x, ?y)", "geof:distance(?y, ?x)",
+        "geof:metricDistance(?x, ?y)",
+        "geof:distance(?x, ?y, <http://qudt.org/vocab/unit/MI>)"}) {
+    auto trace = generateLocationTrace(AD_CURRENT_SOURCE_LOC(), bind);
+    auto expected = compute(bind, false);
+    auto actual = compute(bind, true);
+    // `<a3>` and `<b3>` are too far away from the others.
+    ASSERT_EQ(expected.numRows(), 4);
+    ASSERT_EQ(actual.numRows(), expected.numRows());
+    for (size_t row = 0; row < expected.numRows(); ++row) {
+      EXPECT_EQ(actual(row, 0), expected(row, 0));
+      EXPECT_EQ(actual(row, 1), expected(row, 1));
+      auto expectedDist = expected(row, 2).getDouble();
+      EXPECT_NEAR(actual(row, 2).getDouble(), expectedDist,
+                  1e-6 * expectedDist);
+    }
+  }
 }
 
 // _____________________________________________________________________________

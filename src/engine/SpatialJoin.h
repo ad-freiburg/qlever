@@ -175,6 +175,14 @@ class SpatialJoin : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+
+  // If `bind` computes the distance between the two join variables of this
+  // `SpatialJoin`, and this `SpatialJoin` already computes exact distances,
+  // return a copy of this `SpatialJoin` that binds the distance to the target
+  // of the `bind`. Otherwise return `std::nullopt`.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const;
+
   std::unique_ptr<Operation> cloneWithNewChildren(
       std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
