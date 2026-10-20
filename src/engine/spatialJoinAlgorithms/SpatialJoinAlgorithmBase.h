@@ -44,9 +44,10 @@ class SpatialJoinAlgorithmBase {
                            size_t rowRight, Id distance,
                            bool swapLeftAndRight = false) const;
 
-  // The unit of the distances passed to `addResultTableEntry`.
-  virtual UnitOfMeasurement nativeDistanceUnit() const {
-    return UnitOfMeasurement::KILOMETERS;
+  // Convert a distance in kilometers to the `distanceUnit_` of the `config_`.
+  Id kilometersToDistanceId(double kilometers) const {
+    return Id::makeFromDouble(
+        ad_utility::detail::kilometerToUnit(kilometers, config_.distanceUnit_));
   }
 
   // Calls the `cancellationWrapper` which throws if the query has been

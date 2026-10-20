@@ -51,6 +51,15 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     }
   } else if (predString == "bindDistance") {
     setVariable("bindDistance", object, distanceVariable_);
+  } else if (predString == "distanceUnit") {
+    auto unit = object.isIri() ? ad_utility::detail::iriToUnitOfMeasurement(
+                                     object.getIri().getContent())
+                               : UnitOfMeasurement::UNKNOWN;
+    throwIf(!ad_utility::detail::isLengthUnit(unit),
+            absl::StrCat("The parameter `<distanceUnit>` expects the IRI of a "
+                         "unit of length, e.g. <",
+                         UNIT_METER_IRI, "> or <", UNIT_KILOMETER_IRI, ">"));
+    distanceUnit_ = unit;
   } else if (predString == "joinType") {
     // This case is already covered by `SpatialJoinType::fromString` below,
     // but we want to throw a more precise error if the object isn't even an
@@ -130,6 +139,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
         "Unsupported argument ", predString,
         " in spatial search; supported arguments are: `<left>`, `<right>`, "
         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
+        "`<distanceUnit>`, "
         "`<joinType>`, `<de9imFilter>`, `<payload>`, and `<algorithm>`"));
   }
 }
@@ -182,6 +192,16 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
   throwIf(!right_.has_value(),
           "Missing parameter `<right>` in spatial search.");
+
+  throwIf(distanceUnit_.has_value() && !distanceVariable_.has_value(),
+          "The parameter `<distanceUnit>` requires the parameter "
+          "`<bindDistance>`.");
+
+  throwIf(distanceVariable_.has_value() && !distanceUnit_.has_value() &&
+              algo != SpatialJoinAlgorithm::LIBSPATIALJOIN,
+          "The parameter `<bindDistance>` requires the parameter "
+          "`<distanceUnit>`, unless the algorithm `<libspatialjoin>` is used "
+          "(which defaults to meters).");
 
   throwIf(
       rightCacheName_.has_value() &&
@@ -247,9 +267,14 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     task = MaxDistanceConfig{maxDist_.value()};
   }
 
-  return SpatialJoinConfiguration{
+  SpatialJoinConfiguration config{
       task, left_.value(), right_.value(), distanceVariable_,
       pv,   algo,          rightCacheName_};
+  config.distanceUnit_ = distanceUnit_;
+  if (distanceVariable_.has_value() && !distanceUnit_.has_value()) {
+    config.distanceUnit_ = UnitOfMeasurement::METERS;
+  }
+  return config;
 }
 
 // ____________________________________________________________________________

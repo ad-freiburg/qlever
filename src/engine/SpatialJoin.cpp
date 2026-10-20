@@ -58,6 +58,11 @@ SpatialJoin::SpatialJoin(
     : Operation(qec),
       config_{std::move(config)},
       substitutesFilterOp_{substitutesFilterOp} {
+  AD_CONTRACT_CHECK(
+      config_.distanceUnit_.has_value() ==
+          config_.distanceVariable_.has_value(),
+      "A spatial join must have a distance unit iff it has a distance "
+      "variable.");
   if (childLeft.has_value()) {
     childLeft_ = std::move(childLeft.value());
   }

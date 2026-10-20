@@ -117,7 +117,7 @@ Result S2PointPolylineAlgorithm::run() {
     for (auto [indexRow, dist] : deduplicatedSet) {
       auto rowRight = indexRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
-                          Id::makeFromDouble(dist));
+                          kilometersToDistanceId(dist));
     }
     timerWrite.stop();
   }
