@@ -92,7 +92,15 @@ std::vector<std::string> Operation::collectWarnings() const {
 }
 
 // _____________________________________________________________________________
-void Operation::addWarningOrThrow(std::string warning) const {
+void Operation::addWarning(std::string warning) const {
+  auto warnings = warnings_.wlock();
+  if (!ad_utility::contains(*warnings, warning)) {
+    warnings->push_back(std::move(warning));
+  }
+}
+
+// _____________________________________________________________________________
+void Operation::addUnboundVariableWarningOrThrow(std::string warning) const {
   if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {

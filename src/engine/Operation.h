@@ -184,15 +184,13 @@ class Operation {
   std::vector<std::string> collectWarnings() const;
 
   // Add a warning to the `Operation`. The warning will be returned by
-  // `collectWarnings()` above.
-  void addWarning(std::string warning) const {
-    warnings_.wlock()->push_back(std::move(warning));
-  }
+  // `collectWarnings()` above. Duplicate warnings are ignored.
+  void addWarning(std::string warning) const;
 
   // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a
-  // warning.
-  void addWarningOrThrow(std::string warning) const;
+  // warning. Only use this for warnings about unbound variables.
+  void addUnboundVariableWarningOrThrow(std::string warning) const;
 
   /**
    * @return A list of columns on which the result of this operation is sorted.
