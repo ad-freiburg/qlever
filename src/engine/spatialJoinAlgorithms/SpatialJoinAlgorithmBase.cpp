@@ -50,6 +50,17 @@ void SpatialJoinAlgorithmBase::addResultTableEntry(
   }
 
   if (config_.distanceVariable_.has_value()) {
+    // Convert the distance to the requested unit, if it differs from the
+    // native unit of the algorithm.
+    auto unit = config_.distanceUnit_;
+    auto nativeUnit = nativeDistanceUnit();
+    if (unit.has_value() && unit.value() != nativeUnit &&
+        distance.getDatatype() == Datatype::Double) {
+      distance = Id::makeFromDouble(ad_utility::detail::kilometerToUnit(
+          ad_utility::detail::valueInUnitToKilometer(distance.getDouble(),
+                                                     nativeUnit),
+          unit.value()));
+    }
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
     // which add additional columns, would need to remember to increase
