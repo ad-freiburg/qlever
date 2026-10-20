@@ -258,9 +258,7 @@ class WktCrsType {
     }
 
     auto typeIri = crsType.value().asIri();
-    if (!typeIri.has_value()) {
-      return ValueId::makeUndefined();
-    }
+    AD_CORRECTNESS_CHECK(typeIri.has_value());
 
     // The CRS type should be returned as an xsd:anyURI literal according
     // to the GeoSPARQL standard.
