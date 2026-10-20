@@ -12,7 +12,6 @@
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
 #include <absl/strings/str_cat.h>
-#include <absl/strings/str_join.h>
 #include <spatialjoin/BoxIds.h>
 
 #include <thread>
@@ -241,20 +240,21 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 // ____________________________________________________________________________
 void LibspatialjoinAlgorithm::addInvalidGeometriesWarning(
     size_t numInvalidLeft, size_t numInvalidRight) const {
-  std::vector<std::string> sides;
-  for (auto [n, var] : {std::pair{numInvalidLeft, &config_.left_},
-                        std::pair{numInvalidRight, &config_.right_}}) {
-    if (n > 0) {
-      sides.push_back(absl::StrCat(var->name(), ": ", n));
-    }
+  std::string counts;
+  if (numInvalidLeft > 0) {
+    absl::StrAppend(&counts, config_.left_.name(), ": ", numInvalidLeft);
   }
-  if (sides.empty()) {
+  if (numInvalidRight > 0) {
+    absl::StrAppend(&counts, counts.empty() ? "" : ", ", config_.right_.name(),
+                    ": ", numInvalidRight);
+  }
+  if (counts.empty()) {
     return;
   }
   spatialJoin_.value()->addWarning(absl::StrCat(
       spatialJoin_.value()->getDescriptor(),
-      ": skipped rows with invalid or unsupported geometry literals (",
-      absl::StrJoin(sides, ", "), ")"));
+      ": skipped rows with invalid or unsupported geometry literals (", counts,
+      ")"));
 }
 
 // ____________________________________________________________________________
