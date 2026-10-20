@@ -97,8 +97,8 @@ std::vector<std::string> Operation::collectWarnings() const {
 // _____________________________________________________________________________
 void Operation::addWarning(std::string warning) const {
   auto warnings = warnings_.wlock();
+  _runtimeInfo->details_["warnings"].push_back(warning);
   warnings->push_back(std::move(warning));
-  _runtimeInfo->addDetail("warnings", *warnings);
 }
 
 // _____________________________________________________________________________
@@ -529,18 +529,21 @@ void Operation::updateRuntimeInformationOnSuccess(
       _runtimeInfo->originalTotalTime_ = runtimeInfo->totalTime_;
       _runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
       _runtimeInfo->details_ = std::move(runtimeInfo->details_);
-      // The cached details contain the warnings of the original computation.
-      // Keep the ones that were added to this operation before (e.g. during
-      // query planning) as well.
-      auto& warningsDetail = _runtimeInfo->details_["warnings"];
-      for (const auto& warning : *warnings_.rlock()) {
-        if (std::find(warningsDetail.begin(), warningsDetail.end(), warning) ==
-            warningsDetail.end()) {
-          warningsDetail.push_back(warning);
+      // The cached details only contain the warnings of the original
+      // computation, so we have to add the warnings that were added to this
+      // operation (e.g. during query planning). Example: A query using the
+      // deprecated `<nearest-neighbors:...>` predicate gets a deprecation
+      // warning during query planning. If its result is read from the cache
+      // because it was previously computed by an equivalent query using the
+      // `SERVICE` syntax, the cached details don't contain this warning.
+      if (auto warnings = warnings_.rlock(); !warnings->empty()) {
+        auto& warningsDetail = _runtimeInfo->details_["warnings"];
+        for (const auto& warning : *warnings) {
+          if (std::find(warningsDetail.begin(), warningsDetail.end(),
+                        warning) == warningsDetail.end()) {
+            warningsDetail.push_back(warning);
+          }
         }
-      }
-      if (warningsDetail.empty()) {
-        _runtimeInfo->eraseDetail("warnings");
       }
     }
     // Only the result that was actually computed (or read from cache) knows
