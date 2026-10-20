@@ -150,10 +150,12 @@ TEST(SpatialJoinParser, InvalidWktIsSkipped) {
     parser.addValueIdToQueue(id, row++, false, std::nullopt);
   }
   // Literals from the query (`LocalVocabIndex`): The first two are valid
-  // (exponent notation and a leading `+` are allowed in the strict mode).
+  // (exponent notation and a leading `+` are allowed in the strict mode). The
+  // last one has an unsupported CRS.
   LocalVocab localVocab;
   for (auto wkt : {"POINT(1 2)", "POINT(1e1 +2)", "POINT(1 2, 3 4)",
-                   "LINESTRING(1 1, 3 3, 4 a)", "not wkt"}) {
+                   "LINESTRING(1 1, 3 3, 4 a)", "not wkt",
+                   "<http://example.com/crs> POINT(1 2)"}) {
     auto idx = localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::fromStringRepresentation(lit(wkt),
                                                   qec->getLocalVocabContext()));
@@ -162,8 +164,8 @@ TEST(SpatialJoinParser, InvalidWktIsSkipped) {
   }
   parser.done();
 
-  EXPECT_EQ(parser.getParseCounter(), 7);
-  EXPECT_EQ(parser.getNumInvalid(), 4);
+  EXPECT_EQ(parser.getParseCounter(), 8);
+  EXPECT_EQ(parser.getNumInvalid(), 5);
   EXPECT_EQ(sweeper.numElements(), 3);
 
   // See `AddValueIdToQueue` above.

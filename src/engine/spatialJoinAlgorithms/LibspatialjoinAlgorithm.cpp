@@ -11,6 +11,8 @@
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <spatialjoin/BoxIds.h>
 
 #include <thread>
@@ -237,6 +239,25 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 }
 
 // ____________________________________________________________________________
+void LibspatialjoinAlgorithm::addInvalidGeometriesWarning(
+    size_t numInvalidLeft, size_t numInvalidRight) const {
+  std::vector<std::string> sides;
+  for (auto [n, var] : {std::pair{numInvalidLeft, &config_.left_},
+                        std::pair{numInvalidRight, &config_.right_}}) {
+    if (n > 0) {
+      sides.push_back(absl::StrCat(var->name(), ": ", n));
+    }
+  }
+  if (sides.empty()) {
+    return;
+  }
+  spatialJoin_.value()->addWarning(absl::StrCat(
+      spatialJoin_.value()->getDescriptor(),
+      ": skipped rows with invalid or unsupported geometry literals (",
+      absl::StrJoin(sides, ", "), ")"));
+}
+
+// ____________________________________________________________________________
 Result LibspatialjoinAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
@@ -349,6 +370,11 @@ Result LibspatialjoinAlgorithm::run() {
         "num-geoms-dropped-by-prefilter", droppedLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
                                                   invalidSmall + invalidLarge);
+    if (smallerIsRight) {
+      addInvalidGeometriesWarning(invalidLarge, invalidSmall);
+    } else {
+      addInvalidGeometriesWarning(invalidSmall, invalidLarge);
+    }
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
