@@ -334,29 +334,40 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
-// _____________________________________________________________________________
-bool containsGeoDistanceExpression(const SparqlExpression& expr) {
+namespace {
+// Return true iff `expr` or any of its descendants is a `geof:distance` or
+// `geof:metricDistance` call for which `pred` holds.
+template <typename P>
+bool anyGeoDistanceExpression(const SparqlExpression& expr, const P& pred) {
   using namespace detail;
-  if (dynamic_cast<const DistExpression*>(&expr) ||
-      dynamic_cast<const MetricDistExpression*>(&expr) ||
-      dynamic_cast<const DistWithUnitExpression*>(&expr)) {
+  if ((dynamic_cast<const DistExpression*>(&expr) ||
+       dynamic_cast<const MetricDistExpression*>(&expr) ||
+       dynamic_cast<const DistWithUnitExpression*>(&expr)) &&
+      pred(expr)) {
     return true;
   }
-  return ql::ranges::any_of(expr.children(), [](const auto& child) {
-    return containsGeoDistanceExpression(*child);
+  return ql::ranges::any_of(expr.children(), [&pred](const auto& child) {
+    return anyGeoDistanceExpression(*child, pred);
   });
+}
+}  // namespace
+
+// _____________________________________________________________________________
+bool containsGeoDistanceExpression(const SparqlExpression& expr) {
+  return anyGeoDistanceExpression(expr, [](const auto&) { return true; });
 }
 
 // _____________________________________________________________________________
-std::vector<GeoDistanceCall> getGeoDistanceCalls(const SparqlExpression& expr) {
-  std::vector<GeoDistanceCall> result;
-  if (auto call = getGeoDistanceExpressionParameters(expr)) {
-    result.push_back(std::move(call).value());
-  }
-  for (const auto& child : expr.children()) {
-    ql::ranges::move(getGeoDistanceCalls(*child), std::back_inserter(result));
-  }
-  return result;
+bool containsGeoDistanceExpressionWithOneFixedGeometry(
+    const SparqlExpression& expr) {
+  auto isFixed = [](const SparqlExpression& arg) {
+    auto operand = extractGeometryOperand(arg);
+    return operand.has_value() && !operand.value().isVariable();
+  };
+  return anyGeoDistanceExpression(expr, [&isFixed](const auto& dist) {
+    auto children = dist.children();
+    return isFixed(*children[0]) != isFixed(*children[1]);
+  });
 }
 
 }  // namespace sparqlExpression

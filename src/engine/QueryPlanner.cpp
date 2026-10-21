@@ -1814,19 +1814,18 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     auto sj = rewriteFilterToSpatialJoin(
         filterExpression, _qec, [this] { return generateUniqueVarName(); });
     if (!sj) {
-      // A `geof:distance` filter with a fixed value on one side would have
-      // been rewritten to a `SpatialJoin` with a single-row `VALUES` child if
-      // only the filter had a supported form. Filters with two variables are
-      // only reported if they lead to a Cartesian product (see `fillDpTab`).
+      // A `geof:distance` filter with a fixed value on one side is evaluated
+      // row by row over all geometries on the other side. This also applies if
+      // the other side is not a variable (e.g. `geof:centroid(?x)`), even
+      // though such a filter could not be rewritten in any form. Filters with
+      // two variables are only reported if they lead to a Cartesian product
+      // (see `fillDpTab`).
       //
       // TODO<ullingerc> Filters like `geof:distance(?a, <fixed>) > constant`
       // can never be rewritten to a `SpatialJoin`, so the warning cannot be
       // acted upon. Consider not reporting them.
-      auto calls = sparqlExpression::getGeoDistanceCalls(
-          *filterExpression.expression_.getPimpl());
-      if (ql::ranges::any_of(calls, [](const auto& call) {
-            return call.left_.isVariable() != call.right_.isVariable();
-          })) {
+      if (sparqlExpression::containsGeoDistanceExpressionWithOneFixedGeometry(
+              *filterExpression.expression_.getPimpl())) {
         addNonRewritableGeoDistanceFilterWarning(filterExpression);
       }
       plans.push_back({filterExpression, std::nullopt});

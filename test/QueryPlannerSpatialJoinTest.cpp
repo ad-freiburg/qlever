@@ -1434,10 +1434,15 @@ TEST(QueryPlanner, WarningForNonRewritableGeofDistanceFilter) {
   expectWarnings(absl::StrCat("geof:distance(", point, ", ?y) * 2 <= 1"),
                  {warn});
 
-  // A complex geometry argument next to a fixed value is not detected, because
-  // the filter could not have been rewritten anyway.
+  // A complex geometry argument next to a fixed value: warning, even though
+  // the filter cannot be rewritten in any form.
   expectWarnings(
-      absl::StrCat("geof:distance(geof:centroid(?y), ", point, ") < 0.5"), {});
+      absl::StrCat("geof:distance(geof:centroid(?y), ", point, ") <= 0.5"),
+      {warn});
+
+  // Two fixed values: no warning.
+  expectWarnings(absl::StrCat("geof:distance(", point, ", ", point, ") < 0.5"),
+                 {});
 
   // Unrelated filter, also between two components: no warning.
   expectWarnings("?y < ?b", {});
