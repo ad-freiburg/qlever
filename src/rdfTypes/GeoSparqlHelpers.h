@@ -225,49 +225,30 @@ class WktBoundingCoordinate {
   }
 };
 
-// Get the geometry type of WKT literal using `GeometryInfo`.
-class WktGeometryType {
+// Get the IRI of a type of a WKT literal (its `GeometryType` or its
+// `SourceCrsType` from the `GeometryInfo`) as an `xsd:anyURI` literal, which
+// is the return type of `geof:geometryType` and `geof:getSRID` in the GeoSPARQL
+// standard. `UNDEF` if there is no such type or no IRI for it.
+template <typename TypeWithIri>
+class WktTypeIri {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<GeometryType>& geometryType) const {
-    if (!geometryType.has_value()) {
+      const std::optional<TypeWithIri>& type) const {
+    if (!type.has_value()) {
       return ValueId::makeUndefined();
     }
-
-    auto typeIri = geometryType.value().asIri();
+    auto typeIri = type.value().asIri();
     if (!typeIri.has_value()) {
       return ValueId::makeUndefined();
     }
-
-    // The geometry type should be returned as an xsd:anyURI literal according
-    // to the GeoSPARQL standard.
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
     return {LiteralOrIri{std::move(lit)}};
   }
 };
-
-// Get the CRS type of WKT literal using `GeometryInfo`.
-class WktCrsType {
- public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<SourceCrsType>& crsType) const {
-    if (!crsType.has_value()) {
-      return ValueId::makeUndefined();
-    }
-
-    auto typeIri = crsType.value().asIri();
-    AD_CORRECTNESS_CHECK(typeIri.has_value());
-
-    // The CRS type should be returned as an xsd:anyURI literal according
-    // to the GeoSPARQL standard.
-    using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(typeIri.value());
-    lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
-    return {LiteralOrIri{std::move(lit)}};
-  }
-};
+using WktGeometryType = WktTypeIri<GeometryType>;
+using WktCrsType = WktTypeIri<SourceCrsType>;
 
 // Get the WKT for the n-th element (1-indexed) of the given WKT.
 class WktGeometryN {
