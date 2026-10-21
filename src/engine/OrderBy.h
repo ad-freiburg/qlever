@@ -112,7 +112,8 @@ class OrderBy : public Operation {
   // to the block metadata of the scan, replace the scan by a copy that only
   // reads the blocks which can contain the rows selected by the
   // `LIMIT`/`OFFSET` (see `selectBlocksForSortedNumericLimit` in the `.cpp`).
-  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                            bool childIsExclusivelyOwned) override;
 
   // If the `LIMIT`/`OFFSET` was pushed into an `IndexScan`, the number of
   // blocks that the scan reads now, and its total number of blocks. Only used
