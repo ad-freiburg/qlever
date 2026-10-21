@@ -34,9 +34,9 @@ struct SpatialQuery : MagicServiceQuery {
   // search results is bound
   std::optional<Variable> distanceVariable_;
 
-  // The unit of the distances bound to `distanceVariable_`. Mandatory if the
-  // `distanceVariable_` is set, except for `libspatialjoin`, which defaults to
-  // meters.
+  // The unit of the distances bound to `distanceVariable_`. If not given,
+  // `libspatialjoin` defaults to meters and all other algorithms default to
+  // kilometers.
   std::optional<UnitOfMeasurement> distanceUnit_;
 
   // A list of variables from the right join table that shall be part of the

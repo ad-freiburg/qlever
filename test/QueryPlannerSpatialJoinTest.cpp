@@ -1129,18 +1129,13 @@ TEST(QueryPlanner, SpatialJoinServiceDistanceUnit) {
                   absl::StrCat(bind, " ; ", unit(UNIT_KILOMETER_IRI))),
             hasUnit(KILOMETERS));
 
-  // `libspatialjoin` defaults to meters.
+  // `libspatialjoin` defaults to meters, all other algorithms to kilometers.
   h::expect(query(libspatialjoin, bind), hasUnit(METERS));
+  h::expect(query(s2, bind), hasUnit(KILOMETERS));
 
   // Without a distance variable, there is no unit.
   h::expect(query(s2, "spatialSearch:numNearestNeighbors 5"),
             hasUnit(std::nullopt));
-
-  // All other algorithms require an explicit unit for a distance variable.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect(query(s2, bind), ::testing::_),
-      ::testing::HasSubstr("`<bindDistance>` requires the parameter "
-                           "`<distanceUnit>`"));
 
   // A unit requires a distance variable.
   AD_EXPECT_THROW_WITH_MESSAGE(
