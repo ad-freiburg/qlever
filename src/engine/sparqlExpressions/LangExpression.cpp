@@ -22,8 +22,8 @@ struct GetLanguageTag {
     if (!optLangTag.has_value()) {
       return Id::makeUndefined();
     } else {
-      return LiteralOrIri{Lit::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+      return LiteralOrIri{
+          Lit::literalWithNormalizedContent(optLangTag.value())};
     }
   }
 };

@@ -115,7 +115,7 @@ struct VocabularyMetaData {
   // converted to an ID without becoming part of the vocabulary.
   size_t numBlankNodesTotal_ = 0;
   IdRangeForPrefix langTaggedPredicates_{
-      std::string{ad_utility::languageTaggedPredicatePrefix}};
+      std::string{LANGUAGE_TAGGED_PREDICATE_PREFIX}};
   IdRangeForPrefix internalEntities_{
       std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
 

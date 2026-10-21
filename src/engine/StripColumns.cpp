@@ -47,8 +47,8 @@ StripColumns::StripColumns(QueryExecutionContext* ctx,
       varToCol_{std::move(varToCol)} {}
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> StripColumns::getChildrenImpl() const {
-  return {child_.get()};
+qlm::vector<QueryExecutionTree*> StripColumns::getChildrenImpl() const {
+  return {{child_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -90,7 +90,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // Push `bind` down to the child. If successful, create a new `StripColumns`
   // that also keeps the bound target variable.
-  auto newChild = child_->getRootOperation()->makeTreeWithBindColumn(bind);
+  auto newChild = child_->makeTreeWithBindColumn(bind);
   if (!newChild) {
     return std::nullopt;
   }

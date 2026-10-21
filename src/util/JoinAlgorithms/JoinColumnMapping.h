@@ -231,9 +231,9 @@ struct IdTableAndFirstCols<1, Table> {
 
   bool empty() const { return col().empty(); }
 
-  const Id& operator[](size_t idx) const { return col()[idx]; }
-  const Id& front() const { return col().front(); }
-  const Id& back() const { return col().back(); }
+  ConstIdRef operator[](size_t idx) const { return col()[idx]; }
+  ConstIdRef front() const { return col().front(); }
+  ConstIdRef back() const { return col().back(); }
 
   size_t size() const { return col().size(); }
 

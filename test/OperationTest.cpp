@@ -3,12 +3,14 @@
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <optional>
 
 #include "engine/Bind.h"
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
@@ -22,6 +24,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 using namespace ad_utility::testing;
 using namespace ::testing;
@@ -191,7 +195,7 @@ class OperationTestFixture : public testing::Test {
 
   std::shared_ptr<Index> index = []() {
     TestIndexConfig indexConfig{};
-    indexConfig.blocksizePermutations = 32_B;
+    indexConfig.rowsPerBlock = 4;
 
     return std::make_shared<Index>(makeTestIndex(std::move(indexConfig)));
   }();
@@ -206,6 +210,7 @@ class OperationTestFixture : public testing::Test {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -230,6 +235,32 @@ TEST_F(OperationTestFixture,
                       "status", Eq("fully materialized completed"))),
                   ParsedAsJson(HasKeyMatching(
                       "status", Eq("fully materialized completed")))));
+}
+
+// Test that the updates of the runtime information carry the information about
+// the query planning, once it is set.
+TEST_F(OperationTestFixture, updatesCarryInformationAboutTheQueryPlanning) {
+  // Without that information, an update is just the runtime information of the
+  // operations.
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  EXPECT_FALSE(nlohmann::json::parse(jsonHistory.back()).contains("meta"));
+
+  // With it, every update carries it as the key `meta`, with the same content
+  // as in the `application/qlever-results+json` format.
+  QueryPlanningInfo queryPlanningInfo;
+  queryPlanningInfo.timeQueryPlanning = std::chrono::milliseconds{17};
+  queryPlanningInfo.queryPlanning.push_back(
+      {PlanningAlgorithm::DYNAMIC_PROGRAMMING, 3, 6, 1500, 42});
+  qec.setQueryPlanningInfo(queryPlanningInfo);
+  jsonHistory.clear();
+  qec.clearCacheUnpinnedOnly();
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  for (const auto& json : jsonHistory) {
+    EXPECT_EQ(nlohmann::ordered_json::parse(json)["meta"],
+              nlohmann::ordered_json(queryPlanningInfo));
+  }
 }
 
 // _____________________________________________________________________________
@@ -291,10 +322,12 @@ TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
       operation.getChildren().at(0)->getRootOperation());
 
+#ifndef _QLEVER_NO_TIMING_TESTS
   EXPECT_GT(operation.publicRemainingTime(), 0ms);
   EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
+#endif
   std::this_thread::sleep_for(timeout);
-  // Verify time is up for parent and child
+  // Verify that the time is up for the parent and the child.
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
   EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }
@@ -510,6 +543,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -540,6 +574,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { signaledUpdate = true; }};
   CustomGeneratorOperation operation{&context, []() -> Result::Generator {
                                        throw CancellationException{
@@ -577,6 +612,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -611,6 +647,32 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 }
 
 // _____________________________________________________________________________
+TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
+  auto idTable = makeIdTableFromVector({{}});
+  CustomGeneratorOperation operation{
+      getQec(), [](const IdTable& idTable) -> Result::Generator {
+        co_yield {idTable.clone(), LocalVocab{}};
+        // Work that is done after the last chunk, e.g. a filter that discards
+        // the remaining input, has to be accounted for, too.
+        std::this_thread::sleep_for(5ms);
+      }(idTable)};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+  auto& rti = operation.runtimeInfo();
+  auto totalTimeBefore = rti.totalTime_;
+
+  for ([[maybe_unused]] auto& _ : result.idTables()) {
+  }
+  EXPECT_EQ(rti.status_, Status::lazilyMaterializedCompleted);
+  // Only lower bounds, a high system load can only make the sleep longer.
+  EXPECT_GE(rti.totalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalTotalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalOperationTime_, 5ms);
+}
+
+// _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
@@ -627,6 +689,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -956,6 +1019,45 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   auto sortedTree = ad_utility::makeExecutionTree<Sort>(
       qec, randBindTree, std::vector<ColumnIndex>{});
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, isDeterministicOfNestedJoins) {
+  using namespace ad_utility::testing;
+  auto* qec = getQec();
+  Variable x{"?x"};
+
+  std::vector<std::shared_ptr<const ValuesForTestingCountingDeterminismChecks>>
+      leaves;
+  auto makeLeaf = [&]() {
+    auto leaf = ad_utility::makeExecutionTree<
+        ValuesForTestingCountingDeterminismChecks>(
+        qec, makeIdTableFromVector({{1, 2}}),
+        std::vector<std::optional<Variable>>{
+            x, Variable{absl::StrCat("?o", leaves.size())}},
+        false, std::vector<ColumnIndex>{0});
+    leaves.push_back(std::dynamic_pointer_cast<
+                     const ValuesForTestingCountingDeterminismChecks>(
+        leaf->getRootOperation()));
+    AD_CORRECTNESS_CHECK(leaves.back() != nullptr);
+    return leaf;
+  };
+
+  // Each leaf of a left-deep chain of nested joins must be visited exactly
+  // once. Previously, `Join::isDeterministicImpl()` recursed into the subtree
+  // in addition to `Operation::isDeterministic()`, which made this exponential
+  // in the nesting depth, see
+  // https://github.com/ad-freiburg/qlever/issues/3557.
+  auto tree = makeLeaf();
+  for (size_t i = 0; i < 40; ++i) {
+    auto leftCol = tree->getVariableColumn(x);
+    tree = ad_utility::makeExecutionTree<Join>(qec, std::move(tree), makeLeaf(),
+                                               leftCol, 0);
+  }
+  EXPECT_TRUE(tree->getRootOperation()->isDeterministic());
+  for (const auto& leaf : leaves) {
+    EXPECT_EQ(leaf->numDeterminismChecks(), 1);
+  }
 }
 
 // _____________________________________________________________________________

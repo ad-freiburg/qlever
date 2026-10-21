@@ -22,9 +22,9 @@
 class GraphStoreProtocol {
  private:
   // Extract the mediatype from a request.
-  CPP_template_2(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
-                                    RequestT>) static ad_utility::MediaType
-      extractMediatype(const RequestT& rawRequest) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ad_utility::MediaType extractMediatype(const RequestT& rawRequest) {
     using namespace boost::beast::http;
 
     std::string_view contentTypeString;
@@ -93,7 +93,7 @@ class GraphStoreProtocol {
   // and sets the correct graph.
   static updateClause::GraphUpdate::Triples convertTriples(
       const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-      Quads::BlankNodeAdder& blankNodeAdder);
+      BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
   // Creates a `ResponseMiddleware` that sets the `Location` of the response to
@@ -105,11 +105,9 @@ class GraphStoreProtocol {
   // GSP POST must be inserted into a new graph. If it cannot be determined
   // whether the graph identifies the instance, `false` is returned.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<
-          RequestT>) static bool mustInsertIntoNewGraph(const RequestT&
-                                                            rawRequest,
-                                                        const GraphOrDefault&
-                                                            graph) {
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static bool mustInsertIntoNewGraph(const RequestT& rawRequest,
+                                     const GraphOrDefault& graph) {
     if (!std::holds_alternative<GraphRef>(graph) ||
         rawRequest.find(boost::beast::http::field::host) == rawRequest.end()) {
       return false;
@@ -133,13 +131,14 @@ class GraphStoreProtocol {
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
                     const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto insertIntoNewGraph = mustInsertIntoNewGraph(rawRequest, graph);
     const GraphOrDefault effectiveGraph =
         insertIntoNewGraph ? generateNewGraphIri() : graph;
@@ -166,13 +165,14 @@ class GraphStoreProtocol {
   // `TSOP` (`POST` backwards) does a `DELETE DATA` of the payload. It is an
   // extension to the Graph Store Protocol.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ParsedQuery
       transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph,
                     const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
     ParsedQuery res;
@@ -195,10 +195,10 @@ class GraphStoreProtocol {
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
   // which are SPARQL Updates.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ParsedQuery> transformPut(const RequestT& rawRequest,
-                                       const GraphOrDefault& graph,
-                                       const Index& index) {
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static std::vector<ParsedQuery> transformPut(const RequestT& rawRequest,
+                                               const GraphOrDefault& graph,
+                                               const Index& index) {
     std::string stringRepresentation =
         truncatedStringRepresentation("PUT", rawRequest);
 
@@ -221,7 +221,7 @@ class GraphStoreProtocol {
 
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery insertData;
@@ -260,11 +260,10 @@ class GraphStoreProtocol {
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ParsedQuery> transformGraphStoreProtocol(
-          ad_utility::url_parser::sparqlOperation::GraphStoreOperation
-              operation,
-          const RequestT& rawRequest, const Index& index) {
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static std::vector<ParsedQuery> transformGraphStoreProtocol(
+      ad_utility::url_parser::sparqlOperation::GraphStoreOperation operation,
+      const RequestT& rawRequest, const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;

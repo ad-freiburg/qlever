@@ -127,8 +127,7 @@ TEST(UuidExpression, evaluateStrUuidExpression) {
     ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(uuid));
     LiteralOrIri litUuid = std::get<LocalVocabEntry>(uuid);
     ASSERT_TRUE(litUuid.isLiteral());
-    std::string_view strUuid =
-        asStringViewUnsafe(litUuid.getLiteral().getContent());
+    std::string_view strUuid = litUuid.getLiteral().getContent();
     ASSERT_EQ(strUuids.find(std::string(strUuid)), strUuids.end());
     strUuids.insert(std::string(strUuid));
   }
@@ -160,8 +159,7 @@ TEST(UuidExpression, evaluateUuidExpression) {
     ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(uuid));
     LiteralOrIri litUuid = std::get<LocalVocabEntry>(uuid);
     ASSERT_TRUE(litUuid.isIri());
-    std::string_view iriUuid =
-        asStringViewUnsafe(litUuid.getIri().getContent());
+    std::string_view iriUuid = litUuid.getIri().getContent();
     ASSERT_EQ(strUuids.find(std::string(iriUuid)), strUuids.end());
     strUuids.insert(std::string(iriUuid));
   }

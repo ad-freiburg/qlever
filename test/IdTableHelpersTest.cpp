@@ -13,7 +13,7 @@
 #include "./util/IdTableHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ConstexprUtils.h"
 #include "util/IdTestHelpers.h"
@@ -136,7 +136,7 @@ void generalIdTableCheck(const IdTable& table,
 
   if (allEntriesWereSet) {
     ASSERT_TRUE(ql::ranges::all_of(table, [](const auto& row) {
-      return ql::ranges::all_of(row, [](const ValueId& entry) {
+      return ql::ranges::all_of(row, [](ConstIdRef entry) {
         return ad_utility::testing::VocabId(0) <= entry &&
                entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
       });
@@ -179,7 +179,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
                         const size_t& lowerBound, const size_t& upperBound) {
     ASSERT_TRUE(ql::ranges::all_of(
         table.getColumn(columnNumber),
-        [&lowerBound, &upperBound](const ValueId& entry) {
+        [&lowerBound, &upperBound](ConstIdRef entry) {
           return ad_utility::testing::VocabId(lowerBound) <= entry &&
                  entry <= ad_utility::testing::VocabId(upperBound);
         }));

@@ -198,12 +198,16 @@ class FileBlockSource : public BlockingBlockSource {
 };
 
 // Wrap an `AsyncBlockSource` and cut blocks at statement boundaries. For each
-// block produced by the inner source, `findEndPosition` determines the number
-// of bytes until the end of the last statement in the block (it is expected to
-// scan the block from the back); the block is returned up to that position,
-// with the tail carried over from the previous block prepended. If no statement
-// boundary can be found in a complete block, an exception is thrown with a
-// message that indicates possible mitigations for this error.
+// block produced by the inner source, with the tail carried over from the
+// previous block prepended, `findEndPosition` determines the number of bytes
+// until the end of the last statement in it (it is expected to scan from the
+// back); the block is returned up to that position, and the rest becomes the
+// new tail. The tail is prepended before the search, such that
+// `findEndPosition` always sees the input from the end of the previous
+// statement on and can hence also recognize constructs that start before the
+// current block, like a comment. If no statement boundary can be found in a
+// complete block, an exception is thrown with a message that indicates possible
+// mitigations for this error.
 class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
  public:
   // A function that, given a block, returns the number of bytes until the end
@@ -218,38 +222,47 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   Block remainder_;
   EndPositionFinder findEndPosition_;
   std::string description_;
+  std::string inputName_;
+  bool isParsedInParallel_;
   bool exhausted_ = false;
 
  public:
   // Wrap `inner` and cut its blocks at the positions determined by
   // `findEndPosition`. `description` is used in error messages to describe what
-  // marks the end of a statement. `exec` is only used as the default executor
-  // for the completions (see `AsyncBlockSource`'s constructor).
+  // marks the end of a statement, and `inputName` to name the input that
+  // `inner` reads (typically a filename, see
+  // `qlever::InputFileSpecification::filename`), such that an error can be
+  // attributed to one of the possibly many inputs of an index build.
+  // `isParsedInParallel` only selects the fixes that such an error suggests:
+  // disabling parallel parsing is no fix for an input that is parsed serially
+  // to begin with. `exec` is only used as the default executor for the
+  // completions (see `AsyncBlockSource`'s constructor).
   AsyncStatementBoundaryBlockSource(const ql::any_io_executor& exec,
                                     std::unique_ptr<AsyncBlockSource> inner,
                                     EndPositionFinder findEndPosition,
-                                    std::string description);
+                                    std::string description,
+                                    std::string inputName,
+                                    bool isParsedInParallel);
 
  protected:
   void asyncGetNextBlockImpl(Handler handler) override;
 
  private:
-  // Assemble the result block from `remainder_` and `rawInput[0,
-  // endPosition)`, update `remainder_` to `rawInput[endPosition, end)`, and
-  // pass the result to `handler`.
-  void assembleAndDeliver(Handler& handler, Block& rawInput,
-                          size_t endPosition);
+  // Split `input` (which already has the previous `remainder_` prepended) at
+  // `endPosition`: the part before it is passed to `handler`, the part after it
+  // becomes the new `remainder_`.
+  void splitAndDeliver(Handler& handler, Block& input, size_t endPosition);
 
   // Mark this source exhausted and pass whatever is left in `remainder_` to
   // `handler` (`nullopt` if empty).
   void deliverRemainder(Handler& handler);
 
-  // Called when `findEndPosition_` found no boundary in `rawInput`. Peeks at
-  // the next block from `inner_` to decide whether `rawInput` is simply the
-  // last block (delivered as-is via `assembleAndDeliver`) or the search
+  // Called when `findEndPosition_` found no boundary in `input`. Peeks at
+  // the next block from `inner_` to decide whether `input` is simply the
+  // last block (delivered as-is via `splitAndDeliver`) or the search
   // failed because the batch was too small (in which case `handler` receives
   // a "statement too large" error).
-  void handleMissingBoundary(Handler handler, Block rawInput);
+  void handleMissingBoundary(Handler handler, Block input);
 };
 
 }  // namespace qlever::parser

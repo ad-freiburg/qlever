@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <map>
+#include <numeric>
+#include <vector>
 
 #include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
@@ -315,4 +317,53 @@ TEST(AlgorithmTest, SetDifference) {
   testProj({{9, 1}, {9, 2}}, {}, {{9, 1}, {9, 2}});
   testProj({{9, 1}, {9, 2}}, {{9, 3}}, {{9, 2}});
   testProj({{9, 1}, {9, 2}}, {{9, 3}, {9, 4}}, {});
+}
+
+// _____________________________________________________________________________
+TEST(AlgorithmTest, gallopingPartitionPoint) {
+  // Compare against `std::partition_point` for all the partition points of
+  // ranges of different sizes (the sizes cover all the cases in which the
+  // galloping steps exactly hit or overshoot the end of the range).
+  for (size_t size = 0; size < 70; ++size) {
+    for (size_t partitionPoint = 0; partitionPoint <= size; ++partitionPoint) {
+      std::vector<size_t> values(size);
+      std::iota(values.begin(), values.end(), 0);
+      auto pred = [partitionPoint](size_t value) {
+        return value < partitionPoint;
+      };
+      auto it = gallopingPartitionPoint(values.begin(), values.end(), pred);
+      EXPECT_EQ(it - values.begin(), static_cast<ptrdiff_t>(partitionPoint))
+          << "size: " << size << ", partitionPoint: " << partitionPoint;
+      EXPECT_EQ(it, std::partition_point(values.begin(), values.end(), pred));
+    }
+  }
+
+  // A partition point close to the beginning of a large range is found with
+  // only a few calls to the predicate.
+  std::vector<int> large(1'000'000, 1);
+  large.at(0) = 0;
+  large.at(1) = 0;
+  size_t numCalls = 0;
+  auto isZero = [&numCalls](int value) {
+    ++numCalls;
+    return value == 0;
+  };
+  auto it = gallopingPartitionPoint(large.begin(), large.end(), isZero);
+  EXPECT_EQ(it - large.begin(), 2);
+  EXPECT_LE(numCalls, 4u);
+
+  // A partition point at the end of a large range only needs a logarithmic
+  // number of calls.
+  ql::ranges::fill(large, 0);
+  numCalls = 0;
+  it = gallopingPartitionPoint(large.begin(), large.end(), isZero);
+  EXPECT_EQ(it, large.end());
+  EXPECT_LE(numCalls, 45u);
+
+  // The predicate is also applied correctly if it is a member pointer.
+  std::vector<std::pair<bool, int>> pairs{{true, 0}, {true, 1}, {false, 2}};
+  EXPECT_EQ(gallopingPartitionPoint(pairs.begin(), pairs.end(),
+                                    &std::pair<bool, int>::first) -
+                pairs.begin(),
+            2);
 }

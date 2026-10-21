@@ -48,6 +48,16 @@ constexpr int bitMaskSizeForValue(uint64_t maxValue) {
   return bitMaskSizeForValue(maxValue >> 1) + 1;
 }
 
+// Round `offset` up to the next multiple of `alignment`, which has to be a
+// power of two (see `absl::has_single_bit`). For example, `alignUp(13, 8)` is
+// `16`, and `alignUp(16, 8)` is again `16`.
+constexpr size_t alignUp(size_t offset, size_t alignment) {
+  // NOTE: This function is called in tight loops, so the check is only an
+  // expensive check, although it is rather cheap.
+  AD_EXPENSIVE_CHECK(absl::has_single_bit(alignment));
+  return (offset + alignment - 1) & ~(alignment - 1);
+}
+
 namespace detail {
 
 // Return any value, the type of which is the smallest unsigned integer type

@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/BitUtils.h"
 #include "util/EnumWithStrings.h"

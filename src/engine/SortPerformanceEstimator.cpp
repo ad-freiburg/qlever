@@ -5,9 +5,9 @@
 #include "engine/SortPerformanceEstimator.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <cstdlib>
-#include <iomanip>
 
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
@@ -45,12 +45,13 @@ constexpr bool isSorted(const std::array<size_t, I>& array) {
 // ____________________________________________________________________
 auto SortPerformanceEstimator::measureSortingTime(
     size_t numRows, size_t numColumns,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) -> Timer::Duration {
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const SortConfig& sortConfig) -> Timer::Duration {
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
   ad_utility::callFixedSizeVi(numColumns, [&](auto numCols) {
-    IdTableUtils::sort<numCols>(&randomTable, 0ull);
+    IdTableUtils::sort<numCols>(&randomTable, 0ULL, sortConfig);
   });
   return timer.value();
 }
@@ -58,8 +59,8 @@ auto SortPerformanceEstimator::measureSortingTime(
 // ____________________________________________________________________________
 SortPerformanceEstimator::SortPerformanceEstimator(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    size_t maxNumElementsToSort) {
-  computeEstimatesExpensively(allocator, maxNumElementsToSort);
+    size_t maxNumElementsToSort, const SortConfig& sortConfig) {
+  computeEstimatesExpensively(allocator, maxNumElementsToSort, sortConfig);
 }
 
 auto SortPerformanceEstimator::estimatedSortTime(
@@ -120,7 +121,7 @@ auto SortPerformanceEstimator::estimatedSortTime(
 
 void SortPerformanceEstimator::computeEstimatesExpensively(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    size_t maxNumberOfElementsToSort) {
+    size_t maxNumberOfElementsToSort, const SortConfig& sortConfig) {
 #ifndef QLEVER_CPP_17
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
@@ -152,7 +153,8 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
         }
 #endif
         if (!estimateSortingTime) {
-          _samples[i][j] = measureSortingTime(rows, cols, allocator);
+          _samples[i][j] =
+              measureSortingTime(rows, cols, allocator, sortConfig);
         }
       } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
         estimateSortingTime = true;
@@ -188,8 +190,9 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
               << "Setting all estimates to 0. This means that no sort "
               << "operations will be canceled." << std::endl;
         }
-        AD_LOG_TRACE << "Estimated the sort time to be " << std::fixed
-                     << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
+        AD_LOG_TRACE << "Estimated the sort time to be "
+                     << absl::StrFormat("%.3f",
+                                        Timer::toSeconds(_samples[i][j]))
                      << " seconds." << std::endl;
       }
     }

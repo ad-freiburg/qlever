@@ -52,18 +52,18 @@ bool BasicLiteral<isOwning>::hasDatatype() const {
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteral<isOwning>::getContent() const {
+std::string_view BasicLiteral<isOwning>::getContent() const {
   return content().substr(1, beginOfSuffix() - 2);
 }
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteral<isOwning>::getDatatype() const {
+std::string_view BasicLiteral<isOwning>::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
   // We don't return the enclosing <angle brackets>
-  NormalizedStringView result = content();
+  std::string_view result = content();
   result.remove_prefix(beginOfSuffix() + 3);
   result.remove_suffix(1);
   return result;
@@ -71,7 +71,7 @@ NormalizedStringView BasicLiteral<isOwning>::getDatatype() const {
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteral<isOwning>::getLanguageTag() const {
+std::string_view BasicLiteral<isOwning>::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
@@ -91,8 +91,7 @@ BasicLiteral<isOwning> BasicLiteral<isOwning>::fromStringRepresentation(
   // Remove redundant `XSD_STRING` datatype. If vocabularies normalize strings
   // like this in the future, this could get replaced by an assertion if all the
   // other callers are updated accordingly.
-  if (literal.hasDatatype() &&
-      asStringViewUnsafe(literal.getDatatype()) == XSD_STRING) {
+  if (literal.hasDatatype() && literal.getDatatype() == XSD_STRING) {
     literal.removeDatatypeOrLanguageTag();
   }
   return literal;
@@ -127,24 +126,31 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 }
 
 // ____________________________________________________________________________
-Literal Literal::fromEscapedRdfLiteral(
-    std::string_view rdfContentWithQuotes,
-    std::optional<std::variant<Iri, std::string>> descriptor) {
-  NormalizedString content =
-      RdfEscaping::normalizeLiteralWithQuotes(rdfContentWithQuotes);
-  return literalWithNormalizedContent(content, std::move(descriptor));
+// Return an upper bound for the number of bytes that `addDatatype` or
+// `addLanguageTag` will append for the given `descriptor`. This allows the
+// storage of a literal to be allocated exactly once.
+static size_t maxSuffixSize(
+    const std::optional<std::variant<Iri, std::string>>& descriptor) {
+  if (!descriptor.has_value()) {
+    return 0;
+  }
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          // `^^` plus the datatype IRI.
+          [](const Iri& datatype) {
+            return datatype.toStringRepresentation().size() + 2;
+          },
+          // `@` plus the language tag (which may already contain the `@`).
+          [](std::string_view languageTag) { return languageTag.size() + 1; }},
+      descriptor.value());
 }
 
 // ____________________________________________________________________________
-Literal Literal::literalWithNormalizedContent(
-    NormalizedStringView normalizedRdfContent,
+Literal Literal::withDescriptor(
+    std::string storage,
     std::optional<std::variant<Iri, std::string>> descriptor) {
-  using namespace std::string_view_literals;
-  auto quotes = "\""sv;
-  auto actualContent =
-      absl::StrCat(quotes, asStringViewUnsafe(normalizedRdfContent), quotes);
-  auto sz = actualContent.size();
-  auto literal = Literal{std::move(actualContent), sz};
+  auto sz = storage.size();
+  auto literal = Literal{std::move(storage), sz};
   if (!descriptor.has_value()) {
     return literal;
   }
@@ -163,12 +169,47 @@ Literal Literal::literalWithNormalizedContent(
 }
 
 // ____________________________________________________________________________
+Literal Literal::fromEscapedRdfLiteral(
+    std::string_view rdfContentWithQuotes,
+    std::optional<std::variant<Iri, std::string>> descriptor) {
+  std::string storage;
+  // Unescaping never makes the content longer, and `rdfContentWithQuotes`
+  // already contains at least the two quotes that are added below, so this is
+  // an upper bound for the size of the complete literal. Reserving it up front
+  // (instead of `absl::StrCat`) requires only a single allocation.
+  storage.reserve(rdfContentWithQuotes.size() + maxSuffixSize(descriptor));
+  storage.push_back(quote);
+  RdfEscaping::unescapeLiteralWithQuotesRemoved(rdfContentWithQuotes, storage);
+  storage.push_back(quote);
+  return withDescriptor(std::move(storage), std::move(descriptor));
+}
+
+// ____________________________________________________________________________
+Literal Literal::literalWithNormalizedContent(
+    std::string_view normalizedRdfContent,
+    std::optional<std::variant<Iri, std::string>> descriptor) {
+  std::string storage;
+  // Reserve instead of `absl::StrCat` to require only a single allocation.
+  storage.reserve(normalizedRdfContent.size() + 2 + maxSuffixSize(descriptor));
+  storage.push_back(quote);
+  storage.append(normalizedRdfContent);
+  storage.push_back(quote);
+  return withDescriptor(std::move(storage), std::move(descriptor));
+}
+
+// ____________________________________________________________________________
 Literal Literal::literalWithoutQuotes(
     std::string_view rdfContentWithoutQuotes,
     std::optional<std::variant<Iri, std::string>> descriptor) {
-  NormalizedString content =
-      RdfEscaping::normalizeLiteralWithoutQuotes(rdfContentWithoutQuotes);
-  return literalWithNormalizedContent(content, std::move(descriptor));
+  std::string storage;
+  // See `fromEscapedRdfLiteral` for why this is an upper bound and why we
+  // reserve.
+  storage.reserve(rdfContentWithoutQuotes.size() + 2 +
+                  maxSuffixSize(descriptor));
+  storage.push_back(quote);
+  RdfEscaping::unescapeLiteral(rdfContentWithoutQuotes, storage);
+  storage.push_back(quote);
+  return withDescriptor(std::move(storage), std::move(descriptor));
 }
 
 // ____________________________________________________________________________
@@ -187,7 +228,7 @@ void Literal::addDatatype(const Iri& datatype) {
   AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
   // Trim the default string datatype.
   using namespace std::string_view_literals;
-  if (asStringViewUnsafe(datatype.getContent()) != XSD_STRING) {
+  if (datatype.getContent() != XSD_STRING) {
     absl::StrAppend(&storage(), "^^"sv, datatype.toStringRepresentation());
   }
 }
@@ -226,7 +267,7 @@ void Literal::concat(const Literal& other) {
          getDatatype() == other.getDatatype()))) {
     removeDatatypeOrLanguageTag();
   }
-  const auto& otherContent = asStringViewUnsafe(other.getContent());
+  const auto& otherContent = other.getContent();
   storage().insert(beginOfSuffix() - 1, otherContent);
   beginOfSuffix() += otherContent.size();
 }

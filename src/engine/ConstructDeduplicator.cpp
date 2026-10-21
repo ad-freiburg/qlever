@@ -64,7 +64,9 @@ DeduplicationKey ConstructDeduplicator::makeFullTripleKey(
         return c.dedupId_.value();
       },
       [&ctx, rowIdxInIdTable](const PrecomputedVariable& v) {
-        return ctx.idTable_[rowIdxInIdTable][v.columnIndex_];
+        // Convert to `Id`, because the element access may yield a proxy
+        // reference, but all overloads have to return the same type.
+        return static_cast<Id>(ctx.idTable_[rowIdxInIdTable][v.columnIndex_]);
       },
       [](const PrecomputedBlankNode&) -> ValueId {
         // Blank-node triples bypass deduplication, so

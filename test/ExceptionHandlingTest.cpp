@@ -44,11 +44,14 @@ TEST(ExceptionHandling, terminateIfThrows) {
                                 mockedTerminate);
   EXPECT_EQ(numCallsToMockedTerminate, 2);
 
+  // `EXPECT_EXIT` has no `_IF_SUPPORTED` variant (needed for Emscripten).
+#ifdef GTEST_HAS_DEATH_TEST
   auto noThrowThenExit = []() {
     ad_utility::terminateIfThrows([]() {}, "");
     std::exit(42);
   };
   EXPECT_EXIT(noThrowThenExit(), ::testing::ExitedWithCode(42), ::testing::_);
+#endif
 
   ad_utility::terminateIfThrows([]() {}, "", mockedTerminate);
   EXPECT_EQ(numCallsToMockedTerminate, 2);

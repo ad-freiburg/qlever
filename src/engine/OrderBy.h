@@ -6,11 +6,13 @@
 #ifndef QLEVER_SRC_ENGINE_ORDERBY_H
 #define QLEVER_SRC_ENGINE_ORDERBY_H
 
+#include <optional>
 #include <utility>
 #include <vector>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // The implementation of the SPARQL `ORDER BY` operation.
 //
@@ -61,23 +63,18 @@ class OrderBy : public Operation {
     return subtree_->getMultiplicity(col);
   }
 
-  size_t getCostEstimate() override {
-    size_t size = getSizeEstimateBeforeLimit();
-    size_t logSize = std::max(
-        size_t(1), static_cast<size_t>(logb(
-                       static_cast<double>(getSizeEstimateBeforeLimit()))));
-    size_t nlogn = size * logSize;
-    size_t subcost = subtree_->getCostEstimate();
-    return nlogn + subcost;
-  }
+  // The cost is `n log n` for the sort, or linear if there is a single sort
+  // column and the input is already sorted by it (see
+  // `computeResultForSortedInput`).
+  size_t getCostEstimate() override;
 
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
   size_t getResultWidth() const override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {subtree_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{subtree_.get()}, allocator()};
   }
 
  private:
@@ -86,6 +83,22 @@ class OrderBy : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
+
+  // Return true iff there is a single sort column and the subtree's result is
+  // sorted by it (in the internal order of the `Id`s). This is the part of the
+  // precondition of the fast path below that is known at planning time.
+  bool hasSingleSortColumnWithSortedInput() const;
+
+  // Fast path for a single sort column, where the `input` is already sorted by
+  // that column in the internal order and the column contains only integers or
+  // only doubles (possibly preceded by `Undefined` values). The internal order
+  // then differs from the order required by `ORDER BY` only in the placement of
+  // a few contiguous ranges (e.g. the negative numbers), so the result is
+  // obtained by copying these ranges in the right order, in linear time and
+  // without any comparisons. Return `std::nullopt` if the fast path does not
+  // apply.
+  std::optional<IdTable> computeResultForSortedInput(
+      const IdTableView<0>& input) const;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();

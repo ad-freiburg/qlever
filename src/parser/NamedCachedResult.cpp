@@ -13,7 +13,7 @@ namespace {
 // Helper function for the constructor that takes an IRI. check that the IRI has
 // the expected format and extract the query name.
 std::string extractQueryNameFromIri(const TripleComponent::Iri& iri) {
-  auto view = asStringViewUnsafe(iri.getContent());
+  auto view = iri.getContent();
   AD_CORRECTNESS_CHECK(
       ql::starts_with(view, CACHED_RESULT_WITH_NAME_PREFIX),
       "The target IRI of a named cached query must start with `",

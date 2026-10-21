@@ -7,6 +7,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // The implementation of an "EXISTS join", which we use to realize the semantics
 // of the SPARQL `EXISTS` function. The join takes two subtrees as input, and
@@ -73,8 +74,8 @@ class ExistsJoin : public Operation {
   size_t getCostEstimate() override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {left_.get(), right_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{left_.get(), right_.get()}, allocator()};
   }
 
  public:
@@ -119,6 +120,13 @@ class ExistsJoin : public Operation {
   Result lazyExistsJoin(std::shared_ptr<const Result> left,
                         std::shared_ptr<const Result> right,
                         bool requestLaziness);
+
+  // Only the left child's columns appear in the result, so we need special
+  // treatment of the `EXISTS` operation for `BIND` push down.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // Helper function to modify the `IdTable` such that it gains a column
   // signaling if the values exist on the right or not.

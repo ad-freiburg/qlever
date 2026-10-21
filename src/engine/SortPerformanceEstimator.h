@@ -8,6 +8,7 @@
 #include <array>
 
 #include "global/Id.h"
+#include "index/SortConfig.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Timer.h"
 
@@ -23,10 +24,12 @@ class SortPerformanceEstimator {
   // explicit factory function.
 
   // Create a random IdTable with the specified number of rows and columns. Sort
-  // this table and return the time that this sorting took.
+  // this table as configured by the `sortConfig` (see `IdTableUtils::sort`) and
+  // return the time that this sorting took.
   static Timer::Duration measureSortingTime(
       size_t numRows, size_t numColumns,
-      const ad_utility::AllocatorWithLimit<Id>& allocator);
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const SortConfig& sortConfig);
 
   // Compute and return an Estimate for how long sorting an IdTable with the
   // specified number of rows and columns takes.
@@ -40,14 +43,17 @@ class SortPerformanceEstimator {
   // Expensive constructor, directly calls computeEstimatesExpensively
   explicit SortPerformanceEstimator(
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      size_t maxNumberOfElementsToSort);
+      size_t maxNumberOfElementsToSort, const SortConfig& sortConfig);
 
   /// Set up the sort estimates. This will take some time. Only samples, that
   /// can be allocated by the allocator and that have less than
-  /// `maxNumberOfElementsToSort` elements will actually be measured.
+  /// `maxNumberOfElementsToSort` elements will actually be measured. The
+  /// samples are sorted as configured by the `sortConfig`, which should match
+  /// the one of the queries (see `QueryExecutionContext::makeSortConfig`), so
+  /// that the estimates reflect their parallelism.
   void computeEstimatesExpensively(
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      size_t maxNumberOfElementsToSort);
+      size_t maxNumberOfElementsToSort, const SortConfig& sortConfig);
 
   // Return true iff `computeEstimatesExpensively` has been called. If it
   // returns false, `estimatedSortTime` always returns zero, and sorts thus

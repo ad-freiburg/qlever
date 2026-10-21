@@ -62,8 +62,7 @@ struct ExtractStrTimezone {
       return Id::makeUndefined();
     }
     auto timezoneStr = d.value().getStrTimezone();
-    return LiteralOrIri{Literal::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(timezoneStr))};
+    return LiteralOrIri{Literal::literalWithNormalizedContent(timezoneStr)};
   }
 };
 
@@ -141,9 +140,8 @@ NARY_EXPRESSION(SecondsExpression, 1, FV<ExtractSeconds, DateValueGetter>);
 //______________________________________________________________________________
 // `YearExpression` requires `YearExpressionImpl` to be easily identifiable if
 // provided as a `SparqlExpression*` object.
-CPP_class_template(typename NaryOperation)(
-    requires(isOperation<NaryOperation>)) class YearExpressionImpl
-    : public NaryExpression<NaryOperation> {
+CPP_class_template(typename NaryOperation)(requires(isOperation<NaryOperation>))
+class YearExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   bool isYearExpression() const override { return true; }

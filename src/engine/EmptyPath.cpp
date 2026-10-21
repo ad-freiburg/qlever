@@ -16,7 +16,7 @@
 #include <array>
 #include <utility>
 
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/Views.h"
@@ -50,13 +50,13 @@ EntityAndGraph entityAndGraph(const Row& row, size_t numColumns) {
 // the graphs, such that the caller can treat both cases uniformly: The result
 // is a single undefined ID if `id` occurs in `matches` at all, and empty
 // otherwise.
-ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
-  ql::span<const Id> ids = matches.getColumn(0);
+ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
+  ConstIdColumnRef ids = matches.getColumn(0);
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
-    static const Id undefined = Id::makeUndefined();
-    return {&undefined, numMatches == 0 ? 0u : 1u};
+    static const IdColumn undefinedColumn{Id::makeUndefined()};
+    return ConstIdColumnRef{undefinedColumn}.first(numMatches == 0u ? 0u : 1u);
   }
   return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
                                       numMatches);
@@ -140,11 +140,11 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> EmptyPath::getChildrenImpl() const {
+qlm::vector<QueryExecutionTree*> EmptyPath::getChildrenImpl() const {
   if (!checkedChild_.has_value()) {
-    return {};
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  return {&child()};
+  return {{&child()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -301,7 +301,8 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
     return ad_utility::InputRangeTypeErased<IdTable>{
         index.getPermutation(permutation)
             .getDistinctCol0Ids(scanSpec, addGraphColumn, std::move(ids),
-                                cancellationHandle_, locatedTriplesState())};
+                                cancellationHandle_, locatedTriplesState(),
+                                executor())};
   };
   // The rows of one of the scans above, as a flat range of `EntityAndGraph`.
   auto rows = [numColumns = numKgColumns()](
@@ -399,7 +400,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
         "them have to be read and combined with each of the affected rows, "
         "which can be very slow.");
   }
-  ql::span<const Id> joinColumn =
+  ConstIdColumnRef joinColumn =
       input.getColumn(checkedChild_.value().joinColumn_);
   std::vector<size_t> undefRows;
   ql::ranges::copy_if(
@@ -431,13 +432,12 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
 Result::Generator EmptyPath::processTable(IdTableView<0> table,
                                           const LocalVocab& localVocab,
                                           bool& hasWarnedAboutUndef) const {
-  ql::span<const Id> joinColumn =
+  ConstIdColumnRef joinColumn =
       table.getColumn(checkedChild_.value().joinColumn_);
   // The distinct values of the join column that have to be looked up.
   std::vector<Id> ids;
   ids.reserve(joinColumn.size());
-  ql::ranges::copy_if(joinColumn, std::back_inserter(ids),
-                      [](Id id) { return !id.isUndefined(); });
+  ql::ranges::copy_if(joinColumn, std::back_inserter(ids), Id::isDefinedL);
   bool hasUndef = ids.size() != joinColumn.size();
   ql::ranges::sort(ids);
   // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the

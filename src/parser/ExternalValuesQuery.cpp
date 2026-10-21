@@ -39,7 +39,7 @@ void ExternalValuesQuery::addParameter(const SparqlTriple& triple) {
       throw ExternalValuesException(
           "The parameter <name> expects a string literal");
     }
-    name_ = std::string{asStringViewUnsafe(object.getLiteral().getContent())};
+    name_ = std::string{object.getLiteral().getContent()};
     if (name_.empty()) {
       throw ExternalValuesException(
           "The parameter <name> must be a non-empty string literal");

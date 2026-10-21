@@ -4,26 +4,13 @@
 
 #include "parser/Quads.h"
 
-#include "backports/StartsWithAndEndsWith.h"
 #include "parser/UpdateClause.h"
-
-// ____________________________________________________________________________________
-Id Quads::BlankNodeAdder::getBlankNodeIndex(std::string_view label) {
-  AD_CORRECTNESS_CHECK(ql::starts_with(label, "_:"));
-  auto [it, isNew] = map_.try_emplace(label.substr(2), Id::makeUndefined());
-  auto& id = it->second;
-  if (isNew) {
-    id = Id::makeFromBlankNodeIndex(
-        localVocab_.getBlankNodeIndex(bnodeManager_));
-  }
-  return id;
-}
 
 // Transform the triples and sets the graph on all triples.
 static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     ad_utility::sparql_types::Triples triples,
     const SparqlTripleSimpleWithGraph::Graph& graph,
-    Quads::BlankNodeAdder& blankNodeAdder) {
+    BlankNodeAdder& blankNodeAdder) {
   auto toTc = [&blankNodeAdder](const GraphTerm& t) -> TripleComponent {
     if (auto blank = std::get_if<BlankNode>(&t)) {
       return blankNodeAdder.getBlankNodeIndex(blank->toSparql());

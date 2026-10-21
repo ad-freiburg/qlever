@@ -45,8 +45,12 @@ COPY GitVersion.cmake /qlever/
 # QLever might not be ABI-compatible on ARM with software compiled on a compiler
 # older than GCC10.
 ARG RUN_TESTS=true
+# Link-time optimization for the shipped binaries (see `QLEVER_ENABLE_LTO` in
+# `CMakeLists.txt`). The CI passes `--build-arg QLEVER_ENABLE_LTO=true` only
+# for the image published from `master`.
+ARG QLEVER_ENABLE_LTO=false
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DQLEVER_ENABLE_LTO=${QLEVER_ENABLE_LTO} -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
@@ -57,7 +61,7 @@ RUN if [ "$RUN_TESTS" = "true" ]; then \
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
 # by the `docker-entrypoint.sh` script, see there).

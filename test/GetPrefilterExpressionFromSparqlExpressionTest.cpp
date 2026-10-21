@@ -49,8 +49,8 @@ const auto equalityCheckPrefilterVectors =
                               const PrefilterExprVariablePair& expPair) {
     if (*resPair.first != *expPair.first || resPair.second != expPair.second) {
       std::stringstream stream;
-      stream << "The following value pairs don't match:" << "\nRESULT: "
-             << *resPair.first << "EXPECTED: " << *expPair.first
+      stream << "The following value pairs don't match:"
+             << "\nRESULT: " << *resPair.first << "EXPECTED: " << *expPair.first
              << "RESULT: VARIABLE" << resPair.second.name()
              << "\nEXPECTED: VARIABLE" << expPair.second.name() << std::endl;
       ADD_FAILURE() << stream.str();
@@ -566,7 +566,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 }
 
 // Test PrefilterExpression creation for SparqlExpression isDatatype, where
-// Datatype is Literal, Iri, Numeric or Blank.
+// Datatype is Literal, Iri, Numeric, Blank or GeoPoint.
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExprForIsDatatypeExpr) {
@@ -579,6 +579,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(isLiteralSprql(varX), pr(isLit(), varX));
   evalAndEqualityCheck(isNumericSprql(varX), pr(isNum(), varX));
   evalAndEqualityCheck(isBlankSprql(varX), pr(isBlank(), varX));
+  evalAndEqualityCheck(isGeoPointSprql(varX), pr(isGeoPoint(), varX));
 
   // For the cases below, no prefilter procedure should be available given that
   // the filter reference isn't a Variable.
@@ -586,6 +587,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(isIriSprql(BlankNodeId(10)));
   evalAndEqualityCheck(isBlankSprql(DoubleId(33.1)));
   evalAndEqualityCheck(isNumericSprql((IntId(-0.01))));
+  evalAndEqualityCheck(isGeoPointSprql(VocabId(5)));
 }
 
 // Test PrefilterExpression creation for SparqlExpression InExpression

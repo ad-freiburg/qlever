@@ -78,6 +78,23 @@ SplitVocabulary<SF, FS, S...>::WordWriter::WordWriter(
 template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
     requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+SplitVocabulary<SF, FS, S...>::ParallelWordWriter::ParallelWordWriter(
+    const UnderlyingVocabsArray& underlyingVocabularies,
+    const std::string& filename) {
+  auto vocabFilenames = underlyingFilenames(filename);
+  for (uint8_t i = 0; i < numberOfVocabs; i++) {
+    blockWriters_[i] = std::visit(
+        [&](auto& vocab) -> std::unique_ptr<BlockWriterBase> {
+          return vocab.makeBlockWriterPtr(vocabFilenames[i]);
+        },
+        underlyingVocabularies[i]);
+  }
+}
+
+// _____________________________________________________________________________
+template <typename SF, const auto& FS, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
 uint64_t SplitVocabulary<SF, FS, S...>::WordWriter::operator()(
     std::string_view word, bool isExternal) {
   // The word will be stored in the vocabulary selected by the split
@@ -128,17 +145,16 @@ std::optional<ad_utility::GeometryInfo> SplitVocabulary<
   // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
   // if it is a `GeoVocabulary`.
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
-  return std::visit(
-      [&](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-          return v.getGeoInfo(getVocabIndex(indexWithMarker));
-        } else {
-          static_assert(NeverProvidesGeometryInfo<T>);
-          return std::nullopt;
-        }
+  return ad_utility::visitIf(
+      vocab,
+      CPP_template_lambda(indexWithMarker)(typename T)(const T& v)(
+          requires ad_utility::isInstantiation<T, GeoVocabulary>) {
+        return v.getGeoInfo(getVocabIndex(indexWithMarker));
       },
-      vocab);
+      [](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
+        static_assert(NeverProvidesGeometryInfo<std::decay_t<decltype(v)>>);
+        return std::nullopt;
+      });
 }
 
 // _____________________________________________________________________________

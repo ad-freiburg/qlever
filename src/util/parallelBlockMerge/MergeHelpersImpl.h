@@ -12,19 +12,27 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <limits>
 #include <range/v3/numeric/accumulate.hpp>
 #include <range/v3/numeric/partial_sum.hpp>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/range/operations.hpp>
 #include <range/v3/view/chunk_by.hpp>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
+#include "util/GlobalExecutor.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
+#include "util/blockSort/BlockIndirectSort.h"
+#include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 // The internals of the computation of the chunk split points. This is the
@@ -88,8 +96,31 @@ CPP_template(typename Input)(requires InputConcept<Input>) size_t
 template <typename Element>
 using ElementAndWeight = std::pair<Element, size_t>;
 
+// Whether the `Input` has a member `blockWeight(runIdx, blockIdx)`, see
+// `blockWeight` below.
+template <typename Input>
+CPP_requires(HasBlockWeight_,
+             requires(const Input& input, size_t runIdx,
+                      size_t blockIdx)(input.blockWeight(runIdx, blockIdx)));
+
+// The weight of a block for the computation of the chunk boundaries: the
+// chunks are cut such that they all have (approximately) the same total
+// weight. By default this is the number of elements of the block. An input
+// may instead provide a `blockWeight(runIdx, blockIdx)` member, for example
+// the size of the block in bytes for elements of very different sizes whose
+// comparison cost grows with their size, such that the chunks cost the same
+// to merge rather than having the same number of elements.
+CPP_template(typename Input)(requires InputConcept<Input>) size_t
+    blockWeight(const Input& input, size_t runIdx, size_t blockIdx) {
+  if constexpr (CPP_requires_ref(HasBlockWeight_, Input)) {
+    return input.blockWeight(runIdx, blockIdx);
+  } else {
+    return input.numElementsInBlock(runIdx, blockIdx);
+  }
+}
+
 // Step 1: Collect the last element of every block of the `input` together with
-// its weight.
+// its weight (see `blockWeight`).
 //
 // PRECONDITION: No block of the `input` is empty, see `InputConcept`.
 CPP_template(typename Input)(requires InputConcept<Input>) std::
@@ -102,8 +133,10 @@ CPP_template(typename Input)(requires InputConcept<Input>) std::
         auto [runIdx, blockIdx] = runAndBlock;
         size_t numElements = input.numElementsInBlock(runIdx, blockIdx);
         AD_CORRECTNESS_CHECK(numElements > 0);
+        size_t weight = blockWeight(input, runIdx, blockIdx);
+        AD_CORRECTNESS_CHECK(weight > 0);
         return ElementAndWeight<Element>{input.lastElement(runIdx, blockIdx),
-                                         numElements};
+                                         weight};
       }));
 }
 
@@ -116,7 +149,28 @@ template <typename Element, typename Comparator>
 std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
     std::vector<ElementAndWeight<Element>> elementsAndWeights,
     const Comparator& comparator) {
-  ql::ranges::sort(elementsAndWeights, comparator, ad_utility::first);
+  // NOTE: This is the only work of the boundary computation that grows with
+  // the number of blocks, and with an expensive comparator (such as a
+  // collation) and millions of blocks it takes a while, so it is sorted in
+  // parallel. This blocks the calling thread, which therefore must not be a
+  // thread of the global executor.
+  // NOTE: The comparator is type-erased, because it ends up in the coroutine
+  // frames of the parallel sort, and GCC rejects a frame that depends on a
+  // `Comparator` without linkage (a local class, as in several tests) with
+  // `-Werror=subobject-linkage`.
+  std::function<bool(const ElementAndWeight<Element>&,
+                     const ElementAndWeight<Element>&)>
+      compareElements = [&comparator](const ElementAndWeight<Element>& a,
+                                      const ElementAndWeight<Element>& b) {
+        return comparator(a.first, b.first);
+      };
+  size_t numThreads = defaultMergeParallelism();
+  ad_utility::blockSort::blockIndirectSort(
+      elementsAndWeights, std::move(compareElements),
+      static_cast<uint32_t>(std::clamp<size_t>(
+          numThreads, 1, std::numeric_limits<uint32_t>::max())),
+      ad_utility::makeConcurrencyLimitedExecutor(ad_utility::globalExecutor(),
+                                                 numThreads));
   // Merging equal elements is what makes the quantiles below exact: a target
   // then always identifies a single entry, and picking that entry for two
   // different targets can be avoided by simply moving on to the next one.
@@ -163,15 +217,22 @@ inline std::vector<size_t> uniformTargets(size_t totalNumElements,
   return targets;
 }
 
-// Step 3b: The same, but for explicitly given chunk sizes (the components of a
-// `ChunkSizes`, see `MergeHelpers.h`): the `i`-th target is the total size of
-// the first `i` chunks. Stop as soon as a target has reached the total number
+// Step 3b: The same, but for explicitly given chunk sizes: the first
+// `firstChunkSizes.size()` chunks get the corresponding size from that vector,
+// and all the remaining chunks get the size `remainingChunkSize`. All the sizes
+// have to be strictly positive. The `i`-th target is the total size of the
+// first `i` chunks. Stop as soon as a target has reached the total number
 // of elements, because all the chunks after that one would be empty. This is
 // what makes a `remainingChunkSize` that is smaller than the input terminate,
 // and it also handles leading sizes that already exceed the input.
 inline std::vector<size_t> targetsFromChunkSizes(
     size_t totalNumElements, const std::vector<size_t>& firstChunkSizes,
     size_t remainingChunkSize) {
+  // A size of zero would describe an empty chunk, and a `remainingChunkSize`
+  // of zero would make the loop below run forever.
+  AD_CONTRACT_CHECK(remainingChunkSize > 0);
+  AD_CONTRACT_CHECK(ql::ranges::all_of(firstChunkSizes,
+                                       [](size_t size) { return size > 0; }));
   std::vector<size_t> targets;
   size_t sizeOfPreviousChunks = 0;
   // Return `false` if the chunk of the given `chunkSize` is the last one.

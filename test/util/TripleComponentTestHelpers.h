@@ -40,6 +40,14 @@ constexpr auto tripleComponentLiteral =
 // invalid IRIs (e.g. with embedded whitespace) as test data. Use
 // `Iri::fromIrirefValidated` directly when a test wants validation.
 constexpr auto iri = [](std::string_view s) {
+  // Also accept QLever's internal `@langtag@<iri>` form for language-tagged
+  // predicates, which several tests use as expected values.
+  if (ql::starts_with(s, '@')) {
+    auto endOfLangtag = s.find('@', 1);
+    AD_CONTRACT_CHECK(endOfLangtag != std::string_view::npos);
+    return TripleComponent::Iri::fromLangtagAndIriref(
+        s.substr(1, endOfLangtag - 1), s.substr(endOfLangtag + 1));
+  }
   return TripleComponent::Iri::fromIriref(s);
 };
 constexpr auto iriV = [](std::string_view s) {

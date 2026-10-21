@@ -95,7 +95,7 @@ TEST(LocalVocab, constructionAndAccess) {
   // not contained in the local vocab. This makes use of the fact that the words
   // in our test vocabulary only contain digits as letters, see above.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    std::string content{asStringViewUnsafe(testWords[i].getContent())};
+    std::string content{testWords[i].getContent()};
     auto illegalWord = LocalVocabEntry::literalWithoutQuotes(
         content + "A", qec->getLocalVocabContext());
     ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));

@@ -47,6 +47,7 @@
 #endif
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
+#include "index/IndexFormatVersion.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
@@ -54,6 +55,9 @@
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
+
+// Multi-threaded, to exercise the concurrency of the tested code.
+static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -454,10 +458,10 @@ TEST(IndexRebuilder, readIndexAndRemap) {
       ADDITIONAL_COLUMN_GRAPH_ID, ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
       ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
 
-  auto range = readIndexAndRemap(permutation, blockMetadataRanges, state,
-                                 localVocabMapping, insertionPositions,
-                                 blankNodeBlocks, minBlankNodeIndex,
-                                 cancellationHandle, additionalColumns);
+  auto range = readIndexAndRemap(
+      permutation, blockMetadataRanges, state, localVocabMapping,
+      insertionPositions, blankNodeBlocks, minBlankNodeIndex,
+      cancellationHandle, additionalColumns, executor());
 
   std::vector<IdTableStatic<0>> idTables = ::ranges::to<std::vector>(
       ql::views::transform(range, ad_utility::staticCast<IdTableStatic<0>&&>));
@@ -560,7 +564,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),
       index.getImpl().getPermutation(Permutation::Enum::POS), false, state,
       localVocabMapping, insertionPositions, blankNodeBlocks, 1,
-      cancellationHandle);
+      cancellationHandle, executor());
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
@@ -650,7 +654,8 @@ TEST(IndexRebuilder, materializeToIndex) {
       auto sourceDate = index.getImpl().dateOfIndexBuild();
 
       qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                                 blankNodes, cancellationHandle, logFile);
+                                 blankNodes, cancellationHandle, executor(),
+                                 logFile);
       EXPECT_TRUE(ql::filesystem::exists(logFile));
 
       // Each phase writes its header (which says what is being processed,
@@ -760,13 +765,90 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
-  EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
-                                             state, vocab, blankNodes,
-                                             cancellationHandle, logFile));
+  EXPECT_NO_THROW(qlever::materializeToIndex(
+      index.getImpl(), newIndexName, state, vocab, blankNodes,
+      cancellationHandle, executor(), logFile));
 
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   newIndex.createFromOnDiskIndex(newIndexName, false);
   EXPECT_EQ(newIndex.numTriples().normal, 3);
+}
+
+// Test that rebuilding an index in the previous format (whose configuration has
+// no entry for the encoding of the geo points) gives an index in the current
+// format that keeps the `LatMajor` encoding of its points.
+TEST(IndexRebuilder, materializeToIndexKeepsGeoPointEncoding) {
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+
+  // The names of the index and of the rebuilt index.
+  std::string sourceIndexName = gtestCurrentTestName();
+  std::string baseFolder = absl::StrCat(sourceIndexName, "-new");
+  std::string newIndexName = baseFolder + "/index";
+
+  // An index with one point in the previous format.
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> \"POINT(7.8 48.0)\"^^"
+      "<http://www.opengis.net/ont/geosparql#wktLiteral> ."};
+  config.geoPointEncoding = ad_utility::GeoPointEncoding::LatMajor;
+  ad_utility::testing::makeTestIndex(sourceIndexName, std::move(config));
+  nlohmann::json configuration;
+  ad_utility::makeIfstream(sourceIndexName + CONFIGURATION_FILE) >>
+      configuration;
+  configuration.erase("geo-point-encoding");
+  configuration["index-format-version"] =
+      qlever::indexFormatVersionWithLatMajorGeoPoints;
+  ad_utility::makeOfstream(sourceIndexName + CONFIGURATION_FILE)
+      << configuration;
+
+  // Load it, insert a second point, and rebuild it.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.createFromOnDiskIndex(sourceIndexName, false);
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto g =
+        toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                      DEFAULT_GRAPH_IRI)},
+                  index)
+            .value();
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                Id::makeFromGeoPoint(GeoPoint{-33.9, 18.4}),
+                                g}}});
+  });
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+  ql::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeIndexFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+  qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                             blankNodes, cancellationHandle, executor(),
+                             newIndexName + ".log");
+
+  // The rebuilt index is in the current format with the entry `lat-major`, and
+  // both points are decoded correctly (the only objects are the two points, so
+  // `OSP` begins with the southern and ends with the northern one).
+  GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  newIndex.createFromOnDiskIndex(newIndexName, false);
+  ad_utility::makeIfstream(newIndexName + CONFIGURATION_FILE) >> configuration;
+  EXPECT_EQ(
+      configuration["index-format-version"].get<qlever::IndexFormatVersion>(),
+      qlever::indexFormatVersion);
+  EXPECT_EQ(configuration["geo-point-encoding"], "lat-major");
+  const auto& blocks =
+      newIndex.getPermutation(Permutation::OSP).metaData().blockData();
+  GeoPoint south = blocks.front().firstTriple_.col0Id_.getGeoPoint();
+  GeoPoint north = blocks.back().lastTriple_.col0Id_.getGeoPoint();
+  EXPECT_NEAR(south.getLat(), -33.9, 1e-6);
+  EXPECT_NEAR(south.getLng(), 18.4, 1e-6);
+  EXPECT_NEAR(north.getLat(), 48.0, 1e-6);
+  EXPECT_NEAR(north.getLng(), 7.8, 1e-6);
 }
 
 // _____________________________________________________________________________
@@ -781,10 +863,10 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  EXPECT_THROW(
-      qlever::materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
-                                 blankNodes, cancellationHandle, ""),
-      ad_utility::Exception);
+  EXPECT_THROW(qlever::materializeToIndex(index.getImpl(), "nexIndex", state,
+                                          vocab, blankNodes, cancellationHandle,
+                                          executor(), ""),
+               ad_utility::Exception);
 }
 
 namespace {
@@ -808,41 +890,23 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 }  // namespace
 
 // _____________________________________________________________________________
-// The thread-count override for the rebuild's scans must be set on the
-// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
-// the permutation's shared reader, which is used by the query scans, must
-// never carry an override.
-TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
+// Recomputing the statistics must give exactly the same result, no matter by
+// how many threads each of its scans is limited (0 means "no limit"). This
+// exercises both branches of the translation of the runtime parameter
+// `rebuild-index-scan-num-threads` to a concurrency-limited executor.
+TEST(IndexRebuilder, rebuildIndexScanNumThreads) {
   auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                   "<a> <b> <c> .");
-  const auto& permutation =
-      index.getImpl().getPermutation(Permutation::Enum::PSO);
-  auto cancellationHandle =
-      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   auto state =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-
-  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
-    return permutation.lazyScanWithUnlimitedReader(
-        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
-        cancellationHandle, *state, numThreadsOverride);
+  auto recomputeStatistics = [&](size_t maxNumThreads) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::rebuildIndexScanNumThreads_>(maxNumThreads);
+    return index.getImpl().recomputeStatistics(state, executor());
   };
-  auto [reader, scan] = scanWithOverride(3);
-  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
-  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
-  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
-  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
-
-  // Recomputing the statistics with the throttle set must give exactly the
-  // same result as with the default (0, which means "fall back to
-  // `lazy-index-scan-num-threads`"). This exercises the translation of the
-  // runtime parameter to the override at both of its use sites.
-  auto statsDefault = index.getImpl().recomputeStatistics(state);
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
-  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
+  auto statsUnlimited = recomputeStatistics(0);
+  EXPECT_EQ(recomputeStatistics(1), statsUnlimited);
+  EXPECT_EQ(recomputeStatistics(2), statsUnlimited);
 }
 
 // _____________________________________________________________________________

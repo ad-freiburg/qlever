@@ -25,34 +25,43 @@ namespace ad_utility::parallelBlockMerge {
 
 // The requirements of the `InputConcept` below, see there for the
 // documentation.
+//
+// NOTE: The return types are spelled with the `std::is_..._v` traits and not
+// with the corresponding `ql::concepts::...` concepts, because GCC 15.2.1
+// rejects the latter inside this `CPP_requires` with "the value of
+// `std::is_convertible_v<...>` is not usable in a constant expression ... used
+// in its own initializer" (ad-freiburg/qlever#3367). Ubuntu's GCC 15.2.0,
+// GCC 15.3.0, GCC 16 and Clang compile both spellings; the traits are
+// equivalent here, because the entries of a `CPP_requires` only check that the
+// expression is valid.
 template <typename T>
 CPP_requires(
     InputConcept_,
     requires(const T& t, size_t runIdx, size_t blockIdx, typename T::Block& out,
              ql::ranges::range_reference_t<typename T::Block> el)(
         // The number of presorted runs.
-        ql::concepts::convertible_to<decltype(t.numRuns()), size_t>,
+        std::is_convertible_v<decltype(t.numRuns()), size_t>,
         // The number of blocks of a single run.
-        ql::concepts::convertible_to<decltype(t.numBlocks(runIdx)), size_t>,
+        std::is_convertible_v<decltype(t.numBlocks(runIdx)), size_t>,
         // The number of elements in a single block, available without I/O.
-        ql::concepts::convertible_to<
-            decltype(t.numElementsInBlock(runIdx, blockIdx)), size_t>,
+        std::is_convertible_v<decltype(t.numElementsInBlock(runIdx, blockIdx)),
+                              size_t>,
         // The first and the last element of a single block, available without
         // I/O.
-        ql::concepts::convertible_to<decltype(t.firstElement(runIdx, blockIdx)),
-                                     typename T::Element>,
-        ql::concepts::convertible_to<decltype(t.lastElement(runIdx, blockIdx)),
-                                     typename T::Element>,
+        std::is_convertible_v<decltype(t.firstElement(runIdx, blockIdx)),
+                              typename T::Element>,
+        std::is_convertible_v<decltype(t.lastElement(runIdx, blockIdx)),
+                              typename T::Element>,
         // Get the block identified by the `runIdx` and the `blockIdx`. This is
         // the only operation that performs I/O, and it has to be thread-safe.
-        ql::concepts::convertible_to<decltype(t.getBlock(runIdx, blockIdx)),
-                                     typename T::Block>,
+        std::is_convertible_v<decltype(t.getBlock(runIdx, blockIdx)),
+                              typename T::Block>,
         // Create an empty block, and append a single element to a block.
-        ql::concepts::same_as<decltype(t.makeEmptyBlock()), typename T::Block>,
-        ql::concepts::same_as<decltype(t.appendToBlock(out, el)), void>,
+        std::is_same_v<decltype(t.makeEmptyBlock()), typename T::Block>,
+        std::is_same_v<decltype(t.appendToBlock(out, el)), void>,
         // The memory that a single element occupies.
-        ql::concepts::convertible_to<decltype(t.memorySizeOfElement(el)),
-                                     MemorySize>));
+        std::is_convertible_v<decltype(t.memorySizeOfElement(el)),
+                              MemorySize>));
 
 namespace detail {
 // Extract `T::Block` if it exists, and `void` otherwise. This is needed so that

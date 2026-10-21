@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "global/FileSuffixConstants.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "util/File.h"
 
 // Container for the `CompressedRelationMetadata` objects (one per relation) of

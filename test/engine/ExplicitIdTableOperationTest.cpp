@@ -14,7 +14,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/QueryExecutionContext.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "parser/TripleComponent.h"
 
 using ad_utility::testing::makeAllocator;

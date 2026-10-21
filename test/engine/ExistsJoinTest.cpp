@@ -864,6 +864,41 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
 }
 
 // _____________________________________________________________________________
+TEST(ExistsJoin, addExistsJoinsToSubtreeSkipsAlreadyHandledExists) {
+  auto* qec = getQec();
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+
+  ParsedQuery query;
+  query._rootGraphPattern._graphPatterns.push_back(
+      parsedQuery::BasicGraphPattern{
+          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                        TripleComponent{Variable{"?b"}}}}});
+  // Select the visible variables via `*`, exactly as the parser does.
+  query.selectClause().setAsterisk();
+  query.selectClause().addVisibleVariable(Variable{"?a"});
+
+  // The descriptor is the original text of the expression, exactly as the
+  // parser stores it.
+  sparqlExpression::SparqlExpressionPimpl pimpl{
+      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query)),
+      "EXISTS { ?a <something> ?b }"};
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto tree = ExistsJoin::addExistsJoinsToSubtree(pimpl, subtree, qec, handle);
+  EXPECT_NE(tree, subtree);
+
+  // Applying the same `EXISTS` to a subtree that already contains its variable
+  // must not add a second `ExistsJoin`. This happens for `FILTER`s that are
+  // applied multiple times, for example in the presence of `OPTIONAL` joins.
+  EXPECT_EQ(
+      ExistsJoin::addExistsJoinsToSubtree(pimpl, tree, qec, std::move(handle)),
+      tree);
+}
+
+// _____________________________________________________________________________
 TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
   auto* qec = getQec();
 

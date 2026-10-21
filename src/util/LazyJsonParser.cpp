@@ -67,7 +67,7 @@ LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
 std::optional<nlohmann::json> LazyJsonParser::parseChunk(
     std::string_view inStr) {
   size_t idx = input_.size();
-  absl::StrAppend(&input_, inStr);
+  input_.append(inStr);
 
   // End-index (exclusive) of the current `input_` to construct a result.
   size_t materializeEnd = 0;

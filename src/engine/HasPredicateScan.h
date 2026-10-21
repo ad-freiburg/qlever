@@ -14,6 +14,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "parser/ParsedQuery.h"
 #include "util/CompactStringVector.h"
+#include "util/ContainersWithAllocator.h"
 
 class HasPredicateScan : public Operation {
  public:
@@ -91,11 +92,11 @@ class HasPredicateScan : public Operation {
   [[nodiscard]] const TripleComponent& getObject() const;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     if (subtree_) {
-      return {subtreePtr()};
+      return {{subtreePtr()}, allocator()};
     } else {
-      return {};
+      return qlm::vector<QueryExecutionTree*>{allocator()};
     }
   }
 

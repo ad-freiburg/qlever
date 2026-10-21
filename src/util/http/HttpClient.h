@@ -141,6 +141,9 @@ using SendRequestType = std::function<HttpOrHttpsResponse(
 // `maxRedirects` is greater than 0, the function will automatically follow
 // redirects (301, 302, 307, 308) up to the specified limit. All requests are
 // routed through the proxy configured for this process, see `globalProxy()`.
+// For Emscripten this is implemented with the `fetch` API of the surrounding
+// JavaScript environment instead, which differs in a few points that are listed
+// at the top of `HttpClientEmscripten.cpp`; the proxy is one of them.
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
@@ -154,6 +157,10 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
 // Mostly useful for tests, as the latter is read from the environment only once
 // per process. Note that this deliberately is not an overload of the above,
 // which could then no longer be converted to a `SendRequestType`.
+//
+// NOTE: `fetch` cannot be told to use a proxy, so this does not exist for
+// Emscripten; using it there is a compile error rather than a link error.
+#ifndef __EMSCRIPTEN__
 HttpOrHttpsResponse sendHttpOrHttpsRequestWithProxy(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
@@ -161,6 +168,7 @@ HttpOrHttpsResponse sendHttpOrHttpsRequestWithProxy(
     std::string_view contentTypeHeader, std::string_view acceptHeader,
     size_t maxRedirects,
     const std::optional<ad_utility::httpProxy::Proxy>& proxy);
+#endif  // __EMSCRIPTEN__
 
 #endif
 #endif  // QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H

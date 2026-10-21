@@ -219,54 +219,6 @@ TEST_F(ValueIdComparators, Undefined) {
   }
 }
 
-// Similar to `testGetRanges` (see above) but tests the comparison to a range of
-// `ValueId`s that are considered equal.
-template <typename It, typename IsMatchingDatatype>
-auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
-                              IsMatchingDatatype isMatchingDatatype) {
-  // Perform the testing for a single `Comparison`
-  auto testImpl = [&](auto comparison) {
-    if (comparison == Comparison::NE &&
-        idBegin.getDatatype() == Datatype::VocabIndex) {
-      EXPECT_TRUE(true);
-    }
-    using enum ComparisonResult;
-    auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
-    auto it = begin;
-    for (auto [rangeBegin, rangeEnd] : ranges) {
-      while (it != rangeBegin) {
-        // TODO<joka921> Correctly determine, which of these cases we want.
-        ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
-                    ::testing::AnyOf(False, Undef))
-            << *it << " " << idBegin << ' ' << idEnd << ' '
-            << static_cast<int>(comparison.value);
-        ++it;
-      }
-      while (it != rangeEnd) {
-        // The "not equal" relation also yields true for different datatypes.
-        ASSERT_TRUE(isMatchingDatatype(*it) || comparison == Comparison::NE);
-        ASSERT_EQ(compareWithEqualIds(*it, idBegin, idEnd, comparison), True)
-            << *it << ' ' << idBegin << ' ' << idEnd;
-        ++it;
-      }
-    }
-    while (it != end) {
-      // TODO<joka921> Correctly determine, which of these cases we want.
-      ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
-                  ::testing::AnyOf(False, Undef));
-      ++it;
-    }
-  };
-
-  using ad_utility::use_value_identity::vi;
-  testImpl(vi<Comparison::LT>);
-  testImpl(vi<Comparison::LE>);
-  testImpl(vi<Comparison::EQ>);
-  testImpl(vi<Comparison::NE>);
-  testImpl(vi<Comparison::GE>);
-  testImpl(vi<Comparison::GT>);
-}
-
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
 // index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`,
 // `WordVocabIndex`).
@@ -301,18 +253,9 @@ TEST_F(ValueIdComparators, IndexTypes) {
     };
 
     for (size_t i = 0; i < 200; ++i) {
-      auto begin = beginOfDatatype + getRandomIndex();
-      auto end = beginOfDatatype + getRandomIndex();
-      if (*begin > *end) {
-        std::swap(begin, end);
-      }
-      testGetRangesForId(ids.begin(), ids.end(), *begin, isTypeMatching,
+      auto id = *(beginOfDatatype + getRandomIndex());
+      testGetRangesForId(ids.begin(), ids.end(), id, isTypeMatching,
                          applyComparator);
-      if (*begin == *end) {
-        continue;
-      }
-      testGetRangesForEqualIds(ids.begin(), ids.end(), *begin, *end,
-                               isTypeMatching);
     }
   };
 
@@ -348,12 +291,6 @@ TEST_F(ValueIdComparators, undefinedWithItself) {
 // _______________________________________________________________________
 TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
-  auto I = ad_utility::testing::IntId;
   // Invalid value for the `Comparison` enum.
   ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
-  ASSERT_ANY_THROW(
-      (compareWithEqualIds(u, u, u, static_cast<Comparison>(542))));
-
-  // The third argument must be >= the second.
-  ASSERT_ANY_THROW((compareWithEqualIds(I(3), I(25), I(12), Comparison::LE)));
 }

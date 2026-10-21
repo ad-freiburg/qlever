@@ -6,6 +6,7 @@
 #define QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
 
 #include "engine/Operation.h"
+#include "util/ContainersWithAllocator.h"
 
 /// The neutral element wrt `JOIN`. It contains one element, but binds no
 /// variables (which means it has 0 columns).
@@ -15,8 +16,8 @@ class NeutralElementOperation : public Operation {
       : Operation{qec} {}
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
 
   // The individual implementation of `getCacheKey` (see above) that has to be
