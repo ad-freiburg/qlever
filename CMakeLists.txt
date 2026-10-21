@@ -893,7 +893,8 @@ endif ()
 # are invariants that never fail, so branches inside these conditions (e.g.
 # from `&&` or `||`) can never be fully covered by unit tests. With this option,
 # the condition is evaluated inside a lambda that is excluded from the coverage
-# instrumentation. It is used for the coverage build and requires Clang.
+# instrumentation. It is used for the coverage build; see `src/util/Exception.h`
+# for why this option is not set unconditionally.
 option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
 if (COVERAGE_FRIENDLY_CHECKS)
     add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)

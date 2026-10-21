@@ -201,8 +201,11 @@ constexpr void adCorrectnessCheckImpl(
 // short-circuit operators (`&&`, `||`) inside the condition would produce
 // branch regions at each call site, which can never be taken because the
 // condition of a correctness check never fails (see above).
-// NOTE: Only the coverage build sets this define, so this pattern only has to
-// work with the compiler of that build (Clang, C++20).
+// NOTE: The lambda is not used unconditionally for two reasons: In C++17,
+// structured bindings cannot be captured by a lambda, so some conditions would
+// not compile in the C++17 build. And in debug builds, the additional lambda
+// call is an inconvenient indirection (e.g. when stepping through the code in
+// a debugger). This is the single place where this reasoning is documented.
 #ifdef QLEVER_COVERAGE_FRIENDLY_CHECKS
 #define AD_CORRECTNESS_CHECK_CONDITION(condition)         \
   [&]() __attribute__((no_profile_instrument_function)) { \
