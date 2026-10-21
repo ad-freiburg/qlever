@@ -11,9 +11,11 @@
 #include <gtest/gtest.h>
 
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "QueryRewriteUtilTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
+#include "absl/strings/str_replace.h"
 #include "engine/GeoRectangleRowFilter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -44,37 +46,42 @@ constexpr std::string_view wktDatatype =
 // of type `<P>`, plus `numFar` far-away points of type `<T>` in southern
 // latitude bands (so that the latitude band of a query near (10, 10) can
 // prune whole blocks of points), and one far-away linestring.
-std::string geoTurtleInput(int numFar = 64) {
+std::string geoTurtleInput(int numFar = 64,
+                           std::string_view extraTriples = "") {
   auto wktTriple = [](std::string_view subject, std::string_view content) {
     return absl::StrCat(subject, " <hasGeom> \"", content, "\"", wktDatatype,
                         " . \n");
   };
-  return absl::StrCat(wktTriple("<lineA>", "LINESTRING(10 10, 11 10)"),
-                      wktTriple("<lineB>", "LINESTRING(12 10, 13 10)"),
-                      wktTriple("<lineFar>", "LINESTRING(-100 -50, -101 -50)"),
-                      wktTriple("<pointNear>", "POINT(10.5 10.01)"),
-                      wktTriple("<pointFar>", "POINT(-100.5 -50.01)"),
-                      "<lineA> <hasType> <T> . \n"
-                      "<lineB> <hasType> <T> . \n"
-                      "<lineFar> <hasType> <T> . \n"
-                      "<pointNear> <hasType> <P> . \n"
-                      "<pointFar> <hasType> <P> . \n",
-                      [numFar] {
-                        std::string result;
-                        for (int i = 0; i < numFar; ++i) {
-                          result += absl::StrCat(
-                              "<far", i, "> <hasGeom> \"POINT(", -170 + i % 320,
-                              " -", 60 - i / 320, ".0)\"", wktDatatype, " . \n",
-                              "<far", i, "> <hasType> <T> . \n");
-                        }
-                        return result;
-                      }());
+  return absl::StrCat(
+      wktTriple("<lineA>", "LINESTRING(10 10, 11 10)"),
+      wktTriple("<lineB>", "LINESTRING(12 10, 13 10)"),
+      wktTriple("<lineFar>", "LINESTRING(-100 -50, -101 -50)"),
+      wktTriple("<pointNear>", "POINT(10.5 10.01)"),
+      wktTriple("<pointFar>", "POINT(-100.5 -50.01)"),
+      "<lineA> <hasType> <T> . \n"
+      "<lineB> <hasType> <T> . \n"
+      "<lineFar> <hasType> <T> . \n"
+      "<pointNear> <hasType> <P> . \n"
+      "<pointFar> <hasType> <P> . \n",
+      [numFar] {
+        std::string result;
+        for (int i = 0; i < numFar; ++i) {
+          result +=
+              absl::StrCat("<far", i, "> <hasGeom> \"POINT(", -170 + i % 320,
+                           " -", 60 - i / 320, ".0)\"", wktDatatype, " . \n",
+                           "<far", i, "> <hasType> <T> . \n");
+        }
+        return result;
+      }(),
+      extraTriples);
 }
 
 // A `QueryExecutionContext` for an index over `geoTurtleInput` with the
 // geo-split vocabulary (which has the precomputed geometry info).
-QueryExecutionContext* geoQec(int numFar = 64) {
-  ad_utility::testing::TestIndexConfig config{geoTurtleInput(numFar)};
+QueryExecutionContext* geoQec(int numFar = 64,
+                              std::string_view extraTriples = "") {
+  ad_utility::testing::TestIndexConfig config{
+      geoTurtleInput(numFar, extraTriples)};
   config.vocabularyType = ad_utility::VocabularyType{
       ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
   config.parserBufferSize = 1000_B;
@@ -121,6 +128,27 @@ TEST(GeoRectanglePrefilter, padGeoRectangle) {
   // Latitudes are clamped.
   EXPECT_EQ(padGeoRectangle(GeoRectangle{0, 89.99, 0, 89.99}, 50000).maxLat_,
             90.0);
+}
+
+// Test that the intersection of two rectangles is their common part, and
+// that rectangles without a common part have no intersection.
+TEST(GeoRectanglePrefilter, intersectGeoRectangles) {
+  using ad_utility::intersectGeoRectangles;
+  GeoRectangle a{0, 0, 10, 10};
+  // A rectangle that overlaps `a`, one inside it, and `a` itself.
+  EXPECT_EQ(intersectGeoRectangles(a, GeoRectangle{5, -5, 15, 5}),
+            (GeoRectangle{5, 0, 10, 5}));
+  EXPECT_EQ(intersectGeoRectangles(a, GeoRectangle{2, 3, 4, 5}),
+            (GeoRectangle{2, 3, 4, 5}));
+  EXPECT_EQ(intersectGeoRectangles(a, a), a);
+  // Rectangles that only share an edge intersect in that edge.
+  EXPECT_EQ(intersectGeoRectangles(a, GeoRectangle{10, 0, 20, 10}),
+            (GeoRectangle{10, 0, 10, 10}));
+  // Disjoint in longitude, and disjoint in latitude.
+  EXPECT_EQ(intersectGeoRectangles(a, GeoRectangle{11, 0, 20, 10}),
+            std::nullopt);
+  EXPECT_EQ(intersectGeoRectangles(a, GeoRectangle{0, -20, 10, -1}),
+            std::nullopt);
 }
 
 TEST(GeoRectanglePrefilter, geoRectangleSelectivity) {
@@ -261,7 +289,8 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
   auto clone = expr.clone();
   EXPECT_TRUE(*clone == expr);
   GeoRectangleExpression otherExpr{GeoRectangle{0, 0, 1, 1}};
-  EXPECT_FALSE(otherExpr == expr);
+  EXPECT_FALSE(*otherExpr.clone() == expr);
+  EXPECT_FALSE(expr == *expr.logicalComplement());
   EXPECT_THAT(expr.asString(0), ::testing::HasSubstr("GeoRectangleExpression"));
 
   // The logical complement keeps all blocks.
@@ -280,18 +309,19 @@ TEST_F(GeoRectangleExpressionTest, evaluateZOrder) {
   absl::Cleanup restoreEncoding{
       [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
   GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
-  // Blocks of points, sorted by their IDs, as the evaluation expects.
+  // Blocks of points, sorted by their IDs, as the evaluation expects. They are
+  // sorted before they are created, because `makeBlock` numbers the blocks in
+  // the order of their creation.
   auto pointBlocks =
       [this](std::vector<std::pair<GeoPoint, GeoPoint>> firstAndLast) {
+        ql::ranges::sort(firstAndLast, {}, [](const auto& pair) {
+          return Id::makeFromGeoPoint(pair.first).getBits();
+        });
         std::vector<CompressedBlockMetadata> blocks;
         for (const auto& [first, last] : firstAndLast) {
           blocks.push_back(makeBlock(Id::makeFromGeoPoint(first),
                                      Id::makeFromGeoPoint(last)));
         }
-        ql::ranges::sort(blocks, [](const auto& a, const auto& b) {
-          return a.firstTriple_.col2Id_.getBits() <
-                 b.firstTriple_.col2Id_.getBits();
-        });
         return blocks;
       };
   auto evaluate = [this](GeoRectangleExpression& expr,
@@ -443,6 +473,18 @@ TEST(GeoRectanglePrefilter, rowFilterOnPrefilteredScan) {
   // (measured on the prefiltered scan's own computation, before the full
   // scan's result, which shares the cache key, is in the cache).
   EXPECT_LT(prefilteredRows, fullScanRows);
+
+  // A clone of the row filter drops the same rows, also from the lazy result
+  // of the scan.
+  auto clone = rowFilter->clone();
+  qec->clearCacheUnpinnedOnly();
+  auto lazyResult = clone->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_FALSE(lazyResult->isFullyMaterialized());
+  size_t numLazyRows = 0;
+  for (const auto& pair : lazyResult->idTables()) {
+    numLazyRows += pair.idTable_.numRows();
+  }
+  EXPECT_EQ(numLazyRows, 4u);
 }
 
 // The runtime block prefilter: with a non-constant (here: two-row) small
@@ -482,6 +524,12 @@ TEST(GeoRectanglePrefilter, runtimeBlockPrefilter) {
   ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
   EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),
             details.at("num-geoms-after-block-prefilter").get<int64_t>());
+
+  // The small side was materialized once, by the prefilter, and that result
+  // was reused for the join. A second `getResult` would be a cache hit that
+  // records the time of the cache lookup instead of the computation.
+  EXPECT_EQ(valuesTree->getRootOperation()->runtimeInfo().cacheStatus_,
+            ad_utility::CacheStatus::computed);
 }
 
 // The runtime block prefilter reaches a scan whose blocks it can prune even
@@ -639,6 +687,11 @@ constexpr std::string_view queryBind = R"q(
 // form, and the spatial join carries the selectivity.
 TEST(GeoRectanglePrefilter, plannerPrefiltersGeometrySeeds) {
   auto* qec = geoQec();
+  // On this small index, every part of the query would be small enough to
+  // be evaluated at planning time; here the rectangle comes from the fixed
+  // point alone.
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
   for (std::string_view query : {queryInlined, queryBind}) {
     auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{query}, qec);
     const auto* spatialJoin = findOperation<SpatialJoin>(*qet);
@@ -662,6 +715,8 @@ TEST(GeoRectanglePrefilter, plannerPrefiltersGeometrySeeds) {
 // disabled give the same rows.
 TEST(GeoRectanglePrefilter, plannerPrefilterKeepsResultsCorrect) {
   auto* qec = geoQec();
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
   auto numRows = [&qec](std::string_view q) {
     qec->clearCacheUnpinnedOnly();
     auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{q}, qec);
@@ -679,6 +734,379 @@ TEST(GeoRectanglePrefilter, plannerPrefilterKeepsResultsCorrect) {
     EXPECT_EQ(rowsWithPrefilter, 2u) << query;
     EXPECT_EQ(rowsWithPrefilter, rowsWithoutPrefilter) << query;
   }
+}
+
+// All operations of type `T` in `tree`, depth first.
+template <typename T>
+void collectOperations(const QueryExecutionTree& tree,
+                       std::vector<const T*>& result) {
+  if (const auto* op = dynamic_cast<const T*>(tree.getRootOperation().get())) {
+    result.push_back(op);
+  }
+  for (const auto* child :
+       std::as_const(*tree.getRootOperation()).getChildren()) {
+    collectOperations<T>(*child, result);
+  }
+}
+
+// The rectangles of the `GeoRectangleRowFilter`s in the plan of `query` whose
+// subtree binds `variable` (a prefiltered scan always has such a row filter
+// above it, see `IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied`
+// and `QueryPlanner::applyGeoRectanglePrefilters`).
+std::vector<GeoRectangle> rowFilterRectangles(
+    std::shared_ptr<QueryExecutionTree> qet, const Variable& variable) {
+  std::vector<const GeoRectangleRowFilter*> rowFilters;
+  collectOperations(*qet, rowFilters);
+  std::vector<GeoRectangle> result;
+  for (const auto* rowFilter : rowFilters) {
+    if (rowFilter->getExternallyVisibleVariableColumns().contains(variable)) {
+      result.push_back(rowFilter->rectangle());
+    }
+  }
+  return result;
+}
+
+// The queries for the propagation tests below: two unrelated geometry
+// variables, where only `?g1` is spatially joined with a fixed rectangle
+// around the geometries near (10, 10), and `?g2` only with `?g1`.
+constexpr std::string_view queryHead = R"q(
+  PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+  PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+  SELECT * WHERE { ?s1 <hasGeom> ?g1 . ?s2 <hasGeom> ?g2 . )q";
+constexpr std::string_view fixedPolygon =
+    R"q("POLYGON((9 9, 14 9, 14 11, 9 11, 9 9))"^^geo:wktLiteral)q";
+const GeoRectangle fixedRectangle{9, 9, 14, 11};
+
+// Expect exactly one row filter for `variable` in the plan `qet`, whose
+// rectangle equals `expected` up to the quantization of the coordinates (a
+// point constant is encoded into a `GeoPoint` ID, the bounding box of a WKT
+// literal is precomputed with limited precision).
+void expectRowFilterRectangleNear(std::shared_ptr<QueryExecutionTree> qet,
+                                  const Variable& variable,
+                                  const GeoRectangle& expected,
+                                  std::string_view query) {
+  auto actual = rowFilterRectangles(std::move(qet), variable);
+  ASSERT_EQ(actual.size(), 1u) << query;
+  EXPECT_NEAR(actual.at(0).minLng_, expected.minLng_, 1e-3) << query;
+  EXPECT_NEAR(actual.at(0).minLat_, expected.minLat_, 1e-3) << query;
+  EXPECT_NEAR(actual.at(0).maxLng_, expected.maxLng_, 1e-3) << query;
+  EXPECT_NEAR(actual.at(0).maxLat_, expected.maxLat_, 1e-3) << query;
+}
+
+// The number of result rows of `query`, computed from scratch.
+size_t numResultRows(QueryExecutionContext* qec, const std::string& query) {
+  qec->clearCacheUnpinnedOnly();
+  return queryPlannerTestHelpers::parseAndPlan(query, qec)
+      ->getRootOperation()
+      ->getResult()
+      ->idTableView()
+      .size();
+}
+
+// The number of result rows of `query` without any prefilter.
+size_t numResultRowsWithoutPrefilter(QueryExecutionContext* qec,
+                                     const std::string& query) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+  return numResultRows(qec, query);
+}
+
+// Test that a rectangle that contains all geometries of `?g1` (the fixed
+// polygon contains `?g1`, or `?g1` lies within it) carries over to `?g2`,
+// which is spatially joined with `?g1`: the scans of both variables are
+// prefiltered with that rectangle, and the result is the same as without
+// the prefilter.
+TEST(GeoRectanglePrefilter, plannerPropagatesContainedRectangle) {
+  auto* qec = geoQec();
+  // No part of these queries is small enough to be evaluated at planning
+  // time, so the rectangles come from the fixed polygon alone.
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(1);
+  for (std::string_view firstFilter : {R"(FILTER geof:sfContains(POLY, ?g1))",
+                                       R"(FILTER geof:sfWithin(?g1, POLY))"}) {
+    std::string query = absl::StrCat(
+        queryHead, absl::StrReplaceAll(firstFilter, {{"POLY", fixedPolygon}}),
+        " FILTER geof:sfIntersects(?g1, ?g2) }");
+    auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+    EXPECT_THAT(rowFilterRectangles(qet, Variable{"?g1"}),
+                ::testing::ElementsAre(fixedRectangle))
+        << query;
+    EXPECT_THAT(rowFilterRectangles(qet, Variable{"?g2"}),
+                ::testing::ElementsAre(fixedRectangle))
+        << query;
+    // At least the two linestrings near (10, 10) intersect themselves.
+    auto numRows = qet->getRootOperation()->getResult()->idTableView().size();
+    EXPECT_GE(numRows, 2u) << query;
+    EXPECT_EQ(numResultRowsWithoutPrefilter(qec, query), numRows) << query;
+  }
+}
+
+// Test that a rectangle that the geometries of `?g1` only intersect (`?g1`
+// intersects the fixed polygon, or contains a fixed point) does not carry
+// over to `?g2`: only the scans of `?g1` are prefiltered.
+TEST(GeoRectanglePrefilter, plannerDoesNotPropagateIntersectedRectangle) {
+  // No evaluation at planning time (also not of `?g1` together with its
+  // spatial join with the fixed geometry), so that the rectangles are
+  // propagated.
+  auto* qec = geoQec();
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxCost_>(0);
+  const std::string point = R"q("POINT(10.5 10.0)"^^geo:wktLiteral)q";
+  for (const auto& [firstFilter, rectangle] :
+       std::vector<std::pair<std::string, GeoRectangle>>{
+           {absl::StrCat("FILTER geof:sfIntersects(", fixedPolygon, ", ?g1)"),
+            fixedRectangle},
+           {absl::StrCat("FILTER geof:sfContains(?g1, ", point, ")"),
+            GeoRectangle{10.5, 10.0, 10.5, 10.0}}}) {
+    std::string query = absl::StrCat(queryHead, firstFilter,
+                                     " FILTER geof:sfIntersects(?g1, ?g2) }");
+    auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+    expectRowFilterRectangleNear(qet, Variable{"?g1"}, rectangle, query);
+    EXPECT_THAT(rowFilterRectangles(qet, Variable{"?g2"}), ::testing::IsEmpty())
+        << query;
+  }
+}
+
+// Test that a rectangle carries over to the other side of a distance join
+// padded by the maximal distance, and that a rectangle that arrives at a
+// variable from two sides is the intersection of the two.
+TEST(GeoRectanglePrefilter, plannerPropagatesPaddedAndIntersectedRectangles) {
+  // No evaluation at planning time (also not of `?g1` together with its
+  // spatial join with the fixed geometry), so that the rectangles are
+  // propagated.
+  auto* qec = geoQec();
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxCost_>(0);
+  // The geometries of `?g2` are within 1 km of those of `?g1`, which lie in
+  // the fixed rectangle.
+  std::string query =
+      absl::StrCat(queryHead, "FILTER geof:sfContains(", fixedPolygon, ", ?g1)",
+                   " FILTER (geof:metricDistance(?g1, ?g2) <= 1000) }");
+  auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  auto rectangles = rowFilterRectangles(qet, Variable{"?g2"});
+  ASSERT_EQ(rectangles.size(), 1u);
+  const auto& padded = rectangles.at(0);
+  EXPECT_LT(padded.minLng_, fixedRectangle.minLng_);
+  EXPECT_LT(padded.minLat_, fixedRectangle.minLat_);
+  EXPECT_GT(padded.maxLng_, fixedRectangle.maxLng_);
+  EXPECT_GT(padded.maxLat_, fixedRectangle.maxLat_);
+  EXPECT_GT(padded.minLng_, fixedRectangle.minLng_ - 0.1);
+  EXPECT_LT(padded.maxLat_, fixedRectangle.maxLat_ + 0.1);
+
+  // `?g2` lies in the fixed rectangle via `?g1`, and in a second fixed
+  // rectangle directly, so its scans are prefiltered with the intersection.
+  query = absl::StrCat(
+      queryHead, "FILTER geof:sfContains(", fixedPolygon, ", ?g1)",
+      " FILTER geof:sfContains(?g1, ?g2)",
+      R"q( FILTER geof:sfContains("POLYGON((12 5, 20 5, 20 10.5, 12 10.5, 12 5))"^^geo:wktLiteral, ?g2) })q");
+  qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  EXPECT_THAT(rowFilterRectangles(qet, Variable{"?g2"}),
+              ::testing::ElementsAre(GeoRectangle{12, 9, 14, 10.5}));
+}
+
+// Test that the geometry of a fixed subject, which is bound by a small and
+// cheap part of the query, is evaluated at planning time and its rectangle is
+// used like that of a fixed geometry (also along a second spatial join if the
+// first one is a containment), and that this does not happen when the budget
+// of rows is zero.
+TEST(GeoRectanglePrefilter, plannerEvaluatesSmallComponent) {
+  // The index with an additional polygon whose bounding box is the fixed
+  // rectangle of the tests above.
+  auto* qec = geoQec(
+      64, absl::StrCat("<polyNear> <hasGeom> \"POLYGON((9 9, 14 9, 14 11, 9 "
+                       "11, 9 9))\"",
+                       wktDatatype, " . \n"));
+  // The geometry of `<polyNear>` is the only part small enough to be
+  // evaluated.
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(1);
+
+  // `?g1` intersects the polygon: only `?g1` is prefiltered.
+  std::string query = absl::StrCat(
+      queryHead,
+      " <polyNear> <hasGeom> ?r . FILTER geof:sfIntersects(?r, ?g1)"
+      " FILTER geof:sfIntersects(?g1, ?g2) }");
+  auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  expectRowFilterRectangleNear(qet, Variable{"?g1"}, fixedRectangle, query);
+  EXPECT_THAT(rowFilterRectangles(qet, Variable{"?g2"}), ::testing::IsEmpty());
+  // At least the two linestrings near (10, 10) intersect themselves.
+  auto numRows = qet->getRootOperation()->getResult()->idTableView().size();
+  EXPECT_GE(numRows, 2u);
+  EXPECT_EQ(numResultRowsWithoutPrefilter(qec, query), numRows);
+
+  // The polygon contains `?g1`: both variables are prefiltered.
+  std::string queryContained =
+      absl::StrCat(queryHead,
+                   " <polyNear> <hasGeom> ?r . FILTER geof:sfContains(?r, ?g1)"
+                   " FILTER geof:sfIntersects(?g1, ?g2) }");
+  auto qetContained =
+      queryPlannerTestHelpers::parseAndPlan(queryContained, qec);
+  expectRowFilterRectangleNear(qetContained, Variable{"?g1"}, fixedRectangle,
+                               queryContained);
+  expectRowFilterRectangleNear(qetContained, Variable{"?g2"}, fixedRectangle,
+                               queryContained);
+  auto numRowsContained =
+      qetContained->getRootOperation()->getResult()->idTableView().size();
+  EXPECT_GE(numRowsContained, 2u);
+  EXPECT_EQ(numResultRowsWithoutPrefilter(qec, queryContained),
+            numRowsContained);
+
+  // With a budget of zero rows, nothing is evaluated and nothing prefiltered.
+  {
+    auto noBudget = setRuntimeParameterForTest<
+        &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
+    auto qetNoBudget = queryPlannerTestHelpers::parseAndPlan(query, qec);
+    EXPECT_THAT(rowFilterRectangles(qetNoBudget, Variable{"?g1"}),
+                ::testing::IsEmpty());
+  }
+
+  // A part with more than four triples is not evaluated.
+  std::string queryLarge = absl::StrCat(
+      queryHead,
+      " ?p <hasGeom> ?r . ?p <hasType> ?t . ?p <hasNode> ?n . ?p <a> ?x .",
+      " ?p <b> ?y . FILTER geof:sfIntersects(?r, ?g1)",
+      " FILTER geof:sfIntersects(?g1, ?g2) }");
+  auto qetLarge = queryPlannerTestHelpers::parseAndPlan(queryLarge, qec);
+  EXPECT_THAT(rowFilterRectangles(qetLarge, Variable{"?g1"}),
+              ::testing::IsEmpty());
+}
+
+// The size estimates of the children of the spatial joins in the plan `qet`
+// that bind `variable` but not `otherVariable` (the other side of the join).
+std::vector<size_t> spatialJoinSideSizeEstimates(
+    const std::shared_ptr<QueryExecutionTree>& qet, const Variable& variable,
+    const Variable& otherVariable) {
+  std::vector<const SpatialJoin*> joins;
+  collectOperations(*qet, joins);
+  std::vector<size_t> result;
+  for (const auto* join : joins) {
+    for (const auto* child : std::as_const(*join).getChildren()) {
+      if (child->containsVariable(variable) &&
+          !child->containsVariable(otherVariable)) {
+        // `getSizeEstimate` caches its result and is therefore not `const`.
+        result.push_back(
+            const_cast<QueryExecutionTree*>(child)->getSizeEstimate());
+      }
+    }
+  }
+  return result;
+}
+
+// Test that a part of the query is evaluated at planning time together with
+// its spatial join with a fixed geometry (here, the `BIND` of a point), so
+// that its rectangle is that of the geometries near the point only.
+TEST(GeoRectanglePrefilter, plannerEvaluatesComponentWithFixedSpatialJoin) {
+  // The geometries within 100 km of the point are `<lineA>` and `<pointNear>`
+  // (`<lineB>` is about 165 km away, and excluded by a plain `FILTER` as
+  // well), and `?g2` intersects one of them. The
+  // budget of rows lets only the part with the spatial join be evaluated (two
+  // rows), not the scan of `?g2`.
+  auto* qec = geoQec();
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(10);
+  std::string query = R"q(
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX unit: <http://qudt.org/vocab/unit/>
+    SELECT * WHERE {
+      BIND ("POINT(10.5 10.0)"^^geo:wktLiteral AS ?c)
+      ?s1 <hasGeom> ?g1 . ?s2 <hasGeom> ?g2 .
+      FILTER (geof:distance(?c, ?g1, unit:M) <= 100000)
+      FILTER geof:sfIntersects(?g1, ?g2)
+      FILTER (?s1 != <lineB>) })q";
+  auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+
+  // The scans of `?g2` are prefiltered with the rectangle of the two near
+  // geometries, those of `?g1` not at all (its values are known).
+  expectRowFilterRectangleNear(qet, Variable{"?g2"},
+                               GeoRectangle{10, 10, 11, 10.01}, query);
+  EXPECT_THAT(rowFilterRectangles(qet, Variable{"?g1"}), ::testing::IsEmpty());
+
+  // The result (`<lineA>` intersects itself) is the same as without the
+  // prefilters.
+  auto numRows = qet->getRootOperation()->getResult()->idTableView().size();
+  EXPECT_EQ(numRows, 1u);
+  EXPECT_EQ(numResultRowsWithoutPrefilter(qec, query), numRows);
+}
+
+// Test that a part of the query that was evaluated at planning time enters the
+// plan with its exact size as its size estimate. Here, the part is a join
+// whose estimate from the multiplicities is larger than its one actual row.
+TEST(GeoRectanglePrefilter, plannerUsesExactSizeOfEvaluatedPart) {
+  // `<polyNear>` has three nodes, of which only one has a geometry.
+  auto* qec = geoQec(
+      64, absl::StrCat("<polyNear> <hasNode> <pn1> . <polyNear> <hasNode> "
+                       "<pn2> . <polyNear> <hasNode> <pn3> . <pn1> <hasGeom> "
+                       "\"POLYGON((9 9, 14 9, 14 11, 9 11, 9 9))\"",
+                       wktDatatype, " . \n"));
+  std::string query = absl::StrCat(
+      queryHead,
+      " <polyNear> <hasNode>/<hasGeom> ?r . FILTER geof:sfContains(?r, ?g1)"
+      " FILTER geof:sfIntersects(?g1, ?g2) }");
+
+  // Without the evaluation, the join of the two triples is estimated to have
+  // more than one row.
+  size_t estimateWithoutEvaluation = 0;
+  {
+    auto noBudget = setRuntimeParameterForTest<
+        &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
+    auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+    auto estimates =
+        spatialJoinSideSizeEstimates(qet, Variable{"?r"}, Variable{"?g1"});
+    ASSERT_THAT(estimates, ::testing::SizeIs(1));
+    estimateWithoutEvaluation = estimates.at(0);
+    EXPECT_GT(estimateWithoutEvaluation, 1u);
+  }
+
+  // With the evaluation, the estimate is the one actual row, and the result
+  // is the same as without the prefilters.
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(
+      estimateWithoutEvaluation);
+  auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  EXPECT_THAT(
+      spatialJoinSideSizeEstimates(qet, Variable{"?r"}, Variable{"?g1"}),
+      ::testing::ElementsAre(1u));
+  expectRowFilterRectangleNear(qet, Variable{"?g1"}, fixedRectangle, query);
+  auto numRows = qet->getRootOperation()->getResult()->idTableView().size();
+  EXPECT_GE(numRows, 2u);
+  EXPECT_EQ(numResultRowsWithoutPrefilter(qec, query), numRows);
+}
+
+// Test that a subquery with a small `LIMIT` counts as a small part of the
+// query (its size estimate is the limit), and that a part whose size estimate
+// exceeds the budget is not evaluated.
+TEST(GeoRectanglePrefilter, plannerEvaluatesSubqueryWithLimit) {
+  auto* qec = geoQec();
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(1);
+  constexpr std::string_view prefixes = R"q(
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>)q";
+  // The one geometry of type `<P>` that the subquery returns, within 1 km.
+  std::string query = absl::StrCat(
+      prefixes,
+      " SELECT * WHERE { ?s <hasGeom> ?g ."
+      " { SELECT ?r WHERE { ?x <hasType> <P> . ?x <hasGeom> ?r } LIMIT 1 }"
+      " FILTER (geof:metricDistance(?r, ?g) <= 1000) }");
+  auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  auto rectangles = rowFilterRectangles(qet, Variable{"?g"});
+  ASSERT_EQ(rectangles.size(), 1u);
+  // A small rectangle around one of the two points of type `<P>`.
+  EXPECT_LT(rectangles.at(0).maxLng_ - rectangles.at(0).minLng_, 0.1);
+  EXPECT_LT(rectangles.at(0).maxLat_ - rectangles.at(0).minLat_, 0.1);
+  EXPECT_EQ(numResultRowsWithoutPrefilter(qec, query),
+            numResultRows(qec, query));
+
+  // All geometries of type `<T>` are far more than one row: not evaluated,
+  // so `?g` is not prefiltered.
+  std::string queryLarge = absl::StrCat(
+      prefixes,
+      " SELECT * WHERE { ?s <hasGeom> ?g . ?x <hasType> <T> . ?x <hasGeom> ?r ."
+      " FILTER geof:sfIntersects(?r, ?g) }");
+  auto qetLarge = queryPlannerTestHelpers::parseAndPlan(queryLarge, qec);
+  EXPECT_THAT(rowFilterRectangles(qetLarge, Variable{"?g"}),
+              ::testing::IsEmpty());
 }
 
 // -----------------------------------------------------------------------------
