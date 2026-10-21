@@ -46,6 +46,8 @@ jobs:
         additional-cmake-options: [""]
 
     runs-on: ubuntu-24.04
+    # Run all steps of the job inside a Docker container of Ubuntu 26.04, so
+    # that `apt` sees the repositories of that release (see the NOTE at the top).
     container: ubuntu:26.04
     # Inside a `container`, the runner falls back to `sh` as the default shell
     # for `run` steps, so request `bash` explicitly (see `cpp-17-libqlever.yml`
