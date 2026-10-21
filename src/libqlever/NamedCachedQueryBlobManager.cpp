@@ -330,9 +330,9 @@ std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
 // Return the snapshot of the index whose secondary vocabulary is the starting
 // point of the one of a blob that is written from an instance with the
 // snapshot `indexAndViews` and the `incremental` config: the snapshot of the
-// base for an incremental blob, else `indexAndViews` itself. Throw if the base
-// of an incremental blob is null, or if the `indexAndViews` of an incremental
-// blob have a secondary vocabulary.
+// base for an incremental blob, else `indexAndViews` itself. Throw if the
+// `indexAndViews` of an incremental blob have a secondary vocabulary. The base
+// of an incremental blob must not be null.
 std::shared_ptr<Qlever::IndexAndViews> vocabSourceForBlob(
     std::shared_ptr<Qlever::IndexAndViews> indexAndViews,
     const std::optional<BlobSerializationConfig::IncrementalBase>&
@@ -340,15 +340,6 @@ std::shared_ptr<Qlever::IndexAndViews> vocabSourceForBlob(
   if (!incremental.has_value()) {
     return indexAndViews;
   }
-  AD_CONTRACT_CHECK(incremental->base_ != nullptr,
-                    "The base of an incremental blob must not be null");
-  AD_CONTRACT_CHECK(incremental->maxGeoSegments_ >= 1,
-                    "The maximal number of segments of the geo index of an "
-                    "incremental blob must be at least 1");
-  AD_CONTRACT_CHECK(incremental->maxDeadShapeRatio_ >= 0.0 &&
-                        incremental->maxDeadShapeRatio_ <= 1.0,
-                    "The maximal ratio of dead shapes in the geo index of an "
-                    "incremental blob must be between 0 and 1");
   AD_CONTRACT_CHECK(
       indexAndViews->index_.getImpl().secondaryVocab() == nullptr,
       "An incremental blob can only be written from an instance without a "
@@ -553,6 +544,17 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   auto indexAndViews = qlever.indexAndViewsSnapshot();
   const auto& indexImpl = indexAndViews->index_.getImpl();
   const auto& incremental = config.incremental_;
+  if (incremental.has_value()) {
+    AD_CONTRACT_CHECK(incremental->base_ != nullptr,
+                      "The base of an incremental blob must not be null");
+    AD_CONTRACT_CHECK(incremental->maxGeoSegments_ >= 1,
+                      "The maximal number of segments of the geo index of an "
+                      "incremental blob must be at least 1");
+    AD_CONTRACT_CHECK(incremental->maxDeadShapeRatio_ >= 0.0 &&
+                          incremental->maxDeadShapeRatio_ <= 1.0,
+                      "The maximal ratio of dead shapes in the geo index of an "
+                      "incremental blob must be between 0 and 1");
+  }
   // The index whose secondary vocabulary is the starting point of the one of
   // the blob (see `vocabSourceForBlob`).
   auto vocabSource = vocabSourceForBlob(indexAndViews, incremental);
