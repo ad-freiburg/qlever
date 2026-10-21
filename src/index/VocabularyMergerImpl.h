@@ -85,14 +85,15 @@ template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, C& wordCallback,
                      ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes)
+                     const ad_utility::RegexSet& blankNodeIriRegexes,
+                     std::function<uint64_t(std::string_view)> geoSortKeyFn)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   using detail::MergeBlock;
   using detail::MergeWord;
   using detail::QueueWord;
   // The order of the merged vocabulary: by geo sort key first (all keys are 0
-  // without a geo cell grid, see `ItemVecEntry`), then by `comparator`.
+  // without a geo cell grid, see `geoSortKeyFn`), then by `comparator`.
   auto keyedLessThan = [&comparator](uint64_t key1, std::string_view word1,
                                      uint64_t key2, std::string_view word2) {
     if (key1 != key2) {
@@ -120,7 +121,8 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   // the merged blocks in the order of the vocabulary. The blocks stay in
   // memory, and a chunk keeps its slot until this thread has taken its output,
   // see `vocabularyMergeOptions`.
-  PartialVocabularyRunsInput input{basename, numPartialVocabularies};
+  PartialVocabularyRunsInput input{basename, numPartialVocabularies,
+                                   std::move(geoSortKeyFn)};
   const auto inputStatistics = input.statistics();
   auto options = vocabularyMergeOptions(numPartialVocabularies,
                                         inputStatistics.numBytes_, memoryToUse);
@@ -185,16 +187,16 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries) {
   // This value will overflow on the first entry.
   size_t nextWordId = -1;
   for (auto& entry : entries) {
-    auto& idAndExternal = entry.idAndFlag_;
-    auto id = idAndExternal.id();
+    auto& indexAndFlag = entry.indexAndFlag_;
+    auto index = indexAndFlag.index();
     if (lastWord != entry.word_) {
       nextWordId++;
       lastWord = entry.word_;
     }
-    auto inserted = res.try_emplace(id, nextWordId).second;
+    auto inserted = res.try_emplace(index, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
-    idAndExternal = PartialVocabIndexWithExternalFlag{
-        nextWordId, idAndExternal.isExternal()};
+    indexAndFlag = PartialVocabIndexWithExternalFlag{nextWordId,
+                                                     indexAndFlag.isExternal()};
   }
   return res;
 }
@@ -266,7 +268,7 @@ inline void writePartialVocabularyToFile(const ItemVec& entries,
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   PartialVocabularyWriter writer{fileName};
   for (const auto& entry : entries) {
-    writer(entry.word_, entry.idAndFlag_, entry.geoSortKey_);
+    writer(entry.word_, entry.indexAndFlag_);
   }
   writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";

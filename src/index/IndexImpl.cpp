@@ -431,17 +431,6 @@ void IndexImpl::createFromFiles(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::checkVocabularyTypeForGeoCellGrid(
-    ad_utility::VocabularyType vocabularyType) {
-  if (vocabularyType !=
-      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
-    throw std::runtime_error{
-        "A geo cell grid requires the vocabulary type "
-        "`on-disk-compressed-geo-split`"};
-  }
-}
-
-// _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
@@ -635,20 +624,26 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    // The merger orders the words by the geo sort keys stored in the partial
-    // vocabularies (see `mergeVocabulary`), so the comparator here is the one
-    // without the geo cell layer.
-    auto sortPred = [&cmp = vocab_.getCaseComparator()](std::string_view a,
-                                                        std::string_view b) {
+    // The merger orders the words by their geo sort keys, which it computes
+    // once per word (see `mergeVocabulary`), so the comparator here is the
+    // one without the geo cell layer. Without a grid, no keys are computed.
+    const auto& cmp = vocab_.getCaseComparator();
+    auto sortPred = [&cmp](std::string_view a, std::string_view b) {
       return cmp.compareWithoutGeoCellGrid(
                  a, b, TripleComponentComparator::Level::TOTAL) < 0;
     };
+    std::function<uint64_t(std::string_view)> geoSortKeyFn = nullptr;
+    if (cmp.getGeoCellGrid().has_value()) {
+      geoSortKeyFn = [&cmp](std::string_view word) {
+        return cmp.geoSortKey(word);
+      };
+    }
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabularies, sortPred, wordCallback,
-        memoryLimitIndexBuilding(), blankNodeIriRegexes_);
+        memoryLimitIndexBuilding(), blankNodeIriRegexes_, geoSortKeyFn);
     wordCallback.finish();
     return mergedVocabMeta;
   }();
@@ -1499,6 +1494,17 @@ void IndexImpl::applyGeoPointEncoding() {
 }
 
 // _____________________________________________________________________________
+void IndexImpl::checkVocabularyTypeForGeoCellGrid(
+    ad_utility::VocabularyType vocabularyType) {
+  if (vocabularyType !=
+      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
+    throw std::runtime_error{
+        "A geo cell grid requires the vocabulary type "
+        "`on-disk-compressed-geo-split`"};
+  }
+}
+
+// _____________________________________________________________________________
 void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
@@ -1871,8 +1877,8 @@ void IndexImpl::writePartialVocabulary(
         vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlagAndGeoSortKeys(
-              a.word_, a.idAndFlag_.isExternal(), a.geoSortKey_, b.word_,
-              b.idAndFlag_.isExternal(), b.geoSortKey_);
+              a.word_, a.indexAndFlag_.isExternal(), a.geoSortKey_, b.word_,
+              b.indexAndFlag_.isExternal(), b.geoSortKey_);
         });
   }
   auto mapping = [&]() {
@@ -1886,7 +1892,8 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
     vec.erase(std::unique(vec.begin(), vec.end(),
                           [](const auto& a, const auto& b) {
-                            return a.idAndFlag_.id() == b.idAndFlag_.id();
+                            return a.indexAndFlag_.index() ==
+                                   b.indexAndFlag_.index();
                           }),
               vec.end());
   }

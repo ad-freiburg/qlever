@@ -869,12 +869,13 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
                ad_utility::Exception);
 }
 
-// _____________________________________________________________________________
+// Test that `materializeToIndex` refuses an index whose vocabulary has a geo
+// cell grid (the rebuild cannot remap the IDs of such an index yet).
 TEST(IndexRebuilder, materializeToIndexRefusesGeoCellGrid) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
 
-  // An index whose vocabulary has a geo cell grid cannot be rebuilt yet.
+  // An index with one WKT literal and a grid of level 2.
   ad_utility::testing::TestIndexConfig config{
       "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
       "geosparql#wktLiteral> ."};
