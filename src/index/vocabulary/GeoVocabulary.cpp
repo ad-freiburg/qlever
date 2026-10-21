@@ -54,6 +54,19 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   std::decay_t<decltype(ad_utility::GEOMETRY_INFO_VERSION)> versionOfFile = 0;
   geoInfoFile_.read(&versionOfFile, geoInfoHeader, 0);
 
+  // See `isOldServingFile_`.
+  isOldServingFile_ = versionOfFile == oldServingFileVersion &&
+                      ql::filesystem::file_size(getGeoInfoFilename(filename)) ==
+                          geoInfoHeader + size() * oldServingFileRecordSize;
+  if (isOldServingFile_) {
+    static_assert(ad_utility::geometryInfoSize(7) == oldServingFileRecordSize);
+    AD_LOG_INFO << "The geometry info file " << getGeoInfoFilename(filename)
+                << " was built with an earlier version of the serving branch "
+                   "of QLever, it is read as version 7"
+                << std::endl;
+    versionOfFile = 7;
+  }
+
   // Check version of geo info file
   if (!ad_utility::isLoadableGeometryInfoVersion(versionOfFile)) {
     throw std::runtime_error(absl::StrCat(
@@ -75,9 +88,7 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   }
   geoInfoVersion_ = versionOfFile;
 
-  // The file must have one record per word of the size of its version. This
-  // also rejects the files of pre-release builds with parsed geometries, which
-  // have version 6 (like the released version 6), but larger records.
+  // The file must have one record per word of the size of its version.
   const auto geoInfoFilename = getGeoInfoFilename(filename);
   const uint64_t expectedFileSize =
       geoInfoHeader + size() * ad_utility::geometryInfoSize(versionOfFile);
@@ -496,6 +507,12 @@ std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
   // all-zero binary representation.
   if (buffer == invalidGeoInfoBuffer) {
     return std::nullopt;
+  }
+
+  // See `isOldServingFile_`.
+  if (isOldServingFile_) {
+    std::fill(buffer.begin() + oldServingFileReservedBytesBegin,
+              buffer.begin() + oldServingFileReservedBytesEnd, uint8_t{0});
   }
 
   return GeometryInfo::fromSerialized(

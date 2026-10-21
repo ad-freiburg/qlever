@@ -106,6 +106,18 @@ class GeoVocabulary {
   // `GEOMETRY_INFO_VERSION` for the versions that can be read.
   uint64_t geoInfoVersion_ = ad_utility::GEOMETRY_INFO_VERSION;
 
+  // TODO: Remove this once the indexes built with the serving branch of
+  // #3640 before 2026-10-19 have been rebuilt. Those have records with the
+  // layout of version 7, but the version number 6 in their header and
+  // arbitrary content in the two 16-bit fields of version 6 (which they did
+  // not have yet). Such a file is read as version 7, with these fields zeroed
+  // (like for version 5, see `GeometryInfo::fromSerialized`).
+  bool isOldServingFile_ = false;
+  static constexpr uint64_t oldServingFileVersion = 6;
+  static constexpr size_t oldServingFileRecordSize = 56;
+  static constexpr size_t oldServingFileReservedBytesBegin = 28;
+  static constexpr size_t oldServingFileReservedBytesEnd = 32;
+
   // TODO<ullingerc> Possibly add in-memory cache of bounding boxes here
 
   // Filename suffix for geometry information file
