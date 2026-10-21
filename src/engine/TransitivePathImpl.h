@@ -347,13 +347,11 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> startSideResult) const {
     using namespace ad_utility;
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
-    size_t cols = tree->getResultWidth();
     std::optional<ColumnIndex> graphColumn = getActualGraphColumnIndex(tree);
     std::optional<ColumnIndex> targetJoinColumn = targetSide.getJoinColumn();
 
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
-        computeColumnsWithoutJoinColumns(joinColumn, cols, targetJoinColumn,
-                                         graphColumn);
+        computePayloadColumns(tree, joinColumn, targetJoinColumn);
 
     // From two columns given by their column id, return an iterable range of
     // their contents.
@@ -424,35 +422,6 @@ class TransitivePathImpl : public TransitivePathBase {
                           const TransitivePathSide& targetSide) const = 0;
 
  private:
-  // Helper function to filter the join column to not add it twice to the
-  // result.
-  static std::vector<ColumnIndex> computeColumnsWithoutJoinColumns(
-      ColumnIndex joinColumn, size_t totalColumns,
-      std::optional<ColumnIndex> targetColumn,
-      std::optional<ColumnIndex> graphColumn) {
-    std::vector<ColumnIndex> columnsWithoutJoinColumn;
-
-    auto padding = [&joinColumn](const auto& column) -> size_t {
-      return column.has_value() && joinColumn != column;
-    };
-    AD_CORRECTNESS_CHECK(totalColumns >=
-                         padding(graphColumn) + padding(targetColumn));
-    size_t graphAndOtherIdentical =
-        !(graphColumn.has_value() && targetColumn.has_value() &&
-          graphColumn.value() == targetColumn.value());
-    columnsWithoutJoinColumn.reserve(totalColumns - padding(graphColumn) -
-                                     padding(targetColumn) -
-                                     graphAndOtherIdentical);
-    ql::ranges::copy(ql::views::iota(static_cast<size_t>(0), totalColumns) |
-                         ql::views::filter([joinColumn, &graphColumn,
-                                            &targetColumn](size_t i) {
-                           return i != joinColumn && i != graphColumn &&
-                                  i != targetColumn;
-                         }),
-                     std::back_inserter(columnsWithoutJoinColumn));
-    return columnsWithoutJoinColumn;
-  }
-
   // Create a zipped view that returns `Id::makeUndefined()` for the graph
   // column.
   static auto padWithMissingGraph(ConstIdColumnRef input) {

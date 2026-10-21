@@ -246,22 +246,8 @@ std::optional<ColumnIndex> TransitivePathBase::getActualGraphColumnIndex(
 size_t TransitivePathBase::numJoinColumnsWith(
     const std::shared_ptr<QueryExecutionTree>& tree, ColumnIndex joinColumn,
     std::optional<ColumnIndex> otherJoinColumn) const {
-  auto graphCol = getActualGraphColumnIndex(tree);
-
-  if (otherJoinColumn.has_value() && graphCol.has_value()) {
-    const auto& ojc = otherJoinColumn.value();
-    const auto& gc = graphCol.value();
-    if (ojc != gc && ojc != joinColumn && gc != joinColumn) {
-      return 3;
-    }
-    return 2;
-  }
-  if ((otherJoinColumn.has_value() && joinColumn == otherJoinColumn.value()) ||
-      (graphCol.has_value() && joinColumn == graphCol.value()) ||
-      (!graphCol.has_value() && !otherJoinColumn.has_value())) {
-    return 1;
-  }
-  return 2;
+  return tree->getResultWidth() -
+         computePayloadColumns(tree, joinColumn, otherJoinColumn).size();
 }
 
 // _____________________________________________________________________________
@@ -550,65 +536,47 @@ void TransitivePathBase::computePayloadColumnOffsets(
     const std::shared_ptr<QueryExecutionTree>& op,
     const std::shared_ptr<TransitivePathBase>& plan,
     std::optional<size_t> leftCol, std::optional<size_t> rightCol) const {
-  // Shift the index of a column to its position in the output table if one side
-  // is bound.
-  auto singleColBoundIndexShift = [](size_t columnIndex, size_t col) {
-    return col > columnIndex ? 2 : 1;
-  };
-
-  // Shift the index of a column to its position in the output table if both
-  // sides are bound.
-  auto bothColsBoundIndexShift = [](size_t columnIndex, size_t colL,
-                                    size_t colR) {
-    auto [lowerCol, higherCol] = std::minmax(colL, colR);
-    auto leftOrMiddle = columnIndex < lowerCol ? 2 : 1;
-    return columnIndex < higherCol ? leftOrMiddle : 0;
-  };
-
-  // Check if a column is equal to any given side column.
-  auto isSideCol = [&](const auto& colIndex) -> bool {
-    return (leftCol.has_value() && colIndex == leftCol.value()) ||
-           (rightCol.has_value() && colIndex == rightCol.value());
-  };
-
-  auto graphIndex = getActualGraphColumnIndex(op);
-  if (isSideCol(graphIndex)) {
-    graphIndex = std::nullopt;
-  }
+  auto payloadCols = computePayloadColumns(op, leftCol, rightCol);
 
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
   // `variable` to keep the code simpler.
   for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
-    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-    // Do not add the actual joining columns as payload columns.
-    if (isSideCol(columnIndex) || columnIndex == graphIndex) {
+    auto& colIndex = columnIndexWithType.columnIndex_;
+    auto position = ql::ranges::find(payloadCols, colIndex);
+    // If we couldn't find the column index in the payload columns, it is of a
+    // side or the graph column.
+    if (position == payloadCols.end()) {
       continue;
     }
 
-    // Correctly update the column index for the payload column.
-    // In the output table, the transitive path's side columns (left and
-    // right) always come first, while they can be in any order in the input
-    // table. Hence, we need to shift indices here.
-    if (!leftCol.has_value() || !rightCol.has_value()) {
-      // Single side is bound case.
-      columnIndexWithType.columnIndex_ += singleColBoundIndexShift(
-          columnIndex, (leftCol.has_value() ? leftCol : rightCol).value());
-    } else {
-      // Both sides bound, left side comes first in input table.
-      columnIndexWithType.columnIndex_ += bothColsBoundIndexShift(
-          columnIndex, leftCol.value(), rightCol.value());
-    }
-
-    // When we have a graph variable, we write it last, so we have to
-    // account for that.
-    if (columnIndex > graphIndex.value_or(std::numeric_limits<size_t>::max())) {
-      columnIndexWithType.columnIndex_ -= 1;
-    }
-    // Ensure all payload columns are appended to the `variableColumns_`.
+    // The two side columns always come first in the output. Graph column comes
+    // at the very end.
+    colIndex = 2 + ql::ranges::distance(payloadCols.begin(), position);
     AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
     plan->variableColumns_[variable] = columnIndexWithType;
   }
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> TransitivePathBase::computePayloadColumns(
+    const std::shared_ptr<QueryExecutionTree>& op,
+    const std::optional<ColumnIndex>& leftCol,
+    const std::optional<ColumnIndex>& rightCol) const {
+  auto graphCol = getActualGraphColumnIndex(op);
+  auto isNotPayload = [&](const auto& col) {
+    return (graphCol.has_value() && graphCol.value() == col) ||
+           (leftCol.has_value() && leftCol.value() == col) ||
+           (rightCol.has_value() && rightCol.value() == col);
+  };
+  std::vector<ColumnIndex> payloadIndices;
+  for (ColumnIndex col = 0; col < op->getResultWidth(); col++) {
+    if (isNotPayload(col)) {
+      continue;
+    }
+    payloadIndices.emplace_back(col);
+  }
+  return payloadIndices;
 }
 
 // _____________________________________________________________________________

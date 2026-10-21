@@ -294,6 +294,12 @@ class TransitivePathBase : public Operation {
  public:
   size_t getCostEstimate() override;
 
+  // Get a list of indices of all payload columns (no side, no graph).
+  std::vector<ColumnIndex> computePayloadColumns(
+      const std::shared_ptr<QueryExecutionTree>& op,
+      const std::optional<ColumnIndex>& leftCol,
+      const std::optional<ColumnIndex>& rightCol) const;
+
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
    * The concrete object will either be TransitivePathHashMap or
