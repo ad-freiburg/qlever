@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -70,11 +71,18 @@ namespace ad_utility::vocabulary_merger {
 //    `index/vocabulary_merger/IdMapWriters.h`), and the words go to the blocks
 //    of their sub-vocabulary, which are prepared (compressed) on the thread
 //    pool and appended to the files by one thread per sub-vocabulary.
+//
+// The `geoSortKeyFn` computes the geo sort key of a word (see
+// `TripleComponentComparator::geoSortKey`), by which the merged words are
+// ordered before the `comparator` is consulted. It is called once per word
+// when the word is read from its partial vocabulary. Without a geo cell grid
+// it is empty, and the order is that of the `comparator` alone.
 template <typename W>
-auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
-                     W comparator, ParallelWordWriterBase& writer,
-                     ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes = {})
+auto mergeVocabulary(
+    const std::string& basename, size_t numPartialVocabularies, W comparator,
+    ParallelWordWriterBase& writer, ad_utility::MemorySize memoryToUse,
+    const ad_utility::RegexSet& blankNodeIriRegexes = {},
+    std::function<uint64_t(std::string_view)> geoSortKeyFn = nullptr)
     -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>);
 
 // Read the partial ID map from the given file (see `IdMapWriter`) into a hash
@@ -119,8 +127,11 @@ IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
 /**
  * @brief Serialize an `ItemVec` to a binary file
  *
- * For each string first writes the size of the string (64 bits). Then the
- * actual string content (no trailing zero) and then the Id (sizeof(Id)
+ * First writes the number of entries. Then, for each entry, the word (its
+ * size and then its content, without a trailing zero), the external flag and
+ * the index, followed by the block index (see `PartialVocabularyWriter`). The
+ * geo sort key of an entry is not written (the merge computes it again when it
+ * reads the word, see `mergeVocabulary`).
  *
  * @param entries The input
  * @param fileName will write to this file. If it exists it will be overwritten
@@ -131,8 +142,12 @@ void writePartialVocabularyToFile(const ItemVec& entries,
 /**
  * @brief Take a HashMap of strings to Ids and insert all its elements into a
  * single vector. No reordering or deduplication is done, so result.size() ==
- * size of the hash map
+ * size of the hash map. The `geoSortKeyFn` computes the geo sort key of each
+ * word (see `ItemVecEntry`); the overload without it sets all keys to 0.
  */
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn);
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
 }  // namespace ad_utility::vocabulary_merger
 

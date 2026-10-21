@@ -167,9 +167,10 @@ struct Segment {
 // the boundary of two blocks), combine their external flags, detect the blank
 // nodes (see `isBlankNode`), assign every distinct word to its sub-vocabulary
 // and its segment-local ID, and collect the ID map entries of all the
-// occurrences. The words of the `blocks` have to be in the order of the
-// `comparator` (a `WordComparator`), which is only checked if the expensive
-// checks are enabled. The `blocks` are destroyed by this function.
+// occurrences. The words of the `blocks` have to be in the order of the merged
+// vocabulary (by geo sort key, then by the `comparator`, a `WordComparator`),
+// which is only checked if the expensive checks are enabled. The `blocks` are
+// destroyed by this function.
 //
 // NOTE: The constraint on `W` is a `static_assert` in the body and not a
 // `requires` clause, because the function is a friend of the `SegmentBuilder`
@@ -266,7 +267,8 @@ class SegmentBuilder {
         // that the words within a block are distinct (see
         // `MergedBlock::addWord`, which the logic above relies on).
         if (pendingWord_.has_value()) {
-          checkVocabularyOrder(comparator, pendingWord_->iriOrLiteral(),
+          checkVocabularyOrder(comparator, pendingWord_->geoSortKey_,
+                               pendingWord_->iriOrLiteral(), word.geoSortKey_,
                                word.iriOrLiteral());
         }
         commitPendingWord();

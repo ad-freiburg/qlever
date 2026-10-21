@@ -305,6 +305,72 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
                                {L(4), V(2)}}));  // <http://ex/cherry>
 }
 
+// Test that the merge orders by the geo sort keys of the words first (which
+// it computes with the given function when it reads a word) and by the
+// comparator second, and that the order check considers the keys.
+TEST(MergeVocabulary, geoSortKeyOrder) {
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
+  // Write the given words as a partial vocabulary file, and remember the geo
+  // sort key of each word for the `geoSortKeyFn` below.
+  ad_utility::HashMap<std::string, uint64_t> keys;
+  auto writeFile = [&keys](const std::string& path, const auto& wordsAndKeys) {
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{path};
+    size_t localIdx = 0;
+    for (const auto& [word, key] : wordsAndKeys) {
+      partialVocab(std::string_view{word},
+                   PartialVocabIndexWithExternalFlag{localIdx, false});
+      keys[std::string{word}] = key;
+      ++localIdx;
+    }
+    partialVocab.finish();
+  };
+  auto geoSortKeyFn = [&keys](std::string_view word) {
+    return keys.at(std::string{word});
+  };
+  auto lessThan = [](std::string_view a, std::string_view b) { return a < b; };
+  // The words that the merge writes to the vocabulary, in its order, with
+  // their external flags.
+  std::vector<std::pair<std::string, bool>> mergedWords;
+
+  // Each file is sorted by (key, word). In the merged vocabulary, the words
+  // with key 0 come first, then the word with key 4, then those with key 13,
+  // although "\"z\"" is lexicographically the largest word.
+  using P = std::pair<std::string_view, uint64_t>;
+  writeFile(filenames.wordsFiles_[0],
+            std::vector<P>{{"\"a\"", 0}, {"\"z\"", 0}, {"\"x\"", 13}});
+  writeFile(filenames.wordsFiles_[1],
+            std::vector<P>{{"\"b\"", 0}, {"\"w\"", 4}, {"\"y\"", 13}});
+  {
+    auto writer = makeParallelWriter(makeCollectingWordCallback(mergedWords));
+    mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                    lessThan, writer, 1_GB, {}, geoSortKeyFn);
+  }
+  using ::testing::Pair;
+  EXPECT_THAT(mergedWords, ::testing::ElementsAre(
+                               Pair("\"a\"", false), Pair("\"b\"", false),
+                               Pair("\"z\"", false), Pair("\"w\"", false),
+                               Pair("\"x\"", false), Pair("\"y\"", false)));
+
+  // Keys out of order within a file violate the vocabulary order, even
+  // though the words are in lexicographic order.
+  //
+  // NOTE: The order is only checked if the expensive checks are enabled (see
+  // `buildSegment` in `index/vocabulary_merger/Segment.h`).
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    mergedWords.clear();
+    writeFile(filenames.wordsFiles_[0],
+              std::vector<P>{{"\"a\"", 13}, {"\"b\"", 4}});
+    writeFile(filenames.wordsFiles_[1], std::vector<P>{});
+    auto writer = makeParallelWriter(makeCollectingWordCallback(mergedWords));
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
+                        lessThan, writer, 1_GB, {}, geoSortKeyFn),
+        ::testing::HasSubstr("vocabulary order violated"),
+        ad_utility::Exception);
+  }
+}
+
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
   using S = PartialVocabIndexWithExternalFlag;

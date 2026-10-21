@@ -462,6 +462,19 @@ void IndexImpl::createFromFiles(
 
   readIndexBuilderSettingsFromFile();
 
+  // Set the geo cell grid (see `GeoCellGrid`), if one is configured. This must
+  // happen after `readIndexBuilderSettingsFromFile`, which sets the locale and
+  // thereby recreates the word comparator, and before any parsing, which
+  // already sorts words.
+  if (geoCellGridForIndexBuilding_.has_value()) {
+    checkVocabularyTypeForGeoCellGrid(vocabularyTypeForIndexBuilding_);
+    const auto& grid = geoCellGridForIndexBuilding_.value();
+    vocab_.setGeoCellGrid(grid);
+    AD_LOG_INFO << "Using a geo cell grid for WKT literals, level "
+                << static_cast<int>(grid.level()) << ", scheme "
+                << grid.scheme() << std::endl;
+  }
+
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
 
@@ -635,16 +648,27 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
-    auto sortPred = [&cmp = vocab_.getCaseComparator()](std::string_view a,
-                                                        std::string_view b) {
-      return cmp(a, b, TripleComponentComparator::Level::TOTAL);
+    // The merger orders the words by their geo sort keys, which it computes
+    // once per word (see `mergeVocabulary`), so the comparator here is the
+    // one without the geo cell layer. Without a grid, no keys are computed.
+    const auto& cmp = vocab_.getCaseComparator();
+    auto sortPred = [&cmp](std::string_view a, std::string_view b) {
+      return cmp.compareWithoutGeoCellGrid(
+                 a, b, TripleComponentComparator::Level::TOTAL) < 0;
     };
+    std::function<uint64_t(std::string_view)> geoSortKeyFn = nullptr;
+    if (cmp.getGeoCellGrid().has_value()) {
+      geoSortKeyFn = [&cmp](std::string_view word) {
+        return cmp.geoSortKey(word);
+      };
+    }
+    vocab_.setParsedGeometriesMinLength(parsedGeometriesMinLength_);
     auto writerPtr = vocab_.makeParallelWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& writer = *writerPtr;
     writer.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabularies, sortPred, writer,
-        memoryLimitIndexBuilding(), blankNodeIriRegexes_);
+        memoryLimitIndexBuilding(), blankNodeIriRegexes_, geoSortKeyFn);
     writer.finish();
     return mergedVocabMeta;
   }();
@@ -1569,6 +1593,17 @@ void IndexImpl::applyGeoPointEncoding() {
 }
 
 // _____________________________________________________________________________
+void IndexImpl::checkVocabularyTypeForGeoCellGrid(
+    ad_utility::VocabularyType vocabularyType) {
+  if (vocabularyType !=
+      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
+    throw std::runtime_error{
+        "A geo cell grid requires the vocabulary type "
+        "`on-disk-compressed-geo-split`"};
+  }
+}
+
+// _____________________________________________________________________________
 void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
@@ -1692,6 +1727,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
           "Invalid value ", geoCellGridLevel,
           " for the key \"geo-cell-grid-level\" in the `meta-data.json`")};
     }
+    checkVocabularyTypeForGeoCellGrid(vocabType);
     ad_utility::GeoCellGridScheme geoCellGridScheme =
         ad_utility::GeoCellGridScheme::Flat;
     loadDataMember("geo-cell-grid-scheme", geoCellGridScheme,
@@ -1822,8 +1858,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
@@ -1923,7 +1960,12 @@ void IndexImpl::writePartialVocabulary(
 
   auto vec = [&]() {
     ad_utility::TimeBlockAndLog l{"vocab map to vector"};
-    return vocabMapsToVector(items);
+    // The geo sort key of each word is computed here, once, so that the sort
+    // below does not parse WKT literals for every comparison.
+    return vocabMapsToVector(
+        items, [&c = vocab_.getCaseComparator()](std::string_view word) {
+          return c.geoSortKey(word);
+        });
   }();
   {
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
@@ -1934,9 +1976,9 @@ void IndexImpl::writePartialVocabulary(
     boost::sort::pdqsort(
         vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
-          return c.isLessInTotalWithExternalFlag(
-              a.word_, a.indexAndFlag_.isExternal(), b.word_,
-              b.indexAndFlag_.isExternal());
+          return c.isLessInTotalWithExternalFlagAndGeoSortKeys(
+              a.word_, a.indexAndFlag_.isExternal(), a.geoSortKey_, b.word_,
+              b.indexAndFlag_.isExternal(), b.geoSortKey_);
         });
   }
   auto mapping = [&]() {

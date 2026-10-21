@@ -44,6 +44,19 @@ CPP_template(typename W)(requires WordComparator<W>) void checkVocabularyOrder(
                      "Total vocabulary order violated for ", previous, " and ",
                      next);
 }
+
+// The same check for words with geo sort keys (see
+// `detail::InputWord::geoSortKey_`): the order of the merged vocabulary is by
+// key first, then by the `comparator`. Without a geo cell grid all keys are 0.
+CPP_template(typename W)(requires WordComparator<W>) void checkVocabularyOrder(
+    [[maybe_unused]] const W& comparator, [[maybe_unused]] uint64_t previousKey,
+    [[maybe_unused]] std::string_view previous,
+    [[maybe_unused]] uint64_t nextKey, [[maybe_unused]] std::string_view next) {
+  AD_EXPENSIVE_CHECK(previousKey < nextKey ||
+                         (previousKey == nextKey && comparator(previous, next)),
+                     "Total vocabulary order violated for ", previous, " and ",
+                     next);
+}
 }  // namespace ad_utility::vocabulary_merger
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H
