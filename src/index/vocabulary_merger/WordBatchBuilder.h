@@ -79,9 +79,11 @@ class WordBatchBuilder {
   // `VOCAB_MERGER_WORD_BATCH_SIZE` and `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`),
   // it is handed to the `batchCallback`. The `QueueWord`s must be passed in
   // ascending order wrt the `comparator`, which compares (geo sort key, word)
-  // pairs (also across multiple calls). NOTE: This order is only checked if the
-  // expensive checks are enabled (see `AD_EXPENSIVE_CHECK`), because the
-  // additional comparison per word is rather costly.
+  // pairs (also across multiple calls).
+  //
+  // NOTE: This order is only checked if the expensive checks are enabled (see
+  // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
+  // costly.
   CPP_template(typename W, typename F)(
       requires KeyedWordComparator<W> CPP_and WordBatchCallback<
           F>) void addMergedWords(std::vector<QueueWord> buffer,

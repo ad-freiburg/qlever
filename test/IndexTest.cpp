@@ -553,20 +553,44 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
+namespace {
+// Add the `additionalKeys` to the configuration of the index with the given
+// `base`, load the index, and return the geo cell grid of its vocabulary.
+std::optional<ad_utility::GeoCellGrid> loadGeoCellGridWithConfiguration(
+    const std::string& base, const nlohmann::json& additionalKeys) {
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  nlohmann::json configuration;
+  {
+    std::ifstream in{configFilename};
+    in >> configuration;
+  }
+  configuration.update(additionalKeys);
+  {
+    auto out = ad_utility::makeOfstream(configFilename);
+    out << configuration;
+  }
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.createFromOnDiskIndex(base, false);
+  return index.getVocab().getGeoCellGrid();
+}
+}  // namespace
+
 // Test an index built with a geo cell grid: the vocabulary and its comparator
 // get the grid from the index configuration, the vocabulary indices of WKT
-// literals carry their grid cell, and the literals can be looked up. NOTE: The
-// tiny input gives a single partial vocabulary; the merge of several partial
-// vocabularies by geo sort key is tested in `VocabularyGeneratorTest`.
+// literals carry their grid cell, and the literals can be looked up.
+//
+// NOTE: The tiny input gives a single partial vocabulary; the merge of several
+// partial vocabularies by geo sort key is tested in `VocabularyGeneratorTest`.
 TEST(IndexTest, geoCellGridIndexBuild) {
   using ad_utility::GeoCellGrid;
   auto wkt = [](std::string_view content) {
     return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
   };
   // With a grid of level 2 (4 x 4 cells of 90 degrees), the first literal is
-  // in cell 3, the other two in cell 12. NOTE: Point literals would not do
-  // here, because they are encoded directly in the ID and never reach the
-  // vocabulary.
+  // in cell 3, the other two in cell 12.
+  //
+  // NOTE: Point literals would not do here, because they are encoded directly
+  // in the ID and never reach the vocabulary.
   std::string w3 = wkt("LINESTRING(170 -80, 171 -81)");
   std::string w12 = wkt("LINESTRING(-170 80, -171 81)");
   std::string w12b = wkt("LINESTRING(-170 80, -172 82)");
@@ -617,7 +641,8 @@ TEST(IndexTest, geoCellGridIndexBuild) {
             makeIdTableFromVector({{Id::makeFromVocabIndex(idxOfA)}}));
 }
 
-// Test that a geo cell grid requires the geo split vocabulary type.
+// Test that building an index with a geo cell grid requires the geo split
+// vocabulary type.
 TEST(IndexTest, geoCellGridRequiresGeoSplitVocabulary) {
   ad_utility::testing::TestIndexConfig config{"<a> <p> <b> ."};
   config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
@@ -627,11 +652,9 @@ TEST(IndexTest, geoCellGridRequiresGeoSplitVocabulary) {
       ::testing::HasSubstr("requires the vocabulary type"));
 }
 
-// NOTE: The configuration of an index built without a grid is edited by hand
-// here, so that only the reading of the configuration is tested.
-
 // Test that the geo cell grid (see `GeoVocabulary`) is read from the index
 // configuration when an index is loaded, with `flat` as the default scheme.
+//
 // NOTE: The configuration of an index built without a grid is edited by hand
 // here, so that only the reading of the configuration is tested.
 TEST(IndexTest, geoCellGridFromConfiguration) {
@@ -643,21 +666,8 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   const auto& base = qec->getIndex().getOnDiskBase();
   EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
 
-  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
-  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
-    nlohmann::json configuration;
-    {
-      std::ifstream in{configFilename};
-      in >> configuration;
-    }
-    configuration.update(additionalKeys);
-    {
-      auto out = ad_utility::makeOfstream(configFilename);
-      out << configuration;
-    }
-    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-    index.createFromOnDiskIndex(base, false);
-    return index.getVocab().getGeoCellGrid();
+  auto loadWithConfiguration = [&base](const nlohmann::json& additionalKeys) {
+    return loadGeoCellGridWithConfiguration(base, additionalKeys);
   };
   EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
             std::optional{ad_utility::GeoCellGrid{2}});
@@ -669,6 +679,18 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       loadWithConfiguration({{"geo-cell-grid-level", 300}}),
       ::testing::HasSubstr("Invalid value 300"));
+}
+
+// Test that a configuration with a geo cell grid is rejected when the
+// vocabulary type has no `GeoVocabulary` that could hold the grid.
+TEST(IndexTest, geoCellGridFromConfigurationRequiresGeoSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <b> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadGeoCellGridWithConfiguration(base, {{"geo-cell-grid-level", 2}}),
+      ::testing::HasSubstr("requires the vocabulary type"));
 }
 
 // _____________________________________________________________________________

@@ -141,7 +141,6 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
   assertFalse("\"१५१\"", "\"151\"@en");
 }
 
-// ______________________________________________________________________________________________
 // Test that with a geo cell grid, WKT literals sort after all other words
 // and by their grid cell, and that the variants with precomputed geo sort
 // keys and the purely lexicographic variants behave as documented.

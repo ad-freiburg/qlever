@@ -30,8 +30,8 @@ struct QueueWord {
   // externalized.
   TripleComponentWithIndex entry_;
   size_t partialFileId_;  // from which partial vocabulary did this word come
-  // The geo sort key of the word (see `ItemVecEntry`), read from the partial
-  // vocabulary file.
+  // The geo sort key of the word (see `ItemVecEntry`), computed when the word
+  // was read from its partial vocabulary (see `PartialVocabularyRunsInput`).
   uint64_t geoSortKey_ = 0;
 
   [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }

@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -77,11 +78,18 @@ namespace ad_utility::vocabulary_merger {
 //
 // The last three of those stages are owned by the
 // `detail::VocabularyMergePipeline`.
+//
+// The `geoSortKeyFn` computes the geo sort key of a word (see
+// `TripleComponentComparator::geoSortKey`), by which the merged words are
+// ordered before the `comparator` is consulted. It is called once per word
+// when the word is read from its partial vocabulary. Without a geo cell grid
+// it is empty, and the order is that of the `comparator` alone.
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
-                     W comparator, C& wordCallback,
-                     ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes = {})
+auto mergeVocabulary(
+    const std::string& basename, size_t numPartialVocabularies, W comparator,
+    C& wordCallback, ad_utility::MemorySize memoryToUse,
+    const ad_utility::RegexSet& blankNodeIriRegexes = {},
+    std::function<uint64_t(std::string_view)> geoSortKeyFn = nullptr)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
@@ -93,14 +101,14 @@ ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename);
 
 /**
- * @brief Create a hashMap that maps the Id of the pair<string, Id> to the
- * position of the string in the vector. The resulting ids will be ascending and
+ * @brief Create a hashMap that maps the index of each `ItemVecEntry` to the
+ * position of its word in the vector. The resulting ids will be ascending and
  * duplicates strings that appear adjacent to each other will be given the same
  * ID. If Input is sorted this will mean if result[x] == result[y] then the
  * strings that were connected to x and y in the input were identical. Also
  * modifies the input Ids to their mapped values.
  *
- * @param entries  Must be sorted(at least duplicates must be adjacent)
+ * @param entries  Must be sorted (at least duplicates must be adjacent)
  * according to the strings and the Ids must be unique to work correctly.
  */
 ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries);
@@ -128,8 +136,10 @@ IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
  * @brief Serialize an `ItemVec` to a binary file
  *
  * First writes the number of entries. Then, for each entry, the word (its
- * size and then its content, without a trailing zero), the external flag, the
- * index, and the geo sort key.
+ * size and then its content, without a trailing zero), the external flag and
+ * the index, followed by the block index (see `PartialVocabularyWriter`). The
+ * geo sort key of an entry is not written (the merge computes it again when it
+ * reads the word, see `mergeVocabulary`).
  *
  * @param entries The input
  * @param fileName will write to this file. If it exists it will be overwritten

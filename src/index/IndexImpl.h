@@ -431,6 +431,21 @@ class IndexImpl {
     configurationJson_["vocabulary-type"] = type;
   }
 
+  // Set the geo cell grid for WKT literals (see `GeoCellGrid`), which is
+  // stored in the index configuration. A grid requires the vocabulary type
+  // `OnDiskCompressedGeoSplit`. Only relevant during index building.
+  void setGeoCellGridForIndexBuilding(
+      std::optional<ad_utility::GeoCellGrid> grid) {
+    geoCellGridForIndexBuilding_ = grid;
+    if (grid.has_value()) {
+      configurationJson_["geo-cell-grid-level"] = grid->level();
+      configurationJson_["geo-cell-grid-scheme"] = grid->scheme();
+    } else {
+      configurationJson_.erase("geo-cell-grid-level");
+      configurationJson_.erase("geo-cell-grid-scheme");
+    }
+  }
+
   // Set the encoding of the geo points for the index build; see
   // `ad_utility::GeoPointEncoding` for details.
   void setGeoPointEncodingForIndexBuilding(
@@ -453,8 +468,8 @@ class IndexImpl {
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
-  // Throw if `vocabularyType` cannot hold a geo cell grid (see
-  // `setGeoCellGridForIndexBuilding`).
+  // Throw if `vocabularyType` has no `GeoVocabulary` and hence cannot hold a
+  // geo cell grid (see `GeoCellGrid`).
   static void checkVocabularyTypeForGeoCellGrid(
       ad_utility::VocabularyType vocabularyType);
 
@@ -462,21 +477,6 @@ class IndexImpl {
   TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
-  // Set the geo cell grid for WKT literals (see `GeoCellGrid`), which is
-  // stored in the index configuration. A grid requires the vocabulary type
-  // `OnDiskCompressedGeoSplit`. Only relevant during index building.
-  void setGeoCellGridForIndexBuilding(
-      std::optional<ad_utility::GeoCellGrid> grid) {
-    geoCellGridForIndexBuilding_ = grid;
-    if (grid.has_value()) {
-      configurationJson_["geo-cell-grid-level"] = grid->level();
-      configurationJson_["geo-cell-grid-scheme"] = grid->scheme();
-    } else {
-      configurationJson_.erase("geo-cell-grid-level");
-      configurationJson_.erase("geo-cell-grid-scheme");
-    }
-  }
-
   // ___________________________________________________________________________
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 

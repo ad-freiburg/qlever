@@ -260,6 +260,9 @@ template <auto isSomethingFunction, const auto& prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    case Datatype::Undefined:
+      // An unbound argument is an error, see `IsValueIdValueGetter`.
+      return Id::makeUndefined();
     case Datatype::VocabIndex:
       // See instantiations below for what `isSomethingFunction` is.
       return Id::makeFromBool(std::invoke(isSomethingFunction,
@@ -279,10 +282,7 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Double:
     case Datatype::Date:
     case Datatype::GeoPoint:
-      if constexpr (prefix == isLiteralPrefix) {
-        return Id::makeFromBool(true);
-      }
-    case Datatype::Undefined:
+      return Id::makeFromBool(prefix == isLiteralPrefix);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::BlankNodeIndex:
