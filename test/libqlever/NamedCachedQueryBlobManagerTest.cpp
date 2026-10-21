@@ -1387,9 +1387,9 @@ void applySecondUpdate(Qlever& source) {
 }  // namespace
 
 // _____________________________________________________________________________
-// An incremental blob of an unchanged state is byte-identical to its base. This
-// also shows that the encoding of the segments of a geo index is stable under a
-// decode-encode round trip.
+// Test that an incremental blob of an unchanged state is byte-identical to its
+// base. This also shows that the encoding of the segments of a geo index is
+// stable under a decode-encode round trip.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutChangesIsIdentical) {
   auto [source, baseBlob, base] = setUpAfterFirstUpdate();
   expectAllEntriesCanonical(*base);
@@ -1423,9 +1423,9 @@ TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
 }
 
 // _____________________________________________________________________________
-// An update that inserts and deletes rows of the geo-indexed result: the
-// incremental blob extends the geo index of the base, and answers all queries
-// like a blob that was written without a base.
+// Test that after an update that inserts and deletes rows of the geo-indexed
+// result, the incremental blob extends the geo index of the base, and answers
+// all queries like a blob that was written without a base.
 TEST(NamedCachedQueryBlobManager, incrementalBlobAfterUpdate) {
   auto [source, baseBlob, base] = setUpAfterFirstUpdate();
   applySecondUpdate(*source);
@@ -1451,8 +1451,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobAfterUpdate) {
   EXPECT_EQ(columnsOfPinnedResult(*incremental, "ints"),
             columnsOfPinnedResult(*base, "ints"));
 
-  // The first `Id`s of the table of the geo entry are the ones of the rows
-  // that were not changed: the subject `<s2>` is the same row in both.
+  // The subjects of the geo entry that are in both tables (here only `<s2>`,
+  // which is a word of the main vocabulary) have the same `Id` in both.
   auto subjectsOf = [](const Qlever& qlever) {
     return columnsOfPinnedResult(qlever, "geoPin").at(0);
   };
@@ -1469,8 +1469,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobAfterUpdate) {
 }
 
 // _____________________________________________________________________________
-// If the geo index would consist of too many segments or have too many dead
-// shapes, then it is compacted.
+// Test that the geo index is compacted if it would consist of too many
+// segments or have too many dead shapes.
 TEST(NamedCachedQueryBlobManager, incrementalBlobCompactsGeoIndex) {
   auto [source, baseBlob, base] = setUpAfterFirstUpdate();
   applySecondUpdate(*source);
@@ -1496,7 +1496,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobCompactsGeoIndex) {
 }
 
 // _____________________________________________________________________________
-// The words of the secondary vocabulary of the base keep their `Id`s.
+// Test that the words of the secondary vocabulary of the base keep their
+// `Id`s.
 TEST(NamedCachedQueryBlobManager, incrementalBlobKeepsSecondaryVocabIds) {
   auto [source, baseBlob, base] = setUpAfterFirstUpdate();
   applySecondUpdate(*source);
@@ -1537,7 +1538,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobKeepsSecondaryVocabIds) {
 }
 
 // _____________________________________________________________________________
-// An entry without a counterpart in the base is written with a fresh geo index.
+// Test that an entry without a counterpart in the base is written with a fresh
+// geo index.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutMatchingBaseEntry) {
   auto sourceConfig = buildTestIndex(incrementalTestData());
   auto source = makeIncrementalSource(sourceConfig);
@@ -1554,8 +1556,8 @@ namespace {
 // Write the blob after the second update of the incremental tests
 // incrementally against a base that was written after the first update with
 // the given `baseGeoPinOptions` for the entry "geoPin" (see
-// `setUpAfterFirstUpdate`), where
-// `modifyBase` is applied to the instance that the base blob was loaded into.
+// `setUpAfterFirstUpdate`), where `modifyBase` is applied to the instance that
+// the base blob was loaded into.
 // Expect that the geo index of the entry "geoPin" is not extended from the base
 // (and hence has a single segment, in contrast to the extension, see
 // `incrementalBlobAfterUpdate`), and that the blob answers all queries like a
@@ -1577,7 +1579,8 @@ void expectGeoIndexNotExtended(
 }  // namespace
 
 // _____________________________________________________________________________
-// If the entry of the base has no geo index, the geo index is not extended.
+// Test that the geo index is not extended if the entry of the base has no geo
+// index.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithBaseEntryWithoutGeoIndex) {
   expectGeoIndexNotExtended([](Qlever& base) {
     auto entry = base.namedResultCache().get("geoPin");
@@ -1587,8 +1590,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithBaseEntryWithoutGeoIndex) {
 }
 
 // _____________________________________________________________________________
-// If the structure of the base entry differs (here: the simplification of the
-// geo index), the geo index is not extended.
+// Test that the geo index is not extended if the structure of the base entry
+// differs (here: the simplification of the geo index).
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentSimplification) {
   expectGeoIndexNotExtended(
       [](Qlever& base) {
@@ -1598,8 +1601,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentSimplification) {
 }
 
 // _____________________________________________________________________________
-// If the table of the base entry has a different number of columns (here: an
-// additional column without a variable), the geo index is not extended.
+// Test that the geo index is not extended if the table of the base entry has a
+// different number of columns (here: an additional column without a variable).
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentNumberOfColumns) {
   expectGeoIndexNotExtended([](Qlever& base) {
     auto entry = base.namedResultCache().get("geoPin");
@@ -1620,9 +1623,9 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentNumberOfColumns) {
 }
 
 // _____________________________________________________________________________
-// If the geo index of the base entry is on a different variable (here: `?geom`
-// instead of `?geo2`, with the same number of columns), the geo index is not
-// extended.
+// Test that the geo index is not extended if the geo index of the base entry
+// is on a different variable (here: `?geom` instead of `?geo2`, with the same
+// number of columns).
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentGeometryColumn) {
   expectGeoIndexNotExtended(
       [](Qlever& base) {
@@ -1632,8 +1635,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentGeometryColumn) {
 }
 
 // _____________________________________________________________________________
-// If the variables of the base entry differ (here: `?s2` is renamed), the geo
-// index is not extended.
+// Test that the geo index is not extended if the variables of the base entry
+// differ (here: `?s2` is renamed).
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentVariables) {
   expectGeoIndexNotExtended([](Qlever& base) {
     auto entry = base.namedResultCache().get("geoPin");
@@ -1647,7 +1650,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentVariables) {
 }
 
 // _____________________________________________________________________________
-// If the sort order of the base entry differs, the geo index is not extended.
+// Test that the geo index is not extended if the sort order of the base entry
+// differs.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentSortOrder) {
   expectGeoIndexNotExtended([](Qlever& base) {
     auto entry = base.namedResultCache().get("geoPin");
@@ -1663,9 +1667,9 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentSortOrder) {
 }
 
 // _____________________________________________________________________________
-// If the table of the base entry is not in canonical order (for example
-// because the base was written by an older writer), the geo index is not
-// extended, and no error occurs.
+// Test that the geo index is not extended (and no error occurs) if the table
+// of the base entry is not in canonical order (for example because the base
+// was written by an older writer).
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithNonCanonicalBase) {
   expectGeoIndexNotExtended([](Qlever& base) {
     auto entry = base.namedResultCache().get("geoPin");
@@ -1687,9 +1691,10 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithNonCanonicalBase) {
 }
 
 // _____________________________________________________________________________
-// An update that only deletes a row of the geo-indexed result leaves its rows
-// in canonical order (no `Id` has to be rewritten), so the geo index is
-// extended from the base without permuting the rows of the updated entry.
+// Test that the geo index is extended from the base without permuting the rows
+// of the updated entry if an update only deletes a row of the geo-indexed
+// result (its rows then stay in canonical order, because no `Id` has to be
+// rewritten).
 TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
   auto source = makeIncrementalSource(buildTestIndex(absl::StrCat(
       freiburgSegmentsS1S2,
@@ -1723,8 +1728,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
 }
 
 // _____________________________________________________________________________
-// A geo index without any shapes (the pinned query has an empty result) can be
-// extended, and is not compacted.
+// Test that a geo index without any shapes (the pinned query has an empty
+// result) can be extended, and is not compacted.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithEmptyGeoIndex) {
   auto source = makeIncrementalSource(buildTestIndex("<m> <p> <o> ."));
   pinGeoResult(*source);
@@ -1742,8 +1747,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithEmptyGeoIndex) {
 }
 
 // _____________________________________________________________________________
-// A base can only be used if the instance that is serialized has no secondary
-// vocabulary.
+// Test that a base can only be used if the instance that is serialized has no
+// secondary vocabulary, and that the base must not be null.
 TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsSecondaryVocab) {
   auto sourceConfig = buildTestIndex(newWordsTestData);
   auto loaded = loadBlob(serializeNewWordsTestBlob(sourceConfig));
@@ -1760,7 +1765,8 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsSecondaryVocab) {
 }
 
 // _____________________________________________________________________________
-// The compaction thresholds of an incremental blob have to be in a valid range.
+// Test that the compaction thresholds of an incremental blob are rejected if
+// they are not in a valid range.
 TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsInvalidThresholds) {
   auto source = makeIncrementalSource(buildTestIndex("<m> <p> <o> ."));
   auto base = roundTrip(*source);

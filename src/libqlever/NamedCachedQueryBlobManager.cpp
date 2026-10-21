@@ -163,12 +163,13 @@ bool baseHasSameStructure(const NamedResultCache::Value& baseValue,
 
 // Return the entry with the `key` from the named result cache of the `base`
 // if its geo index can be extended to the one of the updated entry with the
-// same `key` (with the canonicalized copy `canonicalUpdated` and the geo index
-// `updatedGeoIndex`), else `nullptr`. That is the case iff the base contains
-// an entry with the `key` that has a geo index and the same structure (see
-// `baseHasSameStructure`), and whose table is in canonical order (which
-// `canonicalRowOrder::alignRows` requires). If the base entry is not eligible
-// (or does not exist), then the reason is logged.
+// same `key` (given by its canonicalized copy `canonicalUpdated` and its geo
+// index `updatedGeoIndex`), else `nullptr`. The reason for a `nullptr` is
+// logged.
+//
+// NOTE: The base entry is eligible iff it has a geo index, the same structure
+// as the updated entry (see `baseHasSameStructure`), and a table in canonical
+// order (which `canonicalRowOrder::alignRows` requires).
 std::shared_ptr<const NamedResultCache::Value> findEligibleBaseEntry(
     const std::string& key, const Qlever& base,
     const NamedResultCache::Value& canonicalUpdated,
@@ -288,14 +289,16 @@ bool exceedsCompactionThresholds(
 // Return the geo index for the canonicalized copy `canonicalized` of the
 // `updated` entry that reuses the segments of the geo index of the entry with
 // the same `key` in the base of the `incremental` config (see
-// `findEligibleBaseEntry` and `extendGeoIndexFromBase`), or `std::nullopt` if
-// that is not possible or if the result would have to be compacted (see
-// `exceedsCompactionThresholds`), in which case the geo index of
-// `canonicalized` is to be used, which is the geo index of the `updated` entry
-// itself (as built when the entry was pinned, or as loaded from a blob; it may
-// have several segments in the latter case) with its rows permuted to
-// canonical order. The result is in canonical row order. The `index` is used
-// to resolve the `Id`s of the table of `updated`.
+// `findEligibleBaseEntry` and `extendGeoIndexFromBase`). The result is in
+// canonical row order, and the `index` is used to resolve the `Id`s of the
+// table of `updated`. Return `std::nullopt` if the base has no eligible
+// entry, or if the extended geo index would have to be compacted (see
+// `exceedsCompactionThresholds`).
+//
+// NOTE: In the `std::nullopt` case, the geo index of `canonicalized` is to be
+// used. That is the geo index of the `updated` entry itself (as built when the
+// entry was pinned, or as loaded from a blob, in which case it may have
+// several segments) with its rows permuted to canonical order.
 std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
     const std::string& key, const NamedResultCache::Value& updated,
     const namedCacheSecondaryVocab::CanonicalizedValue& canonicalized,
@@ -409,14 +412,15 @@ bool needsNewFormat(const SecondaryVocabulary& secondaryVocab,
 // `key` that is written to a blob with the `secondaryVocab`: its `Id`s of type
 // `LocalVocabIndex` are rewritten, its columns without a variable are dropped,
 // and its rows and columns are in canonical order (see
-// `namedCacheSecondaryVocab::canonicalizeWithPermutation`). For an entry that
-// needs neither rewriting nor sorting, the copy is only a view of the columns
-// of the entry, so no table is copied; otherwise the `allocator` is used for
-// the copy of the table. For an incremental blob (if
-// `incremental` is set), the geo index of the copy is created from the one of
-// the base if possible (see `tryToExtendGeoIndex`, the `index` is used to
-// resolve the `Id`s of the table of `value`). The `value` has to outlive the
-// copy, because the table of the copy may be a view of the columns of `value`.
+// `namedCacheSecondaryVocab::canonicalizeWithPermutation`). For an incremental
+// blob (if `incremental` is set), the geo index of the copy is created from
+// the one of the base if possible (see `tryToExtendGeoIndex`, the `index` is
+// used to resolve the `Id`s of the table of `value`).
+//
+// NOTE: For an entry that needs neither rewriting nor sorting, the copy is
+// only a view of the columns of the entry, so no table is copied; otherwise
+// the `allocator` is used for the copy of the table. The `value` therefore
+// has to outlive the copy.
 NamedResultCache::Value canonicalizeEntryForBlob(
     const std::string& key, const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
@@ -598,7 +602,8 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // written in the `entriesVersion` (see above).
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
-      [&](auto& entrySerializer, const std::string& key,
+      [&secondaryVocab, &incremental, &indexAndViews, &qlever, entriesVersion](
+          auto& entrySerializer, const std::string& key,
           const NamedResultCache::Value& value) {
         auto canonicalValue =
             canonicalizeEntryForBlob(key, value, secondaryVocab, incremental,

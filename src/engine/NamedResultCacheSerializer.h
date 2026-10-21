@@ -33,15 +33,18 @@ using Value = NamedResultCache::Value;
 
 // Write the `entries` (as returned by `getAllEntriesSortedByKey`) to the
 // `serializer`, in exactly the format that `readFromSerializer` reads. Each
-// value is written via `writeEntry(serializer, key, value)`, which has to write
-// a `NamedResultCache::Value`, but may write a modified version of it (see
-// `writeValue` below); the `key` is passed so that a caller can look up
-// information about the entry (for example its counterpart in a previously
-// written blob). The entries are written in the format version
-// `entriesVersion` (one of `legacyFormatVersion` and
-// `formatVersion`). Note that `writeEntry` has to write the values in
-// the same `entriesVersion`, and that the legacy version can only represent
-// geo indices with a single segment.
+// value is written via `writeEntry(serializer, key, value)`, in the format
+// version `entriesVersion` (one of `legacyFormatVersion` and
+// `formatVersion`).
+//
+// NOTE 1: The `writeEntry` has to write a `NamedResultCache::Value`, but may
+// write a modified version of it (see `writeValue` below). The `key` is passed
+// so that a caller can look up information about the entry (for example its
+// counterpart in a previously written blob).
+//
+// NOTE 2: The `writeEntry` has to write the values in the same
+// `entriesVersion`, and the legacy version can only represent geo indices
+// with a single segment.
 CPP_template(typename Serializer, typename WriteEntry)(
     requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
         ql::concepts::invocable<

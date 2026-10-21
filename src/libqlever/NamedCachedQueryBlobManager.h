@@ -45,8 +45,10 @@ struct BlobSerializationConfig {
   // If true, then the blob is always written in the new format
   // (`formatVersionWithSecondaryVocab` with entries format version 2, see
   // `NamedCachedQueryBlobManager::serialize`), also if the old format could
-  // represent it. The new format keeps the simplification of a geo index with
-  // a single segment, which the old format drops; the simplification is needed
+  // represent it.
+  //
+  // NOTE: The new format keeps the simplification of a geo index with a
+  // single segment, which the old format drops. The simplification is needed
   // when the blob later serves as the base of an incremental blob (see
   // `incremental_` below, which implies this setting).
   bool alwaysUseNewFormat_ = false;
@@ -54,13 +56,15 @@ struct BlobSerializationConfig {
   // Settings for writing a blob that is a small modification of a previously
   // written blob (the "base"), such that the two blobs only differ in the
   // parts of the content that actually changed (for example to be able to
-  // compute a small diff between them). In such a blob, the words of the
-  // secondary vocabulary of the base keep their `Id`s, and the geo index of an
-  // entry is extended from the geo index of the entry with the same name in the
-  // base (reusing its segments, see `SpatialJoinCachedIndex::forUpdatedTable`)
-  // instead of using the geo index of the entry itself (see
-  // `NamedCachedQueryBlobManager::serialize`). An incremental blob is always
-  // written in the new format (see `alwaysUseNewFormat_`).
+  // compute a small diff between them).
+  //
+  // NOTE: In such a blob, the words of the secondary vocabulary of the base
+  // keep their `Id`s, and the geo index of an entry is extended from the geo
+  // index of the entry with the same name in the base (reusing its segments,
+  // see `SpatialJoinCachedIndex::forUpdatedTable`) instead of using the geo
+  // index of the entry itself (see `NamedCachedQueryBlobManager::serialize`).
+  // An incremental blob is always written in the new format (see
+  // `alwaysUseNewFormat_`).
   struct IncrementalBase {
     // A `Qlever` instance into which the previous blob was loaded, for example
     // via `Qlever{EngineConfig{}, true}` followed by
@@ -203,14 +207,16 @@ class NamedCachedQueryBlobManager {
   // NOTE 3: If `config.incremental_` is set, then the secondary vocabulary of
   // the blob starts from a copy of the one of the base (its words keep their
   // `Id`s), and `qlever` must not have a secondary vocabulary itself (otherwise
-  // an exception is thrown). Moreover, for each entry with a geo index for
-  // which the base has an entry with the same name, a geo index, the same
-  // geometry column, variable-to-column map and sort order, and a table in
-  // canonical order, the geo index of the blob is created from the one of the
-  // base via `SpatialJoinCachedIndex::forUpdatedTable` (reusing its segments),
-  // unless the compaction thresholds of the `IncrementalBase` are exceeded. If
-  // the content of `qlever` equals the one of the base, then the written blob
-  // equals the one of the base.
+  // an exception is thrown). If the content of `qlever` equals the one of the
+  // base, then the written blob equals the one of the base.
+  //
+  // NOTE 4: If `config.incremental_` is set, then for each entry with a geo
+  // index for which the base has an entry with the same name, a geo index, the
+  // same geometry column, variable-to-column map and sort order, and a table
+  // in canonical order, the geo index of the blob is created from the one of
+  // the base via `SpatialJoinCachedIndex::forUpdatedTable` (reusing its
+  // segments), unless the compaction thresholds of the `IncrementalBase` are
+  // exceeded.
   std::vector<char> serialize(const Qlever& qlever,
                               const BlobSerializationConfig& config = {}) const;
 
