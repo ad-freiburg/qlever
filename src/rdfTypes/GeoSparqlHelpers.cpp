@@ -126,11 +126,10 @@ sparqlExpression::IdOrLiteralOrIri WktCentroid::operator()(
     return ValueId::makeUndefined();
   }
   std::optional<SourceCrsType> sourceCrs = geom.value().getSourceCrsType();
-  if (!sourceCrs.has_value()) {
-    // TODO<yarox-1> Check if this breaks somethings (old index might have
-    // problem as stored with unsupported Crs -> maybe just assume CRS84)
-    return ValueId::makeUndefined();
-  }
+  AD_CORRECTNESS_CHECK(sourceCrs.has_value());
+  // TODO<yarox-1> Check if this breaks somethings (old index might have
+  // problem as stored with unsupported Crs -> maybe just assume CRS84)
+
   Centroid centroid = geom.value().getCentroid();
 
   auto resultWkt = ad_utility::detail::geoPointToWktInCrs(
@@ -139,10 +138,32 @@ sparqlExpression::IdOrLiteralOrIri WktCentroid::operator()(
   if (!resultWkt.has_value()) {
     return ValueId::makeUndefined();
   }
-  auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
-      resultWkt.value());
+
+  using namespace triple_component;
+  auto lit = Literal::literalWithoutQuotes(resultWkt.value());
   lit.addDatatype(detail::wktLiteralIri);
-  return {ad_utility::triple_component::LiteralOrIri{std::move(lit)}};
+  return {LiteralOrIri{std::move(lit)}};
+}
+
+// _____________________________________________________________________________
+sparqlExpression::IdOrLiteralOrIri WktEnvelope::operator()(
+    const std::optional<ad_utility::GeometryInfo>& geom) const {
+  if (!geom.has_value()) {
+    return ValueId::makeUndefined();
+  }
+
+  std::optional<SourceCrsType> sourceCrs = geom.value().getSourceCrsType();
+  AD_CORRECTNESS_CHECK(sourceCrs.has_value());
+  // TODO<yarox-1> Check if this breaks somethings (old index might have
+  // problem as stored with unsupported Crs -> maybe just assume CRS84)
+
+  BoundingBox boundingBox = geom.value().getBoundingBox();
+  using namespace triple_component;
+  auto lit = Literal::literalWithoutQuotes(ad_utility::detail::boundingBoxAsWkt(
+      boundingBox.lowerLeft(), boundingBox.upperRight(),
+      static_cast<::util::geo::CRSType>(sourceCrs.value().type())));
+  lit.addDatatype(detail::wktLiteralIri);
+  return {LiteralOrIri{std::move(lit)}};
 }
 
 }  // namespace ad_utility

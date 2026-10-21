@@ -35,7 +35,7 @@ NARY_EXPRESSION(MetricAreaExpression, 1,
 
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+                   GeometryInfoValueGetter<ad_utility::GeometryInfo>>);
 NARY_EXPRESSION(
     EnvelopeLowerLeftExpression, 1,
     FV<ad_utility::WktEnvelopeCorner<ad_utility::BoundingBoxCorner::LOWER_LEFT>,

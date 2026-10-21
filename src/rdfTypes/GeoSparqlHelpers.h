@@ -180,15 +180,7 @@ class WktCentroid {
 class WktEnvelope {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<BoundingBox>& boundingBox) const {
-    if (!boundingBox.has_value()) {
-      return ValueId::makeUndefined();
-    }
-    using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
-    lit.addDatatype(detail::wktLiteralIri);
-    return {LiteralOrIri{std::move(lit)}};
-  }
+      const std::optional<ad_utility::GeometryInfo>& geom) const;
 };
 
 // Get one of the two bounding box corners as `GeoPoint`s.
