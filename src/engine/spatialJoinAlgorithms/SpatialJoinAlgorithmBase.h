@@ -53,6 +53,12 @@ class SpatialJoinAlgorithmBase {
   static std::optional<GeoPoint> getPoint(const IdTableView<0>* restable,
                                           size_t row, ColumnIndex col);
 
+  // Add a warning to the `SpatialJoin` operation if rows of the left and/or
+  // right input were skipped. The `reason` describes the skipped values, e.g.
+  // "values that are not points".
+  void addSkippedRowsWarning(std::string_view reason, size_t numSkippedLeft,
+                             size_t numSkippedRight) const;
+
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
