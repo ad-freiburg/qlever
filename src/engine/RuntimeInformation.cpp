@@ -157,6 +157,20 @@ std::chrono::microseconds RuntimeInformation::getOperationTime() const {
 }
 
 // __________________________________________________________________________
+void RuntimeInformation::updateTotalTimeOfOptimizedOutChildren() {
+  for (auto& child : children_) {
+    if (child->status_ != optimizedOut) {
+      continue;
+    }
+    child->updateTotalTimeOfOptimizedOutChildren();
+    child->totalTime_ = ::ranges::accumulate(
+        child->children_ |
+            ql::views::transform(&RuntimeInformation::totalTime_),
+        0us);
+  }
+}
+
+// __________________________________________________________________________
 size_t RuntimeInformation::getOperationCostEstimate() const {
   size_t result = costEstimate_;
   for (const auto& child : children_) {

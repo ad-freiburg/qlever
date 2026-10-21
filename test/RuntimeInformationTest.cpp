@@ -75,6 +75,38 @@ TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
 }
 
 // ________________________________________________________________
+TEST(RuntimeInformation, updateTotalTimeOfOptimizedOutChildren) {
+  auto grandchild = std::make_shared<RuntimeInformation>();
+  auto child = std::make_shared<RuntimeInformation>();
+  child->status_ = RuntimeInformation::Status::optimizedOut;
+  child->children_.push_back(grandchild);
+  auto optimizedOutLeaf = std::make_shared<RuntimeInformation>();
+  optimizedOutLeaf->status_ = RuntimeInformation::Status::optimizedOut;
+  // A stale time that is reset by the recursive update.
+  optimizedOutLeaf->totalTime_ = 3ms;
+  child->children_.push_back(optimizedOutLeaf);
+  RuntimeInformation parent;
+  parent.children_.push_back(child);
+
+  // The grandchild is only computed after the child was optimized out (e.g. a
+  // skipped `Sort` below an `OptionalJoin`), so the time of the grandchild
+  // must not be attributed to the parent.
+  grandchild->totalTime_ = 5ms;
+  parent.totalTime_ = 7ms;
+  parent.updateTotalTimeOfOptimizedOutChildren();
+  EXPECT_EQ(child->totalTime_, 5ms);
+  EXPECT_EQ(child->getOperationTime(), 0ms);
+  EXPECT_EQ(optimizedOutLeaf->totalTime_, 0ms);
+  EXPECT_EQ(parent.getOperationTime(), 2ms);
+
+  // Children that were not optimized out are left untouched.
+  grandchild->totalTime_ = 6ms;
+  child->updateTotalTimeOfOptimizedOutChildren();
+  EXPECT_EQ(grandchild->totalTime_, 6ms);
+  EXPECT_EQ(child->totalTime_, 5ms);
+}
+
+// ________________________________________________________________
 TEST(RuntimeInformation, setColumnNames) {
   RuntimeInformation rti;
   rti.columnNames_.push_back("?blimbim");

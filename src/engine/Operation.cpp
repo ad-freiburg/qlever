@@ -127,6 +127,7 @@ void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
   bool isRtiWrappedInLimit = !applyToLimit && externalLimitApplied_;
   auto& rti =
       isRtiWrappedInLimit ? *runtimeInfo().children_.at(0) : runtimeInfo();
+  rti.updateTotalTimeOfOptimizedOutChildren();
   rti.totalTime_ += duration;
   rti.originalTotalTime_ = rti.totalTime_;
   rti.originalOperationTime_ = rti.getOperationTime();
@@ -534,6 +535,7 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfoPointer());
     }
   }
+  _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
@@ -585,6 +587,7 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
     _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);
   }
 
+  _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
