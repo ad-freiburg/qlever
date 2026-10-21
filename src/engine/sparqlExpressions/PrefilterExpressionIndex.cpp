@@ -488,8 +488,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
   LocalVocab localVocab{};
-  auto prefixQuoted =
-      absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
+  auto prefixQuoted = absl::StrCat("\"", prefixLiteral_.getContent());
   auto [lowerVocabIndex, upperVocabIndex] =
       index.getVocab().prefixRanges(prefixQuoted).ranges().front();
 

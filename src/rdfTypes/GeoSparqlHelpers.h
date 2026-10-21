@@ -20,7 +20,6 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/LocalVocabEntry.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Iri.h"

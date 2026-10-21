@@ -222,6 +222,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {{2, 2}, {4, 4}},
                                               {3, 3},
                                               {1},
+                                              SourceCrsType{1},
                                               getLengthForTesting(line),
                                               MetricArea{0}}));
   static constexpr std::string_view polygon =
@@ -233,8 +234,21 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {{2, 2}, {4, 4}},
                                               {3, 3},
                                               {1},
+                                              SourceCrsType{1},
                                               getLengthForTesting(polygon),
                                               getAreaForTesting(polygon)}));
+  static constexpr std::string_view lineWGS84 =
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 3, 4 5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      std::string{lineWGS84},
+      geoInfoMatcher(ad_utility::GeometryInfo{2,
+                                              {{2, 3}, {4, 5}},
+                                              {3, 4},
+                                              {1},
+                                              SourceCrsType{2},
+                                              getLengthForTesting(lineWGS84),
+                                              MetricArea{0}}));
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
@@ -251,6 +265,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                 {{6, 6}, {8, 8}},
                                 {7, 7},
                                 {1},
+                                SourceCrsType{1},
                                 getLengthForTesting(secondaryWktLiteral),
                                 MetricArea{0}}));
   t.checkFromSecondaryVocab(secondaryPlainLiteral, noGeoInfo);
@@ -316,6 +331,33 @@ TEST(GeometryInfoValueGetterTest, ValidWktWithoutGeometryInfo) {
             expected);
 }
 
+// Test that a valid WKT literal with precomputed geometry info gets its source
+// CRS and its geometry type from the `GeoVocabulary`, with the same values as
+// computed from the string without a `GeoVocabulary`.
+TEST(GeometryInfoValueGetterTest, ValidWktWithGeometryInfo) {
+  // A line with an explicit WGS84 CRS, which the `GeoVocabulary` stores.
+  static constexpr std::string_view lit =
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 3, 4 5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  // The source CRS is WGS84 (type 2) with both vocabulary types.
+  EXPECT_EQ(
+      getGeoInfoFromIndex<SourceCrsType>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      SourceCrsType{2});
+  EXPECT_EQ(getGeoInfoFromIndex<SourceCrsType>(
+                lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
+            SourceCrsType{2});
+  // The geometry type is a `LineString` with both vocabulary types.
+  auto expected = ad_utility::GeometryType{2};
+  EXPECT_EQ(
+      getGeoInfoFromIndex<ad_utility::GeometryType>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      expected);
+  EXPECT_EQ(getGeoInfoFromIndex<ad_utility::GeometryType>(
+                lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
+            expected);
+}
+
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   GeoInfoTester t;
@@ -325,6 +367,7 @@ TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
                                                  {{3, 2}, {3, 2}},
                                                  {3, 2},
                                                  {1},
+                                                 SourceCrsType{1},
                                                  ad_utility::MetricLength{0},
                                                  MetricArea{0}}));
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
@@ -753,8 +796,10 @@ TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
   expectIsIriAndIsLiteral({boolTrue_, int_, double_, date_, geoPoint_}, false,
                           true);
   // The remaining datatypes are neither.
-  expectIsIriAndIsLiteral({undefined_, blankNode_, textRecord_, wordVocab_},
-                          false, false);
+  expectIsIriAndIsLiteral({blankNode_, textRecord_, wordVocab_}, false, false);
+  // An unbound argument is an error.
+  expectAll<IsIriValueGetter>({undefined_}, Eq(Id::makeUndefined()));
+  expectAll<IsLiteralValueGetter>({undefined_}, Eq(Id::makeUndefined()));
 }
 
 // _____________________________________________________________________________

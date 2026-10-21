@@ -237,6 +237,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
                    {{2, 2}, {4, 4}},
                    {3, 3},
                    {1},
+                   SourceCrsType{util::geo::CRSType::CRS84},
                    getLengthForTesting(exampleGeoLit),
                    getAreaForTesting(exampleGeoLit)};
   EXPECT_GEOMETRYINFO(gi.value(), exp);
@@ -292,7 +293,7 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 }
 
 // Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
-// content, is read with the fields in these bytes at their default values.
+// content, is read with the source CRS zeroed and the serialization type `WKT`.
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
@@ -339,8 +340,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     out << contents;
   }
 
-  // Read the version 5 file. The fields in the bytes `[28, 32)` must have
-  // their default values.
+  // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
+  // the source CRS "not computed" and the serialization type `WKT`.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
@@ -349,8 +350,11 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     auto actual = geoVocab.getGeoInfo(i);
     ASSERT_EQ(actual.has_value(), expected.has_value());
     if (expected.has_value()) {
-      EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()),
-                absl::bit_cast<Bytes>(expected.value()));
+      EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
+      EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
+      auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
+      std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
+      EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
     }
   }
 }

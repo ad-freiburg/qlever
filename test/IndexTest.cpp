@@ -695,8 +695,7 @@ TEST(IndexTest, textRecordExportDoesNotUnescapeTheExcerpt) {
 
   auto exported = ql::exportIds::getLiteralOrIriFromTextRecordIndex(index, id);
   ASSERT_TRUE(exported.has_value());
-  EXPECT_EQ(asStringViewUnsafe(exported.value().getLiteral().getContent()),
-            docText);
+  EXPECT_EQ(exported.value().getLiteral().getContent(), docText);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a

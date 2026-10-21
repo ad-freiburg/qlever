@@ -1,6 +1,8 @@
-//   Copyright 2023, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "util/CancellationHandle.h"
 
@@ -21,44 +23,64 @@ void CancellationHandle<Mode>::cancel(
 
 // _____________________________________________________________________________
 template <CancellationMode Mode>
-CPP_member_def auto CancellationHandle<Mode>::startWatchDogInternal()
-    -> CPP_ret(void)(requires WatchDogEnabled) {
+CPP_member_def auto CancellationHandle<Mode>::advanceWatchDogState()
+    -> CPP_ret(bool)(requires WatchDogEnabled) {
   using enum CancellationState;
-  std::unique_lock lock{watchDogState_.mutex_};
-  // This function is only supposed to be run once.
-  AD_CONTRACT_CHECK(!watchDogState_.running_);
-  watchDogState_.running_ = true;
-  watchDogThread_ = ad_utility::JThread{[this]() {
-    std::unique_lock lock{watchDogState_.mutex_};
-    do {
-      auto state = cancellationState_.load(std::memory_order_relaxed);
-      if (state == NOT_CANCELLED) {
-        cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK,
-                                                   std::memory_order_relaxed);
-      } else if (state == WAITING_FOR_CHECK) {
-        // This variable needs to be set before compare exchange,
-        // otherwise another thread might read an old value before
-        // the new value is set. This might lead to redundant stores,
-        // which is acceptable here.
-        startTimeoutWindow_ = steady_clock::now();
-        cancellationState_.compare_exchange_strong(state, CHECK_WINDOW_MISSED,
-                                                   std::memory_order_relaxed);
-      } else if (detail::isCancelled(state)) {
-        // No need to keep the watchdog running if the handle was cancelled
-        // already
-        break;
-      }
-    } while (!watchDogState_.conditionVariable_.wait_for(
-        lock, DESIRED_CANCELLATION_CHECK_INTERVAL,
-        [this]() { return !watchDogState_.running_; }));
-  }};
+  auto state = cancellationState_.load(std::memory_order_relaxed);
+  if (state == NOT_CANCELLED) {
+    cancellationState_.compare_exchange_strong(state, WAITING_FOR_CHECK,
+                                               std::memory_order_relaxed);
+  } else if (state == WAITING_FOR_CHECK) {
+    // This variable needs to be set before compare exchange,
+    // otherwise another thread might read an old value before
+    // the new value is set. This might lead to redundant stores,
+    // which is acceptable here.
+    startTimeoutWindow_ = steady_clock::now();
+    cancellationState_.compare_exchange_strong(state, CHECK_WINDOW_MISSED,
+                                               std::memory_order_relaxed);
+  }
+  // No need to keep the watchdog running if the handle was cancelled already.
+  return !detail::isCancelled(state);
 }
 
 // _____________________________________________________________________________
 template <CancellationMode Mode>
-void CancellationHandle<Mode>::startWatchDog() {
+void CancellationHandle<Mode>::runWatchDogStep(
+    [[maybe_unused]] std::weak_ptr<CancellationHandle> handle,
+    [[maybe_unused]] std::shared_ptr<RunAfter> runAfter) {
   if constexpr (WatchDogEnabled) {
-    startWatchDogInternal();
+    {
+      // Don't keep the handle alive until the next step.
+      auto lockedHandle = handle.lock();
+      if (!lockedHandle || !lockedHandle->advanceWatchDogState()) {
+        return;
+      }
+    }
+    (*runAfter)(DESIRED_CANCELLATION_CHECK_INTERVAL,
+                [handle = std::move(handle), runAfter]() mutable {
+                  runWatchDogStep(std::move(handle), std::move(runAfter));
+                });
+  }
+}
+
+// _____________________________________________________________________________
+template <CancellationMode Mode>
+void CancellationHandle<Mode>::registerWatchDog(
+    [[maybe_unused]] std::weak_ptr<CancellationHandle> handle,
+    [[maybe_unused]] RunAfter runAfter) {
+  if constexpr (WatchDogEnabled) {
+    {
+      auto lockedHandle = handle.lock();
+      AD_CONTRACT_CHECK(lockedHandle);
+      bool wasRegistered = lockedHandle->watchDogRegistered_.exchange(true);
+      AD_CONTRACT_CHECK(!wasRegistered,
+                        "The watch dog of a `CancellationHandle` must only be "
+                        "registered once.");
+    }
+    // The `RunAfter` is shared because each step calls it while the next step
+    // already has to capture it.
+    runWatchDogStep(std::move(handle),
+                    std::make_shared<RunAfter>(std::move(runAfter)));
   }
 }
 
@@ -80,18 +102,6 @@ template <CancellationMode Mode>
 void CancellationHandle<Mode>::resetWatchDogState() {
   if constexpr (WatchDogEnabled) {
     setStatePreservingCancel(CancellationState::NOT_CANCELLED);
-  }
-}
-
-// _____________________________________________________________________________
-template <CancellationMode Mode>
-CancellationHandle<Mode>::~CancellationHandle() {
-  if constexpr (WatchDogEnabled) {
-    {
-      std::unique_lock lock{watchDogState_.mutex_};
-      watchDogState_.running_ = false;
-    }
-    watchDogState_.conditionVariable_.notify_all();
   }
 }
 

@@ -1554,7 +1554,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             "was built with an older version of QLever and should be rebuilt")};
       }
     } else {
-      target = static_cast<Target>(*it);
+      target = it->get<Target>();
     }
   };
 
@@ -1621,12 +1621,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
     if (lit.hasLanguageTag()) {
-      result.langtag_ = std::string(asStringViewUnsafe(lit.getLanguageTag()));
+      result.langtag_ = std::string(lit.getLanguageTag());
     }
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = asStringViewUnsafe(lit.getContent());
+      std::string_view content = lit.getContent();
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
         ++result.wordFrequencies_[std::move(word)];
@@ -1837,7 +1837,8 @@ void IndexImpl::writePartialVocabulary(
         vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlag(
-              a.first, a.second.isExternal(), b.first, b.second.isExternal());
+              a.word_, a.indexAndFlag_.isExternal(), b.word_,
+              b.indexAndFlag_.isExternal());
         });
   }
   auto mapping = [&]() {
@@ -1851,7 +1852,8 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
     vec.erase(std::unique(vec.begin(), vec.end(),
                           [](const auto& a, const auto& b) {
-                            return a.second.id() == b.second.id();
+                            return a.indexAndFlag_.index() ==
+                                   b.indexAndFlag_.index();
                           }),
               vec.end());
   }
