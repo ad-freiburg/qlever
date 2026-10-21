@@ -584,7 +584,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
     }
     NumericOperandClassification expected;
     if (!values.empty()) {
-      expected.hasUnsupported_ =
+      expected.containsValueRejectedByGetter_ =
           std::any_of(values.begin(), values.end(), [](Id value) {
             const auto type = value.getDatatype();
             return type != Datatype::Int && type != Datatype::Double &&
@@ -615,7 +615,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
                                                        &context_);
     EXPECT_EQ(actual.homogeneousType_, expected.homogeneousType_);
     EXPECT_EQ(actual.majorityType_, expected.majorityType_);
-    EXPECT_EQ(actual.hasUnsupported_, expected.hasUnsupported_);
+    EXPECT_EQ(actual.containsValueRejectedByGetter_,
+              expected.containsValueRejectedByGetter_);
   };
   for (size_t size :
        {0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 100001}) {
@@ -643,14 +644,16 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedMixedOperands) {
       Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
   std::vector<Id> values{I(1), D(2), Id::makeFromBool(true), date};
   EXPECT_FALSE(classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_)
-                   .hasUnsupported_);
+                   .containsValueRejectedByGetter_);
   EXPECT_TRUE(classifyNumericOperand(ConstIdColumnRef{values}, &context_)
-                  .hasUnsupported_);
-  EXPECT_FALSE(classifyNumericOperand(Id::makeFromBool(true)).hasUnsupported_);
-  EXPECT_FALSE(classifyNumericOperand<true>(date).hasUnsupported_);
+                  .containsValueRejectedByGetter_);
+  EXPECT_FALSE(classifyNumericOperand(Id::makeFromBool(true))
+                   .containsValueRejectedByGetter_);
+  EXPECT_FALSE(
+      classifyNumericOperand<true>(date).containsValueRejectedByGetter_);
   values.push_back(Id::makeUndefined());
   EXPECT_TRUE(classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_)
-                  .hasUnsupported_);
+                  .containsValueRejectedByGetter_);
 }
 
 // _____________________________________________________________________________

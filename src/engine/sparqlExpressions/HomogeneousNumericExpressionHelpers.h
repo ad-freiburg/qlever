@@ -46,9 +46,10 @@ inline constexpr auto numericTypeMap = std::tuple{
     std::pair{NumericType::Int, ad_utility::use_type_identity::ti<int64_t>},
     std::pair{NumericType::Double, ad_utility::use_type_identity::ti<double>}};
 
-// Select the supported compile-time types. Numeric-only expressions keep the
-// two-type map; date-aware expressions additionally dispatch
-// DateYearOrDuration.
+// Map NumericType values to the C++ types used for typed evaluation. Include
+// DateYearOrDuration only when IncludeDates is true. Keeping a two-type map for
+// numeric-only expressions avoids instantiating date combinations they cannot
+// evaluate.
 template <bool IncludeDates>
 inline constexpr auto numericTypeMapFor = [] {
   if constexpr (IncludeDates) {
@@ -63,7 +64,7 @@ inline constexpr auto numericTypeMapFor = [] {
 }();
 
 // Extract a numeric or date value from a `ValueId` whose datatype was
-// already established by homogeneous classification.
+// already established by classification or a per-row datatype check.
 template <typename Primitive>
 Primitive getPrimitiveNumericValue(ValueId value) {
   if constexpr (ql::concepts::same_as<Primitive, int64_t>) {
@@ -117,12 +118,10 @@ struct RawNumericFunction<MakeNumericExpression<Function, NanOrInfToUndef>> {
 template <typename Function>
 using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
 
-// Map a supported numeric type to the corresponding compile-time index used
-// for dispatching to a supported C++ value type. The type must be in the
-// selected numericTypeMapFor (including Date only with IncludeDates), not
-// Other, which has no primitive C++ type. Callers therefore have to classify
-// all operands first and only dispatch if none of them is `Other`, see
-// `evaluateBinaryOperationOnVectorOrConstant`.
+// Return the index of type in numericTypeMapFor<IncludeDates>. The caller must
+// first classify operands and exclude Other. Date is valid only if IncludeDates
+// is true. The recursive lookup selects the corresponding C++ type at compile
+// time when dispatchNumericTypes invokes its callback.
 template <bool IncludeDates = false, size_t I = 0>
 inline int numericTypeToIndex(NumericType type) {
   if constexpr (I ==
@@ -234,9 +233,9 @@ ValueId getIdAt(const Operand& operand, size_t index) {
 // operands does not match the majority types. Integer and double combinations
 // are dispatched explicitly because this was measurably faster than always
 // using the generic fallback. Functions with `undefForNonNumeric` return UNDEF
-// directly for unsupported datatypes (see hasNonNumericOperand). Date-aware
-// functions also dispatch date/date rows directly; other rows (in particular
-// booleans) retain the regular value getters.
+// directly for datatypes rejected by their getters (see hasNonNumericOperand).
+// Date-aware functions also dispatch date/date rows directly; other rows (in
+// particular booleans) retain the regular value getters.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
@@ -342,8 +341,8 @@ ExpressionResult evaluateSpeculativeNumericOperation(
 // Evaluate a row of a numeric/date N-ary expression using the speculative
 // majority-type fast path. If all operand datatypes match the expected
 // types, evaluate using typed numeric/date values. Otherwise, fall back to the
-// generic value getters for this row, unless an unsupported operand can
-// directly yield UNDEF.
+// generic value getters for this row, unless an operand datatype rejected by
+// its getter can directly yield UNDEF.
 template <typename Function, typename ValueGetters, typename... NumericTypes,
           typename... Operands>
 Id evaluateSpeculativeNaryRow(

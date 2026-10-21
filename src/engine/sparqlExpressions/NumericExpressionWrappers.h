@@ -84,17 +84,22 @@ inline constexpr bool
 template <typename Function>
 inline constexpr bool undefForNonNumericOrDate = false;
 
-// Return true if any of `values` is a raw ID with a non-numeric datatype, its
-// corresponding getter is NumericValueGetter, and undefForNonNumeric is true.
-// For NumericOrDateValueGetter with undefForNonNumericOrDate, dates are also
-// accepted and all other unsupported ID datatypes are rejected. `ValueGetters`
-// is a tuple with one getter type per value, in the same order as `values`. The
-// result of the expression for such a row is UNDEF, which the callers return
-// without applying the value getters.
+// Return whether any raw ValueId argument is guaranteed to make Function return
+// UNDEF, based on its datatype and corresponding value getter. ValueGetters is
+// a tuple with one getter per argument, in the same order as values.
 //
-// NOTE: `NumericValueGetter` accepts booleans as integers, so they are not
-// rejected. Other getters and non-ID arguments return false. Date IDs
-// keep their original arithmetic, including invalid/incompatible date subtypes.
+// With NumericValueGetter and undefForNonNumeric<Function>, accept Int, Double,
+// and Bool; with NumericOrDateValueGetter and
+// undefForNonNumericOrDate<Function>, also accept Date. All other datatypes can
+// return UNDEF without invoking the getters or Function. This is the same
+// acceptance rule recorded by
+// NumericOperandClassification::containsValueRejectedByGetter_.
+//
+// Booleans are accepted because both getters convert them to integers. Date
+// payloads, including invalid or incompatible dates, still reach the existing
+// typed arithmetic. Other getters and non-ValueId arguments are never rejected
+// here, and functions without the corresponding opt-in retain normal
+// evaluation.
 template <typename Function, typename ValueGetters, typename... Values>
 bool hasNonNumericOperand(const Values&... values) {
   return [&]<size_t... I>(std::index_sequence<I...>) {

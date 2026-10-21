@@ -54,9 +54,10 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
-    // Classification can prove that every ID is accepted by the getters,
-    // even when a mixed column has no unique majority type.
-    bool checkUnsupported = true;
+    // Check for datatypes rejected by the numeric getters unless classification
+    // proves that every value is accepted (including booleans). Only functions
+    // with an UNDEF opt-in use this check; see hasNonNumericOperand.
+    bool checkForValuesRejectedByGetter = true;
     // Use the shared numeric/date fast paths when both operands and value
     // getters support typed execution.
     if constexpr (supportsNumericFastPath<LeftValueGetter> &&
@@ -66,8 +67,9 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
       constexpr bool includeDates = supportsDateOperands<ValueGetters>;
       const auto classifications =
           classifyNumericOperands<includeDates>(context, left, right);
-      checkUnsupported = classifications[0].hasUnsupported_ ||
-                         classifications[1].hasUnsupported_;
+      checkForValuesRejectedByGetter =
+          classifications[0].containsValueRejectedByGetter_ ||
+          classifications[1].containsValueRejectedByGetter_;
 
       if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications);
           homogeneousTypes.has_value()) {
@@ -110,8 +112,8 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
     ad_utility::chunkedForLoop<1000>(
         0, context->size(),
         [&left, &right, &result, &function, &getLeft, &getRight,
-         checkUnsupported](size_t i) {
-          if (checkUnsupported &&
+         checkForValuesRejectedByGetter](size_t i) {
+          if (checkForValuesRejectedByGetter &&
               hasNonNumericOperand<Function, ValueGetters>(
                   getValueAt(left, i), getValueAt(right, i))) {
             result.push_back(Id::makeUndefined());

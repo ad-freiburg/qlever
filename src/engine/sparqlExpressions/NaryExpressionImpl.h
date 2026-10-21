@@ -136,9 +136,11 @@ class NaryExpressionStronglyTyped
 
       using ConvertedOperands = decltype(convertedOperands);
 
-      // Keep per-row rejection only when the classifier cannot rule out
-      // unsupported IDs. Functions without an UNDEF property don't use this.
-      [[maybe_unused]] bool checkUnsupported = true;
+      // Check for datatypes rejected by the numeric getters unless
+      // classification proves that every value is accepted (including
+      // booleans). Only functions with an UNDEF opt-in use this check; see
+      // hasNonNumericOperand.
+      [[maybe_unused]] bool checkForValuesRejectedByGetter = true;
       constexpr bool useNumericFastPath =
           canUseNumericFastPath<ValueGetters, ConvertedOperands>();
 
@@ -154,9 +156,10 @@ class NaryExpressionStronglyTyped
                   context, values...);
             },
             convertedOperands);
-        checkUnsupported = ql::ranges::any_of(
-            classifications,
-            [](const auto& operand) { return operand.hasUnsupported_; });
+        checkForValuesRejectedByGetter =
+            ql::ranges::any_of(classifications, [](const auto& operand) {
+              return operand.containsValueRejectedByGetter_;
+            });
 
         auto homogeneousTypes =
             homogeneousNumeric::getHomogeneousNumericTypes(classifications);
@@ -197,8 +200,9 @@ class NaryExpressionStronglyTyped
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
-      // Return UNDEF directly for unsupported operands of numeric/date-aware
-      // functions, otherwise pass the converted values to the N-ary function.
+      // Return UNDEF directly for getter-rejected datatypes of
+      // numeric/date-aware functions, otherwise pass the converted values to
+      // the N-ary function.
       //
       // NOTE: The `if constexpr` is required although `hasNonNumericOperand`
       // already checks `undefForNonNumeric` at compile time: `computeValue` has
@@ -210,7 +214,7 @@ class NaryExpressionStronglyTyped
                       undefForNonNumericOrDate<
                           typename NaryOperation::Function>) {
           const bool nonNumeric =
-              checkUnsupported &&
+              checkForValuesRejectedByGetter &&
               std::apply(
                   [i](const auto&... values) {
                     return hasNonNumericOperand<
