@@ -194,18 +194,23 @@ constexpr void adCorrectnessCheckImpl(
 }  // namespace ad_utility::detail
 
 // Evaluate the condition of an `AD_CORRECTNESS_CHECK`. By default, this is a
-// plain conversion to `bool`. In the coverage build
-// (`QLEVER_COVERAGE_FRIENDLY_CHECKS` is set via the CMake option
-// `COVERAGE_FRIENDLY_CHECKS`), the condition is instead evaluated inside a
-// lambda that is excluded from the coverage instrumentation. Otherwise,
-// short-circuit operators (`&&`, `||`) inside the condition would produce
-// branch regions at each call site, which can never be taken because the
-// condition of a correctness check never fails (see above).
-// NOTE: The lambda is not used unconditionally for two reasons: In C++17,
+// plain conversion to `bool`. In the coverage build (CMake option
+// `COVERAGE_FRIENDLY_CHECKS`, which defines `QLEVER_COVERAGE_FRIENDLY_CHECKS`),
+// the condition is instead evaluated inside a lambda that is excluded from the
+// coverage instrumentation. Otherwise, short-circuit operators (`&&`, `||`)
+// inside the condition would produce branch regions at each call site, which
+// can never be fully covered because the condition never fails (see above).
+//
+// NOTE 1: The lambda is not used unconditionally for three reasons. In C++17,
 // structured bindings cannot be captured by a lambda, so some conditions would
-// not compile in the C++17 build. And in debug builds, the additional lambda
+// not compile in the C++17 build. A lambda with a capture-default is only
+// allowed in block scope, so the macro could not be used in a default member
+// initializer or at namespace scope. And in debug builds, the additional lambda
 // call is an inconvenient indirection (e.g. when stepping through the code in
 // a debugger). This is the single place where this reasoning is documented.
+//
+// NOTE 2: Clang's source-based coverage (which the coverage build uses) honors
+// the attribute completely, GCC's `gcov` only partially.
 #ifdef QLEVER_COVERAGE_FRIENDLY_CHECKS
 #define AD_CORRECTNESS_CHECK_CONDITION(condition)         \
   [&]() __attribute__((no_profile_instrument_function)) { \
