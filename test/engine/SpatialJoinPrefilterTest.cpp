@@ -102,6 +102,42 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
                           2},
                          CONTAINS);
 
+  // The complete algorithm decides the prefilter mode from the join type. For
+  // `INTERSECTS` only the Minster is dropped by its bounding box. For
+  // `CONTAINS` the right side has to lie inside the campus, so the road, whose
+  // bounding box only overlaps the campus, is dropped as well. Same for
+  // `WITHIN` with the sides swapped, where the left side has to be contained.
+  // The mock parsing above does not populate the other counters.
+  SweeperTestResult testResultIntersectsRegular;
+  runParsingAndSweeper(qec, "uni-separate", "de",
+                       LibSpatialJoinConfig{INTERSECTS},
+                       testResultIntersectsRegular, true, false, true);
+  checkSweeperTestResult(vMap, testResultIntersectsRegular,
+                         {{{INTERSECTS, vIdCampus, vIdGkAllee, 0},
+                           {INTERSECTS, vIdCampus, vIdUni, 0}},
+                          {},
+                          {},
+                          0,
+                          1,
+                          0,
+                          0},
+                         INTERSECTS);
+
+  SweeperTestResult testResultContainsRegular;
+  runParsingAndSweeper(qec, "uni-separate", "de",
+                       LibSpatialJoinConfig{CONTAINS},
+                       testResultContainsRegular, true, false, true);
+  checkSweeperTestResult(
+      vMap, testResultContainsRegular,
+      {{{CONTAINS, vIdCampus, vIdUni, 0}}, {}, {}, 0, 2, 0, 0}, CONTAINS);
+
+  SweeperTestResult testResultWithinRegular;
+  runParsingAndSweeper(qec, "de", "uni-separate", LibSpatialJoinConfig{WITHIN},
+                       testResultWithinRegular, true, false, true);
+  checkSweeperTestResult(vMap, testResultWithinRegular,
+                         {{{WITHIN, vIdUni, vIdCampus, 0}}, {}, {}, 0, 2, 0, 0},
+                         WITHIN);
+
   // Within distance 5km: Minster satisfies this, s.t. all three geometries
   // from the right are expected to be returned.
   SweeperTestResult testResultWithinDist;
@@ -359,6 +395,34 @@ TEST_P(SpatialJoinPrefilterGeoByBoundingBoxTest, Test) {
       std::nullopt, index, idxNewYork, bbNewYork));
   EXPECT_FALSE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
       std::nullopt, index, idxInvalid, std::nullopt));
+
+  // With `requireContainment`, a geometry is also discarded if its bounding
+  // box only overlaps the prefilter box. Build a box that covers the lower
+  // left quarter of the bounding box of the university.
+  auto uniBox = ad_utility::detail::boundingBoxToUtilBox(
+      ad_utility::GeometryInfo::getBoundingBox(areaUniFreiburg).value());
+  util::geo::DBox quarterOfUni{
+      uniBox.getLowerLeft(),
+      {(uniBox.getLowerLeft().getX() + uniBox.getUpperRight().getX()) / 2,
+       (uniBox.getLowerLeft().getY() + uniBox.getUpperRight().getY()) / 2}};
+  EXPECT_FALSE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+      quarterOfUni, index, idxUni, bbUni, false));
+  EXPECT_TRUE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+      quarterOfUni, index, idxUni, bbUni, true));
+  // A box that contains the geometry keeps it in both modes, and so does a
+  // box that is exactly its bounding box.
+  EXPECT_FALSE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+      boundingBoxGermany, index, idxUni, bbUni, true));
+  EXPECT_FALSE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+      uniBox, index, idxUni, bbUni, true));
+  // Geometries outside the box, invalid geometries and a missing box behave
+  // as without `requireContainment`.
+  EXPECT_TRUE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+      boundingBoxGermany, index, idxLondon, bbLondon, true));
+  EXPECT_TRUE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+      boundingBoxGermany, index, idxInvalid, std::nullopt, true));
+  EXPECT_FALSE(LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+      std::nullopt, index, idxUni, bbUni, true));
 }
 
 // _____________________________________________________________________________
