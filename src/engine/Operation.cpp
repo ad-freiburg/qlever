@@ -78,6 +78,9 @@ void Operation::forAllDescendants(F f) const {
 
 // _____________________________________________________________________________
 std::vector<std::string> Operation::collectWarnings() const {
+  // TODO<ullingerc> Warnings of the original computation of a result that was
+  // read from the cache are only part of the runtime information (see
+  // `addWarning`) and are thus missing here.
   std::vector<std::string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
@@ -89,6 +92,13 @@ std::vector<std::string> Operation::collectWarnings() const {
   }
 
   return res;
+}
+
+// _____________________________________________________________________________
+void Operation::addWarning(std::string warning) const {
+  auto warnings = warnings_.wlock();
+  _runtimeInfo->details_["warnings"].push_back(warning);
+  warnings->push_back(std::move(warning));
 }
 
 // _____________________________________________________________________________
@@ -519,6 +529,24 @@ void Operation::updateRuntimeInformationOnSuccess(
       _runtimeInfo->originalTotalTime_ = runtimeInfo->totalTime_;
       _runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
       _runtimeInfo->details_ = std::move(runtimeInfo->details_);
+      // Add the warnings of this operation that are not yet part of the
+      // cached details (the cached details only contain the warnings of the
+      // original computation).
+      //
+      // NOTE: For example, a query using the deprecated
+      // `<nearest-neighbors:...>` predicate gets a deprecation warning during
+      // the query planning. If its result is read from the cache because it
+      // was previously computed by an equivalent query using the `SERVICE`
+      // syntax, the cached details don't contain this warning.
+      if (auto warnings = warnings_.rlock(); !warnings->empty()) {
+        auto& warningsDetail = _runtimeInfo->details_["warnings"];
+        for (const auto& warning : *warnings) {
+          if (std::find(warningsDetail.begin(), warningsDetail.end(),
+                        warning) == warningsDetail.end()) {
+            warningsDetail.push_back(warning);
+          }
+        }
+      }
     }
     // Only the result that was actually computed (or read from cache) knows
     // the correct information about the children computations.
@@ -642,6 +670,12 @@ void Operation::createRuntimeInfoFromEstimates(
     multiplicityEstimates.push_back(getMultiplicity(i));
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
+
+  // Add the warnings that were added before the runtime information was
+  // (re)created, e.g. during the query planning.
+  if (auto warnings = warnings_.rlock(); !warnings->empty()) {
+    _runtimeInfo->addDetail("warnings", *warnings);
+  }
 
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
       {getCacheKey(), locatedTriplesState().index_});
