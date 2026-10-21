@@ -328,7 +328,9 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 5d1c09eef18bd122cadd9144870fd6bee53d4057
+        # Deliberately not the latest commit. The update to the latest commit requires further
+        # changes in QLever and is done in #3765.
+        GIT_TAG 68ba609077d9423a97c0f636f422ff50c4fffa70
         SYSTEM
         EXCLUDE_FROM_ALL
 )

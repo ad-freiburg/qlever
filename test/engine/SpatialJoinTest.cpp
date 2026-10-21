@@ -1366,8 +1366,8 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
         LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
   };
   Id pointLeft = ValueId::makeFromGeoPoint({0, 0});
-  Id invalidLiteralA = wktId("<a>");
-  Id invalidLiteralB = wktId("<b>");
+  Id invalidLiteralA = wktId("POINT(1 2, 3 4)");
+  Id invalidLiteralB = wktId("not wkt");
   Id validLiteral = ValueId::makeFromGeoPoint({1, 1});
 
   // `?a`: a single, valid point.
@@ -1406,7 +1406,8 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
   EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                             HasKeyMatching("num-geoms-parsed", Eq(3))));
+                             HasKeyMatching("num-geoms-parsed", Eq(3)),
+                             HasKeyMatching("num-geoms-invalid", Eq(2))));
 }
 
 }  // namespace invalidGeometries
