@@ -638,6 +638,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
         return cmp.geoSortKey(word);
       };
     }
+    vocab_.setParsedGeometriesMinLength(parsedGeometriesMinLength_);
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
@@ -1759,8 +1760,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN

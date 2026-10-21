@@ -203,6 +203,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
+// 7: The field `parsedGeometryOffset_` is appended (8 bytes).
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -230,14 +231,14 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
 //   and remove the handling of the dropped versions from `fromSerialized` and
 //   `GEOMETRY_INFO_SIZE_PER_VERSION`.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 7;
 constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 5;
 
 // The size of the binary representation of `GeometryInfo` for each loadable
 // version, starting at `MIN_LOADABLE_GEOMETRY_INFO_VERSION`.
 inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION -
                                         MIN_LOADABLE_GEOMETRY_INFO_VERSION + 1>
-    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48};
+    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48, 56};
 
 // Return true iff a `GeometryInfo` of the given `version` can be read.
 constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
@@ -273,10 +274,11 @@ class GeometryInfo {
   SerializationType serializationType_ = SerializationType::WKT;
   MetricLength metricLength_;
   MetricArea metricArea_;
-
-  // TODO<ullingerc>: Implement the behavior for the following two
-  // attributes
-  //   int64_t parsedGeometryOffset_ = -1;
+  // The offset of the geometry in the file with the parsed geometries of the
+  // `GeoVocabulary` (see `ParsedGeometry`), or -1 if it is not stored there.
+  // Added in version 7, the records of older versions get -1 (see
+  // `fromSerialized`).
+  int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
       bitMaskForHigherBits(ValueId::numDatatypeBits);
@@ -364,6 +366,14 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the length in meters.
   static std::optional<MetricLength> getMetricLength(
       const std::string_view& wkt);
+
+  // The offset of the parsed geometry (see `parsedGeometryOffset_`). It is
+  // set by the `GeoVocabulary::WordWriter` after it stored the parsed
+  // geometry.
+  int64_t getParsedGeometryOffset() const { return parsedGeometryOffset_; }
+  void setParsedGeometryOffset(int64_t offset) {
+    parsedGeometryOffset_ = offset;
+  }
 
   // Get the serialization format of the literal.
   SerializationType getSerializationType() const;
