@@ -24,12 +24,12 @@
 #include <algorithm>
 #include <bit>
 #include <boost/asio/awaitable.hpp>
-#include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 
