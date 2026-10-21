@@ -120,6 +120,9 @@ runs:
         sudo apt-get install -y libboost${{inputs.boost-version}}-all-dev
       shell: bash
 
-    - name: Install Python packages for E2E tests
-      run: sudo apt-get install -y python3-yaml unzip pkg-config python3-icu
+    - name: Install Python packages and tools for E2E tests
+      # `curl` is preinstalled on the runner images, but not in a bare
+      # `container` (where `e2e/e2e.sh` otherwise fails with "curl: command not
+      # found" while waiting for the server).
+      run: sudo apt-get install -y python3-yaml unzip pkg-config python3-icu curl
       shell: bash
