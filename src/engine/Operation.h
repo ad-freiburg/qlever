@@ -187,13 +187,13 @@ class Operation {
   // Add a warning to the `Operation`. The warning will be returned by
   // `collectWarnings()` above. It is also added to the `warnings` detail of the
   // runtime information, so that it is part of the live updates (e.g. via
-  // websocket) and survives cache hits.
+  // websocket) and survives cache hits. Duplicate warnings are ignored.
   void addWarning(std::string warning) const;
 
   // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a
-  // warning.
-  void addWarningOrThrow(std::string warning) const;
+  // warning. Only use this for warnings about unbound variables.
+  void addUnboundVariableWarningOrThrow(std::string warning) const;
 
   /**
    * @return A list of columns on which the result of this operation is sorted.

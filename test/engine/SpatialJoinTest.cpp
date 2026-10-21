@@ -20,6 +20,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -511,9 +512,21 @@ class SpatialJoinVarColParamTest
           ASSERT_THAT(
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
           if (matchWarning) {
-            ASSERT_THAT(spatialJoin->collectWarnings(),
-                        ::testing::Contains(
-                            ::testing::HasSubstr(matchWarning.value())));
+            // The payload variables are also checked when computing the cache
+            // key, which must not add the warning a second time (hence
+            // `Times(1)` below).
+            spatialJoin->getCacheKey();
+            EXPECT_THAT(
+                spatialJoin->collectWarnings(),
+                ::testing::Contains(::testing::HasSubstr(matchWarning.value()))
+                    .Times(1));
+            // With `throw-on-unbound-variables`, the warning becomes an error.
+            auto cleanup = setRuntimeParameterForTest<
+                &RuntimeParameters::throwOnUnboundVariables_>(true);
+            AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+                spatialJoin->computeVariableToColumnMap(),
+                ::testing::HasSubstr(matchWarning.value()),
+                InvalidSparqlQueryException);
           }
         };
 
