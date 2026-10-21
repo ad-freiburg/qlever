@@ -60,7 +60,7 @@ void GroupConcatAggregationData::addValueImpl(
     currentValue_.append(separator_);
   }
   if (val.has_value()) {
-    currentValue_.append(asStringViewUnsafe(val.value().getContent()));
+    currentValue_.append(val.value().getContent());
   } else {
     undefined_ = true;
   }
@@ -74,8 +74,7 @@ void GroupConcatAggregationData::addValueImpl(
   }
   using namespace ad_utility::triple_component;
   auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-      LocalVocabEntry::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(currentValue_), context));
+      LocalVocabEntry::literalWithNormalizedContent(currentValue_, context));
   return ValueId::makeFromLocalVocabIndex(localVocabIndex);
 }
 

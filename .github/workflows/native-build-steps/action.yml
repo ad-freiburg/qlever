@@ -31,7 +31,6 @@ runs:
           -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{fromJSON(inputs.matrix).compiler}}${{fromJSON(inputs.matrix).compiler-version}}.cmake"
           -DADDITIONAL_COMPILER_FLAGS="${{fromJSON(inputs.matrix).warnings}} ${{fromJSON(inputs.matrix).asan-flags}} ${{fromJSON(inputs.matrix).ubsan-flags}}"
           -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
-          -DUSE_PARALLEL=true
           -DRUN_EXPENSIVE_TESTS=${{fromJSON(inputs.matrix).expensive-tests}}
           -DENABLE_EXPENSIVE_CHECKS=true
           ${{fromJSON(inputs.matrix).additional-cmake-options}}

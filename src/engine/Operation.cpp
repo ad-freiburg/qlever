@@ -13,7 +13,6 @@
 #include <absl/container/inlined_vector.h>
 
 #include "engine/NamedResultCache.h"
-#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/VariableToColumnMap.h"
@@ -484,10 +483,11 @@ void Operation::storeToNamedResultCache(const Result& result) {
   auto valueForNamedResultCache = NamedResultCache::Value{
       std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
-      result.sortedBy(),
-      result.localVocab().clone(),
-      getCacheKey(),
-      geoIndex()};
+      // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
+      // migrated to `qlm::vector` throughout the Operation hierarchy.
+      std::vector<ColumnIndex>{result.sortedBy().begin(),
+                               result.sortedBy().end()},
+      result.localVocab().clone(), getCacheKey(), geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
 
@@ -917,6 +917,84 @@ bool Operation::areVariablesVisible(
   return ql::ranges::all_of(variables, [&visibleVariables](const auto v) {
     return visibleVariables.contains(*v);
   });
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Operation::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>>) const {
+  AD_THROW(absl::StrCat("`cloneWithNewChildren` is not implemented for ",
+                        getDescriptor()));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Operation::pushDownBindToChild(
+    const parsedQuery::Bind& bind,
+    std::vector<std::shared_ptr<QueryExecutionTree>> children,
+    size_t childIndex) const {
+  auto& child = children.at(childIndex);
+  AD_CORRECTNESS_CHECK(child != nullptr);
+
+  // Return true iff any of the `children` (except the one at `excludedIndex`,
+  // if given) contains `var`. Compare by position, not by identity: the same
+  // tree might be used twice.
+  auto childrenContain = [&children](const Variable& var,
+                                     std::optional<size_t> excludedIndex) {
+    for (size_t i = 0; i < children.size(); ++i) {
+      const auto& c = children[i];
+      if (i != excludedIndex && c != nullptr && c->containsVariable(var)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Refuse if any child contains the target.
+  //
+  // NOTE: For the chosen child, this is also checked (including its hidden
+  // variables) by `QueryExecutionTree::makeTreeWithBindColumn` below, but we
+  // check all children here for clarity.
+  if (childrenContain(bind._target, std::nullopt)) {
+    return std::nullopt;
+  }
+
+  // Refuse if the chosen child might see different values for the expression
+  // variables than this operation does (see the header).
+  auto canComputeExpression = ql::ranges::all_of(
+      bind._expression.containedVariables(),
+      [&child, &childrenContain, childIndex](const Variable* var) {
+        return child->getRootOperation()->isVariableAlwaysDefined(*var) ||
+               (child->containsVariable(*var) &&
+                !childrenContain(*var, childIndex));
+      });
+  if (!canComputeExpression) {
+    return std::nullopt;
+  }
+
+  // Push the `BIND` into the chosen child and rebuild this operation with the
+  // new child.
+  auto newChild = child->makeTreeWithBindColumn(bind);
+  if (!newChild.has_value()) {
+    return std::nullopt;
+  }
+  child = std::move(newChild.value());
+  return _executionContext->makeShared<QueryExecutionTree>(
+      _executionContext, cloneWithNewChildren(std::move(children)));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Operation::pushDownBindToAnyChild(
+    const parsedQuery::Bind& bind,
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+      children, [](const auto& child) { return child != nullptr; }));
+  for (size_t i = 0; i < children.size(); ++i) {
+    if (auto result = pushDownBindToChild(bind, children, i)) {
+      return result;
+    }
+  }
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________

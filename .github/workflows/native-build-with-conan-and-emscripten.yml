@@ -141,7 +141,6 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
           -DCMAKE_BUILD_TYPE=Release
           -DLOGLEVEL=INFO
-          -DUSE_PARALLEL=false
           -D_NO_TIMING_TESTS=ON
           -DRUN_EXPENSIVE_TESTS=false
           -D_NO_BENCHMARK=ON
