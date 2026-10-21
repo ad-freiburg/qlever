@@ -348,11 +348,6 @@ inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
   return vocabMapsToVector(map, [](std::string_view) { return uint64_t{0}; });
 }
 
-// _____________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
-  return vocabMapsToVector(map, [](std::string_view) { return uint64_t{0}; });
-}
-
 // _____________________________________________________________________
 inline ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {

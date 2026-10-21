@@ -201,6 +201,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   // `MergedWord` with all their occurrences, so its output blocks are of a
   // different type than its input blocks, see `MergeBlock.h`.
   using OutputBlock = detail::MergedBlock;
+  using GeoSortKeyFn = std::function<uint64_t(std::string_view)>;
 
   // The totals over all blocks of all partial vocabularies, see `statistics`.
   struct Statistics {
