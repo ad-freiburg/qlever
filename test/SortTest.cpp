@@ -547,6 +547,7 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
 // translates `sortColumnIndices_` accordingly, and adds a `StripColumns`
 // operation to remove variables that the parent did not request.
 TEST(Sort, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
   using ::testing::ElementsAre;
   using ::testing::Key;
   using ::testing::SizeIs;

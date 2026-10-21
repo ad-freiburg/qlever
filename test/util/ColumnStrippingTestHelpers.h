@@ -17,6 +17,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace column_stripping_test_helpers {
+
 // Check whether root operation of tree is of the expected operation type.
 template <typename Operation>
 auto hasRootOperation() {
@@ -57,5 +59,6 @@ auto isStrippedColumns(std::vector<Variable> expectedVariables,
                           hasVariables(std::move(expectedVariables)),
                           hasExpectedResult(std::move(resultMatcher)));
 }
+}  // namespace column_stripping_test_helpers
 
 #endif  // QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H

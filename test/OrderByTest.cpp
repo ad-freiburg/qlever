@@ -454,6 +454,7 @@ auto hasSortedVariables(OrderBy::SortedVariables expectedVariables) {
 // `sortIndices_` accordingly, and adds a `StripColumns` for the compared
 // variables that the parent did not request.
 TEST(OrderBy, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
   using ::testing::ElementsAre;
   using ::testing::Key;
   using ::testing::SizeIs;
@@ -528,7 +529,7 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
     EXPECT_THAT(tree.get(),
                 ::testing::AllOf(
                     hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}),
-                    isStrippedColumns<OrderBy>(
+                    column_stripping_test_helpers::isStrippedColumns<OrderBy>(
                         {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
                         matchesIdTableFromVector({{6, 1, 3, 6},
                                                   {2, 2, 3, 5},

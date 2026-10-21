@@ -3597,6 +3597,7 @@ TEST(GroupBy, BlankNodeInGroupBy) {
 // and checks whether _aliases are erased in case the parent tree does not
 // request their targets.
 TEST(GroupBy, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
   using ::testing::ElementsAre;
   using ::testing::Key;
   using ::testing::SizeIs;
