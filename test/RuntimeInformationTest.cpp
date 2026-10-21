@@ -149,7 +149,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   child.columnNames_.emplace_back("?y");
   child.totalTime_ = 3ms;
   child.cacheStatus_ = ad_utility::CacheStatus::cachedPinned;
-  child.status_ = RuntimeInformation::Status::optimizedOut;
+  child.status_ = RuntimeInformation::Status::fullyMaterializedCompleted;
   child.addDetail("minor detail", 42);
 
   RuntimeInformation parent;
@@ -180,7 +180,7 @@ TEST(RuntimeInformation, toStringAndJson) {
 │  │  columns: ?x, ?y
 │  │  total_time: 3 ms
 │  │  operation_time: 3 ms
-│  │  status: optimized out
+│  │  status: fully materialized completed
 │  │  cache_status: cached_pinned
 │  │  original_total_time: 0 ms
 │  │  original_operation_time: 0 ms
@@ -227,7 +227,7 @@ TEST(RuntimeInformation, toStringAndJson) {
         "estimated_operation_cost": 0,
         "estimated_column_multiplicities": [],
         "estimated_size": 0,
-        "status": "optimized out",
+        "status": "fully materialized completed",
         "children": []
     }
 ]
