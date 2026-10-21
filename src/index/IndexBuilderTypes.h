@@ -147,17 +147,24 @@ using ItemMap =
     ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag>;
 
 // An entry of an `ItemVec` (see below): a word of a partial vocabulary with
-// its index and external flag.
+// its index and external flag, plus the geo sort key of the word (see
+// `TripleComponentComparator::geoSortKey`), which is 0 unless a geo cell grid
+// is configured and the word is a WKT literal. The key is kept here because
+// computing it means parsing the literal, which should happen once per word
+// and not once per comparison during sorting.
 struct ItemVecEntry {
   ItemVecEntry() = default;
   ItemVecEntry(std::string_view word,
-               PartialVocabIndexWithExternalFlag indexAndFlag)
-      : word_{word}, indexAndFlag_{indexAndFlag} {}
+               PartialVocabIndexWithExternalFlag indexAndFlag,
+               uint64_t geoSortKey = 0)
+      : word_{word}, indexAndFlag_{indexAndFlag}, geoSortKey_{geoSortKey} {}
   // The word (a view into the buffer of the partial vocabulary).
   std::string_view word_;
   // The index of the word in the partial vocabulary and its external flag,
   // see `PartialVocabIndexWithExternalFlag`.
   PartialVocabIndexWithExternalFlag indexAndFlag_;
+  // The geo sort key of the word, see above.
+  uint64_t geoSortKey_ = 0;
 };
 
 // A vector that stores the same values as the hash map.

@@ -157,7 +157,7 @@ constexpr inline size_t VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD = 4;
 // words cuts a chunk of `VOCAB_MERGER_INPUT_PER_CHUNK` of input into at most
 // `VOCAB_MERGER_INPUT_PER_CHUNK / (17 * VOCAB_MERGER_WORD_BATCH_SIZE)` blocks
 // (about 75 for the current values), and a merged word takes less than twice
-// its serialized size (a `MergeWord` of 32 bytes next to the word), so the
+// its serialized size (a `MergeWord` of 40 bytes next to the word), so the
 // memory cuts it into fewer than `2 * VOCAB_MERGER_INPUT_PER_CHUNK /
 // VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` blocks (about 26). The factor `8` is a
 // round number above the sum of the two (it is unrelated to the eight buffers

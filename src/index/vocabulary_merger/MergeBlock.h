@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -49,6 +50,10 @@ struct MergeWord {
   uint32_t partialFileId_ = 0;
   // Whether the word will be externalized.
   bool isExternal_ = false;
+  // The geo sort key of the word, which orders the merge before the word
+  // itself (0 for all words without a geo cell grid). It is computed when the
+  // word is read, see `PartialVocabularyRunsInput`.
+  uint64_t geoSortKey_ = 0;
 
   [[nodiscard]] bool& isExternal() { return isExternal_; }
   [[nodiscard]] const bool& isExternal() const { return isExternal_; }
@@ -225,9 +230,13 @@ class MergeBlock : public ad_utility::NoCopy {
   // above). The words are parsed in place, nothing is copied. The `bytes` go
   // back to the `pools` when the block is cleared or destroyed. The `pools`
   // may be `nullptr` (for example in tests): the block then works just the
-  // same, only its buffers are freed instead of given back.
-  MergeBlock(Buffer bytes, size_t numWords, uint32_t partialFileId,
-             std::shared_ptr<BufferPools> pools = nullptr)
+  // same, only its buffers are freed instead of given back. The `geoSortKeyFn`
+  // (see `PartialVocabularyRunsInput`), if not empty, computes the geo sort
+  // key of each word.
+  MergeBlock(
+      Buffer bytes, size_t numWords, uint32_t partialFileId,
+      std::shared_ptr<BufferPools> pools = nullptr,
+      const std::function<uint64_t(std::string_view)>& geoSortKeyFn = nullptr)
       : pools_{std::move(pools)},
         buffers_{Buffers{}, GiveBackToPools{pools_, true}} {
     buffers_->push_back(std::move(bytes));
@@ -238,6 +247,9 @@ class MergeBlock : public ad_utility::NoCopy {
     for (size_t i = 0; i < numWords; ++i) {
       words_.push_back(
           MergeWord::fromZeroCopyDeserializer(serializer, partialFileId));
+      if (geoSortKeyFn) {
+        words_.back().geoSortKey_ = geoSortKeyFn(words_.back().word_);
+      }
     }
     AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == buffer.size(),
                          "Trailing bytes in a block of a partial vocabulary");

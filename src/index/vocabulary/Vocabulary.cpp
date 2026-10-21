@@ -258,10 +258,16 @@ template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
                                                  bool ignorePunctuation) {
-  vocabulary_.getComparator() =
-      ComparatorType(language, country, ignorePunctuation);
-  vocabulary_.getComparator() =
-      ComparatorType(language, country, ignorePunctuation);
+  // A `TripleComponentComparator` keeps the geo cell grid of the comparator
+  // it replaces (see `TripleComponentComparator::setGeoCellGrid`).
+  auto& comparator = vocabulary_.getComparator();
+  if constexpr (std::is_same_v<ComparatorType, TripleComponentComparator>) {
+    auto geoCellGrid = comparator.getGeoCellGrid();
+    comparator = ComparatorType(language, country, ignorePunctuation);
+    comparator.setGeoCellGrid(std::move(geoCellGrid));
+  } else {
+    comparator = ComparatorType(language, country, ignorePunctuation);
+  }
 }
 
 // _____________________________________________________________________________

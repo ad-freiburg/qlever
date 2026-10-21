@@ -74,7 +74,7 @@ TEST(WordBatchBuilder, deduplicationAndMappings) {
   builder.addMergedWords(
       {makeQueueWord("\"a\"", false, 0, 0), makeQueueWord("\"b\"", false, 0, 1),
        makeQueueWord("\"b\"", false, 1, 0)},
-      lessThan, collect);
+      keyedLessThan, collect);
   // A batch that is not full is only handed on by `finish()`.
   EXPECT_THAT(batches, ::testing::IsEmpty());
 
@@ -112,7 +112,7 @@ TEST(WordBatchBuilder, externalizationWithinOneBatch) {
     WordBatchBuilder builder;
     builder.addMergedWords({makeQueueWord("\"a\"", firstIsExternal, 0, 0),
                             makeQueueWord("\"a\"", !firstIsExternal, 1, 0)},
-                           lessThan, collect);
+                           keyedLessThan, collect);
     builder.finish(collect);
     ASSERT_EQ(batches.size(), 1u);
     EXPECT_THAT(wordsOf(batches[0]),
@@ -140,7 +140,7 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   }
   buffer.push_back(
       makeQueueWord("\"zzz\"", false, 0, VOCAB_MERGER_WORD_BATCH_SIZE));
-  builder.addMergedWords(std::move(buffer), lessThan, collect);
+  builder.addMergedWords(std::move(buffer), keyedLessThan, collect);
 
   // The first batch was handed on. It contains exactly the words that can no
   // longer change, i.e. all but the last one.
@@ -151,7 +151,7 @@ TEST(WordBatchBuilder, externalizationAcrossBatchBoundary) {
   EXPECT_EQ(mappingsOf(batches[0]).size(), VOCAB_MERGER_WORD_BATCH_SIZE);
 
   // Another occurrence of the held-back word, this time marked as external.
-  builder.addMergedWords({makeQueueWord("\"zzz\"", true, 1, 0)}, lessThan,
+  builder.addMergedWords({makeQueueWord("\"zzz\"", true, 1, 0)}, keyedLessThan,
                          collect);
   builder.finish(collect);
   ASSERT_EQ(batches.size(), 2u);
@@ -190,11 +190,11 @@ TEST(WordBatchBuilder, severalBatches) {
   for (size_t i = 0; i < numWords; ++i) {
     buffer.push_back(makeQueueWord(fillWord(i), false, 0, i));
     if (buffer.size() == 100) {
-      builder.addMergedWords(std::move(buffer), lessThan, collect);
+      builder.addMergedWords(std::move(buffer), keyedLessThan, collect);
       buffer.clear();
     }
   }
-  builder.addMergedWords(std::move(buffer), lessThan, collect);
+  builder.addMergedWords(std::move(buffer), keyedLessThan, collect);
   builder.finish(collect);
   EXPECT_GE(batches.size(), 3u);
 
@@ -242,7 +242,7 @@ TEST(WordBatchBuilder, batchIsAlsoLimitedByTheMemorySize) {
   while (batches.empty()) {
     builder.addMergedWords(
         {makeQueueWord(longWord(numWordsAdded), false, 0, numWordsAdded)},
-        lessThan, collect);
+        keyedLessThan, collect);
     ++numWordsAdded;
     ASSERT_LT(numWordsAdded, VOCAB_MERGER_WORD_BATCH_SIZE);
   }
@@ -257,7 +257,7 @@ TEST(WordBatchBuilder, batchIsAlsoLimitedByTheMemorySize) {
   // word alone doesn't immediately complete it.
   builder.addMergedWords(
       {makeQueueWord(longWord(numWordsAdded), false, 0, numWordsAdded)},
-      lessThan, collect);
+      keyedLessThan, collect);
   EXPECT_EQ(batches.size(), 1u);
   builder.finish(collect);
   ASSERT_EQ(batches.size(), 2u);
@@ -279,6 +279,6 @@ TEST(WordBatchBuilder, violatedOrderIsDetected) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 0),
                               makeQueueWord("\"a\"", false, 0, 1)},
-                             lessThan, collect),
+                             keyedLessThan, collect),
       ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
 }
