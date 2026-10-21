@@ -59,7 +59,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
     : allocator_{std::move(allocator)},
       executor_{std::move(executor)},
       indexAndViews_{std::make_shared<IndexAndViews>(
-          Index{allocator_}, MaterializedViewsManager{})},
+          Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -678,7 +678,7 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
                          ownedBlocks, handle, executor_, logFileName);
   auto indexAndViews = std::make_shared<IndexAndViews>(
-      Index{allocator()}, MaterializedViewsManager{});
+      Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
   newIndex.usePatterns() = index.usePatterns();
   newIndex.loadAllPermutations() = index.loadAllPermutations();
