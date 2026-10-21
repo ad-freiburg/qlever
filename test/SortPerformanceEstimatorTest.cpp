@@ -2,13 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_format.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <iomanip>
 #include <thread>
 
 #include "engine/SortPerformanceEstimator.h"
+#include "util/IndexTestHelpers.h"
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
@@ -18,8 +19,9 @@ using namespace ad_utility::memory_literals;
 TEST(SortPerformanceEstimator, TestManyEstimates) {
   // only allow the test to use 1 Gig of RAM
   auto allocator = qlever::makeAllocatorWithLimit<Id>(1_GB);
-  auto t =
-      SortPerformanceEstimator{allocator, std::numeric_limits<size_t>::max()};
+  const SortConfig sortConfig{ad_utility::testing::multiThreadExecutor(), 3};
+  auto t = SortPerformanceEstimator{
+      allocator, std::numeric_limits<size_t>::max(), sortConfig};
 
   ad_utility::SlowRandomIntGenerator<int> dice(1, 6);
 
@@ -36,16 +38,19 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
         using ad_utility::Timer;
         Timer::Duration measurement =
             SortPerformanceEstimator::measureSortingTime(i, numColumns,
-                                                         allocator);
+                                                         allocator, sortConfig);
         Timer::Duration estimate = t.estimatedSortTime(i, numColumns);
-        AD_LOG_INFO << std::fixed << std::setprecision(3) << "input of size "
-                    << i << "with " << numColumns << " columns took "
-                    << Timer::toSeconds(measurement)
-                    << " seconds, estimate was " << Timer::toSeconds(estimate)
-                    << " seconds" << std::endl;
-        ASSERT_GE(2 * measurement, estimate);
+        // Only report the measurement in the case of a failure.
+        auto message = [&i, &numColumns, &measurement, &estimate]() {
+          return absl::StrFormat(
+              "Input of size %d with %d columns took %.3f seconds, estimate "
+              "was %.3f seconds.",
+              i, numColumns, Timer::toSeconds(measurement),
+              Timer::toSeconds(estimate));
+        };
+        ASSERT_GE(2 * measurement, estimate) << message();
         if (!isFirst) {
-          EXPECT_LE(0.5 * measurement, estimate);
+          EXPECT_LE(0.5 * measurement, estimate) << message();
         } else if (0.5 * measurement > estimate) {
           AD_LOG_WARN
               << "The first measurement with a new column size took "

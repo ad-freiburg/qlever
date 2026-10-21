@@ -11,7 +11,7 @@
 #include <variant>
 
 #include "backports/three_way_comparison.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "parser/TripleComponent.h"
 #include "util/HashSet.h"
 #include "util/OverloadCallOperator.h"
@@ -82,6 +82,10 @@ class GraphFilter {
 
   // Return true iff all graphs are always allowed.
   bool areAllGraphsAllowed() const;
+
+  // Return the whitelisted graphs if this filter is a whitelist, and `nullptr`
+  // otherwise.
+  const ad_utility::HashSet<T>* whitelistIfPresent() const;
 
   // Make sure this filter is comparable.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphFilter, filter_)

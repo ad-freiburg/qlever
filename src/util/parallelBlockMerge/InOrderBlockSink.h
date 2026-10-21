@@ -71,13 +71,13 @@ namespace ad_utility::parallelBlockMerge {
 // respective operation, so a token such as `net::use_awaitable` rethrows on the
 // executor of the caller.
 //
-// STRAND CONFINEMENT: All the mutable state of this class and *every* operation
-// of the storage are confined to a single `strand_`, so that neither needs a
-// mutex. Every operation therefore consists of a hop onto the strand, the
-// actual work (a coroutine, see `spawnOnStrand`), and a hop back to the
-// executor of the caller. The only member that is ever read off the strand is
-// the atomic `stopRequested_`, which a producer polls between two output
-// blocks; it is *written* on the strand only.
+// STRAND CONFINEMENT: All the mutable state of this class is confined to a
+// single `strand_`, from which *every* operation of the storage is initiated as
+// well, so that neither needs a mutex. Every operation therefore consists of a
+// hop onto the strand, the actual work (a coroutine, see `spawnOnStrand`), and
+// a hop back to the executor of the caller. The only member that is ever read
+// off the strand is the atomic `stopRequested_`, which a producer polls between
+// two output blocks; it is *written* on the strand only.
 //
 // IMPORTANT: The hop back is always a `net::post`, so a completion handler of
 // this class never runs while the strand is held. That matters because
@@ -131,8 +131,9 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // The value that is handed to the storage. A `std::nullopt` is the
   // end-of-chunk sentinel.
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
-  // The strand to which all the state of this sink and all the operations on
-  // its storage are confined, see the STRAND CONFINEMENT note above.
+  // The strand to which all the state of this sink is confined and from which
+  // all the operations on its storage are initiated, see the STRAND CONFINEMENT
+  // note above.
   using Strand = parallelBlockMerge::Strand;
 
  private:
@@ -157,9 +158,9 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
  public:
   // Construct from the `executor` from which the strand of this sink is
   // derived, the total number of chunks, and a factory that creates the storage
-  // of the blocks. The factory is called exactly once, with that strand, and
-  // the storage that it returns has to confine itself to exactly that strand,
-  // see the CONTRACT of the `BlockStorageConcept`.
+  // of the blocks. The factory is called exactly once, with that strand, which
+  // the storage that it returns may confine itself to or ignore in favor of one
+  // of its own, see the CONTRACT of the `BlockStorageConcept`.
   template <typename StorageFactory>
   requires std::invocable<StorageFactory, const Strand&>
   InOrderBlockSink(net::any_io_executor executor, size_t numChunks,
@@ -243,7 +244,12 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
 
   // Complete with the next block in the global order, or with `std::nullopt` if
   // all chunks are exhausted or the merge was stopped. Rethrow a pushed
-  // exception. Suspend until one of these conditions holds.
+  // exception. Suspend until one of these conditions holds. The block is a
+  // `DeferredBlock`, exactly as the storage hands it out: if it was not in
+  // memory anymore, then it is the caller that reads it (on a thread of its own
+  // choosing), which never happens on the strand of this sink and allows the
+  // caller to read several consecutive blocks concurrently, see
+  // `detail::BlockPrefetcher`.
   //
   // IMPORTANT: Run this from a single consumer only, and never concurrently
   // with itself. The strand does not make this requirement go away, because it
@@ -318,7 +324,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // if there is nothing left to read, or rethrow the pushed exception.
   //
   // PRECONDITION: This runs on `strand_`, see `spawnOnStrand`.
-  net::awaitable<OptionalBlock> receiveNextBlock() {
+  net::awaitable<std::optional<DeferredBlock<Block>>> receiveNextBlock() {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     for (;;) {
       if (exception_ != nullptr) {
@@ -327,7 +333,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
         std::rethrow_exception(exception_);
       }
       if (stopRequested_.load() || nextChunkToRead_ >= numChunks_) {
-        co_return OptionalBlock{std::nullopt};
+        co_return std::nullopt;
       }
       GetResult<Block> result =
           co_await storage_.getBlock(nextChunkToRead_, net::use_awaitable);
@@ -339,7 +345,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
         continue;
       }
       if (result.hasValue()) {
-        co_return OptionalBlock{std::move(result).get()};
+        co_return std::move(result).get();
       }
       // The end-of-chunk sentinel, so move on to the next chunk.
       //

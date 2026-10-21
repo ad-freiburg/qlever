@@ -300,9 +300,8 @@ CPP_template(typename T, typename Func)(requires Arithmetic<T> CPP_and(
 }  // namespace detail
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(
-    requires ql::concepts::integral<T>) constexpr MemorySize
-    MemorySize::bytes(T numBytes) {
+CPP_template_def(typename T)(requires ql::concepts::integral<T>)
+constexpr MemorySize MemorySize::bytes(T numBytes) {
   if constexpr (std::is_signed_v<T>) {
     // Doesn't make much sense to a negative amount of memory.
     AD_CONTRACT_CHECK(numBytes >= 0);
@@ -312,26 +311,26 @@ CPP_template_def(typename T)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
-    MemorySize::kilobytes(T numKilobytes) {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize MemorySize::kilobytes(T numKilobytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numKilobytes, "kB")};
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
-    MemorySize::megabytes(T numMegabytes) {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize MemorySize::megabytes(T numMegabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numMegabytes, "MB")};
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
-    MemorySize::gigabytes(T numGigabytes) {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize MemorySize::gigabytes(T numGigabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numGigabytes, "GB")};
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
-    MemorySize::terabytes(T numTerabytes) {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize MemorySize::terabytes(T numTerabytes) {
   return MemorySize{detail::convertMemoryUnitsToBytes(numTerabytes, "TB")};
 }
 
@@ -403,8 +402,8 @@ constexpr MemorySize& MemorySize::operator-=(const MemorySize& m) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
-    MemorySize::operator*(const T c) const {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize MemorySize::operator*(const T c) const {
   if constexpr (std::is_signed_v<T>) {
     // A negative amount of memory wouldn't make much sense.
     AD_CONTRACT_CHECK(c >= static_cast<T>(0));
@@ -430,9 +429,8 @@ constexpr auto operator*(const T c, const MemorySize m)
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(
-    requires Arithmetic<
-        T>) constexpr MemorySize& MemorySize::operator*=(const T c) {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize& MemorySize::operator*=(const T c) {
   *this = *this * c;
   return *this;
 }
@@ -454,8 +452,8 @@ struct DivisionFunctor {
 }  // namespace detail
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
-    MemorySize::operator/(const T c) const {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize MemorySize::operator/(const T c) const {
   if constexpr (std::is_signed_v<T>) {
     // A negative amount of memory wouldn't make much sense.
     AD_CONTRACT_CHECK(c > static_cast<T>(0));
@@ -489,9 +487,8 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(
-    requires Arithmetic<
-        T>) constexpr MemorySize& MemorySize::operator/=(const T c) {
+CPP_template_def(typename T)(requires Arithmetic<T>)
+constexpr MemorySize& MemorySize::operator/=(const T c) {
   *this = *this / c;
   return *this;
 }

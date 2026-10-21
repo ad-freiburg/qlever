@@ -11,10 +11,10 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "util/ExceptionHandling.h"
-#include "util/ResetWhenMoved.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/UniqueCleanup.h"
 #include "util/Views.h"
 
 namespace ad_utility::serialization {
@@ -106,60 +106,52 @@ CPP_template(typename T, typename S)(
 /// Incrementally serialize a std::vector to disk without materializing it.
 /// Call `push` for each of the elements that will become part of the vector.
 CPP_template(typename T, typename Serializer)(
-    requires WriteSerializer<Serializer>) class VectorIncrementalSerializer {
+    requires WriteSerializer<Serializer>) class VectorIncrementalSerializer
+    : public ad_utility::NoCopy {
  private:
-  Serializer _serializer;
-  uint64_t _startPosition;
-  typename std::vector<T>::size_type _size = 0;
-  // A moved-from `VectorIncrementalSerializer` must not write anything anymore,
-  // as its serializer has been moved away. The `ResetWhenMoved` takes care of
-  // this, such that the move constructor can simply be defaulted.
-  ad_utility::ResetWhenMoved<bool, true> _isFinished = false;
+  using SizeType = typename std::vector<T>::size_type;
+  struct State {
+    Serializer serializer_;
+    uint64_t startPosition_;
+    SizeType size_ = 0;
+  };
+
+  // Write the final size to the header. Runs on destruction and when the
+  // serializer is overwritten, unless `finish()` was called before.
+  struct Finisher {
+    void operator()(State&& state) const {
+      serializeAtPosition(state.serializer_, state.startPosition_, state.size_);
+    }
+  };
+  // NOTE: This class is move-only. Because of this `UniqueCleanup`, the
+  // implicit move operations are correct: A moved-from serializer doesn't write
+  // anything on destruction, and a move assignment first finishes the
+  // overwritten serializer.
+  ad_utility::unique_cleanup::UniqueCleanup<State, Finisher> state_;
 
  public:
   explicit VectorIncrementalSerializer(Serializer&& serializer)
-      : _serializer{std::move(serializer)},
-        _startPosition{_serializer.getSerializationPosition()} {
-    // `_size` does not have the correct value yet. The correct size will be set
-    // in the finish() method.
-    _serializer << _size;
-    alignSerializerForType<T>(_serializer);
-  }
-
-  // This class is move-only, as the underlying serializers are.
-  VectorIncrementalSerializer(const VectorIncrementalSerializer&) = delete;
-  VectorIncrementalSerializer& operator=(const VectorIncrementalSerializer&) =
-      delete;
-  // The defaulted move constructor has the correct semantics because of the
-  // usage of `ResetWhenMoved` for the `_isFinished` member.
-  //
-  // NOTE: There deliberately is no move assignment operator. It would have to
-  // `finish()` the assigned-to object first (which might already have been
-  // written to), and no caller currently needs it.
-  VectorIncrementalSerializer(VectorIncrementalSerializer&&) = default;
+      : state_{initialize(std::move(serializer)), Finisher{}} {}
 
   void push(const T& element) {
-    _serializer << element;
-    _size++;
+    state_->serializer_ << element;
+    state_->size_++;
   }
 
-  void finish() {
-    if (_isFinished) {
-      return;
-    }
-    _isFinished = true;
-    serializeAtPosition(_serializer, _startPosition, _size);
-  }
+  void finish() { std::move(state_).runNowIfActive(); }
 
   Serializer serializer() && {
     finish();
-    return std::move(_serializer);
+    return std::move(state_->serializer_);
   }
 
-  ~VectorIncrementalSerializer() {
-    ad_utility::terminateIfThrows(
-        [this]() { finish(); },
-        "The finishing of a `VectorIncrementalSerializer` failed");
+ private:
+  // Write a placeholder for the size, which is set by the `Finisher`.
+  static State initialize(Serializer&& serializer) {
+    uint64_t startPosition = serializer.getSerializationPosition();
+    serializer << SizeType{0};
+    alignSerializerForType<T>(serializer);
+    return State{std::move(serializer), startPosition};
   }
 };
 

@@ -383,22 +383,22 @@ TEST(TokenizerTest, WhitespaceAndComments) {
 TEST(Escaping, normalizeRDFLiteral) {
   {
     std::string l1 = "\"simpleLiteral\"";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l1).get());
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l1));
     std::string l2 = "\'simpleLiteral\'";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l2).get());
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l2));
     std::string l3 = R"('''simpleLiteral''')";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l3).get());
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l3));
     std::string l4 = R"("""simpleLiteral""")";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l4).get());
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l4));
 
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l1).get()));
+                      RdfEscaping::normalizeRDFLiteral(l1)));
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l2).get()));
+                      RdfEscaping::normalizeRDFLiteral(l2)));
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l3).get()));
+                      RdfEscaping::normalizeRDFLiteral(l3)));
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l4).get()));
+                      RdfEscaping::normalizeRDFLiteral(l4)));
   }
 
   {
@@ -406,23 +406,23 @@ TEST(Escaping, normalizeRDFLiteral) {
     std::string l1 = R"("si\"mple\'Li\n\rt\t\b\fer\\")";
     // only the newline and backslash characters are escaped
     std::string lEscaped = "\"si\"mple\'Li\\n\rt\t\b\fer\\\\\"";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l1).get());
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l1));
     std::string l2 = R"('si\"mple\'Li\n\rt\t\b\fer\\')";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l2).get());
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l2));
     std::string l3 = R"('''si\"mple\'Li\n\rt\t\b\fer\\''')";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l3).get());
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l3));
     std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\""")";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l4).get());
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l4));
 
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(t));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l1).get()));
+                            RdfEscaping::normalizeRDFLiteral(l1)));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l2).get()));
+                            RdfEscaping::normalizeRDFLiteral(l2)));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l3).get()));
+                            RdfEscaping::normalizeRDFLiteral(l3)));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l4).get()));
+                            RdfEscaping::normalizeRDFLiteral(l4)));
   }
 
   std::string lit = R"(",\")";

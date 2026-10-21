@@ -301,6 +301,16 @@ class SortedSequenceManySortedBlocks {
   // access.
   void insert(ValueType elem) { pending_.push_back(std::move(elem)); }
 
+  // Reserve storage for `n` elements in total (including the current ones).
+  // The sorted blocks have fixed storage, so this reserves space for the
+  // additional elements in the pending buffer.
+  void reserve(size_t n) {
+    size_t current = sizeUpperBound();
+    if (n > current) {
+      pending_.reserve(pending_.size() + (n - current));
+    }
+  }
+
  private:
   // Helper for the overloads of `getSortedView`.
   template <typename Self>

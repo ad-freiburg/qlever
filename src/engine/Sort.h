@@ -16,15 +16,16 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
 #include "index/LocalVocab.h"
+#include "util/ContainersWithAllocator.h"
 
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
 // different from the `semantic` order that is computed by ORDER BY. For
 // example, in the internal Order `Int(0) < Int(-3)`. For details on the
-// different orderings see `ValueId.h` and `ValueIdComparators.h`. The `Sort`
-// class has to be used when an operation requires a presorted input (e.g. JOIN,
-// GROUP BY). To compute an `ORDER BY` clause at the end of the query
-// processing, the `OrderBy` class from `OrderBy.h/.cpp` has to be used.
+// different orderings see `FoldedValueId.h` and `ValueIdComparators.h`. The
+// `Sort` class has to be used when an operation requires a presorted input
+// (e.g. JOIN, GROUP BY). To compute an `ORDER BY` clause at the end of the
+// query processing, the `OrderBy` class from `OrderBy.h/.cpp` has to be used.
 class Sort : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
@@ -90,8 +91,8 @@ class Sort : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {subtree_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{subtree_.get()}, allocator()};
   }
 
  public:

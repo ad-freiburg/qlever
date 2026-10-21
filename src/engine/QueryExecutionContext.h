@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 
+#include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
@@ -20,9 +21,11 @@
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/SortConfig.h"
 #include "util/AllocateShared.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
+#include "util/Executor.h"
 
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.
@@ -55,7 +58,7 @@ class CacheValue {
       requires IdTableLike<IdTableT>) static ad_utility::MemorySize
       getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
-                                         sizeof(Id));
+                                         BYTES_PER_ID_COLUMN_ENTRY);
   }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
@@ -112,6 +115,7 @@ class QueryExecutionContext
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+      qlever::Executor executor,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
@@ -171,6 +175,14 @@ class QueryExecutionContext
   // ago; if it is set to `Always`, the update is always sent.
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
                          RuntimeInformation::SendPriority sendPriority) const;
+
+  // Information about the planning of the query (the time and the details).
+  // Once set, `signalQueryUpdate` sends it along with every
+  // update, as the key `meta` of the runtime information, like the result in
+  // the `application/qlever-results+json` format does.
+  void setQueryPlanningInfo(QueryPlanningInfo info) {
+    queryPlanningInfo_ = std::move(info);
+  }
 
   bool _pinSubtrees;
   bool _pinResult;
@@ -253,6 +265,22 @@ class QueryExecutionContext
     return getIndex().getLocalVocabContext();
   }
 
+  // The executor on which the operations of this query run their parallel
+  // work (for example, the reading and decompressing of the blocks of lazy
+  // index scans). The server uses an executor that limits the number of
+  // threads that a single query may use at the same time (see
+  // `max-num-threads-per-query`).
+  const qlever::Executor& executor() const { return executor_; }
+
+  // How the in-memory sorts of this query run in parallel (see
+  // `IdTableUtils::sort`), created by `makeSortConfig(executor())` when this
+  // context is constructed.
+  const SortConfig& sortConfig() const { return sortConfig_; }
+
+  // Return a `SortConfig` for sorting on the `executor`, the number of tasks
+  // of which is the runtime parameter `sort-num-tasks-in-flight`.
+  static SortConfig makeSortConfig(qlever::Executor executor);
+
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
   // header.
@@ -311,6 +339,9 @@ class QueryExecutionContext
   mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
       std::chrono::steady_clock::time_point::min();
 
+  // See `setQueryPlanningInfo`.
+  std::optional<QueryPlanningInfo> queryPlanningInfo_;
+
   // Disable the automatic rewriting of joins to materialized views. This also
   // deactivates the check for materialized view rewriting of
   // `QueryExecutionTree` by cache key. This is needed in
@@ -319,6 +350,12 @@ class QueryExecutionContext
 
   // See the documentation for the getter with the same name above.
   bool isAnalyzingMaterializedViewQuery_ = false;
+
+  // See the documentation for the getter with the same name above.
+  qlever::Executor executor_;
+
+  // See the documentation for the getter with the same name above.
+  SortConfig sortConfig_ = makeSortConfig(executor_);
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

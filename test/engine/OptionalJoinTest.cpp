@@ -938,14 +938,14 @@ class OptionalJoinWithIndexScan
 
   void SetUp() override {
     // Create a small knowledge graph with controlled block structure.
-    // Using 8 bytes per column gives us a single triple per block.
+    // One row per block gives us a single triple per block.
     std::string kg =
         "<a> <p> <A> . <a> <p> <A2> . "
         "<b> <p> <B> . <b> <p> <B2> . "
         "<c> <p> <C> . <c> <p> <C2> . "
         "<d> <p> <D> . "
         "<e> <p> <E> . ";
-    setupQecWithKnowledgeGraph(kg, 8_B);
+    setupQecWithKnowledgeGraph(kg, 1);
   }
 
   // Create a common IndexScan instance for the right side.
@@ -1119,7 +1119,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
       "<s0> <p> <o1> .<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .<s3> <p> "
       "<o3>. ";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   // Left side: two columns with UNDEF in second column.
@@ -1176,7 +1176,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
       "<s0> <p> <o1> .<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .<s3> <p> "
       "<o3>. ";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   // Left side: two columns with UNDEF in second column.
@@ -1231,7 +1231,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   EXPECT_EQ(actual.numColumns(), 3);
 
   const auto& payload = actual.getColumn(2);
-  const auto& payloadBits = payload | ql::views::transform(&Id::getBits);
+  const auto& payloadBits = payload | ql::views::transform(Id::getBitsL);
   EXPECT_TRUE(ad_utility::contains(payloadBits, l1.getBits()));
   EXPECT_TRUE(ad_utility::contains(payloadBits, l2.getBits()));
   EXPECT_TRUE(ad_utility::contains(payloadBits, l3.getBits()));
@@ -1246,7 +1246,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   // Test two-column optional join with multiple matches for one subject.
   std::string kg2 = "<s0> <p> 1. <s1> <p> 2 . <s1> <p> 3 . <s2> <p> 4 .";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   auto s1 =
@@ -1300,6 +1300,47 @@ INSTANTIATE_TEST_SUITE_P(
       return absl::StrCat(requestLaziness ? "LazyResult" : "MaterializedResult",
                           materializeLeft ? "MaterializedLeft" : "LazyLeft");
     }));
+
+// Test the optional join with an `IndexScan` without variables on the right,
+// which must not use the prefiltered join (regression test for
+// https://github.com/ad-freiburg/qlever/issues/3574).
+TEST(OptionalJoin, rightIsScanWithoutVariables) {
+  TestIndexConfig config{"<a> <b> <c> <g1> . <a> <b> <c> <g2> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto* qec = getQec(config);
+  auto getId = makeGetId(qec->getIndex());
+  // `<g1>` is matched by the right side, `<c>` is not.
+  auto [first, second] = std::minmax({getId("<g1>"), getId("<c>")});
+  auto leftTable = makeIdTableFromVector({{first}, {second}});
+
+  for (bool materializeLeft : {false, true}) {
+    for (bool requestLaziness : {false, true}) {
+      auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, leftTable.clone(),
+          std::vector<std::optional<Variable>>{Variable{"?g"}}, false,
+          std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+          materializeLeft);
+      // `GRAPH ?g { <a> <b> <c> }`
+      auto right = ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::PSO,
+          SparqlTripleSimple{
+              iri("<a>"),
+              iri("<b>"),
+              iri("<c>"),
+              {std::pair{ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?g"}}}});
+      OptionalJoin optJoin{qec, std::move(left), std::move(right)};
+      qec->getQueryTreeCache().clearAll();
+      auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+      IdTable actual =
+          result.isFullyMaterialized()
+              ? result.cloneIdTable()
+              : aggregateTables(result.idTables(), optJoin.getResultWidth())
+                    .first;
+      EXPECT_EQ(actual, leftTable) << "materializeLeft: " << materializeLeft
+                                   << ", requestLaziness: " << requestLaziness;
+    }
+  }
+}
 
 namespace {
 // _____________________________________________________________________________
@@ -1378,7 +1419,7 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
       optionalJoin.getRuntimeInfoPointer());
   auto result = optionalJoin.computeResultOnlyForTesting();
   for (const auto& row : result.idTableView()) {
-    for (const Id& id : row) {
+    for (ConstIdRef id : row) {
       EXPECT_NE(id, Id::makeUndefined());
     }
   }
@@ -1433,7 +1474,7 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
       optionalJoin.getRuntimeInfoPointer());
   auto result = optionalJoin.computeResultOnlyForTesting();
   for (const auto& row : result.idTableView()) {
-    for (const Id& id : row) {
+    for (ConstIdRef id : row) {
       EXPECT_NE(id, Id::makeUndefined());
     }
   }

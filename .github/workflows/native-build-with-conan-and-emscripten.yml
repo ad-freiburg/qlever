@@ -10,6 +10,9 @@ on:
     tags: [ "v*" ]
   pull_request:
     branches: [ master ]
+    # Also run when a label is applied, so that applying the `run-ci` or
+    # `run-full-ci` label triggers the checks, see `README.md`.
+    types: [ opened, synchronize, reopened, labeled ]
   merge_group:
 
 concurrency:
@@ -22,7 +25,7 @@ env:
   # directly (rather than via the Conan recipe) because the Conan Center recipe
   # is outdated. Make sure to also change the version in
   # `conanprofiles/emscripten.profile` when changing this!
-  EMSDK_VERSION: "6.0.5"
+  EMSDK_VERSION: "6.0.12"
 
 # The default GITHUB_TOKEN only needs to read the repository here. The `publish`
 # job requests `id-token: write` for itself; that permission is deliberately NOT
@@ -34,7 +37,19 @@ permissions:
 
 jobs:
   build:
+    # Only run for PRs with the `run-full-ci` label, see `README.md`.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
     runs-on: ubuntu-24.04
+    # Settings for `ccache`: `em++` is a wrapper around Clang, and the depend
+    # mode avoids running the (slow) `em++` preprocessor on each cache lookup.
+    # The sloppiness is needed for precompiled headers and fresh checkouts.
+    env:
+      CCACHE_COMPILERTYPE: clang
+      CCACHE_DEPEND: 1
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+      CCACHE_MAXSIZE: 5G
 
     steps:
       - uses: actions/checkout@v7
@@ -46,7 +61,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up emsdk ${{ env.EMSDK_VERSION }}
-        uses: mymindstorm/setup-emsdk@v14
+        uses: emscripten-core/setup-emsdk@v16
         with:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: emsdk-cache-${{ env.EMSDK_VERSION }}
@@ -54,7 +69,7 @@ jobs:
       # `emsdk` shells out to `node` during compilation, so a working `node` has to
       # be on `PATH` even though we never invoke it directly.
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 26
 
@@ -88,7 +103,7 @@ jobs:
           EOF
 
       - name: Cache conan packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.conan2/p
           key: ${{ runner.os }}-conan-emscripten-${{ env.EMSDK_VERSION }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile') }}
@@ -104,20 +119,52 @@ jobs:
       - name: Install dependencies via conan
         run: conan install . -pr:b default -pr:h conanprofiles/emscripten.profile -s build_type=Release -b missing -of build
 
+      - name: Install ccache
+        run: sudo apt-get update && sudo apt-get install -y ccache
+
+      # Only pull requests use `ccache`; pushes to master, the merge queue and
+      # releases are built from scratch. Each run saves its cache under its own
+      # key (see `Save ccache`), so this restores the most recent one.
+      - name: Restore ccache
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-emscripten-${{ env.EMSDK_VERSION }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-ccache-emscripten-${{ env.EMSDK_VERSION }}-
+
+      # Run the tests with the Node.js from `actions/setup-node` (the tests need
+      # >= 26), not with the older one from `emsdk`, which is also in `PATH`.
       - name: Configure CMake
         run: >
           cmake -S . -B build -GNinja
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
           -DCMAKE_BUILD_TYPE=Release
           -DLOGLEVEL=INFO
-          -DUSE_PARALLEL=true
           -D_NO_TIMING_TESTS=ON
-          -D_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER=ON
+          -DRUN_EXPENSIVE_TESTS=false
           -D_NO_BENCHMARK=ON
-          -D_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS=ON
+          -DCMAKE_CROSSCOMPILING_EMULATOR="$(command -v node)"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
+      # Outside of pull requests, `ccache` is disabled (see `Restore ccache`).
+      # Otherwise, remove the cache entries that this build didn't use, so that
+      # the cache doesn't grow with each run.
       - name: Build
-        run: cmake --build build --parallel
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then export CCACHE_DISABLE=1; fi
+          ccache --zero-stats
+          cmake --build build --parallel
+          ccache --evict-older-than "$((SECONDS + 60))s"
+          ccache --show-stats
+
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-emscripten-${{ env.EMSDK_VERSION }}-${{ github.sha }}
 
       # Assemble the `@ad-freiburg/qlever` npm package (see `src/libqlever/npm/`) on every
       # run, so that pull requests also validate the packaging and the tarball
@@ -199,6 +246,10 @@ jobs:
             | grep -E 'Number of result rows: 3$' > /dev/null \
             || { echo "::error::The example did not print 'Number of result rows: 3'"; exit 1; }
 
+      # Runs last, so that the npm package is still uploaded if a test fails.
+      - name: Test
+        run: ctest --test-dir build -j $(nproc) --timeout 300 --output-on-failure
+
   # Release tags publish to the default `latest` dist-tag (what a plain
   # `npm install @ad-freiburg/qlever` resolves to). Pushes to master publish the
   # dev version under the `next` dist-tag, which never affects `latest`; users
@@ -235,7 +286,7 @@ jobs:
 
     steps:
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 26
 
@@ -246,7 +297,7 @@ jobs:
       # The tarball built, packed and smoke-tested by the `build` job; it is
       # published as-is, no checkout or rebuild involved.
       - name: Download the npm package
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: qlever-npm-package
 

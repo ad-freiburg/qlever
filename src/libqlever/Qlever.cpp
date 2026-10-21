@@ -34,25 +34,29 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
 
 namespace qlever {
 
 // _____________________________________________________________________________
-Qlever::Qlever(const EngineConfig& config, bool skipLoading)
+Qlever::Qlever(const EngineConfig& config, bool skipLoading,
+               qlever::Executor executor)
     : Qlever(config, skipLoading,
              qlever::makeAllocatorWithLimit<Id>(
                  config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numMemoryToAllocate);
-                 })) {}
+                 }),
+             std::move(executor)) {}
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
-               Allocator<Id> allocator)
+               Allocator<Id> allocator, qlever::Executor executor)
     : allocator_{std::move(allocator)},
+      executor_{std::move(executor)},
       indexAndViews_{std::make_shared<IndexAndViews>(
           Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
@@ -99,17 +103,22 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning), unless
-  // the user disabled this (potentially expensive) step.
+  // the user disabled this (potentially expensive) step. The samples are sorted
+  // like the sorts of the queries themselves (see `IdTableUtils::sort` and
+  // `QueryExecutionContext::makeSortConfig`).
   if (config.computeSortPerformanceEstimators_) {
     sortPerformanceEstimator_.computeEstimatesExpensively(
-        allocator_, index.numTriples().normalAndInternal_() *
-                        PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+        allocator_,
+        index.numTriples().normalAndInternal_() *
+            PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100,
+        QueryExecutionContext::makeSortConfig(executor_));
   }
 
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
     try {
-      auto qec = createQueryExecutionContext(indexAndViewsSnapshot());
+      auto qec =
+          createQueryExecutionContext(indexAndViewsSnapshot(), executor_);
       materializedViewsManager.loadView(viewName, qec.get());
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
@@ -122,6 +131,19 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 void Qlever::buildIndex(IndexBuilderConfig config) {
   // Reject invalid configurations early and with an informative error message.
   config.validate();
+  // Make the size of the global thread pool respect the number of threads that
+  // was configured for the index build. The pool is created on its first use
+  // and cannot be resized afterwards, so a process that has already used it
+  // (for example because it has built an index before) has to live with the
+  // existing pool. That is not an error, but it is worth a warning.
+  if (!ad_utility::trySetGlobalExecutorNumThreads(config.numThreads_)) {
+    AD_LOG_WARN << "The global thread pool already exists with "
+                << ad_utility::globalExecutorNumThreads() << " threads, so the "
+                << config.numThreads_
+                << " threads that were configured for this index build cannot "
+                   "be applied to it"
+                << std::endl;
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Set memory limit and parser buffer size if specified.
@@ -130,6 +152,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   }
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
+  }
+  if (config.indexRowsPerBlock_.has_value()) {
+    index.rowsPerBlock() = config.indexRowsPerBlock_.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after
@@ -149,6 +174,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
                                               config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(
@@ -326,13 +352,14 @@ PlannedQuery Qlever::planQuery(
     rootOperation.recursivelySetTimeConstraint(timeLimit.value());
   }
 
+  auto& queryPlanningInfo = rootOperation.getQueryPlanningInfo();
   if (requestTimer.has_value()) {
-    auto& qet = plannedQuery.queryExecutionTree();
-    auto timeForQueryPlanning = requestTimer->msecs();
-    auto& runtimeInfoWholeQuery =
-        qet.getRootOperation()->getRuntimeInfoWholeQuery();
-    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+    queryPlanningInfo.timeQueryPlanning = requestTimer->msecs();
   }
+  queryPlanningInfo.queryPlanning = qp.planningInfo();
+  // The runtime information that is sent over the websocket during the
+  // execution also carries this information about the query planning.
+  qec.setQueryPlanningInfo(queryPlanningInfo);
   return plannedQuery;
 }
 
@@ -355,8 +382,8 @@ ParsedQueryAndContext Qlever::parseQuery(
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
   auto qecPtr = createQueryExecutionContext(
-      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
-      pinResult, disableCaching_);
+      indexAndViewsSnapshot(), executor_, std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching_);
 
   auto parsedQuery = SparqlParser::parseQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
@@ -370,8 +397,8 @@ ParsedQueryAndContext Qlever::bindParsedQuery(
     ParsedQuery parsedQuery, std::function<void(std::string)> updateCallback,
     bool pinSubtrees, bool pinResult) const {
   auto qecPtr = createQueryExecutionContext(
-      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
-      pinResult, disableCaching_);
+      indexAndViewsSnapshot(), executor_, std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching_);
   return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
 }
 
@@ -404,6 +431,13 @@ void IndexBuilderConfig::validate() const {
     throw std::invalid_argument(
         "The number of threads for the index build (`num-threads`) must be at "
         "least 1");
+  }
+  if (indexRowsPerBlock_ == 0 ||
+      indexRowsPerBlock_ > MAX_INDEX_ROWS_PER_BLOCK) {
+    throw std::invalid_argument(absl::StrCat(
+        "The number of rows per block of the index (`index-rows-per-block`) "
+        "must be between 1 and ",
+        MAX_INDEX_ROWS_PER_BLOCK));
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
@@ -455,7 +489,7 @@ bool Qlever::unloadMaterializedView(const std::string& name) const {
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
   auto indexAndViews = indexAndViewsSnapshot();
-  auto qec = createQueryExecutionContext(indexAndViews);
+  auto qec = createQueryExecutionContext(indexAndViews, executor_);
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 }
 
@@ -467,15 +501,15 @@ void Qlever::deleteMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
-    std::shared_ptr<IndexAndViews> indexAndViews,
+    std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult,
     QueryExecutionContext::DisableCaching disableCaching) const {
   auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
   return std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching);
+      &namedResultCache_, std::move(viewsManager), std::move(executor),
+      std::move(updateCallback), pinSubtrees, pinResult, disableCaching);
 }
 
 // ___________________________________________________________________________
@@ -624,7 +658,7 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
           .getCurrentLocatedTriplesSharedStateWithVocab();
   auto mapping =
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
-                         ownedBlocks, handle, logFileName);
+                         ownedBlocks, handle, executor_, logFileName);
   auto indexAndViews = std::make_shared<IndexAndViews>(
       Index{allocator()}, MaterializedViewsManager{});
   auto& [newIndex, newManager] = *indexAndViews;

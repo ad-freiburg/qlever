@@ -56,8 +56,9 @@ CPP_class_template(typename NaryOperation,
 
 //______________________________________________________________________________
 // Expressions for the builtin functions `isIRI`, `isBlank`, `isLiteral`,
-// `isNumeric`, and the custom function `isWktPoint`. Note that the value
-// getters already return the correct `Id`, hence `ql::identity`.
+// `isNumeric`, and the custom functions `ql:isEncodedIri` and `ql:isGeoPoint`.
+// Note that the value getters already return the correct `Id`, hence
+// `ql::identity`.
 template <typename Getter, prefilterExpressions::IsDatatype Datatype>
 using IsDtypeExpression =
     IsDatatypeExpressionImpl<Operation<1, FV<ql::identity, Getter>>, Datatype>;
@@ -77,9 +78,9 @@ using isEncodedIriExpression =
     IsDtypeExpression<IsValueIdValueGetter<Datatype::EncodedVal>,
                       prefilterExpressions::IsDatatype::ENCODED_IRI>;
 
-// We currently don't support pre-filtering for `isGeoPointExpression`.
 using isGeoPointExpression =
-    NARY<1, FV<ql::identity, IsValueIdValueGetter<Datatype::GeoPoint>>>;
+    IsDtypeExpression<IsValueIdValueGetter<Datatype::GeoPoint>,
+                      prefilterExpressions::IsDatatype::GEO_POINT>;
 
 //______________________________________________________________________________
 // The expression for `bound` is slightly different as `IsValidValueGetter`
