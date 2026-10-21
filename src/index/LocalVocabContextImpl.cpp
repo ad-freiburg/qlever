@@ -52,6 +52,7 @@ ad_utility::BlankNodeManager* LocalVocabContextImpl::getBlankNodeManager()
 }
 
 // _____________________________________________________________________________
-VocabIndex LocalVocabContextImpl::getBeginOfIrisInVocabulary() const {
-  return vocabulary_->getBeginOfIris();
+std::pair<VocabIndex, VocabIndex>
+LocalVocabContextImpl::getRangeOfIrisInVocabulary() const {
+  return vocabulary_->getRangeOfIris();
 }

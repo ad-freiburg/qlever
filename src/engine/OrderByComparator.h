@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
@@ -42,12 +43,12 @@ class OrderByComparator {
   enum struct TermKind : uint8_t { Undefined, BlankNode, Iri, Literal };
 
  private:
-  // See `LocalVocabContext::getBeginOfIrisInVocabulary`.
-  VocabIndex beginOfIrisInVocabulary_;
+  // See `LocalVocabContext::getRangeOfIrisInVocabulary`.
+  std::pair<VocabIndex, VocabIndex> rangeOfIrisInVocabulary_;
 
  public:
   explicit OrderByComparator(const LocalVocabContext& context)
-      : beginOfIrisInVocabulary_{context.getBeginOfIrisInVocabulary()} {}
+      : rangeOfIrisInVocabulary_{context.getRangeOfIrisInVocabulary()} {}
 
   // Return the kind of the RDF term that `id` represents.
   TermKind getTermKind(Id id) const {
@@ -56,9 +57,15 @@ class OrderByComparator {
         return TermKind::Undefined;
       case Datatype::BlankNodeIndex:
         return TermKind::BlankNode;
-      case Datatype::VocabIndex:
-        return id.getVocabIndex() < beginOfIrisInVocabulary_ ? TermKind::Literal
-                                                             : TermKind::Iri;
+      case Datatype::VocabIndex: {
+        // Outside of the range of the IRIs are the literals, in particular
+        // also the WKT literals of a geo-split vocabulary, whose indices lie
+        // above all other indices (see `Vocabulary::getRangeOfIris`).
+        auto [begin, end] = rangeOfIrisInVocabulary_;
+        VocabIndex index = id.getVocabIndex();
+        return begin <= index && index < end ? TermKind::Iri
+                                             : TermKind::Literal;
+      }
       case Datatype::LocalVocabIndex: {
         const LocalVocabEntry& entry = *id.getLocalVocabIndex();
         if (entry.isLiteral()) {

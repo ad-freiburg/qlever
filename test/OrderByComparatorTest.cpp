@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include "./util/IdTestHelpers.h"
@@ -24,22 +25,47 @@
 using namespace ad_utility::testing;
 using TermKind = OrderByComparator::TermKind;
 
-// Test that `getBeginOfIrisInVocabulary` separates the literals from the other
+// Test that `getRangeOfIrisInVocabulary` separates the IRIs from the other
 // words of the vocabulary.
-TEST(OrderByComparator, beginOfIrisInVocabulary) {
+TEST(OrderByComparator, rangeOfIrisInVocabulary) {
   auto* qec = getQec();
   const auto& index = qec->getIndex();
-  VocabIndex beginOfIris =
-      qec->getLocalVocabContext().getBeginOfIrisInVocabulary();
+  auto [begin, end] = qec->getLocalVocabContext().getRangeOfIrisInVocabulary();
   size_t vocabSize = index.getVocab().size();
   // The vocabulary of the test index has both literals and IRIs.
-  EXPECT_GT(beginOfIris.get(), 0);
-  EXPECT_LT(beginOfIris.get(), vocabSize);
+  EXPECT_GT(begin.get(), 0);
+  EXPECT_LT(begin.get(), end.get());
+  EXPECT_LE(end.get(), vocabSize);
   for (size_t i = 0; i < vocabSize; ++i) {
     const auto& word = index.indexToString(VocabIndex::make(i));
-    EXPECT_EQ(i < beginOfIris.get(), ql::starts_with(word, '"'))
+    EXPECT_EQ(begin.get() <= i && i < end.get(), ql::starts_with(word, '<'))
         << i << ' ' << word;
   }
+}
+
+// Test that the WKT literals of a geo-split vocabulary, whose indices lie
+// above the range of the IRIs, are literals.
+TEST(OrderByComparator, getTermKindWithGeoSplitVocabulary) {
+  std::string wktLiteral =
+      "\"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral>";
+  TestIndexConfig config{
+      absl::StrCat("<a> <p> ", wktLiteral, " . <a> <p> 3 .")};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto* qec = getQec(config);
+  auto getId = makeGetId(qec->getIndex());
+  OrderByComparator comparator{qec->getLocalVocabContext()};
+
+  Id wkt = getId(wktLiteral);
+  auto [begin, end] = qec->getLocalVocabContext().getRangeOfIrisInVocabulary();
+  ASSERT_EQ(wkt.getDatatype(), Datatype::VocabIndex);
+  ASSERT_GE(wkt.getVocabIndex(), end);
+  EXPECT_EQ(comparator.getTermKind(wkt), TermKind::Literal);
+  EXPECT_EQ(comparator.getTermKind(getId("<a>")), TermKind::Iri);
+  // In the order of `ORDER BY`, the IRI comes before the number, which comes
+  // before the WKT literal (by its datatype).
+  EXPECT_LT(comparator.compare(getId("<a>"), IntId(3)), 0);
+  EXPECT_LT(comparator.compare(IntId(3), wkt), 0);
 }
 
 // _____________________________________________________________________________

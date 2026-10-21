@@ -105,20 +105,23 @@ class LocalVocabContext {
   // it, and before calling this function.
   IdOrVocabBounds lookupWordInVocabularies(std::string_view word) const;
 
-  // Return the manager for the blank nodes of this index. NOTE: This is the one
-  // function here that `LocalVocabEntry` itself does not need. It is required
-  // when a complete `LocalVocab` is deserialized (see `deserializeLocalVocab`
-  // in `util/Serializer/TripleSerializer.h`), which has only this interface at
+  // Return the manager for the blank nodes of this index.
+  //
+  // NOTE: `LocalVocabEntry` itself does not need this. It is required when a
+  // complete `LocalVocab` is deserialized (see `deserializeLocalVocab` in
+  // `util/Serializer/TripleSerializer.h`), which has only this interface at
   // hand, so that the blank node manager would otherwise have to be threaded
   // through the same call chains a second time.
   virtual ad_utility::BlankNodeManager* getBlankNodeManager() const = 0;
 
-  // Return the position of the first IRI in the vocabulary of the main index
-  // (all literals come before it, see `Vocabulary::getBeginOfIris`).
-  // `OrderByComparator` uses this to tell the literals from the IRIs. NOTE:
-  // `LocalVocabEntry` doesn't need this, but `ORDER BY` and `MIN`/`MAX` have
-  // this interface at hand.
-  virtual VocabIndex getBeginOfIrisInVocabulary() const = 0;
+  // Return the range `[begin, end)` of the IRIs in the vocabulary of the main
+  // index, see `Vocabulary::getRangeOfIris`. `OrderByComparator` uses this to
+  // tell the literals from the IRIs.
+  //
+  // NOTE: `LocalVocabEntry` doesn't need this, but `ORDER BY` and `MIN`/`MAX`
+  // have this interface at hand.
+  virtual std::pair<VocabIndex, VocabIndex> getRangeOfIrisInVocabulary()
+      const = 0;
 };
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABCONTEXT_H

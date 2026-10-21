@@ -179,9 +179,13 @@ class Vocabulary {
     return prefixRangesLiterals_.contain(index);
   }
 
-  // Return the index of the first IRI, or `size()` if there is none. All
-  // literals come before it.
-  IndexT getBeginOfIris() const { return prefixRangesIris_.ranges()[0].first; }
+  // Return the range `[begin, end)` of the indices of the IRIs. The literals
+  // come before it. The WKT literals of a geo-split vocabulary come after it
+  // (their indices carry a marker bit, see `SplitVocabulary`), as do the
+  // internal language-tagged predicates like `@en@<...>`.
+  std::pair<IndexT, IndexT> getRangeOfIris() const {
+    return prefixRangesIris_.ranges()[0];
+  }
 
   bool shouldBeExternalized(std::string_view word) const;
 
