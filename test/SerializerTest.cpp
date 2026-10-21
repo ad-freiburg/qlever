@@ -706,6 +706,25 @@ TEST(Serializer, serializeOptional) {
 }
 
 // _____________________________________________________________________________
+TEST(Serializer, serializeTriviallyCopyableOptional) {
+  std::optional<double> d = 3.5;
+  std::optional<double> nil = std::nullopt;
+  ByteBufferWriteSerializer writer;
+  writer << d;
+  writer << nil;
+  // The optionals are written as a `bool` followed by the value (if any), and
+  // not as their raw bytes.
+  EXPECT_EQ(writer.data().size(), 2 * sizeof(bool) + sizeof(double));
+  std::optional<double> dExpected;
+  std::optional<double> nilExpected = 1.0;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  reader >> dExpected;
+  reader >> nilExpected;
+  EXPECT_THAT(dExpected, ::testing::Optional(3.5));
+  EXPECT_EQ(nilExpected, std::nullopt);
+}
+
+// _____________________________________________________________________________
 TEST(Serializer, serializeVariant) {
   using Variant = std::variant<int, std::string, std::vector<int>>;
   Variant number = 42;

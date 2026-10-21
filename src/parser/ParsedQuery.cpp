@@ -111,27 +111,49 @@ void ParsedQuery::addSolutionModifiers(
   addGroupByClause(std::move(modifiers.groupByVariables_),
                    internalVariableGenerator);
 
+  // Without a `GROUP BY` clause, an aggregate in the `SELECT`, `HAVING`, or
+  // `ORDER BY` clause groups all solutions into a single group (SPARQL 1.1,
+  // sec. 18.2.4.1).
+  using sparqlExpression::SparqlExpressionPimpl;
   const bool isExplicitGroupBy = !_groupByVariables.empty();
-  const bool isImplicitGroupBy =
+  const bool hasAggregateInSelectOrHaving =
       ql::ranges::any_of(getAliases(),
-                         [](const Alias& alias) {
-                           return alias._expression.containsAggregate();
-                         }) &&
-      !isExplicitGroupBy;
+                         &SparqlExpressionPimpl::containsAggregate,
+                         &Alias::_expression) ||
+      ql::ranges::any_of(modifiers.havingClauses_,
+                         &SparqlExpressionPimpl::containsAggregate,
+                         &SparqlFilter::expression_);
+  const bool hasAggregateInOrderBy = ql::ranges::any_of(
+      modifiers.orderBy_.orderKeys, [](const OrderKey& orderKey) {
+        auto* key = std::get_if<ExpressionOrderKey>(&orderKey);
+        return key != nullptr && key->expression_.containsAggregate();
+      });
+  const bool isImplicitGroupBy =
+      !isExplicitGroupBy &&
+      (hasAggregateInSelectOrHaving || hasAggregateInOrderBy);
   const bool isGroupBy = isExplicitGroupBy || isImplicitGroupBy;
   using namespace std::string_literals;
   std::string noteForImplicitGroupBy =
       isImplicitGroupBy
-          ? " Note: The GROUP BY in this query is implicit because an aggregate expression was used in the SELECT clause"s
+          ? " Note: The GROUP BY in this query is implicit because an aggregate expression was used in the SELECT, HAVING, or ORDER BY clause"s
           : ""s;
   std::string noteForGroupByError =
       " All non-aggregated variables must be part of the GROUP BY "
       "clause." +
       noteForImplicitGroupBy;
 
+  // Check this before `HAVING` and `ORDER BY` add their internal aliases, which
+  // a `SELECT *` clause doesn't support.
+  if (isGroupBy && hasSelectClause() && selectClause().isAsterisk()) {
+    throw InvalidSparqlQueryException(absl::StrCat(
+        "GROUP BY is not allowed when all variables are selected via "
+        "SELECT *.",
+        noteForImplicitGroupBy));
+  }
+
   // Process HAVING clause
   addHavingClause(std::move(modifiers.havingClauses_), isGroupBy,
-                  internalVariableGenerator);
+                  internalVariableGenerator, postQueryValues);
 
   // The trailing `VALUES` clause is joined after `GROUP BY` and `HAVING`, but
   // before the `SELECT` expressions and `ORDER BY` (SPARQL 1.1, sec. 18.2.4.3).
@@ -155,6 +177,19 @@ void ParsedQuery::addSolutionModifiers(
       _rootGraphPattern._graphPatterns.emplace_back(
           std::move(postQueryValues.value()));
     }
+  }
+
+  // With an implicit `GROUP BY`, the result has at most one row (unless it is
+  // joined with a trailing `VALUES`), so the `ORDER BY` has no effect.
+  if (isImplicitGroupBy && !modifiers.orderBy_.orderKeys.empty() &&
+      !postQueryValuesClause_.has_value()) {
+    addWarning(absl::StrCat(
+        "The ORDER BY clause has no effect, because the query has an implicit "
+        "GROUP BY with a single group and therefore returns at most one row.",
+        hasAggregateInSelectOrHaving
+            ? noteForImplicitGroupBy
+            : " Note: The GROUP BY is implicit only because of the aggregate "
+              "in the ORDER BY clause. Is a GROUP BY clause missing?"));
   }
 
   // Process ORDER BY clause
@@ -215,12 +250,6 @@ void ParsedQuery::addSolutionModifiers(
             postQueryValuesClause_->_inlineValues._variables.end());
       }
 
-      if (selectClause().isAsterisk()) {
-        throw InvalidSparqlQueryException(
-            "GROUP BY is not allowed when all variables are selected via "
-            "SELECT *");
-      }
-
       // Check if all selected variables are either aggregated or
       // part of the group by statement.
       const auto& aliases = selectClause().getAliases();
@@ -270,7 +299,7 @@ void ParsedQuery::addSolutionModifiers(
       selectClause.deleteAliasesButKeepVariables();
     }
   } else if (hasConstructClause()) {
-    if (!_groupByVariables.empty()) {
+    if (isGroupBy) {
       for (const auto& variable : constructClause().containedVariables()) {
         if (!ad_utility::contains(_groupByVariables, variable) &&
             !(postQueryValuesClause_.has_value() &&
@@ -609,10 +638,11 @@ void ParsedQuery::addGroupByClause(
 // ____________________________________________________________________________
 void ParsedQuery::addHavingClause(
     std::vector<SparqlFilter> havingClauses, bool isGroupBy,
-    InternalVariableGenerator internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator,
+    const std::optional<parsedQuery::Values>& postQueryValues) {
   if (!isGroupBy && !havingClauses.empty()) {
-    throw InvalidSparqlQueryException(
-        "A HAVING clause is only supported in queries with GROUP BY");
+    addHavingClauseWithoutGroupBy(std::move(havingClauses), postQueryValues);
+    return;
   }
 
   ad_utility::HashSet<Variable> variablesFromAliases;
@@ -631,6 +661,64 @@ void ParsedQuery::addHavingClause(
         {sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
             newVariable)});
   }
+}
+
+// ____________________________________________________________________________
+void ParsedQuery::addHavingClauseWithoutGroupBy(
+    std::vector<SparqlFilter> havingClauses,
+    const std::optional<parsedQuery::Values>& postQueryValues) {
+  // An aggregate in the `HAVING` clause implies a `GROUP BY`.
+  AD_CORRECTNESS_CHECK(
+      ql::ranges::none_of(havingClauses, [](const SparqlFilter& having) {
+        return having.expression_.containsAggregate();
+      }));
+  addWarning(
+      "A HAVING clause without GROUP BY and without aggregates is equivalent "
+      "to a FILTER in the WHERE clause. Consider using FILTER instead.");
+
+  // Without grouping, `HAVING(E)` is `Filter(E, P)` with `P` the `WHERE` clause
+  // (SPARQL 1.1, sec. 18.2.4.2). The trailing `VALUES` and the `SELECT`
+  // expressions come later (sec. 18.2.4), so their variables are not visible.
+  //
+  // NOTE: The `WHERE` clause gets its own group, such that the filters are
+  // applied before the `BIND`s for the `SELECT` aliases and the `ORDER BY`
+  // expressions, which are added to the root graph pattern later.
+  ad_utility::HashSet<Variable> aliasTargets;
+  for (const auto& alias : getAliases()) {
+    aliasTargets.insert(alias._target);
+  }
+  auto explainWhyNotVisible =
+      [&aliasTargets,
+       &postQueryValues](const Variable& variable) -> std::string_view {
+    if (aliasTargets.contains(variable)) {
+      return ". It is bound in the SELECT clause, which is evaluated after the "
+             "HAVING clause. Use the expression of the alias directly or a "
+             "BIND in the WHERE clause instead";
+    }
+    if (postQueryValues.has_value() &&
+        ad_utility::contains(postQueryValues->_inlineValues._variables,
+                             variable)) {
+      return ". It is bound by the VALUES clause at the end of the query, "
+             "which is joined after the HAVING clause. Move the VALUES clause "
+             "into the WHERE clause instead";
+    }
+    return "";
+  };
+  auto where = std::exchange(_rootGraphPattern, GraphPattern{});
+  for (auto& having : havingClauses) {
+    // Like `checkUsedVariablesAreVisible`, but with an explanation per
+    // variable. `true` excludes the variables that only occur inside `EXISTS`.
+    for (const auto* variable : having.expression_.containedVariables(true)) {
+      checkVariableIsVisible(
+          *variable,
+          absl::StrCat("HAVING in expression \"",
+                       having.expression_.getDescriptor(), "\""),
+          {}, explainWhyNotVisible(*variable));
+    }
+    where._filters.push_back(std::move(having));
+  }
+  _rootGraphPattern._graphPatterns.emplace_back(
+      parsedQuery::GroupGraphPattern{std::move(where)});
 }
 
 // ____________________________________________________________________________

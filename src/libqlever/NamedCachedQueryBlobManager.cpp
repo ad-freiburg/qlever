@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/IndexImpl.h"
@@ -241,16 +242,40 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // any, for example because the index was itself loaded from a blob, so that
   // the `Id`s of its words stay valid), extended by the new words of the
   // named cache entries (see `NamedCacheSecondaryVocabRewriter.h`). Only if it
-  // is empty, the blob is written in the old format without a secondary
-  // vocabulary, which can also be read by older versions of QLever.
+  // is empty and no entry has a geo index with more than one segment or with
+  // dead shapes, the blob is written in the old format (blob version 1 and
+  // entries version 1) without a secondary vocabulary, which can also be read
+  // by older versions of QLever. Otherwise the new format is used (blob
+  // version 2 with a possibly empty secondary vocabulary, and entries
+  // version 2).
+  //
+  // NOTE 1: A geo index with more than one segment can only be written in
+  // entries version 2. A geo index with dead shapes (which only arise from
+  // `SpatialJoinCachedIndex::forUpdatedTable`) could be written in the old
+  // format, but older versions of QLever would fail on it, because they
+  // expect each shape of the S2 index to have a row.
+  //
+  // NOTE 2: A geo index with a single segment and a simplification is
+  // deliberately still written in the old format, although that format cannot
+  // store the simplification (which is then lost). The simplification is only
+  // needed when the blob is later updated (see
+  // `SpatialJoinCachedIndex::forUpdatedTable`), and switching such blobs to the
+  // new format would break users that already write and read them in the old
+  // format.
   auto entries = qlever.namedResultCache_.getAllEntriesSortedByKey();
   SecondaryVocabulary secondaryVocab = indexImpl.secondaryVocab() != nullptr
                                            ? indexImpl.secondaryVocab()->clone()
                                            : SecondaryVocabulary{};
   namedCacheSecondaryVocab::addNewWordsToSecondaryVocab(entries,
                                                         secondaryVocab);
-  bool hasSecondaryVocab = secondaryVocab.numWords() > 0;
-  writeBlobHeader(serializer, hasSecondaryVocab
+  bool needsNewGeoFormat = ql::ranges::any_of(entries, [](const auto& entry) {
+    const auto& geoIndex = entry.second->cachedGeoIndex_;
+    return geoIndex.has_value() &&
+           (geoIndex.value().numSegments() > 1 ||
+            geoIndex.value().numLiveShapes() < geoIndex.value().numShapes());
+  });
+  bool useNewFormat = secondaryVocab.numWords() > 0 || needsNewGeoFormat;
+  writeBlobHeader(serializer, useNewFormat
                                   ? formatVersionWithSecondaryVocab
                                   : formatVersionWithoutSecondaryVocab);
   // Serialize the index metadata JSON together with the vocabulary, so that the
@@ -268,9 +293,12 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
         config.excludedEntryRegexes_);
   }
-  if (hasSecondaryVocab) {
+  if (useNewFormat) {
     serializer << secondaryVocab;
   }
+  const uint16_t entriesVersion =
+      useNewFormat ? namedResultCacheSerializer::formatVersion
+                   : namedResultCacheSerializer::legacyFormatVersion;
 
   // Write the named cache entries. Each entry is written as a canonicalized
   // copy (the entry in the named cache itself stays unchanged): its `Id`s of
@@ -279,18 +307,21 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // `canonicalizeForSerialization`). The words of the local vocab of such a
   // copy are not written, because they are no longer referenced. For an entry
   // that needs neither rewriting nor sorting, the copy is only a view of the
-  // columns of the entry, so no table is copied.
+  // columns of the entry, so no table is copied. All entries are written in
+  // the `entriesVersion` (see above).
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
-      [&secondaryVocab, &qlever](auto& entrySerializer,
-                                 const NamedResultCache::Value& value) {
+      [&secondaryVocab, &qlever, entriesVersion](
+          auto& entrySerializer, const NamedResultCache::Value& value) {
         auto canonical = namedCacheSecondaryVocab::canonicalizeForSerialization(
             value, secondaryVocab, qlever.allocator_);
         namedResultCacheSerializer::writeValue(
             entrySerializer, canonical,
             ExplicitIdTableOperation::viewOf(canonical.result_).getColumns(),
-            canonical.resultSortedOn_, /*writeLocalVocabWords=*/false);
-      });
+            canonical.resultSortedOn_, /*writeLocalVocabWords=*/false,
+            entriesVersion);
+      },
+      entriesVersion);
   auto uncompressed = std::move(serializer).data();
 
   return compressBlob(uncompressed);

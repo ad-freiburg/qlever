@@ -17,6 +17,7 @@
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -117,7 +118,7 @@ struct EvaluationContext {
 
   /// The input is sorted on these columns. This information can be used to
   /// perform efficient relational operations like `equal` or `less than`
-  std::vector<ColumnIndex> _columnsByWhichResultIsSorted;
+  qlm::vector<ColumnIndex> _columnsByWhichResultIsSorted;
 
   /// Let the expression evaluation also respect the memory limit.
   ad_utility::AllocatorWithLimit<Id> _allocator;

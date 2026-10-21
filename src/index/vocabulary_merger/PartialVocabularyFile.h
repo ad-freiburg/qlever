@@ -57,11 +57,8 @@
 // block index is what the merge needs: the first and the last word of every
 // block, without reading the block, so that it can split the runs into
 // independent chunks by their words alone and then read only the blocks that a
-// chunk needs, see `PartialVocabularyRunsInput`.
-//
-// NOTE: `mergeVocabulary` (see `index/VocabularyMerger.h`) currently still
-// reads the words the old way (and ignores the block index); switching it to
-// the parallel block merge over `PartialVocabularyRunsInput` is a follow-up.
+// chunk needs, see `PartialVocabularyRunsInput`. This is how `mergeVocabulary`
+// (see `index/VocabularyMerger.h`) merges the partial vocabularies.
 namespace ad_utility::vocabulary_merger {
 
 // The metadata of a single block of words, see above. The first and the last
@@ -127,7 +124,7 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
     offsetOfLastWord_ = currentBlock_.getCurrentPosition();
     currentBlock_ << word;
     currentBlock_ << indexAndExternalFlag.isExternal();
-    currentBlock_ << indexAndExternalFlag.id();
+    currentBlock_ << indexAndExternalFlag.index();
     ++numWordsInBlock_;
     ++numWords_;
     if (currentBlock_.getCurrentPosition() >=
@@ -192,6 +189,14 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   using Element = detail::MergeWord;
   using Block = detail::MergeBlock;
 
+  // The totals over all blocks of all partial vocabularies, see `statistics`.
+  struct Statistics {
+    size_t numBlocks_ = 0;
+    size_t numWords_ = 0;
+    // The sizes of the blocks in the files.
+    size_t numBytes_ = 0;
+  };
+
  private:
   // The metadata of a block, with the first and the last word already in the
   // form that the merge compares. Their words point into the
@@ -212,6 +217,12 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     std::unique_ptr<char[]> boundaryWords_;
   };
   std::vector<Run> runs_;
+  // The pools of the buffers of the blocks (see `detail::BufferPools`), with
+  // the buffer sizes from `index/ConstantsIndexBuilding.h`.
+  std::shared_ptr<detail::BufferPools> pools_ =
+      std::make_shared<detail::BufferPools>(
+          VOCAB_MERGER_FILE_BLOCK_BUFFER_SIZE.getBytes(),
+          VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE.getBytes());
 
  public:
   PartialVocabularyRunsInput(const std::string& basename,
@@ -235,12 +246,23 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     return runs_.at(run).blocks_.at(block).numBytes_;
   }
 
-  // The weight of a block for the chunk boundaries of the merge, which is its
-  // size in bytes.
-  //
-  // NOTE: The merge library does not use this yet (the `blockWeight`
-  // customization point is added by #3669); it currently cuts the chunks by
-  // numbers of words. The cost of merging a word grows with its length, so
+  // Return the number of blocks, of words, and of bytes in the files over all
+  // partial vocabularies.
+  Statistics statistics() const {
+    Statistics result;
+    for (const Run& run : runs_) {
+      result.numBlocks_ += run.blocks_.size();
+      for (const BlockInfo& block : run.blocks_) {
+        result.numWords_ += block.numWords_;
+        result.numBytes_ += block.numBytes_;
+      }
+    }
+    return result;
+  }
+
+  // The weight of a block for the chunk boundaries of the merge (see
+  // `blockWeight` in `util/parallelBlockMerge/MergeHelpersImpl.h`), which is
+  // its size in bytes. The cost of merging a word grows with its length, so
   // chunks of equal size in bytes cost about the same, while chunks of equal
   // numbers of words do not (a chunk of long literals costs many times a chunk
   // of short IRIs, and the consumer, which takes the chunks in order, then
@@ -257,17 +279,20 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     return runs_.at(run).blocks_.at(block).last_;
   }
 
-  // Read a block. The words are parsed in place, see `MergeBlock`.
+  // Read a block. The words are parsed in place, see `MergeBlock`. The bytes
+  // of the block come from the `pools_` and go back to them with the block.
   Block getBlock(size_t run, size_t block) const {
     const auto& info = runs_.at(run).blocks_.at(block);
-    Block::Buffer bytes(info.numBytes_);
+    Block::Buffer bytes = pools_->fileBlocks_.take(info.numBytes_);
+    bytes.resize(info.numBytes_);
     auto numBytesRead = runs_.at(run).file_.read(
         bytes.data(), info.numBytes_, static_cast<off_t>(info.offset_));
     AD_CORRECTNESS_CHECK(static_cast<uint64_t>(numBytesRead) == info.numBytes_);
-    return Block{std::move(bytes), info.numWords_, static_cast<uint32_t>(run)};
+    return Block{std::move(bytes), info.numWords_, static_cast<uint32_t>(run),
+                 pools_};
   }
 
-  Block makeEmptyBlock() const { return Block{}; }
+  Block makeEmptyBlock() const { return Block{pools_}; }
 
   // Append a merged `word` to an output `block` of the merge (a copy of the
   // word, the `word` itself lives in an input block).

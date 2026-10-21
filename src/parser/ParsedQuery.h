@@ -241,15 +241,24 @@ class ParsedQuery {
   void addGroupByClause(std::vector<GroupKey> groupKeys,
                         InternalVariableGenerator internalVariableGenerator);
 
-  // Add the `havingClause` to the query. The argument `isGroupBy` denotes
-  // whether the query performs a GROUP BY. If it is set to false, then an
-  // exception is thrown (HAVING without GROUP BY is not allowed). The function
-  // also throws if one of the variables that is used in the `havingClause` is
-  // neither grouped nor aggregate by the expression it is contained in. Uses
-  // `internalVariableGenerator` to generate distinct internal variables as
-  // required.
-  void addHavingClause(std::vector<SparqlFilter> havingClause, bool isGroupBy,
-                       InternalVariableGenerator internalVariableGenerator);
+  // Add the `havingClause` to the query. With an explicit or implicit
+  // `GROUP BY` (`isGroupBy`), each expression becomes an internal alias (using
+  // `internalVariableGenerator`). Without, see `addHavingClauseWithoutGroupBy`.
+  // Variables that are not visible yield a warning (or an exception, see
+  // `addWarningOrThrow`). `postQueryValues` is only used for the warnings.
+  void addHavingClause(
+      std::vector<SparqlFilter> havingClause, bool isGroupBy,
+      InternalVariableGenerator internalVariableGenerator,
+      const std::optional<parsedQuery::Values>& postQueryValues);
+
+  // Helper for `addHavingClause` without (explicit or implicit) `GROUP BY`:
+  // each `HAVING` becomes a `FILTER` on the `WHERE` clause, with a warning to
+  // use `FILTER` instead. The `SELECT` aliases and the variables of the
+  // `postQueryValues` are bound only after `HAVING`, so the warning for an
+  // unbound variable explains this.
+  void addHavingClauseWithoutGroupBy(
+      std::vector<SparqlFilter> havingClauses,
+      const std::optional<parsedQuery::Values>& postQueryValues);
 
   // Add the `orderClause` to the query. Throw an exception if the `orderClause`
   // is not valid. This might happen if it uses variables that are not visible
@@ -294,7 +303,8 @@ class ParsedQuery {
 
   // Return true if this query performs a GROUP BY, either explicitly (a
   // `GROUP BY` clause is present) or implicitly (no `GROUP BY` clause, but an
-  // aggregating expression is used in the `SELECT` clause).
+  // aggregate in the `SELECT`, `HAVING`, or `ORDER BY` clause, all of which
+  // become aliases).
   [[nodiscard]] bool isAggregatingQuery() const;
 
   // Return false if two evaluations of this query may differ (e.g. `RAND()`).
