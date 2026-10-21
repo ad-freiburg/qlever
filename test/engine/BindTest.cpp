@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../util/ColumnStrippingTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
@@ -292,6 +293,7 @@ TEST(Bind, cloneSucceedsForNondeterministicBind) {
 // the target of `Bind`, and adds a `StripColumns` for the evaluated variables
 // that the parent did not request.
 TEST(Bind, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
   using ::testing::ElementsAre;
   using ::testing::Key;
   using ::testing::SizeIs;
@@ -317,28 +319,24 @@ TEST(Bind, makeTreeWithStrippedColumns) {
   // result has `a` and `?additionalA`.
   {
     auto tree = strip({V{"?a"}, V{"?additionalA"}});
-    auto bind = std::dynamic_pointer_cast<Bind>(tree->getRootOperation());
-    ASSERT_TRUE(bind);
-    EXPECT_THAT(tree->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?additionalA"})));
-    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
-    EXPECT_EQ(tree->getVariableColumn(V{"?additionalA"}), 1u);
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-              makeIdTableFromVector({{6, 6}, {2, 2}, {3, 3}, {1, 1}}));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>({V{"?a"}, V{"?additionalA"}},
+                                        matchesIdTableFromVector(
+                                            {{6, 6}, {2, 2}, {3, 3}, {1, 1}})));
   }
 
-  // `Bind` `?a` AS `?additionalA`, `?a`, `?b` and `?additionalA` requested:
-  // `?c` and `?d` are stripped.
+  // `Bind` `?a` AS `?additionalA`, `?a`, `?c` and `?additionalA` requested:
+  // `?b` and `?d` are stripped, columns are renumbered.
   {
-    auto tree = strip({V{"?a"}, V{"?b"}, V{"?additionalA"}});
-    auto bind = std::dynamic_pointer_cast<Bind>(tree->getRootOperation());
-    ASSERT_TRUE(bind);
-    EXPECT_THAT(tree->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}),
-                                     Key(V{"?additionalA"})));
-    EXPECT_EQ(
-        tree->getResult(false)->idTableView(),
-        makeIdTableFromVector({{6, 1, 6}, {2, 2, 2}, {3, 6, 3}, {1, 6, 1}}));
+    auto tree = strip({V{"?a"}, V{"?c"}, V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>(
+                    {V{"?a"}, V{"?c"}, V{"?additionalA"}},
+                    matchesIdTableFromVector(
+                        {{6, 3, 6}, {2, 3, 2}, {3, 5, 3}, {1, 5, 1}})));
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?c"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?additionalA"}), 2u);
   }
 
   // A requested variable that the subtree does not have is ignored.
@@ -353,22 +351,14 @@ TEST(Bind, makeTreeWithStrippedColumns) {
   // keeps `?a` and `?additionalA`, a `StripColumns` on top removes `?a`.
   {
     auto tree = strip({V{"?additionalA"}});
-    auto stripColumns =
-        std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
-    ASSERT_TRUE(stripColumns);
-    EXPECT_THAT(tree->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?additionalA"})));
-    EXPECT_THAT(tree->getVariableColumns(), SizeIs(1));
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-              makeIdTableFromVector({{6}, {2}, {3}, {1}}));
-    const auto* child = stripColumns->getChildren().at(0);
-    auto bind = std::dynamic_pointer_cast<Bind>(child->getRootOperation());
-    ASSERT_TRUE(bind);
-    EXPECT_THAT(child->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?additionalA"})));
-    EXPECT_THAT(child->getVariableColumns(), SizeIs(2));
-    EXPECT_EQ(child->getResult(false)->idTableView(),
-              makeIdTableFromVector({{6, 6}, {2, 2}, {3, 3}, {1, 1}}));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?additionalA"}},
+                    matchesIdTableFromVector({{6}, {2}, {3}, {1}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Bind>({V{"?a"}, V{"?additionalA"}},
+                                        matchesIdTableFromVector(
+                                            {{6, 6}, {2, 2}, {3, 3}, {1, 1}})));
   }
 
   // `Bind` `?a` AS `?additionalA`, only `?b` requested: `Bind` is erased from
@@ -385,8 +375,12 @@ TEST(Bind, makeTreeWithStrippedColumns) {
   // All variables requested: nothing is stripped.
   {
     auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?additionalA"}});
-    auto bind = std::dynamic_pointer_cast<Bind>(tree->getRootOperation());
-    ASSERT_TRUE(bind);
-    EXPECT_THAT(tree->getVariableColumns(), SizeIs(5));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>(
+                    {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?additionalA"}},
+                    matchesIdTableFromVector({{6, 1, 3, 6, 6},
+                                              {2, 2, 3, 5, 2},
+                                              {3, 6, 5, 4, 3},
+                                              {1, 6, 5, 1, 1}})));
   }
 }
