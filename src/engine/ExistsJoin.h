@@ -67,6 +67,9 @@ class ExistsJoin : public Operation {
 
   float getMultiplicity(size_t col) override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(const std::set<Variable>& variables) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -120,13 +123,6 @@ class ExistsJoin : public Operation {
   Result lazyExistsJoin(std::shared_ptr<const Result> left,
                         std::shared_ptr<const Result> right,
                         bool requestLaziness);
-
-  // Only the left child's columns appear in the result, so we need special
-  // treatment of the `EXISTS` operation for `BIND` push down.
-  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
-      const parsedQuery::Bind& bind) const override;
-  std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // Helper function to modify the `IdTable` such that it gains a column
   // signaling if the values exist on the right or not.

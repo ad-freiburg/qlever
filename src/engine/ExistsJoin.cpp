@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ColumnStrippingHelpers.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -80,22 +81,6 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   }
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
-}
-
-// ____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // The `BIND` can only be pushed into the left child, as only its columns are
-  // part of the result.
-  return pushDownBindToChild(bind, {left_, right_}, 0);
-}
-
-// _____________________________________________________________________________
-std::unique_ptr<Operation> ExistsJoin::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
-  return std::make_unique<ExistsJoin>(
-      _executionContext, std::move(children.at(0)), std::move(children.at(1)),
-      existsVariable_);
 }
 
 // ____________________________________________________________________________
@@ -192,10 +177,10 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
   bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
-        return ql::ranges::any_of(joinColumnsRight.getColumn(col),
-                                  Id::isUndefinedL) ||
-               ql::ranges::any_of(joinColumnsLeft.getColumn(col),
-                                  Id::isUndefinedL);
+        return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
+                                   &Id::isUndefined)) ||
+               (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
+                                   &Id::isUndefined));
       });
 
   // Nothing to do for the actual matches.
@@ -264,7 +249,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // variable), skip it. This can happen because some `FILTER`s (which may
     // contain `EXISTS` functions) are applied multiple times (for example,
     // when there are OPTIONAL joins in the query).
-    if (subtree->containsVariable(exists.variable())) {
+    if (subtree->isVariableCovered(exists.variable())) {
       continue;
     }
 
@@ -582,9 +567,11 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
 
 // _____________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> && ql::ranges::sized_range<Range> &&
-    ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
-void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
+    requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
+        ql::concepts::convertible_to<
+            ql::ranges::range_value_t<Range>,
+            bool>) void ExistsJoin::addExistsColumn(IdTable& idTable,
+                                                    Range&& range) const {
   idTable.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(AD_FWD(range),
@@ -594,4 +581,41 @@ void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
                            }),
       idTable.getColumn(idTable.numColumns() - 1).begin(),
       qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
+  // Collect variables required from subtree.
+  VarsRequiredFromSubtree helper(variables);
+
+  // The variables of the left column plus the existsVariable_ are needed for
+  // the ExistsJoin-Operation to work.
+  std::vector<const Variable*> keepVars;
+  VariableToColumnMap v2cMap = computeVariableToColumnMap();
+  for (const auto& [variable, _] : v2cMap) {
+    helper.add(variable);
+    keepVars.push_back(&variable);
+  }
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of the two subtrees.
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(
+      left_, varsRequiredFromSubtree);
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(
+      right_, varsRequiredFromSubtree);
+
+  // "Delete" ExistsJoin-operation from the queryExecutionTree and only return
+  // left subtree, if the existsVariabe_ is not requested by the parent-tree
+  // (this should never happen).
+  if (!ad_utility::contains(variables, existsVariable_)) {
+    return left;
+  }
+
+  // Create query execution tree with ExistsJoin-Operation as root-Operation and
+  // add additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<ExistsJoin>(
+      getExecutionContext(), variables, std::move(keepVars), std::move(left),
+      std::move(right), existsVariable_);
 }
