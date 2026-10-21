@@ -50,6 +50,17 @@ struct GeoDistanceCall : public GeoFunctionCall {
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr);
 
+// Return true iff `expr` or any of its descendants is a `geof:distance` or
+// `geof:metricDistance` call. Also implemented in `GeoExpression.cpp`.
+bool containsGeoDistanceExpression(const SparqlExpression& expr);
+
+// Return the parameters of all `geof:distance` or `geof:metricDistance` calls
+// in `expr` or any of its descendants, for which
+// `getGeoDistanceExpressionParameters` succeeds (that is, the geometry
+// arguments are variables or fixed values). Also implemented in
+// `GeoExpression.cpp`.
+std::vector<GeoDistanceCall> getGeoDistanceCalls(const SparqlExpression& expr);
+
 // Helper struct for `getDe9imRelationExpressionParameters`
 struct De9imRelationCall : public GeoFunctionCall {
   De9imFilterString pattern_;

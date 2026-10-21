@@ -334,6 +334,31 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
+// _____________________________________________________________________________
+bool containsGeoDistanceExpression(const SparqlExpression& expr) {
+  using namespace detail;
+  if (dynamic_cast<const DistExpression*>(&expr) ||
+      dynamic_cast<const MetricDistExpression*>(&expr) ||
+      dynamic_cast<const DistWithUnitExpression*>(&expr)) {
+    return true;
+  }
+  return ql::ranges::any_of(expr.children(), [](const auto& child) {
+    return containsGeoDistanceExpression(*child);
+  });
+}
+
+// _____________________________________________________________________________
+std::vector<GeoDistanceCall> getGeoDistanceCalls(const SparqlExpression& expr) {
+  std::vector<GeoDistanceCall> result;
+  if (auto call = getGeoDistanceExpressionParameters(expr)) {
+    result.push_back(std::move(call).value());
+  }
+  for (const auto& child : expr.children()) {
+    ql::ranges::move(getGeoDistanceCalls(*child), std::back_inserter(result));
+  }
+  return result;
+}
+
 }  // namespace sparqlExpression
 
 // Explicit instantiations for the different geometric relations to avoid linker
