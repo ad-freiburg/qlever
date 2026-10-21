@@ -5,12 +5,18 @@ inputs:
   matrix:
     description: "The build matrix entry of the calling job, as JSON (pass the `toJSON` of the `matrix` context). Used keys: `compiler`, `compiler-version`, `warnings`, `asan-flags`, `ubsan-flags`, `build-type`, `expensive-tests`, `additional-cmake-options`, `allocator-backend`."
     required: true
+  in-container:
+    description: "Must be set to true for jobs that run in a `container`. The disk space of the host can't be freed from inside a container, and the kernel parameter for the sanitizers can't be set there (no job in a container uses sanitizers, so it isn't needed there either)."
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
   steps:
     - name: Install dependencies
       uses: ./.github/workflows/install-dependencies-ubuntu
+      with:
+        free-disk-space: ${{ inputs.in-container == 'true' && 'false' || 'true' }}
     - name: Install compiler
       uses: ./.github/workflows/install-compiler-ubuntu
       with:
@@ -18,6 +24,7 @@ runs:
         compiler-version: ${{fromJSON(inputs.matrix).compiler-version}}
     - name: Reduce address randomization to make sanitizers work
       # For details see for example `https://stackoverflow.com/questions/77850769/fatal-threadsanitizer-unexpected-memory-mapping-when-running-on-linux-kernels`
+      if: inputs.in-container != 'true'
       shell: bash
       run: |
         sudo sysctl vm.mmap_rnd_bits
