@@ -1,10 +1,13 @@
 # Build QLever with the newest GCC versions. These are only run for PRs with
 # the `run-full-ci` label (see `README.md`) and always on `master`.
 #
-# NOTE: `ppa:ubuntu-toolchain-r/test` only provides a pre-release snapshot of
-# GCC 16 (`16-20260315`). It does not behave exactly like the released GCC 16:
-# for example, the released version rejects code that the snapshot accepts
-# (see #3454), and it fixes GCC bug 124584, which the snapshot still has.
+# NOTE: The jobs run in a container of Ubuntu 26.04, whose standard
+# repositories ship GCC 15 and GCC 16, so no PPA is needed. The GCC 16 there is
+# a pre-release snapshot (`16-20260322`, one week newer than the `16-20260315`
+# from the `ubuntu-toolchain-r/test` PPA used before). It does not behave
+# exactly like the released GCC 16: for example, the released version rejects
+# code that the snapshot accepts (see #3454), and it fixes GCC bug 124584,
+# which the snapshot still has.
 name: Native build with the newest compilers
 
 on:
@@ -43,8 +46,27 @@ jobs:
         additional-cmake-options: [""]
 
     runs-on: ubuntu-24.04
+    # Run all steps of the job inside a Docker container of Ubuntu 26.04, so
+    # that `apt` sees the repositories of that release (see the NOTE at the top).
+    container: ubuntu:26.04
+    # Inside a `container`, the runner falls back to `sh` as the default shell
+    # for `run` steps, so request `bash` explicitly (see `cpp-17-libqlever.yml`
+    # for the details).
+    defaults:
+      run:
+        shell: bash
 
     steps:
+      - name: Prepare the container
+        # A bare Ubuntu image has none of these: `actions/checkout` needs `git`
+        # for the submodules, and the composite actions below use `sudo` and
+        # `add-apt-repository`. The steps run as `root`, so `sudo` isn't
+        # available (and isn't needed) yet. For the significance of
+        # `DEBIAN_FRONTEND=noninteractive`, see `cpp-17-libqlever.yml`.
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git sudo software-properties-common wget
       - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
@@ -52,3 +74,4 @@ jobs:
         uses: ./.github/workflows/native-build-steps
         with:
           matrix: ${{ toJSON(matrix) }}
+          in-container: "true"

@@ -784,6 +784,13 @@ if (EMSCRIPTEN)
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
+# The library `pb_util_geo` of `spatialjoin` uses the JSON writer of
+# `pb_util_json`, but does not link against it. With `BUILD_SHARED_LIBS`, the
+# linker of Ubuntu 26.04 (binutils 2.46, and also `mold`) then rejects every
+# executable that links against `libpb_util_geo.so` with "undefined reference
+# to `util::json::Writer::...`".
+target_link_libraries(pb_util_geo PUBLIC pb_util_json)
+
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest
 # of the build can link against the correct one without further case
