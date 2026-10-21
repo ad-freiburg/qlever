@@ -529,13 +529,15 @@ void Operation::updateRuntimeInformationOnSuccess(
       _runtimeInfo->originalTotalTime_ = runtimeInfo->totalTime_;
       _runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
       _runtimeInfo->details_ = std::move(runtimeInfo->details_);
-      // The cached details only contain the warnings of the original
-      // computation, so we have to add the warnings that were added to this
-      // operation (e.g. during query planning). Example: A query using the
-      // deprecated `<nearest-neighbors:...>` predicate gets a deprecation
-      // warning during query planning. If its result is read from the cache
-      // because it was previously computed by an equivalent query using the
-      // `SERVICE` syntax, the cached details don't contain this warning.
+      // Add the warnings of this operation that are not yet part of the
+      // cached details (the cached details only contain the warnings of the
+      // original computation).
+      //
+      // NOTE: For example, a query using the deprecated
+      // `<nearest-neighbors:...>` predicate gets a deprecation warning during
+      // the query planning. If its result is read from the cache because it
+      // was previously computed by an equivalent query using the `SERVICE`
+      // syntax, the cached details don't contain this warning.
       if (auto warnings = warnings_.rlock(); !warnings->empty()) {
         auto& warningsDetail = _runtimeInfo->details_["warnings"];
         for (const auto& warning : *warnings) {
@@ -669,8 +671,8 @@ void Operation::createRuntimeInfoFromEstimates(
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
-  // Warnings that were added before the runtime information was (re)created,
-  // e.g. during query planning.
+  // Add the warnings that were added before the runtime information was
+  // (re)created, e.g. during the query planning.
   if (auto warnings = warnings_.rlock(); !warnings->empty()) {
     _runtimeInfo->addDetail("warnings", *warnings);
   }

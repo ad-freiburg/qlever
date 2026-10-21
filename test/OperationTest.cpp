@@ -292,7 +292,9 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
       operation.precomputedResultBecauseSiblingOfService().has_value());
 }
 
-// _____________________________________________________________________________
+// Test that the warnings of an operation are part of the `warnings` detail of
+// its runtime information, both when the result is computed and when it is
+// read from the cache.
 TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
   // An operation that adds a warning during its computation.
   struct WarningOperation : ValuesForTesting {
