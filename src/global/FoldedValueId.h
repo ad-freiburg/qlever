@@ -239,7 +239,7 @@ class ValueId {
     return {payload | (datatype << numDataBits)};
   }
 
-  // Overload of fromBits to directly use it with Datatype
+  // The same with the `Datatype` instead of its bits.
   static constexpr ValueId fromBits(const Datatype datatype,
                                     const T payload) noexcept {
     return fromBits(static_cast<T>(datatype), payload);
@@ -575,6 +575,8 @@ class ValueId {
 
   static constexpr auto getBitsL = [](const auto& id) { return id.getBits(); };
 
+  // Unlike the lambdas above, this one exists because `fromBits` is an
+  // overload set, which cannot be passed to an algorithm directly.
   static constexpr auto fromBitsL = [](const auto& idBitRep) {
     return fromBits(idBitRep);
   };

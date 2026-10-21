@@ -40,10 +40,8 @@ inline std::vector<Id> sampleIds() {
           Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7))};
 }
 
-// The datatype bits and the payload bits of the `Id`, such that they can be
-// decomposed via `auto [datatype, payload] = getBitsCompat(id);`. This
-// works for every `Id` implementation, in contrast to `id.getBits()`, which can
-// only be decomposed if it is a struct (split layout) and not a plain integer.
+// The datatype bits and the payload bits of `id` as a pair, for structured
+// bindings in the tests.
 inline auto getBitsCompat(const Id id) {
   return std::pair{id.getDatatypeBits(), id.getPayloadBits()};
 }

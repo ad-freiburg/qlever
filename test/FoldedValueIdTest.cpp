@@ -179,7 +179,8 @@ TEST_F(ValueIdTest, Undefined) {
   EXPECT_FALSE(ValueId::makeFromInt(42).visit(isUndefinedType));
 }
 
-// _____________________________________________________________________________
+// Test `getDatatypeBits` and `getPayloadBits`, the two parts of the bits of
+// an `Id`.
 TEST_F(ValueIdTest, getDatatypeBitsAndGetPayloadBits) {
   // The datatype bits and the payload bits are the two parts of the bits of an
   // `Id`: the datatype in the highest `numDatatypeBits` bits, the payload in

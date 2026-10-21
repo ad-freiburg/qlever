@@ -89,8 +89,8 @@ TEST(IdRefTest, swapExchangesTheReferencedValues) {
 // Test the comparison operators between proxies and `Id`s, between two
 // proxies, and that the ordering is datatype-major like for `Id`.
 TEST(IdRefTest, comparisonOperators) {
-  auto bitsSmall = Id::makeFromInt(1);
-  auto [datatypeSmall, payloadSmall] = getBitsCompat(bitsSmall);
+  const auto idSmall = Id::makeFromInt(1);
+  auto [datatypeSmall, payloadSmall] = getBitsCompat(idSmall);
   auto [datatypeLarge, payloadLarge] = getBitsCompat(Id::makeFromInt(2));
   const ConstIdRef small{&payloadSmall, &datatypeSmall};
   const ConstIdRef large{&payloadLarge, &datatypeLarge};
@@ -111,8 +111,7 @@ TEST(IdRefTest, comparisonOperators) {
   EXPECT_TRUE(large >= small);
   EXPECT_TRUE(small != large);
   EXPECT_FALSE(small == large);
-  auto bitsSmallCopy = bitsSmall;
-  auto [datatypeSmallCopy, payloadSmallCopy] = getBitsCompat(bitsSmallCopy);
+  auto [datatypeSmallCopy, payloadSmallCopy] = getBitsCompat(idSmall);
   const IdRef mutableSmall{&payloadSmallCopy, &datatypeSmallCopy};
   EXPECT_TRUE(small == mutableSmall);
   EXPECT_TRUE(mutableSmall == small);
