@@ -500,7 +500,7 @@ IdTable IndexScan::materializedIndexScan() const {
       locatedTriplesState(), executor(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
-  idTable = makeApplyColumnSubset()(std::move(idTable));
+  idTable = makeApplyColumnSubset()(idTable);
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   return idTable;
 }
