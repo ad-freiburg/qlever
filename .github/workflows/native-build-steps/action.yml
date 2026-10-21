@@ -6,7 +6,7 @@ inputs:
     description: "The build matrix entry of the calling job, as JSON (pass the `toJSON` of the `matrix` context). Used keys: `compiler`, `compiler-version`, `warnings`, `asan-flags`, `ubsan-flags`, `build-type`, `expensive-tests`, `additional-cmake-options`, `allocator-backend`."
     required: true
   in-container:
-    description: "Must be set to true for jobs that run in a `container`. The disk space of the host can't be freed from inside a container, and the kernel parameter for the sanitizers can't be set there (no job in a container uses sanitizers, so it isn't needed there either)."
+    description: "Must be set to true for jobs that run in a `container`. The disk space of the host can't be freed from inside a container, and the kernel parameter for the sanitizers can't be set there (no job in a container uses sanitizers, so it isn't needed there either). The `mold` linker isn't used there either, because the `mold` of Ubuntu 26.04 can't read the linker script `libatomic_asneeded.so` that the GCC packages of that release add (`mold: fatal: ... INPUT ( AS_NEEDED ( -latomic ) )`)."
     required: false
     default: "false"
 
@@ -22,6 +22,7 @@ runs:
       with:
         compiler: ${{fromJSON(inputs.matrix).compiler}}
         compiler-version: ${{fromJSON(inputs.matrix).compiler-version}}
+        install-mold: ${{ inputs.in-container == 'true' && 'false' || 'true' }}
     - name: Reduce address randomization to make sanitizers work
       # For details see for example `https://stackoverflow.com/questions/77850769/fatal-threadsanitizer-unexpected-memory-mapping-when-running-on-linux-kernels`
       if: inputs.in-container != 'true'
@@ -37,7 +38,7 @@ runs:
         cmake-args: >-
           -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{fromJSON(inputs.matrix).compiler}}${{fromJSON(inputs.matrix).compiler-version}}.cmake"
           -DADDITIONAL_COMPILER_FLAGS="${{fromJSON(inputs.matrix).warnings}} ${{fromJSON(inputs.matrix).asan-flags}} ${{fromJSON(inputs.matrix).ubsan-flags}}"
-          -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
+          ${{ inputs.in-container != 'true' && '-DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"' || '' }}
           -DRUN_EXPENSIVE_TESTS=${{fromJSON(inputs.matrix).expensive-tests}}
           -DENABLE_EXPENSIVE_CHECKS=true
           ${{fromJSON(inputs.matrix).additional-cmake-options}}
