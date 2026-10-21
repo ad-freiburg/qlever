@@ -1583,23 +1583,24 @@ TEST(SparqlExpression, isSomethingFunctions) {
       iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank, localLiteral,
       I(42),         D(1),         F,      geo, date,    U};
   testUnaryExpression<makeIsIriExpression>(
-      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, F});
+      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, U});
   testUnaryExpression<makeIsBlankExpression>(
-      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, F});
+      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, U});
   testUnaryExpression<makeIsLiteralExpression>(
-      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, U});
   testUnaryExpression<makeIsNumericExpression>(
-      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, U});
   testUnaryExpression<makeBoundExpression>(
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 
   // `ql:isEncodedIri` is only true for ids of datatype `EncodedVal`, not for
-  // regular vocabulary IRIs, string IRIs, literals, or unbound values.
+  // regular vocabulary IRIs, string IRIs, or literals, and UNDEF for an unbound
+  // argument.
   auto checkIsEncodedIri = testUnaryExpression<&makeIsEncodedIriExpression>;
   checkIsEncodedIri(Id::makeFromEncodedVal(0), T);
   checkIsEncodedIri(iri, F);
   checkIsEncodedIri(literal, F);
-  checkIsEncodedIri(U, F);
+  checkIsEncodedIri(U, U);
   checkIsEncodedIri(IdOrLocalVocabEntry{iriref("<i>")}, F);
 
   auto expression = makeBoundExpression(
@@ -1899,6 +1900,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
+  checkIsGeoPoint(U, U);
   checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);

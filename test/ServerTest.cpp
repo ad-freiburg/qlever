@@ -734,6 +734,24 @@ TEST(ServerTest, processCommands) {
           "Unknown value \"not-a-real-command\" for parameter \"cmd\""));
 }
 
+// Test that a request with neither a known URL parameter nor a known path is
+// answered with an error response.
+TEST(ServerTest, unknownParametersAndPath) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown URL parameter results in a 400 Bad Request response.
+  auto response = server.process(makeGetRequest("/?nexistepas=1"));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown query parameters"));
+
+  // An unknown path without URL parameters results in a 404 Not Found response.
+  response = server.process(makeGetRequest("/nexistepas"));
+  EXPECT_THAT(response, StatusIs(http::status::not_found));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown path"));
+}
+
 // _____________________________________________________________________________
 TEST(ServerTest, handleHttpRequest) {
   auto server = makeServerForTesting(getDefaultConfig().baseName_);
