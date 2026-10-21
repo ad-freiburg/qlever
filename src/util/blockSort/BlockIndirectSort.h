@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <numeric>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -144,11 +145,17 @@ net::awaitable<void> sortOnExecutor(Iterator begin, Iterator end, Compare comp,
       numThreads, static_cast<uint32_t>(
                       numElements / (params.blockSize * BLOCKS_PER_TASK) + 1));
 
-  // Sort small inputs (or without threads) in a single task, in parts between
-  // which the cancellation is checked.
+  // Sort small inputs (or without threads) in a single task. A cancellable
+  // sort is split into parts between which the cancellation is checked, a
+  // sort that can't be cancelled is one `pdqsort` (the split costs 5-10% on a
+  // big input of `IdTable` rows).
   if (numElements < params.maxElementsPerTask || numThreads < 2) {
-    serialQuicksort(begin, end, comp, params.maxElementsPerTask,
-                    checkCancellation);
+    if constexpr (std::is_same_v<CheckCancellation, ad_utility::Noop>) {
+      boost::sort::pdqsort(begin, end, comp);
+    } else {
+      serialQuicksort(begin, end, comp, params.maxElementsPerTask,
+                      checkCancellation);
+    }
     co_return;
   }
 
@@ -234,16 +241,17 @@ CPP_template(typename Range, typename Compare)(
                                 std::move(exec), ad_utility::noop);
 }
 
-// Like above, but the sort can be cancelled via the `cancellationHandle`
-// (which must not be `nullptr`), which then throws a `CancellationException`
-// (like any other exception, see above). The handle is checked often enough
-// for its watchdog: at the start of every task (a task sorts at most
-// `defaultMaxElementsPerTask` elements, or merges or moves at most
-// `BLOCKS_PER_TASK` blocks), for every element that a partition scans, and
-// every `ELEMENTS_PER_CANCELLATION_CHECK` elements of the other linear passes
-// over a bigger range (scans and reversals). A sort in a single task
-// (`numThreads < 2`) is split into parts of the size of a task, see
-// `serialQuicksort`.
+// Like above, but the sort can be cancelled via `cancellationHandle` (must not
+// be `nullptr`): it then throws a `CancellationException`, like any other
+// exception (see above).
+//
+// The handle is checked often enough for its watchdog: at the start of every
+// task (a task sorts at most `defaultMaxElementsPerTask` elements, or merges
+// or moves at most `BLOCKS_PER_TASK` blocks), for every element that a
+// partition scans, and every `ELEMENTS_PER_CANCELLATION_CHECK` elements of the
+// other linear passes over a bigger range (scans and reversals). A sort in a
+// single task (`numThreads < 2`) is split into parts of the size of a task,
+// see `serialQuicksort`.
 //
 // NOTE: In C++17 mode, the sort can't be cancelled.
 CPP_template(typename Range, typename Compare)(
