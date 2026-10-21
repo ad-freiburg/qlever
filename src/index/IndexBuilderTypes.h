@@ -119,18 +119,23 @@ class PartialVocabIndexWithExternalFlag {
  public:
   PartialVocabIndexWithExternalFlag(uint64_t index, bool isExternal)
       : encodedIndex_{(uint64_t(isExternal) << 63) | index} {
-    // The top four bits of any partial-vocab index must be zero: in the final
-    // `Id` they are occupied by the datatype tag (see `ValueId::numDataBits`).
-    // This guard catches future regressions that funnel a tagged value or an
-    // underflowed counter through here, which would otherwise silently
-    // collide with the `isExternal` bit and corrupt the vocabulary mapping.
-    AD_EXPENSIVE_CHECK(index < (uint64_t{1} << ValueId::numDataBits));
+    // A partial-vocab index must fit into the payload of the final `Id`
+    // (`ValueId::maxIndex`) and must not touch the most significant bit (the
+    // `isExternal` bit). This guard catches future regressions that funnel a
+    // tagged value or an underflowed counter through here, which would
+    // otherwise silently collide with the `isExternal` bit and corrupt the
+    // vocabulary mapping.
+    // TODO<pas-kes>: maybe the isExternal bit can move into the datatype.
+    AD_EXPENSIVE_CHECK(index <= std::min<uint64_t>(ValueId::maxIndex,
+                                                   (uint64_t{1} << 63) - 1));
   }
 
   PartialVocabIndexWithExternalFlag() = default;
 
   // Access the original values.
   uint64_t index() const { return encodedIndex_ & (uint64_t(-1) >> 1); }
+
+  // TODO<pas-kes>: maybe the isExternal bit can move into the datatype.
   bool isExternal() const { return (encodedIndex_ >> 63) != 0; }
 };
 
