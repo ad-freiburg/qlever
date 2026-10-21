@@ -154,11 +154,14 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 
 // _____________________________________________________________________________
 void substituteConstantMaxDistances(parsedQuery::GraphPattern& pattern) {
-  ad_utility::HashMap<Variable, Id> constants;
-  collectConstantBindings(pattern, constants);
-  if (constants.empty()) {
-    return;
-  }
+  // First find the filter children that are a variable compared to a distance
+  // call, such that the bindings are only collected if there are any.
+  struct Candidate {
+    sparqlExpression::SparqlExpression* expression_;
+    size_t childIndex_;
+    Variable variable_;
+  };
+  std::vector<Candidate> candidates;
   for (auto& filter : pattern._filters) {
     auto* expression = filter.expression_.getPimpl();
     auto children = expression->children();
@@ -167,12 +170,22 @@ void substituteConstantMaxDistances(parsedQuery::GraphPattern& pattern) {
     }
     for (size_t i : {0, 1}) {
       auto variable = children[i]->getVariableOrNullopt();
-      if (variable.has_value() && constants.contains(variable.value()) &&
+      if (variable.has_value() &&
           getGeoDistanceExpressionParameters(*children[1 - i]).has_value()) {
-        expression->replaceChild(
-            i, std::make_unique<sparqlExpression::IdExpression>(
-                   constants.at(variable.value())));
+        candidates.push_back({expression, i, std::move(variable).value()});
       }
+    }
+  }
+  if (candidates.empty()) {
+    return;
+  }
+
+  ad_utility::HashMap<Variable, Id> constants;
+  collectConstantBindings(pattern, constants);
+  for (const auto& [expression, i, variable] : candidates) {
+    if (auto it = constants.find(variable); it != constants.end()) {
+      expression->replaceChild(
+          i, std::make_unique<sparqlExpression::IdExpression>(it->second));
     }
   }
 }
