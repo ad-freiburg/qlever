@@ -65,7 +65,7 @@ jobs:
           compiler-version: 13
 
       - name: Cache conan packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.conan2
           key: conan-portable-${{ env.CC }}-${{ matrix.arch }}-${{ hashFiles('conanfile.txt') }}
