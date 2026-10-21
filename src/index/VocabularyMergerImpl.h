@@ -169,22 +169,23 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
 }
 
 // ____________________________________________________________________________________________________________
-inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
+inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries) {
   HashMap<uint64_t, uint64_t> res;
-  res.reserve(els.size());
+  res.reserve(entries.size());
   std::optional<std::string_view> lastWord;
   // This value will overflow on the first entry.
   size_t nextWordId = -1;
-  for (auto& [word, idAndExternal] : els) {
-    auto id = idAndExternal.id();
-    if (lastWord != word) {
+  for (auto& entry : entries) {
+    auto& indexAndFlag = entry.indexAndFlag_;
+    auto index = indexAndFlag.index();
+    if (lastWord != entry.word_) {
       nextWordId++;
-      lastWord = word;
+      lastWord = entry.word_;
     }
-    auto inserted = res.try_emplace(id, nextWordId).second;
+    auto inserted = res.try_emplace(index, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
-    idAndExternal = PartialVocabIndexWithExternalFlag{
-        nextWordId, idAndExternal.isExternal()};
+    indexAndFlag = PartialVocabIndexWithExternalFlag{nextWordId,
+                                                     indexAndFlag.isExternal()};
   }
   return res;
 }
@@ -251,12 +252,12 @@ inline IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
 }
 
 // _________________________________________________________________________________________________________
-inline void writePartialVocabularyToFile(const ItemVec& els,
+inline void writePartialVocabularyToFile(const ItemVec& entries,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   PartialVocabularyWriter writer{fileName};
-  for (const auto& [word, idAndExternal] : els) {
-    writer(word, idAndExternal);
+  for (const auto& entry : entries) {
+    writer(entry.word_, entry.indexAndFlag_);
   }
   writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
@@ -264,12 +265,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 
 // __________________________________________________________________________________________________
 inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
-  ItemVec els;
-  els.resize(map.map_.size());
+  ItemVec entries;
+  entries.resize(map.map_.size());
   using T = ItemVec::value_type;
-  ql::ranges::transform(map.map_, els.begin(),
+  ql::ranges::transform(map.map_, entries.begin(),
                         [](auto& el) -> T { return {el.first, el.second}; });
-  return els;
+  return entries;
 }
 
 // _____________________________________________________________________
