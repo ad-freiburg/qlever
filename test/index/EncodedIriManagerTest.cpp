@@ -394,8 +394,11 @@ TEST(EncodedIriManager, illegalPatterns) {
               "enclosed in angle brackets");
   // The patterns are checked against the number of payload bits of the
   // manager (see `validatePattern` in `EncodedIriPatternTest.cpp`).
-  expectThrow(Pattern{"http://example.org/", {Part{53, {}, ""}}},
-              "it requires 53 bits, but only 52 bits are available");
+  constexpr size_t numBitsAvailable = EncodedIriManager::NumBitsEncoding;
+  expectThrow(
+      Pattern{"http://example.org/", {Part{numBitsAvailable + 1, {}, ""}}},
+      absl::StrCat("it requires ", numBitsAvailable + 1, " bits, but only ",
+                   numBitsAvailable, " bits are available"));
 }
 
 // _____________________________________________________________________________
