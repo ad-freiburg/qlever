@@ -82,6 +82,22 @@ auto PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename) const
 }
 
 // _____________________________________________________________________________
+auto PolymorphicVocabulary::makeParallelWriterPtr(const std::string& filename)
+    const -> std::unique_ptr<ParallelWordWriterBase> {
+  return std::visit(
+      [&filename](auto& vocab) -> std::unique_ptr<ParallelWordWriterBase> {
+        using T = std::decay_t<decltype(vocab)>;
+        if constexpr (isSplitVocabulary<T>) {
+          return vocab.makeParallelWriterPtr(filename);
+        } else {
+          return std::make_unique<SingleVocabularyParallelWriter>(
+              vocab.makeBlockWriterPtr(filename));
+        }
+      },
+      vocab_);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
     const std::string& filename, VocabularyType type) {
   PolymorphicVocabulary dummyVocab;

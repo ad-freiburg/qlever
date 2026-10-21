@@ -16,7 +16,6 @@
 #include "../util/IndexTestHelpers.h"
 #include "index/IndexImpl.h"
 #include "parser/LiteralOrIri.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/HashSet.h"
@@ -33,8 +32,7 @@ const std::string myDatatypeWithBrackets = absl::StrCat("<", myDatatype, ">");
 TEST(IriTest, IriCreation) {
   Iri iri = Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>");
 
-  EXPECT_EQ("http://www.wikidata.org/entity/Q3138",
-            asStringViewUnsafe(iri.getContent()));
+  EXPECT_EQ("http://www.wikidata.org/entity/Q3138", iri.getContent());
 }
 
 // _____________________________________________________________________________
@@ -229,22 +227,22 @@ TEST(LiteralTest, LiteralTest) {
 
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World", literal.getContent());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 
   literal.addLanguageTag("en");
-  EXPECT_EQ("en", asStringViewUnsafe(literal.getLanguageTag()));
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("en", literal.getLanguageTag());
+  EXPECT_EQ("Hello World", literal.getContent());
   EXPECT_ANY_THROW(literal.addLanguageTag("en"));
 
   Iri datatype = Iri::fromIriref("<someIri>");
   EXPECT_ANY_THROW(literal.addDatatype(datatype));
   literal.removeDatatypeOrLanguageTag();
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World", literal.getContent());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_NO_THROW(literal.addDatatype(datatype));
-  EXPECT_EQ(asStringViewUnsafe(literal.getDatatype()), "someIri");
+  EXPECT_EQ(literal.getDatatype(), "someIri");
   EXPECT_ANY_THROW(literal.addLanguageTag("en"));
   EXPECT_ANY_THROW(literal.addDatatype(datatype));
 }
@@ -260,7 +258,7 @@ TEST(LiteralTest, XsdStringDatatypeIsNormalizedAway) {
   for (const Literal& literal : {literal1, literal2}) {
     EXPECT_FALSE(literal.hasLanguageTag());
     EXPECT_FALSE(literal.hasDatatype());
-    EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+    EXPECT_EQ("Hello World", literal.getContent());
     EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
     EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
   }
@@ -273,9 +271,9 @@ TEST(LiteralTest, LiteralTestWithDatatype) {
 
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World", literal.getContent());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ(myDatatype, literal.getDatatype());
 }
 
 // _____________________________________________________________________________
@@ -284,8 +282,8 @@ TEST(LiteralTest, LiteralTestWithLanguagetag) {
 
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_EQ("Hallo Welt", asStringViewUnsafe(literal.getContent()));
-  EXPECT_EQ("de", asStringViewUnsafe(literal.getLanguageTag()));
+  EXPECT_EQ("Hallo Welt", literal.getContent());
+  EXPECT_EQ("de", literal.getLanguageTag());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
 
@@ -295,8 +293,7 @@ TEST(LiteralOrIri, LiteralOrIriWithIri) {
       LiteralOrIri::iriref("<http://www.wikidata.org/entity/Q3138>");
 
   EXPECT_TRUE(iri.isIri());
-  EXPECT_EQ("http://www.wikidata.org/entity/Q3138",
-            asStringViewUnsafe(iri.getIriContent()));
+  EXPECT_EQ("http://www.wikidata.org/entity/Q3138", iri.getIriContent());
   EXPECT_FALSE(iri.isLiteral());
   EXPECT_THROW(iri.hasLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(iri.hasDatatype(), ad_utility::Exception);
@@ -311,8 +308,7 @@ TEST(LiteralOrIri, LiteralOrIriWithPrefixedIri) {
       Iri::fromIriref("<http://www.wikidata.org/entity/>"), "Q3138");
 
   EXPECT_TRUE(iri.isIri());
-  EXPECT_EQ("http://www.wikidata.org/entity/Q3138",
-            asStringViewUnsafe(iri.getIriContent()));
+  EXPECT_EQ("http://www.wikidata.org/entity/Q3138", iri.getIriContent());
   EXPECT_FALSE(iri.isLiteral());
   EXPECT_THROW(iri.hasLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(iri.hasDatatype(), ad_utility::Exception);
@@ -330,7 +326,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteral) {
   EXPECT_TRUE(literal.isLiteral());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getLiteralContent()));
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
@@ -344,7 +340,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotes) {
   EXPECT_TRUE(literal.isLiteral());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getLiteralContent()));
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
@@ -359,9 +355,9 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
   EXPECT_TRUE(literal.isLiteral());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getLiteralContent()));
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ(myDatatype, literal.getDatatype());
 }
 
 // _____________________________________________________________________________
@@ -374,9 +370,9 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
   EXPECT_TRUE(literal.isLiteral());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
-  EXPECT_EQ("Hello World", asStringViewUnsafe(literal.getLiteralContent()));
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ(myDatatype, literal.getDatatype());
 }
 
 // _____________________________________________________________________________
@@ -389,8 +385,8 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndLanguageTag) {
   EXPECT_TRUE(literal.isLiteral());
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_EQ("Hej världen", asStringViewUnsafe(literal.getLiteralContent()));
-  EXPECT_EQ("se", asStringViewUnsafe(literal.getLanguageTag()));
+  EXPECT_EQ("Hej världen", literal.getLiteralContent());
+  EXPECT_EQ("se", literal.getLanguageTag());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
 
@@ -404,8 +400,8 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndLanguageTag) {
   EXPECT_TRUE(literal.isLiteral());
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_EQ("Hej världen", asStringViewUnsafe(literal.getLiteralContent()));
-  EXPECT_EQ("se", asStringViewUnsafe(literal.getLanguageTag()));
+  EXPECT_EQ("Hej världen", literal.getLiteralContent());
+  EXPECT_EQ("se", literal.getLanguageTag());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 }
 
@@ -417,24 +413,20 @@ TEST(LiteralOrIri, GetContent) {
   LiteralOrIri literalWithDatatype = LiteralOrIri::literalWithoutQuotes(
       "ABC", Iri::fromIriref("<https://example.org>"));
 
-  EXPECT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(iri.getContent()));
-  EXPECT_EQ("Hello World",
-            asStringViewUnsafe(literalWithLanguageTag.getContent()));
-  EXPECT_EQ("ABC", asStringViewUnsafe(literalWithDatatype.getContent()));
+  EXPECT_EQ("https://example.org/books/book1", iri.getContent());
+  EXPECT_EQ("Hello World", literalWithLanguageTag.getContent());
+  EXPECT_EQ("ABC", literalWithDatatype.getContent());
 }
 
 // _____________________________________________________________________________
 TEST(LiteralOrIri, EnsureLiteralsAreEncoded) {
   LiteralOrIri literal1 =
       LiteralOrIri::literalWithQuotes(R"("This is to be \"\\ encoded")");
-  EXPECT_EQ(R"(This is to be "\ encoded)",
-            asStringViewUnsafe(literal1.getContent()));
+  EXPECT_EQ(R"(This is to be "\ encoded)", literal1.getContent());
 
   LiteralOrIri literal2 =
       LiteralOrIri::literalWithoutQuotes(R"(This is to be \"\\ encoded)");
-  EXPECT_EQ(R"(This is to be "\ encoded)",
-            asStringViewUnsafe(literal2.getContent()));
+  EXPECT_EQ(R"(This is to be "\ encoded)", literal2.getContent());
 }
 
 // _____________________________________________________________________________
@@ -477,19 +469,19 @@ TEST(LiteralTest, SetSubstr) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
   literal.getLiteral().setSubstr(0, 5);
-  EXPECT_EQ("Hello", asStringViewUnsafe(literal.getContent()));
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ("Hello", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
 
   literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
   literal.getLiteral().setSubstr(6, 5);
-  EXPECT_EQ("World", asStringViewUnsafe(literal.getContent()));
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ("World", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
 
   // Substring works at the byte level (not the UTF-8 character level).
   literal = LiteralOrIri::literalWithoutQuotes("Äpfel");
   literal.getLiteral().setSubstr(0, 2);
-  EXPECT_EQ("Ä", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Ä", literal.getContent());
 
   // Test with invalid values.
   literal = LiteralOrIri::literalWithoutQuotes(
@@ -501,8 +493,7 @@ TEST(LiteralTest, SetSubstr) {
 // _____________________________________________________________________________
 TEST(LiteralOrIriTest, GetIri) {
   LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>");
-  EXPECT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(iri.getIriContent()));
+  EXPECT_EQ("https://example.org/books/book1", iri.getIriContent());
 
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
   EXPECT_THROW(literal.getIri(), ad_utility::Exception);
@@ -513,19 +504,19 @@ TEST(LiteralTest, removeDatatypeOrLanguageTag) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
   literal.getLiteral().removeDatatypeOrLanguageTag();
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!", literal.getContent());
   EXPECT_FALSE(literal.hasDatatype());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
 
   literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
   literal.getLiteral().removeDatatypeOrLanguageTag();
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!", literal.getContent());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
 
   literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
   literal.getLiteral().removeDatatypeOrLanguageTag();
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!", literal.getContent());
 }
 
 // _____________________________________________________________________________
@@ -533,19 +524,19 @@ TEST(LiteralTest, replaceContent) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello!", Iri::fromIriref(myDatatypeWithBrackets));
   literal.getLiteral().replaceContent("Thüss!");
-  EXPECT_EQ("Thüss!", asStringViewUnsafe(literal.getContent()));
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ("Thüss!", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
   literal.getLiteral().replaceContent("Hi!");
-  EXPECT_EQ("Hi!", asStringViewUnsafe(literal.getContent()));
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ("Hi!", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
   literal.getLiteral().replaceContent("Hello World!");
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ("Hello World!", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
   literal = LiteralOrIri::literalWithoutQuotes("Hello!");
   literal.getLiteral().replaceContent("Hi!");
-  EXPECT_EQ("Hi!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hi!", literal.getContent());
   literal.getLiteral().replaceContent("Hello World!");
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!", literal.getContent());
 }
 
 // _____________________________________________________________________________
@@ -553,7 +544,7 @@ TEST(LiteralTest, concat) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello ");
   LiteralOrIri literalOther = LiteralOrIri::literalWithoutQuotes("World!");
   literal.getLiteral().concat(literalOther.getLiteral());
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!", literal.getContent());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
   literal = LiteralOrIri::literalWithoutQuotes(
@@ -561,34 +552,34 @@ TEST(LiteralTest, concat) {
   literalOther = LiteralOrIri::literalWithoutQuotes(
       "World!", Iri::fromIriref(myDatatypeWithBrackets));
   literal.getLiteral().concat(literalOther.getLiteral());
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!", literal.getContent());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
-  EXPECT_EQ(myDatatype, asStringViewUnsafe(literal.getDatatype()));
+  EXPECT_EQ(myDatatype, literal.getDatatype());
   literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
   literalOther = LiteralOrIri::literalWithoutQuotes("Bye!", "@en");
   literal.getLiteral().concat(literalOther.getLiteral());
-  EXPECT_EQ("Hello World!Bye!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!Bye!", literal.getContent());
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
-  EXPECT_EQ("en", asStringViewUnsafe(literal.getLanguageTag()));
+  EXPECT_EQ("en", literal.getLanguageTag());
   literal = LiteralOrIri::literalWithoutQuotes(
       "Hello ", Iri::fromIriref(myDatatypeWithBrackets));
   literalOther = LiteralOrIri::literalWithoutQuotes("World!");
   literal.getLiteral().concat(literalOther.getLiteral());
-  EXPECT_EQ("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!", literal.getContent());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
   literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
   literalOther = LiteralOrIri::literalWithoutQuotes("Bye!");
   literal.getLiteral().concat(literalOther.getLiteral());
-  EXPECT_EQ("Hello World!Bye!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!Bye!", literal.getContent());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
   literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
   literalOther = LiteralOrIri::literalWithoutQuotes("Thüss!", "@de");
   literal.getLiteral().concat(literalOther.getLiteral());
-  EXPECT_EQ("Hello World!Thüss!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_EQ("Hello World!Thüss!", literal.getContent());
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
 }
@@ -644,7 +635,7 @@ TEST(NonOwningTest, IriView) {
   static_assert(
       std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
   EXPECT_EQ(v.toStringRepresentation(), s);
-  EXPECT_THAT("http://example.org/foo", asStringViewUnsafe(v.getContent()));
+  EXPECT_THAT("http://example.org/foo", v.getContent());
   // Test that the `IriView` actually references the `s` the was passed in.
   EXPECT_EQ(v.toStringRepresentation(), s);
   EXPECT_EQ(v.toStringRepresentation().data(), s.data());
@@ -665,8 +656,8 @@ TEST(NonOwningTest, LiteralView) {
   EXPECT_EQ(v.toStringRepresentation().data(), s.data());
   EXPECT_TRUE(v.hasLanguageTag());
   EXPECT_FALSE(v.hasDatatype());
-  EXPECT_THAT("Hello", asStringViewUnsafe(v.getContent()));
-  EXPECT_THAT("en", asStringViewUnsafe(v.getLanguageTag()));
+  EXPECT_THAT("Hello", v.getContent());
+  EXPECT_THAT("en", v.getLanguageTag());
   EXPECT_THROW(v.getDatatype(), ad_utility::Exception);
   v.removeDatatypeOrLanguageTag();
   EXPECT_FALSE(v.hasLanguageTag());
@@ -684,7 +675,7 @@ TEST(NonOwningTest, LiteralOrIriView) {
       std::is_same_v<decltype(iv.toStringRepresentation()), std::string_view>);
   EXPECT_TRUE(iv.isIri());
   EXPECT_FALSE(iv.isLiteral());
-  EXPECT_THAT("http://example.org/", asStringViewUnsafe(iv.getIriContent()));
+  EXPECT_THAT("http://example.org/", iv.getIriContent());
   EXPECT_EQ(iv.toStringRepresentation(), iriStr);
   EXPECT_EQ(iv.toStringRepresentation().data(), iriStr.data());
 
@@ -696,9 +687,8 @@ TEST(NonOwningTest, LiteralOrIriView) {
   EXPECT_TRUE(lv.isLiteral());
   EXPECT_FALSE(lv.hasLanguageTag());
   EXPECT_TRUE(lv.hasDatatype());
-  EXPECT_THAT("42", asStringViewUnsafe(lv.getLiteralContent()));
-  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#integer",
-              asStringViewUnsafe(lv.getDatatype()));
+  EXPECT_THAT("42", lv.getLiteralContent());
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#integer", lv.getDatatype());
 
   ad_utility::HashSet<LiteralOrIriView> set{iv, lv};
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));

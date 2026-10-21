@@ -30,7 +30,7 @@ class OptionalJoin : public Operation {
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   std::vector<float> _multiplicities;
-  size_t _sizeEstimate;
+  size_t _sizeEstimate = 0;
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 
@@ -129,6 +129,11 @@ class OptionalJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   void computeSizeEstimateAndMultiplicities();
 

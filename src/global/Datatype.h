@@ -17,7 +17,7 @@
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 
-// The different datatypes that an `Id` (see `ValueId.h`) can encode.
+// The different datatypes that an `Id` (see `Id.h`) can encode.
 //
 // NOTE: If you add a datatype, keep `MaxValue` equal to the last member and
 // check whether the new datatype belongs into `isDatatypeTrivial` below.

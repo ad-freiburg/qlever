@@ -12,7 +12,6 @@
 #include <string_view>
 
 #include "backports/three_way_comparison.h"
-#include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
@@ -124,6 +123,10 @@ using ResponseT = http::response<streamable_body>;
 // Assign the generator to the body of the response. If a supported
 // compression is specified in the request, this method is applied to the
 // body and the corresponding response headers are set.
+//
+// NOTE: The body is advanced on the executor that is passed to the
+// `HttpMessageSender` when sending the response, so (potentially expensive)
+// generators are fine here if that executor is not one of the IO threads.
 CPP_template(typename RequestType)(
     requires HttpRequest<RequestType>) void setBody(ResponseT& response,
                                                     const RequestType& request,
@@ -135,20 +138,12 @@ CPP_template(typename RequestType)(
   CompressionMethod method =
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
 
-  auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
-  auto coroAsyncGenerator = [](auto range) -> cppcoro::generator<std::string> {
-    for (auto& value : range) {
-      co_yield value;
-    }
-  }(std::move(asyncGenerator));
-
   if (method != CompressionMethod::NONE) {
-    response.body() =
-        streams::compressStream(std::move(coroAsyncGenerator), method);
+    response.body() = streams::compressStream(std::move(generator), method);
     ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
         method, response);
   } else {
-    response.body() = std::move(coroAsyncGenerator);
+    response.body() = std::move(generator);
   }
 }
 

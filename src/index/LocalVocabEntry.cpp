@@ -112,6 +112,6 @@ LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
 
 // _____________________________________________________________________________
 LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
-    NormalizedStringView view, const LocalVocabContext& ctx) {
+    std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
 }

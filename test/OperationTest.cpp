@@ -25,6 +25,8 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 using namespace ad_utility::testing;
 using namespace ::testing;
 using ad_utility::CacheStatus;
@@ -208,6 +210,7 @@ class OperationTestFixture : public testing::Test {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -319,10 +322,12 @@ TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
       operation.getChildren().at(0)->getRootOperation());
 
+#ifndef _QLEVER_NO_TIMING_TESTS
   EXPECT_GT(operation.publicRemainingTime(), 0ms);
   EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
+#endif
   std::this_thread::sleep_for(timeout);
-  // Verify time is up for parent and child
+  // Verify that the time is up for the parent and the child.
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
   EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }
@@ -538,6 +543,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -568,6 +574,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { signaledUpdate = true; }};
   CustomGeneratorOperation operation{&context, []() -> Result::Generator {
                                        throw CancellationException{
@@ -605,6 +612,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -681,6 +689,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {

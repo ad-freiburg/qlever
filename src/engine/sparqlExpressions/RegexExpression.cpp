@@ -36,7 +36,7 @@ void ensureIsValidRegexIfConstant(const SparqlExpression& expression) {
       dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
+    const auto& string = literal.getContent();
     RE2 regex{string, RE2::Quiet};
     if (!regex.ok()) {
       throw std::runtime_error{absl::StrCat(
@@ -54,7 +54,7 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
       dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
+    const auto& string = literal.getContent();
     auto firstInvalidFlag = string.find_first_not_of("imsU");
     if (firstInvalidFlag != std::string::npos) {
       throw std::runtime_error{absl::StrCat(
@@ -338,8 +338,7 @@ PrefixRegexExpression::getPrefilterExpressionForMetadata(
   std::vector<PrefilterExprVariablePair> prefilterVec;
   prefilterVec.emplace_back(
       std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-          TripleComponent::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(prefixRegex_))),
+          TripleComponent::Literal::literalWithNormalizedContent(prefixRegex_)),
       variable_);
   return prefilterVec;
 }
@@ -361,8 +360,8 @@ PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
   }
   const auto& stringLiteral = stringLiteralExpression->value();
   detail::ensureIsSimpleLiteral(stringLiteral);
-  if (std::optional<std::string> prefixRegex = getPrefixRegex(
-          std::string{asStringViewUnsafe(stringLiteral.getContent())})) {
+  if (std::optional<std::string> prefixRegex =
+          getPrefixRegex(std::string{stringLiteral.getContent()})) {
     return PrefixRegexExpression{std::move(string),
                                  std::move(prefixRegex.value()),
                                  variableExpression->value()};
@@ -415,8 +414,7 @@ SparqlExpression::Ptr makePrefixMatchExpression(
   const auto& stringLiteral = stringLiteralExpression->value();
   detail::ensureIsSimpleLiteral(stringLiteral);
   return std::make_unique<PrefixRegexExpression>(
-      std::move(string),
-      std::string{asStringViewUnsafe(stringLiteral.getContent())},
+      std::move(string), std::string{stringLiteral.getContent()},
       variableExpression->value());
 }
 

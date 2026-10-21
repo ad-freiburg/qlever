@@ -83,6 +83,22 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
 }
 
 // ____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {left_, right_}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> ExistsJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<ExistsJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)),
+      existsVariable_);
+}
+
+// ____________________________________________________________________________
 float ExistsJoin::getMultiplicity(size_t col) {
   // The multiplicities of all columns except the last one are the same as in
   // `left_`.

@@ -243,6 +243,13 @@ class Vocabulary {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 
+  // The parallel counterpart of `makeWordWriterPtr`, see
+  // `ParallelWordWriterBase` in `index/vocabulary/VocabularyTypes.h`.
+  auto makeParallelWriterPtr(const std::string& filename) const {
+    return vocabulary_.getUnderlyingVocabulary().makeParallelWriterPtr(
+        filename);
+  }
+
   // Return a reference to the vocabulary that actually holds the words, i.e.
   // the vocabulary below the wrapping `UnicodeVocabulary`. The latter is
   // bypassed because its only additional state is a comparator (see

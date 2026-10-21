@@ -151,7 +151,7 @@ class alignas(16) LocalVocabEntry
                                               const LocalVocabContext& ctx);
 
   static LocalVocabEntry literalWithNormalizedContent(
-      NormalizedStringView view, const LocalVocabContext& ctx);
+      std::string_view view, const LocalVocabContext& ctx);
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {

@@ -86,7 +86,7 @@ Result Sort::computeResult(bool requestLaziness) {
   size_t maxNumRowsToBeSortedInMemory =
       getRuntimeParameter<&RuntimeParameters::sortInMemoryThreshold_>()
           .getBytes() /
-      (numColumns * sizeof(Id));
+      (numColumns * BYTES_PER_ID_COLUMN_ENTRY);
 
   // Always request lazy input to avoid premature materialization.
   std::shared_ptr<const Result> input = subtree_->getResult(true);
@@ -146,7 +146,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
 
-  IdTableUtils::sort(idTable, sortColumnIndices_);
+  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig());
 
   // Don't report missed timeout check because the in-memory sort is currently
   // not cancellable.

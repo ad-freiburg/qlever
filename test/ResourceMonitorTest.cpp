@@ -46,6 +46,29 @@ using ::testing::Gt;
 using ::testing::Optional;
 }  // namespace
 
+// `ResourceMonitor::start` only works on Linux and macOS. Elsewhere (e.g.
+// Emscripten) it is a no-op, so we test that instead of what it writes.
+#if defined(__APPLE__) || defined(__linux__)
+#define QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP static_assert(true)
+#else
+#define QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP \
+  GTEST_SKIP() << "`ResourceMonitor::start` is a no-op on this platform"
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, StartIsANoOpOnUnsupportedPlatforms) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  {
+    ResourceMonitor monitor;
+    EXPECT_NO_THROW(monitor.start(path, ResourceMonitor::Mode::Truncate,
+                                  std::chrono::milliseconds{5}));
+  }
+  EXPECT_FALSE(fs::exists(path));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr("not supported on this platform"));
+}
+#endif
+
 // _____________________________________________________________________________
 TEST(ResourceMonitor, ReadsCurrentMemoryAndCpuUsage) {
 #if defined(__APPLE__) || defined(__linux__)
@@ -422,6 +445,7 @@ TEST(ResourceMonitor, UnwritablePathDisablesMonitoring) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, TruncateModeWritesHeader) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   {
     ResourceMonitor monitor;
@@ -460,6 +484,7 @@ TEST(ResourceMonitor, AppendModeKeepsAMatchingHeader) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, AppendModeRotatesAFileWithAnOutdatedHeader) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // In `Append` mode `start` moves a log of an older format aside and then
   // writes a fresh header.
   auto [directory, cleanup] =
@@ -487,6 +512,7 @@ TEST(ResourceMonitor, AppendModeRotatesAFileWithAnOutdatedHeader) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, AppendModeWritesASecondHeaderWhenRotationFails) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   auto [directory, cleanup] =
       ad_utility::testing::makeTemporaryDirectory("resourceMonitorNoRotate");
   // A name that is close to the 255-character limit for file names: splicing
@@ -520,6 +546,7 @@ TEST(ResourceMonitor, AppendModeWritesASecondHeaderWhenRotationFails) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, TruncateModeNeverRotates) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // Index builds start a fresh file every run, so an outdated header is simply
   // overwritten. Rotation exists to protect rows that are being appended to,
   // and there are none here.
@@ -547,6 +574,7 @@ TEST(ResourceMonitor, TruncateModeNeverRotates) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, AppendModeWritesHeaderWhenFileIsEmptyOrMissing) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // Append mode writes the header when there is no existing row to preserve:
   // the file is missing (its size cannot be read) or it exists but is empty.
   auto expectHeaderOnly = [](const fs::path& path) {
@@ -589,6 +617,7 @@ std::vector<std::string> sampledLines(rm::Readers readers) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   auto lines = sampledLines({});
   // The header plus at least one sampled row.
   ASSERT_GE(lines.size(), 2u);
@@ -608,6 +637,7 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // The RSS reading is written out as it is. The other three are cumulative
   // counters that become rates. All of them stand still except the written
   // bytes, so exactly one rate column is positive and a value landing in a
@@ -642,6 +672,7 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   {
     ResourceMonitor monitor;
@@ -674,6 +705,7 @@ TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // A stall counter that grows by 1000 seconds on every reading, while the
   // monitor samples every 5 milliseconds. The raw percentage is therefore
   // far above 100, and the row has to show it clamped to 100.
@@ -691,6 +723,7 @@ TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // What every non-Linux machine does: there is no pressure-stall interface,
   // so the reader returns nothing on every tick and nothing is clamped.
   rm::Readers readers;
@@ -709,6 +742,7 @@ TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, AMissingDiskIoReadingLeavesBothColumnsEmpty) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // When no disk I/O information is available, both columns stay empty.
   rm::Readers readers;
   readers.rssReader_ = []() -> std::optional<uint64_t> { return 2048u; };
@@ -727,6 +761,7 @@ TEST(ResourceMonitor, AMissingDiskIoReadingLeavesBothColumnsEmpty) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
   // A reader that throws makes `runLoop` throw; the sampler thread must catch
   // it and log, not terminate the process. Both catch arms are covered: a
   // `std::exception` and a non-exception throw.

@@ -78,12 +78,12 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
 }
 
 // ____________________________________________________________________________
-std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
+std::variant<Variable, IdColumn> PathQuery::toSearchSide(
     std::vector<TripleComponent> side, const IndexImpl& index) const {
   if (side.size() == 1 && side[0].isVariable()) {
     return side[0].getVariable();
   } else {
-    std::vector<Id> sideIds;
+    IdColumn sideIds;
     for (const auto& comp : side) {
       if (comp.isVariable()) {
         throw PathSearchException(

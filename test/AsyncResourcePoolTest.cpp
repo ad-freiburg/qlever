@@ -65,6 +65,14 @@ struct HasGet<Handle, std::void_t<decltype(std::declval<Handle&>().get())>>
 
 // Take out a single resource and return it (and the error code of the
 // acquisition) to the caller.
+//
+// NOTE: Every caller below stores the result in a named variable and then takes
+// a *reference* structured binding of it. This is a workaround for a GCC 15/16
+// bug: the hidden object of a by-value structured binding in a coroutine is not
+// always destroyed at the end of its scope, for example when it is initialized
+// by a `co_await` (gcc.gnu.org bug 124584), so the `Handle` would never return
+// its resource to the pool. See also the pull request that fixed the same
+// pattern elsewhere (#2906).
 template <typename ResourceType>
 net::awaitable<std::tuple<boost::system::error_code,
                           typename AsyncResourcePool<ResourceType>::Handle>>
@@ -114,7 +122,8 @@ ASYNC_TEST(AsyncResourcePool, acquireWhileResourcesAreFree) {
   Semaphore semaphore{ioContext.get_executor(), 3};
   std::vector<Permit> permits;
   for (size_t i = 0; i < 3; ++i) {
-    auto [errorCode, permit] = co_await acquire<void>(semaphore);
+    auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+    auto& [errorCode, permit] = errorCodeAndPermit;
     EXPECT_FALSE(errorCode);
     EXPECT_TRUE(permit.isValid());
     permits.push_back(std::move(permit));
@@ -138,7 +147,8 @@ ASYNC_TEST(AsyncResourcePool, defaultConstructedHandleIsEmpty) {
 // _____________________________________________________________________________
 ASYNC_TEST(AsyncResourcePool, acquireSuspendsUntilAResourceIsReturned) {
   Semaphore semaphore{ioContext.get_executor(), 1};
-  auto [errorCode, permit] = co_await acquire<void>(semaphore);
+  auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+  auto& [errorCode, permit] = errorCodeAndPermit;
   EXPECT_FALSE(errorCode);
   EXPECT_TRUE(permit.isValid());
 
@@ -147,7 +157,8 @@ ASYNC_TEST(AsyncResourcePool, acquireSuspendsUntilAResourceIsReturned) {
   net::co_spawn(
       ioContext,
       [&semaphore, &secondWasAcquired]() -> net::awaitable<void> {
-        auto [errorCode, permit] = co_await acquire<void>(semaphore);
+        auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+        auto& [errorCode, permit] = errorCodeAndPermit;
         EXPECT_FALSE(errorCode);
         EXPECT_TRUE(permit.isValid());
         secondWasAcquired.store(true);
@@ -171,12 +182,14 @@ ASYNC_TEST(AsyncResourcePool, acquireSuspendsUntilAResourceIsReturned) {
 ASYNC_TEST(AsyncResourcePool, destructorReturnsTheResource) {
   Semaphore semaphore{ioContext.get_executor(), 1};
   {
-    auto [errorCode, permit] = co_await acquire<void>(semaphore);
+    auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+    auto& [errorCode, permit] = errorCodeAndPermit;
     EXPECT_TRUE(permit.isValid());
   }
   // The destructor of the handle has returned the permit, so the next
   // acquisition succeeds (it would hang otherwise).
-  auto [errorCode, permit] = co_await acquire<void>(semaphore);
+  auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+  auto& [errorCode, permit] = errorCodeAndPermit;
   EXPECT_FALSE(errorCode);
   EXPECT_TRUE(permit.isValid());
 }
@@ -184,8 +197,10 @@ ASYNC_TEST(AsyncResourcePool, destructorReturnsTheResource) {
 // _____________________________________________________________________________
 ASYNC_TEST(AsyncResourcePool, moveAssignmentReturnsTheOverwrittenResource) {
   Semaphore semaphore{ioContext.get_executor(), 2};
-  auto [errorCodeA, permitA] = co_await acquire<void>(semaphore);
-  auto [errorCodeB, permitB] = co_await acquire<void>(semaphore);
+  auto errorCodeAAndPermitA = co_await acquire<void>(semaphore);
+  auto& [errorCodeA, permitA] = errorCodeAAndPermitA;
+  auto errorCodeBAndPermitB = co_await acquire<void>(semaphore);
+  auto& [errorCodeB, permitB] = errorCodeBAndPermitB;
   EXPECT_TRUE(permitA.isValid());
   EXPECT_TRUE(permitB.isValid());
   // Both permits are taken, so this overwrites (and thereby returns) `permitA`
@@ -195,7 +210,8 @@ ASYNC_TEST(AsyncResourcePool, moveAssignmentReturnsTheOverwrittenResource) {
   // NOLINTNEXTLINE(bugprone-use-after-move)
   EXPECT_FALSE(permitB.isValid());
   // Exactly one permit is free again, so this acquisition succeeds.
-  auto [errorCodeC, permitC] = co_await acquire<void>(semaphore);
+  auto errorCodeCAndPermitC = co_await acquire<void>(semaphore);
+  auto& [errorCodeC, permitC] = errorCodeCAndPermitC;
   EXPECT_FALSE(errorCodeC);
   EXPECT_TRUE(permitC.isValid());
 }
@@ -203,7 +219,8 @@ ASYNC_TEST(AsyncResourcePool, moveAssignmentReturnsTheOverwrittenResource) {
 // _____________________________________________________________________________
 ASYNC_TEST(AsyncResourcePool, cancelWakesUpTheWaiters) {
   Semaphore semaphore{ioContext.get_executor(), 1};
-  auto [errorCode, permit] = co_await acquire<void>(semaphore);
+  auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+  auto& [errorCode, permit] = errorCodeAndPermit;
   EXPECT_TRUE(permit.isValid());
 
   std::atomic<size_t> numCancelled{0};
@@ -211,7 +228,8 @@ ASYNC_TEST(AsyncResourcePool, cancelWakesUpTheWaiters) {
     net::co_spawn(
         ioContext,
         [&semaphore, &numCancelled]() -> net::awaitable<void> {
-          auto [errorCode, permit] = co_await acquire<void>(semaphore);
+          auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+          auto& [errorCode, permit] = errorCodeAndPermit;
           // NOTE: The channel that holds the resources reports the
           // channel-specific `channel_cancelled`, which the pool translates
           // into the canonical `operation_aborted`.
@@ -232,7 +250,8 @@ ASYNC_TEST(AsyncResourcePool, cancelIsNotSticky) {
   // resources that are still free, see the NOTE at `AsyncResourcePool::cancel`.
   Semaphore semaphore{ioContext.get_executor(), 1};
   semaphore.cancel();
-  auto [errorCode, permit] = co_await acquire<void>(semaphore);
+  auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+  auto& [errorCode, permit] = errorCodeAndPermit;
   EXPECT_FALSE(errorCode);
   EXPECT_TRUE(permit.isValid());
 }
@@ -244,7 +263,8 @@ ASYNC_TEST(AsyncResourcePool, handleOutlivesThePoolObject) {
   Permit permit;
   {
     Semaphore semaphore{ioContext.get_executor(), 1};
-    auto [errorCode, acquired] = co_await acquire<void>(semaphore);
+    auto errorCodeAndAcquired = co_await acquire<void>(semaphore);
+    auto& [errorCode, acquired] = errorCodeAndAcquired;
     EXPECT_TRUE(acquired.isValid());
     permit = std::move(acquired);
   }
@@ -296,7 +316,8 @@ ASYNC_TEST(AsyncResourcePool, asyncWithResourceScopesTheResourceToTheWork) {
 // _____________________________________________________________________________
 ASYNC_TEST(AsyncResourcePool, asyncWithResourceReportsACancelledAcquisition) {
   Semaphore semaphore{ioContext.get_executor(), 1};
-  auto [errorCode, permit] = co_await acquire<void>(semaphore);
+  auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+  auto& [errorCode, permit] = errorCodeAndPermit;
   EXPECT_TRUE(permit.isValid());
 
   std::atomic<bool> workWasRun{false};
@@ -362,7 +383,8 @@ ASYNC_TEST_N(AsyncResourcePool, multiThreaded, 4) {
     net::co_spawn(
         ioContext,
         [&]() -> net::awaitable<void> {
-          auto [errorCode, permit] = co_await acquire<void>(semaphore);
+          auto errorCodeAndPermit = co_await acquire<void>(semaphore);
+          auto& [errorCode, permit] = errorCodeAndPermit;
           EXPECT_FALSE(errorCode);
           size_t running = ++numRunning;
           size_t previousMax = maxRunning.load();
@@ -388,7 +410,8 @@ ASYNC_TEST_N(AsyncResourcePool, multiThreaded, 4) {
 ASYNC_TEST(AsyncResourcePool, countConstructorValueInitializesTheResources) {
   AsyncResourcePool<int> pool{ioContext.get_executor(), 2};
   for (size_t i = 0; i < 2; ++i) {
-    auto [errorCode, handle] = co_await acquire<int>(pool);
+    auto errorCodeAndHandle = co_await acquire<int>(pool);
+    auto& [errorCode, handle] = errorCodeAndHandle;
     EXPECT_FALSE(errorCode);
     EXPECT_TRUE(handle.isValid());
     EXPECT_EQ(handle.get(), 0);
@@ -402,7 +425,8 @@ ASYNC_TEST(AsyncResourcePool, vectorConstructorTakesOneResourcePerElement) {
   std::vector<std::string> acquired;
   std::vector<AsyncResourcePool<std::string>::Handle> handles;
   for (size_t i = 0; i < 3; ++i) {
-    auto [errorCode, handle] = co_await acquire<std::string>(pool);
+    auto errorCodeAndHandle = co_await acquire<std::string>(pool);
+    auto& [errorCode, handle] = errorCodeAndHandle;
     EXPECT_FALSE(errorCode);
     EXPECT_TRUE(handle.isValid());
     acquired.push_back(handle.get());
@@ -417,7 +441,8 @@ ASYNC_TEST(AsyncResourcePool, prototypeConstructorCopiesTheResource) {
   AsyncResourcePool<std::string> pool{ioContext.get_executor(), 2,
                                       std::string{"hello"}};
   for (size_t i = 0; i < 2; ++i) {
-    auto [errorCode, handle] = co_await acquire<std::string>(pool);
+    auto errorCodeAndHandle = co_await acquire<std::string>(pool);
+    auto& [errorCode, handle] = errorCodeAndHandle;
     EXPECT_TRUE(handle.isValid());
     EXPECT_EQ(handle.get(), "hello");
   }
@@ -430,7 +455,8 @@ ASYNC_TEST(AsyncResourcePool, modificationsOfTheResourceArePreserved) {
   // just a permit) is returned to the pool.
   AsyncResourcePool<int> pool{ioContext.get_executor(), 1};
   for (int expected = 0; expected < 3; ++expected) {
-    auto [errorCode, handle] = co_await acquire<int>(pool);
+    auto errorCodeAndHandle = co_await acquire<int>(pool);
+    auto& [errorCode, handle] = errorCodeAndHandle;
     EXPECT_TRUE(handle.isValid());
     EXPECT_EQ(handle.get(), expected);
     ++handle.get();
@@ -446,12 +472,14 @@ ASYNC_TEST(AsyncResourcePool, moveOnlyResources) {
   AsyncResourcePool<MoveOnlyResource> pool{ioContext.get_executor(),
                                            std::move(resources)};
   {
-    auto [errorCode, handle] = co_await acquire<MoveOnlyResource>(pool);
+    auto errorCodeAndHandle = co_await acquire<MoveOnlyResource>(pool);
+    auto& [errorCode, handle] = errorCodeAndHandle;
     EXPECT_TRUE(handle.isValid());
     EXPECT_EQ(handle.get().value_, 17);
     handle.get().value_ = 18;
   }
-  auto [errorCode, handle] = co_await acquire<MoveOnlyResource>(pool);
+  auto errorCodeAndHandle = co_await acquire<MoveOnlyResource>(pool);
+  auto& [errorCode, handle] = errorCodeAndHandle;
   EXPECT_TRUE(handle.isValid());
   EXPECT_EQ(handle.get().value_, 18);
 }
@@ -460,7 +488,8 @@ ASYNC_TEST(AsyncResourcePool, moveOnlyResources) {
 ASYNC_TEST(AsyncResourcePool, constResources) {
   AsyncResourcePool<const std::string> pool{
       ioContext.get_executor(), std::vector<std::string>{"immutable"}};
-  auto [errorCode, handle] = co_await acquire<const std::string>(pool);
+  auto errorCodeAndHandle = co_await acquire<const std::string>(pool);
+  auto& [errorCode, handle] = errorCodeAndHandle;
   EXPECT_TRUE(handle.isValid());
   static_assert(std::is_same_v<decltype(handle.get()), const std::string&>);
   EXPECT_EQ(handle.get(), "immutable");
@@ -492,7 +521,8 @@ ASYNC_TEST(AsyncResourcePool, asyncWithResourcePassesTheResourceToTheWork) {
                       });
   }
   co_await yieldUntil(ioContext, [&numDone] { return numDone.load() == 3; });
-  auto [errorCode, handle] = co_await acquire<int>(pool);
+  auto errorCodeAndHandle = co_await acquire<int>(pool);
+  auto& [errorCode, handle] = errorCodeAndHandle;
   EXPECT_TRUE(handle.isValid());
   EXPECT_EQ(handle.get(), 3);
 }

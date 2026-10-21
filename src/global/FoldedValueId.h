@@ -4,8 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_SRC_GLOBAL_VALUEID_H
-#define QLEVER_SRC_GLOBAL_VALUEID_H
+#ifndef QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
+#define QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
 
 #include <absl/strings/str_cat.h>
 
@@ -25,6 +25,8 @@
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
+
+namespace foldedValueId {
 
 // Encode values of different types (the types from the `Datatype` enum in
 // `Datatype.h`) using 4 bits for the datatype and 60 bits for the value.
@@ -598,4 +600,6 @@ class ValueId {
   }
 };
 
-#endif  // QLEVER_SRC_GLOBAL_VALUEID_H
+}  // namespace foldedValueId
+
+#endif  // QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H

@@ -18,7 +18,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
@@ -307,7 +307,7 @@ TEST(AggregateExpression, CountStar) {
   t.table.push_back(t.table[0]);
 
   auto setToUndef = [](IdTable::row_reference row) {
-    for (Id& id : row) {
+    for (IdRef id : row) {
       id = Id::makeUndefined();
     }
   };

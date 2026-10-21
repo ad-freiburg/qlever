@@ -23,7 +23,7 @@ enum class PathSearchAlgorithm { ALL_PATHS };
  * @brief Represents the source or target side of a PathSearch.
  * The side can either be a variable or a list of Ids.
  */
-using SearchSide = std::variant<Variable, std::vector<Id>>;
+using SearchSide = std::variant<Variable, IdColumn>;
 
 namespace pathSearch {
 struct Edge {
@@ -87,7 +87,7 @@ class BinSearchWrapper {
    * the search starts from all possible sources (i.e. all
    * start nodes). Returns only unique start nodes.
    */
-  std::vector<Id> getSources() const;
+  IdColumn getSources() const;
 
   std::vector<Id> getEdgeProperties(const Edge& edge) const;
 
@@ -123,7 +123,7 @@ struct PathSearchConfiguration {
       return std::get<Variable>(side).toSparql();
     }
     std::ostringstream os;
-    for (auto id : std::get<std::vector<Id>>(side)) {
+    for (auto id : std::get<IdColumn>(side)) {
       os << id << ", ";
     }
     return std::move(os).str();

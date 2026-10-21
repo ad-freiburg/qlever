@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: "w3c/rdf-tests"
-          ref: 3d0b0613d0177d25aad7ec60e88df2338f461516
+          ref: ec2ba15e0a001431af0e56376572812fd5dd1dbc
           path: sparql-test-suite
           fetch-depth: 1
       - name: Checkout sparql-conformance
@@ -70,7 +70,7 @@ jobs:
       - name: Create build directory
         run: mkdir ${{github.workspace}}/qlever-code/build
       - name: Configure CMake
-        run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
+        run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO
       - name: Build qlever binaries
         run: cmake --build ${{github.workspace}}/qlever-code/build --target qlever-index qlever-server --config ${{env.build-type}} -- -j $(nproc)
       # Only what the uploader still needs. Branch, event and origin repository

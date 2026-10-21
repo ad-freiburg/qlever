@@ -19,7 +19,8 @@
 
 #include "backports/concepts.h"
 #include "engine/CallFixedSize.h"
-#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
+#include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/NumericOperandClassification.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
@@ -158,7 +159,7 @@ void checkNumericOperandSizes(const std::tuple<Operands...>& operands,
 // means that at least one operand is vector-like.
 template <typename Function, typename... NumericTypes, typename... Operands>
 ExpressionResult evaluateHomogeneousNumericOperation(
-    std::tuple<Operands...> operands, EvaluationContext* context) {
+    const std::tuple<Operands...>& operands, EvaluationContext* context) {
   static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
   static_assert((... || isVectorResult<std::decay_t<Operands>>),
                 "At least one operand must be vector-like");
@@ -198,23 +199,17 @@ ExpressionResult evaluateHomogeneousNumericOperation(
 // return the same value for every index.
 template <typename Operand>
 ValueId getIdAt(const Operand& operand, size_t index) {
-  using OperandType = std::decay_t<Operand>;
-
   static_assert(supportsNumericFastPathOperand<Operand>(),
                 "Unsupported operand representation for numeric fast path");
-
-  if constexpr (isVectorResult<OperandType>) {
-    return operand[index];
-  } else {
-    return operand;
-  }
+  return getValueAt(operand, index);
 }
 
 // The fallback path for the speculative evaluation below when a pair of
 // operands does not match the majority types. Integer and double combinations
 // are dispatched explicitly because this was measurably faster than always
-// using the generic fallback. Other datatypes use the regular value getters to
-// preserve the generic expression semantics.
+// using the generic fallback. Functions with `undefForNonNumeric` return UNDEF
+// directly for non-numeric datatypes (see `hasNonNumericOperand`); all other
+// rows (in particular booleans) use the regular value getters.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
@@ -238,6 +233,12 @@ AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
 
   if (leftType == Double && rightType == Double) {
     return fastFunction(leftValue.getDouble(), rightValue.getDouble());
+  }
+
+  if (hasNonNumericOperand<Function,
+                           std::tuple<LeftValueGetter, RightValueGetter>>(
+          leftValue, rightValue)) {
+    return Id::makeUndefined();
   }
 
   return genericFunction(LeftValueGetter{}(leftValue, context),
@@ -296,6 +297,87 @@ ExpressionResult evaluateSpeculativeNumericOperation(
                   leftValue, rightValue, context, fastFunction,
                   genericFunction);
         }
+      },
+      [context]() { context->cancellationHandle_->throwIfCancelled(); });
+
+  return result;
+}
+
+// Evaluate a single row of an N-ary numeric expression using the speculative
+// majority-type fast path. If all operand datatypes match the expected numeric
+// types, evaluate using primitive numeric values. Otherwise, fall back to the
+// generic value getters for this row, unless an unsupported operand can
+// directly yield UNDEF.
+template <typename Function, typename ValueGetters, typename... NumericTypes,
+          typename... Operands>
+Id evaluateSpeculativeNaryRow(
+    size_t i, const std::tuple<Operands...>& operands,
+    const std::array<Datatype, sizeof...(NumericTypes)>& expectedTypes,
+    EvaluationContext* context) {
+  using FastFunction = RawNumericFunctionT<Function>;
+  FastFunction fastFunction;
+  Function genericFunction;
+
+  const auto values = std::apply(
+      [i](const auto&... operand) {
+        return std::array{getIdAt(operand, i)...};
+      },
+      operands);
+
+  const bool allMatch =
+      [&values, &expectedTypes]<size_t... I>(std::index_sequence<I...>) {
+        return ((values[I].getDatatype() == expectedTypes[I]) && ...);
+      }(std::index_sequence_for<Operands...>{});
+
+  if (allMatch) {
+    return std::apply(
+        [&fastFunction](const auto&... value) {
+          // Expand the numeric types and corresponding values in lockstep.
+          return fastFunction(getPrimitiveNumericValue<NumericTypes>(value)...);
+        },
+        values);
+  }
+
+  if (std::apply(
+          [](const auto&... value) {
+            return hasNonNumericOperand<Function, ValueGetters>(value...);
+          },
+          values)) {
+    return Id::makeUndefined();
+  }
+
+  return [&genericFunction, &values,
+          context]<size_t... I>(std::index_sequence<I...>) {
+    return genericFunction(
+        std::tuple_element_t<I, ValueGetters>{}(values[I], context)...);
+  }(std::index_sequence_for<Operands...>{});
+}
+
+// Evaluate an N-ary numeric operation speculatively using the majority
+// datatype of every operand. Rows whose datatypes all match the expected
+// majority types use the primitive numeric fast path. Rows with at least one
+// mismatch fall back to the regular value getters and generic function.
+template <typename Function, typename ValueGetters, typename... NumericTypes,
+          typename... Operands>
+ExpressionResult evaluateSpeculativeNaryNumericOperation(
+    const std::tuple<Operands...>& operands, EvaluationContext* context) {
+  static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
+  static_assert(sizeof...(NumericTypes) == std::tuple_size_v<ValueGetters>);
+
+  checkNumericOperandSizes(operands, context);
+
+  constexpr std::array<Datatype, sizeof...(NumericTypes)> expectedTypes{
+      datatypeForNumericType<NumericTypes>()...};
+
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.resize(context->size());
+
+  ad_utility::chunkedForLoop<1000>(
+      0, context->size(),
+      [&result, &operands, &expectedTypes, context](size_t i) {
+        result[i] =
+            evaluateSpeculativeNaryRow<Function, ValueGetters, NumericTypes...>(
+                i, operands, expectedTypes, context);
       },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
 

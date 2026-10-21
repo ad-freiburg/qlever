@@ -236,7 +236,7 @@ auto parallelBlockMergeToSink(
 // The `storageFactory` decides where the finished output blocks live between
 // the producer of a chunk and the consumer, see the `BlockStorageConcept`. A
 // storage that keeps them in memory (see
-// `test/parallelBlockMerge/InMemoryBlockStorage.h`) makes a producer whose
+// `util/parallelBlockMerge/InMemoryBlockStorage.h`) makes a producer whose
 // chunk is far ahead of the consumer suspend, whereas one that spills them to
 // disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it run
 // ahead.

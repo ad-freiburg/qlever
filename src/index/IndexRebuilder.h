@@ -19,6 +19,7 @@
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
+#include "util/Executor.h"
 
 namespace qlever {
 
@@ -61,6 +62,10 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
 // `cancellationHandle` can be used to cancel the rebuild. In this case, the new
 // index will be left in an incomplete state and should be deleted by the
 // caller.
+// The old permutations are read and the new ones are written on the
+// `executor` (throttled by the runtime parameters
+// `rebuild-index-scan-num-threads` and
+// `rebuild-permutation-writer-num-threads`).
 // Return the datastructures used for mapping to be used in further
 // post-processing.
 indexRebuilder::IndexRebuildMapping materializeToIndex(
@@ -69,7 +74,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::vector<LocalVocabIndex>& entries,
     const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const std::string& logFileName);
+    qlever::Executor executor, const std::string& logFileName);
 
 }  // namespace qlever
 

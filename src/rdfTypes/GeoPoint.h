@@ -142,6 +142,13 @@ class GeoPoint {
     encoding_.store(encoding);
   }
 
+  // Convert the bit representation of a point from encoding `from` to `to`.
+  static constexpr T convertEncoding(T bits, GeoPointEncodingEnum from,
+                                     GeoPointEncodingEnum to) {
+    auto [lat, lng] = splitCoordinates(bits, from);
+    return combineCoordinates(lat, lng, to);
+  }
+
   // Construct GeoPoint and ensure valid coordinate values
   GeoPoint(double lat, double lng);
 

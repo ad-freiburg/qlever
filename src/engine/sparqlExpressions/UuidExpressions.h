@@ -18,8 +18,7 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 inline constexpr auto fromLiteral = [](std::string_view str) {
   return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(str))};
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(str)};
 };
 
 inline constexpr auto fromIri = [](std::string_view str) {

@@ -124,6 +124,24 @@ class CompactVectorOfStrings {
     });
   }
 
+  // Append a single `element` at the end. Only allowed if this object owns its
+  // storage (see `build`). The `element` must not point into this object.
+  void push_back(value_type element) {
+    AD_CONTRACT_CHECK(data_.isOwned() && offsets_.isOwned(),
+                      "A `CompactVectorOfStrings` that is a zero-copy view "
+                      "cannot be appended to");
+    data_.modify([&element](auto& data) {
+      data.insert(data.end(), element.begin(), element.end());
+    });
+    offsets_.modify([dataSize = data_.size()](auto& offsets) {
+      // The first element also adds the start offset of the elements.
+      if (offsets.empty()) {
+        offsets.push_back(0);
+      }
+      offsets.push_back(dataSize);
+    });
+  }
+
   // This is a move-only type.
   CompactVectorOfStrings& operator=(const CompactVectorOfStrings&) = delete;
   CompactVectorOfStrings& operator=(CompactVectorOfStrings&&) noexcept =
@@ -194,13 +212,15 @@ class CompactVectorOfStrings {
     }
   }
 
- private:
   // Return a read-only view of the data, regardless of whether the storage
   // currently owns its elements or is a non-owning view.
   DataView dataSpan() const { return data_.view(); }
 
   // Return a read-only view of the offsets, regardless of whether the
   // storage currently owns its elements or is a non-owning view.
+  // NOTE: The `i`-th element starts at the `i`-th offset, and the last offset
+  // is the end of the last element. The offsets are empty if this object has
+  // no elements and was never built (see `ready()`).
   OffsetView offsetsSpan() const { return offsets_.view(); }
 };
 

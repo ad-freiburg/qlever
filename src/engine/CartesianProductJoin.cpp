@@ -504,6 +504,22 @@ std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   for (const auto& operation : children_) {
     copy.push_back(operation->clone());
   }
-  return std::make_unique<CartesianProductJoin>(_executionContext,
-                                                std::move(copy), chunkSize_);
+  return cloneWithNewChildren(std::move(copy));
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> CartesianProductJoin::cloneWithNewChildren(
+    Children children) const {
+  return std::make_unique<CartesianProductJoin>(
+      _executionContext, std::move(children), chunkSize_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+CartesianProductJoin::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // Since the variables covered by the children of a `CartesianProductJoin` are
+  // disjoint, we can simply use the generic push down into any child and it
+  // will select the correct one.
+  return pushDownBindToAnyChild(bind, children_);
 }

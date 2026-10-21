@@ -295,7 +295,7 @@ class IndexNestedLoopJoin {
         [this, leftColumns = std::move(leftColumns), &rightColumns,
          transformationFunc =
              std::move(transformationFunc)](auto JOIN_COLUMNS) {
-          auto rightTable = detail::toStaticView<JOIN_COLUMNS>(
+          auto rightTable = detail::toStaticView<JOIN_COLUMNS.value>(
               rightResult_->idTableView(), rightColumns);
           auto matchHelper =
               [rightTable = std::move(rightTable), leftColumns, JOIN_COLUMNS,
@@ -305,8 +305,9 @@ class IndexNestedLoopJoin {
                   LocalVocab localVocab) -> Result::IdTableVocabPair {
             detail::RightFiller matchTracker{
                 idTable.size(), idTable.getAllocator().template as<bool>()};
-            matchLeft(matchTracker, rightTable,
-                      detail::toStaticView<JOIN_COLUMNS>(idTable, leftColumns));
+            matchLeft(
+                matchTracker, rightTable,
+                detail::toStaticView<JOIN_COLUMNS.value>(idTable, leftColumns));
             return transformationFunc(AD_FWD(idTable), std::move(localVocab),
                                       matchTracker.matchTracker_);
           };

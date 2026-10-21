@@ -92,6 +92,9 @@ class NamedResultCache {
   // Get the number of cached results.
   size_t numEntries() const;
 
+  // Check if the cache contains a result with the given `name`.
+  bool contains(const Key& name) const;
+
   // Get a pointer to the cached result with the given `name`. If no such
   // result exists, throw an exception.
   std::shared_ptr<const Value> get(const Key& name) const;

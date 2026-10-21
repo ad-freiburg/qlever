@@ -11,7 +11,7 @@
 #include <variant>
 
 #include "backports/three_way_comparison.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "parser/TripleComponent.h"
 #include "util/HashSet.h"
 #include "util/OverloadCallOperator.h"

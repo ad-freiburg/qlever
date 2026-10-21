@@ -56,37 +56,47 @@ struct RuntimeParameters {
                                     "cache-max-size"};
   MemorySizeParameter cacheMaxSizeSingleEntry_{
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
-  SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
-  // The number of threads that read and decompress the blocks of a lazy index
-  // scan. Each lazy scan of a query has its own pool of this many threads.
-  // The value must be at least `1` (enforced by a parameter constraint).
-  // The default of `2` is enough for typical queries, where the operation
-  // that consumes the blocks processes them on a single thread and can barely
-  // keep up with the decompression even for `1` thread.
-  SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
-  // The number of threads used to read and decompress blocks when scanning
-  // permutations during a runtime index rebuild (see `IndexRebuilder`), both
-  // for the main scan of the old permutations and for the statistics
-  // recomputation. Lowering it reduces the rebuild's CPU usage without
-  // affecting query scans. The default of 1 keeps a rebuild on a live server
-  // from starving concurrent queries of CPU, at nearly no cost in wall time:
-  // the bottleneck of each permutation pipeline is its single sequential
-  // remap thread, so additional scan threads mostly add contention (measured
-  // on Wikidata on an otherwise idle 16-core server, where the wall time was
-  // the same for 1, 2, and 4 threads). A value of 0 falls back to
-  // `lazy-index-scan-num-threads`, the same value as for query scans.
+  // The number of blocks that a lazy index scan reads and decompresses on the
+  // global thread pool ahead of its consumer. The value must be at least `1`
+  // (enforced by a parameter constraint). The default of `20` keeps the
+  // prefetch depth that the scans had with threads of their own (2 threads
+  // plus a queue of 20 blocks). Smaller values measurably slow down queries
+  // with prefiltered joins on large relations, because their consumer
+  // processes the blocks in bursts.
+  SizeT lazyIndexScanNumBlocksInFlight_{20,
+                                        "lazy-index-scan-num-blocks-in-flight"};
+  // The maximum number of tasks that a single query runs at the same time on
+  // the global thread pool (for example, reading and decompressing the blocks
+  // of its lazy index scans). This keeps a single expensive query from
+  // occupying all the threads of the pool. The value must be at least `1`
+  // (enforced by a parameter constraint).
+  SizeT maxNumThreadsPerQuery_{6, "max-num-threads-per-query"};
+  // The maximum number of threads with which each scan of a permutation
+  // during a runtime index rebuild (see `IndexRebuilder`) reads and
+  // decompresses its blocks, both for the main scan of the old permutations
+  // and for the statistics recomputation. A value of 0 means "no limit".
+  // Lowering it reduces the rebuild's CPU usage without affecting query scans
+  // (how many blocks are read ahead of the consumer is determined by
+  // `lazy-index-scan-num-blocks-in-flight` above, as for query scans).
+  //
+  // NOTE: The default of 1 keeps a rebuild on a live server from starving
+  // concurrent queries of CPU, at nearly no cost in wall time: the bottleneck
+  // of each permutation pipeline is its single sequential remap thread, so
+  // more concurrent block reads mostly add contention (measured on Wikidata on
+  // an otherwise idle 16-core server, where the wall time was the same for 1,
+  // 2, and 4).
   SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
-  // How many blocks per permutation are compressed and written at the same
-  // time during a runtime index rebuild (on the global thread pool, see
-  // `permutation-writer-num-threads` below for the exact meaning of the
-  // value). Like the scan parameter above, this exists so that a rebuild on a
+  // The maximum number of threads with which each permutation is compressed
+  // and written during a runtime index rebuild. A value of 0 means "no limit".
+  // The number of blocks that are in flight is still determined by
+  // `permutation-writer-num-blocks-in-flight`, which is also used when
+  // building an index from scratch and when writing materialized views.
+  //
+  // NOTE: Like the scan parameter above, this exists so that a rebuild on a
   // live server leaves as much CPU as possible to concurrent queries: the
   // default of 1 compresses and writes the blocks of each permutation one
   // after the other, which reduces the CPU work of the permutation phase by
-  // ~20% at nearly no cost in wall time (same measurement setup as above). A
-  // value of 0 falls back to `permutation-writer-num-threads`, which is also
-  // used when building an index from scratch and when writing materialized
-  // views, and which this parameter deliberately leaves untouched.
+  // ~20% at nearly no cost in wall time (same measurement setup as above).
   SizeT rebuildPermutationWriterNumThreads_{
       1, "rebuild-permutation-writer-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
@@ -150,6 +160,13 @@ struct RuntimeParameters {
   // false,
   // the result will be `NaN` or `infinity` respectively.
   Bool divisionByZeroIsUndef_{true, "division-by-zero-is-undef"};
+
+  // If set to `true`, an invalid WKT literal that is given inline in the query
+  // (directly or via `VALUES`) as an argument of a GeoSPARQL function is an
+  // error during query parsing. If set to `false`, the function call is an
+  // expression error (the result is undefined), as specified by GeoSPARQL 1.1.
+  Bool throwOnInvalidWkt_{false, "throw-on-invalid-wkt"};
+
   // If set to `true`, the contained `FILTER` expressions in the query
   // try to set and apply a corresponding `PrefilterExpression` (see
   // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`
@@ -162,18 +179,18 @@ struct RuntimeParameters {
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
   // The maximum number of threads to be used by the spatial join algorithms.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
-  // The maximum number of threads for the parallel counting loops of the
-  // pattern trick (see `CountAvailablePredicates`). The value `0` means the
-  // number of logical cores of the machine. The default of `3` captures most
-  // of the speedup, with quickly diminishing returns for more threads.
-  SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
-  // The number of threads for the parallel sort of intermediate results
-  // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
-  // as `1`. Only effective when QLever was built with the CMake option
-  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
-  // default of `3` captures most of the speedup, with quickly diminishing
-  // returns for more threads.
-  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
+  // The maximum number of tasks of the parallel counting loops of the pattern
+  // trick (see `CountAvailablePredicates`) that run at the same time. They run
+  // on the query's executor, so `max-num-threads-per-query` still bounds the
+  // threads. The value `0` means the number of logical cores of the machine.
+  // The default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more tasks.
+  SizeT patternTrickNumTasksInFlight_{3, "pattern-trick-num-tasks-in-flight"};
+  // A hint for how many tasks of the in-memory sort of intermediate results
+  // (see `IdTableUtils::sort`) run at the same time. They run on the query's
+  // executor, so `max-num-threads-per-query` still bounds the threads. Must be
+  // strictly positive; `1` means that the sort runs sequentially.
+  SizeT sortNumTasksInFlight_{3, "sort-num-tasks-in-flight"};
   // The maximum size of the `prefilterBox` for
   // `LibspatialjoinAlgorithm::parse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
@@ -234,18 +251,18 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
-  // Configure how many blocks are compressed and written concurrently per
-  // permutation. The blocks are compressed and written on the global thread
-  // pool, so this is not a number of threads of its own, and it is capped at
-  // the number of threads of that pool. A value of 0 means "as many as the
-  // global thread pool has threads". A value of 1 means one block after the
-  // other. For a larger value `n`, up to `2 * n` blocks (at least 4) are in
-  // flight, all of which may be compressed at the same time if the pool has
-  // idle threads (see `CompressedRelationWriter::makeBlockWriteQueue`). Even
-  // though this influences the logic of regular index building, `qlever-index`
-  // doesn't expose a CLI flag to set this parameter, but derives it from its
-  // `--num-threads` option.
-  SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
+  // The maximal number of blocks per permutation that are queued for or
+  // currently being compressed and written (see
+  // `CompressedRelationWriter::makeBlockWriteQueue`). Each of them is held in
+  // memory until it has been written. How many of them are compressed at the
+  // same time is not determined by this parameter, but by the executor on
+  // which they are written (for the runtime index rebuild, see
+  // `rebuild-permutation-writer-num-threads`). The value must be at least `1`
+  // (enforced by a parameter constraint). Even though this influences the
+  // logic of regular index building, `qlever-index` doesn't expose a CLI flag
+  // to set this parameter, but derives it from its `--num-threads` option.
+  SizeT permutationWriterNumBlocksInFlight_{
+      4, "permutation-writer-num-blocks-in-flight"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};

@@ -346,11 +346,13 @@ TEST(TaskQueueOnExecutor, aPushThatIsBlockedWhenFinishStartsIsRejected) {
   std::this_thread::sleep_for(shortTimeout);
   EXPECT_FALSE(pushHasReturned.load());
   ad_utility::JThread finisher{[&queue]() { queue.finish(); }};
-  // The finisher has now started finishing and waits for the first task.
-  std::this_thread::sleep_for(shortTimeout);
-  latch.release();
+  // `finish()` wakes up the blocked push, which then reports the violation
+  // right away. The slot is still taken, so the push cannot have enqueued its
+  // task, no matter when the two threads actually started. If the push were
+  // not woken up, this `join` would block forever.
   pusher.join();
-  finisher.join();
   EXPECT_TRUE(pushHasThrown.load());
+  latch.release();
+  finisher.join();
   queue.waitUntilFinished();
 }

@@ -51,7 +51,7 @@ class CopyOnWriteChunkedVector {
   explicit CopyOnWriteChunkedVector(ql::span<const T> elements) {
     // The number of chunks is `ceil(elements.size() / ChunkSize)`.
     size_t size = elements.size();
-    chunks_.reserve((size + ChunkSize - 1) / ChunkSize);
+    chunks_.reserve(size / ChunkSize + (size % ChunkSize != 0));
     for (size_t begin = 0; begin < size; begin += ChunkSize) {
       size_t end = std::min(begin + ChunkSize, size);
       chunks_.emplace_back(
@@ -77,6 +77,10 @@ class CopyOnWriteChunkedVector {
 
   // Write access to the element with the given index. Clones the chunk of the
   // element if it is shared with a copy of this vector.
+  //
+  // NOTE: This is deliberately not a non-const overload of `operator[]`, which
+  // would be chosen for every access via a non-const vector, also for pure
+  // reads, and then clone a shared chunk (see `CopyOnWritePtr::write`).
   T& mutableAt(size_t i) {
     AD_CONTRACT_CHECK(i < size());
     return chunks_[i / ChunkSize].write()[i % ChunkSize];
