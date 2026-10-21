@@ -496,8 +496,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // `varsRequiredFromSubtree`. Keep only aliases whose targets are requested.
   auto requestedAliases =
       _aliases | ql::views::filter([&requestedVariables](const Alias& alias) {
-        return requestedVariables.find(alias._target) !=
-               requestedVariables.end();
+        return ad_utility::contains(requestedVariables, alias._target);
       }) |
       ::ranges::to_vector;
 
