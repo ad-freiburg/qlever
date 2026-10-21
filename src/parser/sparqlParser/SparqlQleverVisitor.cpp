@@ -63,6 +63,21 @@
 namespace {
 // CTRE regex pattern for C++17 compatibility
 constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
+
+// Return true iff `lit` is a WKT literal that is invalid according to the
+// strict WKT parsing mode.
+bool isInvalidWkt(const ad_utility::triple_component::Literal& lit) {
+  return lit.hasDatatype() && lit.getDatatype() == GEO_WKT_LITERAL &&
+         !ad_utility::GeometryInfo::isValidWktStrict(
+             lit.toStringRepresentation());
+}
+
+// Error message for an invalid WKT literal passed to a geo function.
+std::string invalidWktMessage(
+    const ad_utility::triple_component::Literal& lit) {
+  return absl::StrCat("Invalid WKT literal given to a GeoSPARQL function: ",
+                      lit.toStringRepresentation());
+}
 }  // namespace
 
 using namespace ad_utility::sparql_types;
@@ -188,6 +203,53 @@ std::string Visitor::currentTimeAsXsdString() {
 }
 
 // ___________________________________________________________________________
+void Visitor::checkGeoFunctionArgs(const std::vector<ExpressionPtr>& args,
+                                   const antlr4::ParserRuleContext* ctx) {
+  // Without the runtime parameter, invalid WKT literals are not an error here,
+  // but only make the geo function evaluate to UNDEF.
+  if (!getRuntimeParameter<&RuntimeParameters::throwOnInvalidWkt_>()) {
+    return;
+  }
+  for (const auto& arg : args) {
+    if (auto var = arg->getVariableOrNullopt()) {
+      geoFunctionArgVariables_.insert(std::move(var).value());
+    } else if (auto lit = dynamic_cast<
+                   const sparqlExpression::StringLiteralExpression*>(
+                   arg.get())) {
+      if (isInvalidWkt(lit->value())) {
+        reportError(ctx, invalidWktMessage(lit->value()));
+      }
+    }
+  }
+}
+
+// ___________________________________________________________________________
+void Visitor::checkWktInValues(const std::vector<GraphPatternOperation>& ops,
+                               const antlr4::ParserRuleContext* ctx) const {
+  // Always empty if the runtime parameter `throw-on-invalid-wkt` is not set.
+  if (geoFunctionArgVariables_.empty()) {
+    return;
+  }
+  for (const auto& op : ops) {
+    const auto* values = std::get_if<Values>(&op);
+    if (values == nullptr) {
+      continue;
+    }
+    const auto& [variables, rows] = values->_inlineValues;
+    for (size_t col = 0; col < variables.size(); ++col) {
+      if (!geoFunctionArgVariables_.contains(variables[col])) {
+        continue;
+      }
+      for (const auto& row : rows) {
+        if (row[col].isLiteral() && isInvalidWkt(row[col].getLiteral())) {
+          reportError(ctx, invalidWktMessage(row[col].getLiteral()));
+        }
+      }
+    }
+  }
+}
+
+// ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
     const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
     const antlr4::ParserRuleContext* ctx) {
@@ -288,6 +350,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
       {"sfWithin", &makeGeoRelationExpression<WITHIN>}};
   if (checkPrefix(GEOF_PREFIX)) {
+    checkGeoFunctionArgs(argList, ctx);
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
     } else if (functionName == "relate") {
@@ -342,6 +405,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"toEpoch", &makeToEpochExpression},
   };
   if (checkPrefix(QL_PREFIX)) {
+    if (ql::starts_with(functionName, "envelope") ||
+        functionName == "simplifyGeometry") {
+      checkGeoFunctionArgs(argList, ctx);
+    }
     if (ad_utility::contains(unaryInternalFuncs, functionName)) {
       return createUnary(unaryInternalFuncs.at(functionName));
     } else if (functionName == "prefix-match") {
@@ -1211,6 +1278,8 @@ Visitor::OperationsAndFilters Visitor::visit(
     Parser::GroupGraphPatternSubContext* ctx) {
   std::vector<GraphPatternOperation> ops;
   std::vector<SparqlFilter> filters;
+  auto outerGeoFunctionArgVariables =
+      std::exchange(geoFunctionArgVariables_, {});
 
   auto filter = [&filters](SparqlFilter filter) {
     filters.emplace_back(std::move(filter));
@@ -1237,6 +1306,8 @@ Visitor::OperationsAndFilters Visitor::visit(
     std::get<BasicGraphPattern>(ops.back())
         .appendTriples(std::move(triples.value()));
   }
+  checkWktInValues(ops, ctx);
+  geoFunctionArgVariables_ = std::move(outerGeoFunctionArgVariables);
   return {std::move(ops), std::move(filters)};
 }
 

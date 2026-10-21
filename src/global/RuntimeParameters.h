@@ -160,6 +160,13 @@ struct RuntimeParameters {
   // false,
   // the result will be `NaN` or `infinity` respectively.
   Bool divisionByZeroIsUndef_{true, "division-by-zero-is-undef"};
+
+  // If set to `true`, an invalid WKT literal that is given inline in the query
+  // (directly or via `VALUES`) as an argument of a GeoSPARQL function is an
+  // error during query parsing. If set to `false`, the function call is an
+  // expression error (the result is undefined), as specified by GeoSPARQL 1.1.
+  Bool throwOnInvalidWkt_{false, "throw-on-invalid-wkt"};
+
   // If set to `true`, the contained `FILTER` expressions in the query
   // try to set and apply a corresponding `PrefilterExpression` (see
   // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`

@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NUMERICEXPRESSIONWRAPPERS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NUMERICEXPRESSIONWRAPPERS_H
 
+#include <tuple>
 #include <type_traits>
 #include <variant>
 
@@ -62,6 +63,50 @@ struct MakeNumericExpression {
     return std::visit(visitor, args...);
   }
 };
+
+// If `undefForNonNumeric<Function>` is true, `Function` must always return an
+// undefined ID when any argument is non-numeric. Expressions use this property
+// to return UNDEF for such inputs without evaluating the function.
+//
+// NOTE: This property is opt-in and independent of `supportsNumericFastPath`.
+// Date-aware operations also support homogeneous numeric execution, but can
+// return defined results for non-numeric dates.
+template <typename Function>
+inline constexpr bool undefForNonNumeric = false;
+
+template <typename Function, bool NanOrInfToUndef>
+inline constexpr bool
+    undefForNonNumeric<MakeNumericExpression<Function, NanOrInfToUndef>> = true;
+
+// Return true if any of `values` is a raw ID with a non-numeric datatype, its
+// corresponding getter in `ValueGetters` is `NumericValueGetter`, and
+// `undefForNonNumeric<Function>` is true. `ValueGetters` is a tuple with one
+// getter type per value, in the same order as `values`. The result of the
+// expression for such a row is UNDEF, which the callers return without
+// applying the value getters.
+//
+// NOTE: `NumericValueGetter` accepts booleans as integers, so they are not
+// rejected. Other getters and non-ID arguments return false; in particular,
+// date-aware getters keep their own handling of non-numeric dates.
+template <typename Function, typename ValueGetters, typename... Values>
+bool hasNonNumericOperand(const Values&... values) {
+  return [&]<size_t... I>(std::index_sequence<I...>) {
+    auto rejects = []<typename Getter>(const auto& value) {
+      if constexpr (undefForNonNumeric<Function> &&
+                    std::is_same_v<Getter, NumericValueGetter> &&
+                    std::is_same_v<std::decay_t<decltype(value)>, ValueId>) {
+        using enum Datatype;
+        const auto type = value.getDatatype();
+        return type != Int && type != Double && type != Bool;
+      } else {
+        return false;
+      }
+    };
+    return (rejects.template operator()<std::tuple_element_t<I, ValueGetters>>(
+                values) ||
+            ...);
+  }(std::index_sequence_for<Values...>{});
+}
 
 }  // namespace sparqlExpression::detail
 

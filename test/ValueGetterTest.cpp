@@ -796,8 +796,10 @@ TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
   expectIsIriAndIsLiteral({boolTrue_, int_, double_, date_, geoPoint_}, false,
                           true);
   // The remaining datatypes are neither.
-  expectIsIriAndIsLiteral({undefined_, blankNode_, textRecord_, wordVocab_},
-                          false, false);
+  expectIsIriAndIsLiteral({blankNode_, textRecord_, wordVocab_}, false, false);
+  // An unbound argument is an error.
+  expectAll<IsIriValueGetter>({undefined_}, Eq(Id::makeUndefined()));
+  expectAll<IsLiteralValueGetter>({undefined_}, Eq(Id::makeUndefined()));
 }
 
 // _____________________________________________________________________________

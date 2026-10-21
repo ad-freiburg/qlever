@@ -7,6 +7,7 @@
 #include <range/v3/numeric/accumulate.hpp>
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
+#include "rdfTypes/GeometryInfo.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -89,8 +90,17 @@ void WKTParser::processQueue(size_t t) {
       } else if (dt == Datatype::LocalVocabIndex) {
         // `LocalVocabEntry` has to be parsed in any case: we have no
         // information except the string.
+        //
+        // Invalid WKT (according to the strict parsing mode) is skipped, so
+        // it never matches (see GeoSPARQL 1.1, Section 10.9.1).
+        // TODO<ullingerc> This parses the literal twice. To make this more
+        // efficient, `parseLine` of `libspatialjoin` needs a strict mode. This
+        // would also allow parsing the `VocabIndex` literals above strictly if
+        // there is no `GeoVocabulary`.
         const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
-        if (literalOrIri.isLiteral()) {
+        if (literalOrIri.isLiteral() &&
+            GeometryInfo::isValidWktStrict(
+                literalOrIri.toStringRepresentation())) {
           job.wkt = literalOrIri.getLiteral().getContent();
           parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
                     false);
