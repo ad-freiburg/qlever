@@ -173,12 +173,6 @@ class RtreeEntryAlgorithm : public SpatialJoinAlgorithmBase {
 
   // this helper function converts a GeoPoint into a boost geometry Point
   size_t convertGeoPointToPoint(GeoPoint point);
-
-  // number of times the parsing of a geometry failed. For now this is only used
-  // to print the warning once, but it could also be used to print how many
-  // geometries failed. It is mutable to let parsing function which are const
-  // still modify the the nr of failed parsings.
-  size_t numFailedParsedGeometries_ = 0;
 };
 
 #endif  // QLEVER_SRC_ENGINE_RTREEENTRYALGORITHM_H
