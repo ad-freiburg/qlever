@@ -197,12 +197,6 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
           "The parameter `<distanceUnit>` requires the parameter "
           "`<bindDistance>`.");
 
-  throwIf(distanceVariable_.has_value() && !distanceUnit_.has_value() &&
-              algo != SpatialJoinAlgorithm::LIBSPATIALJOIN,
-          "The parameter `<bindDistance>` requires the parameter "
-          "`<distanceUnit>`, unless the algorithm `<libspatialjoin>` is used "
-          "(which defaults to meters).");
-
   throwIf(
       rightCacheName_.has_value() &&
           algo != SpatialJoinAlgorithm::S2_POINT_POLYLINE,
@@ -271,7 +265,12 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
       task, left_.value(), right_.value(), distanceVariable_,
       pv,   algo,          rightCacheName_};
   if (distanceVariable_.has_value()) {
-    config.distanceUnit_ = distanceUnit_.value_or(UnitOfMeasurement::METERS);
+    // If no unit is given, `libspatialjoin` defaults to meters and all other
+    // algorithms default to kilometers.
+    config.distanceUnit_ =
+        distanceUnit_.value_or(algo == SpatialJoinAlgorithm::LIBSPATIALJOIN
+                                   ? UnitOfMeasurement::METERS
+                                   : UnitOfMeasurement::KILOMETERS);
   }
   return config;
 }
