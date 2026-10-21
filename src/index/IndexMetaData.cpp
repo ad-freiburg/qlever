@@ -13,6 +13,7 @@
 
 #include "global/FileSuffixConstants.h"
 #include "util/File.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
@@ -85,7 +86,11 @@ std::string IndexMetaData::statistics() const {
   os.imbue(locWithNumberGrouping);
   os << "#relations = " << numDistinctCol0_
      << ", #blocks = " << blockData().size()
-     << ", #triples = " << totalElements_;
+     << ", #sub-blocks = " << permutationBlockMetadata().numSubBlocks()
+     << " (metadata: "
+     << ad_utility::MemorySize::bytes(subBlocks().getMemoryUsageInBytes())
+            .asString()
+     << ")" << ", #triples = " << totalElements_;
   return std::move(os).str();
 }
 

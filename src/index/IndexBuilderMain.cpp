@@ -199,6 +199,7 @@ int main(int argc, char** argv) {
   // `validate` functions in `util/ProgramOptionsHelpers.h`). `NonNegative` also
   // rejects a negative value right away.
   std::optional<ad_utility::NonNegative> indexRowsPerBlock;
+  std::optional<ad_utility::NonNegative> indexRowsPerSubBlock;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
 
@@ -332,6 +333,16 @@ int main(int argc, char** argv) {
       DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
   add("index-rows-per-block", po::value(&indexRowsPerBlock),
       rowsPerBlockDescription.c_str());
+  auto rowsPerSubBlockDescription = absl::StrCat(
+      "The number of rows of one sub-block of the permutations. Each block is "
+      "split into sub-blocks, which can be read from disk in isolation, so "
+      "the prefiltering of joins and filters skips the parts of a block that "
+      "cannot match. The metadata of a sub-block is much smaller than that of "
+      "a block (it is held in RAM, too). The value 0 disables the "
+      "sub-blocks. Default: ",
+      DEFAULT_INDEX_ROWS_PER_SUB_BLOCK, ".");
+  add("index-rows-per-sub-block", po::value(&indexRowsPerSubBlock),
+      rowsPerSubBlockDescription.c_str());
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
@@ -406,6 +417,9 @@ int main(int argc, char** argv) {
         parseMaterializedViewsJson(materializedViewsJson);
     if (indexRowsPerBlock.has_value()) {
       config.indexRowsPerBlock_ = indexRowsPerBlock.value();
+    }
+    if (indexRowsPerSubBlock.has_value()) {
+      config.indexRowsPerSubBlock_ = indexRowsPerSubBlock.value();
     }
     config.validate();
     // For index building, let each permutation writer keep two blocks in flight

@@ -104,6 +104,10 @@ struct TestIndexConfig {
   bool usePatterns = true;
   bool usePrefixCompression = true;
   size_t rowsPerBlock = 2;
+  // The number of rows per sub-block (see `SubBlockMetadata.h`). If `nullopt`,
+  // the default of the index is used, which is larger than the small
+  // `rowsPerBlock` of most tests, so that the blocks are not split.
+  std::optional<size_t> rowsPerSubBlock = std::nullopt;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>
@@ -164,20 +168,21 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(
-        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
-        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
+    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
+                      c.usePatterns, c.usePrefixCompression, c.rowsPerBlock,
+                      c.rowsPerSubBlock, c.createTextIndex,
+                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
+                      c.indexType, c.encodedPrefixesWithoutAngleBrackets,
+                      c.encodedIriPatterns, c.addHasWordTriples,
+                      c.secondaryVocabWords, c.numThreads, c.parseInParallel,
+                      c.additionalSettings, c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
-      usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
-      contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
-      bAndKParam, indexType, vocabularyType,
+      usePrefixCompression, rowsPerBlock, rowsPerSubBlock, createTextIndex,
+      addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
+      scoringMetric, bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
       addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
       additionalSettings, geoPointEncoding)

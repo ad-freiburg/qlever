@@ -907,7 +907,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
       });
   bool hasCrossGraphDuplicates =
       !isMaterializedView && !hasGraphVariable &&
-      ql::ranges::any_of(locTriples.getAugmentedMetadata(),
+      ql::ranges::any_of(locTriples.getAugmentedMetadata().blocks(),
                          [](const CompressedBlockMetadata& block) {
                            return block.containsDuplicatesWithDifferentGraphs_;
                          });

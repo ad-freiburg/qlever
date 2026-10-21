@@ -46,13 +46,23 @@ struct IndexFormatVersion {
 // the index format, so it has to be either extended by your change or updated
 // to the new pair of versions; else an index of the previous version can no
 // longer be converted, but only be rebuilt. The same holds for
-// `indexFormatVersionWithLatMajorGeoPoints`: an index in that format is loaded
-// without conversion only as long as your change does not affect it.
+// `indexFormatVersionWithoutSubBlocks` and
+// `indexFormatVersionWithLatMajorGeoPoints`: an index in those formats is
+// loaded without conversion only as long as your change does not affect them.
 inline const IndexFormatVersion& indexFormatVersion{
-    3470, DateYearOrDuration{Date{2026, 9, 26}}};
+    3781, DateYearOrDuration{Date{2026, 10, 21}}};
 
 // The index format that directly precedes `indexFormatVersion` above. It
-// differs from the current format only in that it always encodes geo points
+// differs from the current format only in that its blocks are never split into
+// sub-blocks (see `index/SubBlockMetadata.h`). The current format supports
+// that as well (the metadata of such a permutation is still written in the old
+// format, see `IndexMetaData`), so an index in this format is loaded without
+// any conversion.
+inline const IndexFormatVersion& indexFormatVersionWithoutSubBlocks{
+    3470, DateYearOrDuration{Date{2026, 9, 26}}};
+
+// The index format that directly precedes `indexFormatVersionWithoutSubBlocks`
+// above. It differs from that format only in that it always encodes geo points
 // in the (now deprecated) `LatMajor` encoding, and that its configuration has
 // no entry for the encoding (see `ad_utility::GeoPointEncoding`). The current
 // format supports that encoding as well, so an index in this format is loaded
@@ -72,6 +82,7 @@ inline const IndexFormatVersion& previousIndexFormatVersion{
 // version of QLever without conversion.
 inline bool isLoadableIndexFormatVersion(const IndexFormatVersion& version) {
   return version == indexFormatVersion ||
+         version == indexFormatVersionWithoutSubBlocks ||
          version == indexFormatVersionWithLatMajorGeoPoints;
 }
 }  // namespace qlever

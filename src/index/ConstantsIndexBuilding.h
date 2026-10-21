@@ -199,6 +199,21 @@ constexpr inline size_t MAX_INDEX_ROWS_PER_BLOCK =
 constexpr inline std::string_view INDEX_ROWS_PER_BLOCK_KEY =
     "index-rows-per-block";
 
+// The default number of rows of a sub-block of the permutations. Each block is
+// split into sub-blocks of about this many rows, which can be read from disk in
+// isolation. The selection of the blocks of a scan (for example, the
+// prefiltering of a join or of a `FILTER`) works at the granularity of the
+// sub-blocks, while the expensive metadata (for example, the graph info) is
+// only stored per block (see `SubBlockMetadata.h`).
+constexpr inline size_t DEFAULT_INDEX_ROWS_PER_SUB_BLOCK = 4096;
+
+// The key under which the number of rows per sub-block is stored in the
+// configuration of an index (`meta-data.json`). The value `0` means that the
+// blocks are not split into sub-blocks, which is also the case for all indexes
+// that were built before this key existed.
+constexpr inline std::string_view INDEX_ROWS_PER_SUB_BLOCK_KEY =
+    "index-rows-per-sub-block";
+
 constexpr inline size_t NumColumnsIndexBuilding = 4;
 
 // The maximal number of distinct graphs in a block such that this information

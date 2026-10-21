@@ -156,6 +156,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.indexRowsPerBlock_.has_value()) {
     index.rowsPerBlock() = config.indexRowsPerBlock_.value();
   }
+  if (config.indexRowsPerSubBlock_.has_value()) {
+    index.rowsPerSubBlock() = config.indexRowsPerSubBlock_.value();
+  }
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.

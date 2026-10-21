@@ -49,8 +49,8 @@ static Id getIdFromColumnIndex(
 }
 
 // Check for the following conditions.
-// (1) All `CompressedBlockMetadata` values in `input` must be unique.
-// (2) `input` must contain those `CompressedBlockMetadata` values in sorted
+// (1) All `SubBlockMetadata` values in `input` must be unique.
+// (2) `input` must contain those `SubBlockMetadata` values in sorted
 // order.
 // (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
@@ -61,7 +61,7 @@ static Id getIdFromColumnIndex(
 // together with the other expensive checks (like the same check in the
 // constructor of `ScanSpecAndBlocks`).
 static void checkRequirementsBlockMetadata(
-    [[maybe_unused]] ql::span<const CompressedBlockMetadata> input,
+    [[maybe_unused]] BlockMetadataSpan input,
     [[maybe_unused]] size_t evaluationColumn) {
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
     CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
@@ -105,21 +105,19 @@ static BlockMetadataRange mapValueIdItPairToBlockRange(
     const ValueIdIt& endIdIt, BlockMetadataSpan blockRange) {
   AD_CORRECTNESS_CHECK(beginIdIt <= endIdIt);
   auto blockRangeBegin = blockRange.begin();
-  // Each `CompressedBlockMetadata` value contains two bounding `ValueId`s, one
+  // Each `SubBlockMetadata` value contains two bounding `ValueId`s, one
   // for `firstTriple_` and `lastTriple_` respectively. `ValueIdIt idRangeBegin`
-  // is the first valid iterator on our flattened `ql::span<const
-  // CompressedBlockMetadata> blockRange` with respect to the contained
-  // `ValueId`s.
-  // `blockRange.begin()` represents the first valid iterator on our original
-  // `ql::span<const CompressedBlockMetadata> blockRange`.
+  // is the first valid iterator on our flattened `BlockMetadataSpan blockRange`
+  // with respect to the contained `ValueId`s. `blockRange.begin()` represents
+  // the first valid iterator on our original `BlockMetadataSpan blockRange`.
   //
   //  EXAMPLE
-  // `CompressedBlockMetadata` view on `ql::span<const CompressedBlockMetadata>
+  // `SubBlockMetadata` view on `BlockMetadataSpan
   // blockRange`:
   // `{[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150,
   // 1158]}`. Range for `BlockMetadataIt` values.
   //
-  // `ValueId` view on (flat) `ql::span<const CompressedBlockMetadata>
+  // `ValueId` view on (flat) `BlockMetadataSpan
   // blockRange`:
   //`{1021, 1082, 1083, 1115, 1121, 1140, 1140, 1148, 1150, 1158}`.
   // Range for `ValueIdIt` values.
@@ -287,7 +285,7 @@ static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
 }  // namespace logicalOps
 }  // namespace detail
 
-// This function retrieves the `BlockRange`s for `CompressedBlockMetadata`
+// This function retrieves the `BlockRange`s for `SubBlockMetadata`
 // values that contain bounding `ValueId`s with different underlying datatypes.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
@@ -303,7 +301,7 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     auto dType1 = (*firstId).getDatatype();
     auto dType2 = (*std::next(firstId)).getDatatype();
     // ValueIds representing LocalVocab and Vocab entries are contained in mixed
-    // and sorted order over the CompressedBlockMetadata values. Thus, we don't
+    // and sorted order over the `SubBlockMetadata` values. Thus, we don't
     // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
     if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
         (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
@@ -381,14 +379,14 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // CUSTOM VALUE-ID ACCESS (STRUCT) OPERATOR
 
 // Enables access to the i-th `ValueId` regarding our containerized
-// `ql::span<const CompressedBlockMetadata> inputSpan`.
-// Each `CompressedBlockMetadata` value holds exactly two bound `ValueId`s (one
+// `BlockMetadataSpan inputSpan`.
+// Each `SubBlockMetadata` value holds exactly two bound `ValueId`s (one
 // in `firstTriple_` and `lastTriple_` respectively) over the specified column
 // `evaluationColumn_`.
 // Thus, the valid index range over `i` is `[0, 2 * inputSpan.size())`.
 ValueId AccessValueIdFromBlockMetadata::operator()(
     BlockMetadataSpan randomAccessContainer, uint64_t i) const {
-  const CompressedBlockMetadata& block = randomAccessContainer[i / 2];
+  const SubBlockMetadata& block = randomAccessContainer[i / 2];
   return i % 2 == 0
              ? getIdFromColumnIndex(block.firstTriple_, evaluationColumn_)
              : getIdFromColumnIndex(block.lastTriple_, evaluationColumn_);

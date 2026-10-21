@@ -121,6 +121,8 @@ class IndexImpl {
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
+  // `0` means that the blocks are not split into sub-blocks.
+  size_t rowsPerSubBlock_ = DEFAULT_INDEX_ROWS_PER_SUB_BLOCK;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
@@ -599,6 +601,10 @@ class IndexImpl {
 
   const size_t& rowsPerBlock() const { return rowsPerBlock_; }
 
+  size_t& rowsPerSubBlock() { return rowsPerSubBlock_; }
+
+  const size_t& rowsPerSubBlock() const { return rowsPerSubBlock_; }
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   // Return the names of all files that belong to the index with the given base
@@ -650,6 +656,11 @@ class IndexImpl {
   // index was built before that key existed. Throw if the value is not between
   // 1 and `MAX_INDEX_ROWS_PER_BLOCK`.
   static size_t rowsPerBlock(const nlohmann::json& configurationJson);
+
+  // Return the number of rows per sub-block of the index with the given
+  // `configurationJson` (`INDEX_ROWS_PER_SUB_BLOCK_KEY`), and `0` (no
+  // sub-blocks) if the index was built before that key existed.
+  static size_t rowsPerSubBlock(const nlohmann::json& configurationJson);
 
   // Format the given time as a UTC timestamp string in the
   // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).

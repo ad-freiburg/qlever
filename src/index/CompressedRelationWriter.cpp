@@ -24,6 +24,14 @@
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/views/AsyncTransformView.h"
 
+namespace {
+// Return the first three `Id`s (the triple without the graph) of the row with
+// index `row` of the `block`.
+std::array<Id, 3> idsWithoutGraph(const IdTableView<0>& block, size_t row) {
+  return {block(row, 0), block(row, 1), block(row, 2)};
+}
+}  // namespace
+
 // ____________________________________________________________________________
 float CompressedRelationWriter::computeMultiplicity(
     size_t numElements, size_t numDistinctElements) {
@@ -53,11 +61,29 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   smallRelationsBuffer_ = takeBlockBuffer();
 }
 // ____________________________________________________________________________
-CompressedBlockMetadata::OffsetAndCompressedSize
-CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
+std::pair<CompressedBlockMetadata::OffsetAndCompressedSize, std::vector<size_t>>
+CompressedRelationWriter::compressAndWriteColumn(
+    ConstIdColumnRef column, ql::span<const size_t> subBlockEnds) {
   static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * sizeof(column[0]));
+  AD_CORRECTNESS_CHECK(!subBlockEnds.empty() &&
+                       subBlockEnds.back() == column.size());
+  std::vector<char> compressedBlock;
+  std::vector<size_t> compressedSizes;
+  compressedSizes.reserve(subBlockEnds.size());
+  size_t subBlockBegin = 0;
+  for (size_t subBlockEnd : subBlockEnds) {
+    auto compressedSubBlock = ZstdWrapper::compress(
+        (void*)(column.data() + subBlockBegin),
+        (subBlockEnd - subBlockBegin) * sizeof(column[0]));
+    compressedSizes.push_back(compressedSubBlock.size());
+    if (compressedBlock.empty()) {
+      compressedBlock = std::move(compressedSubBlock);
+    } else {
+      compressedBlock.insert(compressedBlock.end(), compressedSubBlock.begin(),
+                             compressedSubBlock.end());
+    }
+    subBlockBegin = subBlockEnd;
+  }
   auto compressedSize = compressedBlock.size();
   // Reserve a range of the file and write to it with the positioned
   // `File::write`, which needs a shared lock only. The compression above and
@@ -65,7 +91,72 @@ CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
   auto offsetInFile = nextOffset_.fetch_add(static_cast<off_t>(compressedSize));
   // NOTE: This throws if not all the bytes could be written.
   outfile_.rlock()->write(compressedBlock.data(), compressedSize, offsetInFile);
-  return {offsetInFile, compressedSize};
+  return {{offsetInFile, compressedSize}, std::move(compressedSizes)};
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> CompressedRelationWriter::computeSubBlockEnds(
+    const IdTableView<0>& block) const {
+  size_t numRows = block.numRows();
+  if (!subBlocksAreEnabled() || numRows <= rowsPerSubBlock_.value()) {
+    return {numRows};
+  }
+  // Distribute the rows evenly over the sub-blocks, s.t. the last sub-block is
+  // not much smaller than the others.
+  size_t numSubBlocks =
+      (numRows + rowsPerSubBlock_.value() - 1) / rowsPerSubBlock_.value();
+  size_t targetSize = (numRows + numSubBlocks - 1) / numSubBlocks;
+  std::vector<size_t> ends;
+  size_t begin = 0;
+  while (begin < numRows) {
+    size_t end = std::min(begin + targetSize, numRows);
+    // Don't split rows that only differ in their graph (or payload).
+    while (end < numRows &&
+           idsWithoutGraph(block, end - 1) == idsWithoutGraph(block, end)) {
+      ++end;
+    }
+    ends.push_back(end);
+    begin = end;
+  }
+  return ends;
+}
+
+// _____________________________________________________________________________
+std::vector<SubBlockTable::SubBlock> CompressedRelationWriter::computeSubBlocks(
+    const IdTableView<0>& block, ql::span<const size_t> subBlockEnds,
+    const std::vector<std::vector<size_t>>& compressedSizes,
+    bool blockHasDuplicates) {
+  std::vector<SubBlockTable::SubBlock> subBlocks;
+  size_t numRows = block.numRows();
+  size_t subBlockBegin = 0;
+  for (size_t i = 0; i < subBlockEnds.size(); ++i) {
+    size_t subBlockEnd = subBlockEnds[i];
+    SubBlockTable::SubBlock& subBlock = subBlocks.emplace_back();
+    subBlock.firstTriple_ = idsWithoutGraph(block, subBlockBegin);
+    subBlock.numRows_ = subBlockEnd - subBlockBegin;
+    for (const auto& sizes : compressedSizes) {
+      subBlock.compressedSizes_.push_back(sizes.at(i));
+    }
+    if (subBlockEnd < numRows) {
+      auto last = idsWithoutGraph(block, subBlockEnd - 1);
+      auto next = idsWithoutGraph(block, subBlockEnd);
+      uint8_t numShared = 0;
+      while (numShared < 3 && last[numShared] == next[numShared]) {
+        ++numShared;
+      }
+      // Rows that agree in the first three columns are never split.
+      AD_CORRECTNESS_CHECK(numShared < 3);
+      subBlock.numColumnsSharedWithNext_ = numShared;
+    }
+    // The duplicates of the whole block (see `getGraphInfo`) can only occur
+    // within a sub-block, because rows that agree in the first three columns
+    // are never split.
+    subBlock.containsDuplicatesWithDifferentGraphs_ =
+        blockHasDuplicates &&
+        hasDuplicatesIgnoringGraph(block, subBlockBegin, subBlockEnd);
+    subBlockBegin = subBlockEnd;
+  }
+  return subBlocks;
 }
 
 // _____________________________________________________________________________
@@ -89,9 +180,14 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
   // moving a `BlockToWrite` doesn't move the memory that the view points to
   // anyway.
   auto view = block.view();
+  auto subBlockEnds = computeSubBlockEnds(view);
   std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
+  // For each column, the compressed sizes of the sub-blocks.
+  std::vector<std::vector<size_t>> compressedSizes;
   for (const auto& column : view.getColumns()) {
-    offsets.push_back(compressAndWriteColumn(column));
+    auto [offset, sizes] = compressAndWriteColumn(column, subBlockEnds);
+    offsets.push_back(offset);
+    compressedSizes.push_back(std::move(sizes));
   }
   AD_CORRECTNESS_CHECK(!offsets.empty());
   auto numRows = view.numRows();
@@ -101,13 +197,22 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
   AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
   auto [hasDuplicates, graphInfo] = getGraphInfo(view);
-  blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
-      std::move(offsets),
-      numRows,
-      {first[0], first[1], first[2], first[3]},
-      {last[0], last[1], last[2], last[3]},
-      std::move(graphInfo),
-      hasDuplicates});
+
+  // Compute the metadata of the sub-blocks.
+  std::vector<SubBlockTable::SubBlock> subBlocks;
+  if (subBlocksAreEnabled()) {
+    subBlocks =
+        computeSubBlocks(view, subBlockEnds, compressedSizes, hasDuplicates);
+  }
+
+  blockBuffer_.wlock()->push_back({CompressedBlockMetadataNoBlockIndex{
+                                       std::move(offsets),
+                                       numRows,
+                                       {first[0], first[1], first[2], first[3]},
+                                       {last[0], last[1], last[2], last[3]},
+                                       std::move(graphInfo),
+                                       hasDuplicates},
+                                   std::move(subBlocks)});
   if (invokeCallback && smallBlocksCallback_) {
     // Only blocks of small relations invoke the callback, and those always
     // own their rows, because they are assembled in the
@@ -117,6 +222,33 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
   } else if (block.ownsRows()) {
     blockBufferPool_->giveBack(std::move(block).extractTable());
   }
+}
+
+// _____________________________________________________________________________
+BlocksAndSubBlocks CompressedRelationWriter::getFinishedBlocks() && {
+  finish();
+  auto blocks = std::move(*(blockBuffer_.wlock()));
+  ql::ranges::sort(blocks, {}, [](const WrittenBlock& block) -> const auto& {
+    return block.metadata_.firstTriple_;
+  });
+
+  BlocksAndSubBlocks result;
+  result.blocks_.reserve(blocks.size());
+  if (subBlocksAreEnabled()) {
+    result.subBlocks_ = SubBlockTable{numColumns()};
+  }
+  // Write the correct block indices.
+  for (size_t i : ad_utility::integerRange(blocks.size())) {
+    auto& block = blocks.at(i);
+    result.blocks_.push_back({std::move(block.metadata_), i});
+    if (subBlocksAreEnabled()) {
+      result.subBlocks_.addBlock(block.subBlocks_);
+    }
+  }
+
+  AD_CORRECTNESS_CHECK(
+      CompressedBlockMetadata::checkInvariantsForSortedBlocks(result.blocks_));
+  return result;
 }
 
 // _____________________________________________________________________________

@@ -334,7 +334,8 @@ IndexMetaData MaterializedViewWriter::writePermutation(
   // query that computes the view.
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
-      qec_->getIndex().rowsPerBlock(), qec_->executor());
+      qec_->getIndex().rowsPerBlock(), qec_->executor(),
+      getRowsPerSubBlockForWriter(qec_->getIndex().rowsPerSubBlock()));
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaData spoMetaData;
@@ -352,7 +353,7 @@ IndexMetaData MaterializedViewWriter::writePermutation(
           spoKeyOrder, {});
 
   AD_LOG_DEBUG << "Writing metadata ..." << std::endl;
-  spoMetaData.blockData() = std::move(blockData);
+  spoMetaData.setBlocksAndSubBlocks(std::move(blockData));
   spoMetaData.calculateStatistics(numDistinctPredicates);
   spoMetaData.setName(getFilenameBase());
   {
@@ -844,7 +845,7 @@ std::shared_ptr<LocatedTriplesState>
 MaterializedView::makeEmptyLocatedTriplesState() const {
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
   emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
-      .setOriginalMetadata(permutation_->metaData().blockDataShared());
+      .setOriginalMetadata(permutation_->metaData().permutationBlockMetadata());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
   LocalVocab emptyVocab;
 

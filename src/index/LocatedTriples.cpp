@@ -108,6 +108,56 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 }
 
 namespace {
+// Return the range of triples that belongs to the `subBlocks`, see
+// `PermutationBlockMetadata::getTripleRange`. Without a
+// `permutationMetadata_` (only in unit tests), the `subBlocks` describe a
+// complete block.
+SubBlockTripleRange getTripleRange(const SubBlockMetadata& subBlocks) {
+  if (subBlocks.permutationMetadata_ == nullptr) {
+    return {};
+  }
+  return subBlocks.permutationMetadata_->getTripleRange(subBlocks);
+}
+
+// Return the predicates for `SortedSequence::getSortedView` that restrict the
+// located triples to the given `range`.
+auto getRangePredicates(const SubBlockTripleRange& range) {
+  auto withoutGraph = [](const IdTriple<0>& triple) {
+    const auto& ids = triple.ids();
+    return std::array<Id, 3>{ids[0], ids[1], ids[2]};
+  };
+  auto isBeforeBegin = [&range, withoutGraph](const IdTriple<0>& triple) {
+    return range.begin_.has_value() && withoutGraph(triple) < *range.begin_;
+  };
+  auto isBeforeEnd = [&range, withoutGraph](const IdTriple<0>& triple) {
+    return !range.end_.has_value() || withoutGraph(triple) < *range.end_;
+  };
+  return std::pair{isBeforeBegin, isBeforeEnd};
+}
+}  // namespace
+
+// _____________________________________________________________________________
+size_t LocatedTriplesPerBlock::numTriplesInRange(
+    size_t blockIndex, const SubBlockTripleRange& range) const {
+  auto blockUpdateTriples = getUpdatesIfPresent(blockIndex);
+  if (!blockUpdateTriples) {
+    return 0;
+  }
+  auto [isBeforeBegin, isBeforeEnd] = getRangePredicates(range);
+  return blockUpdateTriples->sizeUpperBoundInRange(isBeforeBegin, isBeforeEnd);
+}
+
+// _____________________________________________________________________________
+NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(
+    const SubBlockMetadata& subBlocks) const {
+  // See the overload for a complete block for the reason why the same number
+  // is returned twice.
+  size_t numTriples =
+      numTriplesInRange(subBlocks.blockIndex_, getTripleRange(subBlocks));
+  return {numTriples, numTriples};
+}
+
+namespace {
 
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
@@ -166,8 +216,9 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
 
 // ____________________________________________________________________________
 template <size_t numIndexColumns, bool includeGraphColumn>
-IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
-                                                 const IdTable& block) const {
+IdTable LocatedTriplesPerBlock::mergeTriplesImpl(
+    size_t blockIndex, const SubBlockTripleRange& range,
+    const IdTable& block) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
@@ -175,9 +226,8 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   AD_CONTRACT_CHECK(numIndexColumns + static_cast<size_t>(includeGraphColumn) <=
                     block.numColumns());
 
-  auto numInsertsAndDeletes = numTriples(blockIndex);
   IdTable result{block.numColumns(), block.getAllocator()};
-  result.resize(block.numRows() + numInsertsAndDeletes.numAdded_);
+  result.resize(block.numRows() + numTriplesInRange(blockIndex, range));
 
   const auto& locatedTriples = *map_.at(blockIndex);
 
@@ -191,7 +241,9 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   };
 
   auto rowIt = block.begin();
-  auto sortedLocatedTriples = locatedTriples.getSortedView();
+  auto [isBeforeBegin, isBeforeEnd] = getRangePredicates(range);
+  auto sortedLocatedTriples =
+      locatedTriples.getSortedViewInRange(isBeforeBegin, isBeforeEnd);
   auto locatedTripleIt = sortedLocatedTriples.begin();
   auto locatedTripleEnd = sortedLocatedTriples.end();
   auto resultIt = result.begin();
@@ -258,17 +310,32 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              const IdTable& block,
                                              size_t numIndexColumns,
                                              bool includeGraphColumn) const {
+  // A `SubBlockMetadata` without `permutationMetadata_` describes the
+  // complete block.
+  SubBlockMetadata completeBlock;
+  completeBlock.blockIndex_ = blockIndex;
+  return mergeTriples(completeBlock, block, numIndexColumns,
+                      includeGraphColumn);
+}
+
+// _____________________________________________________________________________
+IdTable LocatedTriplesPerBlock::mergeTriples(const SubBlockMetadata& subBlocks,
+                                             const IdTable& block,
+                                             size_t numIndexColumns,
+                                             bool includeGraphColumn) const {
+  size_t blockIndex = subBlocks.blockIndex_;
+  auto range = getTripleRange(subBlocks);
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
-  auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
+  auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &range, &block,
                                  this](auto hasGraphColumn) {
     if (numIndexColumns == 3) {
-      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, range, block);
     } else if (numIndexColumns == 2) {
-      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, range, block);
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, range, block);
     }
   };
   using ad_utility::use_value_identity::vi;
@@ -483,7 +550,7 @@ bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::setOriginalMetadata(
-    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
+    PermutationBlockMetadata metadata) {
   originalMetadata_ = std::move(metadata);
 }
 
@@ -521,16 +588,19 @@ void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
-  // Copy to preserve originalMetadata_.
   if (!originalMetadata_.has_value()) {
     AD_LOG_WARN << "The original metadata has not been set, but updates are "
                    "being performed. This should only happen in unit tests\n";
-    augmentedMetadata_.emplace();
-  } else {
-    augmentedMetadata_ = *originalMetadata_.value();
   }
-  for (auto& blockMetadata : augmentedMetadata_.value()) {
+  auto originalMetadata =
+      originalMetadata_.value_or(PermutationBlockMetadata{});
+  // Copy to preserve `originalMetadata_`.
+  auto augmentedBlocks = originalMetadata.blocks();
+  // The blocks that contain updates (including the possibly added last block).
+  std::vector<bool> blocksWithUpdates(augmentedBlocks.size() + 1, false);
+  for (auto& blockMetadata : augmentedBlocks) {
     if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
+      blocksWithUpdates.at(blockIndex) = true;
       blockMetadata.firstTriple_ =
           std::min(blockMetadata.firstTriple_,
                    blockUpdates->front().triple_.toPermutedTriple());
@@ -554,12 +624,15 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     lastBlockN.graphInfo_.emplace();
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, *blockUpdates);
-    augmentedMetadata_->push_back(lastBlock);
+    augmentedBlocks.push_back(lastBlock);
+    blocksWithUpdates.at(blockIndex) = true;
 
     AD_CORRECTNESS_CHECK(
         CompressedBlockMetadata::checkInvariantsForSortedBlocks(
-            *augmentedMetadata_));
+            augmentedBlocks));
   }
+  augmentedMetadata_ = originalMetadata.withAugmentedBlocks(
+      std::move(augmentedBlocks), std::move(blocksWithUpdates));
 }
 
 // ____________________________________________________________________________

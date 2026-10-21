@@ -20,6 +20,7 @@
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/LocalVocab.h"
+#include "index/SubBlockMetadata.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
@@ -31,8 +32,8 @@ class IndexImpl;
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering
 // procedure w.r.t. relevant data blocks/ValueId values, by making use of the
-// available metadata (see CompressedBlockMetadata in
-// CompressedRelationMetadata.h) while performing the index scan. As a result,
+// available metadata (see `SubBlockMetadata` in
+// `SubBlockMetadata.h`) while performing the index scan. As a result,
 // the actual SparqlExpression evaluation is performed for a smaller IdTable if
 // a PrefilterExpression (declared in this file) for the respective
 // SparqlExpression is available and compatible with the IndexScan. The
@@ -50,22 +51,22 @@ using Vocab = RdfsVocabulary;
 constexpr size_t maxInfoRecursion = 3;
 
 // `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
-// containerized `ql::span<cont CompressedBlockMetadata>` objects. This
+// containerized `BlockMetadataSpan` objects. This
 // (indexable) containerization procedure allows us to efficiently define
 // relevant ranges by indices/iterators, instead of returning the relevant
-// `CompressedBlockMetadata` values itself. `operator()(ql::span<const
-// CompressedBlockMetadata> randomAccessContainer,uint64_t i)` implements access
-// to the i-th `ValueId` regarding our containerized `ql::span<const
-// CompressedBlockMetadata> inputSpan`. Each `CompressedBlockMetadata` value
-// holds exactly two bound `ValueId`s (one in `firstTriple_` and `lastTriple_`
-// respectively) over the specified column `evaluationColumn_`. This leads to an
-// valid index range `[0, 2 * inputSpan.size())` for `i`. Under those conditions
-// and an given `ValueId` index `i`, we can simply determine that the
-// corresponding `ValueId` must be contained in `CompressedBlockMetadata` value
-// at position `i/2`. `i % 2` specifies in the following if we have to access
-// the ValueId from `fristTriple_` or `lastTriple_` of previously determined
-// `CompressedBlockMetadata` value. (1) `i % 2 == 0`: retrieve `ValueId` from
-// `firstTriple_`. (2) `i % 2 != 0`: retrieve `ValueId` from `lastTriple_`.
+// `SubBlockMetadata` values itself. `operator()(BlockMetadataSpan
+// randomAccessContainer,uint64_t i)` implements access to the i-th `ValueId`
+// regarding our containerized `BlockMetadataSpan inputSpan`. Each
+// `SubBlockMetadata` value holds exactly two bound `ValueId`s (one in
+// `firstTriple_` and `lastTriple_` respectively) over the specified column
+// `evaluationColumn_`. This leads to an valid index range `[0, 2 *
+// inputSpan.size())` for `i`. Under those conditions and an given `ValueId`
+// index `i`, we can simply determine that the corresponding `ValueId` must be
+// contained in `SubBlockMetadata` value at position `i/2`. `i % 2` specifies in
+// the following if we have to access the ValueId from `fristTriple_` or
+// `lastTriple_` of previously determined `SubBlockMetadata` value. (1) `i % 2
+// == 0`: retrieve `ValueId` from `firstTriple_`. (2) `i % 2 != 0`: retrieve
+// `ValueId` from `lastTriple_`.
 struct AccessValueIdFromBlockMetadata {
   size_t evaluationColumn_ = 0;
   // `ql::ranges::subrange` requires default constructor
@@ -77,20 +78,21 @@ struct AccessValueIdFromBlockMetadata {
 };
 
 // Specialized `Iterator` with `ValueId` access (retrieve `ValueId`s from
-// corresponding `CompressedBlockMetadata`) on containerized `ql::span<const
-// CompressedBlockMetadata>` objects.
-using ValueIdIt = ad_utility::IteratorForAccessOperator<
-    ql::span<const CompressedBlockMetadata>, AccessValueIdFromBlockMetadata,
-    ad_utility::IsConst::True>;
+// corresponding `SubBlockMetadata`) on containerized `BlockMetadataSpan`
+// objects.
+using ValueIdIt =
+    ad_utility::IteratorForAccessOperator<BlockMetadataSpan,
+                                          AccessValueIdFromBlockMetadata,
+                                          ad_utility::IsConst::True>;
 
 // `ValueIdSubrange` represents a (sub) range of relevant `ValueId`s over
-// the containerized `ql::span<const CompressedBlockMetadata> input`:
+// the containerized `BlockMetadataSpan input`:
 using ValueIdSubrange = ql::ranges::subrange<ValueIdIt>;
 
 // Required because `valueIdComparators::getRangesForId` directly returns pairs
 // of `ValueIdIt`s, and not sub ranges (`ValueIdSubrange`).
 // Remark: The pair defines a relevant range of `ValueId`s over containerized
-// `ql::span<const CompressedBlockMetadata> input` by iterators.
+// `BlockMetadataSpan input` by iterators.
 using ValueIdItPair = std::pair<ValueIdIt, ValueIdIt>;
 
 /*
@@ -116,12 +118,12 @@ class PrefilterExpression {
   virtual std::string asString(size_t depth) const = 0;
 
   // This method is required for implementing the `NotExpression`, because we
-  // logically operate on `CompressedBlockMetadata` values which define ranges
+  // logically operate on `SubBlockMetadata` values which define ranges
   // given the `ValueId`s from last and first triple. E.g. the
-  // `CompressedBlockMetadata` that defines the range [IntId(0),... IntId(5)]
+  // `SubBlockMetadata` that defines the range [IntId(0),... IntId(5)]
   // should be considered relevant for the expression `?x >= IntId(3)`, but also
   // for expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
-  // simply taking the complementing set of `CompressedBlockMetadata`, instead
+  // simply taking the complementing set of `SubBlockMetadata`, instead
   // we retrieve it by directly negating/complementing the child expression
   // itself. Every derived class can return it's respective logical complement
   // (negation) when being called on `logicalCoplement()`. E.g. for a call
@@ -135,10 +137,10 @@ class PrefilterExpression {
   // implementation for derived classes.
   virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
 
-  // It's expected that the provided `CompressedBlockMetadata` span adheres to
+  // It's expected that the provided `SubBlockMetadata` span adheres to
   // the following conditions: (1) unqiueness of blocks (2) sorted (order) (3)
   // Constant values for all columns `< evaluationColumn` Remark: The
-  // potentially incomplete first/last `CompressedBlockMetadata` values in input
+  // potentially incomplete first/last `SubBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
   BlockMetadataRanges evaluate(const IndexImpl& index,
@@ -147,11 +149,11 @@ class PrefilterExpression {
 
   // `evaluateImpl` is internally used for the actual pre-filter procedure.
   // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at
-  // column index `evaluationColumn` over the containerized `ql::span<const
-  // CompressedBlockMetadata> input` (`BlockMetadataSpan`).
-  // If `getTotalComplement` is set to `true`, the leaf `RelationalExpression`s
-  // return their corresponding complement over ALL datatypes. This is in
-  // particular needed for the complement of `IsDatatype` and `InExpression`.
+  // column index `evaluationColumn` over the containerized `BlockMetadataSpan
+  // input`. If `getTotalComplement` is set to `true`, the leaf
+  // `RelationalExpression`s return their corresponding complement over ALL
+  // datatypes. This is in particular needed for the complement of `IsDatatype`
+  // and `InExpression`.
   virtual BlockMetadataRanges evaluateImpl(
       const IndexImpl& index, const ValueIdSubrange& idRange,
       BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
@@ -323,7 +325,7 @@ class RelationalExpression : public PrefilterExpression {
  private:
   // If `getTotalComplement` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
-  // provided `CompressedBlockMetadata` values.
+  // provided `SubBlockMetadata` values.
   BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
@@ -410,21 +412,19 @@ BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
 namespace mapping {
 // `This internal helper function is only exposed for unit tests!`
 // Map the complement of the given `ValueIdItPair`s, which directly refer to the
-// `ValueId`s held by the containerized `ql::span<const
-// CompressedBlockMetadata>`, to their corresponding `BlockMetadataIt`s. The
-// ranges defined by those `BlockMetadataIt`s directly refer to the (relevant)
-// `CompressedBlockMetadata` values of `ql::span<const
-// CompressedBlockMetadata>` (`BlockMetadataSpan`).
+// `ValueId`s held by the containerized `BlockMetadataSpan`, to their
+// corresponding `BlockMetadataIt`s. The ranges defined by those
+// `BlockMetadataIt`s directly refer to the (relevant) `SubBlockMetadata` values
+// of `BlockMetadataSpan`.
 BlockMetadataRanges mapValueIdItRangesToBlockItRangesComplemented(
     const std::vector<ValueIdItPair>& relevantIdRanges,
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange);
 // `This internal helper function is only exposed for unit tests!`
 // Map the given `ValueIdItPair`s, which directly refer to the
-// `ValueId`s held by the containerized `ql::span<const
-// CompressedBlockMetadata>`, to their corresponding `BlockMetadataIt`s. The
-// ranges defined by those `BlockMetadataIt`s directly refer to the (relevant)
-// `CompressedBlockMetadata` values of `ql::span<const
-// CompressedBlockMetadata>` (`BlockMetadataSpan`).
+// `ValueId`s held by the containerized `BlockMetadataSpan`, to their
+// corresponding `BlockMetadataIt`s. The ranges defined by those
+// `BlockMetadataIt`s directly refer to the (relevant) `SubBlockMetadata` values
+// of `BlockMetadataSpan`.
 BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
     const std::vector<ValueIdItPair>& relevantIdRanges,
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange);
@@ -462,7 +462,7 @@ CPP_template(typename T)(requires(std::is_same_v<T, int64_t> ||
 // comparison operations: e.g. `5 < ?x` is changed to `?x > 5`.
 // The `prefilterDateByYear` flag indicates that the constructed
 // `PrefilterExpression<comp>` needs to consider `Date`/`DateYearOrDuration`
-// value ranges for the `CompressedBlockMetadata` pre-selection (w.r.t. the year
+// value ranges for the `SubBlockMetadata` pre-selection (w.r.t. the year
 // provided as an Int-`ValueId` over `referenceValue`). This requires a slightly
 // different logic when constructing the expression, hence set
 // `prefilterDateByYear` as an indicator.
