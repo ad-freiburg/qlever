@@ -67,6 +67,26 @@ TEST(Parameter, verifyParameterConstraint) {
 }
 
 // _____________________________________________________________________________
+TEST(Parameter, onUpdateActionThrowIsRolledBack) {
+  Parameter<size_t, szt, toString> parameter{42, "test"};
+
+  // A throwing `onUpdateAction` restores the old value.
+  parameter.setOnUpdateAction([](size_t value) {
+    if (value > 100) {
+      throw std::runtime_error{"Test"};
+    }
+  });
+  EXPECT_NO_THROW(parameter.set(100));
+  EXPECT_THROW(parameter.set(101), std::runtime_error);
+  EXPECT_EQ(parameter.get(), 100);
+
+  // After clearing the action, setting the value triggers nothing.
+  parameter.clearOnUpdateAction();
+  EXPECT_NO_THROW(parameter.set(101));
+  EXPECT_EQ(parameter.get(), 101);
+}
+
+// _____________________________________________________________________________
 TEST(Parameter, verifyDurationParameterSerializationWorks) {
   DurationParameter<std::chrono::seconds> durationParameter{0s, "zeroSeconds"};
   EXPECT_EQ(durationParameter.toString(), "0s");

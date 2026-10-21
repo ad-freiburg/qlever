@@ -6,9 +6,15 @@
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
 #include <algorithm>
+#include <atomic>
+#include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
+#include <chrono>
 #include <cstdint>
+#include <deque>
 #include <future>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,6 +23,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMerger.h"
 #include "index/vocabulary_merger/PartialVocabularyFile.h"
+#include "index/vocabulary_merger/Segment.h"
+#include "index/vocabulary_merger/SegmentCommitter.h"
 #include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
@@ -50,8 +58,8 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
     size_t numPartialVocabularies, size_t numInputBytes,
     ad_utility::MemorySize memoryToUse) {
   parallelBlockMerge::MergeOptions options;
-  // The blocks of merged words are the batches of the pipeline behind the
-  // merge, see `detail::WordBatchBuilder`.
+  // The blocks of merged words are cut into segments behind the merge, see
+  // `detail::buildSegment`.
   options.outputBlockSize = parallelBlockMerge::OutputBlockSize::both(
       VOCAB_MERGER_WORD_BATCH_SIZE, VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE);
   options.parallelismHint = ad_utility::globalExecutorNumThreads();
@@ -61,7 +69,7 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   options.targetChunksPerThread = std::max<size_t>(
       1, (numChunks + options.parallelism() - 1) / options.parallelism());
   // The blocks in memory are larger than their serialized form (a
-  // `MergeWord` per word next to the bytes, and the output of a chunk copies
+  // `InputWord` per word next to the bytes, and the output of a chunk copies
   // the words), by up to a factor of two.
   constexpr size_t decodedFactor = 2;
   const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
@@ -80,27 +88,38 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   return options;
 }
 
+// The maximal number of segments (see `index/vocabulary_merger/Segment.h`)
+// that are being built or waiting to be committed at the same time: two per
+// thread, so that the pool is never starved, but no more than the memory
+// limit allows (see `VOCAB_MERGER_MEMORY_PER_SEGMENT`).
+inline size_t maxNumSegmentsInFlight(ad_utility::MemorySize memoryToUse) {
+  size_t byThreads = 2 * std::max<size_t>(1, globalExecutorNumThreads());
+  size_t byMemory =
+      memoryToUse.getBytes() / VOCAB_MERGER_MEMORY_PER_SEGMENT.getBytes();
+  return std::clamp<size_t>(byMemory, 1, byThreads);
+}
+
 // _________________________________________________________________
-template <typename W, typename C>
+template <typename W>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
-                     W comparator, C& wordCallback,
+                     W comparator, ParallelWordWriterBase& writer,
                      ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
-  using detail::MergeBlock;
-  using detail::MergeWord;
-  using detail::QueueWord;
-  // Return true iff `p1` is smaller than `p2` according to the order of the
-  // IRI or literal.
-  auto lessThan = [&comparator](const MergeWord& p1, const MergeWord& p2) {
+                     const ad_utility::RegexSet& blankNodeIriRegexes,
+                     std::function<uint64_t(std::string_view)> geoSortKeyFn)
+    -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>) {
+  using detail::InputWord;
+  using detail::MergedBlock;
+  using detail::Segment;
+  // Return true iff `p1` is smaller than `p2` in the order of the merged
+  // vocabulary: by geo sort key first (all keys are 0 without a geo cell grid,
+  // see `geoSortKeyFn`), then by the order of the IRI or literal.
+  auto lessThanForQueue = [&comparator](const InputWord& p1,
+                                        const InputWord& p2) {
+    if (p1.geoSortKey_ != p2.geoSortKey_) {
+      return p1.geoSortKey_ < p2.geoSortKey_;
+    }
     return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
-  // The index of the partial vocabulary that a merged word comes from is
-  // stored in 32 bits (see `detail::MergeWord` and
-  // `detail::LocalIdxToBatchMapping`). NOTE: This check is done here (and not
-  // per merged word, which would be on the hot path of the merging), because
-  // `partialFileId_` is always one of the indices below.
   AD_CORRECTNESS_CHECK(numPartialVocabularies <=
                        std::numeric_limits<uint32_t>::max());
 
@@ -111,61 +130,108 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   // the merged blocks in the order of the vocabulary. The blocks stay in
   // memory, and a chunk keeps its slot until this thread has taken its output,
   // see `vocabularyMergeOptions`.
-  PartialVocabularyRunsInput input{basename, numPartialVocabularies};
+  PartialVocabularyRunsInput input{basename, numPartialVocabularies,
+                                   std::move(geoSortKeyFn)};
   const auto inputStatistics = input.statistics();
   auto options = vocabularyMergeOptions(numPartialVocabularies,
                                         inputStatistics.numBytes_, memoryToUse);
+  const size_t maxSegmentsInFlight = maxNumSegmentsInFlight(memoryToUse);
   AD_LOG_INFO << "Merging " << input.numRuns() << " partial vocabularies ("
               << inputStatistics.numWords_ << " words in "
               << inputStatistics.numBlocks_ << " blocks) in "
               << options.targetNumChunks() << " chunks, using "
-              << options.parallelism() << " threads and up to "
-              << options.maxNumChunksInFlight << " chunks in flight ..."
-              << std::endl;
+              << options.parallelism() << " threads, up to "
+              << options.maxNumChunksInFlight << " chunks and up to "
+              << maxSegmentsInFlight << " segments in flight ..." << std::endl;
   auto mergedWords = parallelBlockMerge::parallelBlockMergeToRange<true>(
-      ad_utility::globalExecutor(), std::move(input), lessThan,
-      parallelBlockMerge::makeInMemoryStorageFactory<MergeBlock>(
+      ad_utility::globalExecutor(), std::move(input), lessThanForQueue,
+      parallelBlockMerge::makeInMemoryStorageFactory<MergedBlock>(
           VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK,
           /*releaseChunkOnConsumption=*/true),
       std::move(options));
 
-  // The stages of the pipeline. The `batchBuilder` (the first stage) runs on
-  // this thread, the `pipeline` owns the three stages that run concurrently to
-  // it.
-  detail::VocabularyMergePipeline pipeline{
+  // The merged blocks are cut into segments, each of which is built by a task
+  // on the global thread pool (see `detail::buildSegment`), and the finished
+  // segments are committed in order (see `detail::SegmentCommitter`). A cut
+  // between two blocks is only allowed if the last word of the one differs
+  // from the first word of the other, so that no word spans two segments.
+  detail::SegmentCommitter committer{
+      writer,
       partialVocabularyIdMapFilenames(basename, numPartialVocabularies)};
-  detail::WordBatchBuilder batchBuilder;
-  auto batchCallback = [&pipeline, &wordCallback,
-                        &blankNodeIriRegexes](detail::WordBatch batch) {
-    pipeline.push(std::move(batch), wordCallback, blankNodeIriRegexes);
+  std::deque<std::future<std::shared_ptr<const Segment>>> segments;
+  std::vector<MergedBlock> currentBlocks;
+  size_t currentNumWords = 0;
+  ad_utility::Timer waitTimer{ad_utility::Timer::Started};
+  ad_utility::Timer commitTimer{ad_utility::Timer::Stopped};
+  std::atomic<uint64_t> segmentBusyMs{0};
+  auto postSegment = [&]() {
+    if (currentBlocks.empty() || committer.hasFailed()) {
+      currentBlocks.clear();
+      return;
+    }
+    segments.push_back(boost::asio::post(
+        ad_utility::globalExecutor(),
+        boost::asio::use_future([blocks = std::move(currentBlocks), &writer,
+                                 &blankNodeIriRegexes, numPartialVocabularies,
+                                 &comparator, &segmentBusyMs]() mutable {
+          ad_utility::Timer timer{ad_utility::Timer::Started};
+          auto segment = std::make_shared<const Segment>(detail::buildSegment(
+              std::move(blocks), writer, blankNodeIriRegexes,
+              numPartialVocabularies, comparator));
+          segmentBusyMs += timer.msecs().count();
+          return segment;
+        })));
+    currentBlocks.clear();
+    currentNumWords = 0;
+  };
+  // Commit the segments that are done, in order, and at least one segment if
+  // `waitForOne` is set.
+  auto commitFinishedSegments = [&](bool waitForOne) {
+    commitTimer.cont();
+    while (!segments.empty()) {
+      auto& next = segments.front();
+      if (!waitForOne &&
+          next.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        break;
+      }
+      committer.commit(next.get());
+      segments.pop_front();
+      waitForOne = false;
+    }
+    commitTimer.stop();
   };
 
-  for (MergeBlock& block : mergedWords) {
-    // Stop merging as soon as one of the stages of the pipeline has failed,
-    // the exception is rethrown by `finish()` below.
-    if (pipeline.hasFailed()) {
+  for (MergedBlock& block : mergedWords) {
+    waitTimer.stop();
+    // Stop merging as soon as one of the stages has failed, the exception is
+    // rethrown by `finish()` below.
+    if (committer.hasFailed()) {
       break;
     }
-    // The pipeline consumes owning `QueueWord`s, so the merged words are
-    // copied out of the block (and the block's buffers go back to the pool).
-    // TODO<joka921> This copy is temporary: the next slice of the parallel
-    // vocabulary merge replaces the pipeline by one that works on the blocks.
-    std::vector<QueueWord> currentWords;
-    currentWords.reserve(block.size());
-    for (const MergeWord& word : block) {
-      currentWords.emplace_back(
-          TripleComponentWithIndex{std::string{word.iriOrLiteral()},
-                                   word.isExternal(), word.id()},
-          word.partialFileId_);
+    if (!block.empty()) {
+      bool canCutHere = currentNumWords >= VOCAB_MERGER_SEGMENT_NUM_WORDS &&
+                        currentBlocks.back().back().iriOrLiteral() !=
+                            block.front().iriOrLiteral();
+      if (canCutHere) {
+        postSegment();
+      }
+      currentNumWords += block.size();
+      currentBlocks.push_back(std::move(block));
     }
-    block.clear();
-    batchBuilder.addMergedWords(std::move(currentWords), comparator,
-                                batchCallback);
+    commitFinishedSegments(segments.size() >= maxSegmentsInFlight);
+    waitTimer.cont();
   }
-  // Hand the remaining words (including the one that is still held back) to
-  // the pipeline and wait until all of them have actually been written.
-  batchBuilder.finish(batchCallback);
-  return pipeline.finish();
+  waitTimer.stop();
+  postSegment();
+  while (!segments.empty()) {
+    commitFinishedSegments(true);
+  }
+  AD_LOG_INFO << "Time spent by the thread behind the merge: waiting for "
+                 "merged blocks "
+              << waitTimer.msecs() << ", committing the segments "
+              << commitTimer.msecs() << "; building the segments "
+              << segmentBusyMs << " ms" << std::endl;
+  return committer.finish();
 }
 
 // ____________________________________________________________________________________________________________
@@ -264,13 +330,22 @@ inline void writePartialVocabularyToFile(const ItemVec& entries,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn) {
   ItemVec entries;
   entries.resize(map.map_.size());
   using T = ItemVec::value_type;
   ql::ranges::transform(map.map_, entries.begin(),
-                        [](auto& el) -> T { return {el.first, el.second}; });
+                        [&geoSortKeyFn](auto& el) -> T {
+                          return {el.first, el.second, geoSortKeyFn(el.first)};
+                        });
   return entries;
+}
+
+// _____________________________________________________________________________
+inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+  return vocabMapsToVector(map, [](std::string_view) { return uint64_t{0}; });
 }
 
 // _____________________________________________________________________

@@ -64,8 +64,7 @@ int main(int argc, char** argv) {
       "The memory that the merge may use, default 5 GB.");
   add("num-threads,j", po::value(&numThreads),
       "The number of threads of the global thread pool, default the number "
-      "of cores. NOTE: The vocabulary merge does not use the pool yet, this "
-      "option is for the parallel merge that is being prepared.");
+      "of cores.");
   po::variables_map optionsMap;
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
@@ -99,8 +98,6 @@ int main(int argc, char** argv) {
     outputBasename = basename + ".merged";
   }
   if (optionsMap.count("num-threads")) {
-    // NOTE: The merge does not use the global thread pool yet, see the
-    // description of the option above.
     ad_utility::setGlobalExecutorNumThreads(numThreads);
   }
 
@@ -116,8 +113,10 @@ int main(int argc, char** argv) {
               << std::endl;
   ad_utility::Timer timer{ad_utility::Timer::Started};
   try {
-    auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(
-        outputBasename + VOCAB_SUFFIX, vocabType);
+    PolymorphicVocabulary vocabulary;
+    vocabulary.resetToType(vocabType);
+    auto writerPtr =
+        vocabulary.makeParallelWriterPtr(outputBasename + VOCAB_SUFFIX);
     auto& writer = *writerPtr;
     writer.readableName() = "merged vocabulary";
     auto metaData = ad_utility::vocabulary_merger::mergeVocabulary(

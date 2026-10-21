@@ -27,6 +27,24 @@
 
 using std::string;
 
+// The configuration of jemalloc, which is the allocator of this binary if it
+// was found at build time (see `CMakeLists.txt`); the symbol is ignored
+// otherwise. The index builder allocates, frees, and reallocates very large
+// buffers (sorter blocks, merge output blocks) all the time. By default,
+// jemalloc returns allocations above its `oversize_threshold` (8 MB) to the
+// OS immediately when they are freed, so that each such allocation is faulted
+// in page by page again, which costs a large share of the CPU time of the
+// index build. Disabling the threshold lets those allocations be reused like
+// all the others. A small number of arenas makes the reuse work across the
+// threads (a freed buffer is only reused by allocations from the same arena),
+// which also keeps the resident memory lower. NOTE: Transparent huge pages
+// (`thp:always`) were measured to make the index build slower, because
+// every freshly faulted huge page is zeroed completely. Both settings can be
+// overridden by the `MALLOC_CONF` environment variable.
+extern "C" {
+const char* malloc_conf = "oversize_threshold:0,narenas:2";
+}
+
 namespace po = boost::program_options;
 
 // Check that `values` has exactly one or `numFiles` many entries. An empty
@@ -280,6 +298,16 @@ int main(int argc, char** argv) {
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
+  add("geo-cell-grid-level", po::value(&config.geoCellGridLevel_),
+      "The level L of the geo cell grid for WKT literals. The earth's surface "
+      "is divided into 2^L x 2^L cells, and the ID of each WKT literal encodes "
+      "its cell, which is the basis for the geo cell prefilter of spatial "
+      "joins. 0 (the default) means no grid. A grid requires "
+      "`--vocabulary-type on-disk-compressed-geo-split`.");
+  add("geo-cell-grid-scheme", po::value(&config.geoCellGridScheme_),
+      "The scheme by which the geo cell grid assigns cells: `flat` (the "
+      "default), `flat-4-shifts`, `hierarchical`, or `hierarchical-3-shifts` "
+      "(see `GeoCellGrid`). Only relevant with a grid level > 0.");
 
   add("geo-point-encoding", po::value(&config.geoPointEncoding_),
       "How geo points are encoded in the IDs of the index: `z-order` (the "
@@ -332,6 +360,16 @@ int main(int argc, char** argv) {
       DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
   add("index-rows-per-block", po::value(&indexRowsPerBlock),
       rowsPerBlockDescription.c_str());
+  add("parsed-geometries-min-length",
+      po::value(&config.parsedGeometriesMinLength_),
+      "Parse the WKT literals with at least this many bytes at index build "
+      "time and store them in their parsed form (with the geo vocabulary), so "
+      "that spatial joins do not have to parse them at query time. Parsing a "
+      "huge geometry (a country boundary with millions of points) takes "
+      "seconds per spatial join, parsing an ordinary geometry takes "
+      "microseconds, so a value like 100000 covers the geometries that "
+      "matter at a negligible cost in index size and build time. Default: 0 "
+      "(store none).");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
@@ -355,6 +393,12 @@ int main(int argc, char** argv) {
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
       logLevelDescription.c_str());
+  add("permutation-compression-level",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::permutationCompressionLevel_>(),
+      "The ZSTD compression level of the blocks of the permutations. Default: "
+      "3. A lower level (e.g. 1) makes the index build faster at the price of "
+      "a slightly larger index.");
   add("num-threads,j", po::value(&config.numThreads_),
       "The number of threads used during the index build. Must be at least 1. "
       "Default: the number of hardware threads of the machine. NOTE: Currently "

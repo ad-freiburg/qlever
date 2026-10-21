@@ -23,11 +23,15 @@
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
-
-  static constexpr auto compare = [](const Id& a, const Id& b) {
-    return a.compareWithoutLocalVocab(b);
-  };
-
+  // The comparison below is a lexicographic comparison of the bits of these
+  // columns, see `ad_utility::sortByBitwiseKeys` in `BitwiseKeySort.h`.
+  static constexpr auto bitwiseKeyColumns = []() {
+    if constexpr (hasGraphColumn) {
+      return std::array<size_t, 4>{i0, i1, i2, ADDITIONAL_COLUMN_GRAPH_ID};
+    } else {
+      return std::array<size_t, 3>{i0, i1, i2};
+    }
+  }();
   // comparison function
   template <typename T1, typename T2>
   bool operator()(const T1& a, const T2& b) const {
@@ -37,31 +41,24 @@ struct SortTriple {
       AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-
-    // TODO<joka921> The manual invoking is ugly, probably we could use
-    // `ql::ranges::lexicographical_compare`, but we have to carefully measure
-    // that this change doesn't slow down the index build.
-    auto c1 = std::invoke(compare, a[i0], b[i0]);
-    if (c1 != 0) {
-      return c1 < 0;
-    }
-    auto c2 = std::invoke(compare, a[i1], b[i1]);
-    if (c2 != 0) {
-      return c2 < 0;
-    }
-    auto c3 = std::invoke(compare, a[i2], b[i2]);
-    if constexpr (!hasGraphColumn) {
-      return c3 < 0;
-    } else {
-      if (c3 != 0) {
-        return c3 < 0;
+    // Compare the bits of the key columns lexicographically (see
+    // `bitwiseKeyColumns`) via small arrays. This is faster than a chain of
+    // three-way comparisons, because it compiles to straight-line code (see
+    // the NOTE at `pickBitsOfColumns` in `CompressedRelationHelpersImpl.h`).
+    auto bits = [](const Id& id) {
+      AD_EXPENSIVE_CHECK(id.canBeComparedBitwise());
+      return id.getBits();
+    };
+    auto keys = [&bits](const auto& row) {
+      if constexpr (hasGraphColumn) {
+        return std::array<Id::T, 4>{bits(row[i0]), bits(row[i1]), bits(row[i2]),
+                                    bits(row[ADDITIONAL_COLUMN_GRAPH_ID])};
+      } else {
+        return std::array<Id::T, 3>{bits(row[i0]), bits(row[i1]),
+                                    bits(row[i2])};
       }
-      // If the triples are equal, we compare by the Graph column. This is
-      // necessary to handle UPDATEs correctly.
-      static constexpr auto g = ADDITIONAL_COLUMN_GRAPH_ID;
-      auto cGraph = std::invoke(compare, a[g], b[g]);
-      return cGraph < 0;
-    }
+    };
+    return keys(a) < keys(b);
   }
 };
 

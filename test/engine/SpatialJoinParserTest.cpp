@@ -50,7 +50,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
 
   // Left side without prefilter box
   std::optional<util::geo::DBox> prefilterBox = std::nullopt;
-  WKTParser parser1{&sweeper, 5, true, prefilterBox, index};
+  WKTParser parser1{&sweeper, 5, true, prefilterBox, false, index};
   EXPECT_EQ(parser1.getParseCounter(), 0);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
   parser1.addValueIdToQueue(idxUni, 0, false, std::nullopt);
@@ -70,7 +70,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   std::optional<util::geo::DBox> newYorkUtilBox =
       ad_utility::detail::boundingBoxToUtilBox(newYorkBox.value());
 
-  WKTParser parser2{&sweeper, 5, true, newYorkUtilBox, index};
+  WKTParser parser2{&sweeper, 5, true, newYorkUtilBox, false, index};
   EXPECT_EQ(parser2.getParseCounter(), 0);
   EXPECT_EQ(parser2.getPrefilterCounter(), 0);
   parser2.addValueIdToQueue(idxUni, 0, true, std::nullopt);
@@ -92,7 +92,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   checkPrefilterBox(actualBox, newYorkUtilBox.value());
 
   // Code coverage for queue clearing after 10'000 entries
-  WKTParser parser3{&sweeper, 5, true, boundingBoxUniAndLondon, index};
+  WKTParser parser3{&sweeper, 5, true, boundingBoxUniAndLondon, false, index};
   EXPECT_EQ(parser3.getParseCounter(), 0);
   EXPECT_EQ(parser3.getPrefilterCounter(), 0);
   for (size_t i = 0; i < 25'000; ++i) {
@@ -114,6 +114,35 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   // because memory manually allocated in the sweeper's constructor is freed in
   // this function.
   sweeper.flush();
+}
+
+// Test that a parser can be destroyed without `done()` while its worker
+// threads still have work, as happens when a query is cancelled during the
+// parsing. The threads must stop before the members of the parser that they
+// use are destroyed (otherwise they write to freed memory, which only a
+// sanitizer build detects reliably).
+TEST(SpatialJoinParser, DestroyWithoutDone) {
+  using enum SpatialJoinType::Enum;
+  auto kg = buildLibSJTestDataset();
+  auto qec = buildQec(kg, true);
+  const auto& index = qec->getIndex();
+  auto [vMap, nMap] = resolveValIdTable(qec, 6);
+  auto idxUni = getValId(nMap, "uni");
+
+  SweeperResult results;
+  SweeperDistResult resultDists;
+  auto cfg = makeSweeperCfg(LibSpatialJoinConfig{INTERSECTS}, results,
+                            resultDists, -1);
+  std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
+  sj::Sweeper sweeper{cfg, ".", sweeperPath};
+
+  for (size_t numBatches : {0, 1, 5}) {
+    WKTParser parser{&sweeper, 4, true, std::nullopt, false, index};
+    for (size_t i = 0; i < numBatches * WKT_PARSER_BATCH_SIZE; ++i) {
+      parser.addValueIdToQueue(idxUni, i, false, std::nullopt);
+    }
+    // The parser goes out of scope here without `done()`.
+  }
 }
 
 // _____________________________________________________________________________

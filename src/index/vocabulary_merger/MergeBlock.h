@@ -14,13 +14,13 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "backports/span.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
@@ -32,37 +32,53 @@
 
 // The words of the partial vocabularies as the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`) sees them, and the blocks
-// that hold them, see `index/vocabulary_merger/PartialVocabularyFile.h`. This
-// is not part of the public interface of `index/VocabularyMerger.h`.
+// that hold them, see `index/vocabulary_merger/PartialVocabularyFile.h`. The
+// input and the output of the merge have different words and blocks:
+//
+// - The input consists of `InputBlock`s of `InputWord`s, which the merge reads
+//   from the partial vocabulary files and compares. A `InputWord` is a single
+//   occurrence of a word in a single partial vocabulary.
+// - The output consists of `MergedBlock`s of `MergedWord`s. A `MergedWord`
+//   holds the list of all the occurrences (from all the partial vocabularies)
+//   that the merge folded into it, see `MergedBlock::addWord`.
+//
+// The buffers of both kinds of blocks come from and go back to the
+// `BufferPools` below, which every block has. This is not part of the public
+// interface of `index/VocabularyMerger.h`.
 namespace ad_utility::vocabulary_merger::detail {
 
-// A word from a partial vocabulary, as the merge sees it. The word itself is a
-// view into the storage of the `MergeBlock` that holds the `MergeWord`, so
-// that reading and merging the words allocates nothing per word (a merge
-// handles billions of them).
-struct MergeWord {
+// An occurrence of a word in a partial vocabulary: the index of the partial
+// vocabulary and the local index of the word in it.
+using Occurrence = std::pair<uint32_t, uint64_t>;
+
+// A word of a partial vocabulary, as the merge reads and compares it: the
+// occurrence of the word in the partial vocabulary `partialFileId_` at the
+// local index `index_`, with its external flag. The word itself is a view into
+// the storage of the `InputBlock` that holds the `InputWord`, so that reading
+// and merging the words allocates nothing per word (a merge handles billions
+// of them).
+struct InputWord {
   // The word, a view into the block's storage.
   std::string_view word_;
   // The local index of the word in its partial vocabulary.
   uint64_t index_ = 0;
   // The partial vocabulary that the word came from.
   uint32_t partialFileId_ = 0;
-  // Whether the word will be externalized.
+  // Whether the word is to be externalized.
   bool isExternal_ = false;
+  // The geo sort key of the word (see `TripleComponentComparator::geoSortKey`),
+  // by which the merge orders before the word itself (0 for all words without
+  // a geo cell grid). It is computed when the word is read, see `InputBlock`
+  // and `PartialVocabularyRunsInput`.
+  uint64_t geoSortKey_ = 0;
 
-  [[nodiscard]] bool& isExternal() { return isExternal_; }
-  [[nodiscard]] const bool& isExternal() const { return isExternal_; }
+  [[nodiscard]] bool isExternal() const { return isExternal_; }
   [[nodiscard]] std::string_view iriOrLiteral() const { return word_; }
   [[nodiscard]] const uint64_t& id() const { return index_; }
 
-  // The memory footprint of a `MergeWord` including its word, which the
-  // parallel merge needs to limit its memory consumption. Every word of a
-  // `MergeBlock` owns a distinct slice of the storage of the block (no two
-  // words share their bytes), so the sum over the words of a block is the
-  // footprint of the block.
-  static ad_utility::MemorySize memorySize(const MergeWord& word) {
-    return ad_utility::MemorySize::bytes(sizeof(MergeWord) +
-                                         word.iriOrLiteral().size());
+  // The occurrence that this word is.
+  [[nodiscard]] Occurrence occurrence() const {
+    return {partialFileId_, index_};
   }
 
   // Read a word of the partial vocabulary `partialFileId` from the
@@ -70,11 +86,11 @@ struct MergeWord {
   // `index/vocabulary_merger/PartialVocabularyFile.h`) writes: the word as a
   // string, its external flag and its local index. The word is not copied, but
   // points into the buffer of the `serializer`, which therefore has to outlive
-  // the returned `MergeWord` (and must not move its buffer).
+  // the returned `InputWord` (and must not move its buffer).
   CPP_template(typename S)(
-      requires serialization::SpanReadSerializer<S>) static MergeWord
+      requires serialization::SpanReadSerializer<S>) static InputWord
       fromZeroCopyDeserializer(S& serializer, uint32_t partialFileId) {
-    MergeWord word;
+    InputWord word;
     word.word_ = serialization::zeroCopyDeserializeToStringView(serializer);
     serializer >> word.isExternal_;
     serializer >> word.index_;
@@ -83,8 +99,50 @@ struct MergeWord {
   }
 };
 
-// A thread-safe pool of the buffers that the `MergeBlock`s below store their
-// words in, so that the merge reuses them instead of allocating and freeing
+// A word of the merged vocabulary, as the merge yields it: the word (a view
+// into the storage of the `MergedBlock` that holds the `MergedWord`), whether
+// it is to be externalized (in any of its occurrences), and the range of its
+// occurrences in the `occurrences()` of its block. The merge folds the equal
+// `InputWord`s of all the partial vocabularies into one `MergedWord` (see
+// `MergedBlock::addWord`), so a `MergedWord` has at least one occurrence, and
+// all of its occurrences are stored alike.
+struct MergedWord {
+  // The word, a view into the block's storage.
+  std::string_view word_;
+  // The range of the occurrences in the `occurrences_` of the block.
+  uint64_t occurrencesOffset_ = 0;
+  uint32_t numOccurrences_ = 0;
+  // Whether the word is to be externalized (in any of its occurrences).
+  bool isExternal_ = false;
+  // The geo sort key of the word, see `InputWord::geoSortKey_`.
+  uint64_t geoSortKey_ = 0;
+
+  // Construct a merged word with a single occurrence so far: the `word` (which
+  // has to point into the storage of the block), its external flag, its geo
+  // sort key, and the position `occurrencesOffset` of that occurrence in the
+  // `occurrences_` of the block.
+  MergedWord(std::string_view word, bool isExternal, uint64_t geoSortKey,
+             uint64_t occurrencesOffset)
+      : word_{word},
+        occurrencesOffset_{occurrencesOffset},
+        numOccurrences_{1},
+        isExternal_{isExternal},
+        geoSortKey_{geoSortKey} {}
+
+  [[nodiscard]] bool& isExternal() { return isExternal_; }
+  [[nodiscard]] const bool& isExternal() const { return isExternal_; }
+  [[nodiscard]] std::string_view iriOrLiteral() const { return word_; }
+};
+
+// The words are stored in huge vectors (one entry per occurrence of a word in
+// a partial vocabulary), so an accidental growth of these structs would cost
+// real memory. Both consist of a `string_view`, two `uint64_t`s, a `uint32_t`
+// and a `bool`, which pack into 40 bytes.
+static_assert(sizeof(InputWord) == 40);
+static_assert(sizeof(MergedWord) == 40);
+
+// A thread-safe pool of the buffers that the blocks below store their bytes
+// or words in, so that the merge reuses them instead of allocating and freeing
 // one per block. All the buffers of a pool have the same `capacity`. A request
 // for a larger buffer (a block with a very long word) is served by a larger
 // one, which is replaced by a fresh buffer of the pool's capacity when it is
@@ -138,10 +196,10 @@ class BufferPool {
   }
 };
 
-// The two pools of the buffers of the `MergeBlock`s below: for the bytes of
-// the blocks of the partial vocabulary files, and for the storage of the
-// blocks of merged words. They are separate because their buffers differ in
-// size by more than an order of magnitude (see
+// The two pools of the buffers of the blocks below: for the bytes of the
+// `InputBlock`s of the partial vocabulary files, and for the storage of the
+// words of the `MergedBlock`s. They are separate because their buffers differ
+// in size by more than an order of magnitude (see
 // `VOCAB_MERGER_FILE_BLOCK_BUFFER_SIZE` and
 // `VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE` in `index/ConstantsIndexBuilding.h`)
 // and the pools keep their buffers' memory touched: with a single pool of the
@@ -156,130 +214,206 @@ struct BufferPools {
       : fileBlocks_{fileBlockCapacity}, mergedWords_{mergedWordsCapacity} {}
 };
 
-// A block of `MergeWord`s together with the storage that their words point
-// into: either the serialized bytes of a block of a partial vocabulary file
-// (see `PartialVocabularyRunsInput::getBlock`, which parses the words in place)
-// or, for a block of merged words, buffers that the words are copied into. The
-// buffers never move once a word points into them, so the block can be moved,
-// but not copied. The block is a random-access range of its words. The
-// buffers come from and go back to the `BufferPools` if the block has them.
-class MergeBlock : public ad_utility::NoCopy {
+// Return the `pools`, which must not be `nullptr` (every block has pools).
+inline std::shared_ptr<BufferPools> checkedBufferPools(
+    std::shared_ptr<BufferPools> pools) {
+  AD_CONTRACT_CHECK(pools != nullptr);
+  return pools;
+}
+
+// The part that the two kinds of blocks below share: a block is a
+// random-access range of its words.
+template <typename Word>
+class BlockOfWords {
  public:
-  using iterator = std::vector<MergeWord>::iterator;
-  using const_iterator = std::vector<MergeWord>::const_iterator;
-  using Buffer = BufferPool::Buffer;
+  using iterator = typename std::vector<Word>::iterator;
+  using const_iterator = typename std::vector<Word>::const_iterator;
 
  private:
-  using Buffers = std::vector<Buffer>;
-  // The cleanup of the `buffers_` below: give them back to the pools, or do
-  // nothing if the block has no pools (the buffers are then simply freed). It
-  // owns a copy of everything it needs (and not pointers into the block), so
-  // that it stays valid when the block is moved.
-  struct GiveBackToPools {
-    std::shared_ptr<BufferPools> pools_;
-    // Whether the first buffer holds the bytes of a block of a file (and hence
-    // goes back to the pool of those). All other buffers hold merged words.
-    bool firstBufferIsFromFile_ = false;
-
-    void operator()(Buffers&& buffers) const {
-      if (pools_ == nullptr) {
-        return;
-      }
-      for (size_t i = 0; i < buffers.size(); ++i) {
-        auto& pool = (i == 0 && firstBufferIsFromFile_) ? pools_->fileBlocks_
-                                                        : pools_->mergedWords_;
-        pool.giveBack(std::move(buffers[i]));
-      }
-    }
-  };
-  using OwnedBuffers =
-      ad_utility::unique_cleanup::UniqueCleanup<Buffers, GiveBackToPools>;
-
-  std::vector<MergeWord> words_;
-  // The pools that the buffers of a block of merged words are taken from (see
-  // `store`), `nullptr` for a block without pools.
-  std::shared_ptr<BufferPools> pools_;
-  // The bytes of a block that was read from a file (see the constructor
-  // below), or the buffers that the words of a block of merged words are
-  // copied into (see `push`). A word is never split across two buffers, and a
-  // buffer is never reallocated (it is reserved once and filled up to its
-  // capacity), so the views into it stay valid.
-  //
-  // NOTE: The `UniqueCleanup` gives the buffers back to the pools when the
-  // block is destroyed, overwritten by a move assignment, or cleared (see
-  // `clear`), and does nothing for a moved-from block, so the move operations
-  // below can be defaulted.
-  OwnedBuffers buffers_{Buffers{}, GiveBackToPools{}};
+  std::vector<Word> words_;
 
  public:
-  MergeBlock() = default;
-  explicit MergeBlock(std::shared_ptr<BufferPools> pools)
-      : pools_{std::move(pools)},
-        buffers_{Buffers{}, GiveBackToPools{pools_, false}} {}
-  MergeBlock(MergeBlock&&) noexcept = default;
-  MergeBlock& operator=(MergeBlock&&) noexcept = default;
-
-  // Construct a block over the serialized `bytes` of `numWords` words of the
-  // partial vocabulary `partialFileId`, in the format that
-  // `PartialVocabularyWriter` writes (see `MergeWord::fromZeroCopyDeserializer`
-  // above). The words are parsed in place, nothing is copied. The `bytes` go
-  // back to the `pools` when the block is cleared or destroyed. The `pools`
-  // may be `nullptr` (for example in tests): the block then works just the
-  // same, only its buffers are freed instead of given back.
-  MergeBlock(Buffer bytes, size_t numWords, uint32_t partialFileId,
-             std::shared_ptr<BufferPools> pools = nullptr)
-      : pools_{std::move(pools)},
-        buffers_{Buffers{}, GiveBackToPools{pools_, true}} {
-    buffers_->push_back(std::move(bytes));
-    const auto& buffer = buffers_->back();
-    words_.reserve(numWords);
-    serialization::ByteBufferReadSerializerT serializer{
-        ql::span<const char>{buffer.data(), buffer.size()}};
-    for (size_t i = 0; i < numWords; ++i) {
-      words_.push_back(
-          MergeWord::fromZeroCopyDeserializer(serializer, partialFileId));
-    }
-    AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == buffer.size(),
-                         "Trailing bytes in a block of a partial vocabulary");
-  }
-
-  // Append a word, copying it into the storage of this block.
-  void push(std::string_view word, bool isExternal, uint32_t partialFileId,
-            uint64_t localIndex) {
-    MergeWord mergeWord;
-    mergeWord.word_ = store(word);
-    mergeWord.isExternal_ = isExternal;
-    mergeWord.partialFileId_ = partialFileId;
-    mergeWord.index_ = localIndex;
-    words_.push_back(mergeWord);
-  }
-
-  // Append a copy of the `word` of another block.
-  void push(const MergeWord& word) {
-    push(word.iriOrLiteral(), word.isExternal(), word.partialFileId_,
-         word.id());
-  }
-
-  // The words of the block, as a range.
   iterator begin() { return words_.begin(); }
   iterator end() { return words_.end(); }
   const_iterator begin() const { return words_.begin(); }
   const_iterator end() const { return words_.end(); }
   size_t size() const { return words_.size(); }
   bool empty() const { return words_.empty(); }
-  MergeWord& operator[](size_t i) { return words_[i]; }
-  const MergeWord& operator[](size_t i) const { return words_[i]; }
-  MergeWord& front() { return words_.front(); }
-  const MergeWord& front() const { return words_.front(); }
-  MergeWord& back() { return words_.back(); }
-  const MergeWord& back() const { return words_.back(); }
+  Word& operator[](size_t i) { return words_[i]; }
+  const Word& operator[](size_t i) const { return words_[i]; }
+  Word& front() { return words_.front(); }
+  const Word& front() const { return words_.front(); }
+  Word& back() { return words_.back(); }
+  const Word& back() const { return words_.back(); }
 
-  // Release the words and the storage (the buffers go back to the pools). The
-  // block stays usable, for merged words.
+ protected:
+  // The words, for the derived blocks to fill.
+  std::vector<Word>& words() { return words_; }
+  const std::vector<Word>& words() const { return words_; }
+};
+
+// A block of a partial vocabulary file, as the merge reads it: the serialized
+// bytes of the block (see `PartialVocabularyRunsInput::getBlock`) and the
+// `InputWord`s that were parsed in place and point into these bytes. The bytes
+// never move once a word points into them, so the block can be moved, but not
+// copied. The bytes go back to the pool of the file blocks when the block is
+// destroyed.
+class InputBlock : public BlockOfWords<InputWord>, public ad_utility::NoCopy {
+ public:
+  using Buffer = BufferPool::Buffer;
+
+ private:
+  // The cleanup of the `bytes_` below: give them back to the pool. It owns
+  // the pools (and not a pointer into the block), so that it stays valid when
+  // the block is moved.
+  struct GiveBackToPool {
+    std::shared_ptr<BufferPools> pools_;
+    void operator()(Buffer&& bytes) const {
+      pools_->fileBlocks_.giveBack(std::move(bytes));
+    }
+  };
+  // NOTE: The `UniqueCleanup` gives the bytes back when the block is
+  // destroyed or overwritten by a move assignment, and does nothing for a
+  // moved-from block, so the implicit move operations are correct.
+  ad_utility::unique_cleanup::UniqueCleanup<Buffer, GiveBackToPool> bytes_;
+
+ public:
+  // Construct a block over the serialized `bytes` of `numWords` words of the
+  // partial vocabulary `partialFileId`, in the format that
+  // `PartialVocabularyWriter` writes (see `InputWord::fromZeroCopyDeserializer`
+  // above). The words are parsed in place, nothing is copied. The `bytes` go
+  // back to the `pools` (which must not be `nullptr`) when the block is
+  // destroyed. The `geoSortKeyFn` (see `PartialVocabularyRunsInput`), if not
+  // empty, computes the geo sort key of each word.
+  InputBlock(
+      Buffer bytes, size_t numWords, uint32_t partialFileId,
+      std::shared_ptr<BufferPools> pools,
+      const std::function<uint64_t(std::string_view)>& geoSortKeyFn = nullptr)
+      : bytes_{std::move(bytes),
+               GiveBackToPool{checkedBufferPools(std::move(pools))}} {
+    words().reserve(numWords);
+    serialization::ByteBufferReadSerializerT serializer{
+        ql::span<const char>{bytes_->data(), bytes_->size()}};
+    for (size_t i = 0; i < numWords; ++i) {
+      words().push_back(
+          InputWord::fromZeroCopyDeserializer(serializer, partialFileId));
+      if (geoSortKeyFn) {
+        words().back().geoSortKey_ = geoSortKeyFn(words().back().word_);
+      }
+    }
+    AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == bytes_->size(),
+                         "Trailing bytes in a block of a partial vocabulary");
+  }
+};
+
+// A block of merged words, as the merge yields it: the `MergedWord`s, the
+// buffers that their words were copied into, and their occurrences. The
+// buffers never move once a word points into them, so the block can be moved,
+// but not copied. The buffers come from and go back to the pool of the merged
+// words.
+class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
+ public:
+  using Occurrence = detail::Occurrence;
+  using Buffer = BufferPool::Buffer;
+
+ private:
+  using Buffers = std::vector<Buffer>;
+  // The cleanup of the `buffers_` below: give them back to the pool. It owns
+  // the pools (and not a pointer into the block), so that it stays valid when
+  // the block is moved.
+  struct GiveBackToPool {
+    std::shared_ptr<BufferPools> pools_;
+    void operator()(Buffers&& buffers) const {
+      for (auto& buffer : buffers) {
+        pools_->mergedWords_.giveBack(std::move(buffer));
+      }
+    }
+  };
+  using OwnedBuffers =
+      ad_utility::unique_cleanup::UniqueCleanup<Buffers, GiveBackToPool>;
+
+  // The occurrences of all the words, see `MergedWord::occurrencesOffset_`.
+  std::vector<Occurrence> occurrences_;
+  // The pools that the `buffers_` are taken from, see `store`.
+  std::shared_ptr<BufferPools> pools_;
+  // The buffers that the words are copied into, see `store`. A word is never
+  // split across two buffers, and a buffer is never reallocated (it is
+  // reserved once and filled up to its capacity), so the views into it stay
+  // valid.
+  //
+  // NOTE: The `UniqueCleanup` gives the buffers back to the pool when the
+  // block is destroyed, overwritten by a move assignment, or cleared (see
+  // `clear`), and does nothing for a moved-from block, so the implicit move
+  // operations are correct.
+  OwnedBuffers buffers_;
+
+ public:
+  // Construct an empty block whose buffers come from the `pools` (which must
+  // not be `nullptr`).
+  explicit MergedBlock(std::shared_ptr<BufferPools> pools)
+      : pools_{checkedBufferPools(std::move(pools))},
+        buffers_{Buffers{}, GiveBackToPool{pools_}} {}
+
+  // The memory that appending the `word` to a block occupies at most (see
+  // `addWord`), which the parallel merge needs to limit the memory of its
+  // output blocks. Every word of a block owns a distinct slice of the buffers
+  // of the block (no two words share their bytes) and a distinct range of the
+  // occurrences, so the sum over the words that were appended to a block is a
+  // bound for the footprint of the block.
+  //
+  // NOTE: A `word` that `addWord` folds into the last word of the block only
+  // costs an `Occurrence`, so for it this size is an overestimate, which is on
+  // the safe side.
+  static ad_utility::MemorySize memorySizeOfAppended(const InputWord& word) {
+    return ad_utility::MemorySize::bytes(
+        sizeof(MergedWord) + word.iriOrLiteral().size() + sizeof(Occurrence));
+  }
+
+  // Add a `word` that the merge yields (the `word` itself lives in an
+  // `InputBlock`). A `word` that is equal to the last word of this block is
+  // not appended, but added as a further occurrence of that word, whose
+  // external flag becomes the OR of the two. Otherwise, the `word` is copied
+  // into the buffers of this block and becomes a new `MergedWord` with this
+  // single occurrence.
+  //
+  // NOTE: An equal word is the same word from another partial vocabulary, and
+  // the merge yields equal words consecutively. The folding thus removes most
+  // of the duplicates on the threads of the merge, and the consumer of the
+  // merged blocks only sees the duplicates at the block boundaries.
+  void addWord(const InputWord& word) {
+    if (!empty() && back().iriOrLiteral() == word.iriOrLiteral()) {
+      MergedWord& last = back();
+      // The occurrences of the last word are the last ones in the vector.
+      AD_CORRECTNESS_CHECK(last.occurrencesOffset_ + last.numOccurrences_ ==
+                           occurrences_.size());
+      last.isExternal_ = last.isExternal_ || word.isExternal();
+      occurrences_.push_back(word.occurrence());
+      ++last.numOccurrences_;
+      return;
+    }
+    occurrences_.push_back(word.occurrence());
+    words().emplace_back(store(word.iriOrLiteral()), word.isExternal(),
+                         word.geoSortKey_, occurrences_.size() - 1);
+  }
+
+  // The occurrences of a `word` of this block.
+  ql::span<const Occurrence> occurrences(const MergedWord& word) const {
+    AD_CONTRACT_CHECK(word.occurrencesOffset_ + word.numOccurrences_ <=
+                      occurrences_.size());
+    return {occurrences_.data() + word.occurrencesOffset_,
+            word.numOccurrences_};
+  }
+
+  // The number of occurrences of all the words of this block.
+  size_t numOccurrences() const { return occurrences_.size(); }
+
+  // Release the words, their occurrences and the buffers (which go back to
+  // the pool). The block stays usable.
   void clear() {
-    words_.clear();
+    words().clear();
+    occurrences_.clear();
     // The move assignment runs the cleanup of the old buffers.
-    buffers_ = OwnedBuffers{Buffers{}, GiveBackToPools{pools_, false}};
+    buffers_ = OwnedBuffers{Buffers{}, GiveBackToPool{pools_}};
   }
 
  private:
@@ -288,14 +422,7 @@ class MergeBlock : public ad_utility::NoCopy {
     Buffers& buffers = *buffers_;
     if (buffers.empty() ||
         buffers.back().size() + word.size() > buffers.back().capacity()) {
-      if (pools_ != nullptr) {
-        buffers.push_back(pools_->mergedWords_.take(word.size()));
-      } else {
-        // Without pools, the buffers have the same size as with them. A word
-        // that is longer gets a buffer of its own.
-        buffers.emplace_back().reserve(std::max(
-            VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE.getBytes(), word.size()));
-      }
+      buffers.push_back(pools_->mergedWords_.take(word.size()));
     }
     auto& buffer = buffers.back();
     size_t offset = buffer.size();

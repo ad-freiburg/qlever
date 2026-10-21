@@ -121,6 +121,7 @@ class IndexImpl {
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
+  size_t parsedGeometriesMinLength_ = 0;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
@@ -214,6 +215,11 @@ class IndexImpl {
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
   ad_utility::RegexSet blankNodeIriRegexes_;
+
+  // The geo cell grid for WKT literals (see `GeoCellGrid`), only relevant
+  // during index building. When reading an index, the grid comes from its
+  // configuration.
+  std::optional<ad_utility::GeoCellGrid> geoCellGridForIndexBuilding_;
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
@@ -426,6 +432,21 @@ class IndexImpl {
     configurationJson_["vocabulary-type"] = type;
   }
 
+  // Set the geo cell grid for WKT literals (see `GeoCellGrid`), which is
+  // stored in the index configuration. A grid requires the vocabulary type
+  // `OnDiskCompressedGeoSplit`. Only relevant during index building.
+  void setGeoCellGridForIndexBuilding(
+      std::optional<ad_utility::GeoCellGrid> grid) {
+    geoCellGridForIndexBuilding_ = grid;
+    if (grid.has_value()) {
+      configurationJson_["geo-cell-grid-level"] = grid->level();
+      configurationJson_["geo-cell-grid-scheme"] = grid->scheme();
+    } else {
+      configurationJson_.erase("geo-cell-grid-level");
+      configurationJson_.erase("geo-cell-grid-scheme");
+    }
+  }
+
   // Set the encoding of the geo points for the index build; see
   // `ad_utility::GeoPointEncoding` for details.
   void setGeoPointEncodingForIndexBuilding(
@@ -447,6 +468,11 @@ class IndexImpl {
 
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
+
+  // Throw if `vocabularyType` has no `GeoVocabulary` and hence cannot hold a
+  // geo cell grid (see `GeoCellGrid`).
+  static void checkVocabularyTypeForGeoCellGrid(
+      ad_utility::VocabularyType vocabularyType);
 
   // ___________________________________________________________________________
   TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
@@ -598,6 +624,13 @@ class IndexImpl {
   size_t& rowsPerBlock() { return rowsPerBlock_; }
 
   const size_t& rowsPerBlock() const { return rowsPerBlock_; }
+
+  // The minimum length of the WKT literals for which the index build stores
+  // the parsed geometry (see `ParsedGeometry`, 0 = none).
+  size_t& parsedGeometriesMinLength() { return parsedGeometriesMinLength_; }
+  const size_t& parsedGeometriesMinLength() const {
+    return parsedGeometriesMinLength_;
+  }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -759,6 +792,10 @@ class IndexImpl {
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
+  //
+  // The `sortedTriples` are either a sequential range of sorted blocks (then
+  // the `perTripleCallbacks` are invoked for the blocks in order), or a
+  // `ChunkwiseInput` (see above).
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutationPairImpl(
       size_t numColumns, const std::string& fileName1,
@@ -958,6 +995,20 @@ class IndexImpl {
 
   using BlocksOfTriples = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
 
+  // The sorted input of a pair of permutations that is written directly from
+  // the chunks of the parallel merge of the `sorter_` (instead of from a
+  // sequential range of sorted blocks), see
+  // `index/ChunkwisePermutationWriter.h`. The `perTripleCallbacks` of such an
+  // input have to be `chunkwisePermutationWriter::ConcurrentBlockCallback`s,
+  // which are invoked concurrently and in an arbitrary order of the blocks.
+  // With `removeDuplicates_` set, consecutive duplicate rows are removed first
+  // (like `ad_utility::uniqueBlockView` does for a sequential input).
+  template <typename Sorter>
+  struct ChunkwiseInput {
+    Sorter& sorter_;
+    bool removeDuplicates_;
+  };
+
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
   // * `sortedInput`  The input, must be sorted by the first permutation in the
@@ -999,6 +1050,40 @@ class IndexImpl {
       sizeof...(NextSorter) <=
       1)) void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
                                NextSorter&&... nextSorter);
+
+  // The variants of the three functions above that write the permutations
+  // directly from the chunks of the parallel merge of the `sortedTriples`
+  // sorter (see `ChunkwiseInput` and `index/ChunkwisePermutationWriter.h`),
+  // and that feed the `nextSorter` (if any) concurrently. They cannot be used
+  // for the SPO and SOP permutations if the patterns are built, because the
+  // pattern creation needs the triples in order. The `removeDuplicates` flag
+  // is for the first pair of permutations, whose input may contain duplicate
+  // triples.
+  CPP_template(typename Sorter, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createPSOAndPOSChunkwise(size_t numColumns,
+                                                 Sorter& sortedTriples,
+                                                 bool removeDuplicates,
+                                                 bool doWriteConfiguration,
+                                                 NextSorter&... nextSorter);
+  CPP_template(typename Sorter, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createSPOAndSOPChunkwise(size_t numColumns,
+                                                 Sorter& sortedTriples,
+                                                 bool removeDuplicates,
+                                                 NextSorter&... nextSorter);
+  CPP_template(typename Sorter, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createOSPAndOPSChunkwise(size_t numColumns,
+                                                 Sorter& sortedTriples,
+                                                 bool removeDuplicates,
+                                                 NextSorter&... nextSorter);
+
+  // Store the statistics of the PSO and POS permutations in the configuration
+  // (and write it if `doWriteConfiguration` is set), see `createPSOAndPOSImpl`.
+  void setPsoAndPosStatistics(size_t numPredicates, size_t numTriples,
+                              uint64_t nextAvailableInternalGraph,
+                              bool doWriteConfiguration);
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.
