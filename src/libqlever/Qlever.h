@@ -40,6 +40,7 @@
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/Allocator.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
@@ -132,6 +133,16 @@ struct IndexBuilderConfig : CommonConfig {
   // IDs. See `src/index/vocabulary/VocabularyType.h` for the possible options.
   ad_utility::VocabularyType vocabType_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
+
+  // The level of the geo cell grid for WKT literals (see `GeoCellGrid`), 0
+  // means no grid. A grid requires the `OnDiskCompressedGeoSplit` vocabulary
+  // type and is the basis for the geo cell prefilter of spatial joins.
+  size_t geoCellGridLevel_ = 0;
+
+  // The scheme of the geo cell grid (see `GeoCellGridScheme`), only relevant
+  // with a grid level > 0.
+  ad_utility::GeoCellGridScheme geoCellGridScheme_ =
+      ad_utility::GeoCellGridScheme::Flat;
 
   // How geo points are encoded in the `Id`s of the index, see
   // `ad_utility::GeoPointEncoding`. The encoding `LatMajor` is deprecated.
