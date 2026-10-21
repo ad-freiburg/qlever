@@ -64,9 +64,10 @@ TEST(IdMapWriter, writeAndReadBack) {
   EXPECT_THAT(getIdMapFromFile(filename),
               ::testing::ElementsAreArray(expected));
   // The file consists of the number of entries (8 bytes), followed by the
-  // entries (16 bytes each). This is exactly the format of a serialized
-  // `IdMap`.
-  EXPECT_EQ(ql::filesystem::file_size(filename), 8 + 16 * numPairs);
+  // entries (`sizeof(IdMapEntry)` bytes each). This is exactly the format of a
+  // serialized `IdMap`.
+  EXPECT_EQ(ql::filesystem::file_size(filename),
+            8 + sizeof(IdMapEntry) * numPairs);
 }
 
 // _____________________________________________________________________________

@@ -36,16 +36,22 @@ using namespace ad_utility::memory_literals;
 
 namespace {
 
+// `bytes` per 8 bytes of an `Id`, so that the row counts below are the same for
+// every size of an `Id`.
+ad_utility::MemorySize scaledBytes(size_t bytes) {
+  return ad_utility::MemorySize::bytes(bytes * BYTES_PER_ID_COLUMN_ENTRY / 8);
+}
+
 // The base configuration of all the tests below. The numbers are chosen such
 // that the memory arithmetic can be verified by hand: a row has
-// `2 * BYTES_PER_ID_COLUMN_ENTRY = 16` bytes, and the input blocks of a single
+// `2 * 8 = 16` bytes (before scaling), and the input blocks of a single
 // chunk occupy `numRuns_ * numColumns_ * inputBlockSizePerColumn_ = 200` bytes.
 MergePhaseConfig baseConfig() {
   MergePhaseConfig config;
   config.numRuns_ = 1;
   config.numColumns_ = 2;
-  config.memoryLimit_ = ad_utility::MemorySize::bytes(20'000'400);
-  config.inputBlockSizePerColumn_ = ad_utility::MemorySize::bytes(100);
+  config.memoryLimit_ = scaledBytes(20'000'400);
+  config.inputBlockSizePerColumn_ = scaledBytes(100);
   config.numBufferedOutputBlocks_ = 4;
   config.maxOutputBlockSize_ = 1_GB;
   config.parallelism_ = 2;
@@ -72,7 +78,7 @@ TEST(ExternalIdTableSorterMergeConfig, fullParallelism) {
 // whole limit minus its 200 bytes of input blocks, divided by `4 + 3 = 7`.
 TEST(ExternalIdTableSorterMergeConfig, parallelismIsReducedForLargeBlocks) {
   auto config = baseConfig();
-  config.memoryLimit_ = ad_utility::MemorySize::bytes(16'000'000);
+  config.memoryLimit_ = scaledBytes(16'000'000);
   auto parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numChunksInFlight_, 1u);
   EXPECT_EQ(parameters.outputBlockSize_, 142'855u);
@@ -95,7 +101,7 @@ TEST(ExternalIdTableSorterMergeConfig, serialMerge) {
 // `125'000` rows of `fullParallelism` at `1'600'000 / 16 = 100'000`.
 TEST(ExternalIdTableSorterMergeConfig, outputBlockSizeIsCapped) {
   auto config = baseConfig();
-  config.maxOutputBlockSize_ = ad_utility::MemorySize::bytes(1'600'000);
+  config.maxOutputBlockSize_ = scaledBytes(1'600'000);
   auto parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numChunksInFlight_, 2u);
   EXPECT_EQ(parameters.outputBlockSize_, 100'000u);
