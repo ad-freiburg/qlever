@@ -89,10 +89,9 @@ class SortedSequenceManySortedBlocks {
   // For the range `rangeToSort` contained in `elements` sort it by the
   // projected key and keep the last element for each projected key (this is
   // the same procedure as in `SortedSequenceTwoSortedRanges`).
-  CPP_template_2(typename R)(
-      requires ql::ranges::range<
-          R>) void sortAndRemoveDuplicates(std::vector<ValueType>& elements,
-                                           R&& rangeToSort) const {
+  CPP_template_2(typename R)(requires ql::ranges::range<R>)
+  void sortAndRemoveDuplicates(std::vector<ValueType>& elements,
+                               R&& rangeToSort) const {
     // Stable sort ensures that the operations for each key are not reordered.
     // Older elements are before newer ones.
     ql::ranges::stable_sort(rangeToSort, comp_, proj_);
@@ -185,8 +184,8 @@ class SortedSequenceManySortedBlocks {
 
   // Remove the elements from `block` whose projected key occurs in the sorted
   // range `toDelete`, and return the number of removed elements.
-  CPP_template_2(typename R)(requires ql::ranges::input_range<R>) size_t
-      eraseSortedFromBlock(Block& block, R&& toDelete) {
+  CPP_template_2(typename R)(requires ql::ranges::input_range<R>)
+  size_t eraseSortedFromBlock(Block& block, R&& toDelete) {
     auto newEnd = ad_utility::inplace_set_difference(block, toDelete, comp_,
                                                      proj_, proj_);
     size_t numErased = static_cast<size_t>(block.end() - newEnd);
