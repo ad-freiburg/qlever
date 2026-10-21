@@ -481,44 +481,49 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 GroupByImpl::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
-  // The subtree must provide the `requestedVariables`, the variables that
-  // the `GroupBy` groups the input rows by (`_groupByVariables`). Keep in mind
-  // that `requestedVariables` which are not part of `_groupByVariables` or
-  // `_aliases`, do not have any impact here, as the columns have already been
-  // stripped in the constructor.
+  // Keep the aliases whose target is requested, and the aliases whose target
+  // is read by a kept alias. The subtree must provide the requested variables,
+  // the variables read by the kept aliases, and the variables that the
+  // `GroupBy` groups by.
+  //
+  // NOTE: An alias can only read the targets of earlier aliases, so one pass
+  // from the last alias to the first finds all aliases to keep.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
-  for (const Variable& groupByVar : _groupByVariables) {
-    varsRequiredFromSubtree.add(groupByVar);
-  }
-
-  // Add the variables needed to compute requested aliases to
-  // `varsRequiredFromSubtree`. Keep only aliases whose targets are requested.
-  auto requestedAliases =
-      _aliases | ql::views::filter([&requestedVariables](const Alias& alias) {
-        return ad_utility::contains(requestedVariables, alias._target);
-      }) |
-      ::ranges::to_vector;
-
-  // Add the variables needed to compute the requested aliases
-  // to `varsRequiredFromSubtree`.
-  for (const auto& alias : requestedAliases) {
+  std::vector<Alias> keptAliases;
+  for (const Alias& alias : _aliases | ql::views::reverse) {
+    if (!ad_utility::contains(varsRequiredFromSubtree.get(), alias._target)) {
+      continue;
+    }
+    // A `COUNT(DISTINCT *)` reads all columns of the subtree, so nothing may
+    // be stripped below it (the caller then adds a `StripColumns` on top).
+    if (alias._expression.readsAllVisibleColumns()) {
+      return std::nullopt;
+    }
+    keptAliases.push_back(alias);
     for (const Variable* aliasVar : alias._expression.containedVariables()) {
       varsRequiredFromSubtree.add(*aliasVar);
     }
   }
+  ql::ranges::reverse(keptAliases);
+  for (const Variable& groupByVar : _groupByVariables) {
+    varsRequiredFromSubtree.add(groupByVar);
+  }
 
-  // Strip the subtree
-  std::shared_ptr<QueryExecutionTree> subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(
-          _subtree, varsRequiredFromSubtree.get());
+  // Strip the subtree and build the new `GroupByImpl` with the private
+  // constructor, which keeps `isImplicitGroupBy_` (like `cloneImpl`, because
+  // `_groupByVariables` is already reduced to the variables of the subtree).
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      _subtree, varsRequiredFromSubtree.get());
+  auto impl = std::unique_ptr<GroupByImpl>{
+      new GroupByImpl{_executionContext, isImplicitGroupBy_, _groupByVariables,
+                      std::move(keptAliases), std::move(subtree)}};
 
-  // The new `GroupBy` also exports the variables it groups the input rows by
+  // The new `GroupBy` also exports the grouped variables and alias targets
   // that the parent did not request. The helper adds a `StripColumns` operation
   // for them.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<GroupBy>(
-      getExecutionContext(), requestedVariables, _groupByVariables,
-      std::move(requestedAliases), std::move(subtree));
+      getExecutionContext(), requestedVariables, std::move(impl));
 }
 
 // _____________________________________________________________________________

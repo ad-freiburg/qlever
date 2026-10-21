@@ -12,14 +12,13 @@
 
 #include <gmock/gmock.h>
 
-#include <algorithm>
-
+#include "backports/algorithm.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
 namespace column_stripping_test_helpers {
 
-// Check whether root operation of tree is of the expected operation type.
+// Match a tree whose root operation is of type `Operation`.
 template <typename Operation>
 auto hasRootOperation() {
   return ::testing::Truly([](const QueryExecutionTree* tree) {
@@ -28,19 +27,19 @@ auto hasRootOperation() {
   });
 }
 
-// Check whether the stripped columns contain the expected variables.
+// Match a tree whose variables are exactly `expectedVariables`.
 inline auto hasVariables(std::vector<Variable> expectedVariables) {
   return ::testing::Truly([expectedVariables = std::move(expectedVariables)](
                               const QueryExecutionTree* tree) {
     const auto& columns = tree->getVariableColumns();
     return columns.size() == expectedVariables.size() &&
-           std::ranges::all_of(expectedVariables, [&](const auto& variable) {
+           ql::ranges::all_of(expectedVariables, [&](const auto& variable) {
              return columns.contains(variable);
            });
   });
 }
 
-// Check whether the stripped table contains the expected row content.
+// Match a tree whose fully materialized result matches `resultMatcher`.
 template <typename ResultMatcher>
 auto hasExpectedResult(ResultMatcher resultMatcher) {
   return ::testing::ResultOf(
@@ -50,8 +49,7 @@ auto hasExpectedResult(ResultMatcher resultMatcher) {
       std::move(resultMatcher));
 }
 
-// Combines `hasRootOperation`, `hasVariables` and `hasExpectedResult` in one
-// check.
+// Combine `hasRootOperation`, `hasVariables` and `hasExpectedResult`.
 template <typename Operation, typename ResultMatcher>
 auto isStrippedColumns(std::vector<Variable> expectedVariables,
                        ResultMatcher resultMatcher) {

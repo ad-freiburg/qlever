@@ -3591,18 +3591,16 @@ TEST(GroupBy, BlankNodeInGroupBy) {
 }
 
 // Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
-// variables plus the variables the `GroupBy` uses for grouping or for building
-// _aliases. The test checks whether `makeTreeWithStrippedColumns` adds a
-// `StripColumns` operation to remove variables that the parent did not request
-// and checks whether _aliases are erased in case the parent tree does not
-// request their targets.
+// variables plus the variables that the `GroupBy` groups by or that its
+// aliases read, drops the aliases whose target is not requested, and adds a
+// `StripColumns` operation for the variables that the parent did not request.
 TEST(GroupBy, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::hasRootOperation;
   using ::column_stripping_test_helpers::isStrippedColumns;
   using ::testing::ElementsAre;
   using ::testing::Key;
-  using ::testing::SizeIs;
   using ::testing::UnorderedElementsAre;
-  // A subtree with the variables `?a`, `?b`, `?c` and `?d`
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec,
@@ -3637,8 +3635,8 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   }
 
   // `GroupBy` `?b` and `?c` and compute alias `?sumB` from `?b`. `?b`, `?c` and
-  // `?sumB`
-  // requested: `?b` and `?d` are stripped and the columns are renumbered.
+  // `?sumB` requested: `?a` and `?d` are stripped and the columns are
+  // renumbered.
   {
     auto tree =
         strip({V{"?b"}, V{"?c"}}, {alias}, {V{"?b"}, V{"?c"}, V{"?sumB"}});
@@ -3677,8 +3675,8 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
                                               {I(6), I(3), I(12)}})));
   }
 
-  // All variables requested: nothing is stripped and result has additional
-  // column `?sumB`
+  // All variables requested: nothing is stripped and the result has the
+  // additional column `?sumB`.
   {
     auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, {alias},
                       {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}});
@@ -3705,6 +3703,69 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
     ASSERT_TRUE(groupBy);
     EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});
+  }
+
+  // The alias `?twiceSumB` reads the target of the alias `?sumB`. Only
+  // `?twiceSumB` requested: both aliases are kept, a `StripColumns` on top
+  // removes `?a` and `?sumB`.
+  {
+    Alias twiceSumB(
+        SparqlExpressionPimpl{
+            makeMultiplyExpression(
+                std::make_unique<VariableExpression>(Variable{"?sumB"}),
+                std::make_unique<IdExpression>(I(2))),
+            "?sumB * 2"},
+        Variable{"?twiceSumB"});
+    auto tree = strip({V{"?a"}}, {alias, twiceSumB}, {V{"?twiceSumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?twiceSumB"}},
+                    matchesIdTableFromVector({{I(4)}, {I(10)}, {I(24)}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}, V{"?twiceSumB"}},
+                    matchesIdTableFromVector({{I(1), I(2), I(4)},
+                                              {I(3), I(5), I(10)},
+                                              {I(6), I(12), I(24)}})));
+  }
+
+  // A `COUNT(DISTINCT *)` alias reads all columns of the subtree. If it is
+  // requested, nothing can be stripped (`std::nullopt`), if it is not
+  // requested, it is dropped like any other alias.
+  {
+    Alias countDistinctStar(SparqlExpressionPimpl{makeCountStarExpression(true),
+                                                  "COUNT(DISTINCT *)"},
+                            Variable{"?count"});
+    GroupBy groupBy(qec, {V{"?a"}}, {countDistinctStar}, values);
+    EXPECT_EQ(groupBy.makeTreeWithStrippedColumns({V{"?count"}}), std::nullopt);
+    auto tree =
+        strip({V{"?a"}}, {countDistinctStar, alias}, {V{"?a"}, V{"?sumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}},
+                    matchesIdTableFromVector(
+                        {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}})));
+  }
+
+  // A `GroupBy` on a variable that the subtree does not have groups by nothing,
+  // but unlike an implicit `GroupBy` has no group for an empty input. This is
+  // preserved by the stripping.
+  {
+    auto emptyValues = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{4, qec->getAllocator()},
+        std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    Alias sumC(
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(V{"?c"})),
+            "SUM(?c)"},
+        Variable{"?sumC"});
+    GroupBy groupBy(qec, {V{"?notInSubtree"}}, {alias, sumC}, emptyValues);
+    auto tree = groupBy.makeTreeWithStrippedColumns({V{"?sumB"}}).value();
+    EXPECT_THAT(tree.get(), hasRootOperation<GroupBy>());
+    EXPECT_EQ(tree->getRootOperation()->getDescriptor(),
+              "GroupBy on unbound variables");
+    EXPECT_EQ(tree->getResult(false)->idTableView().numRows(), 0u);
   }
 }
 

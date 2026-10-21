@@ -12,7 +12,6 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ColumnStrippingHelpers.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"

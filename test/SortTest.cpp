@@ -571,16 +571,15 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
 }
 
 // Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
-// variables plus the variables the `SORT` operation sorts the input rows by,
-// translates `sortColumnIndices_` accordingly, and adds a `StripColumns`
-// operation to remove variables that the parent did not request.
+// variables plus the variables the `Sort` sorts by, translates
+// `sortColumnIndices_` accordingly, and adds a `StripColumns` operation for
+// the sort variables that the parent did not request.
 TEST(Sort, makeTreeWithStrippedColumns) {
   using ::column_stripping_test_helpers::isStrippedColumns;
   using ::testing::ElementsAre;
   using ::testing::Key;
-  using ::testing::SizeIs;
   using ::testing::UnorderedElementsAre;
-  // A subtree with the variables `?a`, `?b`, `?c` and `?d`
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec,
