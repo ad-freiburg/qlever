@@ -74,9 +74,11 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 100 . "
       "{ ?a <p> ?b } }}",
-      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
-                     BBox, std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+      h::QetWithWarnings(
+          {"`<boundingBox>` is deprecated"},
+          h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                         BBox, std::nullopt, std::nullopt,
+                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
