@@ -148,9 +148,10 @@ TEST(OrderByComparator, compare) {
       {local(a2)},
       {getId("<x>")},
       {getId("<y>")},
-      // Literals: booleans, numbers, strings, dates (by their datatypes).
-      {BoolId(false)},
-      {BoolId(true)},
+      // Literals: booleans, numbers, strings, dates (by their datatypes). A
+      // boolean written as `0` or `1` is equal to `false` resp. `true`.
+      {BoolId(false), Id::makeBoolFromZeroOrOne(false)},
+      {BoolId(true), Id::makeBoolFromZeroOrOne(true)},
       {D(-inf)},
       {I(-twoToThe53 - 1)},
       {I(-twoToThe53), D(-d53)},

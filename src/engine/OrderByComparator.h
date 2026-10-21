@@ -123,16 +123,32 @@ class OrderByComparator {
     if (isNumeric(typeA) && isNumeric(typeB)) {
       return compareNumbers(a, b);
     }
+    // Two `Id`s of the same datatype are ordered by their bits, which is what
+    // `compareIds` does for them (they hold an index, a date, or a geo point),
+    // except for `LocalVocabIndex` (the words have to be compared) and `Bool`
+    // (the bits also store whether it was written as `0` or `1`, see
+    // `ValueId::makeBoolFromZeroOrOne`). Compare the bits directly,
+    // `compareIds` would need two calls to tell `>` from `==`.
+    if (typeA == typeB && typeA != Datatype::LocalVocabIndex &&
+        typeA != Datatype::Bool) {
+      return threeWay(a.getBits(), b.getBits());
+    }
     using namespace valueIdComparators;
     auto isLessThan = compareIds(a, b, Comparison::LT);
     // `Undef` means that the datatypes are incompatible.
     if (isLessThan == ComparisonResult::Undef) {
-      return typeA < typeB ? -1 : (typeA > typeB ? 1 : 0);
+      return threeWay(typeA, typeB);
     }
     if (isLessThan == ComparisonResult::True) {
       return -1;
     }
     return toBoolNotUndef(compareIds(b, a, Comparison::LT)) ? 1 : 0;
+  }
+
+  // Return -1, 0, or 1 if `x` is less than, equal to, or greater than `y`.
+  template <typename T>
+  static int threeWay(T x, T y) {
+    return (x > y) - (x < y);
   }
 
   // Compare two `Id`s of type `Int` or `Double`.
@@ -145,11 +161,10 @@ class OrderByComparator {
     if (aIsNan || bIsNan) {
       return static_cast<int>(aIsNan) - static_cast<int>(bIsNan);
     }
-    auto compareThreeWay = [](auto x, auto y) { return (x > y) - (x < y); };
     bool aIsInt = a.getDatatype() == Datatype::Int;
     bool bIsInt = b.getDatatype() == Datatype::Int;
     if (aIsInt && bIsInt) {
-      return compareThreeWay(a.getInt(), b.getInt());
+      return threeWay(a.getInt(), b.getInt());
     }
     if (aIsInt) {
       return ad_utility::compareIntAndDouble(a.getInt(), b.getDouble());
@@ -157,7 +172,7 @@ class OrderByComparator {
     if (bIsInt) {
       return -ad_utility::compareIntAndDouble(b.getInt(), a.getDouble());
     }
-    return compareThreeWay(a.getDouble(), b.getDouble());
+    return threeWay(a.getDouble(), b.getDouble());
   }
 };
 
