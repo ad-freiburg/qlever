@@ -56,7 +56,7 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<RightType>)) {
     // Check for datatypes rejected by the numeric getters unless classification
     // proves that every value is accepted (including booleans). Only functions
-    // with an UNDEF opt-in use this check; see hasNonNumericOperand.
+    // with an `UNDEF` opt-in use this check; see `hasNonNumericOperand`.
     bool checkForValuesRejectedByGetter = true;
     // Use the shared numeric/date fast paths when both operands and value
     // getters support typed execution.

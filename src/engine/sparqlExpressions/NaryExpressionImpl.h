@@ -138,8 +138,8 @@ class NaryExpressionStronglyTyped
 
       // Check for datatypes rejected by the numeric getters unless
       // classification proves that every value is accepted (including
-      // booleans). Only functions with an UNDEF opt-in use this check; see
-      // hasNonNumericOperand.
+      // booleans). Only functions with an `UNDEF` opt-in use this check; see
+      // `hasNonNumericOperand`.
       [[maybe_unused]] bool checkForValuesRejectedByGetter = true;
       constexpr bool useNumericFastPath =
           canUseNumericFastPath<ValueGetters, ConvertedOperands>();
@@ -200,7 +200,7 @@ class NaryExpressionStronglyTyped
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
-      // Return UNDEF directly for getter-rejected datatypes of
+      // Return `UNDEF` directly for getter-rejected datatypes of
       // numeric/date-aware functions, otherwise pass the converted values to
       // the N-ary function.
       //

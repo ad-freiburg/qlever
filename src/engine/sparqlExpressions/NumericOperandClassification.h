@@ -40,18 +40,14 @@ enum class NumericType { Int, Double, Date, Other };
 struct NumericOperandClassification {
   NumericType homogeneousType_ = NumericType::Other;
   NumericType majorityType_ = NumericType::Other;
-  // Whether any value has a datatype rejected by NumericValueGetter (anything
-  // except Int, Double, Bool), or NumericOrDateValueGetter when date
-  // classification is enabled (anything except Int, Double, Bool, Date).
-  // Booleans require generic conversion but are accepted by both getters.
-  // Date payloads, including invalid dates, remain subject to typed arithmetic.
-  // For an unclassified or empty operand, true conservatively retains the
-  // per-row checks that can return UNDEF without invoking the getters.
+  // Whether any value has a datatype rejected by the selected numeric getter.
+  // See `classifyNumericOperand` for the accepted datatypes.
   bool containsValueRejectedByGetter_ = true;
 };
 
 // Check whether an expression supports date arguments. This is currently true
-// if all ValueGetters, specified as a std::tuple, are NumericOrDateValueGetter.
+// if all `ValueGetters`, specified as a `std::tuple`, are
+// `NumericOrDateValueGetter`.
 template <typename ValueGetters>
 inline constexpr bool supportsDateOperands = false;
 
@@ -82,9 +78,10 @@ constexpr bool supportsNumericFastPathOperand() {
   }
 }
 
-// Map Datatype to NumericType. Int and Double are always recognized; Date is
-// recognized only if IncludeDates is true. Return Other for all remaining
-// datatypes, including Bool, which requires conversion by the generic getter.
+// Map `Datatype` to `NumericType`. `Int` and `Double` are always recognized;
+// `Date` is recognized only if `IncludeDates` is true. Return `Other` for all
+// remaining datatypes, including `Bool`, which requires conversion by the
+// generic getter.
 template <bool IncludeDates = false>
 constexpr NumericType numericTypeForDatatype(Datatype type) {
   switch (type) {
@@ -102,12 +99,17 @@ constexpr NumericType numericTypeForDatatype(Datatype type) {
   }
 }
 
-// Classify a column by determining whether all values have the same numeric
-// or date datatype, and whether Int, Double, or Date is the unique most common
-// datatype. Date is considered only if IncludeDates is true. Also record
-// whether any value has a datatype rejected by the selected numeric getter
-// (see containsValueRejectedByGetter_). Empty columns return the default
-// classification, with neither a homogeneous nor a majority type.
+// Classify a column by determining whether all `values` have the same numeric
+// or date datatype, and whether `Int`, `Double`, or `Date` is the unique most
+// common datatype. `Date` is considered only if `IncludeDates` is true.
+//
+// Set `containsValueRejectedByGetter_` if any datatype is rejected by the
+// selected getter: `NumericValueGetter` accepts `Int`, `Double`, and `Bool`;
+// `NumericOrDateValueGetter` additionally accepts `Date` when `IncludeDates` is
+// true. Booleans require generic conversion but are accepted by both getters.
+// `Date` payloads, including invalid dates, remain subject to typed arithmetic.
+// Empty columns have neither a homogeneous nor a majority type and retain the
+// default rejection flag, so callers still check individual rows if needed.
 //
 // Count all datatypes in one pass over the column. Blocks aggregate repeated
 // histogram updates; the individual steps and their motivation are below.
@@ -131,7 +133,7 @@ inline NumericOperandClassification classifyNumericOperand(
         }
         // The OR of all XORs with the first tag is zero exactly when all tags
         // are equal. This reduction lets the compiler vectorize the comparison;
-        // std::all_of was about twice as slow on homogeneous columns in a
+        // `std::all_of` was about twice as slow on homogeneous columns in a
         // release classifier microbenchmark (100k IDs, five samples).
         unsigned differences = 0;
         for (auto type : types) {
@@ -139,18 +141,17 @@ inline NumericOperandClassification classifyNumericOperand(
               static_cast<unsigned>(type) ^ static_cast<unsigned>(types[0]);
         }
         const auto first = types.front();
-        if (differences == 0) {
-          // One histogram update replaces 32 dependent increments of the same
-          // counter. A plain per-ID histogram was about seven times slower on
-          // homogeneous columns in the same classifier-only benchmark.
+        const bool allHaveSameDatatype = differences == 0;
+        if (allHaveSameDatatype) {
           counts[static_cast<size_t>(first)] += blockSize;
         } else {
-          // Try aggregating a block with exactly two datatypes. For such a
-          // block, differences is first XOR second, so XOR with first recovers
-          // second. With three or more types it is only a candidate and might
-          // not even be a valid Datatype; do not index counts with it yet.
-          // Compared with find_if plus separate std::count calls, this avoids
-          // an additional search and counts both types in one reduction loop.
+          // More than one datatype occurs. Optimistically assume exactly two:
+          // the loop above gives `differences = first ^ second`, so the second
+          // tag is `differences ^ first`. For more than two distinct datatypes,
+          // the counting loop is still safe and detects that case below.
+          // The candidate is used only for comparisons until validated.
+          // Compared with `std::find_if` plus separate `std::count` calls, this
+          // avoids another search and counts both types in one reduction loop.
           const auto firstTag = static_cast<unsigned>(first);
           const auto secondCandidate = firstTag ^ differences;
           size_t firstCount = 0;
@@ -164,7 +165,7 @@ inline NumericOperandClassification classifyNumericOperand(
             // therefore occurs in types and is a valid histogram index.
             // Two updates replace repeated writes to the same counters. In
             // classifier-only tests, this was about 2x faster than incrementing
-            // the histogram per tag for shuffled double/UNDEF mixtures.
+            // the histogram per tag for shuffled double/`UNDEF` mixtures.
             counts[firstTag] += firstCount;
             counts[secondCandidate] += secondCount;
           } else {
@@ -211,8 +212,8 @@ inline NumericOperandClassification classifyNumericOperand(
   return result;
 }
 
-// Classify a single ValueId and use its supported datatype as both the
-// homogeneous and majority type. Date is supported only with IncludeDates.
+// Classify a single `ValueId` and use its supported datatype as both the
+// homogeneous and majority type. `Date` is supported only with `IncludeDates`.
 template <bool IncludeDates = false>
 inline NumericOperandClassification classifyNumericOperand(ValueId value) {
   const auto type = numericTypeForDatatype<IncludeDates>(value.getDatatype());
@@ -241,7 +242,7 @@ inline NumericOperandClassification classifyNumericOperand(
 }
 
 // Classify all operands and determine both their homogeneous and majority
-// supported datatypes, including Date when IncludeDates is true.
+// supported datatypes, including `Date` when `IncludeDates` is true.
 template <bool IncludeDates = false, typename... Operands>
 inline auto classifyNumericOperands(const EvaluationContext* context,
                                     const Operands&... operands) {

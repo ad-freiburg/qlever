@@ -734,7 +734,7 @@ TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
 // original arithmetic semantics.
 TEST(SparqlExpression, homogeneousDateArithmetic) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  // Date + duration is directional in the current implementation.
+  // `Date` + duration is directional in the current implementation.
   auto testPlus = std::bind_front(testNaryExpression, &makeAddExpression);
   auto date = [](const std::string& value) {
     return Dat(DateYearOrDuration::parseXsdDate, value);
@@ -800,7 +800,7 @@ TEST(SparqlExpression, homogeneousDateArithmetic) {
            V<Id>{{first, day}, alloc}, day);
   testMinus(V<Id>{{U, U}, alloc}, V<Id>{{first, second}, alloc},
             IdOrLocalVocabEntry{lit("not a date")});
-  // A Date first row must not incorrectly classify the rest of the column.
+  // A `Date` first row must not incorrectly classify the rest of the column.
   testMinus(V<Id>{{day, U, U, U, U}, alloc},
             V<Id>{{second, I(2), B(true), U, Voc(4)}, alloc}, first);
   testMinus(V<Id>{{U, day}, alloc}, V<Id>{{I(2), second}, alloc}, first);
@@ -883,7 +883,8 @@ TEST(SparqlExpression, speculativeDateArithmetic) {
   testMinus(V<Id>{{day, day, U, I(5), U, day, day}, alloc}, left, right);
   testMinus(V<Id>{{day, day, U, U, day, day, day}, alloc}, left, start);
   testMinus(V<Id>{{zero, zero, U, U, zero, zero, zero}, alloc}, end, left);
-  // Date-aware undefined rejection also applies without any supported majority.
+  // Date-aware undefined rejection also applies without any supported
+  // majority.
   testMinus(V<Id>{{U, U, U, U}, alloc}, V<Id>{{U, Voc(4), B(true), end}, alloc},
             V<Id>{{end, end, end, U}, alloc});
   testMinus(U, U, end);

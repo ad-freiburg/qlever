@@ -30,15 +30,15 @@
 namespace sparqlExpression::detail::homogeneousNumeric {
 
 // Helpers for evaluating numeric and date-aware expressions directly on C++
-// numeric types or DateYearOrDuration after operand classification (see
-// `NumericOperandClassification.h`). Date dispatch is enabled only for getters
-// that accept dates, keeping numeric-only expressions free of date
+// numeric types or `DateYearOrDuration` after operand classification (see
+// `NumericOperandClassification.h`). `Date` dispatch is enabled only for
+// getters that accept dates, keeping numeric-only expressions free of date
 // instantiations.
 //
 // The generic numeric/date value getters return variants and therefore require
 // variant dispatch for every result row. These helpers avoid that overhead for
 // homogeneous inputs and provide a speculative fast path for mixed inputs.
-// DateYearOrDuration retains all date/time and duration distinctions; the
+// `DateYearOrDuration` retains all date/time and duration distinctions; the
 // original typed operation continues to determine arithmetic semantics.
 
 // Map supported numeric datatypes to their primitive C++ types.
@@ -46,10 +46,10 @@ inline constexpr auto numericTypeMap = std::tuple{
     std::pair{NumericType::Int, ad_utility::use_type_identity::ti<int64_t>},
     std::pair{NumericType::Double, ad_utility::use_type_identity::ti<double>}};
 
-// Map NumericType values to the C++ types used for typed evaluation. Include
-// DateYearOrDuration only when IncludeDates is true. Keeping a two-type map for
-// numeric-only expressions avoids instantiating date combinations they cannot
-// evaluate.
+// Map `NumericType` values to the C++ types used for typed evaluation.
+// Include `DateYearOrDuration` only when `IncludeDates` is true. Keeping a
+// two-type map for numeric-only expressions avoids instantiating date
+// combinations they cannot evaluate.
 template <bool IncludeDates>
 inline constexpr auto numericTypeMapFor = [] {
   if constexpr (IncludeDates) {
@@ -118,10 +118,10 @@ struct RawNumericFunction<MakeNumericExpression<Function, NanOrInfToUndef>> {
 template <typename Function>
 using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
 
-// Return the index of type in numericTypeMapFor<IncludeDates>. The caller must
-// first classify operands and exclude Other. Date is valid only if IncludeDates
-// is true. The recursive lookup selects the corresponding C++ type at compile
-// time when dispatchNumericTypes invokes its callback.
+// Return the index of type in `numericTypeMapFor<IncludeDates>`. The caller
+// must first classify operands and exclude `Other`. `Date` is valid only if
+// `IncludeDates` is true. The recursive lookup selects the corresponding C++
+// type at compile time when `dispatchNumericTypes` invokes its callback.
 template <bool IncludeDates = false, size_t I = 0>
 inline int numericTypeToIndex(NumericType type) {
   if constexpr (I ==
@@ -136,7 +136,8 @@ inline int numericTypeToIndex(NumericType type) {
 }
 
 // Dispatch supported runtime types to C++ numeric types and, when
-// IncludeDates is true, DateYearOrDuration. Invoke the function with type tags.
+// `IncludeDates` is true, `DateYearOrDuration`. Invoke the function with type
+// tags.
 template <bool IncludeDates = false, size_t N, typename Function>
 decltype(auto) dispatchNumericTypes(const std::array<NumericType, N>& types,
                                     Function&& function) {
@@ -232,10 +233,11 @@ ValueId getIdAt(const Operand& operand, size_t index) {
 // The fallback path for the speculative evaluation below when a pair of
 // operands does not match the majority types. Integer and double combinations
 // are dispatched explicitly because this was measurably faster than always
-// using the generic fallback. Functions with `undefForNonNumeric` return UNDEF
-// directly for datatypes rejected by their getters (see hasNonNumericOperand).
-// Date-aware functions also dispatch date/date rows directly; other rows (in
-// particular booleans) retain the regular value getters.
+// using the generic fallback. Functions with `undefForNonNumeric` return
+// `UNDEF` directly for datatypes rejected by their getters (see
+// `hasNonNumericOperand`). Date-aware functions also dispatch date/date rows
+// directly; other rows (in particular booleans) retain the regular value
+// getters.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
@@ -278,7 +280,7 @@ AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
                          RightValueGetter{}(rightValue, context));
 }
 
-// Return the ValueId datatype corresponding to a supported C++ value type.
+// Return the `ValueId` datatype corresponding to a supported C++ value type.
 template <typename Primitive>
 constexpr Datatype datatypeForNumericType() {
   if constexpr (ql::concepts::same_as<Primitive, int64_t>) {
@@ -340,9 +342,9 @@ ExpressionResult evaluateSpeculativeNumericOperation(
 
 // Evaluate a row of a numeric/date N-ary expression using the speculative
 // majority-type fast path. If all operand datatypes match the expected
-// types, evaluate using typed numeric/date values. Otherwise, fall back to the
-// generic value getters for this row, unless an operand datatype rejected by
-// its getter can directly yield UNDEF.
+// types, evaluate using typed numeric/date values. Otherwise, fall back to
+// the generic value getters for this row, unless an operand datatype rejected
+// by its getter can directly yield `UNDEF`.
 template <typename Function, typename ValueGetters, typename... NumericTypes,
           typename... Operands>
 Id evaluateSpeculativeNaryRow(

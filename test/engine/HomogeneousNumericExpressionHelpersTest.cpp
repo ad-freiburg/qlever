@@ -22,8 +22,8 @@
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 
 namespace sparqlExpression::detail {
-// The counters distinguish typed rows, direct UNDEF and generic getter/variant
-// evaluation without replacing the exact production getter type.
+// The counters distinguish typed rows, direct `UNDEF` and generic
+// getter/variant evaluation without replacing the exact production getter type.
 struct DateAwareTestFunction {
   static inline size_t genericCalls = 0;
   Id operator()(DateYearOrDuration, DateYearOrDuration) const {
