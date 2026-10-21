@@ -106,6 +106,9 @@ class RuntimeInformation {
   /// the time spent computing the children, but always positive.
   [[nodiscard]] Microseconds getOperationTime() const;
 
+  /// Get the sum of the total times of all children.
+  [[nodiscard]] Microseconds getTotalTimeOfChildren() const;
+
   /// Set the total time of each child that was optimized out (recursively) to
   /// the sum of the total times of its children. This has to be called
   /// whenever the total time of this operation is updated: An optimized out

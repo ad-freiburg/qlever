@@ -784,6 +784,7 @@ class Operation {
   void forAllDescendants(F f) const;
 
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
+  FRIEND_TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled);
