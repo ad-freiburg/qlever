@@ -103,7 +103,7 @@ jobs:
 # case we are on the master branch and have access to the Codecov token.
     - name: "Submit coverage data to codecov.io"
       if: github.event_name != 'pull_request'
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         files: ${{github.workspace}}/build/test/coverage.lcov
         # Fail if the file above is missing, instead of silently searching for
