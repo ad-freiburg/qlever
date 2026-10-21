@@ -513,9 +513,9 @@ class SpatialJoinVarColParamTest
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
           if (matchWarning) {
             // The payload variables are also checked when computing the cache
-            // key, which must not add the warning a second time.
+            // key, which must not add the warning a second time (hence
+            // `Times(1)` below).
             spatialJoin->getCacheKey();
-            // `Times(1)` ensures that the warning is not added multiple times.
             EXPECT_THAT(
                 spatialJoin->collectWarnings(),
                 ::testing::Contains(::testing::HasSubstr(matchWarning.value()))
