@@ -9,11 +9,11 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "engine/ColumnStrippingHelpers.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/views/ChunkedIotaView.h"
