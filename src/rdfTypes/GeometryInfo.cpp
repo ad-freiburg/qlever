@@ -1,6 +1,12 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "rdfTypes/GeometryInfo.h"
 
@@ -113,6 +119,10 @@ GeometryType::GeometryType(uint8_t type) : type_{type} {}
 
 // ____________________________________________________________________________
 SourceCrsType::SourceCrsType(uint16_t type) : type_{type} {}
+
+// ____________________________________________________________________________
+SourceCrsType::SourceCrsType(util::geo::CRSType type)
+    : type_{static_cast<uint16_t>(type)} {}
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(double length) : length_{length} {

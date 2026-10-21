@@ -571,8 +571,9 @@ TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
 TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
   // Integers are the majority, so the speculative path is taken with `Int`
   // as the expected datatype. The other rows must reach the generic fallback
-  // of the slow path: a `Bool` counts as `0` or `1` there, an `UNDEF`, a
-  // vocabulary entry, and (for `+`) a date all yield `UNDEF`.
+  // of the slow path or the direct UNDEF shortcut: a `Bool` counts as `0` or
+  // `1` there, an `UNDEF`, a vocabulary entry, and (for `+`) a date all yield
+  // `UNDEF`.
   V<Id> mostlyInts{{I(1), I(2), I(3), I(4), I(5), D(0.5), B(true), U, Voc(4),
                     Dat(DateYearOrDuration::parseXsdDate, "2000-01-01")},
                    alloc};
@@ -673,6 +674,42 @@ TEST(SparqlExpression, naryNumericFastPaths) {
     testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
                        right);
   }
+}
+
+// Test that the direct `UNDEF` shortcut for non-numeric operands yields the
+// same results as the value getters in the generic loop (no numeric majority)
+// and for constant operands.
+TEST(SparqlExpression, numericNonNumericFallback) {
+  // An input without a numeric majority: an `Int`, a `Double`, two `Bool`s
+  // (which count as integers), an `UNDEF`, a vocabulary entry, and a date.
+  const auto date = Dat(DateYearOrDuration::parseXsdDate, "2000-01-01");
+  V<Id> input{{I(2), D(2.5), B(true), B(false), U, Voc(4), date}, alloc};
+  V<Id> allUndef{{U, U, U, U, U, U, U}, alloc};
+
+  // Vector with a numeric constant, for a binary, a unary and a ternary
+  // function: the last three rows are `UNDEF`.
+  testMultiply(V<Id>{{I(4), D(5.0), I(2), I(0), U, U, U}, alloc}, input, I(2));
+  testNaryExpression(makeAbsExpression,
+                     V<Id>{{I(2), D(2.5), I(1), I(0), U, U, U}, alloc}, input);
+  testNaryExpression(makeTestTernaryAddExpression,
+                     V<Id>{{D(3.5), D(4.0), D(2.5), D(1.5), U, U, U}, alloc},
+                     input, I(1), D(0.5));
+
+  // A non-numeric constant (a literal that is not an `Id`, or a vocabulary
+  // entry) makes every row `UNDEF`.
+  testMultiply(allUndef.clone(), input,
+               IdOrLocalVocabEntry{lit("not numeric")});
+  testNaryExpression(makeTestTernaryAddExpression, allUndef.clone(), input,
+                     IdOrLocalVocabEntry{lit("not numeric")}, I(1));
+  testMultiply(allUndef.clone(), input, Voc(4));
+  testNaryExpression(makeTestTernaryAddExpression, allUndef.clone(), input,
+                     Voc(4), I(1));
+
+  // Only constants, at least one of them non-numeric.
+  testMultiply(U, Voc(4), IdOrLocalVocabEntry{lit("not numeric")});
+  testMultiply(U, Voc(4), I(2));
+  testNaryExpression(makeAbsExpression, U, Voc(4));
+  testNaryExpression(makeTestTernaryAddExpression, U, I(1), Voc(4), D(0.5));
 }
 
 // Test that the generic evaluation loop of `NaryExpression` checks for
@@ -1546,23 +1583,24 @@ TEST(SparqlExpression, isSomethingFunctions) {
       iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank, localLiteral,
       I(42),         D(1),         F,      geo, date,    U};
   testUnaryExpression<makeIsIriExpression>(
-      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, F});
+      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, U});
   testUnaryExpression<makeIsBlankExpression>(
-      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, F});
+      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, U});
   testUnaryExpression<makeIsLiteralExpression>(
-      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, U});
   testUnaryExpression<makeIsNumericExpression>(
-      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, U});
   testUnaryExpression<makeBoundExpression>(
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 
   // `ql:isEncodedIri` is only true for ids of datatype `EncodedVal`, not for
-  // regular vocabulary IRIs, string IRIs, literals, or unbound values.
+  // regular vocabulary IRIs, string IRIs, or literals, and UNDEF for an unbound
+  // argument.
   auto checkIsEncodedIri = testUnaryExpression<&makeIsEncodedIriExpression>;
   checkIsEncodedIri(Id::makeFromEncodedVal(0), T);
   checkIsEncodedIri(iri, F);
   checkIsEncodedIri(literal, F);
-  checkIsEncodedIri(U, F);
+  checkIsEncodedIri(U, U);
   checkIsEncodedIri(IdOrLocalVocabEntry{iriref("<i>")}, F);
 
   auto expression = makeBoundExpression(
@@ -1862,6 +1900,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
+  checkIsGeoPoint(U, U);
   checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);
