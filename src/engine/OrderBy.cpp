@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <sstream>
+#include <utility>
 
 #include "engine/CallFixedSize.h"
 #include "engine/ColumnStrippingHelpers.h"
@@ -294,19 +295,42 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // with an input that is already sorted and contains only ints or only
   // doubles, see `computeResultForSortedInput`.
   //
-  // Return true iff `rowA` comes before `rowB` in the sort order specified by
-  // `sortIndices_`.
-  auto comparison = [this](const auto& row1, const auto& row2) -> bool {
+  // Return true iff the value `a` is less than the value `b` (in the order of
+  // `ORDER BY`).
+  auto isLessThan = [](Id a, Id b) {
+    return toBoolNotUndef(
+        valueIdComparators::compareIds<
+            valueIdComparators::ComparisonForIncompatibleTypes::CompareByType>(
+            a, b, valueIdComparators::Comparison::LT));
+  };
+
+  // Return true iff `row1` comes before `row2` in the sort order specified by
+  // `sortIndices_`: the first column whose values differ decides, in the
+  // direction of that column.
+  //
+  // NOTE: Two different `Id`s can have equal values (e.g. the `Int` `5` and the
+  // `Double` `5.0`). Such a pair is neither less nor greater in either
+  // direction, and the next column decides. This matters because the sort
+  // requires a strict weak ordering: a descending order that was implemented
+  // as the negated `<` made such a pair "less" in both directions, which made
+  // the sort read and write outside of the table.
+  auto comparison = [this, &isLessThan](const auto& row1,
+                                        const auto& row2) -> bool {
     for (auto& [column, isDescending] : sortIndices_) {
-      if (row1[column] == row2[column]) {
+      Id a = row1[column];
+      Id b = row2[column];
+      if (a == b) {
         continue;
       }
-      bool isLessThan =
-          toBoolNotUndef(valueIdComparators::compareIds<
-                         valueIdComparators::ComparisonForIncompatibleTypes::
-                             CompareByType>(
-              row1[column], row2[column], valueIdComparators::Comparison::LT));
-      return isLessThan != isDescending;
+      if (isDescending) {
+        std::swap(a, b);
+      }
+      if (isLessThan(a, b)) {
+        return true;
+      }
+      if (isLessThan(b, a)) {
+        return false;
+      }
     }
     return false;
   };
@@ -314,9 +338,10 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  ad_utility::callFixedSizeVi(width, [&idTable, &comparison](auto I) {
-    IdTableUtils::sort<I>(&idTable, comparison);
-  });
+  ad_utility::callFixedSizeVi(
+      width, [this, &idTable, &comparison](auto numColumns) {
+        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig());
+      });
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();

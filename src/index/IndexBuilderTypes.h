@@ -114,24 +114,24 @@ using Triple =
 // can never be used anyway because this is occupied by the datatype bits of the
 // final `Id`.
 class PartialVocabIndexWithExternalFlag {
-  uint64_t encodedId_;
+  uint64_t encodedIndex_;
 
  public:
-  PartialVocabIndexWithExternalFlag(uint64_t id, bool isExternal)
-      : encodedId_{(uint64_t(isExternal) << 63) | id} {
-    // The top four bits of any partial-vocab id must be zero: in the final
+  PartialVocabIndexWithExternalFlag(uint64_t index, bool isExternal)
+      : encodedIndex_{(uint64_t(isExternal) << 63) | index} {
+    // The top four bits of any partial-vocab index must be zero: in the final
     // `Id` they are occupied by the datatype tag (see `ValueId::numDataBits`).
     // This guard catches future regressions that funnel a tagged value or an
     // underflowed counter through here, which would otherwise silently
     // collide with the `isExternal` bit and corrupt the vocabulary mapping.
-    AD_EXPENSIVE_CHECK(id < (uint64_t{1} << ValueId::numDataBits));
+    AD_EXPENSIVE_CHECK(index < (uint64_t{1} << ValueId::numDataBits));
   }
 
   PartialVocabIndexWithExternalFlag() = default;
 
   // Access the original values.
-  uint64_t id() const { return encodedId_ & (uint64_t(-1) >> 1); }
-  bool isExternal() const { return (encodedId_ >> 63) != 0; }
+  uint64_t index() const { return encodedIndex_ & (uint64_t(-1) >> 1); }
+  bool isExternal() const { return (encodedIndex_ >> 63) != 0; }
 };
 
 // During the first phase of the index building, we use hash maps from entries
@@ -146,9 +146,22 @@ class PartialVocabIndexWithExternalFlag {
 using ItemMap =
     ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag>;
 
+// An entry of an `ItemVec` (see below): a word of a partial vocabulary with
+// its index and external flag.
+struct ItemVecEntry {
+  ItemVecEntry() = default;
+  ItemVecEntry(std::string_view word,
+               PartialVocabIndexWithExternalFlag indexAndFlag)
+      : word_{word}, indexAndFlag_{indexAndFlag} {}
+  // The word (a view into the buffer of the partial vocabulary).
+  std::string_view word_;
+  // The index of the word in the partial vocabulary and its external flag,
+  // see `PartialVocabIndexWithExternalFlag`.
+  PartialVocabIndexWithExternalFlag indexAndFlag_;
+};
+
 // A vector that stores the same values as the hash map.
-using ItemVec =
-    std::vector<std::pair<std::string_view, PartialVocabIndexWithExternalFlag>>;
+using ItemVec = std::vector<ItemVecEntry>;
 
 // A buffer that very efficiently handles a set of strings that is deallocated
 // at once when the buffer goes out of scope or `clear` is called.
@@ -256,7 +269,7 @@ struct alignas(256) ItemMapManager {
                       PartialVocabIndexWithExternalFlag{res, key.isExternal_});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id()));
+      return Id::makeFromVocabIndex(VocabIndex::make(it->second.index()));
     }
   }
 

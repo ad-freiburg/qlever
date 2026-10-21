@@ -11,6 +11,16 @@
 using namespace std::chrono_literals;
 
 // _____________________________________________________________________________
+SortConfig QueryExecutionContext::makeSortConfig(qlever::Executor executor) {
+  size_t numTasks =
+      getRuntimeParameter<&RuntimeParameters::sortNumTasksInFlight_>();
+  AD_CORRECTNESS_CHECK(numTasks > 0);
+  return {std::move(executor),
+          static_cast<uint32_t>(std::min<size_t>(
+              numTasks, std::numeric_limits<uint32_t>::max()))};
+}
+
+// _____________________________________________________________________________
 bool QueryExecutionContext::areWebSocketUpdatesEnabled() {
   return getRuntimeParameter<&RuntimeParameters::websocketUpdatesEnabled_>();
 }

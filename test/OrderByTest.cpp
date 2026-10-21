@@ -217,7 +217,7 @@ ResultAndFastPath orderByOnSortedInput(
   // subtree that reports being sorted by these columns.
   auto qec = ad_utility::testing::getQec();
   IdTable table = makeIdTableFromVector(input);
-  IdTableUtils::sort(table, sortedColumns);
+  IdTableUtils::sort(table, sortedColumns, qec->sortConfig());
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < table.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
@@ -232,6 +232,27 @@ ResultAndFastPath orderByOnSortedInput(
           orderBy.runtimeInfo().details_.contains("sorted-numeric-input")};
 }
 }  // namespace
+
+// Test that different `Id`s with equal values (an `Int` and a `Double`) are
+// equal for `ORDER BY` in both directions, so that the next sort column
+// decides (see the NOTE at the comparator in `OrderBy::computeResult`).
+TEST(OrderBy, equalValuesWithDifferentIds) {
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  VectorTable input{
+      {I(5), I(1)}, {D(5.0), I(0)}, {I(7), I(2)}, {D(3.0), I(3)}, {I(5), I(4)}};
+
+  // Descending by the first column, ascending by the second.
+  VectorTable expected{
+      {I(7), I(2)}, {D(5.0), I(0)}, {I(5), I(1)}, {I(5), I(4)}, {D(3.0), I(3)}};
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {true, false});
+
+  // Ascending by the first column, descending by the second.
+  ql::ranges::reverse(expected);
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {false, true});
+}
 
 // Test that `ORDER BY` on an integer column that is sorted in the internal
 // order puts the undefined values first and the negative integers before the
@@ -417,7 +438,8 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   const_cast<SortPerformanceEstimator&>(
       orderBy.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
+          orderBy.sortConfig());
 
   orderBy.recursivelySetTimeConstraint(0ms);
 

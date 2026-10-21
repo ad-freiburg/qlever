@@ -19,6 +19,7 @@
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
+#include "index/IdTableUtils.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
@@ -84,23 +85,49 @@ void testSort(IdTable input, const IdTable& expected,
 }
 }  // namespace
 
-// _____________________________________________________________________________
-// The runtime parameter `parallel-sort-num-threads` bounds the number of
-// threads of the parallel sort; the result must be the same for any value
-// (`0` is treated as `1`).
-TEST(Sort, parallelSortNumThreads) {
-  for (size_t numThreads : {0, 1, 2, 3}) {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::parallelSortNumThreads_>(
-            numThreads);
-    VectorTable input, expected;
-    for (int i = 1000; i > 0; --i) {
-      input.push_back({i});
-      expected.push_back({1001 - i});
-    }
-    testSort(makeIdTableFromVector(input, &Id::makeFromInt),
-             makeIdTableFromVector(expected, &Id::makeFromInt));
+// Test that the result of `IdTableUtils::sort` is the same for any number of
+// tasks of the `SortConfig`. With two columns, `blockIndirectSort` uses at most
+// one task per 131,072 rows, so the 1M rows allow all `8` tasks, which also
+// exercises the sorting in blocks (6 or more tasks, see `blockIndirectSort`).
+TEST(Sort, sortNumTasksInFlight) {
+  constexpr int64_t numRows = 1'000'000;
+  IdTable shuffled{2, ad_utility::testing::makeAllocator()};
+  IdTable expected{2, ad_utility::testing::makeAllocator()};
+  for (int64_t i = 0; i < numRows; ++i) {
+    // `7919` is coprime to `numRows`, so this is a permutation of the rows.
+    int64_t j = (i * 7919) % numRows;
+    shuffled.push_back({Id::makeFromInt(j), Id::makeFromInt(-j)});
+    expected.push_back({Id::makeFromInt(i), Id::makeFromInt(-i)});
   }
+  for (uint32_t numTasks : {0, 1, 2, 3, 8}) {
+    IdTable input = shuffled.clone();
+    IdTableUtils::sort(
+        input, {0},
+        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks});
+    EXPECT_EQ(input, expected) << "numTasks = " << numTasks;
+  }
+}
+
+// Test that the number of tasks of the `SortConfig` of a query is the runtime
+// parameter `sort-num-tasks-in-flight`, not capped by
+// `max-num-threads-per-query` (which limits the threads of the query's executor
+// instead).
+TEST(Sort, makeSortConfig) {
+  auto numTasks = [](size_t sortNumTasks, size_t maxNumThreadsPerQuery) {
+    auto cleanup1 =
+        setRuntimeParameterForTest<&RuntimeParameters::sortNumTasksInFlight_>(
+            sortNumTasks);
+    auto cleanup2 =
+        setRuntimeParameterForTest<&RuntimeParameters::maxNumThreadsPerQuery_>(
+            maxNumThreadsPerQuery);
+    auto config = QueryExecutionContext::makeSortConfig(
+        ad_utility::testing::singleThreadExecutor());
+    EXPECT_TRUE(static_cast<bool>(config.executor_));
+    return config.numTasksInFlight_;
+  };
+  EXPECT_EQ(numTasks(3, 6), 3);
+  EXPECT_EQ(numTasks(10, 4), 10);
+  EXPECT_EQ(numTasks(1, 6), 1);
 }
 
 TEST(Sort, ComputeSortSingleIntColumn) {
@@ -260,7 +287,8 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   const_cast<SortPerformanceEstimator&>(
       sort.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
+          sort.sortConfig());
 
   sort.recursivelySetTimeConstraint(0ms);
 
