@@ -101,6 +101,16 @@ class HttpMessageSender {
     while (!serializer.is_done()) {
       co_await ad_utility::runFunctionOnExecutor(bodyExecutor, serializeNext,
                                                  net::use_awaitable);
+      // Stop if the serializer has finished without producing new buffers.
+      //
+      // NOTE: This happens for a body that is not chunked (for example, for
+      // an HTTP/1.0 request): the call to `next` that finds the body exhausted
+      // only marks the serializer as done. Writing `buffers` in this case
+      // would send the previous buffers (and with them the whole response for
+      // a body that consists of a single chunk) a second time.
+      if (serializer.is_done()) {
+        break;
+      }
       serializer.consume(
           co_await net::async_write(stream_, buffers, net::use_awaitable));
     }
