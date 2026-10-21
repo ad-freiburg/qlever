@@ -105,13 +105,10 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{wktType,
-                      boundingBox.value(),
-                      centroid.value(),
-                      {numGeom},
-                      SourceCrsType{static_cast<uint16_t>(sourceCrs)},
-                      metricLength,
-                      MetricArea{area}};
+  return GeometryInfo{
+      wktType,         boundingBox.value(),      centroid.value(),
+      {numGeom},       SourceCrsType{sourceCrs}, metricLength,
+      MetricArea{area}};
 }
 
 // ____________________________________________________________________________
@@ -147,7 +144,7 @@ std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
   if (crsType == util::geo::CRSType::UNSUPPORTED) {
     return std::nullopt;
   }
-  return SourceCrsType{static_cast<uint16_t>(crsType)};
+  return SourceCrsType{crsType};
 }
 
 // ____________________________________________________________________________
@@ -186,7 +183,7 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
           {point, point},
           Centroid{point},
           {1},
-          SourceCrsType{static_cast<uint16_t>(util::geo::CRSType::CRS84)},
+          SourceCrsType{util::geo::CRSType::CRS84},
           MetricLength{0.0},
           MetricArea{0.0}};
 }

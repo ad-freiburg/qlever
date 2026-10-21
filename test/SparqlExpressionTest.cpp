@@ -1894,38 +1894,36 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
-  checkCentroid(v, v);
+  checkCentroid(v, geoLit("POINT(24.3 26.8)"));
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
   checkIsGeoPoint(U, U);
-  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
+  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, IdOrLocalVocabEntry{U});
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);
   checkDist(U, v, IdOrLocalVocabEntry{lit("NotAPoint")});
   checkDist(U, IdOrLocalVocabEntry{lit("NotAPoint")}, v);
 
-  auto pWGS84 = GP({26.8, 24.3});
   checkCentroid(
       IdOrLocalVocabEntry{lit(
-          "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(24.3 26.8)\"",
+          "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)\"",
           "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-      pWGS84);
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)"));
 
-  auto polygonCentroid = GP({20, 50});
   checkCentroid(IdOrLocalVocabEntry{lit(
                     "\"POLYGON((40 10, 40 30, 60 30, 60 10))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-                polygonCentroid);
+                geoLit("POINT(50 20)"));
 
-  auto polygonCentroidWGS84 = GP({50, 20});
-  checkCentroid(IdOrLocalVocabEntry{lit(
-                    "\"<http://www.opengis.net/def/crs/EPSG/0/4326> "
-                    "POLYGON((10 40, 30 40, 30 60, 10 60))\"",
-                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-                polygonCentroidWGS84);
+  checkCentroid(
+      IdOrLocalVocabEntry{
+          lit("\"<http://www.opengis.net/def/crs/EPSG/0/4326> "
+              "POLYGON((10 40, 30 40, 30 60, 10 60))\"",
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(20 50)"));
 
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
