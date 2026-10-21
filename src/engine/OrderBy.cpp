@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -362,4 +363,37 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 std::unique_ptr<Operation> OrderBy::cloneImpl() const {
   return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
                                    sortIndices_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OrderBy::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and the variables that
+  // the `OrderBy` sorts by (those at `sortIndices_`).
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  std::vector<std::pair<Variable, bool>> sortVars;
+  for (const auto& sortIndex : sortIndices_) {
+    const auto& sortVariable =
+        subtree_->getVariableAndInfoByColumnIndex(sortIndex.first).first;
+    sortVars.push_back(std::pair{sortVariable, sortIndex.second});
+    varsRequiredFromSubtree.add(sortVariable);
+  }
+
+  // Strip the subtree and translate `sortIndices_` to the column indices of
+  // the stripped subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree.get());
+  std::vector<std::pair<ColumnIndex, bool>> newSortIndices;
+  for (const auto& var : sortVars) {
+    newSortIndices.push_back(
+        std::pair{subtree->getVariableColumn(var.first), var.second});
+  }
+
+  // The new `OrderBy` also exports sorting variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<OrderBy>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      newSortIndices);
 }
