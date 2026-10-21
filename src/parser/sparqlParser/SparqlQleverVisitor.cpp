@@ -29,7 +29,6 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
-#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -1274,63 +1273,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   return pattern;
 }
 
-namespace {
-// Replace each variable that is directly compared to a `geof:distance` or
-// `geof:metricDistance` call in one of the `filters` by its constant value, if
-// the variable is bound to a single constant by a `VALUES` with exactly one row
-// or a `BIND` of a literal, which is a direct child of the same group (the
-// `ops`). This allows the `QueryPlanner` to rewrite such filters to spatial
-// joins. It does not change the result, because such a variable has the same
-// value in every result row of the group, and a `FILTER` applies to the whole
-// group.
-void substituteConstantMaxDistances(
-    const std::vector<GraphPatternOperation>& ops,
-    std::vector<SparqlFilter>& filters) {
-  ad_utility::HashMap<Variable, Id> constants;
-  for (const auto& op : ops) {
-    if (const auto* values = std::get_if<Values>(&op)) {
-      const auto& [variables, rows] = values->_inlineValues;
-      if (rows.size() != 1) {
-        continue;
-      }
-      for (size_t col = 0; col < variables.size(); ++col) {
-        const auto& value = rows[0][col];
-        if (value.isInt()) {
-          constants.insert_or_assign(variables[col],
-                                     Id::makeFromInt(value.getInt()));
-        } else if (value.isDouble()) {
-          constants.insert_or_assign(variables[col],
-                                     Id::makeFromDouble(value.getDouble()));
-        }
-      }
-    } else if (const auto* bind = std::get_if<Bind>(&op)) {
-      if (const auto* literal =
-              dynamic_cast<const IdExpression*>(bind->_expression.getPimpl())) {
-        constants.insert_or_assign(bind->_target, literal->value());
-      }
-    }
-  }
-  if (constants.empty()) {
-    return;
-  }
-  for (auto& filter : filters) {
-    auto* expression = filter.expression_.getPimpl();
-    auto children = expression->children();
-    if (children.size() != 2) {
-      continue;
-    }
-    for (size_t i : {0, 1}) {
-      auto variable = children[i]->getVariableOrNullopt();
-      if (variable.has_value() && constants.contains(variable.value()) &&
-          getGeoDistanceExpressionParameters(*children[1 - i]).has_value()) {
-        expression->replaceChild(
-            i, std::make_unique<IdExpression>(constants.at(variable.value())));
-      }
-    }
-  }
-}
-}  // namespace
-
 Visitor::OperationsAndFilters Visitor::visit(
     Parser::GroupGraphPatternSubContext* ctx) {
   std::vector<GraphPatternOperation> ops;
@@ -1364,7 +1306,6 @@ Visitor::OperationsAndFilters Visitor::visit(
         .appendTriples(std::move(triples.value()));
   }
   checkWktInValues(ops, ctx);
-  substituteConstantMaxDistances(ops, filters);
   geoFunctionArgVariables_ = std::move(outerGeoFunctionArgVariables);
   return {std::move(ops), std::move(filters)};
 }

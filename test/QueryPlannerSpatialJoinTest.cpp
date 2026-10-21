@@ -1410,13 +1410,19 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilterWithBoundMaxDistance) {
         binding, " FILTER(geof:metricDistance(?y, ?b) <= ?r) }");
   };
 
-  // The maximum distance is bound to a single constant in the same group.
+  // The maximum distance has the same value in every row of the group.
   h::expect(
       query("VALUES ?r { 500 }"),
       h::CartesianProductJoin(sj, h::ValuesClause("VALUES (?r) { (500) }")));
   h::expect(query("BIND(500 AS ?r)"), h::Bind(sj, "500", V{"?r"}));
+  h::expect(
+      query("{ VALUES ?r { 500 } }"),
+      h::CartesianProductJoin(sj, h::ValuesClause("VALUES (?r) { (500) }")));
+  h::expect(query("VALUES (?r ?s) { (500 1) (500 2) }"),
+            h::CartesianProductJoin(
+                sj, h::ValuesClause("VALUES (?r\t?s) { (500 1) (500 2) }")));
 
-  // The maximum distance is not a single constant in the same group.
+  // The maximum distance may differ between rows or be unbound.
   auto filter = [&](std::string cacheKey) {
     return h::Filter("geof:metricDistance(?y, ?b) <= ?r",
                      h::CartesianProductJoin(scan("?x", "<p>", "?y"),
@@ -1425,7 +1431,13 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilterWithBoundMaxDistance) {
   };
   h::expect(query("VALUES ?r { 500 600 }"),
             filter("VALUES (?r) { (500) (600) }"));
-  h::expect(query("{ VALUES ?r { 500 } }"), filter("VALUES (?r) { (500) }"));
+  h::expect(
+      query("OPTIONAL { VALUES ?r { 500 } }"),
+      h::Filter(
+          "geof:metricDistance(?y, ?b) <= ?r",
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"),
+              h::NeutralOptional(h::ValuesClause("VALUES (?r) { (500) }")))));
 }
 
 // _____________________________________________________________________________
