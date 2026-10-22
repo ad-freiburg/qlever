@@ -51,8 +51,8 @@ TEST(Tie, tieElement) {
   static_assert(!qlever::isProxy<int>);
 }
 
-// The elements of a row of an `IdTable` are lvalue references, so the tuple
-// behaves like `std::tie`.
+// Test that `tieElementsByIndexSequence` on a row of an `IdTable`, whose
+// elements are lvalue references, behaves like `std::tie`.
 TEST(Tie, lvalueReferences) {
   IdTable table{3, ad_utility::testing::makeAllocator()};
   table.push_back({intId(1), intId(2), intId(3)});
@@ -97,9 +97,9 @@ TEST(Tie, lvalueReferences) {
   EXPECT_EQ(&std::get<1>(viaValueSequence), &table(0, 1));
 }
 
-// A column of the split layout returns a proxy by value from `operator[]`: the
-// proxies are stored in the tuple by value, but still refer to the elements of
-// the column.
+// Test `tieElementsByIndexSequence` on a column of the split layout, whose
+// `operator[]` returns a proxy by value. The proxies are stored in the tuple by
+// value, but still refer to the elements of the column.
 TEST(Tie, proxies) {
   IdColumnVector column{testAllocator()};
   column.push_back(intId(10));
@@ -148,7 +148,7 @@ TEST(Tie, proxies) {
   EXPECT_EQ(static_cast<Id>(std::get<1>(viaValueSequence)), intId(11));
 }
 
-// `ad_utility::tie` with lvalues behaves exactly like `std::tie`.
+// Test that `ad_utility::tie` with lvalues behaves exactly like `std::tie`.
 TEST(Tie, tieLvalueReferences) {
   Id a = intId(1);
   Id b = intId(2);
@@ -188,9 +188,9 @@ TEST(Tie, tieLvalueReferences) {
   EXPECT_FALSE(row(2) <= row(1));
 }
 
-// `ad_utility::tie` also accepts proxies that are returned by value, which
-// `std::tie` cannot bind. The proxies are stored by value, but still refer to
-// the elements.
+// Test that `ad_utility::tie` also accepts proxies that are returned by value,
+// which `std::tie` cannot bind. The proxies are stored by value, but still
+// refer to the elements.
 TEST(Tie, tieProxies) {
   IdColumnVector<TestAllocator> column{testAllocator()};
   column.push_back(intId(10));
@@ -241,9 +241,9 @@ TEST(Tie, tieProxies) {
                ad_utility::tie(column[0], column[1]));
 }
 
-// Like `std::tie`, `ad_utility::tie` and `tieElementsByIndexSequence` can be
-// used in constant expressions, and `ad_utility::tie` also works without or
-// with a single argument.
+// Test that `ad_utility::tie` and `tieElementsByIndexSequence` can be used in
+// constant expressions, like `std::tie`, and that `ad_utility::tie` also works
+// without or with a single argument.
 TEST(Tie, constexprAndEdgeCases) {
   static constexpr int x = 1;
   static constexpr int y = 2;
@@ -277,8 +277,8 @@ void expectTieElement() {
 }
 }  // namespace
 
-// `tieElement<T>()` returns a `type_identity` of the type that is stored in the
-// tuple. An lvalue reference stays a reference (also for a proxy), ...
+// Test that `tieElement<T>()`, which returns a `type_identity` of the type that
+// is stored in the tuple, keeps an lvalue reference (also to a proxy).
 TEST(Tie, tieElementOfLvalues) {
   expectTieElement<Id&, Id&>();
   expectTieElement<const Id&, const Id&>();
@@ -291,8 +291,8 @@ TEST(Tie, tieElementOfLvalues) {
                    const splitLayout::ConstIdRef&>();
 }
 
-// ... while a proxy that is returned by value is stored by value, without
-// `const` or reference qualifiers.
+// Test that `tieElement<T>()` stores a proxy that is returned by value by
+// value, without `const` or reference qualifiers.
 TEST(Tie, tieElementOfProxiesReturnedByValue) {
   expectTieElement<splitLayout::IdRef, splitLayout::IdRef>();
   expectTieElement<splitLayout::IdRef&&, splitLayout::IdRef>();
@@ -402,15 +402,16 @@ IdTable makeTableForRowReferences() {
 }
 }  // namespace
 
-// The row references of the `IdTable`s (and their base classes, which is what
-// the `operator[]` of a table returns with `libstdc++`) are marked as proxies
-// for all kinds of tables, ...
+// Test that the row references of the `IdTable`s (and their base classes,
+// which is what the `operator[]` of a table returns with `libstdc++`) are
+// marked as proxies for all kinds of tables, in contrast to rows (the value
+// type), tables and views.
 TEST(Tie, rowReferencesAreProxies) {
   static_assert(hasProxyRowReferences<IdTable>());
   static_assert(staticTablesHaveProxyRowReferences<1, 2, 3, 4, 5, 17>());
   static_assert(viewsHaveProxyConstRowReferences<0, 1, 2, 3, 4, 5, 17>());
 
-  // ... in contrast to rows (the value type), tables and views.
+  // Rows (the value type), tables and views are no proxies.
   static_assert(!qlever::isProxy<IdTable::row_type>);
   static_assert(!qlever::isProxy<columnBasedIdTable::Row<Id, 3>>);
   static_assert(!qlever::isProxy<IdTable>);
@@ -418,8 +419,8 @@ TEST(Tie, rowReferencesAreProxies) {
   static_assert(!qlever::isProxy<IdTableView<3>>);
 }
 
-// As proxies, the row references are stored by value when `tie` gets them as
-// rvalues, while lvalues stay references, like for the `IdRef`s above.
+// Test that the row references, as proxies, are stored by value when `tie`
+// gets them as rvalues, while lvalues stay references, like for the `IdRef`s.
 TEST(Tie, tieElementOfRowReferences) {
   expectRowReferencesAreStoredByValue<IdTable>();
   expectRowReferencesAreStoredByValue<IdTableStatic<1>>();
@@ -430,8 +431,8 @@ TEST(Tie, tieElementOfRowReferences) {
   expectRowReferencesAreStoredByValue<IdTableView<17>>();
 }
 
-// `tie` of the base classes of the row references, for a dynamic and a static
-// table and a view.
+// Test `tie` of the base classes of the row references, for a dynamic and a
+// static table and a view.
 TEST(Tie, tieRowReferences) {
   auto table = makeTableForRowReferences();
   expectTieRowReferencesByValue(table);
