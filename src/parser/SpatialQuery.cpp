@@ -19,6 +19,17 @@ namespace detail {
 // CTRE named capture group identifiers for C++17 compatibility
 constexpr ctll::fixed_string distCaptureGroup = "dist";
 constexpr ctll::fixed_string resultsCaptureGroup = "results";
+
+// The error message for an invalid `<distanceUnit>`, built at compile time.
+constexpr std::string_view distanceUnitErrorPrefix =
+    "The parameter `<distanceUnit>` expects the IRI of a unit of length, e.g. "
+    "<";
+constexpr std::string_view distanceUnitErrorOr = "> or <";
+constexpr std::string_view distanceUnitErrorSuffix = ">";
+constexpr std::string_view distanceUnitError =
+    ad_utility::constexprStrCat<distanceUnitErrorPrefix, UNIT_METER_IRI,
+                                distanceUnitErrorOr, UNIT_KILOMETER_IRI,
+                                distanceUnitErrorSuffix>();
 }  // namespace detail
 
 // ____________________________________________________________________________
@@ -55,10 +66,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     auto unit = object.isIri() ? ad_utility::detail::iriToUnitOfMeasurement(
                                      object.getIri().getContent())
                                : UnitOfMeasurement::UNKNOWN;
-    throwIf(!ad_utility::detail::isLengthUnit(unit),
-            absl::StrCat("The parameter `<distanceUnit>` expects the IRI of a "
-                         "unit of length, e.g. <",
-                         UNIT_METER_IRI, "> or <", UNIT_KILOMETER_IRI, ">"));
+    throwIf(!ad_utility::detail::isLengthUnit(unit), detail::distanceUnitError);
     distanceUnit_ = unit;
   } else if (predString == "joinType") {
     // This case is already covered by `SpatialJoinType::fromString` below,
