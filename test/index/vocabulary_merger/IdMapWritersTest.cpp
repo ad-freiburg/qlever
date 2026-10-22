@@ -72,16 +72,13 @@ TEST(IdMapWriters, writeSegments) {
     writers.finish();
   }
 
-  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]),
-              ElementsAre(IdMapEntry{L(0), V(0)}));
-  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[1]),
-              ElementsAre(IdMapEntry{L(0), V(2)}));
-  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[2]),
-              ElementsAre(IdMapEntry{L(0), V(0)}));
-  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[3]),
-              ElementsAre(IdMapEntry{L(0), V(2)}));
-  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[4]),
-              ElementsAre(IdMapEntry{L(0), V(1)}));
+  // Each partial vocabulary has a single word with the local index `0`, whose
+  // global index is `0` for `"a"`, `1` for `"b"`, and `2` for `"c"`.
+  const std::vector<Id> expectedGlobalIds{V(0), V(2), V(0), V(2), V(1)};
+  for (size_t i = 0; i < expectedGlobalIds.size(); ++i) {
+    EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[i]),
+                ElementsAre(IdMapEntry{L(0), expectedGlobalIds[i]}));
+  }
 }
 
 // Test that the number of groups is bounded by the number of maps.
