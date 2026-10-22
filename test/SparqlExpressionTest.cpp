@@ -1927,9 +1927,13 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
-                             geoLit("LINESTRING(2 4, 8 8)")},
-      IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
-                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+                             geoLit("LINESTRING(2 4, 8 8)"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> LINESTRING(4 2, 8 8)")},
+      IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4))"),
+                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> POLYGON((4 2,4 8,8 8,8 2,4 2))")});
   checkEnvelopeLL(IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
                                          geoLit("LINESTRING(2 4, 8 8)")},
                   Ids{U, U, GP({4, 2}), GP({4, 2})});

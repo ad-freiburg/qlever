@@ -269,7 +269,7 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
   Point<CoordType> lowRight{upRight.getX(), lowLeft.getY()};
   Point<CoordType> upLeft{lowLeft.getX(), upRight.getY()};
   Polygon<CoordType> box{
-      Line<CoordType>{lowLeft, lowRight, upRight, upLeft, lowLeft}};
+      Ring<CoordType>{lowLeft, lowRight, upRight, upLeft, lowLeft}};
   return getWKT(box, defaultCrs, projCrs);
 }
 
