@@ -523,7 +523,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, GetMajorityNumericTypes) {
   EXPECT_FALSE(getMajorityNumericTypes(classifications).has_value());
 }
 
-// _____________________________________________________________________________
+// Test the classification of dates with and without `IncludeDates`, and its
+// cancellation.
 TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
   const auto date =
       Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
@@ -565,7 +566,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
       ad_utility::CancellationException);
 }
 
-// Compare the classifier with independent per-value frequency counts across
+// Test the classifier against independent per-value frequency counts across
 // homogeneous/mixed blocks, incomplete blocks, and a cancellation-chunk
 // boundary.
 TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
@@ -638,7 +639,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
   }
 }
 
-// _____________________________________________________________________________
+// Test `containsValueRejectedByGetter_` for columns and constants that contain
+// only datatypes accepted by the getter, and for one that does not.
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedMixedOperands) {
   const auto date =
       Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
@@ -656,7 +658,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedMixedOperands) {
                   .containsValueRejectedByGetter_);
 }
 
-// _____________________________________________________________________________
+// Test which datatypes `hasNonNumericOperand` rejects for a date-aware
+// function.
 TEST_F(HomogeneousNumericExpressionHelpersTest, DateAwareUndefinedEligibility) {
   using Function = DateAwareTestFunction;
   using Getters = std::tuple<NumericOrDateValueGetter>;
@@ -677,7 +680,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DateAwareUndefinedEligibility) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the speculative binary and N-ary paths evaluate date rows without
+// the generic getter.
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        SpeculativeDateBypassesGenericGetter) {
   using Function = DateAwareTestFunction;

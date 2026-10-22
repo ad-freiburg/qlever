@@ -727,8 +727,7 @@ TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
                ad_utility::CancellationException);
 }
 
-// _____________________________________________________________________________________
-// Exercise typed date execution and compare subtype combinations with the
+// Test typed date execution and compare subtype combinations with the
 // constant (generic getter) path. Datatype::Date is a storage tag, not an RDF
 // datatype: date/dateTime, durations, invalid dates and large years retain the
 // original arithmetic semantics.
@@ -817,6 +816,8 @@ struct TestTypedDateFunction {
   }
 };
 
+// Test that N-ary date expressions use the typed overload of the function, not
+// the generic variant overload.
 TEST(SparqlExpression, homogeneousDateNaryDispatch) {
   using Op = sparqlExpression::detail::Operation<
       2, sparqlExpression::detail::FV<
@@ -834,7 +835,8 @@ TEST(SparqlExpression, homogeneousDateNaryDispatch) {
   testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, dates);
 }
 
-// Homogeneous and speculative date execution share the same typed getter.
+// Test that homogeneous and speculative date execution share the same typed
+// getter.
 TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
   namespace hn = sparqlExpression::detail::homogeneousNumeric;
   struct TypedOnly {
@@ -869,6 +871,8 @@ TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
       ad_utility::CancellationException);
 }
 
+// Test the speculative date path for columns with a date majority and
+// undefined, numeric or boolean outliers.
 TEST(SparqlExpression, speculativeDateArithmetic) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   const Id start = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01Z");
