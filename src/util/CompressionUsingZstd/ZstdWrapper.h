@@ -121,7 +121,8 @@ class ZstdWrapper {
   // (see `tryToDecompressWithReference`). Long distance matching is enabled
   // and the window is made large enough to cover the `reference` and `data`,
   // so references into the whole `reference` are possible. The frame stores
-  // the size of `data`. The `compressionLevel` is the usual ZSTD level
+  // the size of `data` and a checksum of `data`, which the decompression
+  // verifies. The `compressionLevel` is the usual ZSTD level
   // (1 to 22); the high levels (19 and above) give noticeably smaller
   // results for this use case and are still fast enough for data in the range
   // of a few hundred megabytes.
@@ -159,9 +160,13 @@ class ZstdWrapper {
     // in the window, which is the typical case when the data is a modified
     // version of the reference.
     setParameter(ZSTD_c_enableLongDistanceMatching, 1);
-    // Store the size of the data in the frame header (required by
-    // `getUncompressedSize` and thus by `decompressWithReference`).
+    // Store the size of the data in the frame header (see
+    // `getUncompressedSize`).
     setParameter(ZSTD_c_contentSizeFlag, 1);
+    // Append a checksum of the data to the frame (4 bytes), which the
+    // decompression verifies. This in particular detects a wrong `reference`
+    // during the decompression, which ZSTD otherwise could not detect.
+    setParameter(ZSTD_c_checksumFlag, 1);
     // Use the `reference` as the prefix dictionary for the next frame only. The
     // `reference` is not copied, so it has to stay alive until the end of the
     // `ZSTD_compress2` call below.
@@ -180,19 +185,22 @@ class ZstdWrapper {
   // same `reference` into `buffer` (which has to be large enough for the
   // decompressed data), and return the number of decompressed bytes. Report an
   // error if the decompression fails, for example because the compressed data
-  // is corrupted or the buffer is too small. NOTE: A wrong `reference` is not
-  // necessarily detected (the result is then garbage), so a checksum of the
-  // decompressed data should be verified by the caller.
+  // is corrupted, the buffer is too small, or the `reference` is not the one
+  // that was used for the compression. A wrong `reference` is detected via the
+  // checksum of the decompressed data that `compressWithReference` stores in
+  // the frame. That checksum is only 32 bits long, so in very rare cases a
+  // wrong `reference` remains undetected.
   static SizeOrError tryToDecompressWithReference(
       ql::span<const char> reference, ql::span<const char> compressed,
       char* buffer, size_t bufferCapacity) noexcept {
     // The decompression context holds the parameters and the reference for the
     // `ZSTD_decompressDCtx` call below. Its creation only fails if no memory
-    // can be allocated (and then terminates the program, as this function is
-    // `noexcept`).
+    // can be allocated.
     std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> context{
         ZSTD_createDCtx(), &ZSTD_freeDCtx};
-    AD_CORRECTNESS_CHECK(context != nullptr);
+    if (context == nullptr) {
+      return Error{"Could not allocate a ZSTD decompression context"};
+    }
     // By default, the decompressor rejects frames with a window larger than
     // `2^27` bytes to limit its memory usage. Allow the largest window, because
     // the compressor chose the window such that it covers the reference (see
@@ -217,21 +225,6 @@ class ZstdWrapper {
       return error.value();
     }
     return decompressedSize;
-  }
-
-  // Same as `tryToDecompressWithReference`, but return the decompressed data
-  // (whose size is taken from the frame header) as a vector, and throw a
-  // descriptive exception instead of reporting an error.
-  static std::vector<char> decompressWithReference(
-      ql::span<const char> reference, ql::span<const char> compressed) {
-    std::vector<char> result(
-        getUncompressedSize(compressed.data(), compressed.size()));
-    auto size =
-        valueOrThrow(tryToDecompressWithReference(reference, compressed,
-                                                  result.data(), result.size()),
-                     "error during decompression with a reference: ");
-    AD_CORRECTNESS_CHECK(size == result.size());
-    return result;
   }
 
   // Throw a `std::runtime_error` if `result` is a ZSTD error code, else return
