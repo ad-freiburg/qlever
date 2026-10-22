@@ -286,7 +286,7 @@ class Operation {
 
   // The cancellation handle of the query, which is stored in the
   // `QueryExecutionContext`.
-  const SharedCancellationHandle& getCancellationHandle() const {
+  const SharedCancellationHandle& cancellationHandle() const {
     return _executionContext->cancellationHandle();
   }
 
@@ -623,7 +623,7 @@ class Operation {
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
-    getCancellationHandle()->throwIfCancelled(
+    cancellationHandle()->throwIfCancelled(
         location, [this]() { return getDescriptor(); });
   }
 

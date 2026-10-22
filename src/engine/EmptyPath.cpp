@@ -301,7 +301,7 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
     return ad_utility::InputRangeTypeErased<IdTable>{
         index.getPermutation(permutation)
             .getDistinctCol0Ids(scanSpec, addGraphColumn, std::move(ids),
-                                getCancellationHandle(), locatedTriplesState(),
+                                cancellationHandle(), locatedTriplesState(),
                                 executor())};
   };
   // The rows of one of the scans above, as a flat range of `EntityAndGraph`.

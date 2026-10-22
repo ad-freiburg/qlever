@@ -264,7 +264,7 @@ class TransitivePathImpl : public TransitivePathBase {
           // Pick the appropriate graph search strategy and run it.
           GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_,
                                     maxDist_);
-          GraphSearchExecutionParams ep(getCancellationHandle(), allocator());
+          GraphSearchExecutionParams ep(cancellationHandle(), allocator());
           Set connectedNodes = runOptimalGraphSearch(gsp, ep);
 
           if (!connectedNodes.empty()) {

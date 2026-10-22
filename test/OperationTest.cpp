@@ -371,12 +371,10 @@ TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   ShallowParentOperation operation =
       ShallowParentOperation::of<StallForeverOperation>(&qec);
   // All operations use the handle of the context.
-  EXPECT_EQ(operation.getCancellationHandle(), handle);
-  EXPECT_EQ(operation.getChildren()
-                .at(0)
-                ->getRootOperation()
-                ->getCancellationHandle(),
-            handle);
+  EXPECT_EQ(operation.cancellationHandle(), handle);
+  EXPECT_EQ(
+      operation.getChildren().at(0)->getRootOperation()->cancellationHandle(),
+      handle);
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);

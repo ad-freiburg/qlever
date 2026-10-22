@@ -73,7 +73,7 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
       locatedTriplesState());
   ad_utility::HashSetWithMemoryLimit<Id::T> graphIds =
       permutation.reader().computeUniqueGraphIds(
-          scanSpecAndBlocks, ltpb, getCancellationHandle(), allocator());
+          scanSpecAndBlocks, ltpb, cancellationHandle(), allocator());
 
   if (!includeDefaultGraph_) {
     auto defaultGraph = toValueId(

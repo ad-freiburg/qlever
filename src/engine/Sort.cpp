@@ -150,7 +150,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
 
   // Don't report missed timeout check because the in-memory sort is currently
   // not cancellable.
-  getCancellationHandle()->resetWatchDogState();
+  cancellationHandle()->resetWatchDogState();
   checkCancellation();
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
@@ -224,7 +224,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       checkCancellation();
       result.insertAtEnd(block);
     }
-    getCancellationHandle()->resetWatchDogState();
+    cancellationHandle()->resetWatchDogState();
     checkCancellation();
     return {std::move(result), resultSortedOn(), std::move(mergedLocalVocab)};
   }

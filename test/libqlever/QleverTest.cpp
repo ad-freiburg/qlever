@@ -696,7 +696,7 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
             handle);
   EXPECT_EQ(planWithHandle.queryExecutionTree()
                 .getRootOperation()
-                ->getCancellationHandle(),
+                ->cancellationHandle(),
             handle);
   EXPECT_EQ(engine
                 .bindParsedQuery(planWithHandle.parsedQuery(), ad_utility::noop,
