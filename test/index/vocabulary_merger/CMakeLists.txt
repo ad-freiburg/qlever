@@ -9,3 +9,5 @@ addLinkAndDiscoverTest(VocabularyWriterTest index)
 addLinkAndDiscoverTest(VocabularyMergePipelineTest index)
 
 addLinkAndDiscoverTest(SegmentTest index)
+
+addLinkAndDiscoverTest(IdMapWritersTest index)
