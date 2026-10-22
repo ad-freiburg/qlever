@@ -456,6 +456,7 @@ void IndexImpl::prepareIndexBuild() {
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+  configurationJson_[INDEX_ROWS_PER_SUB_BLOCK_KEY] = rowsPerSubBlock_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -858,7 +859,7 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     qlever::Executor executor) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"), rowsPerBlock_,
-      std::move(executor));
+      std::move(executor), getRowsPerSubBlockForWriter(rowsPerSubBlock_));
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -889,8 +890,8 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
           fileName1, std::move(writerAndCallback1),
           std::move(writerAndCallback2), AD_FWD(sortedTriples), permutation,
           perBlockCallbacks);
-  metaData1.blockData() = std::move(blockData1);
-  metaData2.blockData() = std::move(blockData2);
+  metaData1.setBlocksAndSubBlocks(std::move(blockData1));
+  metaData2.setBlocksAndSubBlocks(std::move(blockData2));
 
   return {numDistinctCol0, std::move(metaData1), std::move(metaData2)};
 }
@@ -910,7 +911,7 @@ std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
       CompressedRelationWriter::createPermutation(std::move(writerAndCallback),
                                                   std::move(sortedTriples),
                                                   {0, 1, 2, 3}, {});
-  metaData.blockData() = std::move(blockData);
+  metaData.setBlocksAndSubBlocks(std::move(blockData));
 
   return {numDistinctCol0, std::move(metaData)};
 }
@@ -1109,38 +1110,50 @@ bool IndexImpl::mayContainGeoPoints() const {
   // of it. The first and last object of each block include the updates.
   auto locatedTriplesState =
       deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  BlockMetadataSpan blocks =
+  BlockMetadataSpan blocks{
       osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
-          .getAugmentedMetadata();
+          .getAugmentedMetadata()};
 
   // Find the first block whose last object is not of a datatype before
-  // `GeoPoint`. Return false if there is none or if its first object is of a
-  // datatype after `GeoPoint`.
+  // `GeoPoint`.
   auto block = ql::ranges::find_if(blocks, [](const auto& block) {
     return block.lastTriple_.col0Id_.getDatatype() >= Datatype::GeoPoint;
   });
-  if (block == blocks.end() ||
-      block->firstTriple_.col0Id_.getDatatype() > Datatype::GeoPoint) {
-    return false;
-  }
 
-  // Otherwise, read the objects of that block and check whether one of them is
-  // a point. This block contains a point if there is any: either its last
-  // object is a point, or it ends after the points.
+  // Starting from that block, return false as soon as a block starts after
+  // the points, and true as soon as a block starts with a point. Otherwise,
+  // read the objects of the block and check whether one of them is a point.
+  // If not, the points (if there are any) can only start in the next block:
+  // The last triple of a sub-block is only an upper bound (see
+  // `SubBlockMetadata`), so the block might end before the points although its
+  // last object is of a datatype after the points. So in practice, at most
+  // two blocks are read.
   //
   // NOTE: The metadata alone cannot decide this, because in most indexes
   // without points, some block starts before and ends after the points (the
   // datatypes before, e.g. `VocabIndex`, and after, e.g. `BlankNodeIndex`, are
   // common).
-  CompressedRelationReader::ScanSpecAndBlocks blockOnly{
-      {std::nullopt, std::nullopt, std::nullopt},
-      {BlockMetadataRange{block, block + 1}}};
-  auto objects = osp_->scan(
-      blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
-      *locatedTriplesState, ad_utility::globalExecutor());
-  return ql::ranges::any_of(objects.getColumn(0), [](Id id) {
-    return id.getDatatype() == Datatype::GeoPoint;
-  });
+  for (; block != blocks.end(); ++block) {
+    auto firstDatatype = block->firstTriple_.col0Id_.getDatatype();
+    if (firstDatatype > Datatype::GeoPoint) {
+      return false;
+    }
+    if (firstDatatype == Datatype::GeoPoint) {
+      return true;
+    }
+    CompressedRelationReader::ScanSpecAndBlocks blockOnly{
+        {std::nullopt, std::nullopt, std::nullopt},
+        {BlockMetadataRange{block, block + 1}}};
+    auto objects = osp_->scan(
+        blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
+        *locatedTriplesState, ad_utility::globalExecutor());
+    if (ql::ranges::any_of(objects.getColumn(0), [](Id id) {
+          return id.getDatatype() == Datatype::GeoPoint;
+        })) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // _____________________________________________________________________________
@@ -1351,6 +1364,11 @@ size_t IndexImpl::rowsPerBlock(const nlohmann::json& configurationJson) {
                      MAX_INDEX_ROWS_PER_BLOCK)};
   }
   return rowsPerBlock;
+}
+
+// _____________________________________________________________________________
+size_t IndexImpl::rowsPerSubBlock(const nlohmann::json& configurationJson) {
+  return configurationJson.value(INDEX_ROWS_PER_SUB_BLOCK_KEY, size_t{0});
 }
 
 // ____________________________________________________________________________
@@ -1597,6 +1615,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   // the same block size. Indexes that were built before this key existed were
   // built with the default.
   rowsPerBlock_ = rowsPerBlock(configurationJson_);
+  rowsPerSubBlock_ = rowsPerSubBlock(configurationJson_);
 
   // The geo cell grid of the geo vocabulary, if the index was built with one
   // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
@@ -2238,6 +2257,7 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   setOnDiskBase(newName);
   setKbName(other.getKbName());
   rowsPerBlock() = other.rowsPerBlock();
+  rowsPerSubBlock() = other.rowsPerSubBlock();
   configurationJson_ = newStats;
   numTriples_ = static_cast<NumNormalAndInternal>(newStats.at("num-triples"));
   numPredicates_ =

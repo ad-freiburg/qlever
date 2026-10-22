@@ -1685,31 +1685,39 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
   // Load an index in the previous format (which has no entry for the
   // encoding). It uses `LatMajor`, and there is a warning iff it has points,
   // also when all objects are in a single block that spans the range of all
-  // points, with or without a point inside.
-  for (const auto& [name, turtle, hasPoint] :
-       {std::tuple{"point", withPoint, true},
-        std::tuple{"iri", withoutPoint, false},
-        std::tuple{"blankNode", withoutPointBlankNode, false},
-        std::tuple{"spanning", withoutPoint + withoutPointBlankNode, false},
-        std::tuple{"spanningWithPoint",
-                   withoutPoint + withPoint + withoutPointBlankNode, true}}) {
-    std::string basename = absl::StrCat("geoPointEncoding.previous.", name);
-    TestIndexConfig config{turtle};
-    config.geoPointEncoding = GeoPointEncoding::LatMajor;
-    config.rowsPerBlock = 3;
-    makeTestIndex(basename, std::move(config));
-    auto configuration = readConfiguration(basename);
-    configuration.erase("geo-point-encoding");
-    configuration["index-format-version"] =
-        qlever::indexFormatVersionWithLatMajorGeoPoints;
-    ad_utility::makeOfstream(basename + CONFIGURATION_FILE) << configuration;
-    GeoPoint::setEncoding(GeoPointEncoding::ZOrder);
-    std::string log = load(basename);
-    EXPECT_EQ(GeoPoint::encoding(), GeoPointEncoding::LatMajor);
-    if (hasPoint) {
-      EXPECT_THAT(log, warning);
-    } else {
-      EXPECT_THAT(log, ::testing::Not(warning));
+  // points, with or without a point inside. The check for the points is also
+  // tested with sub-blocks of a single row, for which the last triples in the
+  // metadata are only upper bounds (see `IndexImpl::mayContainGeoPoints`). The
+  // run without sub-blocks comes last, because the following test reuses one
+  // of these indexes.
+  for (std::optional<size_t> rowsPerSubBlock :
+       {std::optional<size_t>{1}, std::optional<size_t>{}}) {
+    for (const auto& [name, turtle, hasPoint] :
+         {std::tuple{"point", withPoint, true},
+          std::tuple{"iri", withoutPoint, false},
+          std::tuple{"blankNode", withoutPointBlankNode, false},
+          std::tuple{"spanning", withoutPoint + withoutPointBlankNode, false},
+          std::tuple{"spanningWithPoint",
+                     withoutPoint + withPoint + withoutPointBlankNode, true}}) {
+      std::string basename = absl::StrCat("geoPointEncoding.previous.", name);
+      TestIndexConfig config{turtle};
+      config.geoPointEncoding = GeoPointEncoding::LatMajor;
+      config.rowsPerBlock = 3;
+      config.rowsPerSubBlock = rowsPerSubBlock;
+      makeTestIndex(basename, std::move(config));
+      auto configuration = readConfiguration(basename);
+      configuration.erase("geo-point-encoding");
+      configuration["index-format-version"] =
+          qlever::indexFormatVersionWithLatMajorGeoPoints;
+      ad_utility::makeOfstream(basename + CONFIGURATION_FILE) << configuration;
+      GeoPoint::setEncoding(GeoPointEncoding::ZOrder);
+      std::string log = load(basename);
+      EXPECT_EQ(GeoPoint::encoding(), GeoPointEncoding::LatMajor);
+      if (hasPoint) {
+        EXPECT_THAT(log, warning);
+      } else {
+        EXPECT_THAT(log, ::testing::Not(warning));
+      }
     }
   }
 

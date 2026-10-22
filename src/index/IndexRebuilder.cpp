@@ -346,8 +346,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
   if (!blockMetadataRanges.empty()) {
     const auto& first = blockMetadataRanges.at(0);
-    if (!first.empty()) {
-      const auto& offsets = first[0].offsetsAndCompressedSize_;
+    if (!first.empty() && first[0].permutationMetadata_ != nullptr) {
+      const auto& offsets = first[0].completeBlock().offsetsAndCompressedSize_;
       if (offsets.has_value()) {
         return offsets.value().size();
       }

@@ -569,6 +569,131 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
   }
 }
 
+// Test the overloads of `numTriples`, `containsTriples`, and `mergeTriples`
+// that only consider the located triples of a range of sub-blocks.
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, subBlocks) {
+  using LT = LocatedTriple;
+  using SubBlock = SubBlockTable::SubBlock;
+  // A single block with six rows, which is split into three sub-blocks with
+  // two rows each.
+  IdTable block = makeIdTableFromVector({
+      {1, 10, 10},  // Row 0, sub-block 0.
+      {2, 15, 20},  // Row 1, sub-block 0.
+      {2, 15, 30},  // Row 2, sub-block 1.
+      {2, 20, 10},  // Row 3, sub-block 1.
+      {2, 30, 20},  // Row 4, sub-block 2.
+      {3, 30, 30}   // Row 5, sub-block 2.
+  });
+  BlocksAndSubBlocks blocksAndSubBlocks{{CBM(PT(1, 10, 10), PT(3, 30, 30))},
+                                        SubBlockTable{3}};
+  blocksAndSubBlocks.subBlocks_.addBlock(
+      std::vector{SubBlock{{V(1), V(10), V(10)}, 2, {1, 1, 1}, 2, false},
+                  SubBlock{{V(2), V(15), V(30)}, 2, {1, 1, 1}, 1, false},
+                  SubBlock{{V(2), V(30), V(20)}, 2, {1, 1, 1}, 0, false}});
+  PermutationBlockMetadata metadata{std::move(blocksAndSubBlocks)};
+  ASSERT_EQ(metadata.numSubBlocks(), 3);
+  auto sub0 = metadata.subBlock(0);
+  auto sub1 = metadata.subBlock(1);
+  auto sub2 = metadata.subBlock(2);
+  auto sub01 = sub0;
+  sub01.mergeWithNext(sub1);
+  // A `SubBlockMetadata` without `permutationMetadata_` describes the complete
+  // block.
+  SubBlockMetadata completeBlock;
+  completeBlock.blockIndex_ = 0;
+
+  auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+      LT{0, IT(1, 5, 10), true},    // Sub-block 0, insert before row 0.
+      LT{0, IT(1, 10, 10), false},  // Sub-block 0, delete row 0.
+      LT{0, IT(2, 11, 10), true},   // Sub-block 0, insert before row 1.
+      LT{0, IT(2, 15, 30), false},  // Sub-block 1, delete row 2.
+      LT{0, IT(2, 16, 0), true},    // Sub-block 1, insert before row 3.
+      LT{0, IT(2, 30, 10), true},   // Sub-block 1, insert after row 3.
+      LT{0, IT(3, 30, 30), false},  // Sub-block 2, delete row 5.
+      LT{0, IT(4, 10, 10), true},   // Sub-block 2, insert after row 5.
+  });
+
+  // Check that `numTriples(subBlocks)` is `NumAddedAndDeleted{num, num}`.
+  auto expectNumTriples = [&locatedTriplesPerBlock](
+                              const SubBlockMetadata& subBlocks, size_t num,
+                              ad_utility::source_location l =
+                                  AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    EXPECT_EQ(locatedTriplesPerBlock.numTriples(subBlocks),
+              (NumAddedAndDeleted{num, num}));
+  };
+
+  // The number of located triples.
+  expectNumTriples(sub0, 3);
+  expectNumTriples(sub1, 3);
+  expectNumTriples(sub2, 2);
+  expectNumTriples(sub01, 6);
+  EXPECT_EQ(locatedTriplesPerBlock.numTriples(completeBlock),
+            locatedTriplesPerBlock.numTriples(0));
+  EXPECT_TRUE(locatedTriplesPerBlock.containsTriples(sub0));
+  EXPECT_TRUE(locatedTriplesPerBlock.containsTriples(sub2));
+
+  // Merge the located triples into the rows of the sub-blocks.
+  auto merge = [&locatedTriplesPerBlock, &block](
+                   const SubBlockMetadata& subBlocks, size_t beginRow,
+                   size_t endRow) {
+    IdTable rows{3, ad_utility::testing::makeAllocator()};
+    rows.insertAtEnd(block, beginRow, endRow);
+    return locatedTriplesPerBlock.mergeTriples(subBlocks, rows, 3, false);
+  };
+  EXPECT_THAT(merge(sub0, 0, 2),
+              testing::ElementsAreArray(makeIdTableFromVector(
+                  {{1, 5, 10}, {2, 11, 10}, {2, 15, 20}})));
+  EXPECT_THAT(merge(sub1, 2, 4),
+              testing::ElementsAreArray(makeIdTableFromVector(
+                  {{2, 16, 0}, {2, 20, 10}, {2, 30, 10}})));
+  EXPECT_THAT(merge(sub2, 4, 6),
+              testing::ElementsAreArray(
+                  makeIdTableFromVector({{2, 30, 20}, {4, 10, 10}})));
+  EXPECT_THAT(merge(sub01, 0, 4),
+              testing::ElementsAreArray(makeIdTableFromVector({{1, 5, 10},
+                                                               {2, 11, 10},
+                                                               {2, 15, 20},
+                                                               {2, 16, 0},
+                                                               {2, 20, 10},
+                                                               {2, 30, 10}})));
+  // Merging into the complete block yields the same result as merging into
+  // the sub-blocks separately.
+  EXPECT_THAT(merge(completeBlock, 0, 6),
+              testing::ElementsAreArray(makeIdTableFromVector({{1, 5, 10},
+                                                               {2, 11, 10},
+                                                               {2, 15, 20},
+                                                               {2, 16, 0},
+                                                               {2, 20, 10},
+                                                               {2, 30, 10},
+                                                               {2, 30, 20},
+                                                               {4, 10, 10}})));
+
+  // A sub-block without located triples.
+  auto onlyInFirstSubBlock =
+      makeLocatedTriplesPerBlock({LT{0, IT(2, 11, 10), true}});
+  EXPECT_TRUE(onlyInFirstSubBlock.containsTriples(sub0));
+  EXPECT_FALSE(onlyInFirstSubBlock.containsTriples(sub1));
+  EXPECT_FALSE(onlyInFirstSubBlock.containsTriples(sub2));
+  EXPECT_EQ(onlyInFirstSubBlock.numTriples(sub1), (NumAddedAndDeleted{0, 0}));
+  // There are no located triples at all in block `1`.
+  auto subBlockOfOtherBlock = sub0;
+  subBlockOfOtherBlock.blockIndex_ = 1;
+  subBlockOfOtherBlock.permutationMetadata_ = nullptr;
+  EXPECT_FALSE(onlyInFirstSubBlock.containsTriples(subBlockOfOtherBlock));
+
+  // The sub-blocks of the augmented metadata have the same ranges.
+  locatedTriplesPerBlock.setOriginalMetadata(metadata);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
+  auto augmentedSubBlocks =
+      locatedTriplesPerBlock.getAugmentedMetadata().subBlocks();
+  ASSERT_EQ(augmentedSubBlocks.size(), 3);
+  expectNumTriples(augmentedSubBlocks[0], 3);
+  expectNumTriples(augmentedSubBlocks[1], 3);
+  expectNumTriples(augmentedSubBlocks[2], 2);
+}
+
 // Test the `mergeTriples` functions with inputs that contain different graphs.
 TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
   using LT = LocatedTriple;
@@ -812,7 +937,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     LocatedTriplesPerBlock locatedTriplesPerBlock;
     locatedTriplesPerBlock.setOriginalMetadata(metadata);
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Adding no triples does no changed the augmented metadata.
@@ -821,7 +946,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T1 is before block 0. The beginning of block 0 changes.
@@ -832,7 +957,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T2 is inside block 1. Borders don't change.
@@ -842,7 +967,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T3 is equal to PT4, the beginning of block 2. All update (update and
@@ -853,7 +978,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T4 is before block 4. The beginning of block 4 changes.
@@ -865,7 +990,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Erasing the update of T4 restores the beginning of block 4.
@@ -876,14 +1001,14 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // The block 4 has no more updates, so we restore the info about the block
     // having no duplicates from the original metadata.
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = false;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Clearing the updates restores the original block borders.
     locatedTriplesPerBlock.clear();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(metadata));
   }
 
@@ -939,7 +1064,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
   }
   {
@@ -979,7 +1104,8 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
-    auto actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    auto actualMetadata =
+        locatedTriplesPerBlock.getAugmentedMetadata().blocks();
     EXPECT_THAT(actualMetadata,
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -1007,7 +1133,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
         handle));
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
-    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata().blocks();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
 
     // Adding one more graph will exceed the maximum.
@@ -1016,7 +1142,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
         keyOrder, true, handle));
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
-    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata().blocks();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
 }

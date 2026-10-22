@@ -206,6 +206,10 @@ class Index {
   size_t& rowsPerBlock();
   const size_t& rowsPerBlock() const;
 
+  // The number of rows per sub-block, `0` means no sub-blocks.
+  size_t& rowsPerSubBlock();
+  const size_t& rowsPerSubBlock() const;
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);

@@ -38,17 +38,23 @@ static std::array<Id, 3> getMaskedTriple(
   }
 }
 
+// _____________________________________________________________________________
+bool permutedTriplesAgreeOnPrefix(
+    const CompressedBlockMetadata::PermutedTriple& a,
+    const CompressedBlockMetadata::PermutedTriple& b, size_t numColumns) {
+  return getMaskedTriple(a, numColumns) == getMaskedTriple(b, numColumns);
+}
+
 bool CompressedBlockMetadataNoBlockIndex::containsInconsistentTriples(
     size_t columnIndex) const {
-  return getMaskedTriple(firstTriple_, columnIndex) !=
-         getMaskedTriple(lastTriple_, columnIndex);
+  return !permutedTriplesAgreeOnPrefix(firstTriple_, lastTriple_, columnIndex);
 }
 
 bool CompressedBlockMetadataNoBlockIndex::isConsistentWith(
     const CompressedBlockMetadataNoBlockIndex& other,
     size_t columnIndex) const {
-  return getMaskedTriple(lastTriple_, columnIndex) ==
-         getMaskedTriple(other.firstTriple_, columnIndex);
+  return permutedTriplesAgreeOnPrefix(lastTriple_, other.firstTriple_,
+                                      columnIndex);
 }
 
 // _____________________________________________________________________________

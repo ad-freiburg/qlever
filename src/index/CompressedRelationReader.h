@@ -29,6 +29,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/ScanSpecification.h"
+#include "index/SubBlockMetadata.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
@@ -88,12 +89,12 @@ class CompressedRelationReader {
     // eliminate them). The return value is `true` if the `block` has been
     // modified because it contained duplicates or triples from unwanted graphs.
     bool postprocessBlock(IdTable& block,
-                          const CompressedBlockMetadata& blockMetadata) const;
+                          const SubBlockMetadata& blockMetadata) const;
 
     // Return true, iff a block, specified by the `blockMetadata` contains no
     // triples from `desiredGraphs_` and therefore doesn't have to be read from
     // disk, and if this fact can be determined by `blockMetadata` alone.
-    bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
+    bool canBlockBeSkipped(const SubBlockMetadata& blockMetadata) const;
 
     // Delete the `graphColumn_` from `block` if `deleteGraphColumn_` is true.
     void deleteGraphColumnIfNecessary(IdTable& block) const;
@@ -106,15 +107,14 @@ class CompressedRelationReader {
     // Return true iff all triples from the block belong to the
     // `desiredGraphs_`, and if this fact can be determined by looking at the
     // metadata alone.
-    bool blockNeedsFilteringByGraph(
-        const CompressedBlockMetadata& metadata) const;
+    bool blockNeedsFilteringByGraph(const SubBlockMetadata& metadata) const;
 
     // Implementation of the various steps of `postprocessBlock`. Each of them
     // returns `true` iff filtering the block was necessary.
-    bool filterByGraphIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
+    bool filterByGraphIfNecessary(IdTable& block,
+                                  const SubBlockMetadata& blockMetadata) const;
     static bool filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata);
+        IdTable& block, const SubBlockMetadata& blockMetadata);
   };
 
   // Classes holding various subsets of parameters relevant for a scan of a
@@ -135,9 +135,9 @@ class CompressedRelationReader {
   // via `getRelevantBlocks` for the provided `ScanSpecification` and
   // `BlockMetadataRanges`.
   // (3) Compute `sizeBlockMetadata_`, which represents the number of
-  // `CompressedBlockMetadata` values contained over all subranges in member
+  // `SubBlockMetadata` values contained over all subranges in member
   // `BlockMetadataRanges_ blockMetadata_`.
-  // (4) Perform an invariant check. The `CompressedBlockMetadata` values must
+  // (4) Perform an invariant check. The `SubBlockMetadata` values must
   // be unique, sorted in ascending order, and have consistent column values up
   // to the first free column defined by `scanSpec_`.
   struct ScanSpecAndBlocks {
@@ -149,7 +149,7 @@ class CompressedRelationReader {
                       const BlockMetadataRanges& blockMetadataRanges);
 
     // Direct view access via `ql::views::join` over all
-    // `CompressedBlockMetadata` values contained in `BlockMetadatatRanges
+    // `SubBlockMetadata` values contained in `BlockMetadatatRanges
     // blockMetadata_`.
     auto getBlockMetadataView() const {
       return ql::views::join(blockMetadata_);
@@ -157,17 +157,16 @@ class CompressedRelationReader {
 
     // If `BlockMetadataRanges blockMetadata_` contains exactly one
     // `BlockMetadataRange` (verified via AD_CONTRACT_CHECK), return the
-    // corresponding CompressedBlockMetadata values as a span.
-    ql::span<const CompressedBlockMetadata> getBlockMetadataSpan() const;
+    // corresponding `SubBlockMetadata` values as a `BlockMetadataSpan`.
+    BlockMetadataSpan getBlockMetadataSpan() const;
 
     // Check the provided `BlockMetadataRange`s for the following invariants:
-    //   - All contained `CompressedBlockMetadata` values must be unique.
-    //   - The `CompressedBlockMetadata` values must adhere to ascending order.
+    //   - All contained `SubBlockMetadata` values must be unique.
+    //   - The `SubBlockMetadata` values must adhere to ascending order.
     //   - `firstFreeColIndex` is the column index up to which we expect
     //      constant values in `columns < firstFreeColIndex` over all blocks.
-    static void checkBlockMetadataInvariant(
-        ql::span<const CompressedBlockMetadata> blocks,
-        size_t firstFreeColIndex);
+    static void checkBlockMetadataInvariant(BlockMetadataSpan blocks,
+                                            size_t firstFreeColIndex);
 
     // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
     // be used if it is known that those are not needed anymore, e.g. because
@@ -215,12 +214,16 @@ class CompressedRelationReader {
 
     // Update this metadata, given the metadata from `blockAndMetadata`.
     // Currently updates: `numBlocksPostprocessed_`, `numBlocksWithUpdate_`,
-    // `numElementsRead_`, and `numBlocksRead_`.
-    void update(const DecompressedBlockAndMetadata& blockAndMetadata);
+    // `numElementsRead_`, and `numBlocksRead_`. The `blockAndMetadata` may
+    // consist of `numBlocks` (sub-)blocks that were read at once, which are
+    // all counted in `numBlocksRead_`.
+    void update(const DecompressedBlockAndMetadata& blockAndMetadata,
+                size_t numBlocks = 1);
     // `nullopt` means the block was skipped because of the graph filters, else
     // call the overload directly above.
     void update(
-        const std::optional<DecompressedBlockAndMetadata>& blockAndMetadata);
+        const std::optional<DecompressedBlockAndMetadata>& blockAndMetadata,
+        size_t numBlocks = 1);
 
     // Aggregate the metadata from `newValue` into this metadata.
     void aggregate(const LazyScanMetadata& newValue);
@@ -269,7 +272,7 @@ class CompressedRelationReader {
   // that this is an offset into `metadataAndBlocks` and not to be
   // confused with the globally assigned `blockIndex_`.
   struct GetBlocksForJoinResult {
-    std::vector<CompressedBlockMetadata> matchingBlocks_;
+    std::vector<SubBlockMetadata> matchingBlocks_;
     size_t numHandledBlocks{0};
   };
   static GetBlocksForJoinResult getBlocksForJoin(
@@ -283,7 +286,7 @@ class CompressedRelationReader {
   // each of the inputs the join column is the first column that is not fixed by
   // the metadata, so the middle column (col1) in case the `scanMetadata`
   // doesn't contain a `col1Id`, or the last column (col2) else.
-  static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
+  static std::array<std::vector<SubBlockMetadata>, 2> getBlocksForJoin(
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks2);
 
@@ -325,7 +328,7 @@ class CompressedRelationReader {
   // `locatedTriplesPerBlock` must outlive it.
   CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
       const ScanSpecification& scanSpec,
-      std::vector<CompressedBlockMetadata> relevantBlockMetadata,
+      std::vector<SubBlockMetadata> relevantBlockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       qlever::Executor executor,
@@ -334,7 +337,7 @@ class CompressedRelationReader {
   // Retrieve all triples in the given block, ignoring updates. This is used in
   // `DeltaTriples::vacuum` to determine update triples that have no effect and
   // thus can be dropped.
-  IdTable readBlockWithoutLocatedTriples(CompressedBlockMetadata block,
+  IdTable readBlockWithoutLocatedTriples(const CompressedBlockMetadata& block,
                                          ColumnIndices additionalColumns) const;
 
   // Get the exact size of the result of the scan, taking the given located
@@ -418,7 +421,7 @@ class CompressedRelationReader {
   // delta triples may have deleted some of them (and inserted others). Use
   // `contentsAreKnownFromMetadata` if you need that.
   static bool columnValuesAreKnownFromMetadata(
-      const CompressedBlockMetadata& block, size_t numColumns,
+      const SubBlockMetadata& block, size_t numColumns,
       const LocatedTriplesPerBlock& locatedTriples);
 
   // Return true iff the complete contents of the given block, restricted to
@@ -427,7 +430,7 @@ class CompressedRelationReader {
   // `columnValuesAreKnownFromMetadata` this requires that there are no delta
   // triples for the block at all.
   static bool contentsAreKnownFromMetadata(
-      const CompressedBlockMetadata& block, size_t numColumns,
+      const SubBlockMetadata& block, size_t numColumns,
       const LocatedTriplesPerBlock& locatedTriples);
 
   // Determine the distinct values and their counts for the column at
@@ -442,15 +445,15 @@ class CompressedRelationReader {
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
       const LocatedTriplesPerBlock&) const;
 
-  // Return the number of `CompressedBlockMetadata` values contained in given
+  // Return the number of `SubBlockMetadata` values contained in given
   // `BlockMetadataRanges` object.
   static size_t getNumberOfBlockMetadataValues(
       const BlockMetadataRanges& blockMetadata);
 
-  // Retrieves the corresponding materialized `CompressedBlockMetadata` vector
+  // Return the corresponding materialized `SubBlockMetadata` vector
   // to the given `BlockMetadataRanges blockMetadata`.
-  static std::vector<CompressedBlockMetadata>
-  convertBlockMetadataRangesToVector(const BlockMetadataRanges& blockMetadata);
+  static std::vector<SubBlockMetadata> convertBlockMetadataRangesToVector(
+      const BlockMetadataRanges& blockMetadata);
 
   // Get the relevant `BlockMetadataRanges` sections of the given
   // `BlockMetadataRanges blockMetadata` for the blocks that contain the
@@ -499,11 +502,23 @@ class CompressedRelationReader {
       const Allocator& allocator) const;
 
  private:
-  // Read the block that is identified by the `blockMetaData` from the `file`.
-  // Only the columns specified by `columnIndices` are read.
+  // Read the (sub-)blocks that are identified by the `blockMetaData` from the
+  // `file`. Only the columns specified by `columnIndices` are read.
+  CompressedBlock readCompressedBlockFromFile(
+      const SubBlockMetadata& blockMetaData,
+      ColumnIndicesRef columnIndices) const;
+
+  // The same, but for a complete block.
   CompressedBlock readCompressedBlockFromFile(
       const CompressedBlockMetadata& blockMetaData,
       ColumnIndicesRef columnIndices) const;
+
+  // Read the columns `columnIndices`, the offset and size of each column is
+  // given by `getOffsetAndCompressedSize(columnIndex)`.
+  template <typename GetOffsetAndCompressedSize>
+  CompressedBlock readColumnsFromFile(
+      ColumnIndicesRef columnIndices,
+      const GetOffsetAndCompressedSize& getOffsetAndCompressedSize) const;
 
   // Decompress the `compressedBlock`. The number of rows that the block will
   // have after decompression must be passed in via the `numRowsToRead`
@@ -524,7 +539,7 @@ class CompressedRelationReader {
   // identifies the block) and `scanConfig` (which specifies the part of that
   // block).
   std::optional<DecompressedBlockAndMetadata> readAndDecompressBlock(
-      const CompressedBlockMetadata& blockMetaData,
+      const SubBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
 
   // Like `readAndDecompressBlock`, and postprocess by merging the located
@@ -533,7 +548,7 @@ class CompressedRelationReader {
   DecompressedBlockAndMetadata decompressAndPostprocessBlock(
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
       const CompressedRelationReader::ScanImplConfig& scanConfig,
-      const CompressedBlockMetadata& metadata) const;
+      const SubBlockMetadata& metadata) const;
 
   // Read, decompress, and postprocess the part of the block according to
   // `blockMetadata` (which identifies the block) and `scanConfig` (which
@@ -544,7 +559,7 @@ class CompressedRelationReader {
   // whole block, use `readAndDecompressBlock` instead.
   DecompressedBlock readPossiblyIncompleteBlock(
       const ScanSpecification& scanSpec, const ScanImplConfig& scanConfig,
-      const CompressedBlockMetadata& blockMetadata,
+      const SubBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       const LocatedTriplesPerBlock&) const;
 

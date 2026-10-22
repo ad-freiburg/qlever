@@ -179,7 +179,7 @@ class Permutation {
   // maintains its invariants.
   CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+      std::optional<std::vector<SubBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
@@ -308,7 +308,7 @@ class Permutation {
   CompressedRelationReader::IdTableGeneratorInputRange lazyScanImpl(
       const CompressedRelationReader& reader,
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+      std::optional<std::vector<SubBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,

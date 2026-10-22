@@ -302,8 +302,7 @@ class IndexScan final : public Operation {
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
   CompressedRelationReader::IdTableGeneratorInputRange getLazyScan(
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
+      std::optional<std::vector<SubBlockMetadata>> blocks = std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 
   // Return the columns of the "full" result (without any columns stripped) that

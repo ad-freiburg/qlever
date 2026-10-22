@@ -211,6 +211,49 @@ class SortedSequence {
   void getSortedView() const&& = delete;
 
  private:
+  // Return the two (sorted) parts of the elements, restricted to the elements
+  // `e` for which `isBeforeBegin(e)` is false and `isBeforeEnd(e)` is true.
+  // Both predicates are applied to the projected elements, and they have to be
+  // monotonic w.r.t. the sorting order (true for a prefix of the elements,
+  // false for the rest). Requires `isConsolidated` to be true.
+  template <typename IsBeforeBegin, typename IsBeforeEnd>
+  auto getRestrictedParts(const IsBeforeBegin& isBeforeBegin,
+                          const IsBeforeEnd& isBeforeEnd) const {
+    AD_CONTRACT_CHECK(isConsolidated());
+    auto restrict = [this, &isBeforeBegin, &isBeforeEnd](auto part) {
+      auto begin = ql::ranges::partition_point(part, isBeforeBegin, proj_);
+      auto end = ql::ranges::partition_point(
+          ql::ranges::subrange(begin, ql::ranges::end(part)), isBeforeEnd,
+          proj_);
+      return ql::ranges::subrange(begin, end);
+    };
+    return std::pair{restrict(largePart()), restrict(smallPart())};
+  }
+
+ public:
+  // Like `getSortedView`, but only return the elements `e` for which
+  // `isBeforeBegin(e)` is false and `isBeforeEnd(e)` is true, see
+  // `getRestrictedParts` above for the requirements. The runtime of this
+  // function is logarithmic in the number of elements.
+  template <typename IsBeforeBegin, typename IsBeforeEnd>
+  auto getSortedViewInRange(const IsBeforeBegin& isBeforeBegin,
+                            const IsBeforeEnd& isBeforeEnd) const& {
+    auto [largePart, smallPart] =
+        getRestrictedParts(isBeforeBegin, isBeforeEnd);
+    return ZipMergeUniqueView(largePart, smallPart, comp_, proj_);
+  }
+
+  // Return an upper bound for the number of elements of the restricted view
+  // (see `getSortedViewInRange` directly above).
+  template <typename IsBeforeBegin, typename IsBeforeEnd>
+  size_t sizeUpperBoundInRange(const IsBeforeBegin& isBeforeBegin,
+                               const IsBeforeEnd& isBeforeEnd) const {
+    auto [largePart, smallPart] =
+        getRestrictedParts(isBeforeBegin, isBeforeEnd);
+    return ql::ranges::size(largePart) + ql::ranges::size(smallPart);
+  }
+
+ private:
   // Return the extreme (maximal if `wantMax`, else minimal) element w.r.t.
   // `comp_`/`proj_`. On a tie (equal projected key) the small part's element
   // wins, since it holds the most recently inserted value for that key.

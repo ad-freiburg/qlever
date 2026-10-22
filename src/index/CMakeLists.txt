@@ -22,6 +22,7 @@ add_library(index
         DocsDB.cpp FTSAlgorithms.cpp
         CompressedRelationMetadata.cpp CompressedRelationReader.cpp
         CompressedRelationReaderBlockSelection.cpp CompressedRelationWriter.cpp
+        SubBlockMetadata.cpp
         DistinctCol0Ids.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp

@@ -291,10 +291,9 @@ class DeltaTriples {
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed. If `setInternalMetadata` is
   // true, this will set the metadata to the internal permutations instead.
-  void setOriginalMetadata(
-      Permutation::Enum permutation,
-      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
-      bool setInternalMetadata);
+  void setOriginalMetadata(Permutation::Enum permutation,
+                           PermutationBlockMetadata metadata,
+                           bool setInternalMetadata);
 
   // Consolidate the located triples in all permutations. Must be called after a
   // batch of insertTriples/deleteTriples, before any query access or metadata

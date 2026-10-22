@@ -185,6 +185,14 @@ size_t& Index::rowsPerBlock() { return pimpl_->rowsPerBlock(); }
 // ____________________________________________________________________________
 const size_t& Index::rowsPerBlock() const { return pimpl_->rowsPerBlock(); }
 
+// _____________________________________________________________________________
+size_t& Index::rowsPerSubBlock() { return pimpl_->rowsPerSubBlock(); }
+
+// _____________________________________________________________________________
+const size_t& Index::rowsPerSubBlock() const {
+  return pimpl_->rowsPerSubBlock();
+}
+
 // ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {
   return pimpl_->setOnDiskBase(onDiskBase);

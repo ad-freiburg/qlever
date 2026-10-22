@@ -239,7 +239,7 @@ std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState(
     const Permutation& permutation) {
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
   emptyLocatedTriples.at(static_cast<size_t>(permutation.permutation()))
-      .setOriginalMetadata(permutation.metaData().blockDataShared());
+      .setOriginalMetadata(permutation.metaData().permutationBlockMetadata());
   // NOTE: The located triples of the internal permutations deliberately stay
   // untouched. `loadPermutation` below loads every permutation with
   // `Permutation::Type::NORMAL`, including the internal ones, so a scan always
@@ -394,7 +394,7 @@ IndexMetaData writePermutation(
       CompressedRelationWriter::createPermutation(
           {std::move(writer), callback}, std::move(blocks),
           KeyOrder{0, 1, 2, 3}, {}, /* showProgressBar = */ false);
-  metaData.blockData() = std::move(blockMetadata);
+  metaData.setBlocksAndSubBlocks(std::move(blockMetadata));
   metaData.calculateStatistics(numDistinctCol0);
   return metaData;
 }

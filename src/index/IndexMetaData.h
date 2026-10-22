@@ -22,6 +22,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/MetaDataHandler.h"
+#include "index/SubBlockMetadata.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
 
@@ -46,8 +47,13 @@ struct VersionInfo {
 constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
     std::numeric_limits<uint64_t>::max() - 2;
 
-// Constant for the current version.
-constexpr uint64_t V_CURRENT = 2;
+// Constant for the current version. Version 3 added the `SubBlockTable`.
+constexpr uint64_t V_CURRENT = 3;
+// The previous version, which has no `SubBlockTable` (each block then consists
+// of exactly one sub-block). It can still be read, and it is also written when
+// the blocks are not split into sub-blocks, so that such a permutation can
+// also be read by older versions of QLever.
+constexpr uint64_t V_WITHOUT_SUB_BLOCKS = 2;
 
 // The metadata for an index permutation. The per-relation metadata is held in
 // RAM by `MetaDataWrapperDense` (stored in a separate file next to the
@@ -67,10 +73,12 @@ class IndexMetaData {
   MetaDataWrapperDense data_;
   // For each compressed block, its metadata.
   std::shared_ptr<BlocksType> blockData_ = std::make_shared<BlocksType>();
+  // The metadata of the sub-blocks of the blocks (empty if the blocks are not
+  // split into sub-blocks).
+  std::shared_ptr<SubBlockTable> subBlocks_ = std::make_shared<SubBlockTable>();
 
   size_t totalElements_ = 0;
   size_t numDistinctCol0_ = 0;
-  uint64_t version_ = V_CURRENT;
 
  public:
   IndexMetaData() = default;
@@ -122,6 +130,22 @@ class IndexMetaData {
     return blockData_;
   }
 
+  SubBlockTable& subBlocks() { return *subBlocks_; }
+  const SubBlockTable& subBlocks() const { return *subBlocks_; }
+
+  // Set the blocks and sub-blocks (as obtained from the
+  // `CompressedRelationWriter`).
+  void setBlocksAndSubBlocks(BlocksAndSubBlocks blocksAndSubBlocks) {
+    blockData() = std::move(blocksAndSubBlocks.blocks_);
+    subBlocks() = std::move(blocksAndSubBlocks.subBlocks_);
+  }
+
+  // Return the metadata of the blocks and sub-blocks, which shares the
+  // underlying data with this object.
+  PermutationBlockMetadata permutationBlockMetadata() const {
+    return PermutationBlockMetadata{blockData_, subBlocks_};
+  }
+
   size_t totalElements() const { return totalElements_; }
   size_t numDistinctCol0() const { return numDistinctCol0_; }
 
@@ -150,9 +174,11 @@ class IndexMetaData {
           "Please rebuild the index.");
     }
 
-    serializer | arg.version_;
+    uint64_t version =
+        arg.subBlocks().empty() ? V_WITHOUT_SUB_BLOCKS : V_CURRENT;
+    serializer | version;
     // This check might only become false, if we are reading from the serializer
-    if (arg.version_ != V_CURRENT) {
+    if (version != V_CURRENT && version != V_WITHOUT_SUB_BLOCKS) {
       throw WrongFormatException(
           "The binary format of this index is no longer supported by QLever. "
           "Please rebuild the index.");
@@ -169,6 +195,11 @@ class IndexMetaData {
     serializer | offsetAfter;
     serializer | arg.totalElements_;
     serializer | arg.numDistinctCol0_;
+    if (version == V_CURRENT) {
+      serializer | arg.subBlocks();
+    } else if constexpr (ad_utility::serialization::ReadSerializer<S>) {
+      arg.subBlocks() = SubBlockTable{};
+    }
   }
 };
 

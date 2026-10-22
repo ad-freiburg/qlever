@@ -30,6 +30,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
+#include "index/SubBlockMetadata.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Executor.h"
 #include "util/File.h"
@@ -44,6 +45,17 @@
 // block.
 using SmallRelationsBuffer = IdTable;
 
+// Convert the number of rows per sub-block from the configuration of an index
+// (where `0` means "no sub-blocks", see `INDEX_ROWS_PER_SUB_BLOCK_KEY`) to the
+// corresponding argument of the constructor of `CompressedRelationWriter`.
+inline std::optional<size_t> getRowsPerSubBlockForWriter(
+    size_t rowsPerSubBlock) {
+  if (rowsPerSubBlock == 0) {
+    return std::nullopt;
+  }
+  return rowsPerSubBlock;
+}
+
 /// Manage the compression and serialization of relations during the index
 /// build.
 class CompressedRelationWriter {
@@ -57,8 +69,13 @@ class CompressedRelationWriter {
   // why the `outfile_` has to be empty when this writer is constructed (this
   // is checked there).
   std::atomic<off_t> nextOffset_{0};
-  ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
-      blockBuffer_;
+  // The metadata of a block that has been written, together with the metadata
+  // of its sub-blocks (empty if `subBlocksAreEnabled()` is false).
+  struct WrittenBlock {
+    CompressedBlockMetadataNoBlockIndex metadata_;
+    std::vector<SubBlockTable::SubBlock> subBlocks_;
+  };
+  ad_utility::Synchronized<std::vector<WrittenBlock>> blockBuffer_;
   // If multiple small relations are stored in the same block, keep track of the
   // first and last `col0Id`.
   Id currentBlockFirstCol0_ = Id::makeUndefined();
@@ -73,6 +90,10 @@ class CompressedRelationWriter {
   // A buffer for small relations that will be stored in the same block.
   SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
   size_t rowsPerBlock_;
+  // The target number of rows of the sub-blocks into which each block is split
+  // (see `SubBlockMetadata.h`). `std::nullopt` means that the blocks are not
+  // split.
+  std::optional<size_t> rowsPerSubBlock_;
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
@@ -121,17 +142,25 @@ class CompressedRelationWriter {
   // the offsets that `nextOffset_` hands out, starting at `0`. It never
   // appends at the current file position (see `compressAndWriteColumn`), so
   // it would otherwise silently overwrite the existing content.
-  explicit CompressedRelationWriter(size_t numColumns, ad_utility::File f,
-                                    size_t rowsPerBlock,
-                                    qlever::Executor executor)
+  //
+  // If `rowsPerSubBlock` is specified and smaller than `rowsPerBlock`, then
+  // each block is split into sub-blocks of about `rowsPerSubBlock` rows (see
+  // `SubBlockMetadata.h`).
+  explicit CompressedRelationWriter(
+      size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
+      qlever::Executor executor,
+      std::optional<size_t> rowsPerSubBlock = std::nullopt)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
+        rowsPerSubBlock_{rowsPerSubBlock},
         executor_{std::move(executor)},
         numBlocksInFlight_{getNumBlocksInFlight()},
         blockWriteQueue_{makeBlockWriteQueue(executor_, numBlocksInFlight_)} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
+    AD_CONTRACT_CHECK(rowsPerSubBlock_.value_or(1) > 0,
+                      "A sub-block must have room for at least one row");
     // NOTE: `File::empty` moves the file position, which doesn't matter,
     // because all the writing uses the positioned `File::write`.
     AD_CONTRACT_CHECK(
@@ -171,7 +200,7 @@ class CompressedRelationWriter {
   // Helper struct for the result of `createPermutation`.
   struct PermutationSingleResult {
     size_t numDistinctCol0_;
-    std::vector<CompressedBlockMetadata> blockMetadata_;
+    BlocksAndSubBlocks blockMetadata_;
   };
 
   // Write a single permutation. It is required for example for materialized
@@ -209,8 +238,8 @@ class CompressedRelationWriter {
   // Helper struct for the result of `createPermutation`.
   struct PermutationPairResult {
     size_t numDistinctCol0_;
-    std::vector<CompressedBlockMetadata> blockMetadata_;
-    std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
+    BlocksAndSubBlocks blockMetadata_;
+    BlocksAndSubBlocks blockMetadataSwitched_;
   };
 
   // Write two permutations that only differ by the order of the col1 and
@@ -238,26 +267,11 @@ class CompressedRelationWriter {
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
 
-  /// Get all the CompressedBlockMetaData that were created by the calls to
-  /// addRelation. This also closes the writer. The typical workflow is:
-  /// add all relations and then call this method.
-  std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
-    finish();
-    auto blocks = std::move(*(blockBuffer_.wlock()));
-    ql::ranges::sort(blocks, {},
-                     &CompressedBlockMetadataNoBlockIndex::firstTriple_);
-
-    std::vector<CompressedBlockMetadata> result;
-    result.reserve(blocks.size());
-    // Write the correct block indices
-    for (size_t i : ad_utility::integerRange(blocks.size())) {
-      result.push_back({std::move(blocks.at(i)), i});
-    }
-
-    AD_CORRECTNESS_CHECK(
-        CompressedBlockMetadata::checkInvariantsForSortedBlocks(result));
-    return result;
-  }
+  /// Get all the `CompressedBlockMetadata` (and the metadata of their
+  /// sub-blocks) that were created by the calls to `addRelation`. This also
+  /// closes the writer. The typical workflow is: add all relations and then
+  /// call this method.
+  BlocksAndSubBlocks getFinishedBlocks() &&;
 
   // Compute the multiplicity of given the number of elements and the number of
   // distinct elements. It is basically `numElements / numDistinctElements` with
@@ -272,6 +286,27 @@ class CompressedRelationWriter {
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
   size_t blocksize() const { return rowsPerBlock_; }
+
+  // Return `true` iff the blocks are split into sub-blocks.
+  bool subBlocksAreEnabled() const {
+    return rowsPerSubBlock_.has_value() &&
+           rowsPerSubBlock_.value() < rowsPerBlock_;
+  }
+
+  // Return the end indices of the sub-blocks into which a block with the rows
+  // of `block` is split. Rows that agree in their first three columns are
+  // never split across two sub-blocks. If `subBlocksAreEnabled()` is false,
+  // the only end is `block.numRows()`.
+  std::vector<size_t> computeSubBlockEnds(const IdTableView<0>& block) const;
+
+  // Return the metadata of the sub-blocks of the `block`, given the ends of the
+  // sub-blocks (see `computeSubBlockEnds`), the compressed sizes of the
+  // sub-blocks for each column (see `compressAndWriteColumn`), and whether the
+  // complete block contains duplicates with different graphs.
+  static std::vector<SubBlockTable::SubBlock> computeSubBlocks(
+      const IdTableView<0>& block, ql::span<const size_t> subBlockEnds,
+      const std::vector<std::vector<size_t>>& compressedSizes,
+      bool blockHasDuplicates);
 
  private:
   /// Finish writing all relations which have previously been added, but might
@@ -290,10 +325,15 @@ class CompressedRelationWriter {
   // data of the written block. Then clear `smallRelationsBuffer_`.
   void writeBufferedRelationsToSingleBlock();
 
-  // Compress the `column` and write it to the `outfile_`. Return the offset and
-  // size of the compressed column in the `outfile_`.
-  CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
-      ConstIdColumnRef column);
+  // Compress the `column` and write it to the `outfile_`. Each of the
+  // sub-blocks given by `subBlockEnds` (see `computeSubBlockEnds`) is
+  // compressed separately, and the compressed sub-blocks are written
+  // contiguously. Return the offset and size of the compressed column in the
+  // `outfile_`, and the compressed size of each of the sub-blocks.
+  std::pair<CompressedBlockMetadata::OffsetAndCompressedSize,
+            std::vector<size_t>>
+  compressAndWriteColumn(ConstIdColumnRef column,
+                         ql::span<const size_t> subBlockEnds);
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
@@ -484,11 +524,10 @@ class CompressedRelationWriter {
   // This is a function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.
   template <typename T>
-  friend std::pair<std::vector<CompressedBlockMetadata>,
-                   std::vector<CompressedRelationMetadata>>
-  compressedRelationTestWriteCompressedRelations(T inputs, std::string filename,
-                                                 size_t rowsPerBlock,
-                                                 size_t inputBlockSize);
+  friend std::pair<BlocksAndSubBlocks, std::vector<CompressedRelationMetadata>>
+  compressedRelationTestWriteCompressedRelations(
+      T inputs, std::string filename, size_t rowsPerBlock,
+      size_t inputBlockSize, std::optional<size_t> rowsPerSubBlock);
 
   // Create the queue for the compression and writing of blocks. The blocks are
   // compressed and written on the `executor`, so this queue owns no threads of

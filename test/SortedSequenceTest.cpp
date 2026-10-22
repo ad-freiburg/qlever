@@ -399,6 +399,54 @@ TEST(SortedSequenceTest, iteration) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(SortedSequenceTest, getSortedViewInRange) {
+  // Keep the two parts separate: The large part is `{p10, p20, p40, p50}`, the
+  // small part is `{p11, p31}`.
+  SV s = SV::fromSorted({p10, p20, p40, p50});
+  s.insert(p31);
+  s.insert(p11);
+  s.consolidate(1.0);
+  EXPECT_THAT(s, StateIs({p10, p20, p40, p50, p11, p31}, 4, true));
+
+  // Check the elements with a key in `[begin, end)` and the upper bound for
+  // their number.
+  auto expectRange = [&s](int begin, int end, const std::vector<Pair>& expected,
+                          size_t expectedSizeUpperBound,
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto isBeforeBegin = [begin](int key) { return key < begin; };
+    auto isBeforeEnd = [end](int key) { return key < end; };
+    EXPECT_THAT(s.getSortedViewInRange(isBeforeBegin, isBeforeEnd),
+                ElementsAreArray(expected));
+    EXPECT_EQ(s.sizeUpperBoundInRange(isBeforeBegin, isBeforeEnd),
+              expectedSizeUpperBound);
+  };
+
+  expectRange(0, 10, {p11, p20, p31, p40, p50}, 6);
+  expectRange(2, 5, {p20, p31, p40}, 3);
+  // The key `1` is contained in both parts, so the upper bound is not exact.
+  expectRange(1, 3, {p11, p20}, 3);
+  expectRange(3, 4, {p31}, 1);
+  expectRange(4, 6, {p40, p50}, 2);
+  expectRange(3, 3, {}, 0);
+  expectRange(6, 10, {}, 0);
+  expectRange(-5, 0, {}, 0);
+
+  // The full range is the same as `getSortedView`.
+  auto always = [](int) { return true; };
+  auto never = [](int) { return false; };
+  EXPECT_THAT(s.getSortedViewInRange(never, always),
+              ElementsAreArray(::ranges::to<std::vector>(s.getSortedView())));
+
+  // The `SortedSequence` has to be consolidated.
+  s.insert(p60);
+  AD_EXPECT_THROW_WITH_MESSAGE(s.getSortedViewInRange(never, always),
+                               NotConsolidated);
+  AD_EXPECT_THROW_WITH_MESSAGE(s.sizeUpperBoundInRange(never, always),
+                               NotConsolidated);
+}
+
 // ____________________________________________________________________________
 TEST(SortedSequenceTest, erase) {
   {

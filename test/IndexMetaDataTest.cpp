@@ -238,10 +238,9 @@ TEST(IndexMetaDataTest, deserializationRejectsWrongFormat) {
   }
 
   // The magic number matches, but the version does not.
-  {
+  for (uint64_t wrongVersion : {V_WITHOUT_SUB_BLOCKS - 1, V_CURRENT + 1}) {
     ByteBufferWriteSerializer writer;
     uint64_t magicNumber = MAGIC_NUMBER_FOR_SERIALIZATION;
-    uint64_t wrongVersion = V_CURRENT - 1;
     writer | magicNumber;
     writer | wrongVersion;
     ByteBufferReadSerializer reader{std::move(writer).data()};
@@ -250,6 +249,90 @@ TEST(IndexMetaDataTest, deserializationRejectsWrongFormat) {
         reader >> imd, ::testing::HasSubstr("no longer supported"),
         WrongFormatException);
   }
+}
+
+// _____________________________________________________________________________
+TEST(IndexMetaDataTest, serializationWithSubBlocks) {
+  using ad_utility::serialization::ByteBufferReadSerializer;
+  using ad_utility::serialization::ByteBufferWriteSerializer;
+
+  // Return the version that is stored in the serialized `IndexMetaData` (it
+  // directly follows the magic number).
+  auto getVersion = [](const std::vector<char>& data) {
+    ByteBufferReadSerializer reader{data};
+    uint64_t magicNumber;
+    uint64_t version;
+    reader | magicNumber;
+    reader | version;
+    EXPECT_EQ(magicNumber, MAGIC_NUMBER_FOR_SERIALIZATION);
+    return version;
+  };
+
+  // Serialize `imd` and deserialize the result into `target`. Return the
+  // version of the serialized data.
+  auto roundTrip = [&getVersion](const IndexMetaData& imd,
+                                 IndexMetaData& target) {
+    ByteBufferWriteSerializer writer;
+    writer << imd;
+    auto data = std::move(writer).data();
+    auto version = getVersion(data);
+    ByteBufferReadSerializer reader{std::move(data)};
+    reader >> target;
+    return version;
+  };
+
+  std::vector<CompressedBlockMetadata> blocks{
+      CompressedBlockMetadata{{{{{12, 34}, {42, 17}}},
+                               5,
+                               {V(0), V(2), V(13), g},
+                               {V(2), V(24), V(62), g},
+                               std::vector{V(512)},
+                               true},
+                              0},
+      CompressedBlockMetadata{{{{{46, 12}, {59, 3}}},
+                               3,
+                               {V(3), V(0), V(1), g},
+                               {V(3), V(24), V(62), g},
+                               {},
+                               false},
+                              1}};
+  using SubBlock = SubBlockTable::SubBlock;
+  SubBlockTable subBlocks{2};
+  subBlocks.addBlock(
+      std::vector{SubBlock{{V(0), V(2), V(13)}, 2, {5, 7}, 0, false},
+                  SubBlock{{V(1), V(7), V(4)}, 3, {7, 10}, 0, true}});
+  subBlocks.addBlock(
+      std::vector{SubBlock{{V(3), V(0), V(1)}, 3, {12, 3}, 0, false}});
+
+  CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
+  IndexMetaData imd;
+  imd.add(rmdF);
+  imd.setBlocksAndSubBlocks(BlocksAndSubBlocks{blocks, subBlocks});
+  EXPECT_EQ(imd.blockData(), blocks);
+  EXPECT_EQ(imd.subBlocks(), subBlocks);
+  EXPECT_EQ(imd.permutationBlockMetadata().numSubBlocks(), 3);
+
+  // With sub-blocks, the current version is written, and the sub-blocks are
+  // restored.
+  IndexMetaData imd2;
+  EXPECT_EQ(roundTrip(imd, imd2), V_CURRENT);
+  EXPECT_EQ(imd2.blockData(), blocks);
+  EXPECT_EQ(imd2.subBlocks(), subBlocks);
+  EXPECT_EQ(imd2.totalElements(), imd.totalElements());
+  EXPECT_EQ(imd2.numDistinctCol0(), imd.numDistinctCol0());
+  EXPECT_EQ(imd2.permutationBlockMetadata().numSubBlocks(), 3);
+  EXPECT_EQ(imd2.permutationBlockMetadata().subBlocksOfBlock(1),
+            (std::pair<size_t, size_t>{2, 3}));
+
+  // Without sub-blocks, the old version is written (so that older versions of
+  // QLever can still read it). Reading it into an `IndexMetaData` that
+  // previously had sub-blocks removes them.
+  IndexMetaData imdWithoutSubBlocks;
+  imdWithoutSubBlocks.blockData() = blocks;
+  EXPECT_EQ(roundTrip(imdWithoutSubBlocks, imd2), V_WITHOUT_SUB_BLOCKS);
+  EXPECT_EQ(imd2.blockData(), blocks);
+  EXPECT_TRUE(imd2.subBlocks().empty());
+  EXPECT_EQ(imd2.permutationBlockMetadata().numSubBlocks(), 2);
 }
 
 // _____________________________________________________________________________

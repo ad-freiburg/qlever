@@ -264,6 +264,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     // multiple blocks. Should this value ever change, then some unit tests
     // might have to be adapted.
     index.rowsPerBlock() = c.rowsPerBlock;
+    if (c.rowsPerSubBlock.has_value()) {
+      index.rowsPerSubBlock() = c.rowsPerSubBlock.value();
+    }
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");

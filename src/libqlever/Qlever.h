@@ -113,6 +113,13 @@ struct IndexBuilderConfig : CommonConfig {
   // compromise that favors large scans; see `DEFAULT_INDEX_ROWS_PER_BLOCK`.
   std::optional<size_t> indexRowsPerBlock_;
 
+  // The number of rows of one sub-block of the permutations (`0` disables the
+  // sub-blocks). Each block is split into sub-blocks, which can be read from
+  // disk in isolation, so the prefiltering of joins and filters works at this
+  // finer granularity, while the expensive per-block metadata is only stored
+  // per block. See `DEFAULT_INDEX_ROWS_PER_SUB_BLOCK`.
+  std::optional<size_t> indexRowsPerSubBlock_;
+
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.

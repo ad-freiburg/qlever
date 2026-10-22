@@ -1499,10 +1499,11 @@ TEST_F(MaterializedViewsTestLarge, Multiplicities) {
   }
 
   // Fixed first column with a small relation that fills a large part of its
-  // block (20'000 of 60'000 rows): the size estimate of the scan (a fixed
-  // fraction of the block) is smaller than the relation, but the multiplicity
-  // of the additional column `?o` is computed from the exact number of rows
-  // of the relation (about 10'001 distinct values of `?o` in the whole view).
+  // block (20'000 of 60'000 rows): the size estimate of the scan is at most the
+  // size of the relation (it is exact, because the relation consists of
+  // complete sub-blocks, see `SubBlockMetadata.h`), and the multiplicity of the
+  // additional column `?o` is computed from the exact number of rows of the
+  // relation (about 10'001 distinct values of `?o` in the whole view).
   {
     manager.writeViewToDisk(
         "multViewG", qlv().parseAndPlanQuery("SELECT ?g ?s ?p ?o { ?s ?p ?o . "
@@ -1513,7 +1514,7 @@ TEST_F(MaterializedViewsTestLarge, Multiplicities) {
                               {V{"?s"}, V{"?S"}},
                               {V{"?p"}, V{"?P"}},
                               {V{"?o"}, V{"?O"}}}});
-    EXPECT_LT(scan->getSizeEstimate(), 20'000);
+    EXPECT_LE(scan->getSizeEstimate(), 20'000);
     EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?S"}), 2);
     EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?P"}), 10'000);
     EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 2, 0.05);
