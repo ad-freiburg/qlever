@@ -202,8 +202,8 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   // constructor will throw an exception if the name is invalid or the view does
   // not exist. All scans of the view allocate through `allocator`, which
   // therefore should be the allocator of the query memory limit whenever the
-  // view is used to answer queries; the overload without an allocator (for
-  // standalone uses like the index converter) does not limit the memory.
+  // view is used to answer queries. The overload without an allocator (for
+  // uses outside an engine, currently only tests) does not limit the memory.
   MaterializedView(std::string onDiskBase, std::string name,
                    ad_utility::AllocatorWithLimit<Id> allocator);
   MaterializedView(std::string onDiskBase, std::string name)

@@ -603,8 +603,10 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
           "SELECT * { { SELECT * { ?s ?p ?o . BIND(1 AS ?g) } LIMIT 2 } }")));
 }
 
-// _____________________________________________________________________________
+// Test that all scans of a view allocate through the allocator the view was
+// loaded with, directly or via the engine.
 TEST_F(MaterializedViewsTest, ScansAllocateThroughTheGivenAllocator) {
+  // A view and a helper that scans the whole view into an `IdTable`.
   qlv().writeMaterializedView("limitedView", simpleWriteQuery_);
   auto scanAll = [](const MaterializedView& view) {
     auto locatedTriples = view.locatedTriplesState();
