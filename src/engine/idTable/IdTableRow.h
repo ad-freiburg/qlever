@@ -175,8 +175,8 @@ class RowReferenceImpl {
     TablePtr table_ = nullptr;
     size_t row_ = 0;
 
-    // The constructor is public, but the whole class is private. the
-    // constructor must be public, because `IdTable` must have access to it.
+    // The constructor is public, because the `RowReference` inherits it, which
+    // is also created for other tables than the `IdTable` (e.g. in tests).
    public:
     explicit RowReferenceWithRestrictedAccess(TablePtr table, size_t row)
         : table_{table}, row_{row} {}
