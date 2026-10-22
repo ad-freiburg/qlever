@@ -2864,14 +2864,18 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
 // clauses). With the filters deferred to the final filter passes, this plans
 // in milliseconds.
 TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
-  std::string query =
-      "SELECT ?v WHERE {\n"
-      "  ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .\n";
-  for (int i = 0; i < 8; ++i) {
-    query += absl::StrCat("  FILTER NOT EXISTS { ?v <q", i, "> ?x", i,
-                          " . FILTER (?x", i, " != ?w1) }\n");
-  }
-  query += "}";
+  std::string query = R"(
+  SELECT ?v WHERE {
+    ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .
+    FILTER NOT EXISTS { ?v <q0> ?x0 . FILTER (?x0 != ?w1) }
+    FILTER NOT EXISTS { ?v <q1> ?x1 . FILTER (?x1 != ?w1) }
+    FILTER NOT EXISTS { ?v <q2> ?x2 . FILTER (?x2 != ?w1) }
+    FILTER NOT EXISTS { ?v <q3> ?x3 . FILTER (?x3 != ?w1) }
+    FILTER NOT EXISTS { ?v <q4> ?x4 . FILTER (?x4 != ?w1) }
+    FILTER NOT EXISTS { ?v <q5> ?x5 . FILTER (?x5 != ?w1) }
+    FILTER NOT EXISTS { ?v <q6> ?x6 . FILTER (?x6 != ?w1) }
+    FILTER NOT EXISTS { ?v <q7> ?x7 . FILTER (?x7 != ?w1) }
+  })";
   EXPECT_NO_THROW(
       h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
 }
