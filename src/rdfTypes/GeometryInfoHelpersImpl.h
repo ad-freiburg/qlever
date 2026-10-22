@@ -613,13 +613,6 @@ struct UtilGeomToWktVisitor {
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 
-// Project the coordinates of a `GeoPoint` to another coordinate reference
-// system and return as WKT string.
-inline std::optional<std::string> geoPointToWktInCrs(const GeoPoint& point,
-                                                     CRSType projCrs) {
-  return utilGeomToWkt(geoPointToUtilPoint(point), projCrs);
-}
-
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
 // 7946). The input is expected to be in CRS84, as GeoJSON only supports this
 // CRS.

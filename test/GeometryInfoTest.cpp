@@ -586,15 +586,6 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_NEAR(g.getLng(), p2.getX(), 0.0001);
   EXPECT_NEAR(g.getLat(), p2.getY(), 0.0001);
 
-  auto wktDefault = geoPointToWktInCrs(g, defaultCrs);
-  ASSERT_TRUE(wktDefault.has_value());
-  EXPECT_EQ(wktDefault.value(), "POINT(50 60)");
-
-  auto wktWGS84 = geoPointToWktInCrs(g, CRSType::WGS84);
-  ASSERT_TRUE(wktWGS84.has_value());
-  EXPECT_EQ(wktWGS84.value(),
-            "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(60 50)");
-
   // Test projection to WGS84 (swapped coordinates).
   auto p3 = geoPointToUtilPoint(g, CRSType::WGS84);
   EXPECT_NEAR(g.getLng(), p3.getY(), 0.0001);
