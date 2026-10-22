@@ -566,7 +566,12 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfoPointer());
     }
   }
-  _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
+  // The runtime information of a cached result is final, and its children
+  // are shared with the cache entry (and with every other query that reads
+  // it), so they are only updated for a computed result.
+  if (!wasCached) {
+    _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
+  }
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
@@ -586,10 +591,8 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
     std::vector<std::shared_ptr<RuntimeInformation>> children) {
   _runtimeInfo->status_ = RuntimeInformation::Status::optimizedOut;
   _runtimeInfo->children_ = std::move(children);
-  // This operation was optimized out, so its operation time is zero.
-  // The operation time is computed as
-  // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
-  // To set it to zero we thus have to set the `totalTime_` to that sum.
+  // This operation was optimized out, so its operation time (the total time
+  // minus the total times of the children, see `getOperationTime`) is zero.
   _runtimeInfo->totalTime_ = _runtimeInfo->getTotalTimeOfChildren();
 
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);

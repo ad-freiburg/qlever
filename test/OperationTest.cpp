@@ -542,7 +542,8 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   EXPECT_EQ(rti.originalOperationTime_, 2ms);
 }
 
-// _____________________________________________________________________________
+// Test that the success and the failure update of the runtime information
+// refresh the total time of an optimized out child from its children.
 TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
   auto qec = getQec();
   Sort sort{qec,
@@ -567,6 +568,16 @@ TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
   sort.updateRuntimeInformationOnFailure(7ms);
   EXPECT_EQ(childRti.totalTime_, 6ms);
   EXPECT_EQ(sort.runtimeInfo().getOperationTime(), 1ms);
+
+  // The runtime information of a result read from the cache is final and its
+  // children are left untouched.
+  grandchild->totalTime_ = 8ms;
+  RuntimeInformation cached;
+  cached.children_ = {
+      sort.getChildren().at(0)->getRootOperation()->getRuntimeInfoPointer()};
+  sort.updateRuntimeInformationOnSuccess(1, CacheStatus::cachedNotPinned, 7ms,
+                                         std::move(cached));
+  EXPECT_EQ(childRti.totalTime_, 6ms);
 }
 
 // _____________________________________________________________________________
