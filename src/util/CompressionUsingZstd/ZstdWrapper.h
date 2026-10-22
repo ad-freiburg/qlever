@@ -118,14 +118,16 @@ class ZstdWrapper {
   // may refer to any byte sequence of the `reference`, so the result is small
   // if `data` mostly consists of pieces of the `reference` (this is the same
   // as `zstd --patch-from`). Decompression requires the identical `reference`
-  // (see `tryToDecompressWithReference`). Long distance matching is enabled
-  // and the window is made large enough to cover the `reference` and `data`,
-  // so references into the whole `reference` are possible. The frame stores
-  // the size of `data` and a checksum of `data`, which the decompression
-  // verifies. The `compressionLevel` is the usual ZSTD level
-  // (1 to 22); the high levels (19 and above) give noticeably smaller
-  // results for this use case and are still fast enough for data in the range
-  // of a few hundred megabytes.
+  // (see `tryToDecompressWithReference`).
+  //
+  // Long distance matching is enabled and the window covers the `reference`
+  // and `data`, so references into the whole `reference` are possible. The
+  // frame stores the size and a checksum of `data`, which the decompression
+  // verifies.
+  //
+  // The `compressionLevel` is the usual ZSTD level (1 to 22). The high levels
+  // (19 and above) give noticeably smaller results for this use case and are
+  // still fast enough for data in the range of a few hundred megabytes.
   static std::vector<char> compressWithReference(ql::span<const char> reference,
                                                  ql::span<const char> data,
                                                  int compressionLevel) {
@@ -186,10 +188,11 @@ class ZstdWrapper {
   // decompressed data), and return the number of decompressed bytes. Report an
   // error if the decompression fails, for example because the compressed data
   // is corrupted, the buffer is too small, or the `reference` is not the one
-  // that was used for the compression. A wrong `reference` is detected via the
-  // checksum of the decompressed data that `compressWithReference` stores in
-  // the frame. That checksum is only 32 bits long, so in very rare cases a
-  // wrong `reference` remains undetected.
+  // that was used for the compression.
+  //
+  // NOTE: A wrong `reference` is detected via the checksum of the decompressed
+  // data in the frame. That checksum is only 32 bits long, so in very rare
+  // cases a wrong `reference` remains undetected.
   static SizeOrError tryToDecompressWithReference(
       ql::span<const char> reference, ql::span<const char> compressed,
       char* buffer, size_t bufferCapacity) noexcept {
