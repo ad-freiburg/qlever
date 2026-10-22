@@ -15,7 +15,7 @@ TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
   TripleComponent internalIri{ad_utility::triple_component::Iri::fromIriref(
       makeQleverInternalIri("something"))};
   TripleComponent languageTaggedIri{
-      ad_utility::triple_component::Iri::fromIriref("@en@<abc>")};
+      ad_utility::triple_component::Iri::fromLangtagAndIriref("en", "<abc>")};
   TripleComponent regularIri{
       ad_utility::triple_component::Iri::fromIriref("<abc>")};
   TripleComponent regularLiteral{1};

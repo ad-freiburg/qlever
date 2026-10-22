@@ -93,7 +93,7 @@ class DateYearOrDuration {
   // True iff constructed with `DayTimeDuration`.
   bool isDayTimeDuration() const {
     return bits_ >> numPayloadDurationBits == daytimeDuration;
-  };
+  }
 
   // Return the underlying `Date` object. The behavior is undefined if
   // `isDate()` is `false`.

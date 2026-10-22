@@ -44,7 +44,12 @@ template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
   vocabulary_.open(fileName);
+  computePrefixRanges();
+}
 
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+void Vocabulary<S, C, I>::computePrefixRanges() {
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
   //
@@ -238,7 +243,7 @@ std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     static_assert(NeverProvidesGeometryInfo<S>);
     return std::nullopt;
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
@@ -251,7 +256,7 @@ bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
     static_assert(NeverProvidesGeometryInfo<S>);
     return false;
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>

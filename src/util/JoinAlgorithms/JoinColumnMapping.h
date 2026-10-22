@@ -56,7 +56,7 @@ class JoinColumnMapping {
   // column in the left input.
   const std::vector<ColumnIndex>& permutationLeft() const {
     return permutationLeft_;
-  };
+  }
   // The same, but for the right input.
   const std::vector<ColumnIndex>& permutationRight() const {
     return permutationRight_;
@@ -231,9 +231,9 @@ struct IdTableAndFirstCols<1, Table> {
 
   bool empty() const { return col().empty(); }
 
-  const Id& operator[](size_t idx) const { return col()[idx]; }
-  const Id& front() const { return col().front(); }
-  const Id& back() const { return col().back(); }
+  ConstIdRef operator[](size_t idx) const { return col()[idx]; }
+  ConstIdRef front() const { return col().front(); }
+  ConstIdRef back() const { return col().back(); }
 
   size_t size() const { return col().size(); }
 

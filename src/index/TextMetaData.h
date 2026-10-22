@@ -71,7 +71,10 @@ class TextBlockMetaData {
   ContextListMetaData _entityCl;
 
   static constexpr size_t sizeOnDisk() {
-    return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
+    static_assert(sizeof(_firstWordId) + sizeof(_lastWordId) ==
+                  2 * sizeof(uint64_t));
+    return sizeof(_firstWordId) + sizeof(_lastWordId) +
+           2 * ContextListMetaData::sizeOnDisk();
   }
 
   template <typename T>
@@ -114,7 +117,7 @@ class TextMetaData {
 
   void setName(const std::string& name) { _name = name; }
 
-  float getAverageNofEntityContexts() const { return 1.0f; };
+  float getAverageNofEntityContexts() const { return 1.0f; }
 
  private:
   std::vector<uint64_t> _blockUpperBoundWordIds;

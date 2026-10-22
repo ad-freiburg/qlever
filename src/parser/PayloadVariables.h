@@ -11,11 +11,7 @@
 
 namespace detail {
 // Represents the selection of all variables as payload
-struct PayloadAllVariables : std::monostate {
-  bool operator==([[maybe_unused]] const std::vector<Variable>& other) const {
-    return false;
-  };
-};
+struct PayloadAllVariables : std::monostate {};
 }  // namespace detail
 
 // This class represents a list of variables to be included in the result of
@@ -50,7 +46,7 @@ class PayloadVariables {
   // For testing: equality operator
   bool operator==(const PayloadVariables& other) const {
     return variables_ == other.variables_;
-  };
+  }
 
  private:
   std::variant<detail::PayloadAllVariables, std::vector<Variable>> variables_ =

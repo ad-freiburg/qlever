@@ -12,6 +12,7 @@
 
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/http/HttpClient.h"
 
 // This class implements the SPARQL UPDATE `LOAD` operation. It reads a turtle
@@ -41,8 +42,12 @@ class Load final : public Operation {
 
   ~Load() override = default;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
+ public:
   std::string getCacheKeyImpl() const override;
 
   std::string getDescriptor() const override;

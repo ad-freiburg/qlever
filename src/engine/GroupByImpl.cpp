@@ -196,10 +196,9 @@ class LazyGroupByRange
   std::optional<Result::IdTableVocabPair> yieldFinalValue() {
     // No need for final commit when loop was never entered.
     if (!groupSplitAcrossTables_) {
-      // If we have an implicit group by we need to produce one result row
-      if (groupByCols_.empty()) {
-        // If we have an implicit GROUP BY, where the entire input is a
-        // single group, we need to produce one result row.
+      // An implicit GROUP BY (where the entire input is a single group) has to
+      // produce one result row even for an empty input.
+      if (parent_->isImplicitGroupBy_) {
         IdTable resultTable = std::move(resultTable_).toDynamic();
         parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates_,
                                                       &currentLocalVocab_);
@@ -220,7 +219,7 @@ class LazyGroupByRange
     // context, that have the values of the `currentGroupBlock` in the
     // correct columns.
     IdTable idTable{inWidth_, ad_utility::makeAllocatorWithLimit<Id>(
-                                  1_B * sizeof(Id) * inWidth_)};
+                                  1_B * BYTES_PER_ID_COLUMN_ENTRY * inWidth_)};
     idTable.emplace_back();
     for (const auto& [colIdx, value] : currentGroupBlock_) {
       idTable.at(0, colIdx) = value;
@@ -265,12 +264,22 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                          vector<Variable> groupByVariables,
                          std::vector<Alias> aliases,
                          std::shared_ptr<QueryExecutionTree> subtree)
+    // Braced initializers are evaluated in order: `empty()` before the move.
+    : GroupByImpl{qec, groupByVariables.empty(), std::move(groupByVariables),
+                  std::move(aliases), std::move(subtree)} {}
+
+// _____________________________________________________________________________
+GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
+                         vector<Variable> groupByVariables,
+                         std::vector<Alias> aliases,
+                         std::shared_ptr<QueryExecutionTree> subtree)
     : Operation{qec},
       _groupByVariables{std::move(groupByVariables)},
-      _aliases{std::move(aliases)} {
+      _aliases{std::move(aliases)},
+      isImplicitGroupBy_{isImplicitGroupBy} {
   AD_CORRECTNESS_CHECK(subtree != nullptr);
-  // Remove all undefined GROUP BY variables (according to the SPARQL standard
-  // they are allowed, but have no effect on the result).
+  // Remove all undefined GROUP BY variables. They are constant, so they don't
+  // affect the grouping, except that an empty input has no group.
   ql::erase_if(_groupByVariables,
                [&map = subtree->getVariableColumns()](const auto& var) {
                  return !map.contains(var);
@@ -307,8 +316,14 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   }
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
-  // used in any of the aggregate aliases.
-  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
+  // used in any of the aggregate aliases. Note that a `COUNT(DISTINCT *)`
+  // implicitly uses all the visible columns without mentioning any variable
+  // explicitly, so in that case no column may be stripped.
+  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>() &&
+      !ql::ranges::any_of(
+          _aliases,
+          &sparqlExpression::SparqlExpressionPimpl::readsAllVisibleColumns,
+          &Alias::_expression)) {
     std::set<Variable> usedVariables{_groupByVariables.begin(),
                                      _groupByVariables.end()};
     for (const auto& alias : _aliases) {
@@ -360,7 +375,7 @@ std::string GroupByImpl::getCacheKeyImpl() const {
   }
 
   std::ostringstream os;
-  os << "GROUP_BY ";
+  os << (isImplicitGroupBy_ ? "IMPLICIT_GROUP_BY " : "GROUP_BY ");
   for (const auto& var : _groupByVariables) {
     os << varMap.at(var).columnIndex_ << ", ";
   }
@@ -374,8 +389,11 @@ std::string GroupByImpl::getCacheKeyImpl() const {
 }
 
 std::string GroupByImpl::getDescriptor() const {
-  if (_groupByVariables.empty()) {
+  if (isImplicitGroupBy_) {
     return "GroupBy (implicit)";
+  }
+  if (_groupByVariables.empty()) {
+    return "GroupBy on unbound variables";
   }
   return "GroupBy on " +
          absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
@@ -398,8 +416,8 @@ std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
 std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
-  // If we have an implicit GROUP BY, where the entire input is a single group,
-  // no sorting needs to be done.
+  // Without GROUP BY columns, the entire input is a single group, so no sorting
+  // needs to be done.
   if (_groupByVariables.empty()) {
     return cols;
   }
@@ -486,7 +504,7 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
+  IdRef resultEntry = result->operator()(resultRow, resultColumn);
 
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
@@ -525,9 +543,9 @@ IdTable GroupByImpl::doGroupBy(const IdTableView<0>& inTable,
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
 
   // If the input is empty, the result is also empty, except for an implicit
-  // GROUP BY (`groupByCols.empty()`), which always has to produce one result
-  // row (see the code further down).
-  if (inTable.empty() && !groupByCols.empty()) {
+  // GROUP BY, which always has to produce one result row (see the code further
+  // down).
+  if (inTable.empty() && !isImplicitGroupBy_) {
     return dynResult;
   }
 
@@ -544,7 +562,7 @@ IdTable GroupByImpl::doGroupBy(const IdTableView<0>& inTable,
                             blockEnd, outLocalVocab, groupByCols);
   };
 
-  // Handle the implicit GROUP BY, where the entire input is a single group.
+  // Without GROUP BY columns, the entire (non-empty) input is a single group.
   if (groupByCols.empty()) {
     processNextBlock(0, input.size());
     return std::move(result).toDynamic();
@@ -812,7 +830,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
 
   if (indexScan->numVariables() <= 1 ||
       !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      !_groupByVariables.empty()) {
+      !isImplicitGroupBy_) {
     return std::nullopt;
   }
 
@@ -1051,7 +1069,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
     return indexScan->permutation();
   }
   return {};
-};
+}
 
 // ____________________________________________________________________________
 std::optional<GroupByImpl::OptimizedGroupByData>
@@ -1068,8 +1086,8 @@ GroupByImpl::checkIfJoinWithFullScan(const Join& join) const {
 
   // Determine if any of the two children of the join operation is a
   // triple with three variables that fulfills the condition.
-  auto* child1 = static_cast<const Operation&>(join).getChildren().at(0);
-  auto* child2 = static_cast<const Operation&>(join).getChildren().at(1);
+  auto* child1 = join.getChildren().at(0);
+  auto* child2 = join.getChildren().at(1);
 
   // TODO<joka921, C++23> Use `optional::or_else`
   auto permutation = getPermutationForThreeVariableTriple(
@@ -1237,6 +1255,11 @@ std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::checkIfHashMapOptimizationPossible(
     std::vector<Aggregate>& aliases) const {
   if (!getRuntimeParameter<&RuntimeParameters::groupByHashMapEnabled_>()) {
+    return std::nullopt;
+  }
+
+  // The hash map needs at least one GROUP BY column.
+  if (_groupByVariables.empty()) {
     return std::nullopt;
   }
 
@@ -1515,7 +1538,7 @@ GroupByImpl::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
+    const ArrayOrVector<ConstIdColumnRef>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1892,7 +1915,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 
       // Perform HashMap lookup once for all groups in current block
       using U = typename HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<ConstIdColumnRef>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 
@@ -1960,14 +1983,16 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
-  return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
-                                       _aliases, _subtree->clone());
+  // `std::make_unique` can't access the private constructor.
+  return std::unique_ptr<GroupByImpl>{
+      new GroupByImpl{_executionContext, isImplicitGroupBy_, _groupByVariables,
+                      _aliases, _subtree->clone()}};
 }
 
 // _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeCountStar() const {
   bool isSingleGlobalAggregateFunction =
-      _groupByVariables.empty() && _aliases.size() == 1;
+      isImplicitGroupBy_ && _aliases.size() == 1;
   if (!isSingleGlobalAggregateFunction) {
     return std::nullopt;
   }

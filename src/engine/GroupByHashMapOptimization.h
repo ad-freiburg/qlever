@@ -41,7 +41,7 @@ struct AvgAggregationData {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
     std::visit([this](auto val) { valueAdder(val, sum_, error_); }, val);
     count_++;
-  };
+  }
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
@@ -85,8 +85,11 @@ struct ExtremumAggregationData {
       return;
     }
 
-    currentValue_ = sparqlExpression::detail::MinMaxLambdaForAllTypes<Comp>{}(
-        value, currentValue_, ctx);
+    // Only copy the `value` if it replaces the current one.
+    using MinMax = sparqlExpression::detail::MinMaxForAllTypes<Comp>;
+    if (MinMax::comesFirst(value, currentValue_, ctx)) {
+      currentValue_ = value;
+    }
   }
 
   // _____________________________________________________________________________
@@ -130,7 +133,7 @@ struct SumAggregationData {
         doubleValueAdder, intValueAdder, nonNumericValueAdder};
 
     std::visit(sumValueAdder, val);
-  };
+  }
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(

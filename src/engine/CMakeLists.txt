@@ -13,14 +13,17 @@ add_library(engine
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
-        CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
+        CountConnectedSubgraphs.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp
+        NeutralOptional.cpp Load.cpp StripColumns.cpp NamedResultCache.cpp EmptyPath.cpp
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
-        ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp)
+        ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp
+        MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp ExternalValues.cpp
+        DistinctGraphs.cpp)
+add_subdirectory(spatialJoinAlgorithms)
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers
@@ -38,13 +41,10 @@ if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(engine PUBLIC http)
 endif()
 
-# Don't build the `server` library at all when the server (and the tests
-# linking it) are disabled for Emscripten: compiling `Server.cpp` crashes
-# emsdk 6.0.2's clang in the `WebAssemblyLateEHPrepare` backend pass (the
-# boost::beast HTTP session coroutine produces irreducible control flow
-# containing EH pads — the same LLVM bug that disables `HttpTest`).
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
-    add_library(server Server.cpp)
+# Not for Emscripten: compiling `Server.cpp` crashes emsdk's clang, see
+# https://github.com/llvm/llvm-project/issues/208409.
+if (NOT EMSCRIPTEN)
+    add_library(server Server.cpp ResponseJson.cpp HttpApiHelpers.cpp)
     qlever_target_link_libraries(server engine qlever_util index sparqlParser global http
     sortPerformanceEstimator qlever metrics)
 endif ()

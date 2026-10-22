@@ -9,9 +9,10 @@
 
 #include <gmock/gmock.h>
 
+#include <functional>
 #include <limits>
 #include <memory>
-#include <thread>
+#include <utility>
 
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathGraphSearch.h"
@@ -138,8 +139,8 @@ class GraphSearchTest : public Test {
             targetIds.emplace_back(Id::makeFromInt(targetNode));
           }
         }
-        graphs_.push_back(BinSearchMap(ql::span<const Id>(startIds),
-                                       ql::span<const Id>(targetIds)));
+        graphs_.push_back(BinSearchMap(ConstIdColumnRef(startIds),
+                                       ConstIdColumnRef(targetIds)));
       }
     }
   }
@@ -262,7 +263,7 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   // Test that the log message created in
   // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
 
   const ad_utility::AllocatorWithLimit<Id> allocator =
       ad_utility::testing::makeAllocator();
@@ -274,8 +275,16 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   // Trigger a `CHECK_WINDOW_MISSED` cancellation state which will make the
   // handle's watchdog write logs containing the algorithmName specified in
   // checkCancellation.
-  ep.cancellationHandle_->startWatchDog();
-  std::this_thread::sleep_for(2 * DESIRED_CANCELLATION_CHECK_INTERVAL);
+  // The first step of the watchdog is run immediately, the second one by
+  // running the scheduled task.
+  absl::AnyInvocable<void()> nextStep;
+  ad_utility::CancellationHandle<>::registerWatchDog(
+      ep.cancellationHandle_,
+      [&nextStep](std::chrono::milliseconds, absl::AnyInvocable<void()> task) {
+        nextStep = std::move(task);
+      });
+  ASSERT_TRUE(nextStep);
+  std::invoke(std::exchange(nextStep, nullptr));
   ep.checkCancellation("TEST");
 
   EXPECT_THAT(

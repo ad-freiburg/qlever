@@ -66,7 +66,7 @@ struct LimitOffsetClause {
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LimitOffsetClause, _limit,
-                                              textLimit_, exportLimit_)
+                                              _offset, textLimit_, exportLimit_)
 
   // Merge two clauses together. This adds the offsets and takes the minimum of
   // both limits. If the other limit is not set, the current limit is kept.

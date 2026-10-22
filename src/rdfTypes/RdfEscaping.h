@@ -5,14 +5,8 @@
 #ifndef QLEVER_RDFESCAPING_H
 #define QLEVER_RDFESCAPING_H
 
-#include <sstream>
 #include <string>
-
-#include "backports/StartsWithAndEndsWith.h"
-#include "global/TypedIndex.h"
-#include "parser/NormalizedString.h"
-#include "util/Exception.h"
-#include "util/StringUtils.h"
+#include <string_view>
 
 namespace RdfEscaping {
 namespace detail {
@@ -53,46 +47,7 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
  * This is NOT a valid RDF form of literals, but this format is only used
  * inside QLever.
  */
-
-// The following two strong typedefs statically keep track of the fact whether a
-// string literal is stored in the normalized form that was described above.
-
-// A strong typedef for a `std::string_view` that stores a normalized RDF
-// literal.
-constexpr inline ad_utility::IndexTag normalizedRDFStringViewTag =
-    "NormalizedRDFString";
-using NormalizedRDFStringView =
-    ad_utility::TypedIndex<std::string_view, normalizedRDFStringViewTag>;
-
-// A strong typedef for a `std::string` that stores a normalized RDF literal.
-class NormalizedRDFString {
-  std::string
-      data_;  // The actual string content. Always is enclosed in quotes.
-
- public:
-  // Const access to the underlying data in the normalized form.
-  const std::string& get() const { return data_; }
-
-  // Explicit conversion from a `NormalizedRDFStringView`.
-  // Note: Conversion to a `NormalizedRDFStringView` is currently not needed in
-  // QLever, but could be easily implemented using a (possibly implicit)
-  // `operator NormalizedRDFStringView()`
-  explicit NormalizedRDFString(NormalizedRDFStringView sv) : data_{sv.get()} {}
-
- private:
-  // Construct from the raw `data`. This function can only be called by the
-  // free `normalizeRDFLiteral` function, so that function is the only way to
-  // create a new `NormalizedRDFString`.
-  explicit NormalizedRDFString(std::string data) : data_{std::move(data)} {
-    AD_CORRECTNESS_CHECK(data_.size() >= 2 && ql::starts_with(data_, '"') &&
-                         ql::ends_with(data_, '"'));
-  }
-  friend NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
-};
-
-// The actual function to obtain a `NormalizedRDFString` from any valid form of
-// RDF literals. For details on the normalization format, see above.
-NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
+std::string normalizeRDFLiteral(std::string_view origLiteral);
 
 /**
  * Convert a literal in the form produced by `normalizeRDFLiteral` into a form
@@ -118,6 +73,16 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input);
  * actual value
  */
 std::string unescapeIriref(std::string_view iriref);
+
+// Same as `unescapeIriref` above, but do not allocate if there is nothing to
+// unescape: return a view of the unescaped Iriref (including the angle
+// brackets). If `iriref` contains no escape sequence (by far the most common
+// case when parsing RDF input), a view of `iriref` itself is returned and
+// `buffer` is left untouched, which tells the caller that it can keep using
+// the original string. Otherwise the unescaped Iriref is stored in `buffer`
+// and a view of `buffer` is returned. `buffer` must be empty when calling this
+// function and has to outlive the returned view.
+std::string_view unescapeIriref(std::string_view iriref, std::string& buffer);
 
 /**
  * This function unescapes a prefixedIri (the "local" part in the form
@@ -148,28 +113,14 @@ std::string escapeForTsv(std::string input);
 // Escape a string to be compatible with XML.
 std::string escapeForXml(std::string input);
 
-// Create the content for a Literal based on a string that contains
-// the surrounding quotation marks. Escaped characters are stored in
-// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
-// The surrounding quotes are removed
-NormalizedString normalizeLiteralWithQuotes(std::string_view input);
+// Append the content of a literal that does not contain the surrounding
+// quotation marks to `res`. Escaped characters are appended in their unescaped
+// format, e.g. "Hello \' World" -> "Hello' World".
+void unescapeLiteral(std::string_view input, std::string& res);
 
-// Create the content for a Literal based on a string that does not contain
-// the surrounding quotation marks. Escaped characters are stored in
-// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
-NormalizedString normalizeLiteralWithoutQuotes(std::string_view input);
-
-// Created the content for an Iri based on a string that contains
-// the surrounding angled brackets. The angled brackets are removed
-NormalizedString normalizeIriWithBrackets(std::string_view input);
-
-// Created the content for an Iri based on a string that does not contain
-// the surrounding angled brackets.
-NormalizedString normalizeIriWithoutBrackets(std::string_view input);
-
-// Created a normalized representation of the language tag.
-// If it starts with an @, the leading @ character will be removed.
-NormalizedString normalizeLanguageTag(std::string_view input);
+// Like `unescapeLiteral`, but the `input` contains the surrounding quotation
+// marks (either one or three `"` or `'`), which are not appended to `res`.
+void unescapeLiteralWithQuotesRemoved(std::string_view input, std::string& res);
 
 }  // namespace RdfEscaping
 

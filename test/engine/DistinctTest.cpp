@@ -9,6 +9,7 @@
 #include "../util/OperationTestHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/StripColumns.h"
 
 using ad_utility::testing::makeAllocator;
 using V = Variable;
@@ -236,4 +237,115 @@ TEST(Distinct, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(distinct, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), distinct.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, isDistinctBy) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = ad_utility::testing::getQec();
+
+  // A `Distinct` on `{0, 1}` produces rows that are distinct wrt `{0, 1}` and
+  // any superset thereof, but not wrt a set that misses one of these columns.
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1, 7}, {0, 1, 8}, {2, 3, 9}}),
+      Vars{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}});
+  auto distinct =
+      ad_utility::makeExecutionTree<Distinct>(qec, values, SC{0, 1});
+  const auto& op = *distinct->getRootOperation();
+
+  EXPECT_TRUE(op.isDistinctBy(SC{0, 1}));
+  EXPECT_TRUE(op.isDistinctBy(SC{0, 1, 2}));
+  EXPECT_TRUE(op.isDistinctBy(SC{2, 1, 0}));
+  EXPECT_FALSE(op.isDistinctBy(SC{0, 2}));
+  EXPECT_FALSE(op.isDistinctBy(SC{0}));
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables the `DISTINCT` compares on, translates
+// `keepIndices_` accordingly, and adds a `StripColumns` for the compared
+// variables that the parent did not request.
+TEST(Distinct, makeTreeWithStrippedColumns) {
+  using ::testing::ElementsAre;
+  using ::testing::Key;
+  using ::testing::SizeIs;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c`, `?d`, sorted on `?b`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<ColumnIndex> keepIndices,
+                   std::set<V> requestedVariables) {
+    Distinct distinct{qec, values, keepIndices};
+    auto tree = distinct.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // DISTINCT on `?b`, only `?b` requested: the result has only `?b`, the
+  // `Distinct` now compares on column 0 and computes the distinct values.
+  {
+    auto tree = strip({1}, {V{"?b"}});
+    auto distinct =
+        std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
+    ASSERT_TRUE(distinct);
+    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?b"})));
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
+    EXPECT_THAT(distinct->getDistinctColumns(), ElementsAre(0));
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{1}, {2}, {6}}));
+  }
+
+  // DISTINCT on `?b` and `?d`, `?a`, `?b` and `?d` requested: `?c` is stripped
+  // and the columns are renumbered.
+  {
+    auto tree = strip({1, 3}, {V{"?a"}, V{"?b"}, V{"?d"}});
+    auto distinct =
+        std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
+    ASSERT_TRUE(distinct);
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
+    EXPECT_THAT(distinct->getDistinctColumns(), ElementsAre(1, 2));
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree = strip({1}, {V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // DISTINCT on `?b`, only `?c` requested: the `Distinct` keeps `?b` and `?c`,
+  // a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({1}, {V{"?c"}});
+    auto stripColumns =
+        std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
+    ASSERT_TRUE(stripColumns);
+    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?c"})));
+    const auto* child = stripColumns->getChildren().at(0);
+    auto distinct =
+        std::dynamic_pointer_cast<Distinct>(child->getRootOperation());
+    ASSERT_TRUE(distinct);
+    EXPECT_THAT(child->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?b"}), Key(V{"?c"})));
+    EXPECT_THAT(distinct->getDistinctColumns(),
+                ElementsAre(child->getVariableColumn(V{"?b"})));
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{3}, {3}, {5}}));
+  }
+
+  // All variables requested: nothing is stripped and the indices stay.
+  {
+    auto tree = strip({0}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    auto distinct =
+        std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
+    ASSERT_TRUE(distinct);
+    EXPECT_THAT(tree->getVariableColumns(), SizeIs(4));
+    EXPECT_THAT(distinct->getDistinctColumns(), ElementsAre(0));
+  }
 }

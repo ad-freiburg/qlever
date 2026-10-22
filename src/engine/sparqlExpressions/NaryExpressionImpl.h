@@ -10,24 +10,84 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/str_join.h>
 
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
+#include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
+#include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "util/ChunkedForLoop.h"
 #include "util/CryptographicHashUtils.h"
 
 namespace sparqlExpression::detail {
 
+// Common storage and metadata handling for expressions with a fixed number of
+// child expressions.
+template <size_t N>
+class NaryExpressionBase : public SparqlExpression {
+ protected:
+  using Children = std::array<SparqlExpression::Ptr, N>;
+  Children children_;
+
+  explicit NaryExpressionBase(Children&& children)
+      : children_{std::move(children)} {}
+
+  [[nodiscard]] std::string getCacheKeyForChildren(
+      const VariableToColumnMap& varColMap) const {
+    return absl::StrJoin(
+        children_ | ql::views::transform([&varColMap](const auto& child) {
+          return child->getCacheKey(varColMap);
+        }),
+        "");
+  }
+
+ public:
+  [[nodiscard]] std::string getCacheKey(
+      const VariableToColumnMap& varColMap) const override {
+    return std::string{typeid(*this).name()} +
+           getCacheKeyForChildren(varColMap);
+  }
+
+  // Deterministic iff all children are deterministic.
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
+
+ private:
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
+    return {children_.data(), children_.size()};
+  }
+};
+
+// Return whether all value getters and converted operands support the numeric
+// fast path. The index sequence matches each value getter with the
+// corresponding converted operand type.
+template <typename ValueGetters, typename ConvertedOperands, size_t... I>
+constexpr bool canUseNumericFastPathImpl(std::index_sequence<I...>) {
+  using namespace homogeneousNumeric;
+
+  return (... &&
+          (supportsNumericFastPath<std::tuple_element_t<I, ValueGetters>> &&
+           supportsNumericFastPathOperand<
+               std::tuple_element_t<I, ConvertedOperands>>()));
+}
+
+// Convenience wrapper that checks all entries of `ConvertedOperands`.
+template <typename ValueGetters, typename ConvertedOperands>
+constexpr bool canUseNumericFastPath() {
+  return canUseNumericFastPathImpl<ValueGetters, ConvertedOperands>(
+      std::make_index_sequence<std::tuple_size_v<ConvertedOperands>>{});
+}
+
 template <typename NaryOperation>
-class NaryExpressionStronglyTyped : public SparqlExpression {
+class NaryExpressionStronglyTyped
+    : public NaryExpressionBase<NaryOperation::N> {
   CPP_assert(isOperation<NaryOperation>);
 
  public:
   static constexpr size_t N = NaryOperation::N;
-  using Children = std::array<SparqlExpression::Ptr, N>;
+  using Base = NaryExpressionBase<N>;
+  using Children = typename Base::Children;
 
- private:
-  Children children_;
-
- public:
   // Construct from an array of `N` child expressions.
   explicit NaryExpressionStronglyTyped(Children&& children);
 
@@ -42,19 +102,7 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  // _________________________________________________________________________
-  [[nodiscard]] std::string getCacheKey(
-      const VariableToColumnMap& varColMap) const override;
-
-  // Deterministic iff all children are deterministic.
-  [[nodiscard]] bool isDeterministic() const override {
-    return areChildrenDeterministic();
-  }
-
  private:
-  // _________________________________________________________________________
-  ql::span<SparqlExpression::Ptr> childrenImpl() override;
-
   // Evaluate the `naryOperation` on the `operands` using the `context`.
   // Is deliberately a functor, s.t. we can pass it to `bind_front` etc,
   // although the call operator is overloaded.
@@ -81,19 +129,111 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
       constexpr static bool resultIsConstant =
           (... && isConstantResult<Operands>);
 
-      // The generator for the result of the operation.
-      auto resultGenerator = applyOperation(targetSize, naryOperation, context,
-                                            AD_FWD(operands)...);
+      using ValueGetters = typename NaryOperation::ValueGetters;
 
-      // Compute the result.
-      using ResultType = PromoteToLocalVocabEntry<
-          ql::ranges::range_value_t<decltype(resultGenerator)>>;
+      auto convertedOperands = std::make_tuple(
+          convertToVectorOrConstant(AD_FWD(operands), context)...);
+
+      using ConvertedOperands = decltype(convertedOperands);
+
+      constexpr bool useNumericFastPath =
+          canUseNumericFastPath<ValueGetters, ConvertedOperands>();
+
+      // For numeric N-ary expressions, first try homogeneous execution, then a
+      // speculative majority-type path. Fall back to the generic indexed
+      // evaluation if neither optimization applies.
+      if constexpr (useNumericFastPath && !resultIsConstant) {
+        auto classifications = std::apply(
+            [context](const auto&... values) {
+              return homogeneousNumeric::classifyNumericOperands(context,
+                                                                 values...);
+            },
+            convertedOperands);
+
+        auto homogeneousTypes =
+            homogeneousNumeric::getHomogeneousNumericTypes(classifications);
+
+        if (homogeneousTypes.has_value()) {
+          return homogeneousNumeric::dispatchNumericTypes(
+              homogeneousTypes.value(),
+              [&convertedOperands,
+               context]<typename... NumericTypes>(NumericTypes...) {
+                return homogeneousNumeric::evaluateHomogeneousNumericOperation<
+                    typename NaryOperation::Function,
+                    typename NumericTypes::type...>(convertedOperands, context);
+              });
+        }
+
+        auto majorityTypes =
+            homogeneousNumeric::getMajorityNumericTypes(classifications);
+
+        if (majorityTypes.has_value()) {
+          return homogeneousNumeric::dispatchNumericTypes(
+              majorityTypes.value(),
+              [&convertedOperands,
+               context]<typename... NumericTypes>(NumericTypes...) {
+                return homogeneousNumeric::
+                    evaluateSpeculativeNaryNumericOperation<
+                        typename NaryOperation::Function, ValueGetters,
+                        typename NumericTypes::type...>(convertedOperands,
+                                                        context);
+              });
+        }
+      }
+
+      // Create one indexed getter per operand, matching each operand with its
+      // corresponding value getter from `ValueGetters`.
+      auto indexedGetters = [&]<size_t... I>(std::index_sequence<I...>) {
+        return std::tuple{
+            makeIndexedValueGetter<std::tuple_element_t<I, ValueGetters>>(
+                std::get<I>(convertedOperands), context)...};
+      }(std::index_sequence_for<Operands...>{});
+
+      // Return UNDEF directly for rows with a non-numeric operand of a numeric
+      // function, otherwise pass the converted values to the N-ary function.
+      //
+      // NOTE: The `if constexpr` is required although `hasNonNumericOperand`
+      // already checks `undefForNonNumeric` at compile time: `computeValue` has
+      // a deduced return type, and for functions that return a different type
+      // (e.g. `IdOrLiteralOrIri` for the string functions), the `Id` branch
+      // would not compile.
+      auto computeValue = [&](size_t i) {
+        if constexpr (undefForNonNumeric<typename NaryOperation::Function>) {
+          const bool nonNumeric = std::apply(
+              [i](const auto&... values) {
+                return hasNonNumericOperand<typename NaryOperation::Function,
+                                            ValueGetters>(
+                    getValueAt(values, i)...);
+              },
+              convertedOperands);
+          if (nonNumeric) {
+            return Id::makeUndefined();
+          }
+        }
+        return std::apply(
+            [&](auto&... getters) {
+              return naryOperation._function(getters(i)...);
+            },
+            indexedGetters);
+      };
+
+      using ResultType =
+          PromoteToLocalVocabEntry<std::decay_t<decltype(computeValue(0))>>;
+
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
-      for (auto&& element : resultGenerator) {
-        result.push_back(promoteToLocalVocabEntry(
-            std::move(element), context->getLocalVocabContext()));
-      }
+
+      // Compute the result row by row. The named temporary `value` works
+      // around a Clang 16/17 code-generation crash when `computeValue(i)` is
+      // passed directly to `promoteToLocalVocabEntry`.
+      ad_utility::chunkedForLoop<1000>(
+          0, targetSize,
+          [&computeValue, &result, context](size_t i) {
+            auto value = computeValue(i);
+            result.push_back(promoteToLocalVocabEntry(
+                std::move(value), context->getLocalVocabContext()));
+          },
+          [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
       if constexpr (resultIsConstant) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
@@ -109,7 +249,7 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
 template <typename Op>
 NaryExpressionStronglyTyped<Op>::NaryExpressionStronglyTyped(
     Children&& children)
-    : children_{std::move(children)} {}
+    : Base{std::move(children)} {}
 
 // _____________________________________________________________________________
 
@@ -118,35 +258,18 @@ ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
     EvaluationContext* context) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
       [context](const auto& child) { return child->evaluate(context); },
-      children_);
+      this->children_);
 
   // A function that only takes several `ExpressionResult`s,
-  // and evaluates the expression.
-  auto evaluateOnChildrenResults =
-      absl::bind_front(ad_utility::visitWithVariantsAndParameters,
-                       EvaluateOnChildOperands{}, NaryOperation{}, context);
+  // and evaluates the expression. The named `naryOperation` instead of an
+  // inline `NaryOperation{}` temporary works around a Clang 16/17 crash during
+  // IR generation for numeric operation wrappers (for example `RoundImpl`).
+  NaryOperation naryOperation;
+  auto evaluateOnChildrenResults = absl::bind_front(
+      ad_utility::visitWithVariantsAndParameters, EvaluateOnChildOperands{},
+      std::move(naryOperation), context);
 
   return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
-}
-
-// _____________________________________________________________________________
-template <typename Op>
-ql::span<SparqlExpression::Ptr>
-NaryExpressionStronglyTyped<Op>::childrenImpl() {
-  return {children_.data(), children_.size()};
-}
-
-// __________________________________________________________________________
-template <typename Op>
-[[nodiscard]] std::string NaryExpressionStronglyTyped<Op>::getCacheKey(
-    const VariableToColumnMap& varColMap) const {
-  std::string key = typeid(*this).name();
-  key += absl::StrJoin(
-      children_ | ql::views::transform([&varColMap](const auto& child) {
-        return child->getCacheKey(varColMap);
-      }),
-      "");
-  return key;
 }
 
 // ============================================================================
@@ -164,10 +287,12 @@ template <typename Op>
 // `NaryExpressionTypeErased` class below, then this works, because the value
 // getters become part of the classes name/typeid.
 template <typename Ret, typename... Args>
-class NaryExpressionTypeErasedImpl : public SparqlExpression {
+class NaryExpressionTypeErasedImpl
+    : public NaryExpressionBase<sizeof...(Args)> {
  public:
   static constexpr size_t N = sizeof...(Args);
-  using Children = std::array<SparqlExpression::Ptr, N>;
+  using Base = NaryExpressionBase<N>;
+  using Children = typename Base::Children;
   using Function = std::function<Ret(Args...)>;
 
   // Type-erased `std::function` that converts the `ExpressionResult` variant
@@ -181,7 +306,6 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
   using Getters = std::tuple<TypeErasedGetter<Args>...>;
 
  private:
-  Children children_;
   Function function_;
   Getters getters_;
 
@@ -190,7 +314,7 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
   // `function` and `getters`.
   explicit NaryExpressionTypeErasedImpl(Function function, Getters getters,
                                         Children&& children)
-      : children_{std::move(children)},
+      : Base{std::move(children)},
         function_{std::move(function)},
         getters_{std::move(getters)} {}
 
@@ -201,7 +325,7 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
           return evaluateOnChildrenOperands(context,
                                             child->evaluate(context)...);
         },
-        children_);
+        this->children_);
   }
 
   // _________________________________________________________________________
@@ -209,29 +333,20 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override {
     const auto& signatureId = typeid(*this);
     const auto& functionId = function_.target_type();
+
     std::string key =
         absl::StrCat(signatureId.name(), "_", signatureId.hash_code(), "_",
                      functionId.name(), "_", functionId.hash_code(), "_");
-    for (const auto& child : children_) {
-      key += child->getCacheKey(varColMap);
-    }
-    return key;
-  }
 
-  // Deterministic iff all children are deterministic.
-  [[nodiscard]] bool isDeterministic() const override {
-    return areChildrenDeterministic();
+    return key + this->getCacheKeyForChildren(varColMap);
   }
 
  private:
-  // _________________________________________________________________________
-  ql::span<SparqlExpression::Ptr> childrenImpl() override { return children_; }
-
   // Evaluate the `naryOperation` on the `operands` using the `context`.
-  CPP_variadic_template(typename... Operands)(requires(
-      ...&& std::is_same_v<ExpressionResult, Operands>)) ExpressionResult
-      evaluateOnChildrenOperands(EvaluationContext* context,
-                                 Operands... operands) const {
+  CPP_variadic_template(typename... Operands)(
+      requires(...&& std::is_same_v<ExpressionResult, Operands>))
+  ExpressionResult evaluateOnChildrenOperands(EvaluationContext* context,
+                                              Operands... operands) const {
     // We have to first determine the number of results the expression will
     // produce.
     auto targetSize = context->size();
@@ -277,9 +392,9 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
 
 // ============================================================================
 // Implementation of `NaryExpressionTypeErased` using the
-// `NaryExpressionTypeErasedImpl` from above: It has the same template argument
-// as `NaryExpression`, but uses type erasure for the function and value
-// getters.
+// `NaryExpressionTypeErasedImpl` from above: It has the same template
+// argument as `NaryExpression`, but uses type erasure for the function and
+// value getters.
 // ============================================================================
 
 // Helper: given a Function type and a tuple of (strongly typed) function
@@ -293,7 +408,8 @@ struct TypeErasedNaryHelper<Func, std::tuple<VGs...>> {
   // `std::decay_t` ensures a value type, not a reference. Without this,
   // expressions that use `ql:identity` as their functor, because the
   // `ValueGetter`s do all the work would lead to dangling stack references.
-  // The strongly-typed path handles the same issue in `applyFunction`.
+  // The strongly-typed path applies the same `std::decay_t` to the result of
+  // its `computeValue` lambda.
   using Res = std::decay_t<std::invoke_result_t<Func, typename VGs::Value...>>;
   using BaseType = NaryExpressionTypeErasedImpl<Res, typename VGs::Value...>;
   static auto makeGetters() {
@@ -308,8 +424,8 @@ class NaryExpressionTypeErased;
 
 // Partial specialization for `Operation<N, FV<Function, ValueGetters...>,
 // SpecializedFunctions...>` As that is exactly the pattern the strongly typed
-// `NaryExpression` uses. Note: The `SpezializedFunctions` (which implement more
-// efficient evaluation in some circumstances, but are not required for
+// `NaryExpression` uses. Note: The `SpezializedFunctions` (which implement
+// more efficient evaluation in some circumstances, but are not required for
 // correctness) are ignored in the type-erased case, which is only used during
 // development for cheaper compilation.
 template <size_t N, typename Function, typename... ValueGetters,
@@ -354,42 +470,7 @@ using NaryExpression = NaryExpressionStronglyTyped<Args...>;
   class Name : public NaryExpression<detail::Operation<N, X, __VA_ARGS__>> { \
     using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
     using Base::Base;                                                        \
-  };
-
-// Takes a `Function` that returns a numeric value (integral or floating point)
-// and converts it to a function, that takes the same arguments and returns the
-// same result, but the return type is the `NumericValue` variant.
-template <typename Function, bool nanToUndef = false>
-struct NumericIdWrapper {
-  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
-  // but adding it causes an internal compiler error in Clang 16.
-  Function function_{};
-  template <typename... Args>
-  Id operator()(Args&&... args) const {
-    return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
   }
-};
-
-// Takes a `Function` that takes and returns numeric values (integral or
-// floating point) and converts it to a function, that takes the same arguments
-// and returns the same result, but the arguments and the return type are the
-// `NumericValue` variant.
-template <typename Function, bool NanOrInfToUndef = false>
-struct MakeNumericExpression {
-  template <typename... Args>
-  Id operator()(const Args&... args) const {
-    CPP_assert((concepts::same_as<std::decay_t<Args>, NumericValue> && ...));
-    auto visitor = [](const auto&... t) {
-      if constexpr ((... ||
-                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
-        return Id::makeUndefined();
-      } else {
-        return makeNumericId<NanOrInfToUndef>(Function{}(t...));
-      }
-    };
-    return std::visit(visitor, args...);
-  }
-};
 
 // Two short aliases to make the instantiations more readable.
 template <typename... T>

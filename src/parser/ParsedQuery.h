@@ -8,6 +8,7 @@
 
 #include <absl/functional/function_ref.h>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <variant>
@@ -78,7 +79,19 @@ class ParsedQuery {
   std::vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   std::string _originalString;
+  // The trailing `VALUES` clause of a query with `GROUP BY`, which is joined by
+  // the `QueryPlanner` after `GROUP BY` and `HAVING`. Without `GROUP BY`, it is
+  // part of `_rootGraphPattern`, see `addSolutionModifiers`.
   std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
+  // The aliases of a query with `GROUP BY` that use a variable of the
+  // `postQueryValuesClause_` and are thus computed by the `QueryPlanner` after
+  // joining it, see `moveAliasesAfterPostQueryValues`.
+  std::vector<parsedQuery::Bind> postQueryValuesBinds_;
+  // The internal aliases (e.g. from `HAVING` and `ORDER BY` with `GROUP BY`,
+  // or from `moveAliasesAfterPostQueryValues`) of a query without a `SELECT`
+  // clause (`CONSTRUCT` or `ASK`). For a `SELECT` query, they are stored in the
+  // `SelectClause`.
+  std::vector<Alias> internalAliasesWithoutSelectClause_;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
@@ -148,7 +161,7 @@ class ParsedQuery {
       const std::vector<Variable>& variables);
 
   // Return all the warnings that have been added via `addWarning()` or
-  // `addWarningOrThrow`.
+  // `addUnboundVariableWarningOrThrow`.
   const std::vector<std::string>& warnings() const { return warnings_; }
 
   // Add a warning to the query. The warning becomes part of the return value of
@@ -159,8 +172,8 @@ class ParsedQuery {
 
   // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a
-  // warning.
-  void addWarningOrThrow(std::string warning);
+  // warning. Only use this for warnings about unbound variables.
+  void addUnboundVariableWarningOrThrow(std::string warning);
 
   // Returns all variables that are visible in the Query Body.
   const std::vector<Variable>& getVisibleVariables() const;
@@ -194,10 +207,20 @@ class ParsedQuery {
       sparqlExpression::SparqlExpressionPimpl expression,
       InternalVariableGenerator internalVariableGenerator);
 
+  // Add `alias` as an internal alias, either to the `SelectClause` or (for
+  // queries without one) to `internalAliasesWithoutSelectClause_`.
+  void addInternalAlias(Alias alias);
+
+  // Remove all aliases and return them. With a `SELECT` clause, the
+  // (non-internal) targets stay selected (see
+  // `SelectClause::deleteAliasesButKeepVariables`), otherwise
+  // `internalAliasesWithoutSelectClause_` is cleared.
+  std::vector<Alias> takeAliases();
+
   // If the `variable` is neither visible in the query body nor contained in the
   // `additionalVisibleVariables`, add a warning or throw an exception (see
-  // `addWarningOrThrow`) that uses the `locationDescription` inside the
-  // message.
+  // `addUnboundVariableWarningOrThrow`) that uses the `locationDescription`
+  // inside the message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
@@ -218,15 +241,25 @@ class ParsedQuery {
   void addGroupByClause(std::vector<GroupKey> groupKeys,
                         InternalVariableGenerator internalVariableGenerator);
 
-  // Add the `havingClause` to the query. The argument `isGroupBy` denotes
-  // whether the query performs a GROUP BY. If it is set to false, then an
-  // exception is thrown (HAVING without GROUP BY is not allowed). The function
-  // also throws if one of the variables that is used in the `havingClause` is
-  // neither grouped nor aggregate by the expression it is contained in. Uses
-  // `internalVariableGenerator` to generate distinct internal variables as
-  // required.
-  void addHavingClause(std::vector<SparqlFilter> havingClause, bool isGroupBy,
-                       InternalVariableGenerator internalVariableGenerator);
+  // Add the `havingClause` to the query. With an explicit or implicit
+  // `GROUP BY` (`isGroupBy`), each expression becomes an internal alias (using
+  // `internalVariableGenerator`). Without, see `addHavingClauseWithoutGroupBy`.
+  // Variables that are not visible yield a warning (or an exception, see
+  // `addUnboundVariableWarningOrThrow`). `postQueryValues` is only used for the
+  // warnings.
+  void addHavingClause(
+      std::vector<SparqlFilter> havingClause, bool isGroupBy,
+      InternalVariableGenerator internalVariableGenerator,
+      const std::optional<parsedQuery::Values>& postQueryValues);
+
+  // Helper for `addHavingClause` without (explicit or implicit) `GROUP BY`:
+  // each `HAVING` becomes a `FILTER` on the `WHERE` clause, with a warning to
+  // use `FILTER` instead. The `SELECT` aliases and the variables of the
+  // `postQueryValues` are bound only after `HAVING`, so the warning for an
+  // unbound variable explains this.
+  void addHavingClauseWithoutGroupBy(
+      std::vector<SparqlFilter> havingClauses,
+      const std::optional<parsedQuery::Values>& postQueryValues);
 
   // Add the `orderClause` to the query. Throw an exception if the `orderClause`
   // is not valid. This might happen if it uses variables that are not visible
@@ -237,22 +270,47 @@ class ParsedQuery {
                         std::string_view noteForImplicitGroupBy,
                         InternalVariableGenerator internalVariableGenerator);
 
- public:
-  // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw
-  // an `InvalidQueryException` if the modifiers are invalid. This might happen
-  // if one of the modifiers uses a variable that is either not visible in the
-  // query before it is used, or if it uses a variable that is not properly
-  // grouped or aggregated in the presence of a GROUP BY clause.
-  // `internalVariableGenerator` has to generate distinct internal variables so
-  // they can be used by operations that might be added as a consequence of this
-  // function.
-  void addSolutionModifiers(
-      SolutionModifiers modifiers,
+  // For a query with `GROUP BY` and `postQueryValuesClause_`: Move the aliases
+  // that use a variable of the `VALUES` clause (outside of an aggregate, also
+  // indirectly via a previous alias) to `postQueryValuesBinds_`. Their
+  // aggregates are replaced by new internal aliases, which are still computed
+  // by the `GroupBy`. For example, `(COUNT(?x) + ?v AS ?y)` becomes the alias
+  // `(COUNT(?x) AS ?internal)` and the bind `(?internal + ?v AS ?y)`.
+  void moveAliasesAfterPostQueryValues(
       InternalVariableGenerator internalVariableGenerator);
 
-  // If this is a SELECT query, return all the selected aliases. Return an empty
-  // vector for construct clauses.
+ public:
+  // Add the `modifiers` (like `GROUP BY`, `HAVING`, `ORDER BY`) to the query.
+  // Throw an `InvalidQueryException` if the modifiers are invalid. This might
+  // happen if one of the modifiers uses a variable that is either not visible
+  // in the query before it is used, or if it uses a variable that is not
+  // properly grouped or aggregated in the presence of a `GROUP BY` clause.
+  // `internalVariableGenerator` has to generate distinct internal variables so
+  // they can be used by operations that might be added as a consequence of this
+  // function. `postQueryValues` is the trailing `VALUES` clause of the query
+  // (if any), which is in scope for `ORDER BY` and the `SELECT` clause.
+  void addSolutionModifiers(SolutionModifiers modifiers,
+                            InternalVariableGenerator internalVariableGenerator,
+                            std::optional<parsedQuery::Values> postQueryValues);
+
+  // Return all the aliases of the query, including the internal ones. For a
+  // query without a `SELECT` clause, these are only internal aliases.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
+
+  // Update the export limit based on the `send` parameter (historical name).
+  // The limit controls the maximum number of bindings exported by
+  // `ExportQueryExecutionTrees`. Do nothing if `sendLimit` is `std::nullopt`.
+  void updateExportLimit(std::optional<uint64_t> sendLimit);
+
+  // Return true if this query performs a GROUP BY, either explicitly (a
+  // `GROUP BY` clause is present) or implicitly (no `GROUP BY` clause, but an
+  // aggregate in the `SELECT`, `HAVING`, or `ORDER BY` clause, all of which
+  // become aliases).
+  [[nodiscard]] bool isAggregatingQuery() const;
+
+  // Return false if two evaluations of this query may differ (e.g. `RAND()`).
+  // Like `Operation::isDeterministic()`, but available before planning.
+  [[nodiscard]] bool isDeterministic() const;
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

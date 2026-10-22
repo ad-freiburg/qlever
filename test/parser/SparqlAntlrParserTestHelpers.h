@@ -17,6 +17,8 @@
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -728,6 +730,20 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
+// Match a `MINUS` clause by the variables that are in scope in it and in the
+// patterns before it (in any order), ignoring its child.
+inline auto MinusWithVisibleVariables =
+    [](const std::vector<::Variable>& visibleVariables,
+       const std::vector<::Variable>& visibleVariablesOfPrecedingPatterns)
+    -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Minus>(testing::AllOf(
+      AD_FIELD(p::Minus, visibleVariables_,
+               testing::UnorderedElementsAreArray(visibleVariables)),
+      AD_FIELD(p::Minus, visibleVariablesOfPrecedingPatterns_,
+               testing::UnorderedElementsAreArray(
+                   visibleVariablesOfPrecedingPatterns))));
+};
+
 inline auto Load = [](const TripleComponent::Iri& iri,
                       bool silent) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Load>(
@@ -1215,6 +1231,7 @@ namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
+using ad_utility::testing::encodedIriManager;
 
 const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
     {std::string{QLEVER_INTERNAL_PREFIX_NAME},
@@ -1230,10 +1247,9 @@ auto parse =
       // We might parse updates here, should we move the blank node manager out
       // to make it testable/accessible?
       static ad_utility::BlankNodeManager blankNodeManager;
-      static EncodedIriManager encodedIriManager;
       ParserAndVisitor p{
-          &blankNodeManager,   &encodedIriManager, input,
-          std::move(prefixes), std::move(clauses), disableSomeChecks};
+          &blankNodeManager,   encodedIriManager(), input,
+          std::move(prefixes), std::move(clauses),  disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }

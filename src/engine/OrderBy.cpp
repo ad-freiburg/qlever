@@ -5,9 +5,12 @@
 
 #include "engine/OrderBy.h"
 
+#include <cmath>
 #include <sstream>
+#include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/OrderByComparator.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -63,14 +66,205 @@ std::string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
+size_t OrderBy::getCostEstimate() {
+  size_t size = getSizeEstimateBeforeLimit();
+  size_t subcost = subtree_->getCostEstimate();
+
+  // If there is a single sort column and the input is already sorted by it,
+  // return the number of rows instead of `n log n` (plus the cost of the
+  // input), because the result can then often be computed in linear time (see
+  // `computeResultForSortedInput`).
+  //
+  // NOTE: The planner does not know whether the fast path applies (the column
+  // must contain only ints or only doubles), so this assumes that it does. If
+  // it does not, the cost is underestimated, and the input is sorted as
+  // before. In the worst case, the planner then prefers a sorted subtree that
+  // is more expensive than an unsorted alternative.
+  if (hasSingleSortColumnWithSortedInput()) {
+    return size + subcost;
+  }
+
+  // Otherwise, return the cost of sorting, `n log n`, plus the cost of the
+  // input.
+  //
+  // NOTE: `logb(0)` is `-inf`, which must not be cast to an integer.
+  size_t logSize = std::max(
+      size_t(1), static_cast<size_t>(
+                     logb(static_cast<double>(std::max(size, size_t(1))))));
+  return size * logSize + subcost;
+}
+
+// _____________________________________________________________________________
+bool OrderBy::hasSingleSortColumnWithSortedInput() const {
+  const auto& sortedOn = subtree_->resultSortedOn();
+  return sortIndices_.size() == 1 && !sortedOn.empty() &&
+         sortedOn.front() == sortIndices_.front().first;
+}
+
+namespace {
+// A contiguous range `[begin_, end_)` of rows of an `IdTable`. If `reversed_`
+// is true, the rows are to be output in reverse order.
+struct RowRange {
+  size_t begin_;
+  size_t end_;
+  bool reversed_;
+};
+
+// If the `column`, which must be sorted in the internal order of the `Id`s
+// (that is, by their bits), contains only `Int`s or only `Double`s, possibly
+// preceded by `Undefined` values, return the row ranges which, concatenated,
+// yield the column in the ascending order of `ORDER BY`. Otherwise return
+// `std::nullopt`.
+//
+// The datatype bits are the most significant bits of an `Id`, so a column that
+// is sorted by bits is grouped by datatype, and the check is O(1) apart from
+// the binary searches for the range boundaries. The internal order deviates
+// from the semantic order as follows (see `valueIdComparators::compareByBits`):
+// ints are `[0 .. max, min .. -1]`, doubles are `[0.0 .. +inf, NaN, -0.0 ..
+// -inf, -NaN]`, where the sign bit of a `NaN` may be set as well. `ORDER BY`
+// puts all `NaN`s after all other doubles (see `OrderByComparator`) and
+// `Undefined` before everything else.
+std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
+    ConstIdColumnRef column) {
+  // Return the index of the first row in `[begin, end)` for which the
+  // `predicate` is false. The predicate must be monotone on that range.
+  auto partitionPoint = [&column](size_t begin, size_t end, auto predicate) {
+    return static_cast<size_t>(
+        ql::ranges::partition_point(column.begin() + begin,
+                                    column.begin() + end, predicate) -
+        column.begin());
+  };
+
+  // Find the first row that is not `Undefined` (the `Undefined` values come
+  // first, because their datatype bits are all zero). If there is no such row,
+  // return the whole column as a single range (it is then already in the order
+  // of `ORDER BY`).
+  size_t firstDefined = partitionPoint(0, column.size(), Id::isUndefinedL);
+  if (firstDefined == column.size()) {
+    return std::vector<RowRange>{{0, column.size(), false}};
+  }
+
+  // Return `std::nullopt` unless the rows from `firstDefined` on are all ints
+  // or all doubles (a mix of the two is not handled). Since the column is
+  // grouped by datatype, it suffices to compare the datatypes of the first and
+  // the last of these rows.
+  Datatype type = column[firstDefined].getDatatype();
+  if (column.back().getDatatype() != type ||
+      (type != Datatype::Int && type != Datatype::Double)) {
+    return std::nullopt;
+  }
+
+  // Output the `Undefined` values first, as `ORDER BY` does (the range is
+  // empty if there are none).
+  std::vector<RowRange> ranges;
+  ranges.push_back({0, firstDefined, false});
+
+  // For ints, output the negative ints first and then the non-negative ones (in
+  // the column, the non-negative ints come first, and each of the two parts is
+  // sorted by value).
+  if (type == Datatype::Int) {
+    size_t firstNegative = partitionPoint(
+        firstDefined, column.size(), [](Id id) { return id.getInt() >= 0; });
+    ranges.push_back({firstNegative, column.size(), false});
+    ranges.push_back({firstDefined, firstNegative, false});
+    return ranges;
+  }
+
+  // For doubles, find where the negative doubles begin (those with the sign bit
+  // set, including `-0.0`, which come after the non-negative ones), and where
+  // the `NaN`s at the end of each of the two parts begin.
+  auto isNotNan = [](Id id) { return !std::isnan(id.getDouble()); };
+  size_t firstNegative = partitionPoint(firstDefined, column.size(), [](Id id) {
+    return !std::signbit(id.getDouble());
+  });
+  size_t firstPositiveNan =
+      partitionPoint(firstDefined, firstNegative, isNotNan);
+  size_t firstNegativeNan =
+      partitionPoint(firstNegative, column.size(), isNotNan);
+
+  // Output the negative doubles in reverse order (in the column, they are
+  // sorted by descending value, because their magnitude increases with the
+  // bits), then the non-negative doubles, and then all `NaN`s.
+  //
+  // NOTE: The SPARQL standard does not say where `NaN`s go. Putting them last
+  // is how the regular comparator of `ORDER BY` does it (see
+  // `OrderByComparator`).
+  ranges.push_back({firstNegative, firstNegativeNan, true});
+  ranges.push_back({firstDefined, firstPositiveNan, false});
+  ranges.push_back({firstPositiveNan, firstNegative, false});
+  ranges.push_back({firstNegativeNan, column.size(), false});
+  return ranges;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::optional<IdTable> OrderBy::computeResultForSortedInput(
+    const IdTableView<0>& input) const {
+  // Get the row ranges of the sort column in the order of `ORDER BY ASC`.
+  // Return `std::nullopt` if the fast path does not apply (see
+  // `hasSingleSortColumnWithSortedInput` and
+  // `getRowRangesForSortedNumericColumn`).
+  if (!hasSingleSortColumnWithSortedInput()) {
+    return std::nullopt;
+  }
+  auto [column, isDescending] = sortIndices_.front();
+  auto ranges = getRowRangesForSortedNumericColumn(input.getColumn(column));
+  if (!ranges.has_value()) {
+    return std::nullopt;
+  }
+
+  // For `ORDER BY DESC`, reverse the order of the ranges and the direction of
+  // each range. This yields the reverse of the result for `ORDER BY ASC`,
+  // without an extra pass over the data that reversing that result would need.
+  if (isDescending) {
+    ql::ranges::reverse(ranges.value());
+    for (auto& range : ranges.value()) {
+      range.reversed_ = !range.reversed_;
+    }
+  }
+
+  // Copy the ranges to the result, one after the other, column by column and
+  // each range in its direction.
+  //
+  // NOTE: `std::copy` and not `ql::ranges::copy`, because only the former
+  // reliably becomes a `memmove` (see the description of #3436).
+  IdTable result{input.numColumns(), allocator()};
+  result.resize(input.numRows());
+  size_t offset = 0;
+  for (const auto& [begin, end, reversed] : ranges.value()) {
+    for (size_t i = 0; i < input.numColumns(); ++i) {
+      auto source = input.getColumn(i).subspan(begin, end - begin);
+      auto target = result.getColumn(i).begin() + offset;
+      if (reversed) {
+        ql::ranges::reverse_copy(source, target);
+      } else {
+        std::copy(source.begin(), source.end(), target);
+      }
+    }
+    offset += end - begin;
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
 Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   AD_LOG_DEBUG << "Getting sub-result for OrderBy result computation..."
                << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
+  const auto& subTable = subRes->idTableView();
+
+  // Take the fast path for a sorted numeric input if it applies (see
+  // `computeResultForSortedInput`), and record that in the runtime
+  // information.
+  if (auto result = computeResultForSortedInput(subTable)) {
+    runtimeInfo().addDetail("sorted-numeric-input", true);
+    checkCancellation();
+    return {std::move(result).value(), resultSortedOn(),
+            subRes->getSharedLocalVocab()};
+  }
 
   // TODO<joka921> proper timeout for sorting operations
-  const auto& subTable = subRes->idTableView();
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       subTable.numRows(), subTable.numColumns(), deadline_,
       "Sort for COUNT(DISTINCT *)");
@@ -83,36 +277,40 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // TODO<joka921> Measure (as soon as we have the benchmark merged)
   // whether it is beneficial to manually instantiate the comparison when
   // sorting by only one or two columns.
-
-  // TODO<joka921> In the case of a single variable, it might be more efficient
-  // to first sort by the ID values and then "repair" the resulting range by
-  // some O(n) algorithms, or even by returning lazy generators that yield
-  // the repaired order.
-
+  //
+  // TODO<joka921> In the case of a single variable whose input is not sorted
+  // by it, it might be more efficient to first sort by the ID values and then
+  // "repair" the order in linear time, like `computeResultForSortedInput` does
+  // for an input that is already sorted, or even to return lazy generators
+  // that yield the repaired order. Besides the numbers, such a repair would
+  // also have to move the IRIs of the vocabulary before its literals, which
+  // come first in the internal order (see `OrderByComparator`).
+  //
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
-
-  // TODO<joka921> Undefined values should always be at the end, no matter
-  // if the ordering is ascending or descending.
-
+  //
   // TODO<joka921> If we know, that all the sort columns contain only datatypes
-  // for which the `internal` order is also the `semantic` order, or if a column
-  // only contains a single datatype, then we can use more efficient
-  // implementations here.
+  // for which the `internal` order is also the `semantic` order, then we can
+  // use more efficient implementations here. Note that a single datatype is
+  // not enough: e.g. for `VocabIndex`, the internal order puts all literals
+  // before all IRIs, but `ORDER BY` puts the IRIs first. So far, this is only
+  // done for a single sort column with an input that is already sorted and
+  // contains only ints or only doubles, see `computeResultForSortedInput`.
+  //
+  OrderByComparator orderByComparator{
+      getExecutionContext()->getLocalVocabContext()};
 
-  // Return true iff `rowA` comes before `rowB` in the sort order specified by
-  // `sortIndices_`.
-  auto comparison = [this](const auto& row1, const auto& row2) -> bool {
+  // Return true iff `row1` comes before `row2` in the sort order specified by
+  // `sortIndices_`: the first column whose values differ decides, in the
+  // direction of that column. Equal values of different `Id`s (e.g. `5` and
+  // `5.0`) let the next column decide.
+  auto comparison = [this, orderByComparator](const auto& row1,
+                                              const auto& row2) -> bool {
     for (auto& [column, isDescending] : sortIndices_) {
-      if (row1[column] == row2[column]) {
-        continue;
+      int result = orderByComparator.compare(row1[column], row2[column]);
+      if (result != 0) {
+        return isDescending ? result > 0 : result < 0;
       }
-      bool isLessThan =
-          toBoolNotUndef(valueIdComparators::compareIds<
-                         valueIdComparators::ComparisonForIncompatibleTypes::
-                             CompareByType>(
-              row1[column], row2[column], valueIdComparators::Comparison::LT));
-      return isLessThan != isDescending;
     }
     return false;
   };
@@ -120,9 +318,10 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  ad_utility::callFixedSizeVi(width, [&idTable, &comparison](auto I) {
-    IdTableUtils::sort<I>(&idTable, comparison);
-  });
+  ad_utility::callFixedSizeVi(
+      width, [this, &idTable, &comparison](auto numColumns) {
+        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig());
+      });
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();

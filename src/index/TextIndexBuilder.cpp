@@ -167,21 +167,22 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-         index = index.incremented()) {
-      auto text = vocab_[index];
+    // NOTE: We must iterate via `scanAll()` and not via indices `0, 1, ...,
+    // vocab_.size() - 1`, because a `SplitVocabulary` (e.g. for geometries)
+    // uses non-contiguous, marker-encoded indices for its `operator[]`.
+    // TODO<ullingerc>: Iterating over all geometries here is wasteful, since we
+    // never want them in the text index. Add a configuration option that lets
+    // `scanAll()` skip a sub-vocabulary (e.g. geometries) entirely.
+    for (const auto& [index, text] : vocab_.scanAll()) {
       if (!isLiteral(text)) {
         continue;
       }
 
-      // We need the explicit cast to `std::string` because the return type of
-      // `indexToString` might be `string_view` if the vocabulary is stored
-      // uncompressed in memory.
+      // We need the explicit cast to `std::string` because `text` is a view
+      // into a buffer that is reused when the range is advanced.
       WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
       co_yield entityLine;
-      std::string_view textView = text;
-      textView = textView.substr(0, textView.rfind('"'));
-      textView.remove_prefix(1);
+      std::string_view textView = stripQuotesAndDatatype(text);
       for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
         WordsFileLine wordLine{std::move(word), false, contextId, 1};
         co_yield wordLine;
@@ -273,7 +274,7 @@ void TextIndexBuilder::addContextToVector(
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
       vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(true),
                           Id::makeFromInt(context.get()),
-                          Id::makeFromInt(it->first.getVocabIndex().get()),
+                          Id::makeFromVocabIndex(it->first.getVocabIndex()),
                           Id::makeFromDouble(it->second)});
     }
   }
@@ -296,7 +297,12 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
     TextBlockIndex textBlockIndex = value[0].getInt();
     bool flag = value[1].getBool();
     TextRecordIndex textRecordIndex = TextRecordIndex::make(value[2].getInt());
-    WordOrEntityIndex wordOrEntityIndex = value[3].getInt();
+    // Entities are stored as a `VocabIndex`-typed `Id` (see
+    // `addContextToVector`), since they do not always fit into the
+    // signed 60-bit range of an integer `Id`; words are stored as a plain
+    // `Int`-typed `Id`.
+    WordOrEntityIndex wordOrEntityIndex =
+        flag ? value[3].getVocabIndex().get() : value[3].getInt();
     Score score = static_cast<Score>(value[4].getDouble());
     if (textBlockIndex != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());

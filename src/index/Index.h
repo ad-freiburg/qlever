@@ -54,7 +54,10 @@ class Index {
     static NumNormalAndInternal fromNormal(size_t normal) {
       return {normal, 0};
     }
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
+    // Note: The expansion of `NLOHMANN_DEFINE_TYPE_INTRUSIVE` ends in complete
+    // `friend` function definitions, so a trailing `;` would be an extra one,
+    // which is ill-formed (and rejected with `-pedantic-errors`).
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal)
   };
 
   // Store all information about possible search results from the text index in
@@ -92,9 +95,12 @@ class Index {
   const IndexImpl& getPimpl() const { return *pimpl_; }
 
   // Create an index from a file. Will write vocabulary and on-disk index data.
+  // `numThreads` is the number of threads used during the index build; it must
+  // be at least 1.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  void createFromFiles(const std::vector<InputFileSpecification>& files);
+  void createFromFiles(const std::vector<InputFileSpecification>& files,
+                       size_t numThreads);
 
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via
@@ -197,7 +203,8 @@ class Index {
   ad_utility::MemorySize& parserBufferSize();
   const ad_utility::MemorySize& parserBufferSize() const;
 
-  ad_utility::MemorySize& blocksizePermutationsPerColumn();
+  size_t& rowsPerBlock();
+  const size_t& rowsPerBlock() const;
 
   void setOnDiskBase(const std::string& onDiskBase);
 

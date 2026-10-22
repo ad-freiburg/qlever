@@ -80,7 +80,7 @@ class GraphNameManager {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphNameManager,
                                               prefixWithoutBraces_,
                                               nextUnallocatedGraph_,
-                                              filenameForPersisting_);
+                                              filenameForPersisting_)
 };
 
 #endif  // QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H

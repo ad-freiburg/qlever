@@ -29,7 +29,7 @@ struct CastToUnsignedPtr {
     using Res = std::conditional_t<ql::concepts::same_as<T, const char*>,
                                    const unsigned char*, unsigned char*>;
     return reinterpret_cast<Res>(ptr);
-  };
+  }
 };
 constexpr CastToUnsignedPtr castToUnsignedPtr{};
 }  // namespace detail
@@ -49,7 +49,14 @@ class FsstDecoder {
   // Construct from the internal `fsst_decoder_t`. Note that the typical way to
   // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
   // `getDecoder()` on that encoder.
-  explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
+  explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {
+    // NOTE: `fsst_decoder` leaves the (unused) `version` field of the struct
+    // uninitialized. It is set here, so that the serialized decoders are the
+    // same for the same input, no matter on which thread they were created.
+    // See https://github.com/cwida/fsst/issues/50, once that is fixed, this
+    // workaround is no longer required.
+    decoder_.version = 0;
+  }
 
   // Decompress a  single string.
   std::string decompress(std::string_view str) const {

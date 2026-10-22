@@ -9,6 +9,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include "../../util/FileTestHelpers.h"
@@ -19,11 +20,117 @@ using ad_utility::VocabularyType;
 
 namespace {
 
-// Test a `PolymorphicVocabulary` with a given `vocabType`.
-void testForVocabType(VocabularyType::Enum vocabType) {
+// Is the given `vocabType` one of the vocabulary types with "holes" (see
+// `VocabularyType.h`)? Those cannot be built word by word, and hence require a
+// special handling in the tests below.
+bool isWithHoles(VocabularyType::Enum vocabType) {
+  return vocabType == VocabularyType::Enum::InMemoryUncompressedWithHoles ||
+         vocabType == VocabularyType::Enum::InMemoryCompressedWithHoles;
+}
+
+// An `absl::Cleanup` that deletes all the files that a vocabulary of the given
+// `type` with the given base `filename` consists of.
+auto getFileCleanup(VocabularyType type, const std::string& filename) {
+  return vocabulary_test::makeVocabFileCleanup(
+      filename, PolymorphicVocabulary::fileSuffixes(type));
+}
+
+// Write the `vocabulary_test::defaultTestWords` with the given (non-contiguous)
+// `indices` to `filename`, using a vocabulary of the given `vocabType`, which
+// must be one of the types with holes. Their `WordWriter`s take an explicit
+// index for each word and hence do not implement the `WordWriterBase`
+// interface, so they cannot be obtained via
+// `PolymorphicVocabulary::makeDiskWriterPtr` (which throws for those types).
+void writeVocabWithHoles(VocabularyType::Enum vocabType,
+                         const std::string& filename,
+                         const std::vector<uint64_t>& indices) {
+  auto writeWords = [&indices](auto& writer) {
+    ASSERT_EQ(indices.size(), vocabulary_test::defaultTestWords.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      EXPECT_EQ(writer(vocabulary_test::defaultTestWords.at(i), indices.at(i)),
+                indices.at(i));
+    }
+    writer.finish();
+  };
+  if (vocabType == VocabularyType::Enum::InMemoryUncompressedWithHoles) {
+    VocabularyInMemoryBinSearch::WordWriter writer{filename};
+    writeWords(writer);
+  } else {
+    ASSERT_EQ(vocabType, VocabularyType::Enum::InMemoryCompressedWithHoles);
+    CompressedVocabulary<VocabularyInMemoryBinSearch>::WordWriter writer{
+        filename};
+    writeWords(writer);
+  }
+}
+
+// Test a `PolymorphicVocabulary` with one of the `vocabType`s with holes. Those
+// cannot be built word by word (only by filtering an existing vocabulary), so
+// they need a separate test.
+void testForVocabTypeWithHoles(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
+  auto cleanup = getFileCleanup(type, filename);
+
+  // The `WordWriterBase` interface cannot express the explicit indices that a
+  // vocabulary with holes requires.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      PolymorphicVocabulary::makeDiskWriterPtr(filename, type),
+      ::testing::HasSubstr("cannot be built word by word"));
+
+  std::vector<uint64_t> indices{0, 2, 4, 6};
+  writeVocabWithHoles(vocabType, filename, indices);
+  PolymorphicVocabulary vocab;
+  vocab.open(filename, type);
+  EXPECT_EQ(vocab.size(), 4);
+
+  vocabulary_test::assertVocabularyMatchesAtIndices(
+      vocab, indices, {"alpha", "beta", "delta", "gamma"});
+
+  // The indices that are not contained (the "holes") yield a placeholder.
+  for (uint64_t index : {1, 3, 5, 100}) {
+    EXPECT_EQ(vocab[index],
+              ad_utility::vocabulary::placeholderForMissingVocabIndex(index));
+  }
+
+  // The binary search reports the (non-contiguous) vocabulary indices.
+  auto wI = vocab.lower_bound("alx", ql::ranges::less{});
+  EXPECT_EQ(wI.index(), 2);
+  EXPECT_EQ(wI.word(), "beta");
+  wI = vocab.upper_bound("gamma", ql::ranges::less{});
+  EXPECT_TRUE(wI.isEnd());
+  EXPECT_EQ(vocab.getPositionOfWord("beta", ql::ranges::less{}),
+            (std::pair<uint64_t, uint64_t>{2, 3}));
+  // A word that sorts after all contained words has to be reported as "one
+  // past the largest contained index" (here 7), and not as `size()` (here 4),
+  // which because of the holes is the index of an actual, smaller word.
+  EXPECT_EQ(vocab.getPositionOfWord("zzz", ql::ranges::less{}),
+            (std::pair<uint64_t, uint64_t>{7, 7}));
+
+  // A vocabulary with holes never provides geometry information.
+  EXPECT_FALSE(vocab.isGeoInfoAvailable());
+  EXPECT_FALSE(vocab.getGeoInfo(0).has_value());
+
+  EXPECT_THAT(vocabulary_test::scanAllToIndexAndWordVector(vocab.scanAll()),
+              ::testing::ElementsAre(std::pair{uint64_t{0}, "alpha"},
+                                     std::pair{uint64_t{2}, "beta"},
+                                     std::pair{uint64_t{4}, "delta"},
+                                     std::pair{uint64_t{6}, "gamma"}));
+
+  vocab.close();
+  EXPECT_EQ(vocab.size(), 0);
+}
+
+// Test a `PolymorphicVocabulary` with a given `vocabType`.
+void testForVocabType(VocabularyType::Enum vocabType) {
+  if (isWithHoles(vocabType)) {
+    testForVocabTypeWithHoles(vocabType);
+    return;
+  }
+  VocabularyType type{vocabType};
+  std::string filename =
+      absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
+  auto cleanup = getFileCleanup(type, filename);
 
   auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
@@ -78,8 +185,14 @@ void testForVocabType(VocabularyType::Enum vocabType) {
 void setupVocab(PolymorphicVocabulary& vocab, VocabularyType::Enum vocabType,
                 const std::string& filename) {
   VocabularyType type{vocabType};
-  auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
-  vocabulary_test::writeWordsAndFinish(*writerPtr);
+  if (isWithHoles(vocabType)) {
+    // For the vocabularies with holes, the indices `1` and `3` are the holes,
+    // for which the lookups below have to report a placeholder.
+    writeVocabWithHoles(vocabType, filename, {0, 2, 4, 6});
+  } else {
+    auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
+    vocabulary_test::writeWordsAndFinish(*writerPtr);
+  }
   vocab.open(filename, type);
 }
 }  // namespace
@@ -96,9 +209,11 @@ TEST(PolymorphicVocabulary, basicTests) {
 // `VocabularyType`.
 TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
-    auto [filename, cleanup] = ad_utility::testing::filenameForTesting();
+    auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
+    std::string filename = temporaryFile.string();
+    auto deleteFiles = getFileCleanup(VocabularyType{vocabType}, filename);
     PolymorphicVocabulary vocab;
-    setupVocab(vocab, vocabType, filename.string());
+    setupVocab(vocab, vocabType, filename);
 
     std::array<size_t, 6> indices{2, 0, 3, 1, 1, 0};
     auto result = vocab.lookupBatch(indices);
@@ -112,9 +227,11 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
 // `VocabularyType`.
 TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
-    auto [filename, cleanup] = ad_utility::testing::filenameForTesting();
+    auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
+    std::string filename = temporaryFile.string();
+    auto deleteFiles = getFileCleanup(VocabularyType{vocabType}, filename);
     PolymorphicVocabulary vocab;
-    setupVocab(vocab, vocabType, filename.string());
+    setupVocab(vocab, vocabType, filename);
 
     std::vector<std::vector<size_t>> batches{{2, 0}, {1}, {0, 3, 1}};
     // `VocabLookupInput` takes ownership of the batches, so keep a copy to
@@ -125,6 +242,25 @@ TEST(PolymorphicVocabulary, lookupBatchesStreamedMatchesIndividualLookups) {
 
     vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
         vocab, streamed, expectedBatches);
+  }
+}
+
+// The geo cell grid (see `GeoVocabulary`) is forwarded to the underlying
+// vocabulary if that is a `SplitVocabulary` with a `GeoVocabulary`, and
+// ignored otherwise.
+TEST(PolymorphicVocabulary, geoCellGrid) {
+  for (auto vocabType : VocabularyType::all()) {
+    PolymorphicVocabulary vocab;
+    vocab.resetToType(VocabularyType{vocabType});
+    EXPECT_FALSE(vocab.getGeoCellGrid().has_value());
+    ad_utility::GeoCellGrid grid{3};
+    vocab.setGeoCellGrid(grid);
+    bool isGeoSplit =
+        vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit;
+    EXPECT_EQ(vocab.getGeoCellGrid().has_value(), isGeoSplit);
+    if (isGeoSplit) {
+      EXPECT_EQ(vocab.getGeoCellGrid().value(), grid);
+    }
   }
 }
 

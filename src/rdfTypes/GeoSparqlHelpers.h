@@ -18,14 +18,44 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/LocalVocabEntry.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/UnitOfMeasurement.h"
+
+// If `filter` is a syntactically valid DE-9IM filter pattern (i.e. exactly 9
+// characters, each one of `0`-`2`, `T`/`t`, `F`/`f`, or `*`, see
+// `De9imFilterString`), return it as a `De9imFilterString`, else
+// `std::nullopt`. Note: this does not check whether the pattern can match
+// disjoint geometries, see `de9imFilterCanMatchDisjoint` below for that.
+//
+// Defined here (rather than in `parser/SpatialQuery.{h,cpp}`, its original
+// home) because it is called both from `SpatialQuery.cpp` (part of the
+// `sparqlParser` library) and from `GeoExpression.cpp` (part of the
+// `sparqlExpressions` library); `sparqlParser` depends on `sparqlExpressions`,
+// not the other way around, so no single one of those libraries can hold the
+// only definition. `rdfTypes`, which this header belongs to, is a dependency
+// of both.
+std::optional<De9imFilterString> parseDe9imFilterString(
+    std::string_view filter);
+
+// Whether the given (syntactically valid) DE-9IM `filter` could match a
+// disjoint pair of geometries. Patterns for which this holds (e.g.
+// `*********` or the literal disjoint pattern `FF*FF****`) are unsupported:
+// the pinned `libspatialjoin` never enumerates disjoint candidate pairs to
+// its callback (see `Sweeper::doDE9IMCheck`), regardless of the configured
+// filter, so accepting such a pattern would silently omit matching disjoint
+// pairs from the result.
+//
+// The DE-9IM matrix entries are ordered II, IB, IE, BI, BB, BE, EI, EB, EE. A
+// pair of geometries is disjoint iff II, IB, BI, and BB (indices 0, 1, 3, 4)
+// are all `F`. A filter character only excludes `F` if it is a digit, `T`, or
+// `t`; `*` and `F`/`f` both admit it. If all four of these positions admit
+// `F`, the pattern could match a disjoint pair.
+bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter);
 
 namespace ad_utility {
 
@@ -49,6 +79,11 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
 // quotation marks nor a datatype yet.
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
+
+// Convert a geometry to a GeoJSON geometry object. The returned string has
+// neither quotation marks nor a datatype yet. The coordinates of a `GeoPoint`
+// are rounded to the six decimals of its WKT export.
+std::optional<std::string> wktToGeoJson(const GeoPointOrWkt& wkt);
 
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
@@ -190,28 +225,30 @@ class WktBoundingCoordinate {
   }
 };
 
-// Get the geometry type of WKT literal using `GeometryInfo`.
-class WktGeometryType {
+// Get the IRI of a type of a WKT literal (its `GeometryType` or its
+// `SourceCrsType` from the `GeometryInfo`) as an `xsd:anyURI` literal, which
+// is the return type of `geof:geometryType` and `geof:getSRID` in the GeoSPARQL
+// standard. `UNDEF` if there is no such type or no IRI for it.
+template <typename TypeWithIri>
+class WktTypeIri {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<GeometryType>& geometryType) const {
-    if (!geometryType.has_value()) {
+      const std::optional<TypeWithIri>& type) const {
+    if (!type.has_value()) {
       return ValueId::makeUndefined();
     }
-
-    auto typeIri = geometryType.value().asIri();
+    auto typeIri = type.value().asIri();
     if (!typeIri.has_value()) {
       return ValueId::makeUndefined();
     }
-
-    // The geometry type should be returned as an xsd:anyURI literal according
-    // to the GeoSPARQL standard.
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
     return {LiteralOrIri{std::move(lit)}};
   }
 };
+using WktGeometryType = WktTypeIri<GeometryType>;
+using WktCrsType = WktTypeIri<SourceCrsType>;
 
 // Get the WKT for the n-th element (1-indexed) of the given WKT.
 class WktGeometryN {
@@ -273,9 +310,27 @@ class WktSimplify {
   }
 };
 
+// Convert a geometry to a GeoJSON literal (`geof:asGeoJSON`).
+class WktAsGeoJson {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeoPointOrWkt>& geom) const {
+    using namespace triple_component;
+    if (!geom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto geoJson = detail::wktToGeoJson(geom.value());
+    if (!geoJson.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return {LiteralOrIri{Literal::literalWithoutQuotes(
+        geoJson.value(), Iri::fromIrirefWithoutBrackets(GEO_JSON_LITERAL))}};
+  }
+};
+
 // A generic operation for all geometric relation functions, like
 // `geof:sfIntersects`.
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 class WktGeometricRelation {
  public:
   ValueId operator()(
@@ -286,7 +341,31 @@ class WktGeometricRelation {
     AD_THROW(
         "Geometric relations via the `geof:sfIntersects` ... functions are "
         "currently only implemented for a subset of all possible queries. More "
-        "details on GeoSPARQL support can be found on the QLever Wiki.");
+        "details on GeoSPARQL support can be found in the QLever Docs "
+        "(https://docs.qlever.dev/geosparql/).");
+  }
+};
+
+// The `geof:relate` function, which checks two geometries against an
+// arbitrary DE-9IM intersection pattern (the third argument). Currently this is
+// a dummy implementation only present to allow query rewriting to a
+// `SpatialJoin`.
+class WktDe9imRelation {
+ public:
+  [[noreturn]] ValueId operator()(
+      [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
+      [[maybe_unused]] const std::optional<GeoPoint>& geoRight,
+      [[maybe_unused]] const std::optional<std::string>& pattern) const {
+    AD_THROW(
+        "The `geof:relate` function is currently only implemented for a "
+        "subset of all possible queries, namely spatial joins using `FILTER "
+        "geof:relate(?geometryA, ?geometryB, \"<DE-9IM pattern>\")`. The "
+        "pattern must be a fixed string literal that is a valid DE-9IM "
+        "intersection pattern (exactly nine characters, each one of `0`, "
+        "`1`, `2`, `T`, `F`, or `*`) and that cannot match disjoint "
+        "geometries (for example, `FF*FF****` is currently not supported). "
+        "More details on GeoSPARQL support can be found in the QLever Docs "
+        "(https://docs.qlever.dev/geosparql/).");
   }
 };
 

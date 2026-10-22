@@ -54,8 +54,8 @@ CartesianProductJoin::CartesianProductJoin(
 }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
-  std::vector<QueryExecutionTree*> result;
+qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
+  qlm::vector<QueryExecutionTree*> result{allocator()};
   ql::ranges::copy(
       children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }),
       std::back_inserter(result));
@@ -106,8 +106,8 @@ bool CartesianProductJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-void CartesianProductJoin::writeResultColumn(ql::span<Id> targetColumn,
-                                             ql::span<const Id> inputColumn,
+void CartesianProductJoin::writeResultColumn(IdColumnRef targetColumn,
+                                             ConstIdColumnRef inputColumn,
                                              size_t groupSize,
                                              size_t offset) const {
   // Copy each element from the `inputColumn` `groupSize` times to
@@ -200,8 +200,9 @@ VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
-    IdTable CartesianProductJoin::writeAllColumns(
-        R idTables, size_t offset, size_t limit, size_t lastTableOffset) const {
+IdTable CartesianProductJoin::writeAllColumns(R idTables, size_t offset,
+                                              size_t limit,
+                                              size_t lastTableOffset) const {
   AD_CORRECTNESS_CHECK(offset >= lastTableOffset);
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
@@ -327,11 +328,10 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
-    CartesianProductJoin::produceTablesLazily(LocalVocab mergedVocab,
-                                              R idTables, size_t offset,
-                                              size_t limit,
-                                              size_t lastTableOffset) const {
+CPP_template_def(typename R)(requires ql::ranges::range<R>)
+Result::LazyResult CartesianProductJoin::produceTablesLazily(
+    LocalVocab mergedVocab, R idTables, size_t offset, size_t limit,
+    size_t lastTableOffset) const {
   using Lc = Result::IdTableLoopControl;
   auto get = [self = this, mergedVocab = std::move(mergedVocab),
               idTables = std::move(idTables), offset, limit,
@@ -388,9 +388,9 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   // kept as a non-const `shared_ptr` so it can be updated in-place on each
   // iteration without a new allocation; the implicit conversion to
   // `shared_ptr<const IdTableView<0>>` makes it compatible with `idTables`.
-  auto placeholder = std::make_shared<IdTable>(0, allocator());
+  auto placeholder = makeShared<IdTable>(0, allocator());
   auto placeholderView =
-      std::make_shared<IdTableView<0>>(placeholder->asStaticView<0>());
+      makeShared<IdTableView<0>>(placeholder->asStaticView<0>());
   idTables.push_back(placeholderView);
 
   auto generatedTables = lazyResult->idTables();
@@ -436,6 +436,67 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 }
 
 // _____________________________________________________________________________
+std::vector<std::vector<ColumnIndex>>
+CartesianProductJoin::perChildDistinctIndices(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  std::vector<std::vector<ColumnIndex>> result;
+  result.reserve(children_.size());
+  size_t offset = 0;
+  for (const auto& child : children_) {
+    size_t width = child->getResultWidth();
+    std::vector<ColumnIndex> childDistinctIndices;
+    for (ColumnIndex col : distinctIndices) {
+      if (col >= offset && col < offset + width) {
+        childDistinctIndices.push_back(col - offset);
+      }
+    }
+    offset += width;
+    result.push_back(std::move(childDistinctIndices));
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+bool CartesianProductJoin::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  return ql::ranges::all_of(
+      ::ranges::views::zip(children_, perChildDistinctIndices(distinctIndices)),
+      [](const auto& childAndIndices) {
+        const auto& [child, childIndices] = childAndIndices;
+        return child->getRootOperation()->isDistinctBy(childIndices);
+      });
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+CartesianProductJoin::makeDistinctTree(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // Applying `DISTINCT` on `distinctIndices` to the Cartesian product is
+  // equivalent to first making each child distinct on the subset of
+  // `distinctIndices` that falls into its columns, and then forming the
+  // Cartesian product. Because the children have disjoint columns, the
+  // resulting product is then already distinct wrt `distinctIndices`. This
+  // pushes the (potentially expensive) deduplication below the Cartesian
+  // product, reducing the sizes of the children before the product (which can
+  // be huge) is formed.
+  //
+  // Note: A child without any `distinctIndices` column is made distinct on the
+  // empty set of columns, which reduces it to (at most) a single row. This is
+  // correct, because such a child does not contribute to `distinctIndices` and
+  // only multiplies the number of rows in the Cartesian product.
+  auto newChildren =
+      ::ranges::views::zip(children_,
+                           perChildDistinctIndices(distinctIndices)) |
+      ql::views::transform([](const auto& childAndIndices) {
+        const auto& [child, childIndices] = childAndIndices;
+        return QueryExecutionTree::createDistinctTree(child, childIndices);
+      }) |
+      ::ranges::to<Children>();
+  return ad_utility::makeExecutionTree<CartesianProductJoin>(
+      _executionContext, std::move(newChildren));
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
   Children copy;
@@ -443,6 +504,22 @@ std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   for (const auto& operation : children_) {
     copy.push_back(operation->clone());
   }
-  return std::make_unique<CartesianProductJoin>(_executionContext,
-                                                std::move(copy), chunkSize_);
+  return cloneWithNewChildren(std::move(copy));
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> CartesianProductJoin::cloneWithNewChildren(
+    Children children) const {
+  return std::make_unique<CartesianProductJoin>(
+      _executionContext, std::move(children), chunkSize_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+CartesianProductJoin::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // Since the variables covered by the children of a `CartesianProductJoin` are
+  // disjoint, we can simply use the generic push down into any child and it
+  // will select the correct one.
+  return pushDownBindToAnyChild(bind, children_);
 }

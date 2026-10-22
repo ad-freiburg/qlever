@@ -243,8 +243,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // for a later PR.
   bool isCheap = ql::ranges::none_of(joinColumns, [&](const auto& jcs) {
     auto [leftCol, rightCol] = jcs;
-    return (ql::ranges::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
-           (ql::ranges::any_of(left.getColumn(leftCol), &Id::isUndefined));
+    return ql::ranges::any_of(right.getColumn(rightCol), Id::isUndefinedL) ||
+           ql::ranges::any_of(left.getColumn(leftCol), Id::isUndefinedL);
   });
 
   auto checkCancellationLambda = [this] { checkCancellation(); };
@@ -276,7 +276,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols);
+    IdTableUtils::sort(*result, cols, sortConfig());
   }
 
   // The result that `zipperJoinWithUndef` produces has a different order of
@@ -306,4 +306,17 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
     return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(bind, {_left, _right});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<MultiColumnJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)));
 }

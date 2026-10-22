@@ -8,9 +8,9 @@
 // Explicit template instantiations
 using namespace detail::splitVocabulary;
 template class SplitVocabulary<
-    GeoSplitFunc, GeoFilenameFunc,
+    GeoSplitFunc, geoFilenameSuffixes,
     CompressedVocabulary<VocabularyInternalExternal>,
     GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>>;
-template class SplitVocabulary<GeoSplitFunc, GeoFilenameFunc,
+template class SplitVocabulary<GeoSplitFunc, geoFilenameSuffixes,
                                VocabularyInMemory,
                                GeoVocabulary<VocabularyInMemory>>;

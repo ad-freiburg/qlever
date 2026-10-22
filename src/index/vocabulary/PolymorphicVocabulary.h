@@ -21,6 +21,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/Serializer/Serializer.h"
@@ -43,14 +44,23 @@ class PolymorphicVocabulary {
   // 3. Add the alias type to the `Variant` below.
   // 4. Add the corresponding line to the `resetToType` function in
   // `PolymorphicVocabulary.cpp`.
+  // 5. Add the alias type to the appropriate concepts in
+  // `VocabularyConstraints.h`.
   using InMemoryUncompressed = VocabularyInMemory;
   using OnDiskUncompressed = VocabularyInternalExternal;
   using InMemoryCompressed = CompressedVocabulary<InMemoryUncompressed>;
   using OnDiskCompressed = CompressedVocabulary<OnDiskUncompressed>;
   using OnDiskCompressedGeoSplit = SplitGeoVocabulary<OnDiskCompressed>;
+  // The vocabularies with "holes", which are only used for vocabularies that
+  // were exported from a larger vocabulary with some of the entries excluded
+  // (see `VocabularyInMemoryBinSearch` and `VocabularyType.h`).
+  using InMemoryUncompressedWithHoles = VocabularyInMemoryBinSearch;
+  using InMemoryCompressedWithHoles =
+      CompressedVocabulary<InMemoryUncompressedWithHoles>;
   using Variant =
       std::variant<InMemoryUncompressed, OnDiskUncompressed, OnDiskCompressed,
-                   InMemoryCompressed, OnDiskCompressedGeoSplit>;
+                   InMemoryCompressed, OnDiskCompressedGeoSplit,
+                   InMemoryUncompressedWithHoles, InMemoryCompressedWithHoles>;
 
   // In this variant we store the actual vocabulary.
   Variant vocab_;
@@ -69,13 +79,46 @@ class PolymorphicVocabulary {
   // `VocabularyType` has already been set via `resetToType` above.
   void open(const std::string& filename);
 
+  // Forward the geo cell grid to the currently active vocabulary if it is a
+  // `SplitVocabulary` (which forwards it to its `GeoVocabulary`); no-op
+  // otherwise.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    ad_utility::visitIf(
+        vocab_,
+        [&grid](OnDiskCompressedGeoSplit& vocab) {
+          vocab.setGeoCellGrid(grid);
+        },
+        [](const auto& vocab) {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
+        });
+  }
+
+  // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
+  // the active vocabulary is not a `SplitVocabulary` holding one with a grid.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    return ad_utility::visitIf(
+        vocab_,
+        [](const OnDiskCompressedGeoSplit& vocab) {
+          return vocab.getGeoCellGrid();
+        },
+        [](const auto& vocab) -> std::optional<ad_utility::GeoCellGrid> {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
+          return std::nullopt;
+        });
+  }
+
   // Close the vocabulary s.t. it consumes no more RAM.
   void close();
 
   // Return the total number of words in the vocabulary.
   size_t size() const;
 
-  // Return the `i`-th word, throw if `i` is out of bounds.
+  // Return the word with the vocabulary index `i`, throw if `i` is out of
+  // bounds. For a vocabulary with holes (see `VocabularyInMemoryBinSearch`)
+  // return `placeholderForMissingVocabIndex(i)` if `i` is one of those holes,
+  // instead of throwing.
   std::string operator[](uint64_t i) const;
 
   // Iterate over all words. The ranges of the different possible
@@ -135,7 +178,9 @@ class PolymorphicVocabulary {
 
   // Analogous to `lower_bound`, but since `word` is guaranteed to be a full
   // word, not a prefix, this function can respect the split of an underlying
-  // `SplitVocabulary`.
+  // `SplitVocabulary`, as well as the "one past the end" index of a vocabulary
+  // with holes (see `HasSpecialGetPositionOfWord` in
+  // `VocabularyConstraints.h`).
   template <typename String, typename Comp>
   std::pair<uint64_t, uint64_t> getPositionOfWord(const String& word,
                                                   Comp comp) const {
@@ -175,7 +220,7 @@ class PolymorphicVocabulary {
           }
         },
         vocab_);
-  };
+  }
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   bool isGeoInfoAvailable() const {
@@ -194,14 +239,26 @@ class PolymorphicVocabulary {
         vocab_);
   }
 
+  // The files that a vocabulary with the given `type` consists of, as suffixes
+  // of its base filename (see `FileSuffixes`).
+  static FileSuffixes fileSuffixes(VocabularyType type);
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
-  // at the given `filename`.
+  // at the given `filename`. Throw for a `type` with holes (see
+  // `VocabularyInMemoryBinSearch`), which cannot be built word by word.
   static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename, VocabularyType type);
 
   // Same as above, but the `VocabularyType` is the currently active type of
   // `this`.
   std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
+      const std::string& filename) const;
+
+  // Create the `ParallelWordWriterBase` (see `index/vocabulary/
+  // VocabularyTypes.h`) that will create a vocabulary of the currently active
+  // type at the given `filename`. Throw for a type with holes, see
+  // `makeDiskWriterPtr`.
+  std::unique_ptr<ParallelWordWriterBase> makeParallelWriterPtr(
       const std::string& filename) const;
 
   // Generic serialization support - delegates to the active variant.

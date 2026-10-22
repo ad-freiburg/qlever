@@ -134,3 +134,75 @@ TEST(PmrVocabBatchLookupData, PmrAsResultEmpty) {
   VocabBatchLookupResult result = PmrVocabBatchLookupData::asResult(data);
   EXPECT_TRUE(result->empty());
 }
+
+namespace {
+// A minimal vocabulary with "holes": its `operator[]` returns `std::nullopt`
+// for odd indices. It does not opt in to the placeholder mechanism (see
+// `replaceOptionalByPlaceholderOnExport` in `VocabularyTypes.h`).
+struct VocabWithHolesThrowing {
+  std::optional<std::string_view> operator[](uint64_t index) const {
+    if (index % 2 == 1) {
+      return std::nullopt;
+    }
+    return "word";
+  }
+};
+
+// The same vocabulary, but opting in to the placeholder mechanism.
+struct VocabWithHolesPlaceholder : VocabWithHolesThrowing {
+  static constexpr bool replaceOptionalByPlaceholderOnExport = true;
+};
+
+// A vocabulary without holes, for which the placeholder mechanism is
+// irrelevant, because its `operator[]` doesn't return a `std::optional`.
+struct VocabWithoutHoles {
+  std::string_view operator[]([[maybe_unused]] uint64_t index) const {
+    return "word";
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, replaceOptionalByPlaceholderOnExportIsOptIn) {
+  using namespace ad_utility::vocabulary;
+  // Only a vocabulary that explicitly declares the member opts in.
+  static_assert(!replaceOptionalByPlaceholderOnExport<VocabWithHolesThrowing>);
+  static_assert(
+      replaceOptionalByPlaceholderOnExport<VocabWithHolesPlaceholder>);
+  static_assert(!replaceOptionalByPlaceholderOnExport<VocabWithoutHoles>);
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, wordAsStringOrPlaceholder) {
+  using namespace ad_utility::vocabulary;
+  // Words that are contained are returned as they are, no matter whether the
+  // `operator[]` returns a `std::optional`.
+  EXPECT_EQ(wordAsStringOrPlaceholder(VocabWithHolesThrowing{}, 4), "word");
+  EXPECT_EQ(wordAsStringOrPlaceholder(VocabWithHolesPlaceholder{}, 4), "word");
+  EXPECT_EQ(wordAsStringOrPlaceholder(VocabWithoutHoles{}, 5), "word");
+
+  // A missing word is reported as a placeholder only by the vocabulary that has
+  // opted in, the other one throws.
+  EXPECT_EQ(wordAsStringOrPlaceholder(VocabWithHolesPlaceholder{}, 5),
+            placeholderForMissingVocabIndex(5));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      wordAsStringOrPlaceholder(VocabWithHolesThrowing{}, 5),
+      ::testing::HasSubstr("replaceOptionalByPlaceholderOnExport"));
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, sequentialLookupBatchWithMissingWords) {
+  using namespace ad_utility::vocabulary;
+  std::vector<size_t> indices{4, 5};
+
+  // The opted-in vocabulary reports the placeholder for the missing word.
+  auto result = sequentialLookupBatch(VocabWithHolesPlaceholder{}, indices);
+  ASSERT_EQ(result->size(), 2u);
+  EXPECT_EQ((*result)[0], "word");
+  EXPECT_EQ((*result)[1], placeholderForMissingVocabIndex(5));
+
+  // The vocabulary that has not opted in throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      sequentialLookupBatch(VocabWithHolesThrowing{}, indices),
+      ::testing::HasSubstr("replaceOptionalByPlaceholderOnExport"));
+}

@@ -14,7 +14,6 @@
 #include <absl/strings/str_join.h>
 
 #include <array>
-#include <boost/program_options.hpp>
 #include <ostream>
 #include <stdexcept>
 #include <string_view>
@@ -77,7 +76,7 @@ CPP_template(typename Derived,
   }
 
   // Constructors.
-  EnumWithStrings() noexcept { check(); };
+  EnumWithStrings() noexcept { check(); }
   // Deliberately implicit, s.t. we can directly construct from the underlying
   // enum.
   QL_EXPLICIT(false) EnumWithStrings(Enum value) : value_{value} { check(); }
@@ -102,6 +101,14 @@ CPP_template(typename Derived,
 
   friend std::ostream& operator<<(std::ostream& stream, const Derived& d) {
     return stream << d.toString();
+  }
+
+  // Enable `absl::StrCat`, `absl::StrAppend`, and `absl::StrFormat` to format
+  // this type directly (as its string representation), without an explicit
+  // call to `toString()`.
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, const Derived& d) {
+    sink.Append(d.toString());
   }
 
   // Create from a string. Throws if the string doesn't match any description.
@@ -159,26 +166,6 @@ CPP_template(typename Derived,
   // equality and other comparisons are handled by the implicit conversion to
   // the underlying enum.
 };
-
-// The following function enables enables support for the `EnumWithStrings`
-// classes within `boost::program_options`. The values are parsed via the
-// `fromString` method.
-CPP_template(typename E)(
-    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag,
-                               E>) void validate(boost::any& v,
-                                                 const std::vector<std::string>&
-                                                     values,
-                                                 E*, int) {
-  // First parse as the command line argument as a string.
-  // Note: `validate` stores the result in `v`.
-  std::string* dummy = nullptr;
-  using namespace boost::program_options;
-  boost::program_options::validate(v, values, dummy, 0);
-
-  // Convert from string to enum.
-  AD_CONTRACT_CHECK(!v.empty());
-  v = E::fromString(boost::any_cast<std::string>(v));
-}
 
 }  // namespace ad_utility
 

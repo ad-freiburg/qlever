@@ -6,7 +6,7 @@
 
 #include <range/v3/numeric/accumulate.hpp>
 
-#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -30,12 +30,12 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
 // _____________________________________________________________________________
 size_t WKTParser::getPrefilterCounter() {
   return ::ranges::accumulate(_numSkipped, 0);
-};
+}
 
 // _____________________________________________________________________________
 size_t WKTParser::getParseCounter() {
   return ::ranges::accumulate(_numParsed, 0);
-};
+}
 
 // _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
@@ -52,7 +52,7 @@ void WKTParser::processQueue(size_t t) {
         // If we have a prefilter box, check if we also have a precomputed
         // bounding box for the geometry this `VocabIndex` is referring to.
         if (_usePrefiltering &&
-            SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+            LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
                 _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
                 job.boundingBox)) {
           prefilterCounter++;
@@ -60,10 +60,11 @@ void WKTParser::processQueue(size_t t) {
         }
 
         // If we have not filtered out this geometry, read and parse the full
-        // string.
+        // string. Invalid WKT (according to the strict parsing mode) is
+        // skipped, so it never matches (see GeoSPARQL 1.1, Section 10.9.1).
         job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
-                  false);
+        parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
+                         job.side, true);
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
@@ -89,11 +90,12 @@ void WKTParser::processQueue(size_t t) {
       } else if (dt == Datatype::LocalVocabIndex) {
         // `LocalVocabEntry` has to be parsed in any case: we have no
         // information except the string.
+        // Invalid WKT is skipped as above.
         const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
         if (literalOrIri.isLiteral()) {
-          job.wkt = asStringViewUnsafe(literalOrIri.getLiteral().getContent());
-          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
-                    false);
+          job.wkt = literalOrIri.getLiteral().getContent();
+          parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
+                           job.side, true);
           parseCounter++;
         }
       }

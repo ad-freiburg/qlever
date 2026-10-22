@@ -7,7 +7,7 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "rdfTypes/Variable.h"
+#include "parser/TripleComponent.h"
 #include "util/UnitOfMeasurement.h"
 
 // This header declares utilities required during query planning for rewriting
@@ -20,11 +20,13 @@
 
 namespace sparqlExpression {
 
-// Helper struct for `getGeoFunctionExpressionParameters`
+// Helper struct for `getGeoFunctionExpressionParameters`. `left_` and `right_`
+// are either a variable or a fixed value (a literal given directly in the
+// expression).
 struct GeoFunctionCall {
   SpatialJoinType function_;
-  Variable left_;
-  Variable right_;
+  TripleComponent left_;
+  TripleComponent right_;
 };
 
 // Helper to extract spatial join parameters from a parsed `geof:` function
@@ -46,6 +48,17 @@ struct GeoDistanceCall : public GeoFunctionCall {
 // the unit of measurement associated with a distance. Also implemented in in
 // `GeoExpression.cpp`.
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
+    const SparqlExpression& expr);
+
+// Helper struct for `getDe9imRelationExpressionParameters`
+struct De9imRelationCall : public GeoFunctionCall {
+  De9imFilterString pattern_;
+};
+
+// Same as `getGeoFunctionExpressionParameters`, but for the `geof:relate`
+// function, which additionally carries a DE-9IM filter pattern as its third
+// argument. Also implemented in `GeoExpression.cpp`.
+std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     const SparqlExpression& expr);
 
 }  // namespace sparqlExpression

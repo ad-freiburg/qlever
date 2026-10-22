@@ -12,11 +12,13 @@
 #include <vector>
 
 #include "backports/keywords.h"
+#include "engine/OrderByComparator.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -96,7 +98,7 @@ constexpr static bool isConstantResult =
 template <typename T>
 constexpr static bool isVectorResult =
     ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypesAsVector> ||
-    ad_utility::isSimilar<T, ql::span<const ValueId>>;
+    ad_utility::isSimilar<T, ConstIdColumnRef>;
 
 /// All the additional information which is needed to evaluate a SPARQL
 /// expression.
@@ -117,7 +119,7 @@ struct EvaluationContext {
 
   /// The input is sorted on these columns. This information can be used to
   /// perform efficient relational operations like `equal` or `less than`
-  std::vector<ColumnIndex> _columnsByWhichResultIsSorted;
+  qlm::vector<ColumnIndex> _columnsByWhichResultIsSorted;
 
   /// Let the expression evaluation also respect the memory limit.
   ad_utility::AllocatorWithLimit<Id> _allocator;
@@ -153,6 +155,10 @@ struct EvaluationContext {
   // *` expression.
   using TimePoint = std::chrono::steady_clock::time_point;
   TimePoint deadline_;
+
+  // The order of `ORDER BY`, which `MIN` and `MAX` use. It is constructed once
+  // here, because its construction is too expensive for each comparison.
+  OrderByComparator orderByComparator_;
 
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
@@ -364,9 +370,13 @@ constexpr bool isOperation = false;
 template <size_t NumOperations, typename... Ts>
 constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 
-// Return the common logical size of the `SingleExpressionResults`.
-// This is either 1 (in case all the `inputs` are constants) or the
-// size of the `context`.
+// Return the common logical size of the `SingleExpressionResults` of a
+// non-aggregate expression. This is either 1 (in case all the `inputs` are
+// constants) or the size of the `context`.
+//
+// NOTE: Aggregates must not use this function, they aggregate one value per
+// row of the `context` also for a constant input (see
+// `AggregateExpression.cpp`).
 CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
     size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();

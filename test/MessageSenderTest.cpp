@@ -16,6 +16,7 @@ using ad_utility::websocket::MessageSender;
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
+using ad_utility::websocket::QueryOperation;
 using ad_utility::websocket::QueryRegistry;
 using ad_utility::websocket::QueryStatus;
 using PayloadType = std::pair<std::shared_ptr<const std::string>, size_t>;
@@ -30,7 +31,8 @@ using ::testing::VariantWith;
 
 ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
   QueryHub queryHub{ioContext.get_executor()};
 
   auto distributor =
@@ -56,7 +58,8 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
 
 ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
   QueryHub queryHub{ioContext.get_executor()};
 
   {
@@ -95,7 +98,8 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
 
 ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
   QueryId reference = queryId.toQueryId();
   QueryHub queryHub{ioContext.get_executor()};
 
@@ -115,7 +119,8 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
 // write through one handle is visible through another.
 ASYNC_TEST(MessageSender, sharedStatusForwardsToOwningQueryId) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
   QueryHub queryHub{ioContext.get_executor()};
 
   {

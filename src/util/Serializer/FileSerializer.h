@@ -19,7 +19,7 @@ class FileWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
 
-  FileWriteSerializer(File&& file) : _file{std::move(file)} {};
+  FileWriteSerializer(File&& file) : _file{std::move(file)} {}
 
   FileWriteSerializer(std::string filename) : _file{filename, "w"} {
     AD_CONTRACT_CHECK(_file.isOpen());
@@ -56,7 +56,7 @@ class FileReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
 
-  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
+  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {}
 
   explicit FileReadSerializer(const std::string& filename)
       : _file{filename, "r"} {
@@ -89,7 +89,7 @@ class CopyableFileReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
   explicit CopyableFileReadSerializer(std::shared_ptr<File> filePtr)
-      : _file{std::move(filePtr)} {};
+      : _file{std::move(filePtr)} {}
 
   explicit CopyableFileReadSerializer(std::string filename)
       : _file{std::make_shared<File>(filename, "r")} {

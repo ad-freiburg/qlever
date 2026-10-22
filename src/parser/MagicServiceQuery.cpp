@@ -9,7 +9,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/NormalizedString.h"
 #include "parser/SparqlTriple.h"
 #include "util/Exception.h"
 
@@ -43,7 +42,7 @@ Variable MagicServiceQuery::getVariable(std::string_view parameter,
   }
 
   return object.getVariable();
-};
+}
 
 // ____________________________________________________________________________
 void MagicServiceQuery::setVariable(
@@ -59,7 +58,7 @@ void MagicServiceQuery::setVariable(
   }
 
   existingValue = object.getVariable();
-};
+}
 
 // ____________________________________________________________________________
 std::string_view MagicServiceQuery::extractParameterName(
@@ -79,7 +78,7 @@ std::string_view MagicServiceQuery::extractParameterName(
   if (ql::starts_with(paramString, iri)) {
     paramString.remove_prefix(iri.size());
   }
-  return asStringViewUnsafe(paramString);
-};
+  return paramString;
+}
 
 }  // namespace parsedQuery

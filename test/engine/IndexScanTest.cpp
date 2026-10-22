@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -23,6 +24,8 @@
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
+
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 using namespace ad_utility::testing;
 using namespace std::chrono_literals;
@@ -106,8 +109,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::string& kgTurtle, const SparqlTripleSimple& tripleLeft,
     const SparqlTripleSimple& tripleRight,
     const std::vector<IndexPair>& leftRows,
-    const std::vector<IndexPair>& rightRows,
-    ad_utility::MemorySize blocksizePermutations = 16_B,
+    const std::vector<IndexPair>& rightRows, size_t rowsPerBlock = 2,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
@@ -115,7 +117,7 @@ void testLazyScanForJoinOfTwoScans(
   std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
   for (const auto& limit : limits) {
     TestIndexConfig config{kgTurtle};
-    config.blocksizePermutations = blocksizePermutations;
+    config.rowsPerBlock = rowsPerBlock;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
     s1.applyLimitOffset(limit);
@@ -297,7 +299,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
   }
   {
-    // In this example we use 3 triples per block (24 bytes) and the `<p>`
+    // In this example we use 3 triples per block and the `<p>`
     // permutation is standing in a single block together with the previous
     // `<o>` relation. The lazy scans are however still aware that the relevant
     // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
@@ -307,7 +309,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
         "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 24_B);
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 3);
   }
   {
     std::string kg =
@@ -565,6 +567,77 @@ TEST(IndexScan, getResultSizeOfScan) {
   }
 }
 
+// Test that the size estimate of a scan with two variables is taken from the
+// per-relation metadata if the relation has an entry there, and that it is
+// exact iff no block of the relation has located triples.
+TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
+  // A large relation `<p>` and two small relations `<q>` and `<r>`. With two
+  // rows per block, `<p>` is stored in blocks of its own and has a metadata
+  // entry, `<q>` and `<r>` share one block and have none.
+  std::string kg;
+  for (size_t i = 0; i < 50; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> <y", i, "> . ");
+  }
+  kg += "<x0> <q> <y0> . <x0> <r> <y0> .";
+  TestIndexConfig config{kg};
+  config.rowsPerBlock = 2;
+  auto index = std::make_shared<Index>(makeTestIndex(std::move(config)));
+  auto getId = makeGetId(*index);
+  const auto& pso = index->getImpl().getPermutation(Permutation::PSO);
+  ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<p>")).has_value());
+  ASSERT_FALSE(pso.metaData().getMetaDataIfPresent(getId("<q>")).has_value());
+
+  // The size estimate of the scan `?x <predicate> ?y` and whether it is exact.
+  // Each scan needs a new `QueryExecutionContext`, because the located triples
+  // are read from the snapshot taken at its creation.
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  std::unique_ptr<QueryExecutionContext> qec = nullptr;
+  auto sizeEstimate = [&](const std::string& predicate) {
+    qec = std::make_unique<QueryExecutionContext>(
+        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{}, &namedCache, materializedViewsManager,
+        executor());
+    SparqlTripleSimple scanTriple{Variable{"?x"},
+                                  TripleComponent::Iri::fromIriref(predicate),
+                                  Variable{"?y"}};
+    IndexScan scan{qec.get(), Permutation::PSO, scanTriple};
+    return std::pair{scan.getSizeEstimate(),
+                     scan.sizeEstimateIsExactForTesting()};
+  };
+  using EstimateAndExact = std::pair<size_t, bool>;
+
+  // Without updates, both estimates are exact, that of `<p>` from the
+  // metadata and that of `<q>` from its block.
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
+  EXPECT_EQ(sizeEstimate("<q>"), EstimateAndExact(1, true));
+
+  // A triple inserted into a block of `<p>` leaves the estimate of `<p>`
+  // unchanged, but makes it inexact.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto p = getId("<p>");
+  auto r = getId("<r>");
+  auto x0 = getId("<x0>");
+  auto y0 = getId("<y0>");
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.insertTriples(cancellationHandle,
+                               {IdTriple<0>{std::array{x0, p, x0, g}}});
+  });
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, false));
+
+  // A triple deleted from a block that does not belong to `<p>` keeps the
+  // estimate of `<p>` exact.
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.clear();
+    deltaTriples.deleteTriples(cancellationHandle,
+                               {IdTriple<0>{std::array{x0, r, y0, g}}});
+  });
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
+}
+
 // _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   auto index = std::make_shared<Index>(
@@ -584,7 +657,8 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   auto makeScan = [&]() {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
+        SortPerformanceEstimator{}, &namedCache, materializedViewsManager,
+        executor());
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
@@ -697,7 +771,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
     auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    size_t byteCount = numRows * numCols * sizeof(Id);
+    size_t byteCount = numRows * numCols * BYTES_PER_ID_COLUMN_ENTRY;
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount - 1)));
     EXPECT_FALSE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount)));
   };
@@ -819,6 +893,29 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   // be still cacheable.
   EXPECT_TRUE(!updatedQet.has_value());
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
+}
+
+// Test that the prefiltered `IndexScan` keeps the variables hidden by a
+// subquery hidden.
+TEST(IndexScan, prefilteringKeepsHiddenVariablesHidden) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  using V = Variable;
+  auto qec = getQec("<x> <y> <z>.");
+  SparqlTripleSimple triple{V{"?x"}, iri("<y>"), V{"?z"}};
+  auto qet =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+  // `?z` is hidden by a subquery (with `strip-columns` disabled).
+  qet->getRootOperation()->setSelectedVariablesForSubquery({V{"?x"}});
+
+  // The prefiltered `IndexScan` is a new operation, but `?z` must still be
+  // hidden.
+  auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      makePrefilterVec(pr(lt(IntId(5)), V{"?x"})));
+  ASSERT_TRUE(updatedQet.has_value());
+  EXPECT_FALSE(updatedQet.value()->getRootOperation()->canResultBeCached());
+  EXPECT_THAT(updatedQet.value()->getVariableColumns(),
+              ::testing::UnorderedElementsAre(::testing::Key(V{"?x"})));
 }
 
 // _____________________________________________________________________________
@@ -1135,6 +1232,44 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   EXPECT_EQ(rti.details_["num-elements-read"], 4);
 }
 
+// Test that for a scan with a LIMIT or OFFSET, the scan side of
+// `prefilterTables` is the complete limited scan, read once, and the join side
+// is passed through unfiltered (`getLazyScan` ignores the prefiltered blocks
+// for such a scan, so reading it per batch would repeat it).
+TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
+  // Rows 3-5 of the six `<p>` rows, join side with two matching values from
+  // different blocks and a value (`<xb>`) that matches no block.
+  IndexScan scan = makeScan();
+  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2});
+
+  auto makeJoinSide = [this]() {
+    using P = Result::IdTableVocabPair;
+    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<xb>")}), LocalVocab{}}};
+  };
+
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+
+  // The join side is passed through unchanged, including the non-matching
+  // table.
+  ASSERT_EQ(joinSideResults.size(), 3);
+  EXPECT_EQ(joinSideResults.at(0).idTable_, makeIdTable({iri("<a>")}));
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<c>")}));
+  EXPECT_EQ(joinSideResults.at(2).idTable_, makeIdTable({iri("<xb>")}));
+
+  // The scan side is exactly the limited scan, each row once.
+  IdTable scanTable{2, qec_->getAllocator()};
+  for (const auto& [table, vocab] : scanResults) {
+    scanTable.insertAtEnd(table);
+  }
+  EXPECT_EQ(scanTable, tableFromTriples({{iri("<b>"), iri("<B>")},
+                                         {iri("<b>"), iri("<B2>")},
+                                         {iri("<c>"), iri("<C>")}}));
+  EXPECT_EQ(scan.runtimeInfo().details_["num-blocks-all"], 3);
+}
+
 // _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin,
        prefilterTablesDoesFilterCorrectlyWithOverlappingValues) {
@@ -1231,7 +1366,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.rowsPerBlock = 2;
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
 
@@ -1256,7 +1391,7 @@ TEST_P(IndexScanWithLazyJoin,
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.rowsPerBlock = 2;
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
@@ -1540,7 +1675,7 @@ TEST(IndexScanTest, StripColumns) {
   TestIndexConfig config;
   using namespace ad_utility::memory_literals;
   // Each triple will be in a separate block.
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
   auto qec = ad_utility::testing::getQec(config);
 
@@ -1872,7 +2007,7 @@ TEST(IndexScanTest, StripColumns) {
 TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   TestIndexConfig config;
   using namespace ad_utility::memory_literals;
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
   auto qec = ad_utility::testing::getQec(config);
 
@@ -2242,4 +2377,61 @@ TEST(IndexScan, additionalVariablesInDescriptor) {
       SparqlTripleSimple{
           Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
   EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, isDistinctBy) {
+  using TC = TripleComponent;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  // A full scan `?s ?p ?o` yields each triple exactly once, so it is distinct
+  // exactly when all of its columns are covered (in any order).
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  const auto& scanOp = *scan->getRootOperation();
+  EXPECT_TRUE(scanOp.isDistinctBy(SC{0, 1, 2}));
+  EXPECT_TRUE(scanOp.isDistinctBy(SC{2, 0, 1}));
+  EXPECT_FALSE(scanOp.isDistinctBy(SC{0}));
+  EXPECT_FALSE(scanOp.isDistinctBy(SC{0, 1}));
+
+  // If an identifying column (`?o`) is stripped away, the remaining columns no
+  // longer identify a row uniquely, so the scan is not distinct even over all
+  // of them.
+  auto stripped = QueryExecutionTree::makeTreeWithStrippedColumns(
+      scan, {Variable{"?s"}, Variable{"?p"}});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<IndexScan>(stripped->getRootOperation()));
+  EXPECT_FALSE(stripped->getRootOperation()->isDistinctBy(SC{0, 1}));
+
+  // The graph column is an identifying column, whereas payload columns (like
+  // the pattern column) are functionally determined by the identifying columns
+  // and therefore need not be covered.
+  auto scanWithAdditionalColumns = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}},
+                         TC{Variable{"?p"}},
+                         TC{Variable{"?o"}},
+                         {std::pair{ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?g"}},
+                          std::pair{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                                    Variable{"?pattern"}}}});
+  // The columns are `?s`, `?p`, `?o`, `?g`, `?pattern` in this order.
+  const auto& scanWithColumnsOp =
+      *scanWithAdditionalColumns->getRootOperation();
+  EXPECT_TRUE(scanWithColumnsOp.isDistinctBy(SC{0, 1, 2, 3}));
+  EXPECT_TRUE(scanWithColumnsOp.isDistinctBy(SC{0, 1, 2, 3, 4}));
+  // Without the graph column, quads that only differ in their graph become
+  // duplicates, so the pattern column can't make up for it.
+  EXPECT_FALSE(scanWithColumnsOp.isDistinctBy(SC{0, 1, 2, 4}));
+
+  // The same holds if the graph column is stripped away instead of missing from
+  // the `distinctIndices`.
+  auto strippedGraph = QueryExecutionTree::makeTreeWithStrippedColumns(
+      scanWithAdditionalColumns,
+      {Variable{"?s"}, Variable{"?p"}, Variable{"?o"}, Variable{"?pattern"}});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<IndexScan>(strippedGraph->getRootOperation()));
+  EXPECT_FALSE(strippedGraph->getRootOperation()->isDistinctBy(SC{0, 1, 2, 3}));
 }

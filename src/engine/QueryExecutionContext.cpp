@@ -11,6 +11,16 @@
 using namespace std::chrono_literals;
 
 // _____________________________________________________________________________
+SortConfig QueryExecutionContext::makeSortConfig(qlever::Executor executor) {
+  size_t numTasks =
+      getRuntimeParameter<&RuntimeParameters::sortNumTasksInFlight_>();
+  AD_CORRECTNESS_CHECK(numTasks > 0);
+  return {std::move(executor),
+          static_cast<uint32_t>(std::min<size_t>(
+              numTasks, std::numeric_limits<uint32_t>::max()))};
+}
+
+// _____________________________________________________________________________
 bool QueryExecutionContext::areWebSocketUpdatesEnabled() {
   return getRuntimeParameter<&RuntimeParameters::websocketUpdatesEnabled_>();
 }
@@ -27,8 +37,9 @@ QueryExecutionContext::QueryExecutionContext(
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
-    std::function<void(std::string)> updateCallback, const bool pinSubtrees,
-    const bool pinResult, const DisableCaching disableCaching)
+    qlever::Executor executor, std::function<void(std::string)> updateCallback,
+    const bool pinSubtrees, const bool pinResult,
+    const DisableCaching disableCaching, bool disableMaterializedViewRewriting)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
       _index(std::move(index)),
@@ -37,7 +48,8 @@ QueryExecutionContext::QueryExecutionContext(
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
-      materializedViewsManager_(std::move(materializedViewsManager)) {
+      materializedViewsManager_(std::move(materializedViewsManager)),
+      executor_(std::move(executor)) {
   disableCaching_ = [disableCaching]() {
     if (disableCaching == DisableCaching::True) {
       return true;
@@ -49,9 +61,13 @@ QueryExecutionContext::QueryExecutionContext(
       return getRuntimeParameter<&RuntimeParameters::disableCaching_>();
     }
   }();
+  // This is a separate function call to also take into account the runtime
+  // parameter.
+  setDisableMaterializedViewRewriting(disableMaterializedViewRewriting);
   AD_CORRECTNESS_CHECK(cache != nullptr);
   AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
   AD_CORRECTNESS_CHECK(materializedViewsManager_ != nullptr);
+  AD_CONTRACT_CHECK(static_cast<bool>(executor_));
 }
 
 // _____________________________________________________________________________
@@ -72,6 +88,19 @@ void QueryExecutionContext::signalQueryUpdate(
   if (sendPriority == RuntimeInformation::SendPriority::Always ||
       enoughTimeSinceLastUpdate()) {
     lastWebsocketUpdate_ = now;
-    updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
+    nlohmann::ordered_json json(runtimeInformation);
+    if (queryPlanningInfo_.has_value()) {
+      json["meta"] = queryPlanningInfo_.value();
+    }
+    updateCallback_(json.dump());
   }
+}
+
+// _____________________________________________________________________________
+void QueryExecutionContext::setDisableMaterializedViewRewriting(
+    bool disableMaterializedViewRewriting) {
+  disableMaterializedViewRewriting_ =
+      !getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>() ||
+      disableMaterializedViewRewriting;
 }

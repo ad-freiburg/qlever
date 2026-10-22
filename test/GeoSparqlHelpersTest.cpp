@@ -4,6 +4,7 @@
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
+#include <util/geo/Geo.h>
 
 #include <cmath>
 #include <string>
@@ -90,11 +91,12 @@ TEST(GeoSparqlHelpers, WktDist) {
 
   // Distance between points: the Eiffel tower and the Freiburg Cathedral (421km
   // according to the distance measurement of Google Maps).
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral), 421.68, 0.01);
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.68, 0.01);
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421676, 1);
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 262.02, 0.01);
-  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421676, 1);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral), 421.57, 0.02);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.57, 0.02);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421569, 15);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 261.95, 0.02);
+  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421569,
+              15);
 
   // Distance between WKT non-point literals.
   EXPECT_NEAR(
@@ -121,7 +123,7 @@ TEST(GeoSparqlHelpers, WktDist) {
 }
 
 // _____________________________________________________________________________
-template <SpatialJoinType SJType>
+template <SpatialJoinType::Enum SJType>
 void checkGeoRelationDummyImpl(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -135,7 +137,7 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();
@@ -144,6 +146,44 @@ TEST(GeoSparqlHelpers, WktGeometricRelation) {
   checkGeoRelationDummyImpl<EQUALS>();
   checkGeoRelationDummyImpl<OVERLAPS>();
   checkGeoRelationDummyImpl<WITHIN>();
+}
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, WktDe9imRelation) {
+  // The `geof:relate` function is currently only a dummy implementation.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::WktDe9imRelation()(GeoPoint{1, 1}, GeoPoint{2, 2},
+                                     std::string{"T*T***T**"}),
+      ::testing::HasSubstr(
+          "currently only implemented for a subset of all possible queries"));
+}
+
+// Test that the geometry type and the CRS of a WKT literal are returned as
+// `xsd:anyURI` literals, and `UNDEF` for a missing type or a type without IRI.
+TEST(GeoSparqlHelpers, WktTypeIri) {
+  using namespace ad_utility::triple_component;
+  using ad_utility::GeometryType;
+  using ad_utility::SourceCrsType;
+  using ad_utility::WktCrsType;
+  using ad_utility::WktGeometryType;
+  auto anyUri = [](std::string_view iri) {
+    auto lit = Literal::literalWithoutQuotes(iri);
+    lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
+    return sparqlExpression::IdOrLiteralOrIri{LiteralOrIri{std::move(lit)}};
+  };
+  sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
+
+  // Types with an IRI.
+  EXPECT_EQ(WktGeometryType{}(GeometryType{util::geo::WKTType::POINT}),
+            anyUri("http://www.opengis.net/ont/sf#Point"));
+  EXPECT_EQ(WktCrsType{}(SourceCrsType{util::geo::CRSType::WGS84}),
+            anyUri("http://www.opengis.net/def/crs/EPSG/0/4326"));
+
+  // No type, or a type without IRI (only 0 to 7 and 0 to 3 are valid).
+  EXPECT_EQ(WktGeometryType{}(std::nullopt), undef);
+  EXPECT_EQ(WktCrsType{}(std::nullopt), undef);
+  EXPECT_EQ(WktGeometryType{}(GeometryType{8}), undef);
+  EXPECT_EQ(WktCrsType{}(SourceCrsType{4}), undef);
 }
 
 }  // namespace

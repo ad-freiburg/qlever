@@ -16,7 +16,7 @@ SparqlExpressionPimpl::SparqlExpressionPimpl(
     std::shared_ptr<SparqlExpression>&& pimpl, std::string descriptor)
     : _pimpl{std::move(pimpl)} {
   _pimpl->descriptor() = std::move(descriptor);
-};
+}
 
 // ___________________________________________________________________________
 SparqlExpressionPimpl::~SparqlExpressionPimpl() = default;
@@ -116,6 +116,11 @@ SparqlExpressionPimpl::getPrefilterExpressionForMetadata(
 // _____________________________________________________________________________
 bool SparqlExpressionPimpl::containsAggregate() const {
   return _pimpl->containsAggregate();
+}
+
+// _____________________________________________________________________________
+bool SparqlExpressionPimpl::readsAllVisibleColumns() const {
+  return _pimpl->readsAllVisibleColumns();
 }
 
 // ______________________________________________________________________________

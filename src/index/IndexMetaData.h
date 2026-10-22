@@ -20,7 +20,7 @@
 
 #include "global/FileSuffixConstants.h"
 #include "global/Id.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
@@ -123,6 +123,7 @@ class IndexMetaData {
   }
 
   size_t totalElements() const { return totalElements_; }
+  size_t numDistinctCol0() const { return numDistinctCol0_; }
 
   // Exchange the multiplicities for two permutations that are "twins" (e.g. PSO
   // and POS). This is needed because the multiplicity of the last column is

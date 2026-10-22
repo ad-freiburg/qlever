@@ -71,7 +71,7 @@ struct MagicServiceQuery {
   virtual void validate() const {
     // Currently most `MagicServiceQuery` implementations do not make use of
     // this method. Thus it is empty by default.
-  };
+  }
 
   // Helper that returns a readable name for the type of `MagicServiceQuery`.
   virtual std::string_view name() const = 0;

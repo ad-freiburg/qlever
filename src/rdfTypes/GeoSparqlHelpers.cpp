@@ -16,10 +16,35 @@
 #include <string_view>
 #include <type_traits>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
+
+namespace {
+constexpr ctll::fixed_string de9imFilterRegex = "[0-2TtFf*]{9}";
+}  // namespace
+
+// ____________________________________________________________________________
+std::optional<De9imFilterString> parseDe9imFilterString(
+    std::string_view filter) {
+  if (!ctre::match<de9imFilterRegex>(filter)) {
+    return std::nullopt;
+  }
+  // The regex above already enforces that `filter` has exactly 9 characters.
+  AD_CORRECTNESS_CHECK(filter.size() == De9imFilterString{}.size());
+  De9imFilterString result{};
+  ql::ranges::copy(filter, result.begin());
+  return result;
+}
+
+// ____________________________________________________________________________
+bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter) {
+  auto admitsF = [](char c) { return c == '*' || c == 'F' || c == 'f'; };
+  return admitsF(filter[0]) && admitsF(filter[1]) && admitsF(filter[3]) &&
+         admitsF(filter[4]);
+}
 
 namespace ad_utility {
 
@@ -64,14 +89,30 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
 
 // _____________________________________________________________________________
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
-  auto [type, parsed] = parseGeoPointOrWkt(wkt);
-  return utilGeomToWkt(simplifyGeometry(parsed, tolerance));
+  auto parseResult = parseGeoPointOrWkt(wkt);
+  return utilGeomToWkt(simplifyGeometry(parseResult.parsedWkt_, tolerance));
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> wktToGeoJson(const GeoPointOrWkt& wkt) {
+  // A `GeoPoint` is stored with limited precision. Round its coordinates to
+  // the six decimals of its WKT export, so that the decoding artifacts (a
+  // stored `POINT(1 2)` decodes to `1.0000001089647412 1.9999999664723873`)
+  // do not end up in the GeoJSON.
+  if (const auto* point = std::get_if<GeoPoint>(&wkt)) {
+    auto round = [](double coordinate) {
+      return std::round(coordinate * 1e6) / 1e6;
+    };
+    return utilGeomToGeoJson(std::optional<ParsedWkt>{
+        Point<CoordType>{round(point->getLng()), round(point->getLat())}});
+  }
+  return utilGeomToGeoJson(parseGeoPointOrWkt(wkt).parsedWkt_);
 }
 
 // _____________________________________________________________________________
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b) {
-  return computeMetricDistance(projectWebMerc(a), projectWebMerc(b));
+  return computeMetricDistance(a, b);
 }
 
 }  // namespace detail

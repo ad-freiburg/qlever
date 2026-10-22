@@ -10,7 +10,9 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
@@ -21,6 +23,14 @@ Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
       ql::ranges::all_of(parsedValues_._values, [&](const auto& row) {
         return row.size() == parsedValues_._variables.size();
       }));
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
+    QueryExecutionContext* qec, Variable variable, TripleComponent value) {
+  return ad_utility::makeExecutionTree<Values>(
+      qec,
+      parsedQuery::SparqlValues{{std::move(variable)}, {{std::move(value)}}});
 }
 
 // ____________________________________________________________________________
@@ -88,8 +98,8 @@ size_t Values::getCostEstimate() { return parsedValues_._values.size(); }
 // ____________________________________________________________________________
 void Values::computeMultiplicities() {
   if (parsedValues_._variables.empty()) {
-    // If the result is empty we still add a column to the multiplicities to
-    // mark them as computed.
+    // If there are no variables (and hence no columns), still add one entry to
+    // the multiplicities to mark them as computed.
     multiplicities_.resize(1, 1);
     return;
   }

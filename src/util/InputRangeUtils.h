@@ -204,7 +204,7 @@ struct LoopControl {
   template <typename R>
   static LoopControl yieldAll(R&& r) {
     return LoopControl{InputRangeTypeErased{ad_utility::allView(AD_FWD(r))}};
-  };
+  }
 };
 
 // `loopControlValueT` is a helper variable to get the stored type out of a
@@ -258,8 +258,8 @@ using ResFromFunction = loopControl::loopControlValueT<std::invoke_result_t<F>>;
 
 // A class that allows to synthesize an input range directly from a callable
 // that returns `LoopControl<T>`.
-CPP_class_template(typename F)(
-    requires std::is_object_v<F>) struct InputRangeFromLoopControlGet
+CPP_class_template(typename F)(requires std::is_object_v<F>)
+struct InputRangeFromLoopControlGet
     : InputRangeFromGet<detail::ResFromFunction<F>> {
  private:
   using T = detail::ResFromFunction<F>;

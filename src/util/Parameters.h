@@ -76,7 +76,7 @@ CPP_template(typename Type, typename FromString, typename ToString)(
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
   explicit Parameter(Type initialValue, std::string name)
-      : value_{std::move(initialValue)}, name_{std::move(name)} {};
+      : value_{std::move(initialValue)}, name_{std::move(name)} {}
 
   /// Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;
@@ -219,7 +219,9 @@ struct SpaceSeparatedStringsToVector {
 }  // namespace detail::parameterSerializers
 
 namespace detail::parameterShortNames {
-namespace n = detail::parameterSerializers;
+// NOTE: The namespace is fully qualified, as an unqualified `detail` might
+// refer to a nested `ad_utility::detail::detail` namespace (if one exists).
+namespace n = ::ad_utility::detail::parameterSerializers;
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
 using Float = Parameter<float, n::fl, n::toString>;

@@ -95,7 +95,7 @@ TEST(LocalVocab, constructionAndAccess) {
   // not contained in the local vocab. This makes use of the fact that the words
   // in our test vocabulary only contain digits as letters, see above.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    std::string content{asStringViewUnsafe(testWords[i].getContent())};
+    std::string content{testWords[i].getContent()};
     auto illegalWord = LocalVocabEntry::literalWithoutQuotes(
         content + "A", qec->getLocalVocabContext());
     ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));
@@ -114,6 +114,53 @@ TEST(LocalVocab, constructionAndAccess) {
               testWords[i]);
     ASSERT_EQ(localVocabMoved.size(), localVocabSize);
   }
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, getIdAndAddIfNotContained) {
+  using namespace ad_utility::testing;
+  // In this index, `<subject>` is part of the vocabulary and IRIs starting with
+  // `http://example.org/` are encoded directly in an `Id`.
+  TestIndexConfig config{"<subject> <predicate> <http://example.org/42>"};
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+  LocalVocab localVocab;
+
+  // A word in the vocabulary of the index yields the corresponding `VocabIndex`
+  // `Id` and is not stored in the local vocab.
+  auto inVocab = LocalVocabEntry::fromIriref("<subject>", context);
+  auto idInVocab = localVocab.getIdAndAddIfNotContained(inVocab);
+  auto [lower, upper] = qec->getIndex().getVocab().getPositionOfWord(
+      inVocab.toStringRepresentation());
+  ASSERT_NE(lower, upper);
+  EXPECT_EQ(idInVocab.getBits(), Id::makeFromVocabIndex(lower).getBits());
+  EXPECT_TRUE(localVocab.empty());
+
+  // The same for a word that can be encoded directly in an `Id`.
+  auto encodable =
+      LocalVocabEntry::fromIriref("<http://example.org/69>", context);
+  auto idEncodable = localVocab.getIdAndAddIfNotContained(encodable);
+  EXPECT_EQ(idEncodable.getDatatype(), Datatype::EncodedVal);
+  EXPECT_EQ(idEncodable.getBits(),
+            qec->getIndex()
+                .encodedIriManager()
+                .encode(encodable.toStringRepresentation())
+                .value()
+                .getBits());
+  EXPECT_TRUE(localVocab.empty());
+
+  // A word that is neither in the vocabulary nor encodable is stored in the
+  // local vocab, just like with `getIndexAndAddIfNotContained`.
+  auto notInVocab = LocalVocabEntry::fromIriref("<notInVocab>", context);
+  auto idNotInVocab = localVocab.getIdAndAddIfNotContained(notInVocab);
+  ASSERT_EQ(idNotInVocab.getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(*idNotInVocab.getLocalVocabIndex(), notInVocab);
+  EXPECT_EQ(localVocab.size(), 1);
+  // Asking a second time doesn't add the word again.
+  EXPECT_EQ(localVocab.getIdAndAddIfNotContained(notInVocab).getBits(),
+            idNotInVocab.getBits());
+  EXPECT_EQ(localVocab.size(), 1);
 }
 
 // _____________________________________________________________________________

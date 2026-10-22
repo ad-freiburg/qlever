@@ -11,11 +11,14 @@
 #include "./GTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace std::chrono_literals;
 
 class StallForeverOperation : public Operation {
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
   std::string getCacheKeyImpl() const override {
     return "StallForeverOperation";
   }
@@ -74,16 +77,15 @@ class ShallowParentOperation : public Operation {
   bool knownEmptyResult() override { return false; }
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{child_.get()}, allocator()};
+  }
 
  public:
   template <typename ChildOperation, typename... Args>
   static ShallowParentOperation of(QueryExecutionContext* qec, Args&&... args) {
     return ShallowParentOperation{
         ad_utility::makeExecutionTree<ChildOperation>(qec, args...)};
-  }
-
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {child_.get()};
   }
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override {
@@ -109,7 +111,9 @@ class ShallowParentOperation : public Operation {
 class AlwaysFailOperation : public Operation {
   std::optional<Variable> variable_ = std::nullopt;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
   std::string getCacheKeyImpl() const override {
     // Because this operation always fails, it should never be cached.
     return "AlwaysFailOperationCacheKey";
@@ -160,7 +164,9 @@ class AlwaysFailOperation : public Operation {
 // provide via the constructor.
 class CustomGeneratorOperation : public Operation {
   Result::Generator generator_;
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
   std::string getCacheKeyImpl() const override { AD_FAIL(); }
   std::string getDescriptor() const override {
     return "CustomGeneratorOperationDescriptor";

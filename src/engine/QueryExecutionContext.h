@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 
+#include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
@@ -20,8 +21,11 @@
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/SortConfig.h"
+#include "util/AllocateShared.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
+#include "util/Executor.h"
 
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.
@@ -54,7 +58,7 @@ class CacheValue {
       requires IdTableLike<IdTableT>) static ad_utility::MemorySize
       getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
-                                         sizeof(Id));
+                                         BYTES_PER_ID_COLUMN_ENTRY);
   }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
@@ -111,10 +115,12 @@ class QueryExecutionContext
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
+      qlever::Executor executor,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
-      DisableCaching = DisableCaching::FromRuntimeParameter);
+      DisableCaching = DisableCaching::FromRuntimeParameter,
+      bool disableMaterializedViewRewriting = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -152,11 +158,16 @@ class QueryExecutionContext
 
   [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
-  };
+  }
 
   const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
   }
+
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `getAllocator()` (see
+  // `util/AllocateShared.h`).
+  DEFINE_MAKE_SHARED_MEMBER(getAllocator())
 
   // Serialize the given `runtimeInformation` to a JSON string and send it
   // using `updateCallback_`. If `sendPriority` is set to `IfDue`, this only
@@ -164,6 +175,14 @@ class QueryExecutionContext
   // ago; if it is set to `Always`, the update is always sent.
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
                          RuntimeInformation::SendPriority sendPriority) const;
+
+  // Information about the planning of the query (the time and the details).
+  // Once set, `signalQueryUpdate` sends it along with every
+  // update, as the key `meta` of the runtime information, like the result in
+  // the `application/qlever-results+json` format does.
+  void setQueryPlanningInfo(QueryPlanningInfo info) {
+    queryPlanningInfo_ = std::move(info);
+  }
 
   bool _pinSubtrees;
   bool _pinResult;
@@ -178,6 +197,33 @@ class QueryExecutionContext
     disableCaching_ = disableCaching;
   }
 
+  // If materialized view rewriting is active. The global configuration is
+  // already taken into account by the return value.
+  bool disableMaterializedViewRewriting() const {
+    return disableMaterializedViewRewriting_;
+  }
+
+  // Set this to `true` to enforce materialized view rewriting to be disabled.
+  // If set to `false`, the global configuration will be used. In particular, if
+  // the global configuration disables rewriting, setting this to `false` does
+  // not enable rewriting.
+  void setDisableMaterializedViewRewriting(
+      bool disableMaterializedViewRewriting);
+
+  // Whether a materialized view's own defining query is currently being
+  // planned to compute its cache key (see `MaterializedView::computeCacheKey`).
+  // This is unrelated to the `enable-materialized-view-query-rewrite` runtime
+  // parameter: it is only used to detect (and reject) the case where a view's
+  // query references another materialized view, which would otherwise
+  // deadlock on the write lock for the loaded views.
+  bool isAnalyzingMaterializedViewQuery() const {
+    return isAnalyzingMaterializedViewQuery_;
+  }
+
+  void setIsAnalyzingMaterializedViewQuery(bool isAnalyzing) {
+    isAnalyzingMaterializedViewQuery_ = isAnalyzing;
+  }
+
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
   bool areWebsocketUpdatesEnabled() const {
@@ -190,7 +236,7 @@ class QueryExecutionContext
   // Get a reference to the `MaterializedViewsManager`.
   const MaterializedViewsManager& materializedViewsManager() const {
     return *materializedViewsManager_;
-  };
+  }
 
   // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using
@@ -204,6 +250,10 @@ class QueryExecutionContext
     std::string name_;
     std::optional<Variable> geoIndexVar_ = std::nullopt;
     std::optional<double> geoIndexSimplificationInMeters_ = std::nullopt;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PinResultWithName, name_,
+                                                geoIndexVar_,
+                                                geoIndexSimplificationInMeters_)
   };
 
   // Accessors; see `pinResultWithName_` for an explanation.
@@ -214,6 +264,22 @@ class QueryExecutionContext
   const LocalVocabContext& getLocalVocabContext() const {
     return getIndex().getLocalVocabContext();
   }
+
+  // The executor on which the operations of this query run their parallel
+  // work (for example, the reading and decompressing of the blocks of lazy
+  // index scans). The server uses an executor that limits the number of
+  // threads that a single query may use at the same time (see
+  // `max-num-threads-per-query`).
+  const qlever::Executor& executor() const { return executor_; }
+
+  // How the in-memory sorts of this query run in parallel (see
+  // `IdTableUtils::sort`), created by `makeSortConfig(executor())` when this
+  // context is constructed.
+  const SortConfig& sortConfig() const { return sortConfig_; }
+
+  // Return a `SortConfig` for sorting on the `executor`, the number of tasks
+  // of which is the runtime parameter `sort-num-tasks-in-flight`.
+  static SortConfig makeSortConfig(qlever::Executor executor);
 
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
@@ -272,6 +338,24 @@ class QueryExecutionContext
   // limiting the update frequency when `sendPriority` is `IfDue`.
   mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
       std::chrono::steady_clock::time_point::min();
+
+  // See `setQueryPlanningInfo`.
+  std::optional<QueryPlanningInfo> queryPlanningInfo_;
+
+  // Disable the automatic rewriting of joins to materialized views. This also
+  // deactivates the check for materialized view rewriting of
+  // `QueryExecutionTree` by cache key. This is needed in
+  // `MaterializedView::computeCacheKey` to prevent a deadlock.
+  bool disableMaterializedViewRewriting_ = false;
+
+  // See the documentation for the getter with the same name above.
+  bool isAnalyzingMaterializedViewQuery_ = false;
+
+  // See the documentation for the getter with the same name above.
+  qlever::Executor executor_;
+
+  // See the documentation for the getter with the same name above.
+  SortConfig sortConfig_ = makeSortConfig(executor_);
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

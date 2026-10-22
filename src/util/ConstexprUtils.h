@@ -18,6 +18,21 @@
 
 namespace ad_utility {
 
+// True iff all the elements of the given `array` are distinct. Note that this
+// needs a quadratic number of comparisons, which is fine for the small
+// compile-time arrays that this is intended for.
+template <typename T, size_t N>
+constexpr bool allDistinct(const std::array<T, N>& array) {
+  for (size_t i = 0; i < N; ++i) {
+    for (size_t j = i + 1; j < N; ++j) {
+      if (array[i] == array[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 // Compute `base ^ exponent` where `^` denotes exponentiation. This is consteval
 // because for all runtime calls, a better optimized algorithm from the standard
 // library should be chosen.
@@ -33,7 +48,7 @@ constexpr auto pow(T base, int exponent) {
     result *= base;
   }
   return result;
-};
+}
 
 /*
  * @brief A compile time for loop, which passes the loop index to the
@@ -186,7 +201,7 @@ struct ValueSequenceImpl {};
 
 template <typename T, const T&... values>
 struct ValueSequenceRefImpl {};
-};  // namespace detail
+}  // namespace detail
 
 template <typename T, T... values>
 using ValueSequence = detail::ValueSequenceImpl<T, values...>;
@@ -244,7 +259,7 @@ CPP_template(typename Int, size_t NumIntegers)(
     value /= numValues;
   }
   return res;
-};
+}
 
 // Store the result of `integerToArray` in a `constexpr` variable which has
 // linkage, and can therefore be used in C++17 mode as a `const&` template

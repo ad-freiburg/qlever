@@ -5,6 +5,8 @@
 #ifndef QLEVER_TEST_UTIL_HTTPREQUESTHELPERS_H
 #define QLEVER_TEST_UTIL_HTTPREQUESTHELPERS_H
 
+#include <optional>
+
 #include "util/HashMap.h"
 #include "util/http/beast.h"
 
@@ -43,6 +45,17 @@ inline auto makeRequest(
 // Constructs a boost::beast GET request with the target path.
 inline auto makeGetRequest(std::string_view target) {
   return makeRequest(http::verb::get, target);
+}
+
+// Constructs a boost::beast GET request with the target path and optionally
+// with the access token.
+inline auto makeGetRequest(std::string_view target,
+                           std::optional<std::string> accessToken) {
+  auto request = makeRequest(http::verb::get, target);
+  if (accessToken.has_value()) {
+    request.set(http::field::authorization, "Bearer " + accessToken.value());
+  }
+  return request;
 }
 
 // Constructs a boost::beast POST request with the target path, body content
