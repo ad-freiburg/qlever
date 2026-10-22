@@ -129,15 +129,7 @@ class Row {
 // First the variation of the `RowReference` that can be created by `auto`
 // but has no mutable access for lvalues.
 class RowReferenceImpl {
- private:
-  // The actual implementation is in a private subclass and only the
-  // `RowReference` and the `IdTable` have direct access to it.
-  template <typename Table, ad_utility::IsConst isConst>
-  friend class RowReference;
-
-  template <typename T, int NumCols, typename Allocator, IsView isView>
-  friend class IdTable;
-
+ public:
   // The actual implementation of a reference to a row that allows mutable
   // access only for rvalues. The rather long name is chosen deliberately so
   // that the most likely problem becomes visible from the compiler's error
@@ -479,10 +471,15 @@ class RowReference
 
 }  // namespace columnBasedIdTable
 
-// The above `RowReference` is a proxy-type (value types that behave like
-// references), so we specialize `qlever::isProxy` for them.
+// The above `RowReference` and its base `RowReferenceWithRestrictedAccess` are
+// proxies (value types that behave like references), so we specialize
+// `qlever::isProxy` for them.
 template <typename Table, ad_utility::IsConst isConstTag>
 inline constexpr bool
     qlever::isProxy<columnBasedIdTable::RowReference<Table, isConstTag>> = true;
+template <typename Table, ad_utility::IsConst isConstTag>
+inline constexpr bool qlever::isProxy<
+    columnBasedIdTable::RowReferenceImpl::RowReferenceWithRestrictedAccess<
+        Table, isConstTag>> = true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

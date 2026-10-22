@@ -1024,31 +1024,9 @@ inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
 
-// The above `row_reference` types are proxies (value types that behave like
-// references), so we specialize `qlever::isProxy` for them. The unrestricted
-// `RowReference` is specialized for all instantiations in `IdTableRow.h`. Its
-// private base class cannot be named here, but it is the only template `Ref`
-// for which `RowReference<Table, isConst>` derives from `Ref<Table, isConst>`,
-// so we specialize for all `Ref<Table, isConst>` where this holds.
-namespace detail {
-template <template <typename, ad_utility::IsConst> class Ref, typename Table,
-          ad_utility::IsConst isConstTag, typename = void>
-inline constexpr bool isRowReferenceBase = false;
-template <template <typename, ad_utility::IsConst> class Ref, typename Table,
-          ad_utility::IsConst isConstTag>
-inline constexpr bool isRowReferenceBase<
-    Ref, Table, isConstTag, std::void_t<typename Table::single_value_type>> =
-    std::is_base_of_v<Ref<Table, isConstTag>,
-                      columnBasedIdTable::RowReference<Table, isConstTag>>;
-}  // namespace detail
-
-template <template <typename, ad_utility::IsConst> class Ref, typename Table,
-          ad_utility::IsConst isConstTag>
-inline constexpr bool qlever::isProxy<Ref<Table, isConstTag>> =
-    ::detail::isRowReferenceBase<Ref, Table, isConstTag>;
-
-// Check that the un/restricted RowReferences are specialized via isProxy, for
-// example for the dynamic and the static tables and for views.
+// Check that the un/restricted RowReferences are specialized via isProxy (see
+// `IdTableRow.h`), for example for the dynamic and the static tables and for
+// views.
 static_assert(qlever::isProxy<IdTable::row_reference>);
 static_assert(qlever::isProxy<IdTable::const_row_reference>);
 static_assert(qlever::isProxy<IdTableView<0>::const_row_reference>);
