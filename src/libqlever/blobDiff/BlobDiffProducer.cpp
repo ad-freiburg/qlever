@@ -404,7 +404,7 @@ BlobDiffProducer::WeeklyResult stepImpl(const BlobDiffConfig& config,
 
   BlobSerializationConfig serializationConfig;
   serializationConfig.excludedEntryRegexes_ = config.excludedEntryRegexes_;
-  size_t maxSegments = forceCompaction ? 0 : config.maxGeoSegments_;
+  size_t maxSegments = forceCompaction ? 1 : config.maxGeoSegments_;
   double maxDeadRatio = forceCompaction ? 0.0 : config.maxDeadShapeRatio_;
   serializationConfig.incremental_ = BlobSerializationConfig::IncrementalBase{
       &base, maxSegments, maxDeadRatio};
