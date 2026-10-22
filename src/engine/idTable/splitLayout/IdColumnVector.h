@@ -37,6 +37,7 @@ class IdColumnVector {
       std::allocator_traits<Allocator>::template rebind_alloc<uint8_t>;
 
   using value_type = Id;
+  // The two reference types, see `BasicIdColumnIterator`.
   using reference = IdRef;
   using const_reference = ConstIdRef;
   using reference_restricted = IdRef::Base;
@@ -64,8 +65,8 @@ class IdColumnVector {
         datatypes_(size, DatatypeAllocator{allocator}) {}
 
   // Construct from a range of elements that are convertible to `Id` (e.g.
-  // `Id` itself, or `IdRef`/`ConstIdRef` as yielded by another column's
-  // iterators). Needed e.g. for `IdTable::clone()` on this storage.
+  // `Id` itself, or the references that the iterators of another column
+  // yield). Needed e.g. for `IdTable::clone()` on this storage.
   //
   // TODO<pas-kes>: This element-wise interface is inefficient as soon as the
   // iterators point into another split column. Check its performance and

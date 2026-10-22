@@ -39,6 +39,7 @@ class BasicIdColumnView {
   using PayloadPointer =
       std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
   using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+  // The two reference types, see `BasicIdColumnIterator`.
   using reference = BasicIdRef<IsConst>;
   using reference_restricted = typename BasicIdRef<IsConst>::Base;
   using value_type = Id;

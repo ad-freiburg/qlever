@@ -17,8 +17,8 @@
 namespace columnBasedIdTable::splitLayout {
 
 // A random-access iterator over a `BasicIdColumnView<IsConst>`. Dereferencing
-// yields a `BasicIdRef<IsConst>` proxy computed from the current pointer
-// pair.
+// yields the restricted proxy reference `BasicIdRef<IsConst>::Base` computed
+// from the current pointer pair.
 //
 // NOTE: deliberately does NOT use the generic
 // `ad_utility::IteratorForAccessOperator` (pointer-back-to-container +
@@ -38,6 +38,9 @@ class BasicIdColumnIterator {
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
   using value_type = Id;
+  // `reference` is the full `BasicIdRef`, which code has to request explicitly
+  // to write via a variable. Dereferencing yields `reference_restricted`, so
+  // that `auto x = *it; x = id;` does not compile (see `IdRef.h`).
   using reference = BasicIdRef<IsConst>;
   using reference_restricted = typename BasicIdRef<IsConst>::Base;
   using pointer = void;
