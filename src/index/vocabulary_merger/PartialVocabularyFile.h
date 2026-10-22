@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -124,7 +125,7 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
     offsetOfLastWord_ = currentBlock_.getCurrentPosition();
     currentBlock_ << word;
     currentBlock_ << indexAndExternalFlag.isExternal();
-    currentBlock_ << indexAndExternalFlag.id();
+    currentBlock_ << indexAndExternalFlag.index();
     ++numWordsInBlock_;
     ++numWords_;
     if (currentBlock_.getCurrentPosition() >=
@@ -186,8 +187,12 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
 // never written to).
 class PartialVocabularyRunsInput : public ad_utility::NoCopy {
  public:
-  using Element = detail::MergeWord;
-  using Block = detail::MergeBlock;
+  using Element = detail::InputWord;
+  using Block = detail::InputBlock;
+  // The merge folds the equal words of the partial vocabularies into one
+  // `MergedWord` with all their occurrences, so its output blocks are of a
+  // different type than its input blocks, see `MergeBlock.h`.
+  using OutputBlock = detail::MergedBlock;
 
   // The totals over all blocks of all partial vocabularies, see `statistics`.
   struct Statistics {
@@ -279,7 +284,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     return runs_.at(run).blocks_.at(block).last_;
   }
 
-  // Read a block. The words are parsed in place, see `MergeBlock`. The bytes
+  // Read a block. The words are parsed in place, see `InputBlock`. The bytes
   // of the block come from the `pools_` and go back to them with the block.
   Block getBlock(size_t run, size_t block) const {
     const auto& info = runs_.at(run).blocks_.at(block);
@@ -292,16 +297,21 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
                  pools_};
   }
 
-  Block makeEmptyBlock() const { return Block{pools_}; }
+  // Create an empty block of merged words, whose buffers come from the
+  // `pools_`.
+  OutputBlock makeEmptyBlock() const { return OutputBlock{pools_}; }
 
-  // Append a merged `word` to an output `block` of the merge (a copy of the
-  // word, the `word` itself lives in an input block).
-  void appendToBlock(Block& block, const Element& word) const {
-    block.push(word);
+  // Append a merged `word` to an output `block` of the merge. A word that is
+  // equal to the last word of the block is folded into that word, see
+  // `MergedBlock::addWord`.
+  void appendToBlock(OutputBlock& block, const Element& word) const {
+    block.addWord(word);
   }
 
+  // The memory that the `word` occupies in an output block, see
+  // `MergedBlock::memorySizeOfAppended`.
   MemorySize memorySizeOfElement(const Element& word) const {
-    return Element::memorySize(word);
+    return OutputBlock::memorySizeOfAppended(word);
   }
 
  private:

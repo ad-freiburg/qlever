@@ -743,6 +743,8 @@ template struct TypeErasedValueGetter<
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::NumGeometries>>;
 template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::SourceCrsType>>;
+template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricLength>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricArea>>;
