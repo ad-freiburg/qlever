@@ -1,6 +1,12 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_GEOMETRYINFO_H
 #define QLEVER_SRC_UTIL_GEOMETRYINFO_H
@@ -19,6 +25,16 @@
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
+
+// Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
+// included in this header).
+//
+// NOTE: The underlying type must match the definition in the util's
+// `geo/Geo.h`. A mismatch does not compile, because `GeometryInfo.cpp`
+// includes both declarations.
+namespace util::geo {
+enum class CRSType : uint8_t;
+}
 
 namespace ad_utility {
 
@@ -93,6 +109,30 @@ struct GeometryType {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
+// Represents the source CRS type (before parsing/projecting), for the meaning
+// see `libspatialjoin`'s `CRSType`.
+struct SourceCrsType {
+ private:
+  // The default (for the C++17 default constructor) is CRS84, the value of
+  // `util::geo::CRSType::CRS84` (the util is not included in this header).
+  uint16_t type_ = 1;
+
+ public:
+  explicit SourceCrsType(uint16_t type);
+  explicit SourceCrsType(::util::geo::CRSType type);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  SourceCrsType() = default;
+#endif
+
+  uint16_t type() const { return type_; }
+
+  // Returns the representing IRI.
+  std::optional<std::string_view> asIri() const;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
+};
+
 // Represents the number of child geometries inside a collection geometry type.
 struct NumGeometries {
  private:
@@ -144,6 +184,12 @@ struct MetricArea {
   bool isValid() const { return !std::isnan(area_); }
 };
 
+// The serialization format of a geometry literal. For now, only WKT literals
+// are supported (in the future possibly e.g. GeoJSON or KML). The value zero
+// is `WKT`, because all records written before this field was taken into use
+// are WKT literals, see the rules at `GEOMETRY_INFO_VERSION`.
+enum class SerializationType : uint16_t { WKT };
+
 // Class for internal exception handling of errors from `s2geometry`.
 class InvalidPolygonError : public std::runtime_error {
  public:
@@ -160,7 +206,8 @@ class GeometryInfo;
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
-              NumGeometries, MetricLength, MetricArea>;
+              SourceCrsType, NumGeometries, MetricLength, MetricArea,
+              SerializationType>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
@@ -171,8 +218,8 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //
 // 5: The bytes `[28, 32)` are padding with arbitrary content (they were only
 //    zeroed explicitly in later builds of this version).
-// 6: The bytes `[28, 32)` are the two reserved 16-bit fields
-//    `reservedSourceCrs_` and `reservedLiteralFormat_`, see below.
+// 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
+//    reserved and zero) and `serializationType_`, see below.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -194,6 +241,8 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 // - Consequently, a zero value of a field that was added (or taken into use)
 //   after version 5 must mean "not computed", and every reader of such a field
 //   must handle this case, typically by computing the value from the literal.
+//   Alternatively, zero may be a value that is correct for all records written
+//   before (like `SerializationType::WKT`).
 // - Only a change that violates these rules is index-breaking: bump the
 //   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
 //   and remove the handling of the dropped versions from `fromSerialized` and
@@ -232,13 +281,13 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
-  // Two reserved fields (in place of the padding before the 8-byte aligned
-  // `metricLength_` in version 5), which are always zero for now: the
-  // coordinate reference system of the literal (#3583), and the format of the
-  // literal (WKT, and in the future e.g. GeoJSON or KML). See the rules at
-  // `GEOMETRY_INFO_VERSION` for taking them into use.
-  uint16_t reservedSourceCrs_ = 0;
-  uint16_t reservedLiteralFormat_ = 0;
+  // The CRS named by the IRI of the literal (before the projection to CRS84),
+  // see `SourceCrsType`. This was the reserved field `reservedSourceCrs_` in
+  // the first builds of version 6, so it is zero ("not computed") in their
+  // records and in those of version 5 (see `fromSerialized`).
+  SourceCrsType sourceCrs_;
+  // The serialization format of the literal, see `SerializationType`.
+  SerializationType serializationType_ = SerializationType::WKT;
   MetricLength metricLength_;
   MetricArea metricArea_;
 
@@ -254,7 +303,8 @@ class GeometryInfo {
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid, NumGeometries numGeometries,
-               MetricLength metricLength, MetricArea metricArea);
+               SourceCrsType sourceCrs, MetricLength metricLength,
+               MetricArea metricArea);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Required for `bit_cast`.
   GeometryInfo() = default;
@@ -264,7 +314,7 @@ class GeometryInfo {
   GeometryInfo& operator=(const GeometryInfo& other) = default;
 
   // Parse an arbitrary WKT literal and compute all attributes. Return
-  // `std:nullopt` if `wkt` cannot be parsed.
+  // `std::nullopt` if `wkt` cannot be parsed (in the strict parsing mode).
   static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt);
 
   // Read a `GeometryInfo` from `bytes`, its binary representation of the given
@@ -290,6 +340,15 @@ class GeometryInfo {
 
   // Parse an arbitrary WKT literal and return only the geometry type.
   static std::optional<GeometryType> getWktType(std::string_view wkt);
+
+  // Get the source CRS type. Empty iff this object was read from an index that
+  // predates `sourceCrs_` (stored as zero, see `fromSerialized`): then compute
+  // it from the literal. Zero is unambiguous, because a literal with an
+  // unsupported CRS has no `GeometryInfo` at all.
+  std::optional<SourceCrsType> getSourceCrsType() const;
+
+  // Parse an arbitrary WKT literal and return only the contained CRS type.
+  static std::optional<SourceCrsType> getSourceCrsType(std::string_view wkt);
 
   // Extract centroid from geometryTypeAndCentroid_ and convert it to GeoPoint.
   Centroid getCentroid() const;
@@ -323,10 +382,19 @@ class GeometryInfo {
   static std::optional<MetricLength> getMetricLength(
       const std::string_view& wkt);
 
-  // Extract the requested information from this object.
+  // Get the serialization format of the literal.
+  SerializationType getSerializationType() const;
+
+  // Return the serialization format of an arbitrary WKT literal, which is
+  // always `WKT`.
+  static std::optional<SerializationType> getSerializationType(
+      std::string_view wkt);
+
+  // Extract the requested information from this object. Empty iff it is not
+  // stored in this object (see `getSourceCrsType`).
   CPP_template(typename RequestedInfo = GeometryInfo)(
-      requires RequestedInfoT<RequestedInfo>) RequestedInfo
-      getRequestedInfo() const;
+      requires RequestedInfoT<RequestedInfo>)
+      std::optional<RequestedInfo> getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
   CPP_template(typename RequestedInfo = GeometryInfo)(
@@ -335,7 +403,8 @@ class GeometryInfo {
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit
-// padding, see `GeometryInfo::padding_`. For a standard-layout class, the
+// padding, because the `GeoVocabulary` writes it to disk and padding bytes
+// would depend on uninitialized memory. For a standard-layout class, the
 // members are laid out in the order of their declaration, so there is no
 // padding iff its size is the sum of the sizes of its members. That is checked
 // in the constructor (see `GeometryInfo.cpp`), because the members are private.

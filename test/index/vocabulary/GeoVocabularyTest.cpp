@@ -64,6 +64,9 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         // Out of range literal
         "\"POLYGON((1 1, 2 2, 3 450))\""
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        // Literal that is only valid in lenient parsing mode
+        "\"LINESTRING(1 1, 2 a, 3 3)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         // Valid WKT literals
         "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), "
         "POLYGON((2 4, 4 4, 4 2, 2 2)))\""
@@ -96,6 +99,15 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     };
 
     checkGeoVocabContents(geoVocab);
+
+    // The literal that is only valid in lenient parsing mode is treated as an
+    // invalid geometry.
+    auto leniencyIdx =
+        geoVocab.lower_bound("\"LINESTRING(1 1, 2 a", ql::ranges::less{});
+    ASSERT_EQ(leniencyIdx.word(),
+              "\"LINESTRING(1 1, 2 a, 3 3)\""
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+    EXPECT_EQ(geoVocab.getGeoInfo(leniencyIdx.index()), std::nullopt);
 
     // Test further methods
     ASSERT_EQ(geoVocab.size(), testLiterals.size());
@@ -225,6 +237,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
                    {{2, 2}, {4, 4}},
                    {3, 3},
                    {1},
+                   SourceCrsType{util::geo::CRSType::CRS84},
                    getLengthForTesting(exampleGeoLit),
                    getAreaForTesting(exampleGeoLit)};
   EXPECT_GEOMETRYINFO(gi.value(), exp);
@@ -280,7 +293,7 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 }
 
 // Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
-// content, is read with the reserved fields zeroed.
+// content, is read with the source CRS zeroed and the serialization type `WKT`.
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
@@ -327,7 +340,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     out << contents;
   }
 
-  // Read the version 5 file. The reserved fields must be zero.
+  // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
+  // the source CRS "not computed" and the serialization type `WKT`.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
@@ -336,8 +350,11 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     auto actual = geoVocab.getGeoInfo(i);
     ASSERT_EQ(actual.has_value(), expected.has_value());
     if (expected.has_value()) {
-      EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()),
-                absl::bit_cast<Bytes>(expected.value()));
+      EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
+      EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
+      auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
+      std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
+      EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
     }
   }
 }

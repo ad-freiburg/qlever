@@ -14,25 +14,10 @@
 #include <utility>
 
 #include "backports/concepts.h"
-#include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
 #include "global/Id.h"
 #include "util/IsProxy.h"
 
 namespace columnBasedIdTable::splitLayout {
-
-// TEMPORARY bridge between the legacy packed `Id` (`ValueId`) and the split
-// layout: converts the single-word `Id::getBits()`/`Id::fromBits(T)` from/to
-// `SplitLayoutIdBitRepresentation`'s (datatype, payload) shape. Only needed
-// as long as the split layout's element type is the legacy `Id`.
-inline SplitLayoutIdBitRepresentation getBitsCompat(const Id id) {
-  const auto bits = id.getBits();
-  return {static_cast<uint8_t>(bits >> Id::numDataBits),
-          bits & ((Id::T{1} << Id::numDataBits) - 1)};
-}
-inline Id idFromBitsCompat(const SplitLayoutIdBitRepresentation bits) {
-  return Id::fromBits((static_cast<Id::T>(bits.datatype_) << Id::numDataBits) |
-                      bits.payload_);
-}
 
 // A proxy reference to a single `Id` stored in the experimental split layout
 // (a payload word + datatype byte in two separate arrays, instead of one
@@ -73,7 +58,7 @@ class BasicIdRef {
   // Implicit conversion to the legacy `Id`, e.g. to store the referenced value
   // in a variable, or to pass it to a function that expects a real `Id`.
   /*implicit*/ operator Id() const {
-    return idFromBitsCompat({*datatype_, *payload_});
+    return Id::fromBits(*datatype_, *payload_);
   }
 
   // Assign a new `Id` to the referenced slot (`IdRef` only). `const`, like
@@ -82,9 +67,8 @@ class BasicIdRef {
   // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
   CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
       const Id id) const {
-    auto [datatype, payload] = getBitsCompat(id);
-    *payload_ = payload;
-    *datatype_ = datatype;
+    *payload_ = id.getPayloadBits();
+    *datatype_ = id.getDatatypeBits();
     return *this;
   }
 
@@ -111,9 +95,7 @@ class BasicIdRef {
   [[nodiscard]] auto compareWithoutLocalVocab(const Id& other) const {
     return toId().compareWithoutLocalVocab(other);
   }
-  [[nodiscard]] SplitLayoutIdBitRepresentation getBits() const noexcept {
-    return {*datatype_, *payload_};
-  }
+  [[nodiscard]] Id::T getBits() const noexcept { return toId().getBits(); }
   [[nodiscard]] Id::T getPayloadBits() const noexcept { return *payload_; }
   [[nodiscard]] Datatype getDatatype() const noexcept {
     return static_cast<Datatype>(*datatype_);
