@@ -532,6 +532,10 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
+addLinkAndDiscoverTest(ComparisonOfIntAndDoubleTest)
+
+addLinkAndDiscoverTest(OrderByComparatorTest engine)
+
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)

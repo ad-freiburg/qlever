@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "backports/keywords.h"
+#include "engine/OrderByComparator.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
@@ -147,6 +148,10 @@ struct EvaluationContext {
   bool _isPartOfGroupBy = false;
 
   ad_utility::SharedCancellationHandle cancellationHandle_;
+
+  // The order of `ORDER BY`, which `MIN` and `MAX` use. It is constructed once
+  // here, because its construction is too expensive for each comparison.
+  OrderByComparator orderByComparator_;
 
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
