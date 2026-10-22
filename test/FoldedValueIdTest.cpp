@@ -540,10 +540,9 @@ TEST_F(ValueIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<ValueId>);
 }
 
-// _____________________________________________________________________________
-// `incremented` is the next bit pattern. The result is hence the smallest `Id`
-// that is greater than the original one, and the overflow of the payload
-// carries into the datatype.
+// Test that `incremented` returns the next bit pattern, that is, the smallest
+// `Id` that is greater than the original one, with the overflow of the payload
+// carrying into the datatype.
 TEST_F(ValueIdTest, incremented) {
   // Without an overflow, only the payload changes.
   EXPECT_EQ(makeVocabId(17).incremented(), makeVocabId(18));
