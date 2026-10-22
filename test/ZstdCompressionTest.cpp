@@ -136,15 +136,17 @@ TEST(CompressionTest, CompressWithReference) {
   using Error = ZstdWrapper::Error;
   // Decompress `compressed` with `reference` into a vector of the size that is
   // stored in the frame header, and return that vector.
-  auto decompress = [](ql::span<const char> reference,
-                       ql::span<const char> compressed) {
-    std::vector<char> result(
-        ZstdWrapper::getUncompressedSize(compressed.data(), compressed.size()));
-    EXPECT_THAT(ZstdWrapper::tryToDecompressWithReference(
-                    reference, compressed, result.data(), result.size()),
-                VariantWith<size_t>(result.size()));
-    return result;
-  };
+  auto decompress =
+      [](ql::span<const char> reference, ql::span<const char> compressed,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto t = generateLocationTrace(loc);
+        std::vector<char> result(ZstdWrapper::getUncompressedSize(
+            compressed.data(), compressed.size()));
+        EXPECT_THAT(ZstdWrapper::tryToDecompressWithReference(
+                        reference, compressed, result.data(), result.size()),
+                    VariantWith<size_t>(result.size()));
+        return result;
+      };
 
   // A pseudo-random reference, and data that mostly consists of pieces of it.
   std::vector<char> reference(100'000);
