@@ -118,7 +118,8 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   sweeper.flush();
 }
 
-// _____________________________________________________________________________
+// Test that invalid WKT literals from the index and from the local vocabulary
+// are skipped by the strict parsing and counted by `getNumInvalid`.
 TEST(SpatialJoinParser, InvalidWktIsSkipped) {
   auto lit = [](std::string_view wkt) {
     return absl::StrCat("\"", wkt, "\"^^<", GEO_WKT_LITERAL, ">");
