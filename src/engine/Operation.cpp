@@ -848,7 +848,7 @@ bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
 }
 
 // _____________________________________________________________________________
-qlm::optional<qlm::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
@@ -871,14 +871,14 @@ bool Operation::isDistinctByImpl(
 }
 
 // _____________________________________________________________________________
-qlm::optional<qlm::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
     const std::vector<ColumnIndex>& distinctIndices) const {
   AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
   return std::nullopt;
 }
 
 // _____________________________________________________________________________
-qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
+std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
   return std::nullopt;
