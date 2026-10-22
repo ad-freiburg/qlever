@@ -123,3 +123,83 @@ TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
     EXPECT_TRUE(map.contains(key)) << key;
   }
 }
+
+// Test that every parameter declared in `RuntimeParameters` is registered in
+// the constructor, and can thus be set via `setFromString`. As the C++
+// versions we support have no reflection (it only comes with C++26), the
+// parameters are listed explicitly below. To make sure that this list is
+// complete, the sizes of the listed parameters must add up to the offset of
+// `runtimeMap_` (which is declared after all the parameters). If this test
+// fails after you added a parameter, add it to the list below AND register it
+// in the constructor of `RuntimeParameters`.
+TEST(RuntimeParameters, allParametersAreRegistered) {
+  RuntimeParameters params;
+  auto keys = params.getKeys();
+  size_t numParameters = 0;
+  size_t totalSize = 0;
+  auto check = [&](auto& parameter,
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    ++numParameters;
+    totalSize += sizeof(parameter);
+    EXPECT_THAT(keys, ::testing::Contains(parameter.name()));
+    EXPECT_NO_THROW(
+        params.setFromString(parameter.name(), parameter.toString()))
+        << parameter.name();
+  };
+  check(params.stripColumns_);
+  check(params.sortEstimateCancellationFactor_);
+  check(params.cacheMaxNumEntries_);
+  check(params.cacheMaxSize_);
+  check(params.cacheMaxSizeSingleEntry_);
+  check(params.lazyIndexScanNumBlocksInFlight_);
+  check(params.maxNumThreadsPerQuery_);
+  check(params.rebuildIndexScanNumThreads_);
+  check(params.rebuildPermutationWriterNumThreads_);
+  check(params.rebuildMaxConcurrentPermutationPairs_);
+  check(params.lazyIndexScanMaxSizeMaterialization_);
+  check(params.useBinsearchTransitivePath_);
+  check(params.groupByHashMapEnabled_);
+  check(params.groupByDisableIndexScanOptimizations_);
+  check(params.serviceMaxValueRows_);
+  check(params.serviceMaxRedirects_);
+  check(params.queryPlanningBudget_);
+  check(params.throwOnUnboundVariables_);
+  check(params.cacheMaxSizeLazyResult_);
+  check(params.websocketUpdatesEnabled_);
+  check(params.websocketUpdateInterval_);
+  check(params.smallIndexScanSizeEstimateDivisor_);
+  check(params.zeroCostEstimateForCachedSubtree_);
+  check(params.requestBodyLimit_);
+  check(params.cacheServiceResults_);
+  check(params.cacheLoadResults_);
+  check(params.syntaxTestMode_);
+  check(params.divisionByZeroIsUndef_);
+  check(params.throwOnInvalidWkt_);
+  check(params.enablePrefilterOnIndexScans_);
+  check(params.spatialJoinMaxNumThreads_);
+  check(params.patternTrickNumTasksInFlight_);
+  check(params.sortNumTasksInFlight_);
+  check(params.spatialJoinPrefilterMaxSize_);
+  check(params.spatialJoinTmpDir_);
+  check(params.enableDistributiveUnion_);
+  check(params.treatDefaultGraphAsNamedGraph_);
+  check(params.sparqlResultsJsonWithTime_);
+  check(params.materializedViewWriterMemory_);
+  check(params.defaultQueryTimeout_);
+  check(params.sortInMemoryThreshold_);
+  check(params.prefilteredOptionalJoin_);
+  check(params.enableMaterializedViewQueryRewrite_);
+  check(params.materializedViewPatternMatchNumAssignments_);
+  check(params.materializedViewPatternMatchNumReplacementPlans_);
+  check(params.serviceAllowedIriPrefixes_);
+  check(params.permutationWriterNumBlocksInFlight_);
+  check(params.vacuumMinimumBlockSize_);
+  check(params.disableCaching_);
+  check(params.logLevel_);
+  check(params.constructDeduplication_);
+  EXPECT_EQ(totalSize,
+            static_cast<size_t>(reinterpret_cast<char*>(&params.runtimeMap_) -
+                                reinterpret_cast<char*>(&params)));
+  EXPECT_EQ(numParameters, keys.size());
+}
