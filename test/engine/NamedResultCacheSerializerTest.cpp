@@ -317,7 +317,8 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
 TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   using namespace namedResultCacheSerializer;
   auto writeWithVersion = [](uint16_t version) {
-    return [version](auto& serializer, const NamedResultCache::Value& v) {
+    return [version](auto& serializer, [[maybe_unused]] const std::string& key,
+                     const NamedResultCache::Value& v) {
       writeValue(serializer, v,
                  ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
                  v.resultSortedOn_, /*writeLocalVocabWords=*/true, version);
@@ -403,6 +404,48 @@ TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
       writeEntries(writer6, entriesWithTwoSegments,
                    writeWithVersion(namedResultCacheSerializer::formatVersion),
                    namedResultCacheSerializer::formatVersion));
+}
+
+// _____________________________________________________________________________
+// Test that `writeEntries` calls `writeEntry` once per entry, in the order of
+// the keys, with the key that belongs to the value, and that `writeEntry` can
+// use the key to modify the written value.
+TEST_F(NamedResultCacheSerializerTest, WriteEntriesPassesKeyOfEachValue) {
+  using namespace namedResultCacheSerializer;
+  NamedResultCache cache;
+  for (std::string key : {"c", "a", "b"}) {
+    cache.store(key, makeSimpleValue(absl::StrCat("key-", key)));
+  }
+  std::vector<std::string> visitedKeys;
+  auto writeEntry = [&visitedKeys](auto& serializer, const std::string& key,
+                                   const NamedResultCache::Value& v) {
+    visitedKeys.push_back(key);
+    EXPECT_EQ(v.cacheKey_, absl::StrCat("key-", key));
+    // Write a copy of the value, the cache key of which is derived from the
+    // `key`.
+    NamedResultCache::Value copy{v.result_,
+                                 v.varToColMap_,
+                                 v.resultSortedOn_,
+                                 v.localVocab_.clone(),
+                                 absl::StrCat("written-", key),
+                                 std::nullopt};
+    writeValue(serializer, copy,
+               ExplicitIdTableOperation::viewOf(copy.result_).getColumns(),
+               copy.resultSortedOn_, /*writeLocalVocabWords=*/true,
+               formatVersion);
+  };
+  ByteBufferWriteSerializer writer;
+  writeEntries(writer, cache.getAllEntriesSortedByKey(), writeEntry,
+               formatVersion);
+  EXPECT_THAT(visitedKeys, ElementsAre("a", "b", "c"));
+
+  NamedResultCache readCache;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  readCache.readFromSerializer(reader, alloc_, qec_->getLocalVocabContext());
+  ASSERT_EQ(readCache.numEntries(), 3);
+  for (std::string key : {"a", "b", "c"}) {
+    EXPECT_EQ(readCache.get(key)->cacheKey_, absl::StrCat("written-", key));
+  }
 }
 
 // _____________________________________________________________________________

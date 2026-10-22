@@ -1644,8 +1644,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
                    .front()
                    .firstTriple_.col0Id_;
     ASSERT_EQ(point.getDatatype(), Datatype::GeoPoint);
-    EXPECT_EQ(point.getBits() &
-                  ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits),
+    EXPECT_EQ(point.getPayloadBits(),
               GeoPoint::combineCoordinates(
                   GeoPoint::quantizeCoordinate(48.0, 90),
                   GeoPoint::quantizeCoordinate(7.8, 180), encoding));
