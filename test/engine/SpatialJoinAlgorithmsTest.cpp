@@ -1873,7 +1873,8 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
   EXPECT_EQ(noMatchRes.idTableView().numRows(), 0);
 }
 
-// _____________________________________________________________________________
+// Test that all algorithms report the distances in the configured unit, and
+// that the unit is part of the cache key.
 TEST(SpatialJoin, DistanceUnit) {
   std::string kg;
   addPoint(kg, "1", "\"Uni Freiburg TF\"",

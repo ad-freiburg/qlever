@@ -1095,7 +1095,9 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                            "literal with exactly 9 characters"));
 }
 
-// _____________________________________________________________________________
+// Test that the parameter `<distanceUnit>` of the spatial search `SERVICE` sets
+// the unit of the `SpatialJoin`, the default unit per algorithm, and the errors
+// for a unit without a distance variable and for a unit that is not a length.
 TEST(QueryPlanner, SpatialJoinServiceDistanceUnit) {
   auto query = [](std::string_view algorithm, std::string_view config) {
     return absl::StrCat(
