@@ -43,7 +43,7 @@ namespace ad_utility::vocabulary_merger {
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). The merged words are written to the
 // `writer` (see `ParallelWordWriterBase` in `index/vocabulary/
-// VocabularyTypes.h`), which is not finished by this function. Argument
+// VocabularyTypes.h`), which is finished by this function. Argument
 // `blankNodeIriRegexes` is a (possibly empty) set of compiled regexes; IRIs
 // that are fully matched by any of them are treated as blank nodes (see
 // `TripleComponentWithIndex::isBlankNode`). The regexes are compiled by the
@@ -55,7 +55,8 @@ namespace ad_utility::vocabulary_merger {
 // vocabulary files (see `index/vocabulary_merger/PartialVocabularyFile.h`),
 // each range is merged by a chunk of its own, and the merged blocks arrive in
 // the order of the vocabulary on the thread that calls this function. That
-// thread does no per-word work at all:
+// thread does no per-word work at all (see
+// `index/vocabulary_merger/SegmentPipeline.h`):
 //
 // 1. It cuts the merged blocks into segments (see
 //    `index/vocabulary_merger/Segment.h`), each of which is a task on the
@@ -66,10 +67,11 @@ namespace ad_utility::vocabulary_merger {
 // 2. It commits the finished segments in order (see
 //    `index/vocabulary_merger/SegmentCommitter.h`): the global IDs are the
 //    segment-local IDs plus the number of words in the previous segments, the
-//    ID map entries go to the threads that write the partial ID maps (see
+//    ID map entries go to the tasks that write the partial ID maps (see
 //    `index/vocabulary_merger/IdMapWriters.h`), and the words go to the blocks
 //    of their sub-vocabulary, which are prepared (compressed) on the thread
-//    pool and appended to the files by one thread per sub-vocabulary.
+//    pool and appended to the files in order, by one strand of the pool per
+//    sub-vocabulary (see `index/vocabulary_merger/AsyncBlockWriter.h`).
 template <typename W>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, ParallelWordWriterBase& writer,

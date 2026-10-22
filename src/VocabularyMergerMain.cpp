@@ -115,13 +115,11 @@ int main(int argc, char** argv) {
   try {
     PolymorphicVocabulary vocabulary;
     vocabulary.resetToType(vocabType);
-    auto writerPtr =
+    auto writer =
         vocabulary.makeParallelWriterPtr(outputBasename + VOCAB_SUFFIX);
-    auto& writer = *writerPtr;
-    writer.readableName() = "merged vocabulary";
+    writer->readableName() = "merged vocabulary";
     auto metaData = ad_utility::vocabulary_merger::mergeVocabulary(
-        basename, numPartialVocabularies, sortPred, writer, memory);
-    writer.finish();
+        basename, numPartialVocabularies, sortPred, *writer, memory);
     AD_LOG_INFO << "Merged " << metaData.numWordsTotal() << " words and "
                 << metaData.getNextBlankNodeIndex() << " blank nodes in "
                 << timer.msecs().count() << " ms" << std::endl;

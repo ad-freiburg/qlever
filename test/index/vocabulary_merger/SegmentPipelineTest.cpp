@@ -1,0 +1,133 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "../../util/GTestHelpers.h"
+#include "VocabularyMergerTestHelpers.h"
+#include "index/vocabulary_merger/IdMap.h"
+#include "index/vocabulary_merger/SegmentPipeline.h"
+#include "util/Exception.h"
+
+using namespace ad_utility::vocabulary_merger;
+using namespace ad_utility::vocabulary_merger::detail;
+using namespace vocabularyMergerTestHelpers;
+using ::testing::ElementsAre;
+using ::testing::Pair;
+
+namespace {
+// The basename of the partial vocabularies of the tests below.
+const std::string partialVocabBasename = "segmentPipelineTest";
+const ad_utility::RegexSet noRegexes{};
+}  // namespace
+
+// Test that the merged blocks are cut into segments of at least the given
+// number of words, but never between two blocks that share a word, and that
+// the segments are committed in order: the words arrive at the writer in
+// order, the ID maps map the occurrences of a word to its single global ID,
+// and the metadata counts all the words.
+TEST(SegmentPipeline, cutAndCommitSegments) {
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
+  std::vector<std::pair<std::string, bool>> words;
+  auto writer = makeParallelWriter(makeCollectingWordCallback(words));
+  // The word `"b"` ends the first block and starts the second one, so the two
+  // blocks have to end up in the same segment.
+  auto blocks =
+      makeMergedBlocks({{{"\"a\"", true, 0, 0}, {"\"b\"", true, 0, 1}},
+                        {{"\"b\"", false, 1, 0}, {"\"c\"", true, 0, 2}},
+                        {{"\"d\"", true, 0, 3}},
+                        {},
+                        {{"\"e\"", true, 0, 4}, {"\"f\"", true, 0, 5}}});
+  VocabularyMetaData meta;
+  {
+    SegmentPipeline<decltype(lessThan)> pipeline{
+        writer,
+        partialVocabularyIdMapFilenames(partialVocabBasename, 2),
+        2,
+        noRegexes,
+        lessThan,
+        /*maxSegmentsInFlight=*/2,
+        /*numWordsPerSegment=*/2};
+    for (MergedBlock& block : blocks) {
+      EXPECT_FALSE(pipeline.hasFailed());
+      pipeline.push(std::move(block));
+    }
+    meta = pipeline.finish();
+  }
+  EXPECT_THAT(words, ElementsAre(Pair("\"a\"", true), Pair("\"b\"", true),
+                                 Pair("\"c\"", true), Pair("\"d\"", true),
+                                 Pair("\"e\"", true), Pair("\"f\"", true)));
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]),
+              ElementsAre(IdMapEntry{L(0), V(0)}, IdMapEntry{L(1), V(1)},
+                          IdMapEntry{L(2), V(2)}, IdMapEntry{L(3), V(3)},
+                          IdMapEntry{L(4), V(4)}, IdMapEntry{L(5), V(5)}));
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[1]),
+              ElementsAre(IdMapEntry{L(0), V(1)}));
+  EXPECT_EQ(meta.numWordsTotal(), 6u);
+  EXPECT_FALSE(writer.blockWriter(0).finishWasCalled());
+}
+
+// Test that an exception from the writer of the vocabulary is rethrown by
+// `finish()`.
+TEST(SegmentPipeline, exceptionOfWriterIsPropagated) {
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  auto writer = makeParallelWriter([](std::string_view, bool) -> uint64_t {
+    throw std::runtime_error{"The vocabulary could not be written"};
+  });
+  SegmentPipeline<decltype(lessThan)> pipeline{
+      writer,
+      partialVocabularyIdMapFilenames(partialVocabBasename, 1),
+      1,
+      noRegexes,
+      lessThan,
+      /*maxSegmentsInFlight=*/1,
+      /*numWordsPerSegment=*/1};
+  auto blocks =
+      makeMergedBlocks({{{"\"a\"", true, 0, 0}}, {{"\"b\"", true, 0, 1}}});
+  for (MergedBlock& block : blocks) {
+    pipeline.push(std::move(block));
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      pipeline.finish(), ::testing::HasSubstr("could not be written"),
+      std::runtime_error);
+}
+
+// Test that an exception from the building of a segment (here: a violated
+// order, which the expensive checks detect) is rethrown on the thread that
+// pushes the blocks.
+TEST(SegmentPipeline, exceptionOfSegmentIsPropagated) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP() << "The order check is only done with expensive checks";
+  }
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  SegmentPipeline<decltype(lessThan)> pipeline{
+      writer,
+      partialVocabularyIdMapFilenames(partialVocabBasename, 1),
+      1,
+      noRegexes,
+      lessThan,
+      /*maxSegmentsInFlight=*/1,
+      /*numWordsPerSegment=*/1};
+  auto blocks =
+      makeMergedBlocks({{{"\"b\"", true, 0, 0}, {"\"a\"", true, 0, 1}}});
+  pipeline.push(std::move(blocks[0]));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      pipeline.finish(), ::testing::HasSubstr("vocabulary order violated"));
+}

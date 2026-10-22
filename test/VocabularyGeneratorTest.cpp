@@ -204,7 +204,6 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
           return comparator(a, b, TripleComponentComparator::Level::TOTAL);
         },
         writer, 1_GB);
-    writer.finish();
   }
 
   EXPECT_THAT(writer.words_,

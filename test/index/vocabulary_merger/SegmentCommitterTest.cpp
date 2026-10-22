@@ -7,19 +7,18 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/strings/str_format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <memory>
-#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
 #include "VocabularyMergerTestHelpers.h"
 #include "global/Constants.h"
-#include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/Segment.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
 
@@ -30,28 +29,8 @@ using ::testing::ElementsAre;
 using ::testing::Pair;
 
 namespace {
-// The basename of the partial vocabularies of the tests below.
-const std::string partialVocabBasename = "segmentCommitterTest";
-
-// Build the segment of a single block with the given `words`, all from the
-// partial vocabulary `partial` with the local indices `0, 1, ...`, and all
-// external.
-std::shared_ptr<const Segment> makeSegment(
-    const std::vector<std::string>& words, uint32_t partial,
-    size_t numPartialVocabularies, ParallelWordWriterBase& writer) {
-  std::vector<MergedBlock> blocks;
-  blocks.emplace_back(testBufferPools());
-  for (size_t i = 0; i < words.size(); ++i) {
-    pushWord(blocks[0], words[i], true, partial, i);
-  }
-  return std::make_shared<const Segment>(
-      buildSegment(std::move(blocks), writer, ad_utility::RegexSet{},
-                   numPartialVocabularies, lessThan));
-}
-
 // A `ParallelWordWriterBase` with a single sub-vocabulary whose block writer
-// has small blocks (so that a few words span several blocks) and collects
-// the words with their positions.
+// has small blocks (so that a few words span several blocks).
 class SmallBlockWriter : public BlockWriterFromCallback<
                              std::function<uint64_t(std::string_view, bool)>> {
  public:
@@ -62,78 +41,81 @@ class SmallBlockWriter : public BlockWriterFromCallback<
             makeCollectingWordCallback(words_)} {}
   size_t blockSize() const override { return 3; }
 };
+
+// The words of the `block` together with their `isExternal` flags.
+std::vector<std::pair<std::string, bool>> wordsOf(const BlockPieces& block) {
+  WordBlock words = gatherWords(block);
+  std::vector<std::pair<std::string, bool>> result;
+  for (size_t i = 0; i < words.numWords(); ++i) {
+    result.emplace_back(words.word(i), words.isExternal_[i]);
+  }
+  return result;
+}
 }  // namespace
 
-// Test that the committer hands the words of consecutive segments to the
-// block writer in blocks of its block size (across the segment boundaries),
-// writes the ID maps with the global IDs, and accumulates the metadata (the
-// number of words, the blank nodes, the prefix ranges and the special IDs
-// shifted by the bases).
+// Test that the committer cuts the words of consecutive segments into blocks
+// of the block size of the block writer (across the segment boundaries, the
+// last block being partial), returns the ID converter of each segment, and
+// accumulates the metadata (the number of words, the blank nodes, the prefix
+// ranges and the special IDs shifted by the bases).
 TEST(SegmentCommitter, commitSegments) {
-  auto [filenames, cleanup] =
-      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
-  auto blockWriter = std::make_unique<SmallBlockWriter>();
-  auto* blockWriterPtr = blockWriter.get();
-  SingleVocabularyParallelWriter writer{std::move(blockWriter)};
+  SingleVocabularyParallelWriter writer{std::make_unique<SmallBlockWriter>()};
 
-  // Segment 0: three words and a blank node from partial vocabulary 0.
+  // Segment 0: two words and a blank node from partial vocabulary 0.
   // Segment 1: two words from partial vocabulary 1, one of them a special
   // internal IRI and one a language-tagged predicate (in the `std::less`
   // order: `"..."` < `<...>` < `@...` < `_:...`).
   std::string special{HAS_PATTERN_PREDICATE};
-  auto segment0 =
-      makeSegment({"\"a\"", "\"b\"", "\"c\"", "_:bn"}, 0, 2, writer);
+  auto segment0 = makeSegment({"\"a\"", "\"b\"", "_:bn"}, 0, 2, writer);
   auto segment1 = makeSegment({special, "@en@<p>"}, 1, 2, writer);
 
-  VocabularyMetaData meta;
-  {
-    SegmentCommitter committer{
-        writer, partialVocabularyIdMapFilenames(partialVocabBasename, 2)};
-    committer.commit(segment0);
-    committer.commit(segment1);
-    EXPECT_FALSE(committer.hasFailed());
-    meta = committer.finish();
-    writer.finish();
-  }
+  std::vector<std::pair<uint8_t, BlockPieces>> blocks;
+  SegmentCommitter committer{writer, [&blocks](uint8_t sub, BlockPieces block) {
+                               blocks.emplace_back(sub, std::move(block));
+                             }};
+  EXPECT_EQ(committer.numSubVocabularies(), 1u);
+  auto converter0 = committer.commit(segment0);
+  // The first block is not full yet.
+  ASSERT_EQ(blocks.size(), 0u);
+  auto converter1 = committer.commit(segment1);
+  // The first block is full after the first word of the second segment.
+  ASSERT_EQ(blocks.size(), 1u);
+  VocabularyMetaData meta = committer.finish();
+  // The last, partial block is handed to the sink by `finish()`.
+  ASSERT_EQ(blocks.size(), 2u);
 
-  // The words, in order, with consecutive positions (which the
-  // `BlockWriterFromCallback` checks).
-  EXPECT_THAT(
-      blockWriterPtr->words_,
-      ElementsAre(Pair("\"a\"", true), Pair("\"b\"", true), Pair("\"c\"", true),
-                  Pair(special, true), Pair("@en@<p>", true)));
+  // The blocks, with their positions and words.
+  EXPECT_EQ(blocks[0].first, 0u);
+  EXPECT_EQ(blocks[0].second.firstPosition_, 0u);
+  EXPECT_EQ(blocks[0].second.numWords_, 3u);
+  EXPECT_THAT(wordsOf(blocks[0].second),
+              ElementsAre(Pair("\"a\"", true), Pair("\"b\"", true),
+                          Pair(special, true)));
+  EXPECT_EQ(blocks[1].first, 0u);
+  EXPECT_EQ(blocks[1].second.firstPosition_, 3u);
+  EXPECT_EQ(blocks[1].second.numWords_, 1u);
+  EXPECT_THAT(wordsOf(blocks[1].second), ElementsAre(Pair("@en@<p>", true)));
+  // The first block spans both segments.
+  EXPECT_EQ(blocks[0].second.pieces_.size(), 2u);
+  EXPECT_EQ(blocks[1].second.pieces_.size(), 1u);
 
-  // The ID maps with the global IDs.
-  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]),
-              ElementsAre(IdMapEntry{L(0), V(0)}, IdMapEntry{L(1), V(1)},
-                          IdMapEntry{L(2), V(2)}, IdMapEntry{L(3), BN(0)}));
-  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[1]),
-              ElementsAre(IdMapEntry{L(0), V(3)}, IdMapEntry{L(1), V(4)}));
+  // The ID converters turn the segment-local IDs into the global ones.
+  const auto& entries0 = segment0->idMapEntries_[0];
+  ASSERT_EQ(entries0.size(), 3u);
+  EXPECT_EQ(converter0.globalIdOf(entries0[0].id_), V(0));
+  EXPECT_EQ(converter0.globalIdOf(entries0[1].id_), V(1));
+  EXPECT_EQ(converter0.globalIdOf(entries0[2].id_), BN(0));
+  const auto& entries1 = segment1->idMapEntries_[1];
+  ASSERT_EQ(entries1.size(), 2u);
+  EXPECT_EQ(converter1.globalIdOf(entries1[0].id_), V(2));
+  EXPECT_EQ(converter1.globalIdOf(entries1[1].id_), V(3));
 
   // The metadata.
-  EXPECT_EQ(meta.numWordsTotal(), 5u);
+  EXPECT_EQ(meta.numWordsTotal(), 4u);
   EXPECT_EQ(meta.getNextBlankNodeIndex(), 1u);
-  EXPECT_EQ(meta.internalEntities().begin(), V(3));
-  EXPECT_EQ(meta.internalEntities().end(), V(4));
-  EXPECT_EQ(meta.langTaggedPredicates().begin(), V(4));
-  EXPECT_EQ(meta.langTaggedPredicates().end(), V(5));
-  EXPECT_EQ(meta.specialIdMapping().at(special), V(3));
-}
-
-// Test that an exception from the block writer (thrown on the appending
-// thread) is rethrown by `finish()`, and that the committer stops.
-TEST(SegmentCommitter, exceptionIsPropagated) {
-  auto [filenames, cleanup] =
-      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
-  auto writer = makeParallelWriter([](std::string_view, bool) -> uint64_t {
-    throw std::runtime_error{"The vocabulary could not be written"};
-  });
-  auto segment = makeSegment({"\"a\""}, 0, 1, writer);
-  SegmentCommitter committer{
-      writer, partialVocabularyIdMapFilenames(partialVocabBasename, 1)};
-  committer.commit(segment);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      committer.finish(), ::testing::HasSubstr("could not be written"),
-      std::runtime_error);
-  EXPECT_TRUE(committer.hasFailed());
+  EXPECT_EQ(meta.internalEntities().begin(), V(2));
+  EXPECT_EQ(meta.internalEntities().end(), V(3));
+  EXPECT_EQ(meta.langTaggedPredicates().begin(), V(3));
+  EXPECT_EQ(meta.langTaggedPredicates().end(), V(4));
+  EXPECT_EQ(meta.specialIdMapping().at(special), V(2));
 }

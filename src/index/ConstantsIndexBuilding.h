@@ -132,8 +132,9 @@ constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_MEMORY_PER_SEGMENT =
     ad_utility::MemorySize::megabytes(256);
 
-// The number of threads that write the partial ID maps, see
-// `index/vocabulary_merger/IdMapWriters.h`.
+// The number of groups into which the partial ID maps are split for writing
+// (the maps of a group are written by one task per segment, on a strand of
+// the global thread pool), see `index/vocabulary_merger/IdMapWriters.h`.
 constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS = 8;
 
 // The amount of input (the serialized words of the partial vocabularies,
@@ -178,8 +179,8 @@ constexpr inline size_t VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK =
     8 * VOCAB_MERGER_INPUT_PER_CHUNK.getBytes() /
         VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() +
     2;
-// The maximal number of segments that may be waiting in each of the queues of
-// the ID map writers of the vocabulary merger (see
+// The maximal number of segments that may be waiting in the queue of each
+// group of the ID map writers of the vocabulary merger (see
 // `index/vocabulary_merger/IdMapWriters.h`). A queued segment holds its ID map
 // entries (about 16 bytes per merged word) in memory.
 constexpr inline size_t VOCAB_MERGER_ID_MAP_QUEUE_SIZE = 16;

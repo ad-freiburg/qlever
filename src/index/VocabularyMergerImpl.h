@@ -6,13 +6,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
 #include <algorithm>
-#include <atomic>
-#include <boost/asio/post.hpp>
-#include <boost/asio/use_future.hpp>
-#include <chrono>
 #include <cstdint>
-#include <deque>
-#include <future>
 #include <limits>
 #include <memory>
 #include <string>
@@ -23,8 +17,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMerger.h"
 #include "index/vocabulary_merger/PartialVocabularyFile.h"
-#include "index/vocabulary_merger/Segment.h"
-#include "index/vocabulary_merger/SegmentCommitter.h"
+#include "index/vocabulary_merger/SegmentPipeline.h"
 #include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
@@ -36,7 +29,6 @@
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
-#include "util/Timer.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
@@ -108,13 +100,16 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
     -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>) {
   using detail::InputWord;
   using detail::MergedBlock;
-  using detail::Segment;
   // Return true iff `p1` is smaller than `p2` according to the order of the
   // IRI or literal.
-  auto lessThanForQueue = [&comparator](const InputWord& p1,
-                                        const InputWord& p2) {
+  auto lessThan = [&comparator](const InputWord& p1, const InputWord& p2) {
     return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
+  // The index of the partial vocabulary that a merged word comes from is
+  // stored in 32 bits (see `detail::InputWord` and
+  // `detail::SegmentIdMapEntry`). NOTE: This check is done here (and not per
+  // merged word, which would be on the hot path of the merging), because
+  // `partialFileId_` is always one of the indices below.
   AD_CORRECTNESS_CHECK(numPartialVocabularies <=
                        std::numeric_limits<uint32_t>::max());
 
@@ -138,94 +133,31 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
               << options.maxNumChunksInFlight << " chunks and up to "
               << maxSegmentsInFlight << " segments in flight ..." << std::endl;
   auto mergedWords = parallelBlockMerge::parallelBlockMergeToRange<true>(
-      ad_utility::globalExecutor(), std::move(input), lessThanForQueue,
+      ad_utility::globalExecutor(), std::move(input), lessThan,
       parallelBlockMerge::makeInMemoryStorageFactory<MergedBlock>(
           VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK,
           /*releaseChunkOnConsumption=*/true),
       std::move(options));
 
-  // The merged blocks are cut into segments, each of which is built by a task
-  // on the global thread pool (see `detail::buildSegment`), and the finished
-  // segments are committed in order (see `detail::SegmentCommitter`). A cut
-  // between two blocks is only allowed if the last word of the one differs
-  // from the first word of the other, so that no word spans two segments.
-  detail::SegmentCommitter committer{
+  // The stages behind the merge, see `detail::SegmentPipeline`.
+  detail::SegmentPipeline<W> pipeline{
       writer,
-      partialVocabularyIdMapFilenames(basename, numPartialVocabularies)};
-  std::deque<std::future<std::shared_ptr<const Segment>>> segments;
-  std::vector<MergedBlock> currentBlocks;
-  size_t currentNumWords = 0;
-  ad_utility::Timer waitTimer{ad_utility::Timer::Started};
-  ad_utility::Timer commitTimer{ad_utility::Timer::Stopped};
-  std::atomic<uint64_t> segmentBusyMs{0};
-  auto postSegment = [&]() {
-    if (currentBlocks.empty() || committer.hasFailed()) {
-      currentBlocks.clear();
-      return;
-    }
-    segments.push_back(boost::asio::post(
-        ad_utility::globalExecutor(),
-        boost::asio::use_future([blocks = std::move(currentBlocks), &writer,
-                                 &blankNodeIriRegexes, numPartialVocabularies,
-                                 &comparator, &segmentBusyMs]() mutable {
-          ad_utility::Timer timer{ad_utility::Timer::Started};
-          auto segment = std::make_shared<const Segment>(detail::buildSegment(
-              std::move(blocks), writer, blankNodeIriRegexes,
-              numPartialVocabularies, comparator));
-          segmentBusyMs += timer.msecs().count();
-          return segment;
-        })));
-    currentBlocks.clear();
-    currentNumWords = 0;
-  };
-  // Commit the segments that are done, in order, and at least one segment if
-  // `waitForOne` is set.
-  auto commitFinishedSegments = [&](bool waitForOne) {
-    commitTimer.cont();
-    while (!segments.empty()) {
-      auto& next = segments.front();
-      if (!waitForOne &&
-          next.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
-        break;
-      }
-      committer.commit(next.get());
-      segments.pop_front();
-      waitForOne = false;
-    }
-    commitTimer.stop();
-  };
-
+      partialVocabularyIdMapFilenames(basename, numPartialVocabularies),
+      numPartialVocabularies,
+      blankNodeIriRegexes,
+      comparator,
+      maxSegmentsInFlight};
   for (MergedBlock& block : mergedWords) {
-    waitTimer.stop();
     // Stop merging as soon as one of the stages has failed, the exception is
     // rethrown by `finish()` below.
-    if (committer.hasFailed()) {
+    if (pipeline.hasFailed()) {
       break;
     }
-    if (!block.empty()) {
-      bool canCutHere = currentNumWords >= VOCAB_MERGER_SEGMENT_NUM_WORDS &&
-                        currentBlocks.back().back().iriOrLiteral() !=
-                            block.front().iriOrLiteral();
-      if (canCutHere) {
-        postSegment();
-      }
-      currentNumWords += block.size();
-      currentBlocks.push_back(std::move(block));
-    }
-    commitFinishedSegments(segments.size() >= maxSegmentsInFlight);
-    waitTimer.cont();
+    pipeline.push(std::move(block));
   }
-  waitTimer.stop();
-  postSegment();
-  while (!segments.empty()) {
-    commitFinishedSegments(true);
-  }
-  AD_LOG_INFO << "Time spent by the thread behind the merge: waiting for "
-                 "merged blocks "
-              << waitTimer.msecs() << ", committing the segments "
-              << commitTimer.msecs() << "; building the segments "
-              << segmentBusyMs << " ms" << std::endl;
-  return committer.finish();
+  VocabularyMetaData metaData = pipeline.finish();
+  writer.finish();
+  return metaData;
 }
 
 // ____________________________________________________________________________________________________________
