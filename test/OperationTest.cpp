@@ -524,6 +524,60 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   EXPECT_EQ(childRti.totalTime_, 41ms);
   EXPECT_EQ(childRti.originalTotalTime_, 41ms);
   EXPECT_EQ(childRti.originalOperationTime_, 41ms);
+
+  // The total time of an optimized out child is updated from its children,
+  // which might have been computed after the child was optimized out.
+  auto grandchild = std::make_shared<RuntimeInformation>();
+  grandchild->totalTime_ = 5ms;
+  auto optimizedOutChild = std::make_shared<RuntimeInformation>();
+  optimizedOutChild->status_ = Status::optimizedOut;
+  optimizedOutChild->children_ = {grandchild};
+  rti.children_ = {optimizedOutChild};
+  rti.totalTime_ = 0ms;
+  valuesForTesting.externalLimitApplied_ = false;
+  valuesForTesting.updateRuntimeStats(false, 1, 1, 7ms);
+
+  EXPECT_EQ(optimizedOutChild->totalTime_, 5ms);
+  EXPECT_EQ(rti.totalTime_, 7ms);
+  EXPECT_EQ(rti.originalOperationTime_, 2ms);
+}
+
+// Test that the success and the failure update of the runtime information
+// refresh the total time of an optimized out child from its children.
+TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
+  auto qec = getQec();
+  Sort sort{qec,
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, makeIdTableFromVector({{1}}),
+                std::vector<std::optional<Variable>>{Variable{"?x"}}),
+            {0}};
+  // The child of the `Sort` was optimized out, but its own child is only
+  // computed afterwards.
+  auto& childRti = sort.getChildren().at(0)->getRootOperation()->runtimeInfo();
+  childRti.status_ = Status::optimizedOut;
+  auto grandchild = std::make_shared<RuntimeInformation>();
+  childRti.children_ = {grandchild};
+
+  grandchild->totalTime_ = 5ms;
+  sort.updateRuntimeInformationOnSuccess(1, CacheStatus::computed, 7ms,
+                                         std::nullopt);
+  EXPECT_EQ(childRti.totalTime_, 5ms);
+  EXPECT_EQ(sort.runtimeInfo().getOperationTime(), 2ms);
+
+  grandchild->totalTime_ = 6ms;
+  sort.updateRuntimeInformationOnFailure(7ms);
+  EXPECT_EQ(childRti.totalTime_, 6ms);
+  EXPECT_EQ(sort.runtimeInfo().getOperationTime(), 1ms);
+
+  // The runtime information of a result read from the cache is final and its
+  // children are left untouched.
+  grandchild->totalTime_ = 8ms;
+  RuntimeInformation cached;
+  cached.children_ = {
+      sort.getChildren().at(0)->getRootOperation()->getRuntimeInfoPointer()};
+  sort.updateRuntimeInformationOnSuccess(1, CacheStatus::cachedNotPinned, 7ms,
+                                         std::move(cached));
+  EXPECT_EQ(childRti.totalTime_, 6ms);
 }
 
 // _____________________________________________________________________________
