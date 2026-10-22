@@ -25,8 +25,6 @@
 #include <atomic>
 #include <bit>
 #include <boost/asio/awaitable.hpp>
-#include <boost/sort/block_indirect_sort/blk_detail/block.hpp>
-#include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -41,6 +39,7 @@
 #include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 #include "util/Views.h"
+#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/TaskGroup.h"
 
 namespace ad_utility::blockSort::detail {

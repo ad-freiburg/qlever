@@ -42,7 +42,9 @@
 #endif
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CancellationHandle.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -163,7 +165,7 @@ template <typename T1, typename T2, typename F>
 static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
                                           F resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
+  auto projectionForComparator = [](const auto& rowOrId) -> ConstIdRef {
     using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
@@ -217,7 +219,7 @@ static auto fixBlockAfterPatternJoin(T block) {
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
-      [](Id& id) {
+      [](IdRef id) {
         id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
       });
   return std::move(block.value()).template toStatic<0>();
@@ -344,7 +346,7 @@ IndexImpl::buildOspWithPatterns(
   // TODO<joka921> Simply get the output unsorted (should be cheaper).
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     internalTripleSorter.push(
-        std::array{row[0], row[1], row[2], internalGraph});
+        std::array<Id, 4>{row[0], row[1], row[2], internalGraph});
   }
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
@@ -423,15 +425,25 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files, size_t numThreads) {
+  // The settings file (read by `prepareIndexBuild`) may set
+  // `useParallelParser_`, so it must be read before the file specifications
+  // are updated.
+  prepareIndexBuild();
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
-                  numThreads);
+  createFromFilesAfterPreparation(
+      ad_utility::InputRangeTypeErased{std::move(files)}, numThreads);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
+  prepareIndexBuild();
+  createFromFilesAfterPreparation(std::move(files), numThreads);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::prepareIndexBuild() {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -458,7 +470,12 @@ void IndexImpl::createFromFiles(
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
+}
 
+// _____________________________________________________________________________
+void IndexImpl::createFromFilesAfterPreparation(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
 
@@ -651,7 +668,7 @@ using BufferView = IdTableView<NumColumnsIndexBuilding>;
 void transformTriples(Buffer& triples,
                       const ad_utility::HashMap<VocabIndex, Id>& idMap) {
   for (IdColumnRef column : triples.getColumns()) {
-    for (Id& id : column) {
+    for (IdRef id : column) {
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
@@ -778,7 +795,7 @@ auto IndexImpl::convertPartialToGlobalIds(
   // and hence irrelevant.
   std::atomic<size_t> nextPartialVocabIdx = 0;
   size_t triplesBytesPerWorker =
-      numTriplesPerBatch_ * NumColumnsIndexBuilding * sizeof(Id);
+      numTriplesPerBatch_ * NumColumnsIndexBuilding * BYTES_PER_ID_COLUMN_ENTRY;
   size_t numWorkersThatFitInMemory =
       std::max<size_t>(1, memoryLimitIndexBuilding().getBytes() /
                               std::max<size_t>(1, triplesBytesPerWorker));
@@ -838,10 +855,10 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
-    std::optional<size_t> numWriterThreads) const {
+    qlever::Executor executor) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"), rowsPerBlock_,
-      numWriterThreads);
+      std::move(executor));
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -858,11 +875,11 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
   IndexMetaData metaData1;
-  auto writerAndCallback1 =
-      getWriterAndCallback(metaData1, numColumns, fileName1);
+  auto writerAndCallback1 = getWriterAndCallback(
+      metaData1, numColumns, fileName1, ad_utility::globalExecutor());
   IndexMetaData metaData2;
-  auto writerAndCallback2 =
-      getWriterAndCallback(metaData2, numColumns, fileName2);
+  auto writerAndCallback2 = getWriterAndCallback(
+      metaData2, numColumns, fileName2, ad_utility::globalExecutor());
 
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
@@ -882,10 +899,10 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    std::optional<size_t> numWriterThreads) {
+    qlever::Executor executor) {
   IndexMetaData metaData;
   auto writerAndCallback =
-      getWriterAndCallback(metaData, numColumns, fileName, numWriterThreads);
+      getWriterAndCallback(metaData, numColumns, fileName, std::move(executor));
 
   // We can always supply the tables with the correct permutation. No need to
   // re-order everything.
@@ -934,19 +951,20 @@ void IndexImpl::writeMetaData(IndexMetaData& metaData,
 std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    const Permutation& permutation, bool internal) {
+    const Permutation& permutation, bool internal, qlever::Executor executor) {
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
   std::string fileName = getFilenameForPermutation(permutation, internal);
   // This function is only used by the runtime index rebuild (see
   // `IndexRebuilder`), which by default throttles the compress/write threads
   // of its permutation writers so that a rebuild on a live server leaves most
-  // of the CPU to concurrent queries. A value of 0 means "fall back to
-  // `permutation-writer-num-threads`".
-  auto numWriterThreads = getRuntimeParameterAsOptional<
-      &RuntimeParameters::rebuildPermutationWriterNumThreads_>();
+  // of the CPU to concurrent queries. A value of 0 means "no limit".
   auto metaData = createPermutationImpl(
-      numColumns, fileName, std::move(sortedTriples), numWriterThreads);
+      numColumns, fileName, std::move(sortedTriples),
+      ad_utility::makeConcurrencyLimitedExecutor(
+          std::move(executor),
+          getRuntimeParameterAsOptional<
+              &RuntimeParameters::rebuildPermutationWriterNumThreads_>()));
 
   auto& [numDistinctCol0, meta] = metaData;
   meta.calculateStatistics(numDistinctCol0);
@@ -1119,7 +1137,7 @@ bool IndexImpl::mayContainGeoPoints() const {
       {BlockMetadataRange{block, block + 1}}};
   auto objects = osp_->scan(
       blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
-      *locatedTriplesState);
+      *locatedTriplesState, ad_utility::globalExecutor());
   return ql::ranges::any_of(objects.getColumn(0), [](Id id) {
     return id.getDatatype() == Datatype::GeoPoint;
   });
@@ -1551,7 +1569,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             "was built with an older version of QLever and should be rebuilt")};
       }
     } else {
-      target = static_cast<Target>(*it);
+      target = it->get<Target>();
     }
   };
 
@@ -1618,12 +1636,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
     if (lit.hasLanguageTag()) {
-      result.langtag_ = std::string(asStringViewUnsafe(lit.getLanguageTag()));
+      result.langtag_ = std::string(lit.getLanguageTag());
     }
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = asStringViewUnsafe(lit.getContent());
+      std::string_view content = lit.getContent();
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
         ++result.wordFrequencies_[std::move(word)];
@@ -1755,7 +1773,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count("parallel-parsing")) {
     useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
   }
-  if (useParallelParser_) {
+  if (useParallelParser_.value_or(false)) {
     AD_LOG_INFO << WARNING_PARALLEL_PARSING << std::endl;
   }
 
@@ -1834,7 +1852,8 @@ void IndexImpl::writePartialVocabulary(
         vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlag(
-              a.first, a.second.isExternal(), b.first, b.second.isExternal());
+              a.word_, a.indexAndFlag_.isExternal(), b.word_,
+              b.indexAndFlag_.isExternal());
         });
   }
   auto mapping = [&]() {
@@ -1848,7 +1867,8 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
     vec.erase(std::unique(vec.begin(), vec.end(),
                           [](const auto& a, const auto& b) {
-                            return a.second.id() == b.second.id();
+                            return a.indexAndFlag_.index() ==
+                                   b.indexAndFlag_.index();
                           }),
               vec.end());
   }
@@ -2018,12 +2038,11 @@ std::string IndexImpl::getPatternFilename() const {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(
-    sizeof...(NextSorter) <=
-    1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
-                                            BlocksOfTriples sortedTriples,
-                                            bool doWriteConfiguration,
-                                            NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
+                                    BlocksOfTriples sortedTriples,
+                                    bool doWriteConfiguration,
+                                    NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
   uint64_t nextAvailableIndex = 1;
@@ -2067,20 +2086,19 @@ CPP_template_def(typename... NextSorter)(requires(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-    std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-        size_t numColumns, BlocksOfTriples sortedTriples,
-        NextSorter&&... nextSorter) {
+std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
+    size_t numColumns, BlocksOfTriples sortedTriples,
+    NextSorter&&... nextSorter) {
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -2094,7 +2112,8 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       static_assert(NumColumnsIndexBuilding == 4,
                     "this place probably has to be changed when additional "
                     "payload columns are added");
-      auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
+      auto tripleArr =
+          std::array<Id, 4>{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr);
     };
     size_t numSubjects = createPermutationPair(
@@ -2118,11 +2137,10 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createOSPAndOPS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjects =
@@ -2254,26 +2272,29 @@ namespace {
 template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, CustomAction customAction,
-    const std::function<void(size_t)>& progress) {
+    const Permutation& permutation, qlever::Executor executor,
+    CustomAction customAction, const std::function<void(size_t)>& progress) {
   return std::packaged_task<void()>{[&counter, &permutation,
-                                     &locatedTriplesSharedState, progress,
-                                     customAction = std::move(customAction)]() {
+                                     &locatedTriplesSharedState,
+                                     executor = std::move(executor), progress,
+                                     customAction =
+                                         std::move(customAction)]() mutable {
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     // The statistics are only recomputed as part of a runtime index rebuild
     // (see `IndexRebuilder`), so this scan is also throttled by
-    // `rebuild-index-scan-num-threads` (several permutations are scanned in
-    // parallel, so without the throttle this short phase has a high peak
-    // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
-    auto numThreadsOverride = getRuntimeParameterAsOptional<
-        &RuntimeParameters::rebuildIndexScanNumThreads_>();
+    // `rebuild-index-scan-num-threads` (several permutations are
+    // scanned in parallel, so without the throttle this short phase has a high
+    // peak CPU). A value of 0 means "no limit".
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
-        numThreadsOverride);
+        ad_utility::makeConcurrencyLimitedExecutor(
+            std::move(executor),
+            getRuntimeParameterAsOptional<
+                &RuntimeParameters::rebuildIndexScanNumThreads_>()));
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
@@ -2287,6 +2308,7 @@ std::packaged_task<void()> computeStatistics(
 // _____________________________________________________________________________
 nlohmann::json IndexImpl::recomputeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState,
+    qlever::Executor executor,
     const std::function<void(size_t)>& progress) const {
   size_t numTriples = 0;
   size_t numTriplesInternal = 0;
@@ -2297,11 +2319,11 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
   std::vector<std::packaged_task<void()>> tasks;
 
-  auto getCounterTask = [&locatedTriplesSharedState, &progress](
+  auto getCounterTask = [&locatedTriplesSharedState, &executor, &progress](
                             size_t& counter, const Permutation& permutation,
                             auto customAction) {
     return computeStatistics(locatedTriplesSharedState, counter, permutation,
-                             customAction, progress);
+                             executor, customAction, progress);
   };
 
   tasks.push_back(getCounterTask(

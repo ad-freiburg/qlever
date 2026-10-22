@@ -488,8 +488,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
   LocalVocab localVocab{};
-  auto prefixQuoted =
-      absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
+  auto prefixQuoted = absl::StrCat("\"", prefixLiteral_.getContent());
   auto [lowerVocabIndex, upperVocabIndex] =
       index.getVocab().prefixRanges(prefixQuoted).ranges().front();
 
@@ -727,10 +726,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
   // ranges below, so neither the `> <>` prefilter nor the datatype range of
   // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is deliberate for now, because
-  // nothing but a unit test can currently create a secondary vocabulary, but
-  // it has to be fixed *before* anything else does, together with the semantic
-  // comparison of those `Id`s (see the detailed note at
+  // of such IRIs are incorrectly pruned. This is a known limitation for now,
+  // because apart from unit tests, a secondary vocabulary is only created when
+  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
+  // but it has to be fixed before it is used more widely, together with the
+  // semantic comparison of those `Id`s (see the detailed note at
   // `valueIdComparators::detail::compareIdsImpl`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
@@ -1017,9 +1017,9 @@ void checkPropertiesForPrefilterConstruction(
 
 //______________________________________________________________________________
 CPP_template_def(typename T)(requires(std::is_same_v<T, int64_t> ||
-                                      std::is_same_v<T, double>))
-    std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-        CompOp comparison, T year) {
+                                        std::is_same_v<T, double>))
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, T year) {
   // Derive integer bounds `yearFloor` and `yearCeil` from the reference `year`.
   // When the `year` is an `int64_t`, they coincide. When it is a non-integer
   // `double`, they differ by 1 so that the code below does the right thing for

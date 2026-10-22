@@ -4,8 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_SRC_GLOBAL_VALUEID_H
-#define QLEVER_SRC_GLOBAL_VALUEID_H
+#ifndef QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
+#define QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
 
 #include <absl/strings/str_cat.h>
 
@@ -16,6 +16,7 @@
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
+#include "global/Datatype.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"
@@ -25,89 +26,10 @@
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
 
-// The different Datatypes that a `ValueId` (see below) can encode.
-// Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
-// and check whether you have to add it to the `isDatatypeTrivial` function
-// directly below.
-enum struct Datatype {
-  Undefined = 0,
-  Bool,
-  Int,
-  Double,
-  VocabIndex,
-  LocalVocabIndex,
-  // See `index/vocabulary/SecondaryVocabulary.h`. NOTE: The position of this
-  // datatype is not arbitrary. It has to be greater than `VocabIndex` (the
-  // words of a secondary vocabulary are all sorted after the words of the main
-  // vocabulary), and it has to be directly adjacent to `VocabIndex` and
-  // `LocalVocabIndex`, which makes the comparison of an `Id` of type
-  // `LocalVocabIndex` with an `Id` of an unrelated datatype cheap, see
-  // `ValueId::compareThreeWay`.
-  SecondaryVocabIndex,
-  TextRecordIndex,
-  Date,
-  GeoPoint,
-  WordVocabIndex,
-  BlankNodeIndex,
-  EncodedVal,
-  MaxValue = EncodedVal
-  // Note: Unfortunately, we cannot easily get the size of an enum.
-  // If members are added to this enum, then the `MaxValue`
-  // alias must always be equal to the last member,
-  // else other code breaks with out-of-bounds accesses.
-};
+namespace foldedValueId {
 
-// Return true iff the `datatype` is a trivial datatype. This means that IDs
-// with this datatype directly encode the value they represent and do not point
-// to an external resource. In other words: These IDs can safely be shared
-// across different QLever indices without having to rewrite them. Note:
-// `BlankNodeIndex` is deliberately NOT considered trivial, as blank nodes
-// depend on the context, in particular they have to be remapped when results
-// from different  RDF sources are merged. Same goes for `EncodedVal` which
-// depends on the (configurable!) prefixes for the encoding.
-constexpr bool isDatatypeTrivial(Datatype datatype) {
-  using enum Datatype;
-  constexpr std::array trivialDatatypes{Undefined, Bool, Int,
-                                        Double,    Date, GeoPoint};
-  return ad_utility::contains(trivialDatatypes, datatype);
-}
-
-// Convert the `Datatype` enum to the corresponding string
-inline QL_CONSTEXPR std::string_view toString(Datatype type) {
-  switch (type) {
-    case Datatype::Undefined:
-      return "Undefined";
-    case Datatype::Bool:
-      return "Bool";
-    case Datatype::Double:
-      return "Double";
-    case Datatype::Int:
-      return "Int";
-    case Datatype::EncodedVal:
-      return "EncodedIri";
-    case Datatype::VocabIndex:
-      return "VocabIndex";
-    case Datatype::LocalVocabIndex:
-      return "LocalVocabIndex";
-    case Datatype::TextRecordIndex:
-      return "TextRecordIndex";
-    case Datatype::WordVocabIndex:
-      return "WordVocabIndex";
-    case Datatype::Date:
-      return "Date";
-    case Datatype::GeoPoint:
-      return "GeoPoint";
-    case Datatype::BlankNodeIndex:
-      return "BlankNodeIndex";
-    case Datatype::SecondaryVocabIndex:
-      return "SecondaryVocabIndex";
-  }
-  // This line is reachable if we cast an arbitrary invalid int to this enum
-  AD_FAIL();
-}
-
-// Encode values of different types (the types from the `Datatype` enum above)
-// using 4 bits for the datatype and 60 bits for the value.
+// Encode values of different types (the types from the `Datatype` enum in
+// `Datatype.h`) using 4 bits for the datatype and 60 bits for the value.
 class ValueId {
  public:
   using T = uint64_t;
@@ -308,9 +230,34 @@ class ValueId {
   // obtained by a call to `getBits()` on a valid `ValueId`.
   static constexpr ValueId fromBits(T bits) noexcept { return {bits}; }
 
+  // Combine datatype and payload bits (inverse of `getDatatypeBits` and
+  // `getPayloadBits`). `payload` must not have any datatype bits set.
+  static constexpr ValueId fromBits(const T datatype,
+                                    const T payload) noexcept {
+    AD_EXPENSIVE_CHECK(datatype < (T{1} << numDatatypeBits));
+    AD_EXPENSIVE_CHECK(payload <= maxIndex);
+    return {payload | (datatype << numDataBits)};
+  }
+
+  // The same with the `Datatype` instead of its bits.
+  static constexpr ValueId fromBits(const Datatype datatype,
+                                    const T payload) noexcept {
+    return fromBits(static_cast<T>(datatype), payload);
+  }
+
+  // Get the datatype bits.
+  [[nodiscard]] constexpr uint8_t getDatatypeBits() const noexcept {
+    return static_cast<uint8_t>(_bits >> numDataBits);
+  }
+
+  // Get the payload bits.
+  [[nodiscard]] constexpr uint64_t getPayloadBits() const noexcept {
+    return _bits & ad_utility::bitMaskForLowerBits(numDataBits);
+  }
+
   // Get the datatype.
   [[nodiscard]] constexpr Datatype getDatatype() const noexcept {
-    return static_cast<Datatype>(_bits >> numDataBits);
+    return static_cast<Datatype>(getDatatypeBits());
   }
 
   // Create a `ValueId` of the `Undefined` type. There is only one such ID and
@@ -336,8 +283,7 @@ class ValueId {
   // mode, where `absl::bit_cast` is `std::bit_cast`. In C++17 mode it falls
   // back to a `memcpy`, see also the note on `minPositiveDouble` above.
   static QL_CONSTEXPR ValueId makeFromDouble(double d) {
-    auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
-    return addDatatypeBits(shifted, Datatype::Double);
+    return fromBits(Datatype::Double, absl::bit_cast<T>(d) >> numDatatypeBits);
   }
   // Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   // Double` then the result is unspecified.
@@ -350,7 +296,7 @@ class ValueId {
   // overflow according to the semantics of `NBitInteger<60>`.
   static constexpr ValueId makeFromInt(int64_t i) {
     auto nbit = IntegerType::toNBit(i);
-    return addDatatypeBits(nbit, Datatype::Int);
+    return fromBits(Datatype::Int, nbit);
   }
 
   // Obtain the signed integer that this `ValueId` encodes. If `getDatatype()
@@ -361,8 +307,7 @@ class ValueId {
 
   // Create a `ValueId` for a boolean value.
   static constexpr ValueId makeFromBool(bool b) noexcept {
-    auto bits = static_cast<T>(b);
-    return addDatatypeBits(bits, Datatype::Bool);
+    return fromBits(Datatype::Bool, b);
   }
 
   // Create a `ValueId` for a boolean value, represented as "0" or "1" instead
@@ -370,12 +315,12 @@ class ValueId {
   static constexpr ValueId makeBoolFromZeroOrOne(bool b) noexcept {
     auto bits = static_cast<T>(b);
     bits |= static_cast<T>(true) << 1;
-    return addDatatypeBits(bits, Datatype::Bool);
+    return fromBits(Datatype::Bool, bits);
   }
 
   // Obtain the boolean value.
   [[nodiscard]] constexpr bool getBool() const noexcept {
-    return static_cast<bool>(removeDatatypeBits(_bits) & 1);
+    return static_cast<bool>(getPayloadBits() & 1);
   }
 
   // Obtain the boolean value as a string view. In particular, return either
@@ -426,56 +371,55 @@ class ValueId {
   // is not the index type that the respective getter below is named after, then
   // the result is unspecified.
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
-    return VocabIndex::make(removeDatatypeBits(_bits));
+    return VocabIndex::make(getPayloadBits());
   }
 
   [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
-    return removeDatatypeBits(_bits);
+    return getPayloadBits();
   }
 
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
-    return TextRecordIndex::make(removeDatatypeBits(_bits));
+    return TextRecordIndex::make(getPayloadBits());
   }
   [[nodiscard]] LocalVocabIndex getLocalVocabIndex() const noexcept {
     return reinterpret_cast<LocalVocabIndex>(_bits << numDatatypeBits);
   }
   [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
-    return WordVocabIndex::make(removeDatatypeBits(_bits));
+    return WordVocabIndex::make(getPayloadBits());
   }
 
   [[nodiscard]] constexpr BlankNodeIndex getBlankNodeIndex() const noexcept {
-    return BlankNodeIndex::make(removeDatatypeBits(_bits));
+    return BlankNodeIndex::make(getPayloadBits());
   }
 
   [[nodiscard]] constexpr SecondaryVocabIndex getSecondaryVocabIndex()
       const noexcept {
-    return SecondaryVocabIndex::make(removeDatatypeBits(_bits));
+    return SecondaryVocabIndex::make(getPayloadBits());
   }
 
   // Store or load a `Date` object.
   // NOTE: These functions cannot be `constexpr`, because
   // `DateYearOrDuration` is not a literal type.
   static ValueId makeFromDate(DateYearOrDuration d) noexcept {
-    return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
+    return fromBits(Datatype::Date, absl::bit_cast<uint64_t>(d));
   }
 
   DateYearOrDuration getDate() const noexcept {
-    return absl::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
+    return absl::bit_cast<DateYearOrDuration>(getPayloadBits());
   }
 
   // TODO<joka921> implement dates
 
   // Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
   static ValueId makeFromGeoPoint(GeoPoint p) {
-    return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
+    return fromBits(Datatype::GeoPoint, p.toBitRepresentation());
   }
 
   // Obtain a new `GeoPoint` object representing the pair of coordinates that
   // this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
   // is unspecified.
   GeoPoint getGeoPoint() const {
-    T bits = removeDatatypeBits(_bits);
-    return GeoPoint::fromBitRepresentation(bits);
+    return GeoPoint::fromBitRepresentation(getPayloadBits());
   }
 
   // An ID is considered trivial, if its datatype is trivial (see
@@ -617,6 +561,30 @@ class ValueId {
     return ostr;
   }
 
+  // Lambdas that forward to the member function of the same name (without the
+  // suffix `L`). Unlike a pointer-to-member like `&Id::isUndefined`, they also
+  // work for proxy types that provide the same member functions, like the
+  // elements of a column view that does not store `Id`s.
+  static constexpr auto isUndefinedL = [](const auto& id) {
+    return id.isUndefined();
+  };
+
+  static constexpr auto isDefinedL = [](const auto& id) {
+    return !id.isUndefined();
+  };
+
+  static constexpr auto getBitsL = [](const auto& id) { return id.getBits(); };
+
+  // Unlike the lambdas above, this one exists because `fromBits` is an
+  // overload set, which cannot be passed to an algorithm directly.
+  static constexpr auto fromBitsL = [](const auto& idBitRep) {
+    return fromBits(idBitRep);
+  };
+
+  static constexpr auto getDatatypeL = [](const auto& id) {
+    return id.getDatatype();
+  };
+
  private:
   // Compare the bits of an `Id` whose datatype is one of
   // `datatypesOfPositionInVocab_` with a `LocalVocabIndex`. For details see
@@ -638,26 +606,15 @@ class ValueId {
   // `Double()`, `Int()` etc.
   constexpr ValueId(T bits) : _bits{bits} {}
 
-  // Set the first 4 bits of `bits` to a 4-bit representation of `type`.
-  // Requires that the first four bits of `bits` are all zero.
-  static constexpr ValueId addDatatypeBits(T bits, Datatype type) {
-    auto mask = static_cast<T>(type) << numDataBits;
-    return {bits | mask};
-  }
-
-  // Set the datatype bits of `bits` to zero.
-  static constexpr T removeDatatypeBits(T bits) noexcept {
-    auto mask = ad_utility::bitMaskForLowerBits(numDataBits);
-    return bits & mask;
-  }
-
   // Helper function for the implementation of the unsigned index types.
   static constexpr ValueId makeFromIndex(T id, Datatype type) {
     if (id > maxIndex) {
       throw IndexTooLargeException(id);
     }
-    return addDatatypeBits(id, type);
+    return fromBits(type, id);
   }
 };
 
-#endif  // QLEVER_SRC_GLOBAL_VALUEID_H
+}  // namespace foldedValueId
+
+#endif  // QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H

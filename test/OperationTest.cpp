@@ -25,6 +25,8 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 using namespace ad_utility::testing;
 using namespace ::testing;
 using ad_utility::CacheStatus;
@@ -208,6 +210,7 @@ class OperationTestFixture : public testing::Test {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -289,6 +292,59 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
       operation.precomputedResultBecauseSiblingOfService().has_value());
 }
 
+// Test that the warnings of an operation are part of the `warnings` detail of
+// its runtime information, both when the result is computed and when it is
+// read from the cache.
+TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
+  // An operation that adds a warning during its computation.
+  struct WarningOperation : ValuesForTesting {
+    using ValuesForTesting::ValuesForTesting;
+    Result computeResult(bool requestLaziness) override {
+      addWarning("during computation");
+      return ValuesForTesting::computeResult(requestLaziness);
+    }
+  };
+  auto warningsOfUpdate = [this](size_t i) {
+    return nlohmann::json::parse(jsonHistory.at(i))["details"]["warnings"];
+  };
+
+  // Computed: A warning from before the computation (e.g. from the query
+  // planning) is part of all updates, the one from the computation is part of
+  // the final update.
+  {
+    WarningOperation op{&qec, makeIdTableFromVector({{1}}), {Variable{"?x"}}};
+    op.addWarning("before computation");
+    op.getResult(true);
+    ASSERT_FALSE(jsonHistory.empty());
+    EXPECT_EQ(warningsOfUpdate(0),
+              nlohmann::json(std::vector{"before computation"}));
+    EXPECT_EQ(warningsOfUpdate(jsonHistory.size() - 1),
+              nlohmann::json(
+                  std::vector{"before computation", "during computation"}));
+    EXPECT_THAT(op.collectWarnings(),
+                ElementsAre("before computation", "during computation"));
+  }
+
+  // Read from the cache: The warnings of the original computation are kept in
+  // the runtime information, in addition to the new one.
+  jsonHistory.clear();
+  {
+    WarningOperation op{&qec, makeIdTableFromVector({{1}}), {Variable{"?x"}}};
+    // Already part of the cached warnings, so it must not be duplicated.
+    op.addWarning("before computation");
+    op.addWarning("other");
+    op.getResult(true);
+    EXPECT_NE(op.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(warningsOfUpdate(jsonHistory.size() - 1),
+              nlohmann::json(std::vector{"before computation",
+                                         "during computation", "other"}));
+    // TODO<ullingerc> `collectWarnings` (used for the `warnings` of the
+    // result) should also include the warnings of the original computation.
+    EXPECT_THAT(op.collectWarnings(),
+                ElementsAre("before computation", "other"));
+  }
+}
+
 // _____________________________________________________________________________
 
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
@@ -319,10 +375,12 @@ TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
       operation.getChildren().at(0)->getRootOperation());
 
+#ifndef _QLEVER_NO_TIMING_TESTS
   EXPECT_GT(operation.publicRemainingTime(), 0ms);
   EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
+#endif
   std::this_thread::sleep_for(timeout);
-  // Verify time is up for parent and child
+  // Verify that the time is up for the parent and the child.
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
   EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }
@@ -538,6 +596,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -568,6 +627,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { signaledUpdate = true; }};
   CustomGeneratorOperation operation{&context, []() -> Result::Generator {
                                        throw CancellationException{
@@ -605,6 +665,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -681,6 +742,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      executor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {

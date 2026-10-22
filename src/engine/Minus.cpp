@@ -97,6 +97,21 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {_left, _right}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Minus::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Minus>(_executionContext, std::move(children.at(0)),
+                                 std::move(children.at(1)));
+}
+
+// _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
   // This is an upper bound on the multiplicity as an arbitrary number
   // of rows might be deleted in this operation.
@@ -130,7 +145,7 @@ auto Minus::makeUndefRangesChecker(bool left,
             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
         return colAlwaysDefined ||
                ql::ranges::none_of(idTable.getColumn(tableColumn),
-                                   &Id::isUndefined);
+                                   Id::isUndefinedL);
       });
   // Use expensive operation if one of the columns might contain undef.
   using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;

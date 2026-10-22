@@ -6,13 +6,17 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <algorithm>
 #include <boost/optional.hpp>
+#include <functional>
+#include <iterator>
 #include <numeric>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -266,6 +270,42 @@ CPP_template(typename ForwardIterator, typename Tp,
     }
   }
   return first;
+}
+
+// Same as `std::partition_point`, but use an exponential ("galloping") search
+// instead of a binary search: The step size is doubled until an element is
+// found that doesn't satisfy the `pred`, and only the remaining range is then
+// searched binarily. As for `std::partition_point`, the range `[first, last)`
+// has to be partitioned with respect to `pred`, i.e. all the elements that
+// satisfy `pred` have to precede all the elements that don't.
+//
+// NOTE: A partition point that is close to `first` is found with a handful of
+// calls to `pred` (a binary search would need about `log2(last - first)`
+// calls), while a partition point that is far away still requires only a
+// logarithmic number of calls (a linear scan would need `last - first` calls).
+CPP_template(typename RandomAccessIterator, typename Predicate)(
+    requires ql::concepts::random_access_iterator<
+        RandomAccessIterator>) constexpr RandomAccessIterator
+    gallopingPartitionPoint(RandomAccessIterator first,
+                            RandomAccessIterator last, Predicate pred) {
+  using DistanceType = ql::iter_difference_t<RandomAccessIterator>;
+  // Invariant of the following loop: All the elements in `[first,
+  // lowerBound)` satisfy the `pred`, and the partition point lies in
+  // `[lowerBound, upperBound]`.
+  RandomAccessIterator lowerBound = first;
+  RandomAccessIterator upperBound = last;
+  for (DistanceType step = 1; step <= upperBound - lowerBound; step *= 2) {
+    RandomAccessIterator probe = lowerBound + (step - 1);
+    if (!std::invoke(pred, *probe)) {
+      upperBound = probe;
+      break;
+    }
+    lowerBound = probe + 1;
+  }
+  // Binary search in `[lowerBound, upperBound)`, i.e. between the element after
+  // the last galloping step that satisfied the `pred` and the first galloping
+  // step that violated it (or `last` if there was no such step).
+  return ql::ranges::partition_point(lowerBound, upperBound, std::move(pred));
 }
 
 // In place version of `ql::ranges::set_difference` which writes the output to

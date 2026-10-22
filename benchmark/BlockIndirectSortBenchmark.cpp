@@ -8,7 +8,6 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <boost/asio/thread_pool.hpp>
-#include <boost/sort/sort.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -20,7 +19,14 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "util/CompilerWarnings.h"
 #include "util/blockSort/BlockIndirectSort.h"
+
+// `<boost/sort/sort.hpp>` includes the deprecated `<ciso646>`, see
+// `util/blockSort/BoostSortHeaders.h`.
+DISABLE_PREPROCESSOR_WARNINGS
+#include <boost/sort/sort.hpp>
+REENABLE_PREPROCESSOR_WARNINGS
 
 // Compare `ad_utility::blockSort::blockIndirectSort` with the original
 // `boost::sort::block_indirect_sort` and a single-threaded sort. Only

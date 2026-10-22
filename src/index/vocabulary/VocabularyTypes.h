@@ -5,11 +5,13 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +22,7 @@
 
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
@@ -407,5 +410,294 @@ class WordWriterBase {
   // The base classes have to implement the actual logic for `finish` here.
   virtual void finishImpl() = 0;
 };
+
+// The parallel writers of a vocabulary. A `WordWriterBase` (see above) is fed
+// one word at a time by a single thread. A `BlockWriterBase` is fed blocks of
+// consecutive words and splits the writing of a block into two steps:
+//
+// 1. The `prepare` step runs on any thread and concurrently for different
+// blocks (the compression of the words, the geometry info of WKT literals).
+//
+// 2. The append step (the `AppendBlock` that `prepare` returns) appends the
+// prepared block to the files. It runs on a single thread, in the order of the
+// blocks.
+//
+// NOTE: This lets the vocabulary merger (see `index/VocabularyMerger.h`, in a
+// follow-up PR) do the expensive per-word work of the writing on all its
+// threads.
+
+// A block of consecutive words of a vocabulary, the unit in which a
+// `BlockWriterBase` works: the words, whether each word is to be externalized
+// (see `WordWriterBase::operator()`), and the position of the first word in the
+// vocabulary. The concatenated bytes of the words and their offsets (see
+// `data()` and `offsets()`) are directly what `VocabularyOnDisk` writes to
+// disk.
+struct WordBlock {
+  CompactVectorOfStrings<char> words_;
+  std::vector<bool> isExternal_;
+  uint64_t firstPosition_ = 0;
+  // The precomputed payload of the words, `payloadSize_` bytes per word (see
+  // `BlockWriterBase::precomputePayload`), empty if the vocabulary has none.
+  std::string payload_;
+  size_t payloadSize_ = 0;
+
+  // Append a word, with its precomputed `payload` (of `payloadSize_` bytes,
+  // empty if the vocabulary has none).
+  void push(std::string_view word, bool isExternal,
+            std::string_view payload = {}) {
+    AD_CORRECTNESS_CHECK(payload.size() == payloadSize_);
+    words_.push_back(word);
+    isExternal_.push_back(isExternal);
+    payload_.append(payload);
+  }
+
+  // The payload of the `i`-th word.
+  std::string_view payload(size_t i) const {
+    return std::string_view{payload_}.substr(i * payloadSize_, payloadSize_);
+  }
+
+  size_t numWords() const { return isExternal_.size(); }
+  bool empty() const { return numWords() == 0; }
+
+  // The `i`-th word of the block.
+  std::string_view word(size_t i) const { return words_[i]; }
+
+  // The words of the block as views into `words_`.
+  std::vector<std::string_view> words() const {
+    return {words_.begin(), words_.end()};
+  }
+
+  // The concatenated bytes of all the words.
+  ql::span<const char> data() const { return words_.dataSpan(); }
+
+  // The offset of each word in `data()`, plus the end of the last word. Empty
+  // if the block is empty.
+  ql::span<const uint64_t> offsets() const { return words_.offsetsSpan(); }
+};
+
+// The append step of a block that `BlockWriterBase::prepare` returns, see the
+// comment above. It has to be called exactly once.
+using AppendBlock = absl::AnyInvocable<void() &&>;
+
+// The default number of words per block for a vocabulary that has no
+// requirement of its own (see `BlockWriterBase::blockSize`).
+inline constexpr size_t DEFAULT_WORDS_PER_VOCABULARY_BLOCK = 100'000;
+
+// The block-wise counterpart of a `WordWriterBase`, see the comment above. The
+// blocks have to be appended in the order of their positions, and every block
+// but the last has to consist of exactly `blockSize()` words, with the first
+// block starting at position `0`.
+class BlockWriterBase {
+ private:
+  std::string readableName_;
+  std::atomic_bool finishWasCalled_ = false;
+
+ public:
+  // NOTE: The destructor is `noexcept(false)` like the one of
+  // `WordWriterBase`, because the block writers hold word writers. It is
+  // deliberately not `= default`, which GCC 8 rejects (it deletes a defaulted
+  // destructor whose exception specification differs from the implicit one).
+  virtual ~BlockWriterBase() noexcept(false) {}
+
+  // The number of words per block that this vocabulary requires, for example
+  // because it creates one codebook per block. A vocabulary without such a
+  // requirement returns `DEFAULT_WORDS_PER_VOCABULARY_BLOCK`.
+  virtual size_t blockSize() const = 0;
+
+  // The index of the `word` at the given `position` (the number of words
+  // before it), which for most vocabularies is the position itself. This is
+  // what the corresponding `WordWriterBase::operator()` would return. This
+  // function must be thread-safe (for all overrides), because it may be called
+  // from any thread.
+  virtual uint64_t indexOf(uint64_t position,
+                           [[maybe_unused]] std::string_view word) const {
+    return position;
+  }
+
+  // The number of bytes that `precomputePayload` produces per word, `0` if the
+  // vocabulary precomputes nothing.
+  virtual size_t precomputedPayloadSize() const { return 0; }
+
+  // Compute the payload of a `word` (see `precomputedPayloadSize`) into
+  // `payload`, which has that many bytes. This is the expensive per-word work
+  // of a vocabulary (the geometry info of a WKT literal), which the caller can
+  // do wherever it has the words and idle threads; the block then carries the
+  // payload (see `WordBlock::payload_`), and `prepare` uses it instead of
+  // computing it. Never called if the size is `0`. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
+  virtual void precomputePayload(
+      [[maybe_unused]] std::string_view word,
+      [[maybe_unused]] ql::span<char> payload) const {}
+
+  // Do the part of the writing of the `block` that does not depend on any
+  // other block. The block carries the precomputed payload of its words if
+  // `precomputedPayloadSize()` is not `0`. This function must be thread-safe
+  // (for all overrides), because it may be called from any thread and
+  // concurrently for different blocks. Return the step that appends the
+  // prepared block to the vocabulary, which has to be called from a single
+  // thread, in the order of the blocks, and before `finish()`.
+  virtual AppendBlock prepare(WordBlock block) = 0;
+
+  // Signal that the last block has been appended (flush and close the files).
+  // No further block may be prepared or appended afterwards.
+  void finish() {
+    if (finishWasCalled_.exchange(true)) {
+      return;
+    }
+    finishImpl();
+  }
+  bool finishWasCalled() const { return finishWasCalled_; }
+
+  // A readable name of the vocabulary that is written, for log messages.
+  std::string& readableName() { return readableName_; }
+
+ private:
+  virtual void finishImpl() = 0;
+};
+
+// The writer of a vocabulary that may consist of several sub-vocabularies (see
+// `SplitVocabulary`), each of which is written by a `BlockWriterBase` of its
+// own. The user first asks for the sub-vocabulary of a word, then for the index
+// that the word gets at a given position in that sub-vocabulary, and writes
+// the words of each sub-vocabulary in blocks via its block writer.
+class ParallelWordWriterBase {
+ private:
+  std::atomic_bool finishWasCalled_ = false;
+
+ public:
+  // NOTE: Not `= default`, see `~BlockWriterBase`.
+  virtual ~ParallelWordWriterBase() noexcept(false) {}
+
+  // The number of sub-vocabularies, at least one.
+  virtual uint8_t numSubVocabularies() const = 0;
+
+  // The sub-vocabulary to which the `word` belongs. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
+  virtual uint8_t subVocabularyOf(std::string_view word) const = 0;
+
+  // The index in the whole vocabulary of the `word` at the given `position` in
+  // the sub-vocabulary `sub`. This function must be thread-safe (for all
+  // overrides), because it may be called from any thread.
+  virtual uint64_t indexOf(uint8_t sub, uint64_t position,
+                           std::string_view word) const = 0;
+
+  // The block writer of the sub-vocabulary `sub`.
+  virtual BlockWriterBase& blockWriter(uint8_t sub) = 0;
+  const BlockWriterBase& blockWriter(uint8_t sub) const {
+    return const_cast<ParallelWordWriterBase*>(this)->blockWriter(sub);
+  }
+
+  // Finish all the block writers.
+  void finish() {
+    if (finishWasCalled_.exchange(true)) {
+      return;
+    }
+    for (uint8_t sub = 0; sub < numSubVocabularies(); ++sub) {
+      blockWriter(sub).finish();
+    }
+  }
+
+  // The readable name of the (first) sub-vocabulary, see
+  // `BlockWriterBase::readableName`.
+  std::string& readableName() { return blockWriter(0).readableName(); }
+};
+
+// The `ParallelWordWriterBase` of a vocabulary with a single sub-vocabulary.
+class SingleVocabularyParallelWriter : public ParallelWordWriterBase {
+ private:
+  std::unique_ptr<BlockWriterBase> blockWriter_;
+
+ public:
+  explicit SingleVocabularyParallelWriter(
+      std::unique_ptr<BlockWriterBase> blockWriter)
+      : blockWriter_{std::move(blockWriter)} {
+    AD_CONTRACT_CHECK(blockWriter_ != nullptr);
+  }
+  uint8_t numSubVocabularies() const override { return 1; }
+  uint8_t subVocabularyOf(std::string_view) const override { return 0; }
+  uint64_t indexOf(uint8_t sub, uint64_t position,
+                   std::string_view word) const override {
+    AD_CORRECTNESS_CHECK(sub == 0);
+    return blockWriter_->indexOf(position, word);
+  }
+  BlockWriterBase& blockWriter(uint8_t sub) override {
+    AD_CORRECTNESS_CHECK(sub == 0);
+    return *blockWriter_;
+  }
+};
+
+namespace detail {
+// Whether `T` has a member function `finish()`, see `BlockWriterFromCallback`.
+template <typename T, typename = void>
+struct HasFinish : std::false_type {};
+template <typename T>
+struct HasFinish<T, std::void_t<decltype(std::declval<T&>().finish())>>
+    : std::true_type {};
+}  // namespace detail
+
+// A `BlockWriterBase` for a vocabulary that has no block writer of its own:
+// the words of a block are handed one by one to the `callback`, which has the
+// signature of `WordWriterBase::operator()` and which has to return the
+// position of the word (the block writer checks that). If the callback has a
+// `finish()`, it is called by `finishImpl`. The `prepare` step does nothing,
+// so all the work of such a writer happens in the append step.
+template <typename Callback>
+class BlockWriterFromCallback : public BlockWriterBase {
+ private:
+  Callback callback_;
+
+ public:
+  explicit BlockWriterFromCallback(Callback callback)
+      : callback_{std::move(callback)} {}
+
+  // Direct access to the callback.
+  Callback& callback() { return callback_; }
+
+  size_t blockSize() const override {
+    return DEFAULT_WORDS_PER_VOCABULARY_BLOCK;
+  }
+
+  AppendBlock prepare(WordBlock block) override {
+    return [this, block = std::move(block)]() {
+      for (size_t i = 0; i < block.numWords(); ++i) {
+        uint64_t position = std::invoke(
+            callback_, block.word(i), static_cast<bool>(block.isExternal_[i]));
+        AD_CORRECTNESS_CHECK(position == block.firstPosition_ + i);
+      }
+    };
+  }
+
+ private:
+  void finishImpl() override {
+    if constexpr (detail::HasFinish<Callback>::value) {
+      callback_.finish();
+    }
+  }
+};
+
+// The callback for `BlockWriterFromCallback` that writes into a
+// `WordWriterBase` (which it owns).
+class WordWriterCallback {
+ private:
+  std::unique_ptr<WordWriterBase> writer_;
+
+ public:
+  explicit WordWriterCallback(std::unique_ptr<WordWriterBase> writer)
+      : writer_{std::move(writer)} {
+    AD_CONTRACT_CHECK(writer_ != nullptr);
+  }
+  uint64_t operator()(std::string_view word, bool isExternal) {
+    return (*writer_)(word, isExternal);
+  }
+  void finish() { writer_->finish(); }
+};
+
+// Make the `BlockWriterBase` that writes word by word into the given
+// `WordWriterBase`, for the vocabularies without a block writer of their own.
+inline std::unique_ptr<BlockWriterBase> makeBlockWriterFromWordWriter(
+    std::unique_ptr<WordWriterBase> writer) {
+  return std::make_unique<BlockWriterFromCallback<WordWriterCallback>>(
+      WordWriterCallback{std::move(writer)});
+}
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H

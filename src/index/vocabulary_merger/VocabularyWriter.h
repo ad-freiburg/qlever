@@ -66,10 +66,10 @@ class VocabularyWriter {
 
 // _____________________________________________________________________________
 CPP_template_def(typename C)(requires WordCallback<C>)
-    IdMapBatch VocabularyWriter::writeWordsToVocabulary(
-        const std::vector<UniqueWord>& uniqueWords,
-        LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
-        const ad_utility::RegexSet& blankNodeIriRegexes) {
+IdMapBatch VocabularyWriter::writeWordsToVocabulary(
+    const std::vector<UniqueWord>& uniqueWords,
+    LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
+    const ad_utility::RegexSet& blankNodeIriRegexes) {
   AD_LOG_TRACE << "Start writing a batch of merged words\n";
 
   std::vector<Id> globalIds;

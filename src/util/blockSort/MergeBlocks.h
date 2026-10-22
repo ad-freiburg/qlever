@@ -20,12 +20,12 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
+#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
 
