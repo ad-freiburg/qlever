@@ -125,13 +125,14 @@ TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
 }
 
 // Test that every parameter declared in `RuntimeParameters` is registered in
-// the constructor, and can thus be set via `setFromString`. As the C++
-// versions we support have no reflection (it only comes with C++26), the
-// parameters are listed explicitly below. To make sure that this list is
-// complete, the sizes of the listed parameters must add up to the offset of
-// `runtimeMap_` (which is declared after all the parameters). If this test
-// fails after you added a parameter, add it to the list below AND register it
-// in the constructor of `RuntimeParameters`.
+// the constructor, and can thus be set via `setFromString`. If this test fails
+// after you added a parameter, add it to the list below AND register it in the
+// constructor of `RuntimeParameters`.
+//
+// NOTE: Without reflection (which only comes with C++26), the parameters have
+// to be listed explicitly. The list is complete if the sizes of the listed
+// parameters add up to the offset of `runtimeMap_`, which is declared after
+// all the parameters.
 TEST(RuntimeParameters, allParametersAreRegistered) {
   RuntimeParameters params;
   auto keys = params.getKeys();
