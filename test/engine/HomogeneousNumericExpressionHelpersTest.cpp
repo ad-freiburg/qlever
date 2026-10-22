@@ -523,7 +523,9 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, GetMajorityNumericTypes) {
   EXPECT_FALSE(getMajorityNumericTypes(classifications).has_value());
 }
 
-// _____________________________________________________________________________
+// Test `numericTypeForDatatype` at runtime, with and without dates: the
+// numeric-only variant rejects dates, the date-aware variant accepts them, and
+// booleans need the generic conversion in both cases.
 TEST_F(HomogeneousNumericExpressionHelpersTest, NumericTypeForDatatype) {
   for (auto [datatype, numericType, dateAwareType] :
        {std::tuple{Datatype::Int, NumericType::Int, NumericType::Int},
@@ -532,9 +534,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, NumericTypeForDatatype) {
         std::tuple{Datatype::Bool, NumericType::Other, NumericType::Other},
         std::tuple{Datatype::Undefined, NumericType::Other,
                    NumericType::Other}}) {
-    // Exercise the runtime mapping as well as constexpr callers. In particular,
-    // numeric-only getters must reject dates while date-aware getters accept
-    // them; booleans require generic conversion in both cases.
+    // `volatile`, so that the mapping also runs at runtime.
     volatile Datatype runtimeType = datatype;
     EXPECT_EQ(numericTypeForDatatype(runtimeType), numericType);
     EXPECT_EQ(numericTypeForDatatype<true>(runtimeType), dateAwareType);
@@ -735,7 +735,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   EXPECT_EQ(Function::genericCalls, 1);
 }
 
-// _____________________________________________________________________________
+// Test that date outliers in columns with a numeric majority use the typed
+// date branch of the speculative path, not the generic getter.
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        SpeculativeDateOutliersBypassGenericGetter) {
   using Function = DateAwareTestFunction;
