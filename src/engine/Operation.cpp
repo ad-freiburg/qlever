@@ -140,6 +140,7 @@ void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
   bool isRtiWrappedInLimit = !applyToLimit && externalLimitApplied_;
   auto& rti =
       isRtiWrappedInLimit ? *runtimeInfo().children_.at(0) : runtimeInfo();
+  rti.updateTotalTimeOfOptimizedOutChildren();
   rti.totalTime_ += duration;
   rti.originalTotalTime_ = rti.totalTime_;
   rti.originalOperationTime_ = rti.getOperationTime();
@@ -565,6 +566,12 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfoPointer());
     }
   }
+  // The runtime information of a cached result is final, and its children
+  // are shared with the cache entry (and with every other query that reads
+  // it), so they are only updated for a computed result.
+  if (!wasCached) {
+    _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
+  }
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
 
@@ -584,13 +591,9 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
     std::vector<std::shared_ptr<RuntimeInformation>> children) {
   _runtimeInfo->status_ = RuntimeInformation::Status::optimizedOut;
   _runtimeInfo->children_ = std::move(children);
-  // This operation was optimized out, so its operation time is zero.
-  // The operation time is computed as
-  // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
-  // To set it to zero we thus have to set the `totalTime_` to that sum.
-  auto timesOfChildren = _runtimeInfo->children_ |
-                         ql::views::transform(&RuntimeInformation::totalTime_);
-  _runtimeInfo->totalTime_ = ::ranges::accumulate(timesOfChildren, 0us);
+  // This operation was optimized out, so its operation time (the total time
+  // minus the total times of the children, see `getOperationTime`) is zero.
+  _runtimeInfo->totalTime_ = _runtimeInfo->getTotalTimeOfChildren();
 
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
@@ -616,6 +619,7 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
     _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);
   }
 
+  _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
