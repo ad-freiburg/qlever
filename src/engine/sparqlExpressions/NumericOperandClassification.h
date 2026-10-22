@@ -145,13 +145,13 @@ inline NumericOperandClassification classifyNumericOperand(
         if (allHaveSameDatatype) {
           counts[static_cast<size_t>(first)] += blockSize;
         } else {
-          // More than one datatype occurs. Optimistically assume exactly two:
-          // the loop above gives `differences = first ^ second`, so the second
-          // tag is `differences ^ first`. For more than two distinct datatypes,
-          // the counting loop is still safe and detects that case below.
-          // The candidate is used only for comparisons until validated.
-          // Compared with `std::find_if` plus separate `std::count` calls, this
-          // avoids another search and counts both types in one reduction loop.
+          // More than one datatype occurs. Optimistically assume exactly two,
+          // then `differences` is `first ^ second`, so the second tag is
+          // `first ^ differences`. The counts below validate this guess before
+          // the candidate is used as an index.
+          //
+          // NOTE: This saves the extra search of `std::find_if` plus separate
+          // `std::count` calls.
           const auto firstTag = static_cast<unsigned>(first);
           const auto secondCandidate = firstTag ^ differences;
           size_t firstCount = 0;
