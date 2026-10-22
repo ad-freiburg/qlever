@@ -9,7 +9,6 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
-#include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
@@ -75,8 +74,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "
             "`T`/`F` (or lowercase), or `*`.");
-    auto parsed = parseDe9imFilterString(
-        asStringViewUnsafe(object.getLiteral().getContent()));
+    auto parsed = parseDe9imFilterString(object.getLiteral().getContent());
     throwIf(!parsed.has_value(),
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "
@@ -126,7 +124,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     throwIf(!object.isLiteral(),
             "The argument to the `<experimentalRightCacheName>` parameter must "
             "be the name of a pinned cache entry as a string literal.");
-    rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
+    rightCacheName_ = object.getLiteral().getContent();
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,

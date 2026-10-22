@@ -42,7 +42,6 @@
 #include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/RuntimeParameters.h"
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/AllocatorWithLimit.h"
@@ -113,12 +112,9 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     AD_THROW("variable does not match");
   }
 
-  // If the `SpatialJoin` is now fully constructed and query rewriting is
-  // allowed, try to push down `BIND`s to retrieve bounding box columns from the
-  // children.
-  if (sj->isConstructed() &&
-      getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+  // If the `SpatialJoin` is now fully constructed, try to push down `BIND`s to
+  // retrieve bounding box columns from the children.
+  if (sj->isConstructed()) {
     if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
       sj = sjWithBoundingBoxes.value();
     }
@@ -455,7 +451,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
       if (varColMap.contains(var)) {
         newVarColMap.insert_or_assign(var, varColMap.at(var));
       } else {
-        addWarningOrThrow(
+        addUnboundVariableWarningOrThrow(
             absl::StrCat("Variable '", var.name(),
                          "' selected as payload to spatial join but not "
                          "present in right child."));

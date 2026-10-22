@@ -188,7 +188,7 @@ struct SortParams {
 
 // The state shared by the tasks of a single sort, similar to
 // `boost::sort::blk_detail::backbone`.
-template <typename Compare>
+template <typename Compare, typename CheckCancellation>
 class SortState {
  public:
   // The maximal number of elements that a single task sorts on its own (with
@@ -202,15 +202,21 @@ class SortState {
   ql::any_io_executor executor_;
   // Set as soon as any task of this sort has failed, see `TaskGroup`.
   std::atomic<bool> stopped_{false};
+  // Throws if the sort has been cancelled (e.g. a `CancellationException`), or
+  // does nothing (`ad_utility::Noop`) if the sort can't be cancelled. Every
+  // task calls it when it starts, so it is called concurrently.
+  [[no_unique_address]] CheckCancellation checkCancellation_;
 
   // A sort by `cmp` on `executor` whose tasks sort at most `maxElementsPerTask`
-  // elements on their own. `maxElementsPerTask` must be at least 16, because
-  // the pivot selection needs nine distinct samples.
+  // elements on their own, and call `checkCancellation` when they start.
+  // `maxElementsPerTask` must be at least 16, because the pivot selection needs
+  // nine distinct samples.
   SortState(Compare cmp, size_t maxElementsPerTask,
-            ql::any_io_executor executor)
+            ql::any_io_executor executor, CheckCancellation checkCancellation)
       : maxElementsPerTask_{maxElementsPerTask},
         cmp_{std::move(cmp)},
-        executor_{std::move(executor)} {
+        executor_{std::move(executor)},
+        checkCancellation_{std::move(checkCancellation)} {
     AD_CONTRACT_CHECK(maxElementsPerTask_ >= 16);
   }
 
@@ -234,8 +240,8 @@ class SortState {
 // the rest of Boost's `backbone` without its work stack. The input is divided
 // into `numBlocks_` blocks of `blockSize_` elements; only the last one (the
 // *tail*) may be shorter.
-template <typename Iterator, typename Compare>
-class BlockSortState : public SortState<Compare> {
+template <typename Iterator, typename Compare, typename CheckCancellation>
+class BlockSortState : public SortState<Compare, CheckCancellation> {
  public:
   using Value = ql::iter_value_t<Iterator>;
   using IteratorRange = bsc::range<Iterator>;
@@ -260,9 +266,12 @@ class BlockSortState : public SortState<Compare> {
   // Sort `[begin, end)`. The range must not be empty, which `sortOnExecutor`
   // makes sure of.
   BlockSortState(Iterator begin, Iterator end, Compare cmp, SortParams params,
-                 ql::any_io_executor executor)
-      : SortState<Compare>{std::move(cmp), params.maxElementsPerTask,
-                           std::move(executor)},
+                 ql::any_io_executor executor,
+                 CheckCancellation checkCancellation)
+      : SortState<Compare, CheckCancellation>{std::move(cmp),
+                                              params.maxElementsPerTask,
+                                              std::move(executor),
+                                              std::move(checkCancellation)},
         globalRange_{begin, end},
         blockSize_{params.blockSize},
         numElements_{static_cast<size_t>(end - begin)},

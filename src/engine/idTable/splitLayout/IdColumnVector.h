@@ -101,9 +101,8 @@ class IdColumnVector {
   }
 
   void push_back(const Id id) {
-    auto [datatype, payload] = getBitsCompat(id);
-    payloads_.push_back(payload);
-    datatypes_.push_back(datatype);
+    payloads_.push_back(id.getPayloadBits());
+    datatypes_.push_back(id.getDatatypeBits());
   }
 
   void emplace_back() {
@@ -166,9 +165,9 @@ class IdColumnVector {
     std::vector<uint64_t> newPayloads;
     std::vector<uint8_t> newDatatypes;
     for (; first != last; ++first) {
-      auto [datatype, payload] = getBitsCompat(static_cast<Id>(*first));
-      newPayloads.push_back(payload);
-      newDatatypes.push_back(datatype);
+      const auto id = static_cast<Id>(*first);
+      newPayloads.push_back(id.getPayloadBits());
+      newDatatypes.push_back(id.getDatatypeBits());
     }
     payloads_.insert(payloads_.begin() + offset, newPayloads.begin(),
                      newPayloads.end());
