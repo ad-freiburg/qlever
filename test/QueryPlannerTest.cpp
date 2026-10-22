@@ -16,6 +16,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -27,6 +28,7 @@ using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
 using ad_utility::testing::parseQuery;
 using queryPlannerTestHelpers::NamedTag;
+const auto alloc = [] { return ad_utility::testing::makeAllocator(); };
 }  // namespace
 using ::testing::HasSubstr;
 
@@ -71,7 +73,7 @@ TEST(QueryPlanner, createTripleGraph) {
                                      iri("<http://rdf.myprefix.com/xxx/rel2>"),
                                      iri("<http://abc.de>"))),
                  {0, 1})}),
-        qlever::makeUnlimitedAllocator<size_t>());
+        alloc());
 
     ASSERT_TRUE(tg.isSimilar(expected));
   }
@@ -95,7 +97,7 @@ TEST(QueryPlanner, createTripleGraph) {
                  QueryPlanner::TripleGraph::Node(
                      2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
                  {0})}),
-        qlever::makeUnlimitedAllocator<size_t>());
+        alloc());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 
@@ -118,7 +120,7 @@ TEST(QueryPlanner, createTripleGraph) {
                                     iri("<Anthony_Newman_(Author)>"))),
                 {0}),
         }),
-        qlever::makeUnlimitedAllocator<size_t>());
+        alloc());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 }
@@ -138,12 +140,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
+      qlm::vector<size_t> keep{alloc()};
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -158,14 +160,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);

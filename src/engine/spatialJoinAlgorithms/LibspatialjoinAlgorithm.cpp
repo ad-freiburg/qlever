@@ -247,9 +247,8 @@ Result LibspatialjoinAlgorithm::run() {
       qec_->getAllocator()};
   qlm::vector<qlm::vector<double>> resultDists{qec_->getAllocator()};
   for (size_t t = 0; t < NUM_THREADS; ++t) {
-    results.emplace_back(
-        qlever::Allocator<std::pair<size_t, size_t>>{qec_->getAllocator()});
-    resultDists.emplace_back(qlever::Allocator<double>{qec_->getAllocator()});
+    results.emplace_back(qec_->getAllocator());
+    resultDists.emplace_back(qec_->getAllocator());
   }
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
   auto joinTypeVal = config_.getJoinType().value();
