@@ -86,8 +86,7 @@ ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
   return ResponseMiddleware(
       [graphIri](ResponseMiddleware::ResponseT&& response, const auto&) {
         response.result(http::status::created);
-        response.set(http::field::location,
-                     asStringViewUnsafe(graphIri.getContent()));
+        response.set(http::field::location, graphIri.getContent());
         return std::move(response);
       });
 }

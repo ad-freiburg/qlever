@@ -180,8 +180,8 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   // GROUP BY (Either the pattern trick or a "normal" GROUP BY)
   if (patternTrickTuple.has_value()) {
-    plans.emplace_back(getPatternTrickRow(pq.selectClause(), plans,
-                                          patternTrickTuple.value()));
+    plans.emplace_back(
+        getPatternTrickRow(pq.getAliases(), plans, patternTrickTuple.value()));
   } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
@@ -360,12 +360,10 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const p::SelectClause& selectClause,
-    const vector<vector<SubtreePlan>>& dpTab,
+    const std::vector<Alias>& aliases, const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
   const vector<SubtreePlan>& previous = dpTab.back();
-  auto aliases = selectClause.getAliases();
 
   vector<SubtreePlan> added;
 
@@ -427,12 +425,8 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
+  const auto& aliases = pq.getAliases();
   for (auto& parent : previous) {
-    std::vector<Alias> aliases;
-    if (pq.hasSelectClause()) {
-      aliases = pq.selectClause().getAliases();
-    }
-
     // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
     // group by the graph variable.
     auto groupVariables = pq._groupByVariables;
@@ -445,8 +439,8 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
-        _qec, groupVariables, std::move(aliases), parent._qet);
+    SubtreePlan groupByPlan =
+        makeSubtreePlan<GroupBy>(_qec, groupVariables, aliases, parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
@@ -2510,6 +2504,31 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
+
+// Return the `child` of `unionOperation`, with the variables that the
+// `unionOperation` hides (because it is the root of a subquery) also hidden.
+// Otherwise a join with the child would also join on (or duplicate) these
+// variables.
+std::shared_ptr<QueryExecutionTree> childWithHiddenVariablesHidden(
+    const Union& unionOperation,
+    const std::shared_ptr<QueryExecutionTree>& child) {
+  const auto& visibleInUnion =
+      unionOperation.getExternallyVisibleVariableColumns();
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(
+      child->getVariableColumns() | ql::views::keys |
+          ql::views::filter([&visibleInUnion](const Variable& var) {
+            return visibleInUnion.contains(var);
+          }),
+      std::back_inserter(visibleVariables));
+  if (visibleVariables.size() == child->getVariableColumns().size()) {
+    return child;
+  }
+  // The child might be shared with other plans, so we must not modify it.
+  auto result = child->clone();
+  result->getRootOperation()->setSelectedVariablesForSubquery(visibleVariables);
+  return result;
+}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2564,10 +2583,14 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
         mapColumnsInUnion(flipped, *unionOperation, jcs);
 
     auto joinedLeft = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->leftChild()), other,
-        leftMapping);
+        cloneWithNewTree(thisPlan,
+                         childWithHiddenVariablesHidden(
+                             *unionOperation, unionOperation->leftChild())),
+        other, leftMapping);
     auto joinedRight = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->rightChild()),
+        cloneWithNewTree(thisPlan,
+                         childWithHiddenVariablesHidden(
+                             *unionOperation, unionOperation->rightChild())),
         cloneWithNewTree(other, other._qet->clone()), rightMapping);
 
     for (const auto& leftPlan : joinedLeft) {
@@ -3029,7 +3052,8 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
 // _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    std::vector<SubtreePlan>& candidates, const Variables& variables) {
+    std::vector<SubtreePlan>& candidates, const Variables& variables,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   using enum SubtreePlan::Type;
   auto type = candidates[0].type;
   if (type != MINUS && type != OPTIONAL) {
@@ -3039,12 +3063,20 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
   // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
   // triples only get their `?g` column when they are planned (contains-word and
   // materialized views are not allowed inside a `GRAPH` clause).
-  // TODO<RobinTF> For a MINUS, `?g` should only count as shared if both sides
-  // mention it explicitly.
+  //
+  // For a MINUS on the other hand, `?g` only counts as a shared variable if it
+  // is in scope on both sides without the implicit graph columns of the index
+  // scans. Otherwise, the MINUS would remove all rows of every graph in which
+  // its pattern matches. If the MINUS is connected via other variables, it
+  // is still joined on `?g`, as the patterns are evaluated per graph.
   auto previousVariables = getVariablesOfPreviousPatterns();
-  if (type == OPTIONAL && planner_.activeGraphVariable_.has_value() &&
-      !candidateTriples_._triples.empty()) {
-    previousVariables.insert(planner_.activeGraphVariable_.value());
+  if (const auto& graphVariable = planner_.activeGraphVariable_;
+      graphVariable.has_value()) {
+    if (type == OPTIONAL && !candidateTriples_._triples.empty()) {
+      previousVariables.insert(graphVariable.value());
+    } else if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
+      previousVariables.erase(graphVariable.value());
+    }
   }
   bool areVariablesUnconnected =
       ql::ranges::none_of(variables, [&previousVariables](const Variable& var) {
@@ -3078,7 +3110,8 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
-    std::vector<SubtreePlan>&& candidates) {
+    std::vector<SubtreePlan>&& candidates,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!candidates.empty());
 
@@ -3090,8 +3123,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // clean. This should be fixed.
   auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
-  bool specialCaseHandled =
-      handleUnconnectedMinusOrOptional(candidates, variables);
+  bool specialCaseHandled = handleUnconnectedMinusOrOptional(
+      candidates, variables, isGraphVariableInScopeOnBothSidesOfMinus);
 
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
@@ -3267,11 +3300,18 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
+    const auto& graphVariable = planner_.activeGraphVariable_;
+    bool isGraphVariableInScopeOnBothSides =
+        graphVariable.has_value() &&
+        ad_utility::contains(arg.visibleVariables_, graphVariable.value()) &&
+        ad_utility::contains(arg.visibleVariablesOfPrecedingPatterns_,
+                             graphVariable.value());
     auto candidates = planner_.optimize(&arg._child);
     for (auto& c : candidates) {
       c.type = SubtreePlan::MINUS;
     }
-    visitGroupOptionalOrMinus(std::move(candidates));
+    visitGroupOptionalOrMinus(std::move(candidates),
+                              isGraphVariableInScopeOnBothSides);
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
   } else if constexpr (std::is_same_v<T, p::Describe>) {
@@ -3336,21 +3376,19 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
-    if (getRuntimeParameter<
-            &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
-      // Consider pushing down the `BIND` into the subtree.
-      auto pushedDownPlan =
-          a._qet->getRootOperation()->makeTreeWithBindColumn(v);
-      if (pushedDownPlan.has_value()) {
-        // We can replace this `BIND` with a plan that contains an additional
-        // scan column with equivalent values, for example from a materialized
-        // view.
-        auto plan = a;
-        plan._qet = pushedDownPlan.value();
-        plan.containsBindSubstitute_ = true;
-        candidatePlans_.back().push_back(std::move(plan));
-        continue;
-      }
+    // Consider pushing down the `BIND` into the subtree. Each operation that
+    // can provide the `BIND` column itself checks whether it is allowed to do
+    // so (e.g. an `IndexScan` of a materialized view checks
+    // `disableMaterializedViewRewriting`).
+    auto pushedDownPlan = a._qet->makeTreeWithBindColumn(v);
+    if (pushedDownPlan.has_value()) {
+      // We can replace this `BIND` with a plan that contains an additional
+      // column with equivalent values, for example from a materialized view.
+      auto plan = a;
+      plan._qet = pushedDownPlan.value();
+      plan.containsBindSubstitute_ = true;
+      candidatePlans_.back().push_back(std::move(plan));
+      continue;
     }
 
     // Add the query plan for the BIND.
