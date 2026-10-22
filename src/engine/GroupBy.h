@@ -69,10 +69,6 @@ class GroupBy : public Operation {
   // exponential in the number of nested `GROUP BY`s.
   [[nodiscard]] bool isDeterministicImpl() const override;
 
-  // Also set the handle of the implementation.
-  void setCancellationHandle(
-      ad_utility::SharedCancellationHandle handle) override;
-
   std::unique_ptr<GroupByImpl> _impl;
 };
 

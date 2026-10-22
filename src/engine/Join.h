@@ -57,9 +57,6 @@ class Join : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
 
-  // Access to the implementation (requires `JoinImpl.h`), used in tests.
-  const JoinImpl& getImpl() const { return *impl_; }
-
  private:
   std::unique_ptr<JoinImpl> impl_;
 
@@ -68,10 +65,6 @@ class Join : public Operation {
   // children, see the comment in `GroupBy.h`.
   [[nodiscard]] bool isDeterministicImpl() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
-
-  // Also set the handle of the implementation.
-  void setCancellationHandle(
-      ad_utility::SharedCancellationHandle handle) override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
   std::optional<std::shared_ptr<QueryExecutionTree>>

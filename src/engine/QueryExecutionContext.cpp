@@ -39,7 +39,8 @@ QueryExecutionContext::QueryExecutionContext(
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
     qlever::Executor executor, std::function<void(std::string)> updateCallback,
     const bool pinSubtrees, const bool pinResult,
-    const DisableCaching disableCaching, bool disableMaterializedViewRewriting)
+    const DisableCaching disableCaching, bool disableMaterializedViewRewriting,
+    ad_utility::SharedCancellationHandle cancellationHandle)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
       _index(std::move(index)),
@@ -49,7 +50,8 @@ QueryExecutionContext::QueryExecutionContext(
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
       materializedViewsManager_(std::move(materializedViewsManager)),
-      executor_(std::move(executor)) {
+      executor_(std::move(executor)),
+      cancellationHandle_(std::move(cancellationHandle)) {
   disableCaching_ = [disableCaching]() {
     if (disableCaching == DisableCaching::True) {
       return true;
@@ -68,6 +70,7 @@ QueryExecutionContext::QueryExecutionContext(
   AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
   AD_CORRECTNESS_CHECK(materializedViewsManager_ != nullptr);
   AD_CONTRACT_CHECK(static_cast<bool>(executor_));
+  AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
 }
 
 // _____________________________________________________________________________

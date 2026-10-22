@@ -182,9 +182,6 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   auto join = ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(valuesOp), std::move(indexScan),
       joinColValues, joinColScan);
-  // The `join` is created at runtime, so it needs the query's handle.
-  join->getRootOperation()->recursivelySetCancellationHandle(
-      cancellationHandle_);
 
   // Compute the result of the `join` and select the columns `?subject`,
   // `?predicate`, `?object`.

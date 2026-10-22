@@ -426,7 +426,7 @@ void OptionalJoin::optionalJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_, keepJoinColumns_);
+      getCancellationHandle(), keepJoinColumns_);
   auto rowAdderOnIterators = [&]() {
     auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
                    beginRight = joinColumnsRight.begin()](const auto& itLeft,
@@ -670,8 +670,8 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto lazyResult =
       std::move(nestedLoopJoin)
           .computeOptionalJoin(!requestLaziness, getResultWidth(),
-                               cancellationHandle_, _right->getResultWidth(),
-                               keepJoinColumns_);
+                               getCancellationHandle(),
+                               _right->getResultWidth(), keepJoinColumns_);
   return requestLaziness
              ? Result{std::move(lazyResult), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(lazyResult)),

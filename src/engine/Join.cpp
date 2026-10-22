@@ -72,12 +72,6 @@ string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
 bool Join::isDeterministicImpl() const { return impl_->isDeterministicImpl(); }
 
 // _____________________________________________________________________________
-void Join::setCancellationHandle(ad_utility::SharedCancellationHandle handle) {
-  impl_->setCancellationHandle(handle);
-  Operation::setCancellationHandle(std::move(handle));
-}
-
-// _____________________________________________________________________________
 std::unique_ptr<Operation> Join::cloneImpl() const {
   auto ptr = std::unique_ptr<JoinImpl>{
       static_cast<JoinImpl*>(impl_->cloneImpl().release())};

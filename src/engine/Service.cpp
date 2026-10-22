@@ -205,7 +205,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
   const size_t maxRedirects =
       getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
   HttpOrHttpsResponse response = getResultFunction_(
-      serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
+      serviceUrl, getCancellationHandle(), boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json", maxRedirects);
 

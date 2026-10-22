@@ -265,9 +265,6 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   // result here.
   auto scan = makePatternScan(
       getExecutionContext(), TripleComponent{Variable{"?_s"}}, Variable{"?_o"});
-  // The `scan` is created at runtime, so it needs the query's handle.
-  scan->getRootOperation()->recursivelySetCancellationHandle(
-      cancellationHandle_);
   auto result = scan->getResult(true);
   // The `callback` is invoked with a single-value span of the `idTableView`
   // if the result is fully materialized. Because of caching we can potentially
@@ -352,8 +349,6 @@ void HasPredicateScan::computeFreeO(
   // result here.
   auto scan = makePatternScan(getExecutionContext(), std::move(subject),
                               Variable{"?_o"});
-  scan->getRootOperation()->recursivelySetCancellationHandle(
-      cancellationHandle_);
   auto result = scan->getResult(false);
   const auto& hasPattern = result->idTableView();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);

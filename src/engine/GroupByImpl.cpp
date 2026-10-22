@@ -346,7 +346,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
   for (const auto& alias : _aliases) {
     subtree = ExistsJoin::addExistsJoinsToSubtree(
         alias._expression, std::move(subtree), getExecutionContext(),
-        cancellationHandle_);
+        getCancellationHandle());
   }
 
   // The input of a GROUP BY has to be sorted. If possible, we get optimize out
@@ -589,7 +589,7 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
       idTable,
       getExecutionContext()->getAllocator(),
       localVocab,
-      cancellationHandle_,
+      getCancellationHandle(),
       deadline_};
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
@@ -960,7 +960,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   // do the index scan, but something smarter).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle_, locatedTriplesState(),
+      col0Id.value(), getCancellationHandle(), locatedTriplesState(),
       indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
@@ -1016,7 +1016,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   operation->updateRuntimeInformationWhenOptimizedOut();
 
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesState(), operation->getLimitOffset());
+      getCancellationHandle(), locatedTriplesState(),
+      operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -1895,8 +1896,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // Setup the `EvaluationContext` for this input block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
-        getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
-        deadline_);
+        getExecutionContext()->getAllocator(), localVocab,
+        getCancellationHandle(), deadline_);
     evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
         _groupByVariables.begin(), _groupByVariables.end()};
     evaluationContext._isPartOfGroupBy = true;

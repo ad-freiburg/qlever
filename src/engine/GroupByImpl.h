@@ -185,8 +185,7 @@ class GroupByImpl : public Operation {
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   friend class groupBy::detail::LazyGroupByRange;
 
-  // `GroupBy` needs access to `isDeterministicImpl()` and
-  // `setCancellationHandle()`.
+  // `GroupBy` needs access to the private `isDeterministicImpl()`.
   friend class GroupBy;
 
  public:

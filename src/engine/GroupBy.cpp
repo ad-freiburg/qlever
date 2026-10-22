@@ -87,13 +87,6 @@ bool GroupBy::isDeterministicImpl() const {
 }
 
 // _____________________________________________________________________________
-void GroupBy::setCancellationHandle(
-    ad_utility::SharedCancellationHandle handle) {
-  _impl->setCancellationHandle(handle);
-  Operation::setCancellationHandle(std::move(handle));
-}
-
-// _____________________________________________________________________________
 std::unique_ptr<Operation> GroupBy::cloneImpl() const {
   // We need to return a `unique_ptr<GroupBy>` to let the unit tests for `clone`
   // pass and to make `GroupByImpl` a true hidden implementation.

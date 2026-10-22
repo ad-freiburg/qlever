@@ -22,9 +22,6 @@
 #include "util/TypeTraits.h"
 
 class JoinImpl : public Operation {
-  // `Join` needs access to `setCancellationHandle()`.
-  friend class Join;
-
  private:
   std::shared_ptr<QueryExecutionTree> left_;
   std::shared_ptr<QueryExecutionTree> right_;

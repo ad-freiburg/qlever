@@ -24,6 +24,7 @@
 #include "index/SortConfig.h"
 #include "util/AllocateShared.h"
 #include "util/Cache.h"
+#include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
 #include "util/Executor.h"
 
@@ -120,7 +121,9 @@ class QueryExecutionContext
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
       DisableCaching = DisableCaching::FromRuntimeParameter,
-      bool disableMaterializedViewRewriting = false);
+      bool disableMaterializedViewRewriting = false,
+      ad_utility::SharedCancellationHandle cancellationHandle =
+          std::make_shared<ad_utility::CancellationHandle<>>());
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -281,6 +284,14 @@ class QueryExecutionContext
   // of which is the runtime parameter `sort-num-tasks-in-flight`.
   static SortConfig makeSortConfig(qlever::Executor executor);
 
+  // The cancellation handle of the query that is executed using this context.
+  // All operations of the query (including the ones that are created during
+  // its execution) check this handle. By default (see the constructor), this
+  // is a handle that is never cancelled.
+  const ad_utility::SharedCancellationHandle& cancellationHandle() const {
+    return cancellationHandle_;
+  }
+
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
   // header.
@@ -356,6 +367,9 @@ class QueryExecutionContext
 
   // See the documentation for the getter with the same name above.
   SortConfig sortConfig_ = makeSortConfig(executor_);
+
+  // See the documentation for the getter with the same name above.
+  ad_utility::SharedCancellationHandle cancellationHandle_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

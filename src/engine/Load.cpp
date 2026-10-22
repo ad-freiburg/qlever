@@ -105,8 +105,9 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
   ad_utility::httpUtils::Url url{loadClause_.iri_.getContent()};
   AD_LOG_INFO << "Loading RDF dataset from " << url.asString() << std::endl;
-  HttpOrHttpsResponse response = getResultFunction_(
-      url, cancellationHandle_, boost::beast::http::verb::get, "", "", "", 0);
+  HttpOrHttpsResponse response =
+      getResultFunction_(url, getCancellationHandle(),
+                         boost::beast::http::verb::get, "", "", "", 0);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));

@@ -9,11 +9,8 @@
 #include <optional>
 
 #include "engine/Bind.h"
-#include "engine/GroupBy.h"
-#include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
-#include "engine/JoinImpl.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
@@ -351,11 +348,35 @@ TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
 // _____________________________________________________________________________
 
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
-  auto qec = getQec();
+  // Use a separate context, such that the handle of the context that is shared
+  // between the tests (see `getQec`) is not cancelled.
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "verifyExceptionIsThrownOnCancellation", TestIndexConfig{}));
+  QueryResultCache cache;
+  NamedResultCache namedCache;
   auto handle = std::make_shared<CancellationHandle<>>();
+  QueryExecutionContext qec{index,
+                            &cache,
+                            makeAllocator(),
+                            SortPerformanceEstimator{},
+                            &namedCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            executor(),
+                            ad_utility::noop,
+                            false,
+                            false,
+                            QueryExecutionContext::DisableCaching::False,
+                            false,
+                            handle};
   ShallowParentOperation operation =
-      ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetCancellationHandle(handle);
+      ShallowParentOperation::of<StallForeverOperation>(&qec);
+  // All operations use the handle of the context.
+  EXPECT_EQ(operation.getCancellationHandle(), handle);
+  EXPECT_EQ(operation.getChildren()
+                .at(0)
+                ->getRootOperation()
+                ->getCancellationHandle(),
+            handle);
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
@@ -386,36 +407,6 @@ TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   // Verify that the time is up for the parent and the child.
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
   EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
-}
-
-// _____________________________________________________________________________
-TEST(OperationTest, cancellationHandleIsPropagatedToImplementations) {
-  // The implementations of `Join` and `GroupBy` are not children, but have to
-  // use the query's cancellation handle, too.
-  auto* qec = getQec();
-  auto makeValues = [qec](std::string secondVariable) {
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, makeIdTableFromVector({{1, 2}, {3, 4}}),
-        std::vector<std::optional<Variable>>{Variable{"?x"},
-                                             Variable{secondVariable}},
-        false, std::vector<ColumnIndex>{0});
-  };
-  auto join = ad_utility::makeExecutionTree<Join>(qec, makeValues("?y"),
-                                                  makeValues("?z"), 0, 0);
-  auto groupBy = ad_utility::makeExecutionTree<GroupBy>(
-      qec, std::vector{Variable{"?x"}}, std::vector<Alias>{}, join);
-
-  auto handle = std::make_shared<CancellationHandle<>>();
-  groupBy->getRootOperation()->recursivelySetCancellationHandle(handle);
-
-  const auto& groupByOperation =
-      dynamic_cast<const GroupBy&>(*groupBy->getRootOperation());
-  EXPECT_EQ(groupByOperation.getCancellationHandle(), handle);
-  EXPECT_EQ(groupByOperation.getImpl().getCancellationHandle(), handle);
-  const auto& joinOperation =
-      dynamic_cast<const Join&>(*join->getRootOperation());
-  EXPECT_EQ(joinOperation.getCancellationHandle(), handle);
-  EXPECT_EQ(joinOperation.getImpl().getCancellationHandle(), handle);
 }
 
 // ________________________________________________

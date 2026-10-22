@@ -114,16 +114,6 @@ void Operation::addUnboundVariableWarningOrThrow(std::string warning) const {
 }
 
 // ________________________________________________________________________
-void Operation::recursivelySetCancellationHandle(
-    SharedCancellationHandle cancellationHandle) {
-  AD_CORRECTNESS_CHECK(cancellationHandle);
-  forAllDescendants([&cancellationHandle](auto child) {
-    child->getRootOperation()->setCancellationHandle(cancellationHandle);
-  });
-  setCancellationHandle(std::move(cancellationHandle));
-}
-
-// ________________________________________________________________________
 
 void Operation::recursivelySetTimeConstraint(
     std::chrono::steady_clock::time_point deadline) {

@@ -67,10 +67,6 @@ class Operation {
   // `makeShared`), and data members are initialized in declaration order.
   QueryExecutionContext* _executionContext;
 
-  // Pointer to the cancellation handle of this operation.
-  SharedCancellationHandle cancellationHandle_ =
-      makeShared<SharedCancellationHandle::element_type>();
-
   std::chrono::steady_clock::time_point deadline_ =
       std::chrono::steady_clock::time_point::max();
 
@@ -288,8 +284,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
+  // The cancellation handle of the query, which is stored in the
+  // `QueryExecutionContext`.
   const SharedCancellationHandle& getCancellationHandle() const {
-    return cancellationHandle_;
+    return _executionContext->cancellationHandle();
   }
 
  private:
@@ -380,21 +378,6 @@ class Operation {
       bool isRoot = false,
       ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
 
-  // Use the same cancellation handle for all children of an operation (= query
-  // plan rooted at that operation). As soon as one child is aborted, the whole
-  // operation is aborted out.
-  void recursivelySetCancellationHandle(
-      SharedCancellationHandle cancellationHandle);
-
- protected:
-  // Set the cancellation handle of this operation (not of its children).
-  // Operations that delegate to another `Operation` that is not a child (like
-  // `Join` to `JoinImpl`) must override this to also set its handle.
-  virtual void setCancellationHandle(SharedCancellationHandle handle) {
-    cancellationHandle_ = std::move(handle);
-  }
-
- public:
   template <typename Rep, typename Period>
   void recursivelySetTimeConstraint(
       std::chrono::duration<Rep, Period> duration) {
@@ -640,8 +623,8 @@ class Operation {
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
-    cancellationHandle_->throwIfCancelled(location,
-                                          [this]() { return getDescriptor(); });
+    getCancellationHandle()->throwIfCancelled(
+        location, [this]() { return getDescriptor(); });
   }
 
   std::chrono::milliseconds remainingTime() const;
