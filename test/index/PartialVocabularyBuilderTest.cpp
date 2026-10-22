@@ -134,9 +134,9 @@ class MockIndex {
     }
     PartialVocabulary vocab;
     ad_utility::HashMap<uint64_t, std::string> wordsByLocalId;
-    for (const auto& [word, idAndFlag] : items.map_) {
+    for (const auto& [word, indexAndFlag] : items.map_) {
       vocab.words_.emplace(word);
-      wordsByLocalId[idAndFlag.id()] = std::string{word};
+      wordsByLocalId[indexAndFlag.index()] = std::string{word};
     }
     for (const auto& row : localIds) {
       StringTriple triple;
