@@ -26,8 +26,8 @@ class ZstdWrapper {
   static std::vector<char> compress(const void* src, size_t numBytes,
                                     int compressionLevel = 3) {
     std::vector<char> result(ZSTD_compressBound(numBytes));
-    auto compressedSize = ZSTD_compress(result.data(), result.size(), src,
-                                        numBytes, compressionLevel);
+    auto compressedSize = checkError(ZSTD_compress(
+        result.data(), result.size(), src, numBytes, compressionLevel));
     result.resize(compressedSize);
     return result;
   }
@@ -97,8 +97,8 @@ class ZstdWrapper {
                               size_t bufferCapacity) noexcept {
     auto decompressedSize =
         ZSTD_decompress(buffer, bufferCapacity, src, numBytes);
-    if (ZSTD_isError(decompressedSize)) {
-      return Error{ZSTD_getErrorName(decompressedSize)};
+    if (auto error = toError(decompressedSize)) {
+      return error.value();
     }
     return decompressedSize;
   }
@@ -137,18 +137,38 @@ class ZstdWrapper {
       std::vector<char> copy{data.begin(), data.end()};
       return compressWithReference(reference, copy, compressionLevel);
     }
+    // The compression context holds the parameters and the reference for the
+    // `ZSTD_compress2` call below. Its creation only fails if no memory can be
+    // allocated.
     std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> context{
         ZSTD_createCCtx(), &ZSTD_freeCCtx};
-    AD_CONTRACT_CHECK(context != nullptr);
-    auto set = [&context](ZSTD_cParameter parameter, int value) {
+    AD_CORRECTNESS_CHECK(context != nullptr);
+    // Set a single compression parameter of the `context`, and throw if ZSTD
+    // rejects it.
+    auto setParameter = [&context](ZSTD_cParameter parameter, int value) {
       checkError(ZSTD_CCtx_setParameter(context.get(), parameter, value));
     };
-    set(ZSTD_c_compressionLevel, compressionLevel);
-    set(ZSTD_c_windowLog, windowLogFor(reference.size() + data.size()));
-    set(ZSTD_c_enableLongDistanceMatching, 1);
-    set(ZSTD_c_contentSizeFlag, 1);
+    // The usual ZSTD compression level.
+    setParameter(ZSTD_c_compressionLevel, compressionLevel);
+    // The compressor can only refer to the last `2^windowLog` bytes before the
+    // current position. The reference is logically placed directly before the
+    // data, so the window has to cover both of them (see `windowLogFor`).
+    setParameter(ZSTD_c_windowLog,
+                 windowLogFor(reference.size() + data.size()));
+    // Long distance matching efficiently finds long matches that are far back
+    // in the window, which is the typical case when the data is a modified
+    // version of the reference.
+    setParameter(ZSTD_c_enableLongDistanceMatching, 1);
+    // Store the size of the data in the frame header (required by
+    // `getUncompressedSize` and thus by `decompressWithReference`).
+    setParameter(ZSTD_c_contentSizeFlag, 1);
+    // Use the `reference` as the prefix dictionary for the next frame only. The
+    // `reference` is not copied, so it has to stay alive until the end of the
+    // `ZSTD_compress2` call below.
     checkError(
         ZSTD_CCtx_refPrefix(context.get(), reference.data(), reference.size()));
+    // Compress into a buffer of the worst-case size, and shrink it to the
+    // actual size afterwards.
     std::vector<char> result(ZSTD_compressBound(data.size()));
     auto compressedSize = checkError(ZSTD_compress2(
         context.get(), result.data(), result.size(), data.data(), data.size()));
@@ -166,32 +186,34 @@ class ZstdWrapper {
   static SizeOrError tryToDecompressWithReference(
       ql::span<const char> reference, ql::span<const char> compressed,
       char* buffer, size_t bufferCapacity) noexcept {
+    // The decompression context holds the parameters and the reference for the
+    // `ZSTD_decompressDCtx` call below. Its creation only fails if no memory
+    // can be allocated (and then terminates the program, as this function is
+    // `noexcept`).
     std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> context{
         ZSTD_createDCtx(), &ZSTD_freeDCtx};
-    if (context == nullptr) {
-      return Error{"Could not create a ZSTD decompression context"};
-    }
-    auto check = [](size_t result) -> std::optional<Error> {
-      if (ZSTD_isError(result)) {
-        return Error{ZSTD_getErrorName(result)};
-      }
-      return std::nullopt;
-    };
-    // Allow the largest window, because the compressor chose the window such
-    // that it covers the reference (see `compressWithReference`).
-    if (auto error = check(ZSTD_DCtx_setParameter(
+    AD_CORRECTNESS_CHECK(context != nullptr);
+    // By default, the decompressor rejects frames with a window larger than
+    // `2^27` bytes to limit its memory usage. Allow the largest window, because
+    // the compressor chose the window such that it covers the reference (see
+    // `compressWithReference`).
+    if (auto error = toError(ZSTD_DCtx_setParameter(
             context.get(), ZSTD_d_windowLogMax,
             ZSTD_dParam_getBounds(ZSTD_d_windowLogMax).upperBound))) {
       return error.value();
     }
-    if (auto error = check(ZSTD_DCtx_refPrefix(context.get(), reference.data(),
-                                               reference.size()))) {
+    // Use the `reference` as the prefix dictionary for the next frame only (it
+    // is not copied, and has to be the same as during compression).
+    if (auto error = toError(ZSTD_DCtx_refPrefix(
+            context.get(), reference.data(), reference.size()))) {
       return error.value();
     }
+    // Decompress the frame into the `buffer`, and get the number of
+    // decompressed bytes (or an error code).
     auto decompressedSize =
         ZSTD_decompressDCtx(context.get(), buffer, bufferCapacity,
                             compressed.data(), compressed.size());
-    if (auto error = check(decompressedSize)) {
+    if (auto error = toError(decompressedSize)) {
       return error.value();
     }
     return decompressedSize;
@@ -212,19 +234,30 @@ class ZstdWrapper {
     return result;
   }
 
- private:
   // Throw a `std::runtime_error` if `result` is a ZSTD error code, else return
-  // it unchanged.
+  // it unchanged. The `result` is the return value of a ZSTD function that
+  // returns either a size or an error code.
   static size_t checkError(size_t result) {
-    if (ZSTD_isError(result)) {
-      throw std::runtime_error{
-          absl::StrCat("ZSTD error: ", ZSTD_getErrorName(result))};
+    if (auto error = toError(result)) {
+      throw std::runtime_error{absl::StrCat("ZSTD error: ", error->message_)};
     }
     return result;
   }
 
+ private:
+  // Return the `Error` if `result` is a ZSTD error code, else `std::nullopt`.
+  static std::optional<Error> toError(size_t result) noexcept {
+    if (ZSTD_isError(result)) {
+      return Error{ZSTD_getErrorName(result)};
+    }
+    return std::nullopt;
+  }
+
   // The smallest `ZSTD_c_windowLog` such that the window covers `numBytes`
-  // bytes (clamped to the range that ZSTD allows).
+  // bytes (clamped to the range that ZSTD allows). The window is the range of
+  // the last `2^windowLog` bytes before the current position, to which the
+  // compressor can refer; a larger window requires more memory for the
+  // compression and the decompression.
   static int windowLogFor(size_t numBytes) {
     int log = numBytes <= 1 ? 1 : absl::bit_width(numBytes - 1);
     auto bounds = ZSTD_cParam_getBounds(ZSTD_c_windowLog);

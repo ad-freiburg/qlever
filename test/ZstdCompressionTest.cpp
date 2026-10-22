@@ -8,6 +8,7 @@
 
 #include "../test/util/GTestHelpers.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/Random.h"
 
 using ::testing::HasSubstr;
 
@@ -132,11 +133,11 @@ TEST(CompressionTest, NonThrowingFunctions) {
 TEST(CompressionTest, CompressWithReference) {
   // A pseudo-random reference, and data that mostly consists of pieces of it.
   std::vector<char> reference(100'000);
-  unsigned state = 12345;
-  for (auto& byte : reference) {
-    state = state * 1103515245u + 12345u;
-    byte = static_cast<char>(state >> 16);
-  }
+  ad_utility::FastRandomIntGenerator<uint64_t> randomGenerator{
+      ad_utility::RandomSeed::make(42)};
+  ql::ranges::generate(reference, [&randomGenerator]() {
+    return static_cast<char>(randomGenerator());
+  });
   std::vector<char> data(reference.begin() + 60'000, reference.end());
   data.insert(data.end(), reference.begin(), reference.begin() + 30'000);
   std::string inserted = "some bytes that are not in the reference";
@@ -175,6 +176,21 @@ TEST(CompressionTest, CompressWithReference) {
   EXPECT_EQ(ZstdWrapper::decompressWithReference({}, plain), data);
   auto empty = ZstdWrapper::compressWithReference(reference, {}, 3);
   EXPECT_TRUE(ZstdWrapper::decompressWithReference(reference, empty).empty());
+  auto bothEmpty = ZstdWrapper::compressWithReference({}, {}, 3);
+  EXPECT_TRUE(ZstdWrapper::decompressWithReference({}, bothEmpty).empty());
+
+  // Data that overlaps with the reference in memory (here: the second part of
+  // the reference itself) is still compressed with the reference. Without the
+  // internal copy, ZSTD would silently ignore the reference, and the random
+  // bytes would be incompressible.
+  ql::span<const char> referenceSpan{reference};
+  auto overlapping = referenceSpan.subspan(60'000);
+  auto compressedOverlap =
+      ZstdWrapper::compressWithReference(referenceSpan, overlapping, 19);
+  EXPECT_LT(compressedOverlap.size(), 200u);
+  EXPECT_THAT(
+      ZstdWrapper::decompressWithReference(reference, compressedOverlap),
+      ::testing::ElementsAreArray(overlapping));
 
   // A wrong reference does not yield the data (and is either an error or
   // garbage, which the caller has to detect via a checksum).
@@ -183,4 +199,20 @@ TEST(CompressionTest, CompressWithReference) {
       wrongReference, compressed, buffer.data(), buffer.size());
   EXPECT_TRUE(std::holds_alternative<ZstdWrapper::Error>(wrong) ||
               buffer != data);
+}
+
+// _____________________________________________________________________________
+TEST(CompressionTest, CheckError) {
+  // A size is returned unchanged.
+  EXPECT_EQ(ZstdWrapper::checkError(0), 0u);
+  EXPECT_EQ(ZstdWrapper::checkError(42), 42u);
+
+  // An error code (here: from decompressing garbage) leads to an exception.
+  std::vector<char> garbage(50, 'x');
+  std::vector<char> buffer(100);
+  auto errorCode = ZSTD_decompress(buffer.data(), buffer.size(), garbage.data(),
+                                   garbage.size());
+  ASSERT_TRUE(ZSTD_isError(errorCode));
+  AD_EXPECT_THROW_WITH_MESSAGE(ZstdWrapper::checkError(errorCode),
+                               HasSubstr("ZSTD error: "));
 }
