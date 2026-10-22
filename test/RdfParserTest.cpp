@@ -1113,6 +1113,26 @@ TEST(RdfParserTest, commentThatEndsWithADot) {
   forAllParsers(testWithParser);
 }
 
+// Test that a comment at the end of the input needs no trailing newline (the
+// end of the input also ends the comment), and that a `\r` ends a comment.
+TEST(RdfParserTest, commentAtEndOfInputWithoutNewline) {
+  std::string filename{gtestCurrentTestName()};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto testWithParser = [&](auto t, std::string_view input,
+                            const std::vector<TurtleTriple>& expected) {
+    using Parser = typename decltype(t)::type;
+    ad_utility::makeOfstream(filename) << input;
+    EXPECT_THAT(parseFromFile<Parser>(filename),
+                ::testing::UnorderedElementsAreArray(expected));
+  };
+  std::vector<TurtleTriple> expected{{iri("<s>"), iri("<p>"), iri("<o>")}};
+  forAllParsers(testWithParser, "<s> <p> <o> .\n# comment", expected);
+  forAllParsers(testWithParser, "<s> <p> <o> . # comment", expected);
+  forAllParsers(testWithParser, "# comment", std::vector<TurtleTriple>{});
+  // A plain `\r` also ends a comment.
+  forAllParsers(testWithParser, "# comment\r<s> <p> <o> .", expected);
+}
+
 // The same, but with a comment that is larger than the buffer, such that the
 // `#` that starts it and the dot that ends it are in different blocks of the
 // block source. The `#` is only visible to the search because the block source

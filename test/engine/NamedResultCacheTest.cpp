@@ -18,6 +18,7 @@ TEST(NamedResultCache, basicWorkflow) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       cache.get("query-1"),
       ::testing::HasSubstr("is not contained in the named result cache"));
+  EXPECT_EQ(cache.getIfContained("query-1"), nullptr);
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
   auto table2 = makeIdTableFromVector({{3, 8}, {16, 11}, {39, 14}});
   using V = Variable;
@@ -95,6 +96,7 @@ TEST(NamedResultCache, basicWorkflow) {
     EXPECT_TRUE(cache.contains("query-2"));
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
+    EXPECT_EQ(cache.getIfContained("query-2"), res);
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
@@ -112,7 +114,9 @@ TEST(NamedResultCache, basicWorkflow) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         cache.getOperation("query-2", qec),
         ::testing::HasSubstr("is not contained in the named result cache"));
+    EXPECT_EQ(cache.getIfContained("query-2"), nullptr);
     EXPECT_NO_THROW(cache.getOperation("query-1", qec));
+    EXPECT_NE(cache.getIfContained("query-1"), nullptr);
   }
 
   cache.clear();
