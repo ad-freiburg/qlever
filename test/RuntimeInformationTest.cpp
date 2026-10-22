@@ -74,7 +74,8 @@ TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
   ASSERT_EQ(parent.getOperationCostEstimate(), 45);
 }
 
-// ________________________________________________________________
+// Test that the total times of optimized out children are recursively set to
+// the sum of the total times of their children.
 TEST(RuntimeInformation, updateTotalTimeOfOptimizedOutChildren) {
   auto grandchild = std::make_shared<RuntimeInformation>();
   auto child = std::make_shared<RuntimeInformation>();

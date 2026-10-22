@@ -111,10 +111,11 @@ class RuntimeInformation {
 
   /// Set the total time of each child that was optimized out (recursively) to
   /// the sum of the total times of its children. This has to be called
-  /// whenever the total time of this operation is updated: An optimized out
-  /// operation is never computed itself, but its children might be computed
-  /// (or still be lazily computed) only after it was marked as optimized out,
-  /// so the children's total times can still change after that.
+  /// whenever the total time of this operation is updated.
+  ///
+  /// NOTE: An optimized out operation is never computed itself, but its
+  /// children might be computed (possibly lazily) only after it was marked as
+  /// optimized out, so their total times can still change after that.
   void updateTotalTimeOfOptimizedOutChildren();
 
   /// Get the cost estimate for this operation. This is the total cost estimate
