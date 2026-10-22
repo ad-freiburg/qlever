@@ -153,6 +153,13 @@ class alignas(16) LocalVocabEntry
   static LocalVocabEntry literalWithNormalizedContent(
       std::string_view view, const LocalVocabContext& ctx);
 
+  // Return a copy of this entry that is anchored to `newContext`, with an empty
+  // cache for the position in the vocabulary. This is used when an index is
+  // replaced by a rebuilt one, which encodes exactly the same IRIs directly in
+  // an `Id` (see `toIdOrLocalVocabEntry`), so an entry that was not encodable
+  // before stays not encodable.
+  LocalVocabEntry reanchoredTo(const LocalVocabContext& newContext) const;
+
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
     return *this;

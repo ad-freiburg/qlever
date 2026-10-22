@@ -666,6 +666,11 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
   newIndex.loadAllPermutations() = index.loadAllPermutations();
   newIndex.createFromOnDiskIndex(indexBaseName,
                                  index.deltaTriplesManager().persists());
+  // The rebuilt index has to encode exactly the same IRIs directly in an `Id`,
+  // otherwise the `Id`s and `LocalVocabEntry`s of the old index cannot be
+  // carried over (see `LocalVocabEntry::reanchoredTo`).
+  AD_CORRECTNESS_CHECK(index.getImpl().encodedIriManager() ==
+                       newIndex.getImpl().encodedIriManager());
   newManager.setOnDiskBase(indexBaseName);
   return {std::move(currentSnapshot), std::move(mapping),
           std::move(indexAndViews)};
