@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "../test/util/GTestHelpers.h"
+#include "util/CompilerWarnings.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Random.h"
 
@@ -156,7 +157,16 @@ TEST(CompressionTest, CompressWithReference) {
     return static_cast<char>(randomGenerator());
   });
   std::vector<char> data(reference.begin() + 60'000, reference.end());
+  // GCC 15 and 16 report false-positive `-Warray-bounds` and
+  // `-Wstringop-overflow` warnings for the following `insert`: the capacity of
+  // `data` equals its size, so the insertion always reallocates, but GCC also
+  // analyzes libstdc++'s (unreachable) branch that copies into the existing
+  // capacity, and considers that copy out of bounds.
+  DISABLE_ARRAY_BOUNDS_WARNINGS
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   data.insert(data.end(), reference.begin(), reference.begin() + 30'000);
+  GCC_REENABLE_WARNINGS
+  GCC_REENABLE_WARNINGS
   std::string inserted = "some bytes that are not in the reference";
   data.insert(data.end(), inserted.begin(), inserted.end());
 
