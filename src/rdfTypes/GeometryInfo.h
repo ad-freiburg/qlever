@@ -28,6 +28,10 @@
 
 // Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
 // included in this header).
+//
+// NOTE: The underlying type must match the definition in the util's
+// `geo/Geo.h`. A mismatch does not compile, because `GeometryInfo.cpp`
+// includes both declarations.
 namespace util::geo {
 enum class CRSType : uint8_t;
 }

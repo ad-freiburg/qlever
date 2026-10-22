@@ -62,9 +62,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
       sourceCrs.type() <=
           static_cast<uint16_t>(util::geo::CRSType::WEB_MERCATOR),
       "CRS Type out of range");
-  AD_CORRECTNESS_CHECK(sourceCrs.type() != static_cast<uint16_t>(
-                                               util::geo::CRSType::UNSUPPORTED),
-                       "CRS Type indicates invalid/unsupported geometry");
+  AD_CORRECTNESS_CHECK(
+      sourceCrs != SourceCrsType{util::geo::CRSType::UNSUPPORTED},
+      "CRS Type indicates invalid/unsupported geometry");
 
   AD_CORRECTNESS_CHECK(
       boundingBox.lowerLeft().getLat() <= boundingBox.upperRight().getLat() &&

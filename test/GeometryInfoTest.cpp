@@ -8,6 +8,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 #include <util/geo/Geo.h>
@@ -427,6 +428,25 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
   for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
                    litInvalidCoord, litInvalidCrsIri, litPointEmpty}) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+
+  // Edge cases from https://github.com/ad-freiburg/util/issues/20 and
+  // https://github.com/ad-freiburg/util/pull/21: signed and exponent notation
+  // and nested collections are valid, degenerate geometries, trailing garbage,
+  // a missing closing bracket and a malformed number are not.
+  auto wkt = [](std::string_view s) {
+    return absl::StrCat(
+        "\"", s, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  };
+  for (auto s :
+       {"POINT(1e3 2)", "POINT(1.5e-3 2)", "POINT(+1 -2)",
+        "GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 2)),POINT(3 4))"}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
+  }
+  for (auto s : {"POINT(1 2, 3 4)", "POINT(1 2 foo)", "LINESTRING(1 2)",
+                 "MULTILINESTRING((1 1, 2 2), (3 3))", "POINT(1.1.1)",
+                 "GEOMETRYCOLLECTION(POINT(1 1)"}) {
+    EXPECT_FALSE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
   }
 
   // All geometry computations use the strict mode, so they don't skip the

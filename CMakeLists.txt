@@ -784,6 +784,13 @@ if (EMSCRIPTEN)
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
+# The library `pb_util_geo` of `spatialjoin` uses the JSON writer of
+# `pb_util_json`, but does not link against it. With `BUILD_SHARED_LIBS`, the
+# linker of Ubuntu 26.04 (binutils 2.46, and also `mold`) then rejects every
+# executable that links against `libpb_util_geo.so` with "undefined reference
+# to `util::json::Writer::...`".
+target_link_libraries(pb_util_geo PUBLIC pb_util_json)
+
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest
 # of the build can link against the correct one without further case
@@ -887,6 +894,17 @@ add_compile_definitions(QLEVER_COMPILETIME_LOGLEVEL=${LOG_LEVEL_${LOGLEVEL_NAME}
 option(BRANCHLESS_LOGGING "Use the coverage-friendly branchless implementation of the `AD_LOG_...` macros" OFF)
 if (BRANCHLESS_LOGGING)
     add_compile_definitions(QLEVER_BRANCHLESS_LOGGING)
+endif ()
+
+# The conditions of the `AD_CORRECTNESS_CHECK` macro (see `src/util/Exception.h`)
+# are invariants that never fail, so branches inside these conditions (e.g.
+# from `&&` or `||`) can never be fully covered by unit tests. With this option,
+# the condition is evaluated inside a lambda that is excluded from the coverage
+# instrumentation. It is used for the coverage build; see `src/util/Exception.h`
+# for why this option is not set unconditionally.
+option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
+if (COVERAGE_FRIENDLY_CHECKS)
+    add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
 endif ()
 
 ##################################################

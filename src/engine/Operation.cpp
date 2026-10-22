@@ -78,6 +78,9 @@ void Operation::forAllDescendants(F f) const {
 
 // _____________________________________________________________________________
 std::vector<std::string> Operation::collectWarnings() const {
+  // TODO<ullingerc> Warnings of the original computation of a result that was
+  // read from the cache are only part of the runtime information (see
+  // `addWarning`) and are thus missing here.
   std::vector<std::string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
@@ -92,7 +95,17 @@ std::vector<std::string> Operation::collectWarnings() const {
 }
 
 // _____________________________________________________________________________
-void Operation::addWarningOrThrow(std::string warning) const {
+void Operation::addWarning(std::string warning) const {
+  auto warnings = warnings_.wlock();
+  if (ad_utility::contains(*warnings, warning)) {
+    return;
+  }
+  _runtimeInfo->details_["warnings"].push_back(warning);
+  warnings->push_back(std::move(warning));
+}
+
+// _____________________________________________________________________________
+void Operation::addUnboundVariableWarningOrThrow(std::string warning) const {
   if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
@@ -127,6 +140,7 @@ void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
   bool isRtiWrappedInLimit = !applyToLimit && externalLimitApplied_;
   auto& rti =
       isRtiWrappedInLimit ? *runtimeInfo().children_.at(0) : runtimeInfo();
+  rti.updateTotalTimeOfOptimizedOutChildren();
   rti.totalTime_ += duration;
   rti.originalTotalTime_ = rti.totalTime_;
   rti.originalOperationTime_ = rti.getOperationTime();
@@ -519,6 +533,24 @@ void Operation::updateRuntimeInformationOnSuccess(
       _runtimeInfo->originalTotalTime_ = runtimeInfo->totalTime_;
       _runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
       _runtimeInfo->details_ = std::move(runtimeInfo->details_);
+      // Add the warnings of this operation that are not yet part of the
+      // cached details (the cached details only contain the warnings of the
+      // original computation).
+      //
+      // NOTE: For example, a query using the deprecated
+      // `<nearest-neighbors:...>` predicate gets a deprecation warning during
+      // the query planning. If its result is read from the cache because it
+      // was previously computed by an equivalent query using the `SERVICE`
+      // syntax, the cached details don't contain this warning.
+      if (auto warnings = warnings_.rlock(); !warnings->empty()) {
+        auto& warningsDetail = _runtimeInfo->details_["warnings"];
+        for (const auto& warning : *warnings) {
+          if (std::find(warningsDetail.begin(), warningsDetail.end(),
+                        warning) == warningsDetail.end()) {
+            warningsDetail.push_back(warning);
+          }
+        }
+      }
     }
     // Only the result that was actually computed (or read from cache) knows
     // the correct information about the children computations.
@@ -533,6 +565,12 @@ void Operation::updateRuntimeInformationOnSuccess(
       _runtimeInfo->children_.push_back(
           child->getRootOperation()->getRuntimeInfoPointer());
     }
+  }
+  // The runtime information of a cached result is final, and its children
+  // are shared with the cache entry (and with every other query that reads
+  // it), so they are only updated for a computed result.
+  if (!wasCached) {
+    _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
   }
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
@@ -553,13 +591,9 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
     std::vector<std::shared_ptr<RuntimeInformation>> children) {
   _runtimeInfo->status_ = RuntimeInformation::Status::optimizedOut;
   _runtimeInfo->children_ = std::move(children);
-  // This operation was optimized out, so its operation time is zero.
-  // The operation time is computed as
-  // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
-  // To set it to zero we thus have to set the `totalTime_` to that sum.
-  auto timesOfChildren = _runtimeInfo->children_ |
-                         ql::views::transform(&RuntimeInformation::totalTime_);
-  _runtimeInfo->totalTime_ = ::ranges::accumulate(timesOfChildren, 0us);
+  // This operation was optimized out, so its operation time (the total time
+  // minus the total times of the children, see `getOperationTime`) is zero.
+  _runtimeInfo->totalTime_ = _runtimeInfo->getTotalTimeOfChildren();
 
   signalQueryUpdate(RuntimeInformation::SendPriority::Always);
 }
@@ -585,6 +619,7 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
     _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);
   }
 
+  _runtimeInfo->updateTotalTimeOfOptimizedOutChildren();
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->status_ = RuntimeInformation::Status::failed;
 
@@ -642,6 +677,12 @@ void Operation::createRuntimeInfoFromEstimates(
     multiplicityEstimates.push_back(getMultiplicity(i));
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
+
+  // Add the warnings that were added before the runtime information was
+  // (re)created, e.g. during the query planning.
+  if (auto warnings = warnings_.rlock(); !warnings->empty()) {
+    _runtimeInfo->addDetail("warnings", *warnings);
+  }
 
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
       {getCacheKey(), locatedTriplesState().index_});
