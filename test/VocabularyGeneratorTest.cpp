@@ -329,13 +329,13 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("xenon", S{0, false});
 
   auto res = createInternalMapping(input);
-  ASSERT_EQ(0u, input[0].second.id());
-  ASSERT_EQ(1u, input[1].second.id());
-  ASSERT_EQ(1u, input[2].second.id());
-  ASSERT_EQ(2u, input[3].second.id());
-  ASSERT_EQ(3u, input[4].second.id());
-  ASSERT_EQ(3u, input[5].second.id());
-  ASSERT_EQ(4u, input[6].second.id());
+  ASSERT_EQ(0u, input[0].indexAndFlag_.index());
+  ASSERT_EQ(1u, input[1].indexAndFlag_.index());
+  ASSERT_EQ(1u, input[2].indexAndFlag_.index());
+  ASSERT_EQ(2u, input[3].indexAndFlag_.index());
+  ASSERT_EQ(3u, input[4].indexAndFlag_.index());
+  ASSERT_EQ(3u, input[5].indexAndFlag_.index());
+  ASSERT_EQ(4u, input[6].indexAndFlag_.index());
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);
@@ -366,12 +366,12 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
 
   auto res = createInternalMapping(input);
   // All three "alpha"s must collapse to the same id (0).
-  EXPECT_EQ(0u, input[0].second.id());
-  EXPECT_EQ(0u, input[1].second.id());
-  EXPECT_EQ(0u, input[2].second.id());
+  EXPECT_EQ(0u, input[0].indexAndFlag_.index());
+  EXPECT_EQ(0u, input[1].indexAndFlag_.index());
+  EXPECT_EQ(0u, input[2].indexAndFlag_.index());
   // Both "beta"s must collapse to the next id (1).
-  EXPECT_EQ(1u, input[3].second.id());
-  EXPECT_EQ(1u, input[4].second.id());
+  EXPECT_EQ(1u, input[3].indexAndFlag_.index());
+  EXPECT_EQ(1u, input[4].indexAndFlag_.index());
 
   EXPECT_EQ(0u, res[7]);
   EXPECT_EQ(0u, res[12]);

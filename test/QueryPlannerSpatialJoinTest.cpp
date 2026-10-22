@@ -5,6 +5,7 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
@@ -2017,4 +2018,50 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
 
   // suffix after >
   testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
+}
+
+// Test that an inline WKT literal that is invalid in the strict parsing mode
+// matches nothing in a spatial join and makes the other geo functions evaluate
+// to UNDEF.
+TEST(QueryPlanner, InvalidInlineWktIsUndef) {
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> \"POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+  // Run `SELECT * { ?a <p> ?b <body> }` and return the result and the column of
+  // `?x` (if any).
+  auto run = [&qec](std::string_view body) {
+    auto plan = h::parseAndPlan(
+        absl::StrCat("PREFIX geof: "
+                     "<http://www.opengis.net/def/function/geosparql/> "
+                     "PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
+                     "SELECT * { ?a <p> ?b ",
+                     body, " }"),
+        qec);
+    auto col = plan->getVariableColumnOrNullopt(Var{"?x"});
+    return std::pair{plan->getResult(), col};
+  };
+  std::string valid = "\"LINESTRING(1 1, 3 3)\"^^geo:wktLiteral";
+  // In lenient parsing mode, this would be the same line as `valid`.
+  std::string invalid = "\"LINESTRING(1 1, 3 3, 4 a)\"^^geo:wktLiteral";
+
+  // `FILTER` (rewritten to a `SpatialJoin` with a `VALUES` clause).
+  for (auto filter : {"FILTER geof:sfIntersects(?b, {})",
+                      "VALUES ?g { {} } FILTER geof:sfIntersects(?b, ?g)"}) {
+    auto withWkt = [&filter](const std::string& wkt) {
+      return absl::StrReplaceAll(filter, {{"{}", wkt}});
+    };
+    EXPECT_EQ(run(withWkt(valid)).first->idTableView().size(), 1);
+    EXPECT_EQ(run(withWkt(invalid)).first->idTableView().size(), 0);
+  }
+
+  // Expressions evaluate to UNDEF.
+  for (auto expr : {"geof:metricLength({})", "geof:envelope({})",
+                    "geof:distance(?b, {})"}) {
+    auto bind = absl::StrCat(
+        "BIND(", absl::StrReplaceAll(expr, {{"{}", invalid}}), " AS ?x)");
+    auto [result, col] = run(bind);
+    ASSERT_EQ(result->idTableView().size(), 1);
+    ASSERT_TRUE(col.has_value());
+    EXPECT_TRUE(result->idTableView()(0, col.value()).isUndefined()) << expr;
+  }
 }

@@ -36,7 +36,7 @@ auto BasicLiteralOrIri<isOwning>::getIri() const -> const IriT& {
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteralOrIri<isOwning>::getIriContent() const {
+std::string_view BasicLiteralOrIri<isOwning>::getIriContent() const {
   return getIri().getContent();
 }
 
@@ -69,25 +69,25 @@ bool BasicLiteralOrIri<isOwning>::hasDatatype() const {
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteralOrIri<isOwning>::getLiteralContent() const {
+std::string_view BasicLiteralOrIri<isOwning>::getLiteralContent() const {
   return getLiteral().getContent();
 }
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteralOrIri<isOwning>::getLanguageTag() const {
+std::string_view BasicLiteralOrIri<isOwning>::getLanguageTag() const {
   return getLiteral().getLanguageTag();
 }
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteralOrIri<isOwning>::getDatatype() const {
+std::string_view BasicLiteralOrIri<isOwning>::getDatatype() const {
   return getLiteral().getDatatype();
 }
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteralOrIri<isOwning>::getContent() const {
+std::string_view BasicLiteralOrIri<isOwning>::getContent() const {
   if (isLiteral())
     return getLiteralContent();
   else if (isIri())

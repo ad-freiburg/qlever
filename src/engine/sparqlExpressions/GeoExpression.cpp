@@ -244,8 +244,7 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
   if (!patternLiteral.has_value()) {
     return std::nullopt;
   }
-  auto pattern = parseDe9imFilterString(
-      asStringViewUnsafe(patternLiteral.value().getContent()));
+  auto pattern = parseDe9imFilterString(patternLiteral.value().getContent());
   if (!pattern.has_value() || de9imFilterCanMatchDisjoint(pattern.value())) {
     return std::nullopt;
   }
