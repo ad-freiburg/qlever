@@ -15,12 +15,15 @@
 #include "engine/idTable/splitLayout/IdRef.h"
 
 using namespace columnBasedIdTable::splitLayout;
+using testHelpers::getBitsCompat;
 using testHelpers::sampleIds;
 
-// Test that `getBitsCompat` and `idFromBitsCompat` are inverse to each other.
-TEST(IdRefTest, getBitsCompatAndIdFromBitsCompatRoundtrip) {
+// Test that putting the datatype and the payload of an `Id` together again
+// yields the same `Id`.
+TEST(IdRefTest, datatypeAndPayloadRoundtrip) {
   for (const Id id : sampleIds()) {
-    EXPECT_EQ(idFromBitsCompat(getBitsCompat(id)), id);
+    auto [datatype, payload] = getBitsCompat(id);
+    EXPECT_EQ(Id::fromBits(datatype, payload), id);
   }
 }
 
@@ -34,7 +37,7 @@ TEST(IdRefTest, conversionAndReadApi) {
     const ConstIdRef constRef{&payload, &datatype};
     EXPECT_EQ(static_cast<Id>(constRef), id);
     EXPECT_EQ(constRef.getDatatype(), id.getDatatype());
-    EXPECT_EQ(constRef.getBits(), getBitsCompat(id));
+    EXPECT_EQ(constRef.getBits(), id.getBits());
     EXPECT_EQ(constRef.getPayloadBits(), payload);
     EXPECT_EQ(constRef.isUndefined(), id.isUndefined());
     EXPECT_TRUE(constRef == id);
@@ -46,8 +49,8 @@ TEST(IdRefTest, conversionAndReadApi) {
     const auto other = Id::makeFromInt(999);
     mutableRef = other;
     EXPECT_EQ(static_cast<Id>(mutableRef), other);
-    EXPECT_EQ(payload, getBitsCompat(other).payload_);
-    EXPECT_EQ(datatype, getBitsCompat(other).datatype_);
+    EXPECT_EQ(payload, other.getPayloadBits());
+    EXPECT_EQ(datatype, other.getDatatypeBits());
   }
 }
 
@@ -59,15 +62,15 @@ TEST(IdRefTest, assignmentWritesThroughToTheReferencedSlot) {
 
   // Assign an `Id`.
   ref = Id::makeFromInt(2);
-  EXPECT_EQ(payload, getBitsCompat(Id::makeFromInt(2)).payload_);
-  EXPECT_EQ(datatype, getBitsCompat(Id::makeFromInt(2)).datatype_);
+  EXPECT_EQ(payload, Id::makeFromInt(2).getPayloadBits());
+  EXPECT_EQ(datatype, Id::makeFromInt(2).getDatatypeBits());
 
   // Assign another `IdRef`, which copies the referenced value.
   auto [datatype2, payload2] = getBitsCompat(Id::makeFromInt(3));
   const IdRef other{&payload2, &datatype2};
   ref = other;
   EXPECT_EQ(static_cast<Id>(ref), Id::makeFromInt(3));
-  EXPECT_EQ(payload, getBitsCompat(Id::makeFromInt(3)).payload_);
+  EXPECT_EQ(payload, Id::makeFromInt(3).getPayloadBits());
 }
 
 // Test that `swap` exchanges the referenced values, not the pointers.
@@ -79,16 +82,17 @@ TEST(IdRefTest, swapExchangesTheReferencedValues) {
   swap(a, b);
   EXPECT_EQ(static_cast<Id>(a), Id::makeFromInt(20));
   EXPECT_EQ(static_cast<Id>(b), Id::makeFromInt(10));
-  EXPECT_EQ(payloadA, getBitsCompat(Id::makeFromInt(20)).payload_);
-  EXPECT_EQ(payloadB, getBitsCompat(Id::makeFromInt(10)).payload_);
+  EXPECT_EQ(payloadA, Id::makeFromInt(20).getPayloadBits());
+  EXPECT_EQ(payloadB, Id::makeFromInt(10).getPayloadBits());
 }
 
 // Test the comparison operators between proxies and `Id`s, between two
 // proxies, and that the ordering is datatype-major like for `Id`.
 TEST(IdRefTest, comparisonOperators) {
-  auto bitsSmall = getBitsCompat(Id::makeFromInt(1));
+  const auto idSmall = Id::makeFromInt(1);
+  auto [datatypeSmall, payloadSmall] = getBitsCompat(idSmall);
   auto [datatypeLarge, payloadLarge] = getBitsCompat(Id::makeFromInt(2));
-  const ConstIdRef small{&bitsSmall.payload_, &bitsSmall.datatype_};
+  const ConstIdRef small{&payloadSmall, &datatypeSmall};
   const ConstIdRef large{&payloadLarge, &datatypeLarge};
 
   // Proxy versus `Id`, in both orders.
@@ -107,8 +111,8 @@ TEST(IdRefTest, comparisonOperators) {
   EXPECT_TRUE(large >= small);
   EXPECT_TRUE(small != large);
   EXPECT_FALSE(small == large);
-  auto bitsSmallCopy = bitsSmall;
-  const IdRef mutableSmall{&bitsSmallCopy.payload_, &bitsSmallCopy.datatype_};
+  auto [datatypeSmallCopy, payloadSmallCopy] = getBitsCompat(idSmall);
+  const IdRef mutableSmall{&payloadSmallCopy, &datatypeSmallCopy};
   EXPECT_TRUE(small == mutableSmall);
   EXPECT_TRUE(mutableSmall == small);
 

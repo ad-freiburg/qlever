@@ -28,7 +28,8 @@ EvaluationContext::EvaluationContext(
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
-      deadline_{deadline} {
+      deadline_{deadline},
+      orderByComparator_{qec.getLocalVocabContext()} {
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 

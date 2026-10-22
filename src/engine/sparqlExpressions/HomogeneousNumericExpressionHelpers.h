@@ -19,6 +19,7 @@
 
 #include "backports/concepts.h"
 #include "engine/CallFixedSize.h"
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
 #include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/NumericOperandClassification.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -198,23 +199,17 @@ ExpressionResult evaluateHomogeneousNumericOperation(
 // return the same value for every index.
 template <typename Operand>
 ValueId getIdAt(const Operand& operand, size_t index) {
-  using OperandType = std::decay_t<Operand>;
-
   static_assert(supportsNumericFastPathOperand<Operand>(),
                 "Unsupported operand representation for numeric fast path");
-
-  if constexpr (isVectorResult<OperandType>) {
-    return operand[index];
-  } else {
-    return operand;
-  }
+  return getValueAt(operand, index);
 }
 
 // The fallback path for the speculative evaluation below when a pair of
 // operands does not match the majority types. Integer and double combinations
 // are dispatched explicitly because this was measurably faster than always
-// using the generic fallback. Other datatypes use the regular value getters to
-// preserve the generic expression semantics.
+// using the generic fallback. Functions with `undefForNonNumeric` return UNDEF
+// directly for non-numeric datatypes (see `hasNonNumericOperand`); all other
+// rows (in particular booleans) use the regular value getters.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
@@ -238,6 +233,12 @@ AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
 
   if (leftType == Double && rightType == Double) {
     return fastFunction(leftValue.getDouble(), rightValue.getDouble());
+  }
+
+  if (hasNonNumericOperand<Function,
+                           std::tuple<LeftValueGetter, RightValueGetter>>(
+          leftValue, rightValue)) {
+    return Id::makeUndefined();
   }
 
   return genericFunction(LeftValueGetter{}(leftValue, context),
@@ -305,7 +306,8 @@ ExpressionResult evaluateSpeculativeNumericOperation(
 // Evaluate a single row of an N-ary numeric expression using the speculative
 // majority-type fast path. If all operand datatypes match the expected numeric
 // types, evaluate using primitive numeric values. Otherwise, fall back to the
-// generic value getters for this row.
+// generic value getters for this row, unless an unsupported operand can
+// directly yield UNDEF.
 template <typename Function, typename ValueGetters, typename... NumericTypes,
           typename... Operands>
 Id evaluateSpeculativeNaryRow(
@@ -334,6 +336,14 @@ Id evaluateSpeculativeNaryRow(
           return fastFunction(getPrimitiveNumericValue<NumericTypes>(value)...);
         },
         values);
+  }
+
+  if (std::apply(
+          [](const auto&... value) {
+            return hasNonNumericOperand<Function, ValueGetters>(value...);
+          },
+          values)) {
+    return Id::makeUndefined();
   }
 
   return [&genericFunction, &values,
