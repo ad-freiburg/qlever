@@ -1038,8 +1038,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   }
 }
 
-// `parallel-parsing` in the settings file is respected when building an index
-// from a single input file that does not specify parallel parsing.
+// Test that `parallel-parsing` in the settings file is respected when building
+// an index from a single input file that does not specify parallel parsing.
 TEST(IndexTest, parallelParsingFromSettingsFile) {
   std::string basename = gtestCurrentTestName();
   std::string settingsFilename = basename + ".settings.json";
@@ -1049,9 +1049,13 @@ TEST(IndexTest, parallelParsingFromSettingsFile) {
     }
     ad_utility::deleteFile(settingsFilename);
   };
-  // The parallel parser does not support multiline literals.
+  // An input file with a multiline literal, which the parallel parser does not
+  // support.
   ad_utility::makeOfstream(basename + ".ttl")
       << "<s> <p> \"\"\"multiline\nliteral\"\"\" .\n";
+
+  // Build the index with `parallel-parsing` set to the given value in the
+  // settings file.
   auto buildIndex = [&](bool parallelParsing) {
     ad_utility::makeOfstream(settingsFilename)
         << nlohmann::json{{"parallel-parsing", parallelParsing}};
@@ -1063,12 +1067,15 @@ TEST(IndexTest, parallelParsingFromSettingsFile) {
             basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
         1);
   };
+
+  // With `false` the sequential parser is used and the build succeeds, with
+  // `true` the parallel parser rejects the multiline literal.
   EXPECT_NO_THROW(buildIndex(false));
   AD_EXPECT_THROW_WITH_MESSAGE(buildIndex(true),
                                ::testing::HasSubstr("multiline string"));
 }
 
-// Building an index from a type-erased range of input files.
+// Test that an index can be built from a type-erased range of input files.
 TEST(IndexTest, createFromFilesTypeErased) {
   std::string basename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&basename] {
@@ -1076,6 +1083,7 @@ TEST(IndexTest, createFromFilesTypeErased) {
       ad_utility::deleteFile(filename, false);
     }
   };
+  // Build an index from an input file with two triples.
   ad_utility::makeOfstream(basename + ".ttl") << "<s> <p> <o1>, <o2> .\n";
   {
     Index index = makeIndexWithTestSettings();
@@ -1086,6 +1094,8 @@ TEST(IndexTest, createFromFilesTypeErased) {
                 {basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}}},
         1);
   }
+
+  // The index can be loaded and contains both triples.
   Index index = makeIndexWithTestSettings();
   index.createFromOnDiskIndex(basename, false);
   EXPECT_EQ(index.numTriples().normal, 2u);

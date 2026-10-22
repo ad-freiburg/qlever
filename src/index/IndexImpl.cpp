@@ -425,8 +425,10 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files, size_t numThreads) {
+  // The settings file (read by `prepareIndexBuild`) may set
+  // `useParallelParser_`, so it must be read before the file specifications
+  // are updated.
   prepareIndexBuild();
-  // Only now `useParallelParser_` is read from the settings file.
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
   createFromFilesAfterPreparation(
       ad_utility::InputRangeTypeErased{std::move(files)}, numThreads);
