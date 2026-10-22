@@ -1,6 +1,11 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
 #define QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
@@ -119,6 +124,10 @@ struct TestIndexConfig {
   // The level of the geo cell grid for WKT literals, 0 means no grid (see
   // `GeoCellGrid`). Requires the `OnDiskCompressedGeoSplit` vocabulary type.
   uint8_t geoCellGridLevel = 0;
+  // The scheme of the geo cell grid (see `GeoCellGridScheme`), only relevant
+  // with a grid level > 0.
+  ad_utility::GeoCellGridScheme geoCellGridScheme =
+      ad_utility::GeoCellGridScheme::Flat;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // The general patterns for IRIs that are encoded directly in an `Id`, see
@@ -172,7 +181,7 @@ struct TestIndexConfig {
         c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.vocabularyType, c.geoCellGridLevel,
+        c.vocabularyType, c.geoCellGridLevel, c.geoCellGridScheme,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
         c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
         c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
@@ -182,9 +191,9 @@ struct TestIndexConfig {
       usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
       bAndKParam, indexType, vocabularyType, geoCellGridLevel,
-      encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
-      additionalSettings, geoPointEncoding)
+      geoCellGridScheme, encodedPrefixesWithoutAngleBrackets,
+      encodedIriPatterns, addHasWordTriples, secondaryVocabWords, numThreads,
+      parseInParallel, additionalSettings, geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
