@@ -2857,12 +2857,10 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
 }
 
-// Regression test: `FILTER (NOT) EXISTS` used to be applied speculatively to
-// every candidate subplan inside the dynamic-programming rounds, which made
-// planning exponential in the number of such filters (each clause roughly
-// quadrupled planning time and memory, OOMing on any index from about four
-// clauses). With the filters deferred to the final filter passes, this plans
-// in milliseconds.
+// Test that a group with many `FILTER (NOT) EXISTS` clauses is planned
+// quickly. These filters used to be applied speculatively in every round of
+// the dynamic programming, which made planning time and memory exponential in
+// their number (about four times per clause).
 TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
   std::string query = R"(
   SELECT ?v WHERE {
