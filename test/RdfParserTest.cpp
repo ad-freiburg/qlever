@@ -1113,8 +1113,8 @@ TEST(RdfParserTest, commentThatEndsWithADot) {
   forAllParsers(testWithParser);
 }
 
-// A comment at the end of the input is terminated by the end of the input, so
-// it needs no trailing newline.
+// Test that a comment at the end of the input needs no trailing newline (the
+// end of the input also ends the comment), and that a `\r` ends a comment.
 TEST(RdfParserTest, commentAtEndOfInputWithoutNewline) {
   std::string filename{gtestCurrentTestName()};
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
