@@ -328,6 +328,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"centroid", &makeCentroidExpression},
       {"envelope", &makeEnvelopeExpression},
       {"geometryType", &makeGeometryTypeExpression},
+      {"getSRID", &makeCrsTypeExpression},
       {"minX", &makeBoundingCoordinateExpression<MIN_X>},
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
