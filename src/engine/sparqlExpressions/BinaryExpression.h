@@ -39,10 +39,14 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
   using RightType = std::decay_t<Right>;
 
   Function function;
+  using ValueGetters = std::tuple<LeftValueGetter, RightValueGetter>;
 
   // Constant–constant operands don't benefit from upfront classification.
   if constexpr (isConstantResult<LeftType> && isConstantResult<RightType>) {
     context->cancellationHandle_->throwIfCancelled();
+    if (hasNonNumericOperand<Function, ValueGetters>(left, right)) {
+      return Id::makeUndefined();
+    }
     return function(LeftValueGetter{}(AD_FWD(left), context),
                     RightValueGetter{}(AD_FWD(right), context));
 
@@ -99,7 +103,14 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
 
     ad_utility::chunkedForLoop<1000>(
         0, context->size(),
-        [&](size_t i) { result.push_back(function(getLeft(i), getRight(i))); },
+        [&left, &right, &result, &function, &getLeft, &getRight](size_t i) {
+          if (hasNonNumericOperand<Function, ValueGetters>(
+                  getValueAt(left, i), getValueAt(right, i))) {
+            result.push_back(Id::makeUndefined());
+            return;
+          }
+          result.push_back(function(getLeft(i), getRight(i)));
+        },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
     return result;

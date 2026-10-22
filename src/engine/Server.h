@@ -172,7 +172,12 @@ class Server {
   // turn requires a type with linkage.
   class MockSend {
    public:
-    Awaitable<void> operator()(auto response) {
+    // Same signature and contract as the corresponding overload of
+    // `HttpMessageSender` (all responses of the `Server` have a
+    // `streamable_body`).
+    Awaitable<void> operator()(ResponseT response,
+                               boost::asio::any_io_executor bodyExecutor) {
+      AD_CONTRACT_CHECK(bodyExecutor);
       response_ = std::move(response);
       co_return;
     }
@@ -523,7 +528,7 @@ class Server {
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
           const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-          SharedCancellationHandle cancellationHandle) const;
+          SharedCancellationHandle cancellationHandle);
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
