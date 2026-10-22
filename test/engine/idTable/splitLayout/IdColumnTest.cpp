@@ -181,12 +181,12 @@ TEST(IdColumnTest, algorithmsOnColumns) {
   auto [payloads, datatypes] = splitIds(ids);
   const IdColumnRef view{payloads.data(), datatypes.data(), payloads.size()};
 
-  // Writing via a lambda that takes the explicit `IdRef`. Note that
-  // `ql::ranges::for_each` would not accept this lambda: It requires that the
-  // function can also be called with an `Id&` (`std::iter_value_t&`), which
-  // cannot be converted to an `IdRef`. `std::for_each` and range-based `for`
-  // loops do not have this requirement.
-  // TODO <pas-kes>: fix this test once the new SplitLayoutId is available.
+  // Writing via a lambda that takes the explicit `IdRef`. Depending on the
+  // library, `ql::ranges::for_each` does not accept this lambda (see the NOTE
+  // above `CanRangesForEach`). `std::for_each` and range-based `for` loops
+  // always do.
+  //
+  // TODO<pas-kes>: Fix this test once the new `SplitLayoutId` is available.
   const Id one = Id::makeFromInt(1);
   std::for_each(view.begin(), view.end(), [one](IdRef id) { id = one; });
   for (size_t i = 0; i < view.size(); ++i) {
@@ -212,8 +212,7 @@ TEST(IdColumnTest, algorithmsOnColumns) {
   EXPECT_EQ(view.back(), Id::makeFromInt(1));
 }
 
-// -----------------------------------------------------------------------------
-// `ql::ranges::for_each` with a function that takes an `IdRef`.
+// Helpers for `ql::ranges::for_each` with a function that takes an `IdRef`.
 //
 // `ql::ranges::for_each(column, f)` (like all the range algorithms of the
 // standard library) only accepts `f` if `std::indirectly_unary_invocable`
@@ -228,7 +227,11 @@ TEST(IdColumnTest, algorithmsOnColumns) {
 // pointers into the two separate arrays of a split column can be built.
 // `std::for_each` and range-based `for` loops do not have requirement 2, and a
 // parameter of type `Id` or `auto&&` is fine, too.
-// -----------------------------------------------------------------------------
+//
+// NOTE: Whether requirement 2 uses the value type of the column depends on the
+// library. range-v3 (the C++17 backports) does, so it rejects these functions.
+// The `std::ranges` of GCC 13 checks the value type of the projected iterator
+// instead, which is the proxy itself, so it accepts them.
 namespace {
 // Is `ql::ranges::for_each(std::declval<Range>(), std::declval<F>())` valid?
 template <typename Range, typename F, typename = void>
@@ -347,8 +350,8 @@ void expectFunctionsTakingIdWork(Column column) {
 }
 }  // namespace
 
-// For the legacy layout, `ql::ranges::for_each` with a parameter `IdRef` (which
-// is `Id&` there) and `ConstIdRef` (`const Id&`) works already.
+// Test that for the legacy layout, `ql::ranges::for_each` with a parameter
+// `IdRef` (which is `Id&` there) and `ConstIdRef` (`const Id&`) works.
 TEST(IdColumnRangesForEachTest, legacyColumnAcceptsIdRefAndConstIdRef) {
   auto ids = sampleIds();
   const ql::span<Id> column{ids.data(), ids.size()};
@@ -369,8 +372,8 @@ TEST(IdColumnRangesForEachTest, legacyColumnAcceptsIdRefAndConstIdRef) {
   EXPECT_EQ(numInts, ids.size());
 }
 
-// Everything except `ql::ranges::for_each` with a parameter `IdRef` etc. works
-// the same for the legacy and for the split column.
+// Test that everything except `ql::ranges::for_each` with a parameter `IdRef`
+// etc. works the same for the legacy and for the split column.
 TEST(IdColumnRangesForEachTest, otherAlgorithmsWorkForBothLayouts) {
   auto ids = sampleIds();
   expectCommonAlgorithmsWork<Id&>(ql::span<Id>{ids.data(), ids.size()});
@@ -380,9 +383,9 @@ TEST(IdColumnRangesForEachTest, otherAlgorithmsWorkForBothLayouts) {
       IdColumnRef{payloads.data(), datatypes.data(), payloads.size()});
 }
 
-// Functions that take a plain `Id` work with the elements of a legacy column
-// and of a split column. This guards the switch of the value type of the split
-// columns, see `expectFunctionsTakingIdWork`.
+// Test that functions that take a plain `Id` work with the elements of a legacy
+// column and of a split column. This guards the switch of the value type of the
+// split columns, see `expectFunctionsTakingIdWork`.
 TEST(IdColumnRangesForEachTest, functionsTakingIdWorkForBothLayouts) {
   auto ids = sampleIds();
   expectFunctionsTakingIdWork(ql::span<Id>{ids.data(), ids.size()});
@@ -392,9 +395,9 @@ TEST(IdColumnRangesForEachTest, functionsTakingIdWorkForBothLayouts) {
       IdColumnRef{payloads.data(), datatypes.data(), payloads.size()});
 }
 
-// A function with a parameter `IdRef`, `ConstIdRef` or `IdRef::Base` can be
-// called with what the iterator of a split column yields. That is not the
-// problem. This has to stay true when the problem is solved.
+// Test that a function with a parameter `IdRef`, `ConstIdRef` or `IdRef::Base`
+// can be called with what the iterator of a split column yields, and that
+// `std::for_each` accepts it.
 TEST(IdColumnRangesForEachTest,
      splitColumnReferenceIsAcceptedByIdRefFunctions) {
   using Reference = decltype(*std::declval<IdColumnRef>().begin());
@@ -415,15 +418,15 @@ TEST(IdColumnRangesForEachTest,
   std::for_each(constColumn.begin(), constColumn.end(), read);
 }
 
-// THE PROBLEM: `ql::ranges::for_each` on a split column with a function that
-// takes an `IdRef`, a `ConstIdRef` or an `IdRef::Base`.
+// Test `ql::ranges::for_each` on a split column with a function that takes an
+// `IdRef`, a `ConstIdRef` or an `IdRef::Base`. Whether the library accepts
+// these functions differs (see the NOTE above `CanRangesForEach`):
+//  - If it rejects them, the test is reported as SKIPPED (with the reason).
+//  - If it accepts them, all three calls are made for real, and the test
+//    checks their effect, so it is reported as PASSED.
 //
-// This test compiles and passes before and after the problem is solved:
-//  - As long as the problem exists, `ql::ranges::for_each` rejects the
-//    functions, and the test is reported as SKIPPED (with the reason).
-//  - As soon as it is solved, all three calls are made for real, and the test
-//    checks their effect, so it is reported as PASSED. Then the `GTEST_SKIP`
-//    branch and `rangesForEachIfAccepted` can be removed.
+// TODO<pas-kes>: Remove the `GTEST_SKIP` branch and `rangesForEachIfAccepted`
+// once all supported libraries accept the functions.
 TEST(IdColumnRangesForEachTest, splitColumnWithIdRefFunctions) {
   auto ids = sampleIds();
   auto [payloads, datatypes] = splitIds(ids);

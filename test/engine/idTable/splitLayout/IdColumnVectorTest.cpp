@@ -232,8 +232,9 @@ void expectGenericRead(const Column& column, const Id expected) {
 }
 }  // namespace
 
-// The generic types of a column resolve to the proxies of the split layout, for
-// the vector and its views, ...
+// Test that the generic types of a column resolve to the proxies of the split
+// layout for the vector and its views, and to true references for a column of
+// plain `Id`s.
 TEST(IdColumnVectorTest, genericReferenceTypes) {
   using Vec = IdColumnVector<TestAllocator>;
   static_assert(hasReferenceTypes<Vec, IdRef, IdRef::Base>);
@@ -242,15 +243,14 @@ TEST(IdColumnVectorTest, genericReferenceTypes) {
   static_assert(
       hasReferenceTypes<ConstIdColumnRef, ConstIdRef, ConstIdRef::Base>);
 
-  // ... while a column of plain `Id`s has true references.
+  // A column of plain `Id`s.
   static_assert(hasReferenceTypes<std::vector<Id>, Id&, Id&>);
   static_assert(hasReferenceTypes<const std::vector<Id>, const Id&, const Id&>);
 }
 
-// A variable of the restricted reference cannot be assigned to, only a
-// temporary of it can. Generic code therefore requests the writable reference
-// via the iterator traits. That code is written once and works for the split
-// columns and for plain `Id`s.
+// Test that generic code can write via the reference from the iterator traits,
+// for the split columns and for plain `Id`s (a variable of the restricted
+// reference cannot be assigned to).
 TEST(IdColumnVectorTest, genericWritableReference) {
   using Vec = IdColumnVector<TestAllocator>;
   using Restricted = ql::ranges::range_reference_t<Vec>;
@@ -266,8 +266,8 @@ TEST(IdColumnVectorTest, genericWritableReference) {
   expectGenericWriteAndRead(ids);
 }
 
-// A const column and a const view only have read-only references. Their value
-// is the plain `Id`, to which a reference converts.
+// Test that a const column and a const view only have read-only references,
+// which convert to the plain `Id`.
 TEST(IdColumnVectorTest, genericConstReference) {
   using Vec = IdColumnVector<TestAllocator>;
   static_assert(
