@@ -9,11 +9,11 @@
 
 // Compare the lexicographic comparison of a row of an `IdTable` with a triple
 // of `Id`s (as in `LocatedTriples.cpp`) when the entries are put into a
-// `std::tie` (references), into the tuple that `tie` in
-// `LocatedTriples.cpp` builds, and into a `std::array<Id, 3>` (copies).
-// `std::tie` cannot bind to the proxy objects that a column storage may return
-// instead of `Id&`. The tuple of `tie` keeps references for lvalues (so
-// it is the same type as `std::tie` here) and stores proxies by value.
+// `std::tie` (references), into an `ad_utility::tie` (as in
+// `LocatedTriples.cpp`), and into a `std::array<Id, 3>` (copies). `std::tie`
+// cannot bind to the proxy objects that a column storage may return instead of
+// `Id&`. `ad_utility::tie` keeps references for lvalues (so it is the same type
+// as `std::tie` here) and stores proxies by value.
 // NOTE: The `std::tie` variant only compiles if the element access of the
 // `IdTable` returns references, so this benchmark only works for the legacy
 // layout.
@@ -21,7 +21,6 @@
 #include <array>
 #include <string>
 #include <tuple>
-#include <type_traits>
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
@@ -30,6 +29,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/CompilerExtensions.h"
 #include "util/Log.h"
+#include "util/Tie.h"
 
 namespace ad_benchmark {
 namespace {
@@ -58,7 +58,7 @@ Data makeData() {
     data.table(i, 0) = makeId(i / 4);
     data.table(i, 1) = makeId(i / 2);
     data.table(i, 2) = makeId(i);
-    size_t j = i % 3 == 0 ? i : (i % 3 == 1 ? i + 1 : (i == 0 ? 0 : i - 1));
+    size_t j = i % 3 == 0 ? i : (i % 3 == 1 ? i + 1 : i - 1);
     data.triples.push_back({makeId(j / 4), makeId(j / 2), makeId(j)});
   }
   return data;
@@ -82,21 +82,14 @@ AD_NO_INLINE size_t countWithTie(const Data& data) {
   return count;
 }
 
-// The element type of the tuple in `tie` in `LocatedTriples.cpp`.
-template <typename T>
-using TieElement =
-    std::conditional_t<std::is_lvalue_reference_v<T>, T, std::decay_t<T>>;
-
 template <Comparison comparison>
-AD_NO_INLINE size_t countWithTieHelper(const Data& data) {
+AD_NO_INLINE size_t countWithAdUtilityTie(const Data& data) {
   size_t count = 0;
   for (size_t i = 0; i < numRows; ++i) {
     auto row = data.table[i];
     const auto& triple = data.triples[i];
     auto lhs = std::tie(triple[0], triple[1], triple[2]);
-    auto rhs =
-        std::tuple<TieElement<decltype(row[0])>, TieElement<decltype(row[1])>,
-                   TieElement<decltype(row[2])>>(row[0], row[1], row[2]);
+    auto rhs = ad_utility::tie(row[0], row[1], row[2]);
     count += comparison == Comparison::Less ? lhs < rhs : lhs == rhs;
   }
   return count;
@@ -132,8 +125,8 @@ class TieVsArrayBenchmark : public BenchmarkInterface {
       AD_LOG_INFO << "Less " << countWithTie<Comparison::Less>(data)
                   << std::endl;
     });
-    lessGroup.addMeasurement("tieHelper (tuple of references)", [&data] {
-      AD_LOG_INFO << "Less " << countWithTieHelper<Comparison::Less>(data)
+    lessGroup.addMeasurement("ad_utility::tie (references)", [&data] {
+      AD_LOG_INFO << "Less " << countWithAdUtilityTie<Comparison::Less>(data)
                   << std::endl;
     });
     lessGroup.addMeasurement("std::array<Id, 3> (copies)", [&data] {
@@ -146,8 +139,8 @@ class TieVsArrayBenchmark : public BenchmarkInterface {
       AD_LOG_INFO << "Equal " << countWithTie<Comparison::Equal>(data)
                   << std::endl;
     });
-    equalGroup.addMeasurement("tieHelper (tuple of references)", [&data] {
-      AD_LOG_INFO << "Equal " << countWithTieHelper<Comparison::Equal>(data)
+    equalGroup.addMeasurement("ad_utility::tie (references)", [&data] {
+      AD_LOG_INFO << "Equal " << countWithAdUtilityTie<Comparison::Equal>(data)
                   << std::endl;
     });
     equalGroup.addMeasurement("std::array<Id, 3> (copies)", [&data] {
