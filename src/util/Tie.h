@@ -17,7 +17,9 @@
 
 namespace ad_utility {
 
-// lvalues stay references, a proxy that is returned by value is stored by value
+// Return the type in which `tie` stores an argument of type `T`, as a
+// `ql::type_identity`. An lvalue stays a reference, a proxy that is returned by
+// value is stored by value.
 template <typename T>
 constexpr auto tieElement() {
   if constexpr (std::is_lvalue_reference_v<T>) {

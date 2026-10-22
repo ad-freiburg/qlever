@@ -110,7 +110,7 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   return {0, 0};
 }
 
-// Return a `std::tie` of the relevant entries of a row, according to
+// Return an `ad_utility::tie` of the relevant entries of a row, according to
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
 // `ad_utility::tie(row[0], row[1], row[2])`.
