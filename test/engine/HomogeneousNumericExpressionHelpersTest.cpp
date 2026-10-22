@@ -524,6 +524,24 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, GetMajorityNumericTypes) {
 }
 
 // _____________________________________________________________________________
+TEST_F(HomogeneousNumericExpressionHelpersTest, NumericTypeForDatatype) {
+  for (auto [datatype, numericType, dateAwareType] :
+       {std::tuple{Datatype::Int, NumericType::Int, NumericType::Int},
+        std::tuple{Datatype::Double, NumericType::Double, NumericType::Double},
+        std::tuple{Datatype::Date, NumericType::Other, NumericType::Date},
+        std::tuple{Datatype::Bool, NumericType::Other, NumericType::Other},
+        std::tuple{Datatype::Undefined, NumericType::Other,
+                   NumericType::Other}}) {
+    // Exercise the runtime mapping as well as constexpr callers. In particular,
+    // numeric-only getters must reject dates while date-aware getters accept
+    // them; booleans require generic conversion in both cases.
+    volatile Datatype runtimeType = datatype;
+    EXPECT_EQ(numericTypeForDatatype(runtimeType), numericType);
+    EXPECT_EQ(numericTypeForDatatype<true>(runtimeType), dateAwareType);
+  }
+}
+
+// _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
   const auto date =
       Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
@@ -711,6 +729,58 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
       left, right, &context_);
   EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(boolean)[1], D(3));
   EXPECT_EQ(Function::genericCalls, 1);
+}
+
+// _____________________________________________________________________________
+TEST_F(HomogeneousNumericExpressionHelpersTest,
+       SpeculativeDateOutliersBypassGenericGetter) {
+  using Function = DateAwareTestFunction;
+  using Getter = NumericOrDateValueGetter;
+  const auto date =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
+  const auto datetime = Id::makeFromDate(
+      DateYearOrDuration::parseXsdDatetime("2020-01-01T12:00:00Z"));
+  const auto duration =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDayTimeDuration("P1D"));
+  VectorWithMemoryLimit<Id> left{
+      {I(1), I(2), I(3), I(4), date, datetime, duration}, context_._allocator};
+  VectorWithMemoryLimit<Id> right{
+      {I(5), I(6), I(7), I(8), date, datetime, duration}, context_._allocator};
+  context_._endIndex = left.size();
+  const auto classifications =
+      classifyNumericOperands<true>(&context_, left, right);
+  ASSERT_EQ(classifications[0].majorityType_, NumericType::Int);
+  ASSERT_EQ(classifications[1].majorityType_, NumericType::Int);
+
+  // Numeric rows take the speculative hot path. Date pairs miss its expected
+  // types and must use the typed date branch of the slow path, not variants.
+  Function::genericCalls = 0;
+  auto binary =
+      evaluateSpeculativeNumericOperation<Function, Getter, Getter, int64_t,
+                                          int64_t>(left, right, &context_);
+  EXPECT_EQ(
+      (std::get<VectorWithMemoryLimit<Id>>(binary)),
+      (VectorWithMemoryLimit<Id>{{D(6), D(8), D(10), D(12), I(7), I(7), I(7)},
+                                 context_._allocator}));
+  EXPECT_EQ(Function::genericCalls, 0);
+
+  // With a date constant, numeric rows yield UNDEF and the date outliers still
+  // bypass generic dispatch. Check both operand orders.
+  const VectorWithMemoryLimit<Id> expected{
+      {Id::makeUndefined(), Id::makeUndefined(), Id::makeUndefined(),
+       Id::makeUndefined(), I(7), I(7), I(7)},
+      context_._allocator};
+  auto vectorConstant =
+      evaluateSpeculativeNumericOperation<Function, Getter, Getter, int64_t,
+                                          DateYearOrDuration>(left, date,
+                                                              &context_);
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(vectorConstant), expected);
+  auto constantVector =
+      evaluateSpeculativeNumericOperation<Function, Getter, Getter,
+                                          DateYearOrDuration, int64_t>(
+          date, left, &context_);
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(constantVector), expected);
+  EXPECT_EQ(Function::genericCalls, 0);
 }
 
 }  // namespace
