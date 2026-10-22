@@ -12,12 +12,13 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
-#include "../../util/GTestHelpers.h"
 #include "VocabularyMergerTestHelpers.h"
 #include "global/Constants.h"
 #include "index/vocabulary_merger/Segment.h"
@@ -30,8 +31,8 @@ using ::testing::ElementsAre;
 using ::testing::Pair;
 
 namespace {
-// A `ParallelWordWriterBase` with a single sub-vocabulary whose block writer
-// has small blocks (so that a few words span several blocks).
+// A block writer (for a `ParallelWordWriterBase` with a single sub-vocabulary)
+// with small blocks, so that a few words already span several blocks.
 class SmallBlockWriter : public BlockWriterFromCallback<
                              std::function<uint64_t(std::string_view, bool)>> {
  public:
@@ -59,6 +60,7 @@ std::vector<std::pair<std::string, bool>> wordsOf(const BlockPieces& block) {
 // last block being partial), returns the ID converter of each segment, and
 // accumulates the metadata (the number of words, the blank nodes, the prefix
 // ranges and the special IDs shifted by the bases).
+// _____________________________________________________________________________
 TEST(SegmentCommitter, commitSegments) {
   SingleVocabularyParallelWriter writer{std::make_unique<SmallBlockWriter>()};
 

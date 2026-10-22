@@ -26,10 +26,9 @@
 #include "util/Log.h"
 #include "util/ProgressBar.h"
 
-// The stage of the vocabulary merger that commits the segments in the order
-// of the vocabulary (see the comment above `mergeVocabulary` in
-// `index/VocabularyMerger.h`). This is not part of the public interface of
-// that header.
+// The stage of the vocabulary merger that commits the segments (see
+// `index/vocabulary_merger/Segment.h`) in the order of the vocabulary. This is
+// not part of the public interface of `index/VocabularyMerger.h`.
 namespace ad_utility::vocabulary_merger::detail {
 
 // A range of the words of one sub-vocabulary of a segment (see `Segment`) that
@@ -117,6 +116,7 @@ class SegmentCommitter {
     }
   }
 
+  // The number of sub-vocabularies of the vocabulary that is written.
   uint8_t numSubVocabularies() const {
     return static_cast<uint8_t>(blockSizes_.size());
   }
