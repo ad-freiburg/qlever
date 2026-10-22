@@ -89,6 +89,10 @@ constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 // an output block of the parallel merge of the partial vocabularies (see
 // `vocabularyMergeOptions` in `VocabularyMergerImpl.h`).
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
+
+// The maximal total size of the words in a block of merged words. A block ends
+// as soon as one of this limit and `VOCAB_MERGER_WORD_BATCH_SIZE` is reached,
+// such that a block of very few but very long words doesn't become too large.
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
     ad_utility::MemorySize::megabytes(10);
 

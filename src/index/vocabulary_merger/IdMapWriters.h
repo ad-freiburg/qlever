@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -95,10 +96,10 @@ class IdMapWriters {
     if (hasFailed()) {
       return;
     }
-    // The writers and the entries of the maps of each group, side by side.
-    auto groups = ::ranges::views::zip(
-        ::ranges::views::chunk(idMapWriters_, groupSize_),
-        ::ranges::views::chunk(segment->idMapEntries_, groupSize_));
+    // The writer and the entries of each map, side by side, in groups.
+    auto groups = ::ranges::views::chunk(
+        ::ranges::views::zip(idMapWriters_, segment->idMapEntries_),
+        groupSize_);
     for (auto&& [groupIndex, group] : ::ranges::views::enumerate(groups)) {
       queues_[groupIndex]->push(
           exceptionCollector_.wrap([this, group, segment, converter]() mutable {
@@ -107,9 +108,7 @@ class IdMapWriters {
               return;
             }
             ad_utility::Timer timer{ad_utility::Timer::Started};
-            auto& [writers, entriesOfMaps] = group;
-            for (auto&& [writer, entries] :
-                 ::ranges::views::zip(writers, entriesOfMaps)) {
+            for (auto&& [writer, entries] : group) {
               for (const SegmentIdMapEntry& entry : entries) {
                 writer.push(IdMapEntry{VocabIndex::make(entry.localIndex_),
                                        converter.globalIdOf(entry.id_)});

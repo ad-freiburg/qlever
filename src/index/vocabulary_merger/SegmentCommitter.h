@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -125,8 +126,8 @@ class SegmentCommitter {
   // map entries, see `IdMapWriters`).
   IdConverterForSegment commit(const std::shared_ptr<const Segment>& segment) {
     AD_CONTRACT_CHECK(segment->wordBlocks_.size() == numSubVocabularies());
-    const IdConverterForSegment converter = idConverter_;
-    idConverter_ = segment->idConverterForNextSegment(idConverter_);
+    const IdConverterForSegment converter = std::exchange(
+        idConverter_, segment->idConverterForNextSegment(idConverter_));
     metaData_.addSegment(
         segment->metaData_,
         [&converter](SegmentLocalId id) { return converter.globalIndexOf(id); },

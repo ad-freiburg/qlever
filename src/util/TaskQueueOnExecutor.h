@@ -74,6 +74,10 @@ namespace ad_utility {
 class TaskQueueOnExecutor {
  public:
   using Task = absl::AnyInvocable<void()>;
+  // The callback that an asynchronous task (see `pushAsync`) has to call
+  // exactly once when it has completed.
+  using Done = absl::AnyInvocable<void() &&>;
+  using AsyncTask = absl::AnyInvocable<void(Done)>;
 
  private:
   ql::any_io_executor executor_;
@@ -126,6 +130,24 @@ class TaskQueueOnExecutor {
   // instead be propagated to the pushing thread. The *scheduling* of the task
   // also terminates if it throws, see below.
   void push(Task task) {
+    pushAsync([task = std::move(task)](Done done) mutable {
+      task();
+      std::move(done)();
+    });
+  }
+
+  // Add an asynchronous task to the queue. This is like `push`, but the task
+  // is invoked with a `done` callback, and it stays in flight until it calls
+  // that callback (exactly once, from any thread), not only until it returns.
+  // This lets a task start an asynchronous operation (for example a
+  // `boost::asio::post` or an operation on another queue) without occupying a
+  // thread of the executor while waiting for its completion. Everything else
+  // (the blocking, the bound, the termination if the task throws or cannot be
+  // scheduled) is as for `push`.
+  //
+  // IMPORTANT: A task that never calls `done` keeps its slot forever, so
+  // `finish()` and the destructor then never return.
+  void pushAsync(AsyncTask task) {
     {
       std::unique_lock lock{mutex_};
       cv_.wait(lock, [this]() {
@@ -147,11 +169,12 @@ class TaskQueueOnExecutor {
     // occupied by a task that will never be run.
     ad_utility::terminateIfThrows(
         [this, &task]() {
-          boost::asio::post(executor_, [this,
-                                        task = std::move(task)]() mutable {
-            ad_utility::terminateIfThrows([&task]() { task(); }, errorMessage_);
-            taskIsDone();
-          });
+          boost::asio::post(
+              executor_, [this, task = std::move(task)]() mutable {
+                ad_utility::terminateIfThrows(
+                    [this, &task]() { task(Done{[this]() { taskIsDone(); }}); },
+                    errorMessage_);
+              });
         },
         errorMessage_);
   }

@@ -12,19 +12,22 @@
 
 #include <algorithm>
 #include <atomic>
-#include <boost/asio/post.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/strand.hpp>
-#include <boost/asio/use_future.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <future>
+#include <deque>
+#include <exception>
 #include <memory>
 #include <utility>
 #include <vector>
 
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
+#include "util/AsioHelpers.h"
+#include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/Executor.h"
 #include "util/GlobalExecutor.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
@@ -39,18 +42,60 @@ namespace ad_utility::vocabulary_merger::detail {
 // `BlockPieces`) to the block writers of a `ParallelWordWriterBase` (see
 // `index/vocabulary/VocabularyTypes.h`). A block is gathered and prepared (see
 // `gatherWords` and `BlockWriterBase::prepare`) by a task on the global thread
-// pool (see `util/GlobalExecutor.h`), and then appended to the vocabulary (the
-// `AppendBlock` that `prepare` returns) by a task on a strand of that pool,
-// one strand per sub-vocabulary, in the order of the blocks.
+// pool (see `util/GlobalExecutor.h`), which runs concurrently for different
+// blocks, and then appended to the vocabulary (the `AppendBlock` that
+// `prepare` returns) in the order of the blocks.
+//
+// The order is restored on a strand of the pool per sub-vocabulary, without
+// ever blocking a thread: the pending blocks of a sub-vocabulary form a queue
+// that only code on the strand touches. A block is registered at the back of
+// that queue (which also starts its prepare task), the completion of its
+// prepare task is posted onto the strand, and whenever the block at the front
+// of the queue is prepared, it is appended and removed. A `TaskQueueOnExecutor`
+// per sub-vocabulary bounds the number of pending blocks (its `pushAsync`
+// keeps a block in flight until it is appended).
+//
+// NOTE: This is written without coroutines, because the vocabulary merge is
+// also compiled in the reduced C++17 build.
 //
 // NOTE: All the member functions are called by a single thread, which must not
-// be a thread of the global executor (see `TaskQueueOnExecutor`). The append
-// task of a block waits for the prepare task of the same block. That cannot
-// deadlock, because the prepare task was posted before the append task and
-// never waits for anything itself, and because of the strand at most one
-// append task per sub-vocabulary runs (and hence waits) at any time.
+// be a thread of the global executor (see `TaskQueueOnExecutor`).
 class AsyncBlockWriter {
  private:
+  // A block that is being prepared or waiting to be appended. Only touched on
+  // the strand of its sub-vocabulary.
+  struct PendingBlock {
+    // The index of the block within its sub-vocabulary.
+    size_t index_;
+    // Set once the prepare task has completed, either with the prepared block
+    // or with the exception that the task threw.
+    bool isPrepared_ = false;
+    AppendBlock appendBlock_;
+    std::exception_ptr exception_;
+    // The callback that releases the slot of the block in the `queue_` of its
+    // sub-vocabulary, see `TaskQueueOnExecutor::pushAsync`.
+    ad_utility::TaskQueueOnExecutor::Done done_;
+  };
+
+  // The state of a sub-vocabulary, see the class comment above.
+  struct SubVocabulary {
+    boost::asio::strand<qlever::Executor> strand_;
+    // The number of blocks registered so far, which is the index of the next
+    // one. Only touched on the strand.
+    size_t numBlocks_ = 0;
+    // The pending blocks in the order of their indices. Only touched on the
+    // strand.
+    std::deque<PendingBlock> pendingBlocks_;
+    // The queue whose tasks register the blocks on the strand. NOTE: Declared
+    // last, because its destructor waits for the blocks to be appended.
+    ad_utility::TaskQueueOnExecutor queue_;
+
+    explicit SubVocabulary(size_t maxNumPendingBlocks)
+        : strand_{boost::asio::make_strand(ad_utility::globalExecutor())},
+          queue_{strand_, maxNumPendingBlocks,
+                 "Writing the merged vocabulary"} {}
+  };
+
   ParallelWordWriterBase& writer_;
   // The first exception that a prepare or append task threw, if any. The
   // remaining blocks are then skipped and the exception is rethrown by
@@ -59,22 +104,17 @@ class AsyncBlockWriter {
   std::atomic<uint64_t> prepareBusyMs_{0};
   std::atomic<uint64_t> appendBusyMs_{0};
   size_t numBlocks_ = 0;
-  // The queue of the append tasks of each sub-vocabulary, see above. A queued
-  // append task holds the future of its prepare task, so the bound of the
-  // queue also bounds the number of blocks that are prepared or waiting to be
-  // appended per sub-vocabulary. NOTE: Declared after everything that the
-  // tasks use, because the destructor of a queue waits for its tasks.
-  std::vector<std::unique_ptr<ad_utility::TaskQueueOnExecutor>> appendQueues_;
+  // NOTE: Declared after everything that the tasks use, because the
+  // destructors of the queues wait for the tasks.
+  std::vector<std::unique_ptr<SubVocabulary>> subVocabularies_;
 
  public:
   // Construct from the `writer` of the vocabulary, which has to stay alive,
   // and which is not finished by this class.
   explicit AsyncBlockWriter(ParallelWordWriterBase& writer) : writer_{writer} {
     for (uint8_t sub = 0; sub < writer_.numSubVocabularies(); ++sub) {
-      appendQueues_.push_back(std::make_unique<ad_utility::TaskQueueOnExecutor>(
-          boost::asio::make_strand(ad_utility::globalExecutor()),
-          std::max<size_t>(1, ad_utility::globalExecutorNumThreads()),
-          "Writing the merged vocabulary"));
+      subVocabularies_.push_back(std::make_unique<SubVocabulary>(
+          std::max<size_t>(1, ad_utility::globalExecutorNumThreads())));
     }
   }
 
@@ -85,28 +125,32 @@ class AsyncBlockWriter {
       return;
     }
     ++numBlocks_;
+    SubVocabulary& state = *subVocabularies_.at(sub);
     auto& blockWriter = writer_.blockWriter(sub);
-    auto prepare = [this, &blockWriter, block = std::move(block)]() {
-      ad_utility::Timer timer{ad_utility::Timer::Started};
-      auto result = blockWriter.prepare(gatherWords(block));
-      prepareBusyMs_ += timer.msecs().count();
-      return result;
-    };
-    std::future<AppendBlock> prepared =
-        boost::asio::post(ad_utility::globalExecutor(),
-                          boost::asio::use_future(std::move(prepare)));
-    appendQueues_[sub]->push(exceptionCollector_.wrap(
-        [this, prepared = std::move(prepared)]() mutable {
-          // Skip the remaining blocks once a task has failed.
-          if (hasFailed()) {
-            return;
-          }
-          // NOTE: This rethrows the exception of the prepare task, if any.
-          auto appendBlock = prepared.get();
-          ad_utility::Timer timer{ad_utility::Timer::Started};
-          std::move(appendBlock)();
-          appendBusyMs_ += timer.msecs().count();
-        }));
+    state.queue_.pushAsync(
+        [this, &state, &blockWriter, block = std::move(block)](
+            ad_utility::TaskQueueOnExecutor::Done done) mutable {
+          // This runs on the strand: register the block and start its prepare
+          // task, whose completion is posted back onto the strand.
+          const size_t index = state.numBlocks_++;
+          state.pendingBlocks_.push_back(PendingBlock{index});
+          state.pendingBlocks_.back().done_ = std::move(done);
+          auto prepare = [this, &blockWriter, block = std::move(block)]() {
+            ad_utility::Timer timer{ad_utility::Timer::Started};
+            auto result = blockWriter.prepare(gatherWords(block));
+            prepareBusyMs_ += timer.msecs().count();
+            return result;
+          };
+          ad_utility::runFunctionOnExecutor(
+              ad_utility::globalExecutor(), std::move(prepare),
+              boost::asio::bind_executor(
+                  state.strand_,
+                  [this, &state, index](std::exception_ptr exception,
+                                        AppendBlock appendBlock) {
+                    blockIsPrepared(state, index, std::move(exception),
+                                    std::move(appendBlock));
+                  }));
+        });
   }
 
   // Whether one of the tasks has thrown an exception that `finish()` has not
@@ -117,8 +161,8 @@ class AsyncBlockWriter {
   // that one of the tasks threw, if any. After this, no more blocks may be
   // pushed. The `writer` is not finished.
   void finish() {
-    for (auto& queue : appendQueues_) {
-      queue->finish();
+    for (auto& state : subVocabularies_) {
+      state->queue_.finish();
     }
     exceptionCollector_.rethrowIfException();
   }
@@ -128,6 +172,44 @@ class AsyncBlockWriter {
   size_t numBlocks() const { return numBlocks_; }
   uint64_t prepareBusyMs() const { return prepareBusyMs_; }
   uint64_t appendBusyMs() const { return appendBusyMs_; }
+
+ private:
+  // Store the result of the prepare task of the block with the given `index`
+  // (the `appendBlock`, or the `exception` that the task threw), and append
+  // all the blocks at the front of the queue that are prepared, in order.
+  // PRECONDITION: This runs on the strand of the sub-vocabulary `state`.
+  void blockIsPrepared(SubVocabulary& state, size_t index,
+                       std::exception_ptr exception, AppendBlock appendBlock) {
+    auto& pending = state.pendingBlocks_;
+    AD_CORRECTNESS_CHECK(!pending.empty() && index >= pending.front().index_ &&
+                         index - pending.front().index_ < pending.size());
+    PendingBlock& block = pending[index - pending.front().index_];
+    block.isPrepared_ = true;
+    block.exception_ = std::move(exception);
+    block.appendBlock_ = std::move(appendBlock);
+    while (!pending.empty() && pending.front().isPrepared_) {
+      PendingBlock next = std::move(pending.front());
+      pending.pop_front();
+      appendPendingBlock(std::move(next));
+    }
+  }
+
+  // Append the prepared `block`, unless a task has failed (then the block is
+  // skipped), and release its slot in the queue.
+  void appendPendingBlock(PendingBlock block) {
+    if (block.exception_) {
+      exceptionCollector_(std::move(block.exception_));
+    } else if (!hasFailed()) {
+      try {
+        ad_utility::Timer timer{ad_utility::Timer::Started};
+        std::move(block.appendBlock_)();
+        appendBusyMs_ += timer.msecs().count();
+      } catch (...) {
+        exceptionCollector_(std::current_exception());
+      }
+    }
+    std::move(block.done_)();
+  }
 };
 }  // namespace ad_utility::vocabulary_merger::detail
 
