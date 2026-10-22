@@ -933,7 +933,7 @@ TEST(QueryPlanner, TransitivePathBindBoth) {
       "?x <p> ?y }",
       h::transitivePath(
           left, right, 1, std::numeric_limits<size_t>::max(),
-          scan("?x", "<p>", "?y"), scan("?x", "<p>", "?y"),
+          scan("?x", "<p>", "?y"),
           scan(internalVar(0), "<p>", internalVar(1), {Permutation::PSO})),
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>. <x1> <p> <x2>"));
 }
@@ -3584,7 +3584,6 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         "{ VALUES (?g ?a ?b) { (1 1 1) } GRAPH ?g { ?a <label>+ ?b } }",
         h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
                           h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }"),
-                          h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }"),
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
                               "?_QLever_internal_variable_qp_1", {}, NamedTag{},
@@ -4056,7 +4055,6 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
       "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
 
       h::transitivePath(left, right1, 1, std::numeric_limits<size_t>::max(),
-                        h::IndexScanFromStrings("?s", "<b>", "?o"),
                         h::IndexScanFromStrings("?s", "<b>", "?o"),
                         h::Sort(h::IndexScanFromStrings(
                             "?_QLever_internal_variable_qp_0", "<a>",

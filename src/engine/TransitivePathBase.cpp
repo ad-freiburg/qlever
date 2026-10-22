@@ -389,14 +389,15 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
 // _____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> TransitivePathBase::getChildrenImpl() const {
   qlm::vector<QueryExecutionTree*> res{allocator()};
-  auto addChildren = [](qlm::vector<QueryExecutionTree*>& res,
-                        TransitivePathSide side) {
-    if (side.treeAndCol_.has_value()) {
-      res.push_back(side.treeAndCol_.value().first.get());
+  for (auto& side : {&lhs_, &rhs_}) {
+    if (!side->treeAndCol_.has_value()) {
+      continue;
+    }
+    auto* tree = side->treeAndCol_->first.get();
+    if (ql::ranges::find(res, tree) == res.end()) {
+      res.push_back(tree);
     }
   };
-  addChildren(res, lhs_);
-  addChildren(res, rhs_);
   res.push_back(subtree_.get());
   return res;
 }
