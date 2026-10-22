@@ -44,8 +44,8 @@ namespace qlever {
 //   payload   a ZSTD frame of the decompressed target, compressed with the
 //             decompressed base as reference
 // The checksums identify the base (a diff applies to exactly one base) and
-// verify the result of `applyBlobDiff` (a wrong base would otherwise yield
-// garbage, because ZSTD does not verify its reference).
+// verify the result of `applyBlobDiff` (the ZSTD frame itself only stores a
+// 32-bit checksum, which detects a wrong base only with high probability).
 
 // The fields of the header of a diff file (see the file format above).
 struct BlobDiffHeader {
