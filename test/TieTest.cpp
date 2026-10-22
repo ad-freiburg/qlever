@@ -438,8 +438,7 @@ TEST(Tie, tieRowReferences) {
 
   auto other = makeTableForRowReferences();
   auto staticTable = std::move(other).toStatic<3>();
-  IdTableStatic<3> staticTableWrapper{std::move(staticTable)};
-  expectTieRowReferencesByValue(staticTableWrapper);
+  expectTieRowReferencesByValue(staticTable);
 
   auto view = table.asStaticView<3>();
   expectTieConstRowReferencesByValue(view);
