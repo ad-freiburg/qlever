@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "global/FoldedValueId.h"
+#include "index/IdBitRepresentation.h"
 
 // The implementation of `Id`. Every file that needs `Id` or `ValueId` includes
 // this header, not the implementation header.
@@ -21,8 +22,8 @@ using Id = foldedValueId::ValueId;
 using ValueId = Id;
 using Score = float;
 
-// To ensure places where we can't include Id.h because of a cycle include
-// we need the be sure that this types are the same.
+// `IdBitRepresentation` stands in for `Id::T` in headers that cannot include
+// this header because of an include cycle, so the two must be the same type.
 static_assert(std::is_same_v<IdBitRepresentation, Id::T>);
 
 // `Id`s are copied around a lot, in particular in bulk (see the `IdTable`
