@@ -465,9 +465,9 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
                                    ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
-      permutation_{std::make_shared<Permutation>(Permutation::Enum::SPO,
-                                                 std::move(allocator), name_)},
-      locatedTriplesState_{makeEmptyLocatedTriplesState()} {
+      permutation_{std::allocate_shared<Permutation>(
+          allocator, Permutation::Enum::SPO, allocator, name_)},
+      locatedTriplesState_{makeEmptyLocatedTriplesState(allocator)} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
@@ -576,7 +576,8 @@ MaterializedViewsManager::loadViewIntoLockedState(
   if (auto it = state.views_.find(name); it != state.views_.end()) {
     return it->second;
   }
-  auto view = std::make_shared<MaterializedView>(onDiskBase_, name, allocator_);
+  auto view = std::allocate_shared<MaterializedView>(allocator_, onDiskBase_,
+                                                     name, allocator_);
   view->connectPermutationBackReference();
   state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
@@ -844,14 +845,16 @@ LocatedTriplesSharedState MaterializedView::locatedTriplesState() const {
 
 // _____________________________________________________________________________
 std::shared_ptr<LocatedTriplesState>
-MaterializedView::makeEmptyLocatedTriplesState() const {
+MaterializedView::makeEmptyLocatedTriplesState(
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
   emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
       .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
   LocalVocab emptyVocab;
 
-  return std::make_shared<LocatedTriplesState>(
+  return std::allocate_shared<LocatedTriplesState>(
+      allocator,
       LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
                           emptyVocab.getLifetimeExtender(), 0});
 }

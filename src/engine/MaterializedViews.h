@@ -192,7 +192,8 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
 
   // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
   // materialized views do not support updates yet.
-  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
+  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState(
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   FRIEND_TEST(MaterializedViewsTest, ManualConfigurations);
 

@@ -617,32 +617,44 @@ TEST_F(MaterializedViewsTest, ScansAllocateThroughTheGivenAllocator) {
         *locatedTriples, ad_utility::testing::multiThreadExecutor());
   };
 
-  // A view loaded with an allocator that has no memory left can be loaded,
-  // but every scan of it fails with the memory limit error.
-  MaterializedView limited{
-      testIndexBase_, "limitedView",
-      ad_utility::makeAllocatorWithLimit<Id>(ad_utility::MemorySize::bytes(0))};
-  EXPECT_THROW(scanAll(limited),
-               ad_utility::detail::AllocationExceedsLimitException);
+  // Use up all the memory that is left in `allocator`. The memory is released
+  // when the returned vector is destroyed.
+  auto exhaust = [](const ad_utility::AllocatorWithLimit<Id>& allocator) {
+    return std::vector<Id, ad_utility::AllocatorWithLimit<Id>>(
+        allocator.amountMemoryLeft().getBytes() / sizeof(Id), allocator);
+  };
 
-  // With enough memory, the same scan succeeds.
+  // The view itself is allocated through the allocator, so the allocator needs
+  // some memory for the view to be loaded. Once the allocator has no memory
+  // left, every scan of the view fails with the memory limit error.
+  auto allocator = ad_utility::makeAllocatorWithLimit<Id>(
+      ad_utility::MemorySize::megabytes(1));
+  MaterializedView limited{testIndexBase_, "limitedView", allocator};
+  {
+    auto blocker = exhaust(allocator);
+    EXPECT_THROW(scanAll(limited),
+                 ad_utility::detail::AllocationExceedsLimitException);
+  }
+  // With the memory released again, the same scan succeeds.
+  EXPECT_GT(scanAll(limited).numRows(), 0u);
   MaterializedView unlimited{testIndexBase_, "limitedView"};
   EXPECT_GT(scanAll(unlimited).numRows(), 0u);
 
   // A view loaded by an engine allocates through the engine's allocator, i.e.
-  // the query memory limit: with the default limit the scan succeeds, with a
-  // limit of zero bytes it fails.
+  // the query memory limit: with the default limit the scan succeeds, once the
+  // engine has no memory left it fails.
   auto viewFromEngine =
       qlv().indexAndViewsSnapshot()->materializedViewsManager_.getView(
           "limitedView", nullptr);
   EXPECT_GT(scanAll(*viewFromEngine).numRows(), 0u);
   qlever::EngineConfig config;
   config.baseName_ = testIndexBase_;
-  config.memoryLimit_ = ad_utility::MemorySize::bytes(0);
-  qlever::Qlever engineWithoutMemory{config};
+  config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
+  qlever::Qlever limitedEngine{config};
   auto viewFromLimitedEngine =
-      engineWithoutMemory.indexAndViewsSnapshot()
-          ->materializedViewsManager_.getView("limitedView", nullptr);
+      limitedEngine.indexAndViewsSnapshot()->materializedViewsManager_.getView(
+          "limitedView", nullptr);
+  auto blocker = exhaust(limitedEngine.allocator());
   EXPECT_THROW(scanAll(*viewFromLimitedEngine),
                ad_utility::detail::AllocationExceedsLimitException);
 }
