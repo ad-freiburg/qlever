@@ -130,7 +130,8 @@ TEST(CompressionTest, NonThrowingFunctions) {
               VariantWith<Error>(_));
 }
 
-// _____________________________________________________________________________
+// Test the compression with a reference and the decompression with the same
+// reference, including the error cases and memory overlap of the inputs.
 TEST(CompressionTest, CompressWithReference) {
   using ::testing::_;
   using ::testing::VariantWith;
@@ -221,7 +222,7 @@ TEST(CompressionTest, CompressWithReference) {
               VariantWith<Error>(_));
 }
 
-// _____________________________________________________________________________
+// Test that `checkError` returns sizes unchanged and throws for error codes.
 TEST(CompressionTest, CheckError) {
   // A size is returned unchanged.
   EXPECT_EQ(ZstdWrapper::checkError(0), 0u);
