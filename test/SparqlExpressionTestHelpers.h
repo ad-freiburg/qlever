@@ -133,7 +133,7 @@ struct TestContext {
                 return valueIdComparators::compareByBits(a[columnIndex],
                                                          b[columnIndex]);
               });
-    result.context.columnsByWhichResultIsSorted_.push_back(columnIndex);
+    result.context._columnsByWhichResultIsSorted.push_back(columnIndex);
     return result;
   }
 };

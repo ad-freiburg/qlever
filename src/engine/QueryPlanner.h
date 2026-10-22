@@ -65,13 +65,13 @@ class QueryPlanner {
 
   class TripleGraph {
    public:
-    TripleGraph();
+    explicit TripleGraph(qlever::Allocator<size_t> allocator);
 
     TripleGraph(const TripleGraph& other);
 
     TripleGraph& operator=(const TripleGraph& other);
 
-    TripleGraph(const TripleGraph& other, const vector<size_t>& keepNodes);
+    TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     struct Node {
       Node(size_t id, SparqlTriple t,
@@ -126,8 +126,8 @@ class QueryPlanner {
     };
 
     // Allows for manually building triple graphs for testing
-    explicit TripleGraph(
-        const std::vector<std::pair<Node, std::vector<size_t>>>& init);
+    TripleGraph(const std::vector<std::pair<Node, std::vector<size_t>>>& init,
+                qlever::Allocator<size_t> allocator);
 
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;

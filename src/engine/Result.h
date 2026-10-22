@@ -28,13 +28,7 @@
 // generator via `idTables()` when it is supposed to be lazily evaluated.
 //
 // A `Result` is move-only to prevent accidental copies of a result table.
-//
-// NOSONAR: The method count is temporarily inflated by the `std::vector`/
-// `std::initializer_list` constructor overloads documented below, which
-// exist only until every `Operation` passes `qlm::vector` directly for
-// `sortedBy` (see the TODO on the constructors). Removing them is a
-// dedicated, separate feature PR, not something to split this class for.
-class Result : public ad_utility::NoCopy {  // NOSONAR
+class Result : public ad_utility::NoCopy {
  public:
   using IdTablePtr = std::shared_ptr<const IdTable>;
 
@@ -190,20 +184,20 @@ class Result : public ad_utility::NoCopy {  // NOSONAR
   // everywhere, delete them and keep only the `qlm::vector` overloads.
   Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
-  Result(IdTable idTable, const std::vector<ColumnIndex>& sortedBy,
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
-  Result(IdTable idTable, const std::vector<ColumnIndex>& sortedBy,
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
   Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
   Result(std::shared_ptr<const IdTable> idTablePtr,
          qlm::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(std::shared_ptr<const IdTable> idTablePtr,
-         const std::vector<ColumnIndex>& sortedBy, LocalVocab&& localVocab);
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(std::shared_ptr<const IdTable> idTablePtr,
          std::initializer_list<ColumnIndex> sortedBy, LocalVocab&& localVocab);
 
@@ -211,20 +205,20 @@ class Result : public ad_utility::NoCopy {  // NOSONAR
   // that the underlying data outlives this `Result`.
   Result(IdTableView<0> view, qlm::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
-  Result(IdTableView<0> view, const std::vector<ColumnIndex>& sortedBy,
+  Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
   Result(IdTableView<0> view, std::initializer_list<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, qlm::vector<ColumnIndex> sortedBy);
-  Result(IdTableVocabPair pair, const std::vector<ColumnIndex>& sortedBy);
+  Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
   Result(IdTableVocabPair pair, std::initializer_list<ColumnIndex> sortedBy);
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   Result(Generator idTables, qlm::vector<ColumnIndex> sortedBy);
-  Result(Generator idTables, const std::vector<ColumnIndex>& sortedBy);
+  Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
   Result(Generator idTables, std::initializer_list<ColumnIndex> sortedBy);
 #endif
   Result(LazyResult idTables, qlm::vector<ColumnIndex> sortedBy);
-  Result(LazyResult idTables, const std::vector<ColumnIndex>& sortedBy);
+  Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
   Result(LazyResult idTables, std::initializer_list<ColumnIndex> sortedBy);
 
   // Wrap the generator stored in `data_` within a new generator that calls

@@ -13,7 +13,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -59,11 +58,6 @@ using list = std::list<T, Allocator<T>>;
 
 template <typename T, typename Compare = std::less<T>>
 using set = std::set<T, Compare, Allocator<T>>;
-
-template <typename CharT, typename Traits = std::char_traits<CharT>>
-using basic_string = std::basic_string<CharT, Traits, Allocator<CharT>>;
-
-using string = basic_string<char>;
 
 template <typename Key, typename T, typename Compare = std::less<Key>>
 using map = std::map<Key, T, Compare, Allocator<std::pair<const Key, T>>>;

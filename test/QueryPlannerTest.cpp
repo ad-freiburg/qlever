@@ -51,8 +51,8 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(
         &pq._rootGraphPattern._graphPatterns[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      0, SparqlTriple(Var{"?x"},
@@ -70,7 +70,8 @@ TEST(QueryPlanner, createTripleGraph) {
                      2, SparqlTriple(Var{"?y"},
                                      iri("<http://rdf.myprefix.com/xxx/rel2>"),
                                      iri("<http://abc.de>"))),
-                 {0, 1})}));
+                 {0, 1})}),
+        qlever::makeUnlimitedAllocator<size_t>());
 
     ASSERT_TRUE(tg.isSimilar(expected));
   }
@@ -80,8 +81,8 @@ TEST(QueryPlanner, createTripleGraph) {
         parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      0, SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>"))),
@@ -93,7 +94,8 @@ TEST(QueryPlanner, createTripleGraph) {
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
-                 {0})}));
+                 {0})}),
+        qlever::makeUnlimitedAllocator<size_t>());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 
@@ -104,8 +106,8 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>({
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
                     0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>"))),
@@ -115,7 +117,8 @@ TEST(QueryPlanner, createTripleGraph) {
                     1, SparqlTriple(Var{"?x"}, iri("<Author>"),
                                     iri("<Anthony_Newman_(Author)>"))),
                 {0}),
-        }));
+        }),
+        qlever::makeUnlimitedAllocator<size_t>());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 }

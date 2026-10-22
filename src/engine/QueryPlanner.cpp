@@ -512,7 +512,8 @@ void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
   tg._nodeStorage.emplace_back(node);
   auto& addedNode = tg._nodeStorage.back();
   tg._nodeMap[addedNode.id_] = &addedNode;
-  tg._adjLists.emplace_back(qlever::makeUnlimitedAllocator<size_t>());
+  tg._adjLists.emplace_back(
+      qlever::Allocator<size_t>{tg._adjLists.get_allocator()});
   AD_CORRECTNESS_CHECK(tg._adjLists.size() == tg._nodeStorage.size());
   AD_CORRECTNESS_CHECK(tg._adjLists.size() == addedNode.id_ + 1);
   // Now add an edge between the added node and every node sharing a var.
@@ -531,7 +532,7 @@ void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
-  TripleGraph tg;
+  TripleGraph tg{allocatorForType<size_t>(_qec)};
   size_t numNodesInTripleGraph = 0;
   ad_utility::HashMap<Variable, std::string> optTermForCvar;
   ad_utility::HashMap<Variable, std::vector<std::string>> potentialTermsForCvar;
@@ -2006,9 +2007,8 @@ QueryPlanner::TripleGraph::splitAtContextVars(
     const vector<SparqlFilter>& origFilters,
     ad_utility::HashMap<std::string, vector<size_t>>& contextVarToTextNodes)
     const {
-  vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal{
-      qlever::makeUnlimitedAllocator<
-          std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>()};
+  using Split = std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>;
+  vector<Split> retVal{qlever::Allocator<Split>{_adjLists.get_allocator()}};
   // Recursively split the graph a context nodes.
   // Base-case: No no context nodes, return the graph itself.
   if (contextVarToTextNodes.size() == 0) {
@@ -2051,7 +2051,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
         // Find all parts so that the number of triples in them plus
         // the number of text triples equals the number of total triples.
         vector<vector<size_t>> setsOfReachablesNodes{
-            qlever::makeUnlimitedAllocator<vector<size_t>>()};
+            qlever::Allocator<vector<size_t>>{_adjLists.get_allocator()}};
         ad_utility::HashSet<size_t> nodesDone;
         nodesDone.insert(textNodeIds.begin(), textNodeIds.end());
         nodesDone.insert(reachableNodes.begin(), reachableNodes.end());
@@ -2085,7 +2085,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
 // _____________________________________________________________________________
 QueryPlanner::vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
     size_t startNode, ad_utility::HashSet<size_t> leaveOut) const {
-  vector<size_t> res{qlever::makeUnlimitedAllocator<size_t>()};
+  vector<size_t> res{qlever::Allocator<size_t>{_adjLists.get_allocator()}};
   ad_utility::HashSet<size_t> visited;
   std::list<size_t> queue;
   queue.push_back(startNode);
@@ -2109,7 +2109,8 @@ QueryPlanner::vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
 QueryPlanner::vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
-  vector<SparqlFilter> ret{qlever::makeUnlimitedAllocator<SparqlFilter>()};
+  vector<SparqlFilter> ret{
+      qlever::Allocator<SparqlFilter>{_adjLists.get_allocator()}};
   ad_utility::HashSet<Variable> coveredVariables;
   for (auto n : nodes) {
     auto& node = *_nodeMap.find(n)->second;
@@ -2127,20 +2128,20 @@ QueryPlanner::vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(
-    const std::vector<std::pair<Node, std::vector<size_t>>>& init)
-    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()) {
+    const std::vector<std::pair<Node, std::vector<size_t>>>& init,
+    qlever::Allocator<size_t> allocator)
+    : _adjLists(qlever::Allocator<vector<size_t>>{allocator}) {
   for (const std::pair<Node, std::vector<size_t>>& p : init) {
     _nodeStorage.push_back(p.first);
     _nodeMap[p.first.id_] = &_nodeStorage.back();
-    _adjLists.emplace_back(p.second.begin(), p.second.end(),
-                           qlever::makeUnlimitedAllocator<size_t>());
+    _adjLists.emplace_back(p.second.begin(), p.second.end(), allocator);
   }
 }
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
-                                       const vector<size_t>& keepNodes)
-    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()) {
+                                       vector<size_t> keepNodes)
+    : _adjLists(other._adjLists.get_allocator()) {
   ad_utility::HashSet<size_t> keep;
   for (auto v : keepNodes) {
     keep.insert(v);
@@ -2159,7 +2160,8 @@ QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
   // Adjust adjacency lists accordingly.
   for (size_t i = 0; i < other._adjLists.size(); ++i) {
     if (keep.count(i) > 0) {
-      vector<size_t> adjList{qlever::makeUnlimitedAllocator<size_t>()};
+      vector<size_t> adjList{
+          qlever::Allocator<size_t>{other._adjLists.get_allocator()}};
       for (size_t v : other._adjLists[i]) {
         if (keep.count(v) > 0) {
           adjList.push_back(idChange[v]);
@@ -2191,8 +2193,8 @@ QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
 }
 
 // _____________________________________________________________________________
-QueryPlanner::TripleGraph::TripleGraph()
-    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()) {}
+QueryPlanner::TripleGraph::TripleGraph(qlever::Allocator<size_t> allocator)
+    : _adjLists(qlever::Allocator<vector<size_t>>{allocator}) {}
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isSimilar(

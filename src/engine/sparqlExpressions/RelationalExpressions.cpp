@@ -140,7 +140,7 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       auto columnIndex = context->getColumnIndexForVariable(value1);
       auto valueId = makeValueId(value2, context);
       // TODO<C++23> Use `ql::ranges::starts_with`.
-      if (const auto& cols = context->columnsByWhichResultIsSorted_;
+      if (const auto& cols = context->_columnsByWhichResultIsSorted;
           !cols.empty() && cols[0] == columnIndex) {
         constexpr static bool value2IsString =
             !ad_utility::isSimilar<decltype(valueId), Id>;

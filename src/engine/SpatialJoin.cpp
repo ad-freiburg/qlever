@@ -278,9 +278,7 @@ size_t SpatialJoin::getResultWidth() const {
     } else {
       // We convert to a set here, because we allow multiple occurrences of
       // variables in payloadVariables_
-      auto payloadVariables = config_.payloadVariables_.getVariables();
-      qlm::vector<Variable> pv{payloadVariables.begin(), payloadVariables.end(),
-                               allocator()};
+      std::vector<Variable> pv = config_.payloadVariables_.getVariables();
       absl::flat_hash_set<Variable> pvSet{pv.begin(), pv.end()};
 
       // The payloadVariables_ may contain the right join variable
@@ -334,13 +332,13 @@ size_t SpatialJoin::getCostEstimate() {
       auto numObjects = n + m;
       return numObjects * 4;
     } else {
-      AD_CORRECTNESS_CHECK(ad_utility::contains(
-                               std::array<SpatialJoinAlgorithm, 3>{
-                                   SpatialJoinAlgorithm{S2_GEOMETRY},
-                                   SpatialJoinAlgorithm{BOUNDING_BOX},
-                                   SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
-                               config_.algo_),
-                           "Unknown SpatialJoin Algorithm.");
+      AD_CORRECTNESS_CHECK(
+          ad_utility::contains(
+              std::array{SpatialJoinAlgorithm{S2_GEOMETRY},
+                         SpatialJoinAlgorithm{BOUNDING_BOX},
+                         SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
+              config_.algo_),
+          "Unknown SpatialJoin Algorithm.");
 
       // Let n be the size of the left table and m the size of the right table.
       // When using the S2Point index, we first create the index for the right
@@ -488,8 +486,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
     auto idTablePtr = &resTable->idTableView();
-    return std::pair<const IdTableView<0>*, std::shared_ptr<const Result>>{
-        idTablePtr, std::move(resTable)};
+    return std::pair{idTablePtr, std::move(resTable)};
   };
 
   auto [childLeft, childRight, joinVarLeft, joinVarRight] =

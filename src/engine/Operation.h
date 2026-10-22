@@ -199,16 +199,6 @@ class Operation {
    */
   const std::vector<ColumnIndex>& getResultSortedOn() const;
 
-  // Same as `getResultSortedOn()`, but converted to `qlm::vector` at this
-  // boundary. This lets callers that need an allocator-aware type consume it
-  // without changing every `resultSortedOn()` override at once.
-  // TODO<vrbommireddy>: Remove once `resultSortedOn()` returns `qlm::vector`
-  // directly.
-  qlm::vector<ColumnIndex> getResultSortedOnQlm() const {
-    const auto& sorted = getResultSortedOn();
-    return {sorted.begin(), sorted.end(), allocator()};
-  }
-
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
   virtual const LocatedTriplesState& locatedTriplesState() const {

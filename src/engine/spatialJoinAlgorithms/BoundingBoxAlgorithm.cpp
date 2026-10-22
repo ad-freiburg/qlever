@@ -316,7 +316,7 @@ Result BoundingBoxAlgorithm::run() {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    std::set<AddedPair> pairs;
+    qlm::set<AddedPair> pairs{qec_->getAllocator()};
     ql::ranges::for_each(results, [&](Value& res) {
       size_t rowLeft = res.second.row_;
       size_t rowRight = i;

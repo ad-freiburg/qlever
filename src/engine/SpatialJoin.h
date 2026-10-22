@@ -133,8 +133,7 @@ class SpatialJoin : public Operation {
 
   // Helper functions for unit tests
   std::pair<double, size_t> onlyForTestingGetTask() const {
-    return std::pair<double, size_t>{getMaxDist().value_or(-1.0),
-                                     getMaxResults().value_or(-1)};
+    return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
   }
 
   const SpatialJoinConfiguration& onlyForTestingGetConfig() const {
@@ -142,7 +141,7 @@ class SpatialJoin : public Operation {
   }
 
   std::pair<Variable, Variable> onlyForTestingGetVariables() const {
-    return std::pair<Variable, Variable>{config_.left_, config_.right_};
+    return std::pair{config_.left_, config_.right_};
   }
 
   std::optional<Variable> onlyForTestingGetDistanceVariable() const {
