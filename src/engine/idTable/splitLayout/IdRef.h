@@ -316,11 +316,10 @@ class BasicIdRef
 
   BasicIdRef(BasicIdRef&&) noexcept = default;
 
-  // Assign a new `Id` to the referenced slot (`IdRef` only). `const`, like
-  // any proxy reference (e.g. `std::vector<bool>::reference`): it writes
-  // through to the referenced slot, not to the proxy's own state, which is
-  // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
-  CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
+  // Assign a new `Id` to the referenced slot (`IdRef` only). Like for any proxy
+  // reference, this writes through to the referenced slot and does not rebind
+  // the proxy.
+  CPP_template(typename = void)(requires(!IsConst)) BasicIdRef& operator=(
       const Id id) {
     *this->payload_ = id.getPayloadBits();
     *this->datatype_ = id.getDatatypeBits();

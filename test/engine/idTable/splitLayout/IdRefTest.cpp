@@ -45,7 +45,7 @@ TEST(IdRefTest, conversionAndReadApi) {
     EXPECT_TRUE(id == constRef);
 
     // Assigning to the mutable proxy changes the referenced slot.
-    const IdRef mutableRef{&payload, &datatype};
+    IdRef mutableRef{&payload, &datatype};
     EXPECT_EQ(static_cast<Id>(mutableRef), id);
     const auto other = Id::makeFromInt(999);
     mutableRef = other;
@@ -59,7 +59,7 @@ TEST(IdRefTest, conversionAndReadApi) {
 // referenced slot.
 TEST(IdRefTest, assignmentWritesThroughToTheReferencedSlot) {
   auto [datatype, payload] = getBitsCompat(Id::makeFromInt(1));
-  const IdRef ref{&payload, &datatype};
+  IdRef ref{&payload, &datatype};
 
   // Assign an `Id`.
   ref = Id::makeFromInt(2);
