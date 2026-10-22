@@ -695,8 +695,7 @@ TEST(IndexTest, textRecordExportDoesNotUnescapeTheExcerpt) {
 
   auto exported = ql::exportIds::getLiteralOrIriFromTextRecordIndex(index, id);
   ASSERT_TRUE(exported.has_value());
-  EXPECT_EQ(asStringViewUnsafe(exported.value().getLiteral().getContent()),
-            docText);
+  EXPECT_EQ(exported.value().getLiteral().getContent(), docText);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
@@ -1037,6 +1036,69 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
         IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, true),
         AllOf(Not(HasSubstr("from 2 input streams")), HasSubstr("forbidden")));
   }
+}
+
+// Test that `parallel-parsing` in the settings file is respected when building
+// an index from a single input file that does not specify parallel parsing.
+TEST(IndexTest, parallelParsingFromSettingsFile) {
+  std::string basename = gtestCurrentTestName();
+  std::string settingsFilename = basename + ".settings.json";
+  absl::Cleanup cleanup = [&basename, &settingsFilename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+    ad_utility::deleteFile(settingsFilename);
+  };
+  // An input file with a multiline literal, which the parallel parser does not
+  // support.
+  ad_utility::makeOfstream(basename + ".ttl")
+      << "<s> <p> \"\"\"multiline\nliteral\"\"\" .\n";
+
+  // Build the index with `parallel-parsing` set to the given value in the
+  // settings file.
+  auto buildIndex = [&](bool parallelParsing) {
+    ad_utility::makeOfstream(settingsFilename)
+        << nlohmann::json{{"parallel-parsing", parallelParsing}};
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.setSettingsFile(settingsFilename);
+    index.createFromFiles(
+        {qlever::InputFileSpecification{
+            basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
+        1);
+  };
+
+  // With `false` the sequential parser is used and the build succeeds, with
+  // `true` the parallel parser rejects the multiline literal.
+  EXPECT_NO_THROW(buildIndex(false));
+  AD_EXPECT_THROW_WITH_MESSAGE(buildIndex(true),
+                               ::testing::HasSubstr("multiline string"));
+}
+
+// Test that an index can be built from a type-erased range of input files.
+TEST(IndexTest, createFromFilesTypeErased) {
+  std::string basename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&basename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+  // Build an index from an input file with two triples.
+  ad_utility::makeOfstream(basename + ".ttl") << "<s> <p> <o1>, <o2> .\n";
+  {
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.getImpl().createFromFiles(
+        ad_utility::InputRangeTypeErased{
+            std::vector<qlever::InputFileSpecification>{
+                {basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}}},
+        1);
+  }
+
+  // The index can be loaded and contains both triples.
+  Index index = makeIndexWithTestSettings();
+  index.createFromOnDiskIndex(basename, false);
+  EXPECT_EQ(index.numTriples().normal, 2u);
 }
 
 TEST(IndexTest, getBlankNodeManager) {
@@ -1592,8 +1654,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
                    .front()
                    .firstTriple_.col0Id_;
     ASSERT_EQ(point.getDatatype(), Datatype::GeoPoint);
-    EXPECT_EQ(point.getBits() &
-                  ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits),
+    EXPECT_EQ(point.getPayloadBits(),
               GeoPoint::combineCoordinates(
                   GeoPoint::quantizeCoordinate(48.0, 90),
                   GeoPoint::quantizeCoordinate(7.8, 180), encoding));

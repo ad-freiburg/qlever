@@ -106,8 +106,44 @@ TEST(Exception, AD_CORRECTNESS_CHECK) {
   std::vector<int> v;
   ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(v.empty()));
   v.push_back(27);
-  auto failCheck = [&v] { AD_CONTRACT_CHECK(v.empty()); };
+  auto failCheck = [&v] { AD_CORRECTNESS_CHECK(v.empty()); };
   AD_EXPECT_THROW_WITH_MESSAGE(failCheck(), makeMatcher("v.empty()"));
+}
+
+// A struct with correctness checks whose conditions contain short-circuit
+// operators and refer to a member and to `this`, also inside a `constexpr`
+// member function.
+namespace {
+struct StructWithCheck {
+  int a_ = 1;
+  void check() const { AD_CORRECTNESS_CHECK(a_ == 1 || a_ == 2); }
+  constexpr int checkWithThis(int x) const {
+    AD_CORRECTNESS_CHECK(x > 0 && a_ > 0, "x was ", x);
+    return x + a_;
+  }
+};
+static_assert(StructWithCheck{}.checkWithThis(1) == 2);
+}  // namespace
+
+// Test that conditions with short-circuit operators work in all contexts. In
+// the coverage build (`QLEVER_COVERAGE_FRIENDLY_CHECKS`) the condition is
+// evaluated inside a lambda, see `util/Exception.h`.
+TEST(Exception, correctnessCheckWithShortCircuitCondition) {
+  // Local variables and structured bindings (the latter can only be captured by
+  // a lambda since C++20).
+  std::vector<int> v{1, 2};
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(!v.empty() && v.size() == 2));
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(v.empty() || v.front() == 1));
+  auto [x, y] = std::pair{1, 2};
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(x == 1 && y == 2));
+
+  // A member and `this`, see `StructWithCheck` above.
+  ASSERT_NO_THROW(StructWithCheck{}.check());
+
+  // A failing check reports the complete condition.
+  auto failCheck = [&v] { AD_CORRECTNESS_CHECK(v.empty() || v.size() > 5); };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      failCheck(), makeMatcher("Assertion `v.empty() || v.size() > 5` failed"));
 }
 
 TEST(Exception, correctnessCheckWithMessage) {

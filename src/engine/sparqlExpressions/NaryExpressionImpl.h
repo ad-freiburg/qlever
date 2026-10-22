@@ -131,8 +131,8 @@ class NaryExpressionStronglyTyped
 
       using ValueGetters = typename NaryOperation::ValueGetters;
 
-      auto convertedOperands =
-          std::tuple{convertToVectorOrConstant(AD_FWD(operands), context)...};
+      auto convertedOperands = std::make_tuple(
+          convertToVectorOrConstant(AD_FWD(operands), context)...);
 
       using ConvertedOperands = decltype(convertedOperands);
 
@@ -189,9 +189,27 @@ class NaryExpressionStronglyTyped
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
-      // Evaluate one result row by invoking every indexed getter at `i` and
-      // passing the resulting values to the N-ary function.
+      // Return UNDEF directly for rows with a non-numeric operand of a numeric
+      // function, otherwise pass the converted values to the N-ary function.
+      //
+      // NOTE: The `if constexpr` is required although `hasNonNumericOperand`
+      // already checks `undefForNonNumeric` at compile time: `computeValue` has
+      // a deduced return type, and for functions that return a different type
+      // (e.g. `IdOrLiteralOrIri` for the string functions), the `Id` branch
+      // would not compile.
       auto computeValue = [&](size_t i) {
+        if constexpr (undefForNonNumeric<typename NaryOperation::Function>) {
+          const bool nonNumeric = std::apply(
+              [i](const auto&... values) {
+                return hasNonNumericOperand<typename NaryOperation::Function,
+                                            ValueGetters>(
+                    getValueAt(values, i)...);
+              },
+              convertedOperands);
+          if (nonNumeric) {
+            return Id::makeUndefined();
+          }
+        }
         return std::apply(
             [&](auto&... getters) {
               return naryOperation._function(getters(i)...);

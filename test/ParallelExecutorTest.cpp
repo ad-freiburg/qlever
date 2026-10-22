@@ -26,6 +26,7 @@
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParallelExecutor.h"
+#include "util/TestException.h"
 #include "util/Views.h"
 
 // _____________________________________________________________________________
@@ -362,7 +363,7 @@ TEST(ParallelExecutor, runIndexedTasksOnExecutorRethrowsAfterAllTasksAreDone) {
     numStarted.fetch_add(1);
     absl::Cleanup finish = [&numFinished] { numFinished.fetch_add(1); };
     if (taskIdx == 5) {
-      throw std::runtime_error("task 5 failed");
+      throw TestException("task 5 failed");
     }
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   };
