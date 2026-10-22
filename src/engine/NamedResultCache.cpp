@@ -42,6 +42,14 @@ auto NamedResultCache::get(const Key& name) const
 }
 
 // _____________________________________________________________________________
+auto NamedResultCache::getIfContained(const Key& name) const
+    -> std::shared_ptr<const Value> {
+  // For the `wlock` see the comment in `get` above. The `operator[]` of the
+  // underlying cache returns `nullptr` if the `name` is not contained.
+  return (*cache_.wlock())[name];
+}
+
+// _____________________________________________________________________________
 void NamedResultCache::store(const Key& name, Value result) {
   auto lock = cache_.wlock();
   // The underlying cache throws on insert if the key is already present. We
