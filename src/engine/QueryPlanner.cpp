@@ -2576,10 +2576,9 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 }
 
 // __________________________________________________________________________________________________________________
-auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
-                                                const SubtreePlan& b,
-                                                const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithTransitivePath(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)a;
   (void)b;
@@ -2668,10 +2667,9 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
-                                                  const SubtreePlan& b,
-                                                  const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithHasPredicateScan(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
@@ -2707,10 +2705,9 @@ auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createJoinWithPathSearch(const SubtreePlan& a,
-                                            const SubtreePlan& b,
-                                            const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createJoinWithPathSearch(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const JoinColumns& jcs) -> std::optional<SubtreePlan> {
   auto aRootOp =
       std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
   auto bRootOp =

@@ -2682,7 +2682,6 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
 }
 
-// ____________________________________________________________________________
 // Regression test: `FILTER (NOT) EXISTS` used to be applied speculatively to
 // every candidate subplan inside the dynamic-programming rounds, which made
 // planning exponential in the number of such filters (each clause roughly
@@ -2702,6 +2701,7 @@ TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
       h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
 }
 
+// ____________________________________________________________________________
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
   auto abc = h::IndexScanFromStrings("?a", "?b", "?c");
