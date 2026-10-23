@@ -10,10 +10,12 @@
 #include <regex>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/BinaryExport.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -35,6 +37,14 @@
 // `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
  protected:
+  // Disable the binary service export for these tests, as the test mocks
+  // expect a plain JSON accept header.
+  decltype(setRuntimeParameterForTest<
+           &RuntimeParameters::binaryServiceEnabled_>(
+      false)) disableBinaryService_ =
+      setRuntimeParameterForTest<&RuntimeParameters::binaryServiceEnabled_>(
+          false);
+
   // Query execution context (with small test index) and allocator for testing,
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
@@ -1342,4 +1352,62 @@ TEST_F(ServiceTest, redirectsIntegration) {
                         boost::beast::http::status::ok, matchers)};
     EXPECT_NO_THROW(service.computeResultOnlyForTesting());
   }
+}
+
+// Test that a `Service` requests QLever's binary format if the runtime
+// parameter `binary-service-enabled` is set, and that it correctly reads a
+// result in that format.
+TEST_F(ServiceTest, binaryFormat) {
+  auto enableBinaryService =
+      setRuntimeParameterForTest<&RuntimeParameters::binaryServiceEnabled_>(
+          true);
+  const auto& binaryMediaType =
+      ad_utility::toString(ad_utility::MediaType::binaryQleverExport);
+
+  // The result of the remote endpoint, which has the columns in a different
+  // order than the `Service`.
+  auto remoteResult = [this]() {
+    QueryExecutionTree qet{
+        testQec,
+        std::make_shared<ValuesForTesting>(
+            testQec, makeIdTableFromVector({{1, 2}, {3, 4}}, &Id::makeFromInt),
+            std::vector<std::optional<Variable>>{Variable{"?y"},
+                                                 Variable{"?x"}})};
+    parsedQuery::SelectClause selectClause;
+    selectClause.setSelected(std::vector{Variable{"?y"}, Variable{"?x"}});
+    std::string bytes;
+    for (std::string_view chunk : qlever::binary_export::exportAsQLeverBinary(
+             qet, selectClause, {},
+             std::make_shared<ad_utility::CancellationHandle<>>())) {
+      bytes.append(chunk);
+    }
+    return bytes;
+  }();
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "",
+      "{ }",
+      false};
+  httpClientTestHelpers::RequestMatchers matchers{
+      .accept_ = testing::Eq(absl::StrCat(
+          binaryMediaType, ",application/sparql-results+json;q=0.9"))};
+  Service service{testQec, parsedServiceClause,
+                  httpClientTestHelpers::getResultFunctionFactory(
+                      remoteResult, binaryMediaType,
+                      boost::beast::http::status::ok, matchers)};
+  auto result = service.computeResultOnlyForTesting();
+  EXPECT_EQ(result.idTableView(),
+            makeIdTableFromVector({{2, 1}, {4, 3}}, &Id::makeFromInt));
+
+  // A different media type is not accepted.
+  Service serviceWithWrongType{
+      testQec, parsedServiceClause,
+      httpClientTestHelpers::getResultFunctionFactory(
+          remoteResult, absl::StrCat(binaryMediaType, "x"),
+          boost::beast::http::status::ok, matchers)};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serviceWithWrongType.computeResultOnlyForTesting(),
+      ::testing::HasSubstr("QLever requires the endpoint of a SERVICE"));
 }
