@@ -2,9 +2,9 @@
 //
 // 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -108,7 +108,8 @@ QueryExecutionTree makeQet(QueryExecutionContext* qec, IdTable table,
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that `appendVectorOfStrings` appends the serialization of the strings,
+// whose size `serializedSize` predicts.
 TEST(BinaryExportHelpers, appendVectorOfStrings) {
   for (const std::vector<std::string>& strings :
        std::vector<std::vector<std::string>>{
@@ -121,7 +122,8 @@ TEST(BinaryExportHelpers, appendVectorOfStrings) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that an `ExportBatch` exports the selected columns, ends after the row
+// that reaches one of its minimum sizes, and appends each string once.
 TEST(ExportBatch, minimumSizesAndFormat) {
   auto* qec = ad_utility::testing::getQec();
   const auto& index = qec->getIndex();
@@ -201,7 +203,9 @@ TEST(ExportBatch, minimumSizesAndFormat) {
   }
 }
 
-// _____________________________________________________________________________
+// Test the complete format of `exportAsQLeverBinary`: the header, the IDs as
+// they are sent, unbound variables, results without columns, and results that
+// are sent in several batches.
 TEST(BinaryExport, format) {
   ad_utility::testing::TestIndexConfig config;
   config.encodedPrefixesWithoutAngleBrackets =

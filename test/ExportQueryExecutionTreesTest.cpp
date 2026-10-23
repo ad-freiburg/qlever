@@ -1470,7 +1470,7 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
                          "</literal></binding>\n  </result>", xmlTrailer));
 }
 
-// ____________________________________________________________________________
+// Test that a SELECT query can be exported in QLever's binary format.
 TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
   // The format itself is tested in `engine/BinaryExportTest.cpp`.
   auto result = runQueryStreamableResult(

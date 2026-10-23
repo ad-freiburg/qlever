@@ -41,7 +41,8 @@ TEST(DatatypeTest, isDatatypeTrivial) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that `isListOfAllDatatypesInOrder` accepts exactly the complete list of
+// datatypes in the order of their numeric values.
 TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
   constexpr auto allDatatypes =
       std::to_array({Undefined, Bool, Int, Double, VocabIndex, LocalVocabIndex,
