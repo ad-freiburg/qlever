@@ -1311,6 +1311,119 @@ class CompressedExternalIdTableSorter
                           }}};
   }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Transition from the input phase to the output phase like `getSortedBlocks`,
+  // but instead of yielding the sorted blocks as a sequential range, push them
+  // to the sink that `makeSink` creates, see
+  // `parallelBlockMerge::parallelBlockMergeToSink` for the requirements on
+  // the factory and on the sink. The blocks are pushed from the threads of the
+  // merge executor (see `setMergeExecutor`): the blocks of a single chunk one
+  // after the other and in order, but the chunks concurrently and in an
+  // arbitrary order. This is for consumers that can handle the chunks
+  // independently, which saves the spilling and reordering of the blocks that
+  // a sequential consumer needs.
+  //
+  // Return a future that becomes ready once the merge has completed and has
+  // released this sorter again (only then it may be cleared or destroyed). The
+  // future is deferred, so the caller has to `get()` or `wait()` for it.
+  // Exceptions of the merge are reported to the sink and not via the future.
+  //
+  // NOTE: Like `getSortedBlocks`, this may only be called once if
+  // `moveResultOnMerge()` is set (which is the default).
+  template <size_t N = NumStaticCols, typename SinkFactory>
+  std::future<void> mergeToSink(SinkFactory makeSink) {
+    static_assert(N == NumStaticCols || N == 0);
+    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.exchange(true));
+    auto finished = [this]() noexcept {
+      this->isFirstIteration_ = false;
+      mergeIsActive_.store(false);
+    };
+    if (!this->transformAndPushLastBlock()) {
+      // There is only a single (already sorted) block, so there is nothing to
+      // merge: push that block to a sink that expects a single chunk, and
+      // synchronously wait for the sink to accept it.
+      //
+      // NOTE: The end of the chunk is deliberately *not* awaited here, but
+      // only via the returned future, because a sink may complete it only
+      // once its consumer (which typically runs after this function has
+      // returned) has processed the chunk.
+      auto sink = makeSink(1);
+      auto& block = this->currentBlock_;
+      if (!block.empty()) {
+        IdTableStatic<N> output = this->moveResultOnMerge_
+                                      ? std::move(block).template toStatic<N>()
+                                      : block.clone().template toStatic<N>();
+        sink->asyncPush(0, std::move(output), boost::asio::use_future).get();
+      }
+      return std::async(
+          std::launch::deferred,
+          [chunkFinished = sink->asyncFinishChunk(0, boost::asio::use_future),
+           finished]() mutable {
+            chunkFinished.get();
+            finished();
+          });
+    }
+    const auto config = makeMergePhaseConfig(std::nullopt);
+    const auto parameters =
+        compressedExternalIdTable::computeMergePhaseParameters(config);
+    warnIfParallelismIsReduced(parameters);
+    auto options =
+        compressedExternalIdTable::makeMergeOptions(config, parameters);
+    auto state = parallelBlockMerge::parallelBlockMergeToSink<true>(
+        mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
+        this->comparator_, std::move(makeSink), std::move(options),
+        std::make_shared<ad_utility::CancellationHandle<>>());
+    // NOTE: The completion future becomes ready once the state of the merge
+    // (which owns the input) has been destroyed, see
+    // `ParallelMergeState::asyncWaitForCompletion`.
+    return std::async(
+        std::launch::deferred,
+        [completion = state->asyncWaitForCompletion(), finished]() mutable {
+          completion.get();
+          finished();
+        });
+  }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+  // Finish the input phase: sort the rows that are still buffered and write
+  // all the rows to the underlying file as sorted runs (also if there is only
+  // a single run, which `getSortedBlocks` would keep in memory). Return the
+  // input for an external merge of these runs (see `CompressedIdTableRunsInput`
+  // and `parallelBlockMerge::parallelBlockMergeToRange`), which the caller can
+  // combine with the runs of other sorters that have the same comparator and
+  // the same number of columns into a single merge. Afterwards this sorter can
+  // only be cleared (once the returned input has been destroyed) or destroyed.
+  template <size_t N = NumStaticCols>
+  CompressedIdTableRunsInput<N> finishAndGetRunsInput() {
+    static_assert(N == NumStaticCols || N == 0);
+    AD_CONTRACT_CHECK(this->isFirstIteration_);
+    // NOTE: The `mergeIsActive_` flag is deliberately not set, because nothing
+    // would reset it. A `clear()` while the returned input is still alive is
+    // prevented by the input's registration as an active reader of the
+    // `writer_`.
+    AD_CONTRACT_CHECK(!mergeIsActive_.load());
+    if (!this->transformAndPushLastBlock()) {
+      // The single block has been sorted in place, but is still in memory.
+      if (!this->currentBlock_.empty()) {
+        this->writer_.writeIdTable(std::move(this->currentBlock_).toDynamic());
+        this->resetCurrentBlock(false);
+      }
+    }
+    this->isFirstIteration_ = false;
+    return CompressedIdTableRunsInput<N>{this->writer_};
+  }
+
+  // The uncompressed size of a single block of a single column in the
+  // underlying file, which is needed to configure a merge of the runs that
+  // `finishAndGetRunsInput` returns.
+  const MemorySize& inputBlockSizePerColumn() const {
+    return this->writer_.blockSizeUncompressed();
+  }
+
+  // The number of columns of the sorted rows.
+  size_t numColumns() const { return this->numColumns_; }
+
   // The implementation of the type-erased interface. Push a complete block at
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
