@@ -32,7 +32,7 @@ Filter::Filter(QueryExecutionContext* qec,
       _expression{std::move(expression)} {
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
-      cancellationHandle_);
+      cancellationHandle());
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
@@ -157,7 +157,7 @@ CPP_template_def(int WIDTH,
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
-      cancellationHandle_, deadline_);
+      cancellationHandle(), deadline_);
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.

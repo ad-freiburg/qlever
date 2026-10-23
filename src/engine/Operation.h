@@ -67,10 +67,6 @@ class Operation {
   // `makeShared`), and data members are initialized in declaration order.
   QueryExecutionContext* _executionContext;
 
-  // Pointer to the cancellation handle of this operation.
-  SharedCancellationHandle cancellationHandle_ =
-      makeShared<SharedCancellationHandle::element_type>();
-
   std::chrono::steady_clock::time_point deadline_ =
       std::chrono::steady_clock::time_point::max();
 
@@ -288,8 +284,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
-  const SharedCancellationHandle& getCancellationHandle() const {
-    return cancellationHandle_;
+  // The cancellation handle of the query, which is stored in the
+  // `QueryExecutionContext`.
+  const SharedCancellationHandle& cancellationHandle() const {
+    return _executionContext->cancellationHandle();
   }
 
  private:
@@ -379,12 +377,6 @@ class Operation {
   std::shared_ptr<const Result> getResult(
       bool isRoot = false,
       ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
-
-  // Use the same cancellation handle for all children of an operation (= query
-  // plan rooted at that operation). As soon as one child is aborted, the whole
-  // operation is aborted out.
-  void recursivelySetCancellationHandle(
-      SharedCancellationHandle cancellationHandle);
 
   template <typename Rep, typename Period>
   void recursivelySetTimeConstraint(
@@ -631,8 +623,8 @@ class Operation {
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
-    cancellationHandle_->throwIfCancelled(location,
-                                          [this]() { return getDescriptor(); });
+    cancellationHandle()->throwIfCancelled(
+        location, [this]() { return getDescriptor(); });
   }
 
   std::chrono::milliseconds remainingTime() const;

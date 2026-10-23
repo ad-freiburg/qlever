@@ -373,14 +373,16 @@ auto Server::prepareOperation(
   // `processUpdate`).
   MakeQueryExecutionContext makeQec =
       [this, sharedMessageSender = std::move(sharedMessageSender),
-       resultPinning = std::move(resultPinning),
-       accessTokenOk](SharedIndexAndView indexAndViews) mutable {
+       resultPinning = std::move(resultPinning), accessTokenOk,
+       cancellationHandle](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
             std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
-            resultPinning.pinSubtrees_, resultPinning.pinResult_);
+            resultPinning.pinSubtrees_, resultPinning.pinResult_,
+            QueryExecutionContext::DisableCaching::FromRuntimeParameter,
+            cancellationHandle);
         configurePinnedResultWithName(
             std::move(resultPinning.pinResultWithName_), accessTokenOk, *qec);
         return qec;
@@ -1086,11 +1088,10 @@ Server::process<Server::StringBodyRequest, Server::MockSend&>(
 
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
-    ParsedQuery&& operation, QueryExecutionContext& qec,
-    ad_utility::SharedCancellationHandle handle, TimeLimit timeLimit,
+    ParsedQuery&& operation, QueryExecutionContext& qec, TimeLimit timeLimit,
     const ad_utility::Timer& requestTimer) const {
-  PlannedQuery plannedQuery = qlever().planQuery(
-      std::move(operation), qec, std::move(handle), timeLimit, requestTimer);
+  PlannedQuery plannedQuery =
+      qlever().planQuery(std::move(operation), qec, timeLimit, requestTimer);
 
   const auto& qet = plannedQuery.queryExecutionTree();
   const auto& queryPlanningInfo =
@@ -1269,10 +1270,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   // an explicit variable instead of directly `co_await`-ing it.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [this, &query, &requestTimer, &timeLimit, &qec,
-       &cancellationHandle]() -> std::optional<PlannedQuery> {
-        return this->planQuery(std::move(query), qec, cancellationHandle,
-                               timeLimit, requestTimer);
+      [this, &query, &requestTimer, &timeLimit,
+       &qec]() -> std::optional<PlannedQuery> {
+        return this->planQuery(std::move(query), qec, timeLimit, requestTimer);
       },
       cancellationHandle);
   plannedQuery = co_await std::move(coroutine);
@@ -1439,8 +1439,7 @@ CPP_template_def(typename RequestT, typename SendT)(
                 tracer.endTrace("updateMetadata");
                 tracer.beginTrace("planning");
                 plannedUpdate =
-                    planQuery(std::move(update), qec, cancellationHandle,
-                              timeLimit, requestTimer);
+                    planQuery(std::move(update), qec, timeLimit, requestTimer);
                 tracer.endTrace("planning");
                 tracer.beginTrace("execution");
                 // Update the delta triples.
