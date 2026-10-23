@@ -19,11 +19,15 @@ namespace detail {
 
 // If `child` is a variable by which the input of the `context` is sorted,
 // return the set of rows where it is bound to an `Id` of one of the
-// `datatypes` (or of none of them if `applyComplement` is set). The `Id`s of
-// each datatype are adjacent in the sorted input, so this only needs a few
-// binary searches. Otherwise, return `std::nullopt`. This is also the case if
-// the input contains UNDEF but `datatypes` doesn't, because then the result for
-// UNDEF is UNDEF, which a `SetOfIntervals` can't represent.
+// `datatypes` (or of none of them if `applyComplement` is set), otherwise
+// return `std::nullopt`.
+//
+// NOTE 1: The `Id`s of each datatype are adjacent in the sorted input, so this
+// only needs one binary search per datatype.
+//
+// NOTE 2: The result is also `std::nullopt` if the input contains UNDEF but
+// `datatypes` doesn't, because then the result for UNDEF is UNDEF, which a
+// `SetOfIntervals` can't represent.
 static std::optional<ad_utility::SetOfIntervals>
 evaluateDatatypesWithBinarySearch(const SparqlExpression& child,
                                   EvaluationContext* context,

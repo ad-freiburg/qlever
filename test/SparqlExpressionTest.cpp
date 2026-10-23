@@ -1779,7 +1779,9 @@ TEST(SparqlExpression, isSomethingFunctions) {
   EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
 }
 
-// ____________________________________________________________________________
+// Test that `isBlank`, `isNumeric`, `ql:isGeoPoint` and `BOUND` are evaluated
+// with binary search (result `SetOfIntervals`) if the input is sorted by their
+// argument, and row by row otherwise.
 TEST(SparqlExpression, isSomethingFunctionsOnSortedInput) {
   using SetOfIntervals = ad_utility::SetOfIntervals;
   Variable var{"?x"};
