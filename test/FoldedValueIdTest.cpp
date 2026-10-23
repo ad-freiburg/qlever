@@ -540,6 +540,51 @@ TEST_F(ValueIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<ValueId>);
 }
 
+// Test that `incremented` returns the next bit pattern, that is, the smallest
+// `Id` that is greater than the original one, with the overflow of the payload
+// carrying into the datatype.
+TEST_F(ValueIdTest, incremented) {
+  // Without an overflow, only the payload changes.
+  EXPECT_EQ(makeVocabId(17).incremented(), makeVocabId(18));
+  EXPECT_EQ(makeVocabId(17).incremented().getDatatype(), Datatype::VocabIndex);
+  EXPECT_EQ(makeSecondaryVocabId(0).incremented(), makeSecondaryVocabId(1));
+  EXPECT_EQ(makeBlankNodeId(0).incremented(), makeBlankNodeId(1));
+  EXPECT_EQ(ValueId::makeFromInt(41).incremented(), ValueId::makeFromInt(42));
+
+  // The `Id` after UNDEF has the datatype `Undefined` too, but it is not UNDEF
+  // (its payload is 1). The join algorithms use it as the end of the range of
+  // the UNDEF values, see `findSmallerUndefRanges...`.
+  const auto afterUndefined = ValueId::makeUndefined().incremented();
+  EXPECT_EQ(afterUndefined.getDatatype(), Datatype::Undefined);
+  EXPECT_FALSE(afterUndefined.isUndefined());
+  EXPECT_EQ(afterUndefined.getBits(), 1u);
+
+  // The largest payload of a datatype carries into the next datatype, with the
+  // payload 0.
+  const auto carried = makeVocabId(ValueId::maxIndex).incremented();
+  EXPECT_EQ(static_cast<size_t>(carried.getDatatype()),
+            static_cast<size_t>(Datatype::VocabIndex) + 1);
+  EXPECT_EQ(carried.getBits(), (static_cast<ValueId::T>(Datatype::VocabIndex) +
+                                1) << ValueId::numDataBits);
+
+  // The result is the smallest greater `Id`: Its bits are the successor of the
+  // bits, so no other `Id` lies between the two.
+  for (const ValueId id :
+       {ValueId::makeUndefined(), ValueId::makeFromBool(true),
+        ValueId::makeFromInt(-42), ValueId::makeFromDouble(1.5), makeVocabId(5),
+        makeTextRecordId(3), makeWordVocabId(4), makeBlankNodeId(7),
+        makeSecondaryVocabId(9), ValueId::makeFromEncodedVal(11)}) {
+    SCOPED_TRACE(id);
+    const auto next = id.incremented();
+    EXPECT_EQ(next.getBits(), id.getBits() + 1);
+    EXPECT_LT(id, next);
+  }
+
+  // There is no greater `Id` than the maximum. The increment wraps around, like
+  // the integer of the bits.
+  EXPECT_EQ(ValueId::max().incremented().getBits(), ValueId::min().getBits());
+}
+
 // Pin down that the `ValueId` functions that can be evaluated at compile time
 // actually are `constexpr`. Note that several of them contain an
 // `AD_CONTRACT_CHECK`/`AD_EXPENSIVE_CHECK`, which is only possible because
@@ -566,6 +611,9 @@ static_assert(
         .getSecondaryVocabIndex() == SecondaryVocabIndex::make(17));
 static_assert(ValueId::makeFromBool(true).getBoolLiteral() == "true");
 static_assert(ValueId::makeBoolFromZeroOrOne(true).getBoolLiteral() == "1");
+static_assert(ValueId::makeFromVocabIndex(VocabIndex::make(17))
+                  .incremented()
+                  .getVocabIndex() == VocabIndex::make(18));
 #ifndef QLEVER_CPP_17
 // `getInt` performs a signed left shift, which is only a constant expression
 // since C++20.
