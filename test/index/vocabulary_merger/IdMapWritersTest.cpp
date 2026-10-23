@@ -7,11 +7,15 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <future>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
@@ -19,6 +23,8 @@
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/IdMapWriters.h"
 #include "index/vocabulary_merger/Segment.h"
+#include "util/AsioHelpers.h"
+#include "util/GlobalExecutor.h"
 
 using namespace ad_utility::vocabulary_merger;
 using namespace ad_utility::vocabulary_merger::detail;
@@ -88,4 +94,93 @@ TEST(IdMapWriters, numGroupsIsBoundedByNumMaps) {
   EXPECT_EQ(writers.numGroups(), 3u);
   IdMapWriters oneGroup{partialVocabularyIdMapFilenames(basename, 3), 0};
   EXPECT_EQ(oneGroup.numGroups(), 1u);
+}
+
+// _____________________________________________________________________________
+// Test that a segment must have the entries of exactly as many partial
+// vocabularies as there are maps.
+TEST(IdMapWriters, writeChecksNumPartialVocabularies) {
+  const std::string basename = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 3);
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  auto segment = makeSegmentOfBlocks(
+      makeMergedBlocks({{{"\"a\"", true, 4, 0}}}), 5, writer);
+  IdMapWriters writers{partialVocabularyIdMapFilenames(basename, 3), 1};
+  EXPECT_ANY_THROW(writers.write(segment, IdConverterForSegment{}));
+  writers.finish();
+}
+
+// _____________________________________________________________________________
+// Test that once a task has failed, the tasks of the remaining segments as well
+// as further calls to `write` are skipped, and that `finish()` rethrows the
+// exception of the failed task.
+TEST(IdMapWriters, failedTaskSkipsRemainingSegments) {
+  const std::string basename = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 1);
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  auto segment0 = makeSegmentOfBlocks(
+      makeMergedBlocks({{{"\"a\"", true, 0, 0}}}), 1, writer);
+  auto segment1 = makeSegmentOfBlocks(
+      makeMergedBlocks({{{"\"b\"", true, 0, 1}}}), 1, writer);
+  // A converter that makes every global index overflow, such that the task
+  // that writes a segment with it throws.
+  IdConverterForSegment overflowingConverter;
+  overflowingConverter.numWordsInPreviousSegments_.fill(
+      SegmentLocalId::maxIndex + 1);
+
+  IdMapWriters writers{partialVocabularyIdMapFilenames(basename, 1), 1};
+
+  // Block all the threads of the global executor, such that the tasks of both
+  // segments are queued before the first of them runs. Otherwise the second
+  // `write` might already see the failure and not queue its task at all.
+  const size_t numThreads = ad_utility::globalExecutorNumThreads();
+  std::promise<void> release;
+  std::shared_future<void> released = release.get_future().share();
+  std::atomic<size_t> numBlocked = 0;
+  std::promise<void> allBlocked;
+  std::vector<std::future<void>> blockers;
+  for (size_t i = 0; i < numThreads; ++i) {
+    blockers.push_back(ad_utility::runFunctionOnExecutor(
+        ad_utility::globalExecutor(),
+        [&numBlocked, &allBlocked, released, numThreads]() {
+          if (++numBlocked == numThreads) {
+            allBlocked.set_value();
+          }
+          released.wait();
+        },
+        ad_utility::net::use_future));
+  }
+  bool isReleased = false;
+  auto releaseBlockers = [&]() {
+    if (!isReleased) {
+      isReleased = true;
+      release.set_value();
+    }
+    for (auto& blocker : blockers) {
+      blocker.get();
+    }
+    blockers.clear();
+  };
+  absl::Cleanup releaseOnError = releaseBlockers;
+  allBlocked.get_future().wait();
+
+  // The task of `segment0` fails, so the one of `segment1` must be skipped.
+  writers.write(segment0, overflowingConverter);
+  writers.write(segment1, IdConverterForSegment{});
+  EXPECT_FALSE(writers.hasFailed());
+  releaseBlockers();
+
+  // Wait until the failure has been observed. A further `write` then doesn't
+  // write anything either.
+  while (!writers.hasFailed()) {
+    std::this_thread::yield();
+  }
+  writers.write(segment1, IdConverterForSegment{});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writers.finish(), ::testing::HasSubstr("SegmentLocalId::maxIndex"));
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]), ::testing::IsEmpty());
 }
