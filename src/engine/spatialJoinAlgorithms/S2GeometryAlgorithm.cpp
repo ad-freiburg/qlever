@@ -78,7 +78,7 @@ Result S2GeometryAlgorithm::run() {
       auto rowLeft = indexOfRight ? searchRow : indexRow;
       auto rowRight = indexOfRight ? indexRow : searchRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
-                          Id::makeFromDouble(dist));
+                          kilometersToDistanceId(dist));
     }
   }
 

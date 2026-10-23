@@ -91,6 +91,8 @@ void DeltaTriples::clear() {
   };
   clearImpl(triplesSetsNormal_, locatedTriples_->getLocatedTriples<false>());
   clearImpl(triplesSetsInternal_, locatedTriples_->getLocatedTriples<true>());
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
@@ -790,8 +792,12 @@ void DeltaTriples::addFromSnapshotDiff(
   tracer.beginTrace("consolidate");
   consolidateAll();
   tracer.endTrace("consolidate");
-  // Update the index of the located triples to mark that they have changed.
-  locatedTriples_->index_++;
+  // Continue the index of `newState` (the snapshot of the old index), so that
+  // the query cache never confuses results that were computed for the old
+  // index with results for this one. This instance belongs to a freshly
+  // rebuilt index, so its own index has never been increased beyond that.
+  AD_CORRECTNESS_CHECK(newState.index_ >= locatedTriples_->index_);
+  locatedTriples_->index_ = newState.index_ + 1;
 }
 
 // _____________________________________________________________________________
