@@ -328,12 +328,14 @@ class SpatialJoinVarColParamTest
                                       : std::nullopt,
                                   std::nullopt};
     }
+    SpatialJoinConfiguration config{
+        task, Variable{"?point1"}, Variable{"?point2"}, dist, pv, alg};
+    if (addDist) {
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
+    }
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
-            qec,
-            SpatialJoinConfiguration{task, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv, alg},
-            std::nullopt, std::nullopt);
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, std::move(config),
+                                                   std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
@@ -1258,12 +1260,12 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       auto rightChild =
           buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
+      SpatialJoinConfiguration config{MaxDistanceConfig{10000000}, subj, obj,
+                                      Variable{"?distanceForTesting"}};
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(
-              qec,
-              SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj,
-                                       Variable{"?distanceForTesting"}},
-              std::nullopt, std::nullopt);
+              qec, std::move(config), std::nullopt, std::nullopt);
 
       // add children and test, that multiplicity is a dummy return before all
       // children are added
