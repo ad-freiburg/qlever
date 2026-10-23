@@ -80,8 +80,8 @@ std::optional<GeoPoint> SpatialJoinAlgorithmBase::getPoint(
 
 // ____________________________________________________________________________
 void SpatialJoinAlgorithmBase::addSkippedRowsWarning(
-    std::string_view reason, size_t numSkippedLeft,
-    size_t numSkippedRight) const {
+    size_t numSkippedLeft, size_t numSkippedRight,
+    std::string_view reason) const {
   if (!spatialJoin_.has_value()) {
     return;
   }

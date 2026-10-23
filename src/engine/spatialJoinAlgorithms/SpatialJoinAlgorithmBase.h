@@ -60,10 +60,13 @@ class SpatialJoinAlgorithmBase {
                                           size_t row, ColumnIndex col);
 
   // Add a warning to the `SpatialJoin` operation if rows of the left and/or
-  // right input were skipped. The `reason` describes the skipped values, e.g.
-  // "values that are not points".
-  void addSkippedRowsWarning(std::string_view reason, size_t numSkippedLeft,
-                             size_t numSkippedRight) const;
+  // right input were skipped. The `reason` describes the skipped values, the
+  // default fits all algorithms that parse WKT literals, the `s2` algorithm
+  // passes "values that are not points".
+  void addSkippedRowsWarning(
+      size_t numSkippedLeft, size_t numSkippedRight,
+      std::string_view reason =
+          "invalid or unsupported geometry literals") const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;

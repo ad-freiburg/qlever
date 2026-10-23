@@ -87,9 +87,9 @@ Result S2GeometryAlgorithm::run() {
     }
   }
 
-  addSkippedRowsWarning("values that are not points",
-                        indexOfRight ? numSkippedSearch : numSkippedIndex,
-                        indexOfRight ? numSkippedIndex : numSkippedSearch);
+  addSkippedRowsWarning(indexOfRight ? numSkippedSearch : numSkippedIndex,
+                        indexOfRight ? numSkippedIndex : numSkippedSearch,
+                        "values that are not points");
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }

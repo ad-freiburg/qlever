@@ -340,8 +340,7 @@ Result BoundingBoxAlgorithm::run() {
       }
     });
   }
-  addSkippedRowsWarning("invalid or unsupported geometry literals",
-                        leftResSmaller ? numSkippedSmaller : numSkippedOther,
+  addSkippedRowsWarning(leftResSmaller ? numSkippedSmaller : numSkippedOther,
                         leftResSmaller ? numSkippedOther : numSkippedSmaller);
   auto resTable =
       Result(std::move(result), std::vector<ColumnIndex>{},

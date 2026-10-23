@@ -349,8 +349,7 @@ Result LibspatialjoinAlgorithm::run() {
         "num-geoms-dropped-by-prefilter", droppedLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
                                                   invalidSmall + invalidLarge);
-    addSkippedRowsWarning("invalid or unsupported geometry literals",
-                          smallerIsRight ? invalidLarge : invalidSmall,
+    addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
                           smallerIsRight ? invalidSmall : invalidLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,

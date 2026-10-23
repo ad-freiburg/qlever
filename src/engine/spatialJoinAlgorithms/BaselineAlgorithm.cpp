@@ -95,8 +95,7 @@ Result BaselineAlgorithm::run() {
       }
     }
   }
-  addSkippedRowsWarning("invalid or unsupported geometry literals",
-                        numSkippedLeft, numSkippedRight);
+  addSkippedRowsWarning(numSkippedLeft, numSkippedRight);
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 #endif
