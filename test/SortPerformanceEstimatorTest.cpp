@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "engine/SortPerformanceEstimator.h"
+#include "util/IndexTestHelpers.h"
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
@@ -18,8 +19,9 @@ using namespace ad_utility::memory_literals;
 TEST(SortPerformanceEstimator, TestManyEstimates) {
   // only allow the test to use 1 Gig of RAM
   auto allocator = qlever::makeAllocatorWithLimit<Id>(1_GB);
-  auto t =
-      SortPerformanceEstimator{allocator, std::numeric_limits<size_t>::max()};
+  const SortConfig sortConfig{ad_utility::testing::multiThreadExecutor(), 3};
+  auto t = SortPerformanceEstimator{
+      allocator, std::numeric_limits<size_t>::max(), sortConfig};
 
   ad_utility::SlowRandomIntGenerator<int> dice(1, 6);
 
@@ -36,7 +38,7 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
         using ad_utility::Timer;
         Timer::Duration measurement =
             SortPerformanceEstimator::measureSortingTime(i, numColumns,
-                                                         allocator);
+                                                         allocator, sortConfig);
         Timer::Duration estimate = t.estimatedSortTime(i, numColumns);
         // Only report the measurement in the case of a failure.
         auto message = [&i, &numColumns, &measurement, &estimate]() {

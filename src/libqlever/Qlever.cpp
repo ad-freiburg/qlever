@@ -57,8 +57,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                Allocator<Id> allocator, qlever::Executor executor)
     : allocator_{std::move(allocator)},
       executor_{std::move(executor)},
-      indexAndViews_{std::make_shared<IndexAndViews>(
-          Index{allocator_}, MaterializedViewsManager{})},
+      indexAndViews_{std::allocate_shared<IndexAndViews>(
+          allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -103,11 +103,15 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
   // Estimate the cost of sorting operations (needed for query planning), unless
-  // the user disabled this (potentially expensive) step.
+  // the user disabled this (potentially expensive) step. The samples are sorted
+  // like the sorts of the queries themselves (see `IdTableUtils::sort` and
+  // `QueryExecutionContext::makeSortConfig`).
   if (config.computeSortPerformanceEstimators_) {
     sortPerformanceEstimator_.computeEstimatesExpensively(
-        allocator_, index.numTriples().normalAndInternal_() *
-                        PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+        allocator_,
+        index.numTriples().normalAndInternal_() *
+            PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100,
+        QueryExecutionContext::makeSortConfig(executor_));
   }
 
   // Preload materialized views as requested by the user.
@@ -655,8 +659,8 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
   auto mapping =
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
                          ownedBlocks, handle, executor_, logFileName);
-  auto indexAndViews = std::make_shared<IndexAndViews>(
-      Index{allocator()}, MaterializedViewsManager{});
+  auto indexAndViews = std::allocate_shared<IndexAndViews>(
+      allocator(), Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
   newIndex.usePatterns() = index.usePatterns();
   newIndex.loadAllPermutations() = index.loadAllPermutations();

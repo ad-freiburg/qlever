@@ -356,7 +356,8 @@ std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed) {
   if (parsed.isAggregatingQuery()) {
     return "The view's query aggregates (GROUP BY, either explicit or "
-           "implicit via an aggregate expression in the SELECT clause)";
+           "implicit via an aggregate expression in the SELECT, HAVING, or "
+           "ORDER BY clause)";
   }
   // Without `GROUP BY`, a trailing `VALUES` clause is part of
   // `_rootGraphPattern`, see `ParsedQuery::addSolutionModifiers`.

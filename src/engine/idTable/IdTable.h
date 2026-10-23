@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <initializer_list>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
@@ -1022,13 +1024,35 @@ inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
 
-// Type aliases for the columns of an `IdTable`: a mutable view, a read-only
-// view, and an owning column. Currently just aliases for `ql::span<Id>`,
-// `ql::span<const Id>` and `std::vector<Id>`; a later commit switches them to
-// storage-efficient split-column types, once `IdTable` stores the payload and
-// datatype of each `Id` in separate arrays.
+// Check that the un/restricted RowReferences are specialized via isProxy (see
+// `IdTableRow.h`), for example for the dynamic and the static tables and for
+// views.
+static_assert(qlever::isProxy<IdTable::row_reference>);
+static_assert(qlever::isProxy<IdTable::const_row_reference>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference>);
+
+static_assert(qlever::isProxy<IdTable::row_reference::Base>);
+static_assert(qlever::isProxy<IdTable::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableStatic<3>::row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<3>::const_row_reference::Base>);
+
+// Rows, tables and views are no proxies.
+static_assert(!qlever::isProxy<IdTable::row_type>);
+static_assert(!qlever::isProxy<IdTable>);
+static_assert(!qlever::isProxy<IdTableView<3>>);
+
+// Type aliases for the columns of an `IdTable` (a mutable view, a read-only
+// view, and an owning column) and for the references to a single element (a
+// mutable and a const one). Currently just aliases for `ql::span<Id>`,
+// `ql::span<const Id>`, `std::vector<Id>`, `Id&` and `const Id&`; a later
+// commit switches them to storage-efficient split-column types and proxies,
+// once `IdTable` stores the payload and datatype of each `Id` in separate
+// arrays.
 using IdColumnRef = ql::span<Id>;
 using ConstIdColumnRef = ql::span<const Id>;
 using IdColumn = std::vector<Id>;
+using IdRef = Id&;
+using ConstIdRef = const Id&;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

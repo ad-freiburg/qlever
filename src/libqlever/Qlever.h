@@ -375,6 +375,11 @@ class Qlever {
   // before it can answer queries. The memory limit from `config` is enforced
   // and cache eviction is wired into the allocator. The queries and index
   // rebuilds of this instance run their parallel work on the `executor`.
+  //
+  // NOTE: Neither this constructor nor the computation of a query must be
+  // called from a thread of the `executor`, because they block while waiting
+  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`, which
+  // also run when the sort performance estimates are computed here).
   explicit Qlever(const EngineConfig& config, bool skipLoading = false,
                   qlever::Executor executor = ad_utility::globalExecutor());
 

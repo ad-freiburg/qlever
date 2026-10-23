@@ -39,7 +39,9 @@ class BasicIdColumnView {
   using PayloadPointer =
       std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
   using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
-  using Reference = BasicIdRef<IsConst>;
+  // The two reference types, see `BasicIdColumnIterator`.
+  using reference = BasicIdRef<IsConst>;
+  using reference_restricted = typename BasicIdRef<IsConst>::Base;
   using value_type = Id;
   using iterator = BasicIdColumnIterator<IsConst>;
   using const_iterator = BasicIdColumnIterator<true>;
@@ -83,19 +85,19 @@ class BasicIdColumnView {
 
   // Like `ql::span` and the legacy `IdTable`, only `at()` is always
   // bounds-checked, `operator[]` only in builds with expensive checks.
-  [[nodiscard]] Reference operator[](size_t i) const {
+  [[nodiscard]] reference_restricted operator[](size_t i) const {
     AD_EXPENSIVE_CHECK(i < size_);
     return {payloads_ + i, datatypes_ + i};
   }
-  [[nodiscard]] Reference at(size_t i) const {
+  [[nodiscard]] reference_restricted at(size_t i) const {
     AD_CONTRACT_CHECK(i < size_);
     return (*this)[i];
   }
-  [[nodiscard]] Reference front() const {
+  [[nodiscard]] reference_restricted front() const {
     AD_CONTRACT_CHECK(!empty());
     return (*this)[0];
   }
-  [[nodiscard]] Reference back() const {
+  [[nodiscard]] reference_restricted back() const {
     AD_CONTRACT_CHECK(!empty());
     return (*this)[size_ - 1];
   }
