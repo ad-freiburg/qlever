@@ -3104,6 +3104,8 @@ ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeDatatypeExpression);
   } else if (functionName == "langmatches") {
     return createBinary(&makeLangMatchesExpression);
+  } else if (functionName == "sameterm") {
+    return createBinary(&makeSameTermExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));

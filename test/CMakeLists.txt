@@ -502,6 +502,8 @@ addLinkAndDiscoverTest(ValuesForTestingTest index)
 
 addLinkAndDiscoverTest(ExportQueryExecutionTreesTest index engine sparqlParser)
 
+addLinkAndDiscoverTest(SameTermQueryTest index engine sparqlParser)
+
 addLinkAndDiscoverTest(AggregateExpressionTest sparqlParser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
