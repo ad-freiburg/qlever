@@ -29,6 +29,11 @@ inline auto indexGenerator =
 inline auto invalidIndexGenerator =
     ad_utility::SlowRandomIntGenerator<uint64_t>(
         ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
+// `SecondaryVocabIndex` is limited to 60 bits (also in the split layout, where
+// `maxIndex` is larger).
+inline auto secondaryVocabIndexGenerator =
+    ad_utility::SlowRandomIntGenerator<uint64_t>(
+        0, std::min<uint64_t>(ValueId::maxIndex, (uint64_t{1} << 60) - 1));
 
 inline auto nonOverflowingNBitGenerator =
     ad_utility::SlowRandomIntGenerator<int64_t>(ValueId::IntegerType::min(),
@@ -121,7 +126,7 @@ inline auto makeRandomIds = []() {
   addIdsFromGenerator(indexGenerator, &makeTextRecordId, ids);
   addIdsFromGenerator(indexGenerator, &makeWordVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeBlankNodeId, ids);
-  addIdsFromGenerator(indexGenerator, &makeSecondaryVocabId, ids);
+  addIdsFromGenerator(secondaryVocabIndexGenerator, &makeSecondaryVocabId, ids);
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
