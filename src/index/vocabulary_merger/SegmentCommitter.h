@@ -14,11 +14,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/Segment.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
@@ -39,6 +39,10 @@ struct SegmentPiece {
   uint8_t sub_;
   size_t firstWord_;
   size_t numWords_;
+
+  // Return the words of the sub-vocabulary of the segment that this piece
+  // belongs to.
+  const WordBlock& words() const { return segment_->wordBlocks_[sub_]; }
 };
 
 // The pieces of consecutive segments that together form one block of a
@@ -60,13 +64,11 @@ inline WordBlock gatherWords(const BlockPieces& block) {
   result.firstPosition_ = block.firstPosition_;
   result.isExternal_.reserve(block.numWords_);
   if (!block.pieces_.empty()) {
-    result.payloadSize_ = block.pieces_.front()
-                              .segment_->wordBlocks_[block.pieces_.front().sub_]
-                              .payloadSize_;
+    result.payloadSize_ = block.pieces_.front().words().payloadSize_;
     result.payload_.reserve(block.numWords_ * result.payloadSize_);
   }
   for (const SegmentPiece& piece : block.pieces_) {
-    const WordBlock& words = piece.segment_->wordBlocks_[piece.sub_];
+    const WordBlock& words = piece.words();
     for (size_t i = piece.firstWord_; i < piece.firstWord_ + piece.numWords_;
          ++i) {
       result.push(words.word(i), words.isExternal_[i], words.payload(i));
@@ -91,7 +93,7 @@ class SegmentCommitter {
  public:
   // The sink for the blocks of a sub-vocabulary, called with the index of the
   // sub-vocabulary and the block, in the order of the blocks.
-  using BlockSink = std::function<void(uint8_t sub, BlockPieces block)>;
+  using BlockSink = absl::AnyInvocable<void(uint8_t sub, BlockPieces block)>;
 
  private:
   // The block size of each sub-vocabulary.

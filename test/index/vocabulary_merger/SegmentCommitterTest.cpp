@@ -60,7 +60,6 @@ std::vector<std::pair<std::string, bool>> wordsOf(const BlockPieces& block) {
 // last block being partial), returns the ID converter of each segment, and
 // accumulates the metadata (the number of words, the blank nodes, the prefix
 // ranges and the special IDs shifted by the bases).
-// _____________________________________________________________________________
 TEST(SegmentCommitter, commitSegments) {
   SingleVocabularyParallelWriter writer{std::make_unique<SmallBlockWriter>()};
 
