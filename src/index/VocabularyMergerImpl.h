@@ -85,17 +85,27 @@ template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, C& wordCallback,
                      ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes)
+                     const ad_utility::RegexSet& blankNodeIriRegexes,
+                     std::function<uint64_t(std::string_view)> geoSortKeyFn)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   using detail::InputWord;
   using detail::MergedBlock;
   using detail::MergedWord;
   using detail::QueueWord;
-  // Return true iff `p1` is smaller than `p2` according to the order of the
-  // IRI or literal.
-  auto lessThan = [&comparator](const InputWord& p1, const InputWord& p2) {
-    return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
+  // The order of the merged vocabulary: by geo sort key first (all keys are 0
+  // without a geo cell grid, see `geoSortKeyFn`), then by `comparator`.
+  auto keyedLessThan = [&comparator](uint64_t key1, std::string_view word1,
+                                     uint64_t key2, std::string_view word2) {
+    if (key1 != key2) {
+      return key1 < key2;
+    }
+    return comparator(word1, word2);
+  };
+  // Return true iff `p1` is smaller than `p2` in this order.
+  auto lessThan = [&keyedLessThan](const InputWord& p1, const InputWord& p2) {
+    return keyedLessThan(p1.geoSortKey_, p1.iriOrLiteral(), p2.geoSortKey_,
+                         p2.iriOrLiteral());
   };
   // The index of the partial vocabulary that a merged word comes from is
   // stored in 32 bits (see `detail::InputWord` and
@@ -112,7 +122,8 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   // the merged blocks in the order of the vocabulary. The blocks stay in
   // memory, and a chunk keeps its slot until this thread has taken its output,
   // see `vocabularyMergeOptions`.
-  PartialVocabularyRunsInput input{basename, numPartialVocabularies};
+  PartialVocabularyRunsInput input{basename, numPartialVocabularies,
+                                   std::move(geoSortKeyFn)};
   const auto inputStatistics = input.statistics();
   auto options = vocabularyMergeOptions(numPartialVocabularies,
                                         inputStatistics.numBytes_, memoryToUse);
@@ -162,11 +173,11 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
         currentWords.emplace_back(
             TripleComponentWithIndex{std::string{word.iriOrLiteral()},
                                      word.isExternal(), localIndex},
-            partialFileId);
+            partialFileId, word.geoSortKey_);
       }
     }
     block.clear();
-    batchBuilder.addMergedWords(std::move(currentWords), comparator,
+    batchBuilder.addMergedWords(std::move(currentWords), keyedLessThan,
                                 batchCallback);
   }
   // Hand the remaining words (including the one that is still held back) to
@@ -271,13 +282,22 @@ inline void writePartialVocabularyToFile(const ItemVec& entries,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn) {
   ItemVec entries;
   entries.resize(map.map_.size());
   using T = ItemVec::value_type;
   ql::ranges::transform(map.map_, entries.begin(),
-                        [](auto& el) -> T { return {el.first, el.second}; });
+                        [&geoSortKeyFn](auto& el) -> T {
+                          return {el.first, el.second, geoSortKeyFn(el.first)};
+                        });
   return entries;
+}
+
+// _____________________________________________________________________________
+inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+  return vocabMapsToVector(map, [](std::string_view) { return uint64_t{0}; });
 }
 
 // _____________________________________________________________________

@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -65,6 +66,10 @@ struct InputWord {
   uint32_t partialFileId_ = 0;
   // Whether the word is to be externalized.
   bool isExternal_ = false;
+  // The geo sort key of the word, which orders the merge before the word
+  // itself (0 for all words without a geo cell grid). It is computed when the
+  // word is read, see `PartialVocabularyRunsInput`.
+  uint64_t geoSortKey_ = 0;
 
   [[nodiscard]] bool isExternal() const { return isExternal_; }
   [[nodiscard]] std::string_view iriOrLiteral() const { return word_; }
@@ -108,16 +113,21 @@ struct MergedWord {
   uint32_t numOccurrences_ = 0;
   // Whether the word is to be externalized (in any of its occurrences).
   bool isExternal_ = false;
+  // The geo sort key of the word (see `InputWord`), which is the same for all
+  // its occurrences, since it is a function of the word.
+  uint64_t geoSortKey_ = 0;
 
   // Construct a merged word with a single occurrence so far: the `word` (which
-  // has to point into the storage of the block), its external flag, and the
+  // has to point into the storage of the block), its external flag, the
   // position `occurrencesOffset` of that occurrence in the `occurrences_` of
-  // the block.
-  MergedWord(std::string_view word, bool isExternal, uint64_t occurrencesOffset)
+  // the block, and its geo sort key.
+  MergedWord(std::string_view word, bool isExternal, uint64_t occurrencesOffset,
+             uint64_t geoSortKey)
       : word_{word},
         occurrencesOffset_{occurrencesOffset},
         numOccurrences_{1},
-        isExternal_{isExternal} {}
+        isExternal_{isExternal},
+        geoSortKey_{geoSortKey} {}
 
   [[nodiscard]] bool& isExternal() { return isExternal_; }
   [[nodiscard]] const bool& isExternal() const { return isExternal_; }
@@ -126,10 +136,10 @@ struct MergedWord {
 
 // The words are stored in huge vectors (one entry per occurrence of a word in
 // a partial vocabulary), so an accidental growth of these structs would cost
-// real memory. Both consist of a `string_view`, a `uint64_t`, a `uint32_t` and
-// a `bool`, which pack into 32 bytes.
-static_assert(sizeof(InputWord) == 32);
-static_assert(sizeof(MergedWord) == 32);
+// real memory. Both consist of a `string_view`, two `uint64_t`s (one of them
+// the geo sort key), a `uint32_t` and a `bool`, which pack into 40 bytes.
+static_assert(sizeof(InputWord) == 40);
+static_assert(sizeof(MergedWord) == 40);
 
 // A thread-safe pool of the buffers that the blocks below store their bytes
 // or words in, so that the merge reuses them instead of allocating and freeing
@@ -273,9 +283,12 @@ class InputBlock : public BlockOfWords<InputWord>, public ad_utility::NoCopy {
   // `PartialVocabularyWriter` writes (see `InputWord::fromZeroCopyDeserializer`
   // above). The words are parsed in place, nothing is copied. The `bytes` go
   // back to the `pools` (which must not be `nullptr`) when the block is
-  // destroyed.
-  InputBlock(Buffer bytes, size_t numWords, uint32_t partialFileId,
-             std::shared_ptr<BufferPools> pools)
+  // destroyed. The `geoSortKeyFn` (see `PartialVocabularyRunsInput`), if not
+  // empty, computes the geo sort key of each word.
+  InputBlock(
+      Buffer bytes, size_t numWords, uint32_t partialFileId,
+      std::shared_ptr<BufferPools> pools,
+      const std::function<uint64_t(std::string_view)>& geoSortKeyFn = nullptr)
       : bytes_{std::move(bytes),
                GiveBackToPool{checkedBufferPools(std::move(pools))}} {
     words().reserve(numWords);
@@ -284,6 +297,9 @@ class InputBlock : public BlockOfWords<InputWord>, public ad_utility::NoCopy {
     for (size_t i = 0; i < numWords; ++i) {
       words().push_back(
           InputWord::fromZeroCopyDeserializer(serializer, partialFileId));
+      if (geoSortKeyFn) {
+        words().back().geoSortKey_ = geoSortKeyFn(words().back().word_);
+      }
     }
     AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == bytes_->size(),
                          "Trailing bytes in a block of a partial vocabulary");
@@ -377,7 +393,7 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
     }
     occurrences_.push_back(word.occurrence());
     words().emplace_back(store(word.iriOrLiteral()), word.isExternal(),
-                         occurrences_.size() - 1);
+                         occurrences_.size() - 1, word.geoSortKey_);
   }
 
   // The occurrences of a `word` of this block.
