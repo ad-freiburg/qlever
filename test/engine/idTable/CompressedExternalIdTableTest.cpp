@@ -277,7 +277,7 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
 // are pushed (the sorts of the blocks) and in the merge phase.
 TEST(CompressedExternalIdTable, sorterIsCancellable) {
   auto test = [](bool cancelBeforePushing) {
-    std::string filename = "idTableCompressedSorter.cancellation.dat";
+    std::string filename = gtestCurrentTestName();
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
         filename,
@@ -305,6 +305,22 @@ TEST(CompressedExternalIdTable, sorterIsCancellable) {
   };
   test(true);
   test(false);
+}
+
+// The cancellation handle of the sorter must not be `nullptr`.
+TEST(CompressedExternalIdTable, sorterRequiresCancellationHandle) {
+  auto makeSorter = []() {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        gtestCurrentTestName(),
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        nullptr};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeSorter(), ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
 // Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.

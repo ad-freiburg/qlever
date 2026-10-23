@@ -161,17 +161,6 @@ struct EvaluationContext {
                     LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle);
 
-  /// Overload that accepts a materialized `IdTable` and converts it to a view.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnMap& variableToColumnMap,
-                    const IdTable& inputTable,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle)
-      : EvaluationContext(qec, variableToColumnMap,
-                          inputTable.asStaticView<0>(), allocator, localVocab,
-                          std::move(cancellationHandle)) {}
-
   bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.
   [[nodiscard]] size_t size() const;

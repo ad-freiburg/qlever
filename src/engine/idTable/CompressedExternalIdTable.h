@@ -895,8 +895,8 @@ CPP_class_template(size_t NumStaticCols,
   }
 
   // Asynchronously compress the `block` and write it to the underlying
-  // `writer_`. Before compressing, apply the transformation that is specified
-  // by the `Impl` via the `transformBlock` function.
+  // `writer_`. Before compressing, apply the `blockTransformation_` (e.g. the
+  // `BlockSorter` of the `CompressedExternalIdTableSorter`).
   //
   // Return the block of the *previous* such task (empty, but with its memory
   // still allocated), or `std::nullopt` if there was no previous task. Reusing
@@ -1495,16 +1495,6 @@ class CompressedExternalIdTableSorter
                 << this->memory_.asString()
                 << ". Increasing the memory limit will speed up the merge."
                 << std::endl;
-  }
-
-  // _____________________________________________________________
-  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockRange(block, comparator_, cancellationHandle_);
-  }
-
-  // A function with this name is needed by the mixin base class.
-  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockInPlace(block);
   }
 };
 }  // namespace ad_utility
