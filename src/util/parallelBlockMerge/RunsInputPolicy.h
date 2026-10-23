@@ -145,6 +145,11 @@ CPP_requires(
 // blocks are of a different type than its input blocks (for example because the
 // merge combines equal elements, see `appendToBlock`) declares that type as
 // `T::OutputBlock`, which is then also the type that the merge yields.
+// Optionally, an input can provide `reserveBlock(block, numElements)`, which
+// reserves the memory for `numElements` elements in an (empty) output block.
+// If it exists and the number of elements per output block is bounded (see
+// `OutputBlockSize`), the merge calls it for every new output block, so that
+// the block is allocated once instead of growing in several steps.
 //
 // All member functions must be `const` and thread-safe. This is what makes the
 // chunks of a merge independent of each other not only in principle, but also
