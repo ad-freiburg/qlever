@@ -211,8 +211,8 @@ TEST(AggregateExpression, min) {
   // compared correctly, that UNDEF is smaller than any other value, and that
   // the result for an empty input is UNDEF.
   testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
-  testMinId({V(7), V(2), V(4)}, V(2));
-  testMinId({V(7), U, V(2), V(4)}, U);
+  testMinId({t.Beta, alpha, t.zz}, alpha);
+  testMinId({t.Beta, U, alpha, t.zz}, U);
   testMinId({I(3), alpha, alx, (I(-1))}, I(-1));
   testMinId({I(3), alpha, alx, (I(-1)), U}, U);
   testMinId({alpha, alx, aalx}, aalx);
@@ -238,11 +238,31 @@ TEST(AggregateExpression, max) {
   // compared correctly, that UNDEF is smaller than any other value, and that
   // the result for an empty input is UNDEF.
   testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
-  testMaxId({V(7), U, V(2), V(4)}, V(7));
+  testMaxId({beta, U, alpha, t.zz}, t.zz);
   testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
   testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
   testMaxId({U, U, U}, U);
   testMaxId({}, U);
+}
+
+// Test `MIN` and `MAX` on different kinds of RDF terms, see
+// `OrderByComparator`.
+TEST(AggregateExpression, minAndMaxForDifferentKindsOfTerms) {
+  auto testMinId = testAggregate<MinExpression, Id>;
+  auto testMaxId = testAggregate<MaxExpression, Id>;
+  auto t = TestContext{};
+  LocalVocabEntry iriEntry = LocalVocabEntry::fromStringRepresentation(
+      "<x:1>", t.qec->getLocalVocabContext());
+  Id iri = Id::makeFromLocalVocabIndex(&iriEntry);
+  Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3));
+  Id alpha = t.alpha;
+
+  testMinId({I(3), iri, alpha}, iri);
+  testMinId({I(3), iri, blankNode, alpha}, blankNode);
+  testMinId({I(3), iri, blankNode, U}, U);
+  testMaxId({iri, I(3), blankNode}, I(3));
+  testMaxId({iri, blankNode}, iri);
+  testMaxId({iri, alpha, I(3)}, alpha);
 }
 
 // _____________________________________________________________________________
