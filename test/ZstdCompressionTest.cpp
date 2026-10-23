@@ -218,6 +218,20 @@ TEST(CompressionTest, CompressWithReference) {
   EXPECT_THAT(decompress(reference, compressedOverlap),
               ::testing::ElementsAreArray(overlapping));
 
+  // Disjoint data directly before the reference in memory (the other ordering
+  // of the overlap check) is compressed with the reference.
+  std::vector<char> dataThenReference(40'000 + reference.size());
+  ql::ranges::copy(referenceSpan.subspan(60'000), dataThenReference.begin());
+  ql::ranges::copy(referenceSpan, dataThenReference.begin() + 40'000);
+  ql::span<const char> dataBefore{dataThenReference.data(), 40'000};
+  ql::span<const char> referenceAfter{dataThenReference.data() + 40'000,
+                                      reference.size()};
+  auto compressedBefore =
+      ZstdWrapper::compressWithReference(referenceAfter, dataBefore, 19);
+  EXPECT_LT(compressedBefore.size(), 200u);
+  EXPECT_THAT(decompress(referenceAfter, compressedBefore),
+              ::testing::ElementsAreArray(dataBefore));
+
   // A wrong reference is reported as an error (via the checksum in the frame).
   std::vector<char> wrongReference(reference.rbegin(), reference.rend());
   EXPECT_THAT(ZstdWrapper::tryToDecompressWithReference(
