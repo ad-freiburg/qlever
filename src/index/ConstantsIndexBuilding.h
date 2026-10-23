@@ -156,12 +156,14 @@ constexpr inline size_t VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD = 4;
 // 17 bytes (the length, the external flag and the index), so the number of
 // words cuts a chunk of `VOCAB_MERGER_INPUT_PER_CHUNK` of input into at most
 // `VOCAB_MERGER_INPUT_PER_CHUNK / (17 * VOCAB_MERGER_WORD_BATCH_SIZE)` blocks
-// (about 75 for the current values), and a merged word takes less than twice
-// its serialized size (a `MergeWord` of 40 bytes next to the word), so the
-// memory cuts it into fewer than `2 * VOCAB_MERGER_INPUT_PER_CHUNK /
-// VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` blocks (about 26). The factor `8` is a
-// round number above the sum of the two (it is unrelated to the eight buffers
-// of a block, see `VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE`).
+// (about 75 for the current values), and a merged word takes less than three
+// times its serialized size (a `MergedWord` of 40 bytes and an `Occurrence` of
+// 16 bytes next to the word, see `MergedBlock::memorySizeOfAppended`), so the
+// memory cuts it into fewer than `3 * VOCAB_MERGER_INPUT_PER_CHUNK /
+// VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` blocks (about 39). The factor `8` is a
+// round number close to the sum of the two (it is unrelated to the eight
+// buffers of a block, see `VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE`); a chunk
+// with more blocks only suspends, see above.
 constexpr inline size_t VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK =
     8 * VOCAB_MERGER_INPUT_PER_CHUNK.getBytes() /
         VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() +

@@ -61,7 +61,7 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   options.targetChunksPerThread = std::max<size_t>(
       1, (numChunks + options.parallelism() - 1) / options.parallelism());
   // The blocks in memory are larger than their serialized form (a
-  // `MergeWord` per word next to the bytes, and the output of a chunk copies
+  // `InputWord` per word next to the bytes, and the output of a chunk copies
   // the words), by up to a factor of two.
   constexpr size_t decodedFactor = 2;
   const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
@@ -89,8 +89,9 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      std::function<uint64_t(std::string_view)> geoSortKeyFn)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
-  using detail::MergeBlock;
-  using detail::MergeWord;
+  using detail::InputWord;
+  using detail::MergedBlock;
+  using detail::MergedWord;
   using detail::QueueWord;
   // The order of the merged vocabulary: by geo sort key first (all keys are 0
   // without a geo cell grid, see `geoSortKeyFn`), then by `comparator`.
@@ -102,12 +103,12 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
     return comparator(word1, word2);
   };
   // Return true iff `p1` is smaller than `p2` in this order.
-  auto lessThan = [&keyedLessThan](const MergeWord& p1, const MergeWord& p2) {
+  auto lessThan = [&keyedLessThan](const InputWord& p1, const InputWord& p2) {
     return keyedLessThan(p1.geoSortKey_, p1.iriOrLiteral(), p2.geoSortKey_,
                          p2.iriOrLiteral());
   };
   // The index of the partial vocabulary that a merged word comes from is
-  // stored in 32 bits (see `detail::MergeWord` and
+  // stored in 32 bits (see `detail::InputWord` and
   // `detail::LocalIdxToBatchMapping`). NOTE: This check is done here (and not
   // per merged word, which would be on the hot path of the merging), because
   // `partialFileId_` is always one of the indices below.
@@ -135,7 +136,7 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
               << std::endl;
   auto mergedWords = parallelBlockMerge::parallelBlockMergeToRange<true>(
       ad_utility::globalExecutor(), std::move(input), lessThan,
-      parallelBlockMerge::makeInMemoryStorageFactory<MergeBlock>(
+      parallelBlockMerge::makeInMemoryStorageFactory<MergedBlock>(
           VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK,
           /*releaseChunkOnConsumption=*/true),
       std::move(options));
@@ -151,23 +152,29 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
     pipeline.push(std::move(batch), wordCallback, blankNodeIriRegexes);
   };
 
-  for (MergeBlock& block : mergedWords) {
+  for (MergedBlock& block : mergedWords) {
     // Stop merging as soon as one of the stages of the pipeline has failed,
     // the exception is rethrown by `finish()` below.
     if (pipeline.hasFailed()) {
       break;
     }
-    // The pipeline consumes owning `QueueWord`s, so the merged words are
-    // copied out of the block (and the block's buffers go back to the pool).
+    // The pipeline consumes owning `QueueWord`s, one per occurrence of a word,
+    // so the merged words are copied out of the block (and the block's buffers
+    // go back to the pool). The occurrences that the merge folded into a word
+    // (see `MergedBlock::addWord`) all get the external flag of that word,
+    // which is the OR over them; the `batchBuilder` combines the flags of the
+    // occurrences of a word in the same way.
     // TODO<joka921> This copy is temporary: the next slice of the parallel
     // vocabulary merge replaces the pipeline by one that works on the blocks.
     std::vector<QueueWord> currentWords;
-    currentWords.reserve(block.size());
-    for (const MergeWord& word : block) {
-      currentWords.emplace_back(
-          TripleComponentWithIndex{std::string{word.iriOrLiteral()},
-                                   word.isExternal(), word.id()},
-          word.partialFileId_, word.geoSortKey_);
+    currentWords.reserve(block.numOccurrences());
+    for (const MergedWord& word : block) {
+      for (const auto& [partialFileId, localIndex] : block.occurrences(word)) {
+        currentWords.emplace_back(
+            TripleComponentWithIndex{std::string{word.iriOrLiteral()},
+                                     word.isExternal(), localIndex},
+            partialFileId, word.geoSortKey_);
+      }
     }
     block.clear();
     batchBuilder.addMergedWords(std::move(currentWords), keyedLessThan,

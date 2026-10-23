@@ -42,7 +42,6 @@
 #include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/RuntimeParameters.h"
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/AllocatorWithLimit.h"
@@ -58,6 +57,11 @@ SpatialJoin::SpatialJoin(
     : Operation(qec),
       config_{std::move(config)},
       substitutesFilterOp_{substitutesFilterOp} {
+  AD_CONTRACT_CHECK(
+      config_.distanceUnit_.has_value() ==
+          config_.distanceVariable_.has_value(),
+      "A spatial join must have a distance unit iff it has a distance "
+      "variable.");
   if (childLeft.has_value()) {
     childLeft_ = std::move(childLeft.value());
   }
@@ -113,12 +117,9 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     AD_THROW("variable does not match");
   }
 
-  // If the `SpatialJoin` is now fully constructed and query rewriting is
-  // allowed, try to push down `BIND`s to retrieve bounding box columns from the
-  // children.
-  if (sj->isConstructed() &&
-      getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+  // If the `SpatialJoin` is now fully constructed, try to push down `BIND`s to
+  // retrieve bounding box columns from the children.
+  if (sj->isConstructed()) {
     if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
       sj = sjWithBoundingBoxes.value();
     }
@@ -206,6 +207,8 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable\n";
+      os << "distanceUnit: " << static_cast<int>(config_.distanceUnit_.value())
+         << "\n";
     }
 
     // Selected payload variables
@@ -455,7 +458,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
       if (varColMap.contains(var)) {
         newVarColMap.insert_or_assign(var, varColMap.at(var));
       } else {
-        addWarningOrThrow(
+        addUnboundVariableWarningOrThrow(
             absl::StrCat("Variable '", var.name(),
                          "' selected as payload to spatial join but not "
                          "present in right child."));

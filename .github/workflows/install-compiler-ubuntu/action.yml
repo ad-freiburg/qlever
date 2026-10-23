@@ -15,14 +15,31 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Add PPA for GCC
-      if :  inputs.compiler == 'gcc' && inputs.compiler-version > 8
-      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update
-      shell: bash
-
     - name: Install gcc
       if :  inputs.compiler == 'gcc' && inputs.compiler-version > 8
-      run : sudo apt install -y gcc-${{inputs.compiler-version}} g++-${{inputs.compiler-version}}
+      # The standard repositories of the distribution have most versions
+      # (Ubuntu 24.04 ships GCC 10 to 14, Ubuntu 26.04 ships GCC 14 to 16), so
+      # the packages are installed from there. Only if that fails (for example,
+      # for GCC 13 on Ubuntu 22.04), they are taken from the
+      # `ubuntu-toolchain-r/test` PPA on Launchpad.
+      #
+      # NOTE: The PPA server occasionally answers with `503 Service Unavailable`
+      # for hours (as on 2026-10-21). `apt-get update` only warns about the
+      # unreachable index, and the install then fails because the packages are
+      # unknown. Hence the retries.
+      run : |
+        PACKAGES="gcc-${{inputs.compiler-version}} g++-${{inputs.compiler-version}}"
+        if sudo apt-get install -y $PACKAGES; then
+          exit 0
+        fi
+        for ATTEMPT in $(seq 1 10); do
+          if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test && sudo apt-get update && sudo apt-get install -y $PACKAGES; then
+            exit 0
+          fi
+          echo "Attempt $ATTEMPT of 10 to install from the PPA failed, retrying in 60 s"
+          sleep 60
+        done
+        exit 1
       shell: bash
 
     - name: Install clang
