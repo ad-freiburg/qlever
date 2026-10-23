@@ -1873,12 +1873,13 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
   EXPECT_EQ(noMatchRes.idTableView().numRows(), 0);
 }
 
-// _____________________________________________________________________________
+// Test that all algorithms report the distances in the configured unit, and
+// that the unit is part of the cache key.
 TEST(SpatialJoin, DistanceUnit) {
   std::string kg;
   addPoint(kg, "1", "\"Uni Freiburg TF\"",
            makePointLiteral("7.83505", "48.01267"));
-  addPoint(kg, "2", "\"Minster Freiburg\"",
+  addPoint(kg, "2", "\"Freiburg Minster\"",
            makePointLiteral("7.85298", "47.99557"));
   auto qec = buildQec(kg);
   Variable distVar{"?dist"};
@@ -1916,8 +1917,8 @@ TEST(SpatialJoin, DistanceUnit) {
        {SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinAlgorithm::BASELINE,
         SpatialJoinAlgorithm::S2_GEOMETRY,
         SpatialJoinAlgorithm::BOUNDING_BOX}) {
-    auto trace = generateLocationTrace(AD_CURRENT_SOURCE_LOC(),
-                                       std::string{algorithm.toString()});
+    auto trace =
+        generateLocationTrace(AD_CURRENT_SOURCE_LOC(), algorithm.toString());
     auto [meters, cacheKeyMeters] = run(algorithm, METERS);
     auto [kilometers, cacheKeyKilometers] = run(algorithm, KILOMETERS);
     auto [miles, cacheKeyMiles] = run(algorithm, MILES);
