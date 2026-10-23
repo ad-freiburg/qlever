@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <initializer_list>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
@@ -1021,6 +1023,24 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+// Check that the un/restricted RowReferences are specialized via isProxy (see
+// `IdTableRow.h`), for example for the dynamic and the static tables and for
+// views.
+static_assert(qlever::isProxy<IdTable::row_reference>);
+static_assert(qlever::isProxy<IdTable::const_row_reference>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference>);
+
+static_assert(qlever::isProxy<IdTable::row_reference::Base>);
+static_assert(qlever::isProxy<IdTable::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableStatic<3>::row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<3>::const_row_reference::Base>);
+
+// Rows, tables and views are no proxies.
+static_assert(!qlever::isProxy<IdTable::row_type>);
+static_assert(!qlever::isProxy<IdTable>);
+static_assert(!qlever::isProxy<IdTableView<3>>);
 
 // Type aliases for the columns of an `IdTable` (a mutable view, a read-only
 // view, and an owning column) and for the references to a single element (a

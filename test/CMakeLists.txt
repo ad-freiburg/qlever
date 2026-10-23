@@ -419,6 +419,8 @@ addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
+addLinkAndDiscoverTest(TieTest qlever_util)
+
 addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
@@ -537,6 +539,10 @@ addLinkAndDiscoverTest(AddCombinedRowToTableTest engine qlever_util)
 addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
+
+addLinkAndDiscoverTest(ComparisonOfIntAndDoubleTest)
+
+addLinkAndDiscoverTest(OrderByComparatorTest engine)
 
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
