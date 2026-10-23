@@ -6,6 +6,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "../test/util/GTestHelpers.h"
 #include "util/CompilerWarnings.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -253,4 +255,49 @@ TEST(CompressionTest, CheckError) {
   EXPECT_TRUE(ZSTD_isError(errorCode));
   AD_EXPECT_THROW_WITH_MESSAGE(ZstdWrapper::checkError(errorCode),
                                HasSubstr("ZSTD error: "));
+}
+
+// _____________________________________________________________________________
+// Compress and decompress many inputs of different sizes in sequence and from
+// several threads concurrently. This covers the reuse of the per-thread
+// contexts and of the per-thread compression buffer, in particular a small
+// input that is compressed after a much larger one.
+TEST(CompressionTest, ReuseOfThreadLocalState) {
+  // Compress and decompress inputs of the given sizes (in this order) and check
+  // that every round trip yields the original data. The `seed` makes the
+  // inputs of different threads differ.
+  auto roundTrips = [](const std::vector<size_t>& sizes, uint64_t seed) {
+    ad_utility::FastRandomIntGenerator<uint64_t> randomGenerator{
+        ad_utility::RandomSeed::make(seed)};
+    for (size_t size : sizes) {
+      // Use few distinct values, s.t. the data is compressible.
+      std::vector<uint64_t> input(size);
+      ql::ranges::generate(
+          input, [&randomGenerator]() { return randomGenerator() % 16; });
+      size_t numBytes = input.size() * sizeof(uint64_t);
+      std::vector<char> compressed =
+          ZstdWrapper::compress(input.data(), numBytes);
+      EXPECT_LT(compressed.size(), ZSTD_compressBound(numBytes));
+      EXPECT_EQ(ZstdWrapper::decompress<uint64_t>(
+                    compressed.data(), compressed.size(), input.size()),
+                input);
+      std::vector<uint64_t> buffer(size);
+      EXPECT_EQ(
+          ZstdWrapper::decompressToBuffer<uint64_t>(
+              compressed.data(), compressed.size(), buffer.data(), numBytes),
+          numBytes);
+      EXPECT_EQ(buffer, input);
+    }
+  };
+
+  std::vector<size_t> sizes{0, 1, 1'000'000, 3, 0, 50'000, 7, 1'000'000, 1};
+  roundTrips(sizes, 42);
+
+  std::vector<std::thread> threads;
+  for (uint64_t i = 0; i < 8; ++i) {
+    threads.emplace_back(roundTrips, sizes, i);
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
 }
