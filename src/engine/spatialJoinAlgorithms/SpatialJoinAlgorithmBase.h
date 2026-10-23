@@ -44,6 +44,12 @@ class SpatialJoinAlgorithmBase {
                            size_t rowRight, Id distance,
                            bool swapLeftAndRight = false) const;
 
+  // Convert a distance in kilometers to the `distanceUnit_` of the `config_`.
+  Id kilometersToDistanceId(double kilometers) const {
+    return Id::makeFromDouble(
+        ad_utility::detail::kilometerToUnit(kilometers, config_.distanceUnit_));
+  }
+
   // Calls the `cancellationWrapper` which throws if the query has been
   // cancelled.
   void throwIfCancelled() const;
