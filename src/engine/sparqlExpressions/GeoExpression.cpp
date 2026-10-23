@@ -49,6 +49,10 @@ NARY_EXPRESSION(
     FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
 
 NARY_EXPRESSION(
+    TransformExpression, 2,
+    FV<ad_utility::WktTransform, GeoPointOrWktValueGetter, StringValueGetter>);
+
+NARY_EXPRESSION(
     SimplifyGeometryExpression, 2,
     FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
 
@@ -113,6 +117,13 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
 SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2) {
   return std::make_unique<GeometryNExpression>(std::move(child1),
+                                               std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeTransformExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2) {
+  return std::make_unique<TransformExpression>(std::move(child1),
                                                std::move(child2));
 }
 

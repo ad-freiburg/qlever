@@ -88,6 +88,13 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
 }
 
 // _____________________________________________________________________________
+std::optional<std::string> transformAsWkt(GeoPointOrWkt wkt, std::string iri) {
+  ::util::geo::CRSType crs = ::util::geo::getCRSType(iri);
+  auto parseResult = parseGeoPointOrWkt(wkt, iri);
+  return utilGeomToWkt(parseResult.parsedWkt_);
+}
+
+// _____________________________________________________________________________
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
   auto parseResult = parseGeoPointOrWkt(wkt);
   return utilGeomToWkt(simplifyGeometry(parseResult.parsedWkt_, tolerance));

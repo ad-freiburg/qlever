@@ -186,4 +186,8 @@ TEST(GeoSparqlHelpers, WktTypeIri) {
   EXPECT_EQ(WktCrsType{}(SourceCrsType{4}), undef);
 }
 
+TEST(GeoSparqlHelpers, WktTransform) {
+  // TODO
+}
+
 }  // namespace

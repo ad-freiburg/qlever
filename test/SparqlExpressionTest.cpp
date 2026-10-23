@@ -2273,6 +2273,10 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 
+  auto checkTransform =
+      std::bind_front(testNaryExpression, &makeTransformExpression);
+  // TODO: use it
+
   // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =
       std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
