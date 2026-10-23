@@ -24,7 +24,8 @@
 
 #include "backports/algorithm.h"
 #include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
+#include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -73,11 +74,12 @@ class GeoVocabulary {
   using ParsedGeometry = ad_utility::ParsedGeometry;
 
   // The index of a word is computed from its position in the underlying
-  // vocabulary (see `indexFromPosition`), so the positions must be contiguous,
-  // which they are not for the vocabularies with "holes".
-  static_assert(!ad_utility::SameAsAny<
-                UnderlyingVocabulary, VocabularyInMemoryBinSearch,
-                CompressedVocabulary<VocabularyInMemoryBinSearch>>);
+  // vocabulary (see `indexFromPosition`), so the positions must be contiguous.
+  // Add a vocabulary type here only if that holds for it (it does not for the
+  // vocabularies with "holes", see `VocabularyInMemoryBinSearch`).
+  static_assert(
+      ad_utility::SameAsAny<UnderlyingVocabulary, VocabularyInMemory,
+                            CompressedVocabulary<VocabularyInternalExternal>>);
 
   // The underlying vocabulary, which stores the WKT literals as strings.
   UnderlyingVocabulary literals_;
