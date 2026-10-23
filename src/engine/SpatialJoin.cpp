@@ -702,10 +702,9 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const {
   // Only `libspatialjoin` with `WITHIN_DIST` computes the exact distances.
-  const auto* task = std::get_if<LibSpatialJoinConfig>(&config_.task_);
   if (!isConstructed() || config_.distanceVariable_.has_value() ||
-      config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN ||
-      task == nullptr || task->joinType_ != SpatialJoinType::WITHIN_DIST) {
+      getAlgorithm() != SpatialJoinAlgorithm::LIBSPATIALJOIN ||
+      getJoinType() != SpatialJoinType::WITHIN_DIST) {
     return std::nullopt;
   }
 
