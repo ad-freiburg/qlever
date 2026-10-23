@@ -496,6 +496,68 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   EXPECT_NE(buffers->at(0), buffers->at(1));
 }
 
+// Test that the `BlockSorter` keeps the buffers of its sorts for the next block
+// and frees them in `releaseBuffers`, and that a sorter releases them when its
+// input phase ends (with several blocks, and with a single block that is
+// sorted in the calling thread) and when it is cleared.
+TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
+  std::string filename = gtestCurrentTestName();
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  constexpr size_t blockSize = 1000;
+  using Sorter =
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS>;
+  auto block = createRandomlyFilledIdTable(blockSize, NUM_COLS);
+  auto sortedSize = [](Sorter& sorter) {
+    size_t numRows = 0;
+    for (const auto& b : sorter.template getSortedBlocks<NUM_COLS>()) {
+      numRows += b.numRows();
+    }
+    return numRows;
+  };
+
+  // The `BlockSorter` keeps at least the key rows of a block after a sort.
+  {
+    ad_utility::BlockSorter<SortByOSP> blockSorter;
+    IdTableStatic<NUM_COLS> copy = block.clone().toStatic<NUM_COLS>();
+    blockSorter(copy);
+    EXPECT_GE(
+        blockSorter.bufferBytes(),
+        blockSize * SortByOSP::bitwiseKeyColumns.size() * sizeof(uint64_t));
+    blockSorter.releaseBuffers();
+    EXPECT_EQ(blockSorter.bufferBytes(), 0u);
+  }
+
+  // Several blocks, sorted on the background thread.
+  {
+    Sorter sorter{filename, memoryForBlocksize(blockSize, NUM_COLS), alloc};
+    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, size_t{5})) {
+      sorter.pushBlock(block);
+    }
+    EXPECT_EQ(sortedSize(sorter), 5 * blockSize);
+    EXPECT_EQ(sorter.sortBufferBytes(), 0u);
+  }
+
+  // A single block that is smaller than the block size, sorted in the calling
+  // thread when the input phase ends.
+  {
+    Sorter sorter{filename, memoryForBlocksize(2 * blockSize, NUM_COLS), alloc};
+    sorter.pushBlock(block);
+    EXPECT_EQ(sortedSize(sorter), blockSize);
+    EXPECT_EQ(sorter.sortBufferBytes(), 0u);
+  }
+
+  // A sorter that is cleared during its input phase.
+  {
+    Sorter sorter{filename, memoryForBlocksize(blockSize, NUM_COLS), alloc};
+    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, size_t{3})) {
+      sorter.pushBlock(block);
+    }
+    sorter.clear();
+    EXPECT_EQ(sorter.sortBufferBytes(), 0u);
+  }
+}
+
 // `memoryForBlocksize` and `blocksizeForMemory` are inverses of each other, so
 // the tests below can specify the number of rows per block instead of a memory
 // limit.
