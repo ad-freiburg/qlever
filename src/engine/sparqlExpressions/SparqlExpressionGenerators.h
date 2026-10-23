@@ -213,10 +213,11 @@ inline auto valueGetterGenerator =
 
 // Return a lambda that takes a `LocalVocabEntry` and converts it to an `Id` by
 // adding it to the `localVocab`. This is used to write the results of an
-// expression to an `IdTable`. NOTE: An IRI that can be encoded directly in an
-// `Id` has already been encoded when it was converted to the `Id` or
-// `LocalVocabEntry` of the expression result (see `toIdOrLocalVocabEntry`), so
-// `entry` never needs this encoding.
+// expression to an `IdTable`.
+//
+// NOTE: An IRI that can be encoded directly in an `Id` has already been encoded
+// when it was converted to the `Id` or `LocalVocabEntry` of the expression
+// result (see `toIdOrLocalVocabEntry`), so `entry` never needs this encoding.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
   return [localVocab](const LocalVocabEntry& entry) {
     auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);
