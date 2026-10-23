@@ -277,14 +277,14 @@ ExportQueryExecutionTrees::makeConstructEvaluationConfig(
 auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+    LimitOffsetClause limitAndOffset, const Result& result,
     uint64_t& resultSize, CancellationHandle cancellationHandle) {
   // For each result from the WHERE clause, we produce up to
   // `constructTriples.size()` triples. We do not account for triples that are
   // filtered out because one of the components is UNDEF (it would require
   // materializing the whole result).
   // TODO<joka921> check the complete semantics of LIMIT/OFFSET
-  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
+  auto rowIndices = getRowIndices(limitAndOffset, result, resultSize,
                                   constructTriples.size());
 
   return qlever::constructExport::ConstructTripleGenerator::
@@ -303,11 +303,17 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   auto generator = constructQueryResultToStringTriples(
-      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
+      qet, constructTriples, limitAndOffset, *result, resultSize,
       std::move(cancellationHandle));
 
+  // NOTE: The `generator` only borrows the `result`, so the transformation
+  // below owns it. This keeps the `result` alive for as long as the returned
+  // range is iterated, even if it is evicted from the cache in the meantime
+  // (the transformation of a `CachingTransformInputRange` is destroyed after
+  // its view).
   return InputRangeTypeErased(ad_utility::CachingTransformInputRange(
-      std::move(generator), [](QueryExecutionTree::StringTriple& triple) {
+      std::move(generator),
+      [result = std::move(result)](QueryExecutionTree::StringTriple& triple) {
         auto binding = nlohmann::json::array({std::move(triple.subject_),
                                               std::move(triple.predicate_),
                                               std::move(triple.object_)});
