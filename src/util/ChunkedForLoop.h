@@ -11,7 +11,6 @@
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
-#include "util/Forward.h"
 
 namespace ad_utility {
 
@@ -147,13 +146,13 @@ CPP_template(typename R, typename Action, typename ChunkOpT)(
                                               std::size_t chunkSize =
                                                   CANCELLATION_CHECK_CHUNK_SIZE) {
   AD_CONTRACT_CHECK(chunkSize != 0);
-  // NOTE: `views::ref`, because `views::chunk` can't take an lvalue reference
-  // to a move-only view (e.g. a `std::ranges::owning_view`).
-  for (auto&& chunk : ::ranges::views::chunk(
-           ::ranges::views::ref(range),
-           static_cast<ql::ranges::range_difference_t<R>>(chunkSize))) {
-    for (auto&& element : chunk) {
-      std::invoke(action, AD_FWD(element));
+  // NOTE: We don't use `::ranges::views::chunk`, because it doesn't accept all
+  // `std::ranges` (e.g. move-only views, or the `IdTable` rows with libc++).
+  auto it = ql::ranges::begin(range);
+  auto end = ql::ranges::end(range);
+  while (it != end) {
+    for (std::size_t i = 0; i < chunkSize && it != end; ++i, ++it) {
+      std::invoke(action, *it);
     }
     std::invoke(chunkOperation);
   }
