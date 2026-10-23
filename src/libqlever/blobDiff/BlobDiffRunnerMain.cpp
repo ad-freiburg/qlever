@@ -14,18 +14,20 @@
 #include <absl/strings/str_format.h>
 
 #include <boost/program_options.hpp>
-#include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string>
+#include <variant>
 #include <vector>
 
+#include "libqlever/blobDiff/BlobDiff.h"
 #include "libqlever/blobDiff/BlobDiffProducer.h"
-#include "util/File.h"
+#include "util/FilesystemHelpers.h"
 
 namespace po = boost::program_options;
 using qlever::BlobDiffConfig;
 using qlever::BlobDiffProducer;
+using qlever::util::readBinaryFile;
+using qlever::util::writeFileAtomically;
 
 namespace {
 constexpr std::string_view usage =
@@ -36,17 +38,6 @@ constexpr std::string_view usage =
     "           [--blob-out FILE] [--compact]\n"
     "  apply    --base BLOB --diff DIFF --out BLOB\n"
     "  inspect  --blob BLOB [--diff DIFF]\n";
-
-std::vector<char> readFile(const std::string& path) {
-  auto stream = ad_utility::makeIfstream(path, std::ios::binary);
-  return {std::istreambuf_iterator<char>{stream},
-          std::istreambuf_iterator<char>{}};
-}
-
-void writeFile(const std::string& path, const std::vector<char>& bytes) {
-  auto stream = ad_utility::makeOfstream(path, std::ios::binary);
-  stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-}
 
 // Parse the options of a command. The first argument (the command itself) is
 // skipped.
@@ -80,7 +71,7 @@ int runInit(int argc, char** argv) {
   auto config = BlobDiffConfig::fromFile(configFile);
   auto blob = BlobDiffProducer::init(config, turtle, stateDir);
   if (!blobOut.empty()) {
-    writeFile(blobOut, blob);
+    writeFileAtomically(blobOut, blob);
   }
   std::cout << "Initialized the state directory " << stateDir << "\n"
             << "Compressed blob: " << blob.size() << " bytes\n";
@@ -103,9 +94,9 @@ int runDiff(int argc, char** argv) {
   auto config = BlobDiffConfig::fromFile(configFile);
   auto result = BlobDiffProducer::step(config, turtle, stateDir,
                                        map["compact"].as<bool>());
-  writeFile(diffOut, result.diffFile_);
+  writeFileAtomically(diffOut, result.diffFile_);
   if (!blobOut.empty()) {
-    writeFile(blobOut, result.blob_);
+    writeFileAtomically(blobOut, result.blob_);
   }
   std::cout << "Inserted triples: " << result.numInsertedTriples_
             << "\nDeleted triples: " << result.numDeletedTriples_ << "\n"
@@ -122,9 +113,16 @@ int runApply(int argc, char** argv) {
       "diff", po::value(&diff)->required(), "The diff file.")(
       "out", po::value(&out)->required(), "Write the new blob here.");
   parse(options, argc, argv);
-  auto result = BlobDiffProducer::apply(readFile(base), readFile(diff));
-  writeFile(out, result);
-  std::cout << "Wrote the new blob (" << result.size() << " bytes) to " << out
+  auto result = qlever::blobDiff::applyBlobDiffToCompressedBase(
+      readBinaryFile(base), readBinaryFile(diff));
+  if (const auto* error =
+          std::get_if<qlever::blobDiff::BlobDiffError>(&result)) {
+    std::cerr << "Error: " << error->message_ << std::endl;
+    return 1;
+  }
+  const auto& blob = std::get<std::vector<char>>(result);
+  writeFileAtomically(out, blob);
+  std::cout << "Wrote the new blob (" << blob.size() << " bytes) to " << out
             << "\n";
   return 0;
 }
@@ -135,10 +133,10 @@ int runInspect(int argc, char** argv) {
   options.add_options()("blob", po::value(&blob)->required(), "The blob.")(
       "diff", po::value(&diff), "A diff file whose target is the blob.");
   parse(options, argc, argv);
-  auto blobBytes = readFile(blob);
+  auto blobBytes = readBinaryFile(blob);
   std::optional<std::vector<char>> diffBytes;
   if (!diff.empty()) {
-    diffBytes = readFile(diff);
+    diffBytes = readBinaryFile(diff);
   }
   std::optional<ql::span<const char>> diffSpan;
   if (diffBytes.has_value()) {

@@ -16,93 +16,15 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "index/vocabulary/VocabularyType.h"
-#include "libqlever/blobDiff/BlobDiff.h"
-#include "util/json.h"
+#include "libqlever/blobDiff/BlobDiffConfig.h"
 
 namespace qlever {
-
-// The configuration of the weekly blob diff workflow (see `BlobDiffProducer`).
-// It is read from a JSON file of the following form (all keys of `index`,
-// `blob`, and `geoCompaction` are optional, unknown keys are rejected):
-//
-// {
-//   "index": {
-//     "vocabularyType": "in-memory-compressed",
-//     "numThreads": 4,
-//     "blankNodeIriRegexes": [],
-//     "prefixesForIdEncodedIris": [],
-//     "settingsFile": ""
-//   },
-//   "blob": { "excludedEntryRegexes": [], "diffCompressionLevel": 19 },
-//   "geoCompaction": { "maxSegments": 8, "maxDeadShapeRatio": 0.3 },
-//   "namedQueries": [
-//     { "name": "streets", "query": "SELECT ...",
-//       "geoIndexVar": "?wkt", "simplificationMeters": 1.0 }
-//   ]
-// }
-struct BlobDiffConfig {
-  // A query whose result is pinned in the named result cache (and thereby
-  // becomes part of the blob), optionally with a geo index.
-  struct NamedQuery {
-    std::string name_;
-    std::string query_;
-    // The variable (including the leading `?`) with the geometries that are
-    // indexed.
-    std::optional<std::string> geoIndexVar_;
-    // The maximal error in meters of the simplification of the indexed
-    // geometries. Only allowed together with `geoIndexVar_`.
-    std::optional<double> simplificationMeters_;
-  };
-
-  // The vocabulary of the index. It has to be one that is held in memory,
-  // because the on-disk vocabularies cannot be serialized into a blob.
-  ad_utility::VocabularyType vocabularyType_{
-      ad_utility::VocabularyType::Enum::InMemoryCompressed};
-  // The number of threads for building the index (the default if unset).
-  std::optional<size_t> numThreads_;
-  std::vector<std::string> blankNodeIriRegexes_;
-  std::vector<std::string> prefixesForIdEncodedIris_;
-  std::string settingsFile_;
-
-  // The vocabulary entries that are left out of the blob, see
-  // `BlobSerializationConfig::excludedEntryRegexes_`.
-  std::vector<std::string> excludedEntryRegexes_;
-  // The ZSTD compression level of the diff files (1 to 22), see
-  // `computeBlobDiff`.
-  int diffCompressionLevel_ = defaultBlobDiffCompressionLevel;
-
-  // The compaction thresholds for the geo indices, see
-  // `BlobSerializationConfig::IncrementalBase`.
-  size_t maxGeoSegments_ = 8;
-  double maxDeadShapeRatio_ = 0.3;
-
-  std::vector<NamedQuery> namedQueries_;
-
-  // Parse and validate a config. Throw with a descriptive message if the JSON
-  // is malformed, contains unknown keys, has duplicate query names, a geo
-  // variable that does not start with `?`, a simplification that is not
-  // positive, or an on-disk vocabulary type.
-  static BlobDiffConfig fromJson(const nlohmann::json& json);
-
-  // Read the file `path` and call `fromJson` on its content.
-  static BlobDiffConfig fromFile(const std::string& path);
-
-  // Return the config as JSON (the inverse of `fromJson`).
-  nlohmann::json toJson() const;
-
-  // Return a hex string that identifies all settings that influence the
-  // content of the index and of the blob (everything except the geo
-  // compaction thresholds). It is stored in the state of the producer to detect
-  // that the config changed between two weeks.
-  std::string fingerprint() const;
-};
 
 // The producer side of the weekly workflow: it holds the state that is needed
 // to turn the data of week `k` into a blob `B_k` and a small diff file `D_k`,
 // such that the consumer, who only holds the blob `B_{k-1}`, can compute `B_k`
-// by `apply(B_{k-1}, D_k)` (byte for byte). All functions are static, the whole
-// state lives in a state directory.
+// by `blobDiff::applyBlobDiffToCompressedBase(B_{k-1}, D_k)` (byte for byte).
+// All functions are static, the whole state lives in a state directory.
 //
 // WHAT THE PRODUCER KEEPS between weeks (all in the state directory):
 //  1. The index of week 0 (`index/index.*`, never modified after `init`).
@@ -145,7 +67,8 @@ class BlobDiffProducer {
     // previous blob into it.
     std::vector<char> blob_;
     std::vector<char> diffFile_;
-    // A human-readable description of the diff (see `describeBlobDiff`).
+    // A human-readable description of the diff (see
+    // `blobDiff::describeBlobDiff`).
     std::string statistics_;
     // The number of triples that were inserted/deleted in this step.
     size_t numInsertedTriples_ = 0;
@@ -172,11 +95,6 @@ class BlobDiffProducer {
                            const std::string& newTurtleFile,
                            const std::string& stateDir,
                            bool forceCompaction = false);
-
-  // The consumer side: apply the diff file to `baseBlob` and return the new
-  // compressed blob. Throw if the diff does not belong to the base.
-  static std::vector<char> apply(ql::span<const char> baseBlob,
-                                 ql::span<const char> diffFile);
 
   // Return a description of `blob` (its sizes and checksum), and, if a
   // `diffFile` is given, of the diff and whether it yields or applies to the

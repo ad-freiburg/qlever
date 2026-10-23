@@ -18,6 +18,7 @@
 #include <regex>
 #include <set>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
@@ -28,9 +29,12 @@
 #include "libqlever/blobDiff/BlobDiff.h"
 #include "libqlever/blobDiff/BlobDiffProducer.h"
 #include "util/File.h"
+#include "util/FilesystemHelpers.h"
+#include "util/SourceLocation.h"
 
 using namespace qlever;
 using namespace testing;
+using qlever::util::readBinaryFile;
 
 namespace {
 namespace fs = ql::filesystem;
@@ -68,14 +72,9 @@ std::string freshDirectory(std::string_view suffix = "") {
   return result;
 }
 
-std::vector<char> readFile(const std::string& path) {
-  auto stream = ad_utility::makeIfstream(path, std::ios::binary);
-  return {std::istreambuf_iterator<char>{stream},
-          std::istreambuf_iterator<char>{}};
-}
-
+// Read the whole file `path` as a string.
 std::string readTextFile(const std::string& path) {
-  auto bytes = readFile(path);
+  auto bytes = readBinaryFile(path);
   return {bytes.begin(), bytes.end()};
 }
 
@@ -228,6 +227,20 @@ struct Weeks {
   std::vector<size_t> numDeleted_;
 };
 
+// Apply the `diffFile` to the compressed `baseBlob` and return the compressed
+// result (fail the test on error).
+std::vector<char> applyOrFail(
+    ql::span<const char> baseBlob, ql::span<const char> diffFile,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  auto result = blobDiff::applyBlobDiffToCompressedBase(baseBlob, diffFile);
+  if (const auto* error = std::get_if<blobDiff::BlobDiffError>(&result)) {
+    ADD_FAILURE() << error->message_;
+    return {};
+  }
+  return std::get<std::vector<char>>(std::move(result));
+}
+
 // Run `init` with the first and `step` with the following weekly snapshots
 // (up to and including `lastWeek`), and check the self-consistency of every
 // step.
@@ -240,14 +253,15 @@ Weeks runWeeks(const BlobDiffConfig& config, const std::string& stateDir,
   weeks.statistics_.emplace_back();
   weeks.numInserted_.push_back(0);
   weeks.numDeleted_.push_back(0);
-  EXPECT_EQ(readFile(absl::StrCat(stateDir, "/current.blob")), weeks.blobs_[0]);
+  EXPECT_EQ(readBinaryFile(absl::StrCat(stateDir, "/current.blob")),
+            weeks.blobs_[0]);
   for (size_t week = 1; week <= lastWeek; ++week) {
     auto result = BlobDiffProducer::step(config, snapshotFile(week), stateDir,
                                          compactedWeeks.contains(week));
-    EXPECT_EQ(BlobDiffProducer::apply(weeks.blobs_.back(), result.diffFile_),
-              result.blob_)
+    EXPECT_EQ(applyOrFail(weeks.blobs_.back(), result.diffFile_), result.blob_)
         << "week " << week;
-    EXPECT_EQ(readFile(absl::StrCat(stateDir, "/current.blob")), result.blob_);
+    EXPECT_EQ(readBinaryFile(absl::StrCat(stateDir, "/current.blob")),
+              result.blob_);
     std::cout << "Week " << week << ": compressed blob " << result.blob_.size()
               << " bytes, diff file " << result.diffFile_.size() << " bytes, "
               << result.numInsertedTriples_ << " triples inserted, "
@@ -314,9 +328,19 @@ TEST(BlobDiffProducer, weeklyStepsAreSelfConsistentAndEquivalentToFreshBuilds) {
               HasSubstr("The diff is unrelated to this blob."));
   EXPECT_THAT(BlobDiffProducer::inspect(weeks.blobs_[3], std::nullopt),
               Not(HasSubstr("The diff")));
+  // A diff file with an invalid header is reported, but does not throw.
+  std::vector<char> garbage{'n', 'o', ' ', 'd', 'i', 'f', 'f'};
+  auto garbageDescription =
+      BlobDiffProducer::inspect(weeks.blobs_[3], ql::span<const char>{garbage});
+  EXPECT_THAT(garbageDescription, HasSubstr("Blob: "));
+  EXPECT_THAT(garbageDescription, HasSubstr("The diff file is invalid"));
 
   // The diff of a week only applies to the blob of the week before.
-  EXPECT_ANY_THROW(BlobDiffProducer::apply(weeks.blobs_[0], weeks.diffs_[3]));
+  auto wrongBase =
+      blobDiff::applyBlobDiffToCompressedBase(weeks.blobs_[0], weeks.diffs_[3]);
+  ASSERT_TRUE(std::holds_alternative<blobDiff::BlobDiffError>(wrongBase));
+  EXPECT_EQ(std::get<blobDiff::BlobDiffError>(wrongBase).type_,
+            blobDiff::BlobDiffErrorType::wrongBase);
 
   // Each blob answers the same as the blob of a freshly built index of the
   // same snapshot, which was serialized without a base.
@@ -366,8 +390,8 @@ TEST(BlobDiffProducer, diffsAreSmallAndIdsAreStable) {
   // about six times).
   auto reference =
       BlobDiffProducer::init(config, snapshotFile(3), referenceDir);
-  auto freshDiff =
-      computeBlobDiff(decompress(weeks.blobs_[2]), decompress(reference));
+  auto freshDiff = blobDiff::computeBlobDiff(decompress(weeks.blobs_[2]),
+                                             decompress(reference));
   std::cout << "Diff to a fresh build of week 3: " << freshDiff.size()
             << " bytes, incremental: " << weeks.diffs_[3].size() << " bytes"
             << std::endl;
@@ -438,8 +462,7 @@ TEST(BlobDiffProducer, lexicalChangeOfLiteralIsNoDelta) {
       config, writeTurtle("week2", turtle("2", "1.0e0")), stateDir);
   EXPECT_EQ(changed.numInsertedTriples_, 1u);
   EXPECT_EQ(changed.numDeletedTriples_, 1u);
-  EXPECT_EQ(BlobDiffProducer::apply(lexical.blob_, changed.diffFile_),
-            changed.blob_);
+  EXPECT_EQ(applyOrFail(lexical.blob_, changed.diffFile_), changed.blob_);
 
   // A change of the type with the same number (`2` to `2.0`) is a change as
   // well.
@@ -451,8 +474,7 @@ TEST(BlobDiffProducer, lexicalChangeOfLiteralIsNoDelta) {
       stateDir);
   EXPECT_EQ(retyped.numInsertedTriples_, 1u);
   EXPECT_EQ(retyped.numDeletedTriples_, 1u);
-  EXPECT_EQ(BlobDiffProducer::apply(changed.blob_, retyped.diffFile_),
-            retyped.blob_);
+  EXPECT_EQ(applyOrFail(changed.blob_, retyped.diffFile_), retyped.blob_);
 }
 
 // _____________________________________________________________________________
@@ -482,8 +504,7 @@ TEST(BlobDiffProducer, geoIndicesAreSegmentedAndCanBeCompacted) {
   for (const auto& name : geoEntries) {
     EXPECT_EQ(numGeoSegments(*afterCompaction, name), 1u) << name;
   }
-  EXPECT_EQ(BlobDiffProducer::apply(weeks.blobs_[2], compacted.diffFile_),
-            compacted.blob_);
+  EXPECT_EQ(applyOrFail(weeks.blobs_[2], compacted.diffFile_), compacted.blob_);
   std::string referenceDir = freshDirectory("_reference");
   absl::Cleanup cleanupReference = [&] { fs::remove_all(referenceDir); };
   auto reference =
@@ -563,7 +584,7 @@ TEST(BlobDiffProducer, stateDirectoryBookkeeping) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       BlobDiffProducer::init(config, snapshotFile(1), stateDir),
       HasSubstr("not empty"));
-  EXPECT_EQ(readFile(stateDir + "/current.blob"), blob0);
+  EXPECT_EQ(readBinaryFile(stateDir + "/current.blob"), blob0);
   EXPECT_EQ(readState(), state);
 
   // After a step, the week counter is increased, the delta triples are
@@ -577,7 +598,7 @@ TEST(BlobDiffProducer, stateDirectoryBookkeeping) {
   EXPECT_EQ(state1.at("turtleSize"), fs::file_size(snapshotFile(1)));
   EXPECT_TRUE(fs::exists(stateDir + "/index/index.update-triples"));
   EXPECT_FALSE(fs::exists(stateDir + "/index/index.update-triples.backup"));
-  EXPECT_EQ(readFile(stateDir + "/current.blob"), result.blob_);
+  EXPECT_EQ(readBinaryFile(stateDir + "/current.blob"), result.blob_);
   EXPECT_EQ(readTextFile(stateDir + "/current.ttl"),
             readTextFile(snapshotFile(1)));
 
@@ -587,16 +608,17 @@ TEST(BlobDiffProducer, stateDirectoryBookkeeping) {
     auto stream = ad_utility::makeOfstream(garbage);
     stream << "this is not <valid> turtle";
   }
-  auto updatesBefore = readFile(stateDir + "/index/index.update-triples");
+  auto updatesBefore = readBinaryFile(stateDir + "/index/index.update-triples");
   EXPECT_ANY_THROW(BlobDiffProducer::step(config, garbage, stateDir));
   EXPECT_EQ(readState().at("week"), 1);
-  EXPECT_EQ(readFile(stateDir + "/current.blob"), result.blob_);
-  EXPECT_EQ(readFile(stateDir + "/index/index.update-triples"), updatesBefore);
+  EXPECT_EQ(readBinaryFile(stateDir + "/current.blob"), result.blob_);
+  EXPECT_EQ(readBinaryFile(stateDir + "/index/index.update-triples"),
+            updatesBefore);
   EXPECT_EQ(readTextFile(stateDir + "/current.ttl"),
             readTextFile(snapshotFile(1)));
   // The state is still usable.
   auto next = BlobDiffProducer::step(config, snapshotFile(2), stateDir);
-  EXPECT_EQ(BlobDiffProducer::apply(result.blob_, next.diffFile_), next.blob_);
+  EXPECT_EQ(applyOrFail(result.blob_, next.diffFile_), next.blob_);
   EXPECT_EQ(readState().at("week"), 2);
 
   // A different config is rejected, as is a missing state directory.
@@ -615,95 +637,4 @@ TEST(BlobDiffProducer, stateDirectoryBookkeeping) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       BlobDiffProducer::step(config, snapshotFile(3), stateDir + "_missing"),
       HasSubstr("Run `init` first"));
-}
-
-// _____________________________________________________________________________
-TEST(BlobDiffProducer, configParsing) {
-  auto config = snapshotConfig();
-  EXPECT_EQ(config.vocabularyType_,
-            ad_utility::VocabularyType::InMemoryCompressed);
-  EXPECT_EQ(config.numThreads_, 4u);
-  EXPECT_EQ(config.maxGeoSegments_, 8u);
-  EXPECT_DOUBLE_EQ(config.maxDeadShapeRatio_, 0.3);
-  EXPECT_EQ(config.diffCompressionLevel_, defaultBlobDiffCompressionLevel);
-  ASSERT_EQ(config.namedQueries_.size(), 5u);
-  EXPECT_EQ(config.namedQueries_[2].name_, "streetGeometries");
-  EXPECT_EQ(config.namedQueries_[2].geoIndexVar_, "?wkt");
-  EXPECT_EQ(config.namedQueries_[2].simplificationMeters_, std::nullopt);
-  EXPECT_EQ(config.namedQueries_[3].simplificationMeters_, 0.5);
-  // The JSON representation round-trips.
-  auto roundTrip = BlobDiffConfig::fromJson(config.toJson());
-  EXPECT_EQ(roundTrip.toJson(), config.toJson());
-  EXPECT_EQ(roundTrip.fingerprint(), config.fingerprint());
-
-  // The minimal config has the defaults.
-  auto minimal = BlobDiffConfig::fromJson(
-      nlohmann::json::parse(R"({"namedQueries": []})"));
-  EXPECT_EQ(minimal.vocabularyType_,
-            ad_utility::VocabularyType::InMemoryCompressed);
-  EXPECT_EQ(minimal.numThreads_, std::nullopt);
-  EXPECT_TRUE(minimal.namedQueries_.empty());
-
-  auto parse = [](std::string_view json) {
-    return BlobDiffConfig::fromJson(nlohmann::json::parse(json));
-  };
-  auto query = [](std::string_view extra = "", std::string_view name = "a") {
-    return absl::StrCat(R"({"namedQueries": [{"name": ")", name,
-                        R"(", "query": "SELECT * { ?s ?p ?o }")", extra, "}]}");
-  };
-  EXPECT_NO_THROW(parse(query(R"(, "geoIndexVar": "?o")")));
-  AD_EXPECT_THROW_WITH_MESSAGE(parse(R"({"namedQueries": [
-        {"name": "a", "query": "SELECT * { ?s ?p ?o }"},
-        {"name": "a", "query": "SELECT * { ?s ?p ?o }"}]})"),
-                               AllOf(HasSubstr("Invalid blob diff config"),
-                                     HasSubstr("`a` is used twice")));
-  AD_EXPECT_THROW_WITH_MESSAGE(parse(query(R"(, "geoIndexVar": "o")")),
-                               HasSubstr("starts with `?`"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(query(R"(, "geoIndexVar": "?o", "simplificationMeters": 0)")),
-      HasSubstr("has to be positive"));
-  AD_EXPECT_THROW_WITH_MESSAGE(parse(query(R"(, "simplificationMeters": 1.5)")),
-                               HasSubstr("but no `geoIndexVar`"));
-  AD_EXPECT_THROW_WITH_MESSAGE(parse(query("", "bad name")),
-                               HasSubstr("letters, digits"));
-  AD_EXPECT_THROW_WITH_MESSAGE(parse(query(R"(, "typo": 1)")),
-                               HasSubstr("unknown key `typo`"));
-  AD_EXPECT_THROW_WITH_MESSAGE(parse(R"({"index": {}})"),
-                               HasSubstr("`namedQueries` has to be an array"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(R"({"index": {"vocabularyType": "on-disk-compressed"},
-                "namedQueries": []})"),
-      AllOf(HasSubstr("cannot be serialized into a blob"),
-            HasSubstr("in-memory-compressed")));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(R"({"index": {"vocabularyType": "nonsense"}, "namedQueries": []})"),
-      HasSubstr("index.vocabularyType"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(R"({"index": {"numThreads": "four"}, "namedQueries": []})"),
-      HasSubstr("`index.numThreads` has the wrong type"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(R"({"geoCompaction": {"maxDeadShapeRatio": 2},
-                "namedQueries": []})"),
-      HasSubstr("maxDeadShapeRatio"));
-  EXPECT_EQ(
-      parse(R"({"blob": {"diffCompressionLevel": 5}, "namedQueries": []})")
-          .diffCompressionLevel_,
-      5);
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(R"({"blob": {"diffCompressionLevel": 0}, "namedQueries": []})"),
-      HasSubstr("diffCompressionLevel"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(R"({"blob": {"diffCompressionLevel": 23}, "namedQueries": []})"),
-      HasSubstr("diffCompressionLevel"));
-
-  // A file that is not JSON.
-  std::string filename = absl::StrCat(gtestCurrentTestName(), ".json");
-  {
-    auto stream = ad_utility::makeOfstream(filename);
-    stream << "{ not json";
-  }
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-  AD_EXPECT_THROW_WITH_MESSAGE(BlobDiffConfig::fromFile(filename),
-                               HasSubstr("is not valid JSON"));
-  EXPECT_ANY_THROW(BlobDiffConfig::fromFile(filename + ".missing"));
 }
