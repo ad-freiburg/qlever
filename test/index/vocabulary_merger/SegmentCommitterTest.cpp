@@ -144,7 +144,6 @@ TEST(SegmentCommitter, commitSegments) {
 // Test that the committer rejects a block writer with a block size of zero and
 // a segment whose number of sub-vocabularies differs from the one of the
 // writer.
-// _____________________________________________________________________________
 TEST(SegmentCommitter, contractChecks) {
   SingleVocabularyParallelWriter zeroBlockSizeWriter{
       std::make_unique<SmallBlockWriter>(0)};
@@ -164,7 +163,6 @@ TEST(SegmentCommitter, contractChecks) {
 // Test that the committer never hands an empty block to its sink: neither
 // when no segment was committed at all, nor when the words fill the last block
 // exactly. Also test that `gatherWords` of a block without pieces is empty.
-// _____________________________________________________________________________
 TEST(SegmentCommitter, noEmptyBlocks) {
   SingleVocabularyParallelWriter writer{std::make_unique<SmallBlockWriter>()};
   {
@@ -197,7 +195,6 @@ TEST(SegmentCommitter, noEmptyBlocks) {
 }
 
 // Test that the progress bar of the committer counts the committed words.
-// _____________________________________________________________________________
 TEST(SegmentCommitter, progressBar) {
   // Use a small batch size, so that the progress bar is updated after a few
   // words already.
