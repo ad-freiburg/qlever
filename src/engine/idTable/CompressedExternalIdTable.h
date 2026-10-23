@@ -24,6 +24,7 @@
 #include "backports/asio.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
+#include "engine/idTable/BitwiseKeySort.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -1121,13 +1122,22 @@ void sortBlockRange(Range& block, const Comparator& comparator) {
       ad_utility::globalExecutor());
 }
 
-// The implementation of sorting a single block, see `sortBlockRange` above.
+// The implementation of sorting a single block. A `Comparator` that compares
+// the bits of some columns (see `hasBitwiseKeyColumns`) is sorted via the much
+// faster `sortByBitwiseKeys`, in parallel on the executor of the
+// `parallelism_` (see `BitwiseKeySortParallelism`). Any other comparator is
+// sorted via `sortBlockRange` above.
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
+  BitwiseKeySortParallelism parallelism_{};
   template <typename T>
   void operator()(T& block) {
-    sortBlockRange(block, comparator_);
+    if constexpr (hasBitwiseKeyColumns<Comparator>) {
+      sortByBitwiseKeys(block, Comparator::bitwiseKeyColumns, parallelism_);
+    } else {
+      sortBlockRange(block, comparator_);
+    }
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
@@ -1201,6 +1211,7 @@ class CompressedExternalIdTableSorter
              BlockSorter{comparator}},
         comparator_{comparator} {
     this->setAsyncPushExecutor(mergeExecutor_);
+    setBlockSortParallelism();
   }
 
   // When we have a static number of columns, then the `numCols` argument to the
@@ -1237,9 +1248,16 @@ class CompressedExternalIdTableSorter
   // PRECONDITION: No `asyncPushBlock` is in flight.
   void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
     AD_CONTRACT_CHECK(parallelism > 0);
+    // A block that is currently being sorted in the background uses the
+    // parallelism that is changed below, so wait for it (without consuming
+    // the future, which `transformAndPushLastBlock` still needs).
+    if (this->compressAndWriteFuture_.valid()) {
+      this->compressAndWriteFuture_.wait();
+    }
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
     this->setAsyncPushExecutor(mergeExecutor_);
+    setBlockSortParallelism();
   }
 
   // Asynchronously push all the rows of the `table`, in a way that several
@@ -1480,13 +1498,20 @@ class CompressedExternalIdTableSorter
                 << std::endl;
   }
 
+  // Let the sorts of the blocks (see `BlockSorter`) run on the merge executor
+  // with the merge parallelism, see `setMergeExecutor`.
+  void setBlockSortParallelism() {
+    this->blockTransformation_.parallelism_ =
+        BitwiseKeySortParallelism{mergeExecutor_, mergeParallelism_};
+  }
+
   // _____________________________________________________________
-  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockRange(block, comparator_);
+  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) {
+    this->blockTransformation_(block);
   }
 
   // A function with this name is needed by the mixin base class.
-  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
+  void transformBlock(IdTableStatic<NumStaticCols>& block) {
     sortBlockInPlace(block);
   }
 };

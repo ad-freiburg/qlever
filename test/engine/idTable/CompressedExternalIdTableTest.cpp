@@ -1048,6 +1048,52 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
   EXPECT_THAT(result.table_, ::testing::ElementsAreArray(expected));
 }
 
+// _____________________________________________________________________________
+// The blocks of a sorter whose comparator compares the bits of some columns
+// (see `ad_utility::hasBitwiseKeyColumns`) are sorted via
+// `ad_utility::sortByBitwiseKeys` in parallel on the merge executor. Check the
+// result for blocks that are large enough for the parallel sort, also when the
+// merge executor is changed while a block is being sorted in the background.
+TEST(CompressedExternalIdTable, sorterWithParallelBlockSorts) {
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  static_assert(ad_utility::hasBitwiseKeyColumns<SortByPSO>);
+  constexpr size_t blocksize = 50'000;
+  IdTable input = createRandomlyFilledIdTable(6 * blocksize + 123, NUM_COLS);
+  CopyableIdTable<0> expected{NUM_COLS, ad_utility::testing::makeAllocator()};
+  for (const auto& row : input) {
+    expected.push_back(row);
+  }
+  ql::ranges::sort(expected, SortByPSO{});
+
+  net::thread_pool pool{8};
+  net::thread_pool otherPool{4};
+  {
+    ad_utility::CompressedExternalIdTableSorter<SortByPSO, 0> sorter{
+        filename, NUM_COLS, memoryForBlocksize(blocksize, NUM_COLS),
+        ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(pool.get_executor(), 8);
+    size_t numPushed = 0;
+    for (const auto& row : input) {
+      sorter.push(row);
+      // Directly after the first block has been handed to the background
+      // thread, switch to another executor.
+      if (++numPushed == blocksize + 1) {
+        sorter.setMergeExecutor(otherPool.get_executor(), 4);
+      }
+    }
+    auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
+    auto result = idTableFromBlockGenerator(blocks);
+    ASSERT_EQ(result.numRows(), input.numRows());
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  }
+  pool.join();
+  otherPool.join();
+}
+
 // The spill files of a merge phase that are currently on disk: their number and
 // their total size. Every chunk spills to a file of its own whose name starts
 // with the given `prefix`, and that file is deleted as soon as the chunk has
