@@ -38,9 +38,13 @@ TEST(SplitLayoutIdBitRepresentationTest, incremented) {
   EXPECT_EQ(static_cast<Datatype>(incDatatype), Datatype::Int);
   EXPECT_EQ(incPayload, static_cast<uint64_t>(idValue) + 1);
 
-  // The maximal payload carries into the datatype. Not `constexpr`, so that the
-  // carry also runs (and is covered) at runtime.
-  const SplitLayoutIdBitRepresentation maxPayload{
+  // The maximal payload carries into the datatype.
+  //
+  // NOTE: Keep `maxPayload` non-const. For a `const` object with a constant
+  // initializer, clang evaluates the `constexpr` call at compile time (even
+  // at `-O0`), so the carry would never run at runtime and the coverage report
+  // would not see it.
+  SplitLayoutIdBitRepresentation maxPayload{
       static_cast<uint8_t>(Datatype::Int),
       std::numeric_limits<uint64_t>::max()};
   const auto carried = maxPayload.incremented();
