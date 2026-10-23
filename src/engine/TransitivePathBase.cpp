@@ -169,7 +169,8 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
     if (idTable.has_value()) {
       inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
-    // NOTE: A single node can be linked to millions of nodes.
+    // Add one row per linked node, with a cancellation check per chunk (a
+    // single node can be linked to millions of nodes).
     ad_utility::chunkedForEach(
         linkedNodes,
         [this, &table, &outputRow, &inputView, startSideCol, targetSideCol,
