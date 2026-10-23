@@ -19,26 +19,26 @@ namespace detail {
 
 // If `child` is a variable by which the input of the `context` is sorted,
 // return the set of rows where it is bound to an `Id` of one of the
-// `datatypes` (or of none of them if `complement` is set). The `Id`s of each
-// datatype are adjacent in the sorted input, so this only needs a few binary
-// searches. Otherwise, return `std::nullopt`. This is also the case if the
-// input contains UNDEF but `datatypes` doesn't, because then the result for
+// `datatypes` (or of none of them if `applyComplement` is set). The `Id`s of
+// each datatype are adjacent in the sorted input, so this only needs a few
+// binary searches. Otherwise, return `std::nullopt`. This is also the case if
+// the input contains UNDEF but `datatypes` doesn't, because then the result for
 // UNDEF is UNDEF, which a `SetOfIntervals` can't represent.
 static std::optional<ad_utility::SetOfIntervals>
 evaluateDatatypesWithBinarySearch(const SparqlExpression& child,
                                   EvaluationContext* context,
                                   ql::span<const Datatype> datatypes,
-                                  bool complement) {
+                                  bool applyComplement) {
   auto variable = child.getVariableOrNullopt();
-  if (!variable.has_value() || !context->isResultSortedBy(variable.value()) ||
+  if (!variable.has_value() ||
       context->_groupedVariables.contains(variable.value())) {
     return std::nullopt;
   }
-  auto column =
-      context->_inputTable
-          .getColumn(
-              context->getColumnIndexForVariable(variable.value()).value())
-          .subspan(context->_beginIndex, context->size());
+  auto optColumn = context->getSortedColumnOrNullopt(variable.value());
+  if (!optColumn.has_value()) {
+    return std::nullopt;
+  }
+  auto column = optColumn.value();
   // UNDEF sorts first.
   if (!column.empty() && column.front().isUndefined() &&
       !ad_utility::contains(datatypes, Datatype::Undefined)) {
@@ -54,7 +54,7 @@ evaluateDatatypesWithBinarySearch(const SparqlExpression& child,
   }
   auto result = ad_utility::SetOfIntervals::CheckSortedAndDisjointAndSimplify(
       {std::move(intervals), context->size()});
-  if (complement) {
+  if (applyComplement) {
     return ad_utility::SetOfIntervals::Complement{}(std::move(result));
   }
   return result;
@@ -83,11 +83,11 @@ CPP_class_template(typename NaryOperation,
   using NaryExpression<NaryOperation>::NaryExpression;
 
   // Use the binary search if `Datatype` holds for exactly the `Id`s of its
-  // datatypes, see `prefilterExpressions::isExactlyDatatypes`. The value
-  // getters must be consistent with this.
+  // datatypes, see `prefilterExpressions::isDatatypeComputableViaBinarySearch`.
+  // The value getters must be consistent with this.
   ExpressionResult evaluate(EvaluationContext* context) const override {
     using namespace prefilterExpressions;
-    if constexpr (isExactlyDatatypes<Datatype>) {
+    if constexpr (isDatatypeComputableViaBinarySearch<Datatype>) {
       AD_CORRECTNESS_CHECK(this->children().size() == 1);
       auto result = evaluateDatatypesWithBinarySearch(
           *this->children()[0], context, getDatatypes<Datatype>(), false);

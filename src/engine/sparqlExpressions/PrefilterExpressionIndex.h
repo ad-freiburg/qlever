@@ -274,12 +274,13 @@ ql::span<const Datatype> getDatatypes() {
 }
 
 // True iff `D` holds for exactly the `Id`s of `getDatatypes<D>()`, and each of
-// these datatypes forms one contiguous range in a sorted column. Not the case
-// for `IRI` and `LITERAL` (see above), and for `ENCODED_IRI`, because local
-// vocab entries of encoded IRIs may lie within the `EncodedVal` range (see
+// these datatypes forms one contiguous range in a sorted column. `D` can then
+// be evaluated on a sorted column with a few binary searches. Not the case for
+// `IRI` and `LITERAL` (see above), and for `ENCODED_IRI`, because local vocab
+// entries of encoded IRIs may lie within the `EncodedVal` range (see
 // `Id::compareThreeWay`).
 template <IsDatatype D>
-inline constexpr bool isExactlyDatatypes =
+inline constexpr bool isDatatypeComputableViaBinarySearch =
     D == IsDatatype::BLANK || D == IsDatatype::NUMERIC ||
     D == IsDatatype::GEO_POINT;
 
