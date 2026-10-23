@@ -219,15 +219,15 @@ TEST(HttpApiHelpersTest, considerSendParameter) {
   EXPECT_TRUE(considerSendParameter(qleverJson));
 
   // Considered for `sparql-results+json` if and only if the runtime
-  // parameter `sparql-results-json-with-time` is set.
+  // parameter `sparql-results-json-with-meta` is set.
   {
     auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+        &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
     EXPECT_TRUE(considerSendParameter(sparqlJson));
   }
   {
     auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+        &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
     EXPECT_FALSE(considerSendParameter(sparqlJson));
   }
 
