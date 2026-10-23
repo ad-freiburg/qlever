@@ -79,6 +79,13 @@ constexpr size_t mergePhaseOutputBlocksPerChunk(
 constexpr inline CompressedBlockFile::CompressionLevel
     MERGE_PHASE_SPILL_COMPRESSION = -5;
 
+// The ZSTD compression level of the presorted runs of a
+// `CompressedExternalIdTableWriter`. The runs are written once and read back
+// once (by the merge), so a fast level is used; level 1 compresses the
+// (typically well compressible) columns of IDs almost as well as the ZSTD
+// default of 3, but roughly twice as fast.
+constexpr inline int DEFAULT_RUN_COMPRESSION = 1;
+
 // The smallest number of rows that an output block of the merge phase may have.
 // The number of chunks that are merged concurrently is chosen as large as the
 // memory limit allows, but never so large that the output blocks would fall

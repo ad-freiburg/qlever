@@ -696,6 +696,50 @@ TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
   checkBlockContents(writer, secondBatch, rowsPerBlockFor(blockSize));
 }
 
+// _____________________________________________________________________________
+// The compression level of the writer is a pure trade-off between CPU and bytes
+// on disk. Check that it doesn't change the stored blocks, and that it really
+// is applied.
+TEST(CompressedExternalIdTable, writerCompressionLevel) {
+  // The columns hold few distinct values, such that the blocks are highly
+  // compressible and the file sizes below differ clearly.
+  std::vector<JoinColumnAndBounds> bounds;
+  for (size_t columnIdx = 0; columnIdx < 3; ++columnIdx) {
+    bounds.push_back(JoinColumnAndBounds{columnIdx, 0, 20});
+  }
+  std::vector<CopyableIdTable<0>> tables;
+  tables.emplace_back(createRandomlyFilledIdTable(20'000, 3, bounds));
+  tables.emplace_back(createRandomlyFilledIdTable(5'000, 3, bounds));
+  auto blockSize = 8_kB;
+
+  // Write the `tables` with the given compression `level`, check that they
+  // can be read back, and return the size of the resulting file.
+  auto writeWithLevel = [&tables, blockSize](int level) {
+    std::string filename =
+        absl::StrCat(gtestCurrentTestName(), ".", level, ".dat");
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writer.setCompressionLevel(level);
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    return ql::filesystem::file_size(filename);
+  };
+
+  auto sizeFast = writeWithLevel(-5);
+  auto sizeDefault = writeWithLevel(
+      ad_utility::compressedExternalIdTable::DEFAULT_RUN_COMPRESSION);
+  auto sizeStrong = writeWithLevel(19);
+  // NOTE: For these random (and small) blocks, a higher positive level does
+  // not necessarily yield a smaller file, so only the fast negative level is
+  // compared to the others.
+  EXPECT_GT(sizeFast, sizeDefault);
+  EXPECT_GT(sizeFast, sizeStrong);
+}
+
 namespace {
 // Merge all the runs of the `writer` serially via a
 // `CompressedIdTableRunsInput` and return the merged rows.
@@ -1366,6 +1410,42 @@ TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
   // The uncompressed spill file is what pays for the CPU that is saved.
   EXPECT_GT(uncompressed.spillFileSize_, compressed.spillFileSize_);
   EXPECT_GT(uncompressed.spillFileSize_, fast.spillFileSize_);
+}
+
+// _____________________________________________________________________________
+// The compression level of the presorted runs (see `setRunCompressionLevel`)
+// must not change the sorted output, but it must be applied to the file of the
+// runs.
+TEST(CompressedExternalIdTable, sorterRunCompressionLevel) {
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::vector<JoinColumnAndBounds> bounds;
+  for (size_t columnIdx = 0; columnIdx < NUM_COLS; ++columnIdx) {
+    bounds.push_back(JoinColumnAndBounds{columnIdx, 0, 20});
+  }
+  IdTable input = createRandomlyFilledIdTable(20'000, NUM_COLS, bounds);
+  auto expected = sortedCopy(input);
+
+  // Sort the `input` with the given run compression `level` and return the
+  // size of the file of the runs.
+  auto sortWithLevel = [&input, &expected](int level) {
+    std::string filename =
+        absl::StrCat(gtestCurrentTestName(), ".", level, ".dat");
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    // The memory limit is small enough to yield several runs.
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+        filename, NUM_COLS, 100_kB, ad_utility::testing::makeAllocator()};
+    sorter.setRunCompressionLevel(level);
+    sorter.pushBlock(input);
+    auto result = sortedOutput(sorter);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+    return ql::filesystem::file_size(filename);
+  };
+
+  auto sizeFast = sortWithLevel(-5);
+  auto sizeStrong = sortWithLevel(19);
+  EXPECT_GT(sizeFast, sizeStrong);
 }
 
 // _____________________________________________________________________________
