@@ -1342,6 +1342,19 @@ namespace invalidGeometries {
 
 using namespace ::testing;
 
+// Return the `Id` of the WKT literal `wkt` (which need not be valid WKT),
+// added to `localVocab`.
+Id wktLiteralId(QueryExecutionContext* qec, LocalVocab& localVocab,
+                std::string_view wkt) {
+  static const auto wktLiteralIri =
+      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+          GEO_WKT_LITERAL);
+  auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
+      wkt, wktLiteralIri);
+  return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
+}
+
 // Regression test for assertion error caused by only invalid geometries
 // surviving prefiltering:
 //
@@ -1358,14 +1371,8 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
 
   // Build the valid and invalid literals.
   LocalVocab localVocab;
-  auto wktLiteralIri =
-      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-          GEO_WKT_LITERAL);
   auto wktId = [&](std::string_view wkt) {
-    auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        wkt, wktLiteralIri);
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
+    return wktLiteralId(qec, localVocab, wkt);
   };
   Id pointLeft = ValueId::makeFromGeoPoint({0, 0});
   Id invalidLiteralA = wktId("POINT(1 2, 3 4)");
@@ -1422,14 +1429,8 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
 TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab;
-  auto wktLiteralIri =
-      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-          GEO_WKT_LITERAL);
   auto wktId = [&](std::string_view wkt) {
-    auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        wkt, wktLiteralIri);
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
+    return wktLiteralId(qec, localVocab, wkt);
   };
 
   // Compute the spatial join of the single-column inputs `left` and `right`
@@ -1479,26 +1480,21 @@ TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
                   "1)")));
 }
 
-// The `S2` algorithm skips all rows whose value is not a `GeoPoint`, the
-// `Baseline` algorithm skips all rows whose value is not a valid geometry. Both
-// warn about the number of skipped rows per side.
+// Test that the `s2` algorithm warns about skipped rows whose value is not a
+// `GeoPoint` and the `baseline` algorithm about skipped rows whose value is
+// not a valid geometry, each with the number of skipped rows per side.
 TEST(SpatialJoin, SkippedRowsWarning) {
   auto* qec = ad_utility::testing::getQec();
-
   LocalVocab localVocab;
-  auto wktLiteralIri =
-      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-          GEO_WKT_LITERAL);
   auto wktId = [&](std::string_view wkt) {
-    auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        wkt, wktLiteralIri);
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
+    return wktLiteralId(qec, localVocab, wkt);
   };
+
+  // `?a`: a point and an invalid literal. `?b`: a point, a linestring (a valid
+  // geometry, but not a point) and an invalid literal.
   Id point = ValueId::makeFromGeoPoint({0, 0});
   Id invalid = wktId("not wkt");
   Id linestring = wktId("LINESTRING(1 1, 2 2)");
-
   auto makeChild = [&](IdTable rows, std::string var) {
     return ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rows),
@@ -1506,6 +1502,8 @@ TEST(SpatialJoin, SkippedRowsWarning) {
         std::vector<ColumnIndex>{}, localVocab.clone());
   };
 
+  // Compute the spatial join of `?a` and `?b` with the given algorithm and
+  // expect a warning about skipped rows that ends with `expected`.
   auto expectWarning = [&](SpatialJoinAlgorithm algo,
                            std::string_view expected) {
     auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
@@ -1526,6 +1524,8 @@ TEST(SpatialJoin, SkippedRowsWarning) {
                     expected))));
   };
 
+  // The `s2` algorithm also skips the linestring, the `baseline` algorithm
+  // only the invalid literals.
   expectWarning(SpatialJoinAlgorithm::S2_GEOMETRY,
                 "values that are not points (?a: 1, ?b: 2)");
   expectWarning(SpatialJoinAlgorithm::BASELINE,
