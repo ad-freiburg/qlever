@@ -1,0 +1,38 @@
+{
+  "index": {
+    "vocabularyType": "in-memory-compressed",
+    "numThreads": 4
+  },
+  "blob": {
+    "excludedEntryRegexes": []
+  },
+  "geoCompaction": {
+    "maxSegments": 8,
+    "maxDeadShapeRatio": 0.3
+  },
+  "namedQueries": [
+    {
+      "name": "streets",
+      "query": "PREFIX ex: <http://example.org/streets#> SELECT ?street ?id ?category ?length ?width ?oneWay WHERE { ?street a ex:Street ; ex:id ?id ; ex:category ?category ; ex:length ?length ; ex:width ?width ; ex:oneWay ?oneWay }"
+    },
+    {
+      "name": "streetSuccessors",
+      "query": "PREFIX ex: <http://example.org/streets#> SELECT ?street ?next WHERE { ?street ex:nextStreet ?next }"
+    },
+    {
+      "name": "streetGeometries",
+      "query": "PREFIX ex: <http://example.org/streets#> PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?street ?wkt WHERE { ?street a ex:Street ; geo:hasGeometry/geo:asWKT ?wkt }",
+      "geoIndexVar": "?wkt"
+    },
+    {
+      "name": "districts",
+      "query": "PREFIX ex: <http://example.org/streets#> PREFIX geo: <http://www.opengis.net/ont/geosparql#> SELECT ?district ?category ?population ?wkt WHERE { ?district a ex:District ; ex:category ?category ; ex:population ?population ; geo:hasGeometry/geo:asWKT ?wkt }",
+      "geoIndexVar": "?wkt",
+      "simplificationMeters": 0.5
+    },
+    {
+      "name": "speedLimits",
+      "query": "PREFIX ex: <http://example.org/streets#> SELECT ?street ?limit ?start ?end ?minSpeed ?maxSpeed WHERE { ?street ex:hasSpeedLimit ?limit . ?limit ex:start ?start ; ex:end ?end ; ex:minSpeed ?minSpeed ; ex:maxSpeed ?maxSpeed }"
+    }
+  ]
+}

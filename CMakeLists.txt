@@ -1009,6 +1009,9 @@ if (NOT EMSCRIPTEN)
         set_target_properties(engine PROPERTIES DEFINE_SYMBOL "")
     endif()
 
+    add_executable(qlever-blob-diff src/libqlever/blobDiff/BlobDiffRunnerMain.cpp)
+    qlever_target_link_libraries(qlever-blob-diff qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+
     add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
     qlever_target_link_libraries(qlever-upgrade-index index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
