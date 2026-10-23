@@ -7,7 +7,6 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
@@ -51,6 +50,8 @@ namespace {
 using Manager = NamedCachedQueryBlobManager;
 using ErrorType = Manager::BlobErrorType;
 using ad_utility::VocabularyType;
+using ad_utility::testing::buildTestIndex;
+using ad_utility::testing::decompressOrFail;
 
 // A `ql::pmr::memory_resource` that counts the allocations routed through it,
 // used to verify that a caller-provided allocator is actually used for the
@@ -141,19 +142,6 @@ auto isNotDecompressible() {
       blobErrorWith(ErrorType::notDecompressible, "was not written by"));
 }
 
-// Return the decompressed `compressedBlob`, and fail the test if it cannot be
-// decompressed.
-std::vector<char, Manager::BlobAllocator> decompressOrFail(
-    ql::span<const char> compressedBlob,
-    ql::pmr::polymorphic_allocator<char> allocator = {}) {
-  auto result = Manager::tryToDecompressBlob(compressedBlob, allocator);
-  if (const auto* error = std::get_if<Manager::BlobError>(&result)) {
-    ADD_FAILURE() << error->message_;
-    return std::vector<char, Manager::BlobAllocator>{};
-  }
-  return std::get<std::vector<char, Manager::BlobAllocator>>(std::move(result));
-}
-
 // Return a validly ZSTD-compressed blob with a valid header, followed by an
 // index metadata JSON whose index format version is incompatible with the
 // current version of QLever, and nothing else.
@@ -166,37 +154,6 @@ std::vector<char> compressedBlobWithIncompatibleIndexFormat() {
   writer << metadata.dump();
   auto data = std::move(writer).data();
   return Manager::compressBlob(ql::span<const char>{data});
-}
-
-// Write the `turtleContents` to a turtle file, build an index from it with the
-// given vocabulary `type`, and return the corresponding `IndexBuilderConfig`.
-// The basename of the index is derived from the name of the currently running
-// test, so that concurrently running tests do not interfere with each other.
-// The turtle input file is deleted again immediately after the index was built.
-//
-// NOTE: The default vocabulary type is the in-memory, uncompressed one,
-// because `serializeVocabAndNamedCacheToCompressedBlob` currently requires it
-// unless vocabulary entries are excluded (see
-// `Vocabulary::writeAsZeroCopyBlob`).
-IndexBuilderConfig buildTestIndex(
-    std::string_view turtleContents,
-    VocabularyType type = VocabularyType::InMemoryUncompressed) {
-  std::string basename = gtestCurrentTestName();
-  std::string sourceFilename = absl::StrCat(basename, ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(sourceFilename);
-    ofs << turtleContents;
-  }
-  absl::Cleanup cleanup = [&sourceFilename] {
-    ad_utility::deleteFile(sourceFilename);
-  };
-  IndexBuilderConfig config;
-  config.inputFiles_.push_back(
-      {sourceFilename, Filetype::Turtle, std::nullopt});
-  config.baseName_ = std::move(basename);
-  config.vocabType_ = type;
-  EXPECT_NO_THROW(Qlever::buildIndex(config));
-  return config;
 }
 
 // The turtle data used by the tests for the filtered vocabulary export below:
