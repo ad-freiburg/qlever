@@ -20,8 +20,6 @@
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
-#include "rdfTypes/Iri.h"
-#include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 
 namespace {
