@@ -146,7 +146,13 @@ TEST_F(DeltaTriplesTest, clear) {
 
   EXPECT_THAT(deltaTriples, NumTriples(1, 1, 2, 1, 1));
 
+  // Clearing changes the index of the located triples, so that results that
+  // are cached for the previous index are not reused.
+  const size_t indexBeforeClear =
+      deltaTriples.getLocatedTriplesSharedStateCopy()->index_;
   deltaTriples.clear();
+  EXPECT_GT(deltaTriples.getLocatedTriplesSharedStateCopy()->index_,
+            indexBeforeClear);
 
   EXPECT_THAT(deltaTriples, NumTriples(0, 0, 0, 0, 0));
 }
@@ -1245,6 +1251,10 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
           .numTriplesForTesting());
 
   EXPECT_THAT(newDeltaTriples, NumTriples(2, 1, 3, 2, 0));
+  // The index of the located triples continues the one of `newSnapshot`, so
+  // that results cached for the old index are never served for the new one.
+  EXPECT_GT(newDeltaTriples.getLocatedTriplesSharedStateCopy()->index_,
+            newSnapshot->index_);
   auto locatedTriples =
       newDeltaTriples.getLocatedTriplesForPermutation(Permutation::SPO);
   std::vector<IdTriple<0>> insertedTriples;

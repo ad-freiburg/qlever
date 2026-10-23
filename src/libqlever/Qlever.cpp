@@ -705,12 +705,10 @@ void Qlever::swapInRebuiltIndex(
   moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
   // Clear the query cache, including pinned entries: cached results were
-  // computed against the old index, so their `VocabIndex` ids are in the old
-  // vocabulary's coordinates and their `LocalVocabEntry`s are anchored to the
-  // old index. The cache key alone does not protect against serving them: it
-  // only contains the query string and the delta triples version counter,
-  // and the counter of the new index starts over and can collide with a
-  // pre-swap value.
+  // computed against the old index and are never hit again, because
+  // `addFromSnapshotDiff` above continued the snapshot index of the old index
+  // in the new one. This also holds for the results that queries still
+  // running on the old index insert after this point.
   cache_.clearAll();
 }
 #endif

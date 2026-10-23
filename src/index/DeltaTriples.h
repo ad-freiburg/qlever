@@ -323,6 +323,8 @@ class DeltaTriples {
   // Compute the diff between `oldState` (the snapshot used to start the index
   // rebuild) and `newState` (the current snapshot), remap the IDs using
   // `idMapping`, and add the resulting triples to this `DeltaTriples` instance.
+  // Afterwards, the index of the located triples is larger than that of
+  // `newState`.
   void addFromSnapshotDiff(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
       const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
