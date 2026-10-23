@@ -386,6 +386,32 @@ void sortImpl(Table& table, const std::array<size_t, NumKeys>& keyColumns,
 }
 }  // namespace bitwiseKeySort::detail
 
+// Return `true` if the `keyColumns` are exactly all the `numColumns` columns of
+// a table (in any order). Then the key rows of `sortByBitwiseKeys` are the
+// complete rows and no index is needed to permute the other columns.
+template <size_t NumKeys>
+bool bitwiseKeysAreAllColumns(size_t numColumns,
+                              const std::array<size_t, NumKeys>& keyColumns) {
+  auto sortedKeys = keyColumns;
+  ql::ranges::sort(sortedKeys);
+  return numColumns == NumKeys &&
+         ql::ranges::adjacent_find(sortedKeys) == sortedKeys.end();
+}
+
+// The memory in bytes per row that `sortByBitwiseKeys` needs in addition to
+// the table, for a table with `numColumns` columns and the given `keyColumns`:
+// two buffers of key rows (the keys, followed by the index of the row unless
+// the keys are all the columns) and one byte per row for the bucket indices of
+// the sample sort. With the index, there is also a buffer of one column that
+// the other columns are permuted through.
+template <size_t NumKeys>
+size_t bitwiseKeySortBytesPerRow(
+    size_t numColumns, const std::array<size_t, NumKeys>& keyColumns) {
+  bool withIndex = !bitwiseKeysAreAllColumns(numColumns, keyColumns);
+  size_t width = NumKeys + (withIndex ? 1 : 0);
+  return 2 * width * sizeof(uint64_t) + 1 + (withIndex ? sizeof(uint64_t) : 0);
+}
+
 // Sort the rows of the `table` (an `IdTable` or `IdTableStatic`, not a view)
 // by the bits of the `keyColumns`, compared lexicographically as unsigned
 // 64-bit integers. This is the order of `Id::compareWithoutLocalVocab` and of
@@ -394,8 +420,8 @@ void sortImpl(Table& table, const std::array<size_t, NumKeys>& keyColumns,
 //
 // The sort works in the `buffers` (see `BitwiseKeySortBuffers`), which keep
 // their memory for the next sort of the caller. Without `buffers`, the sort
-// uses buffers of its own that are freed when it returns. The memory needed
-// per row is `bitwiseKeySortBytesPerRow`, see there.
+// uses buffers of its own that are freed when it returns. The memory that the
+// sort needs per row is `bitwiseKeySortBytesPerRow`, see there.
 template <size_t NumKeys, typename Table>
 void sortByBitwiseKeys(Table& table,
                        const std::array<size_t, NumKeys>& keyColumns,
@@ -408,16 +434,9 @@ void sortByBitwiseKeys(Table& table,
   for (size_t c : keyColumns) {
     AD_CONTRACT_CHECK(c < table.numColumns());
   }
-  // If the keys are exactly all the columns, the key rows are the complete rows
-  // and no index is needed.
-  auto sortedKeys = keyColumns;
-  ql::ranges::sort(sortedKeys);
-  bool keysAreAllColumns =
-      table.numColumns() == NumKeys &&
-      ql::ranges::adjacent_find(sortedKeys) == sortedKeys.end();
   BitwiseKeySortBuffers localBuffers;
   auto& usedBuffers = buffers != nullptr ? *buffers : localBuffers;
-  if (keysAreAllColumns) {
+  if (bitwiseKeysAreAllColumns(table.numColumns(), keyColumns)) {
     bitwiseKeySort::detail::sortImpl<NumKeys, false>(table, keyColumns,
                                                      parallelism, usedBuffers);
   } else {
