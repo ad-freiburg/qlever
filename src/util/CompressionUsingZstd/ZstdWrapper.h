@@ -25,11 +25,19 @@ class ZstdWrapper {
   // Compress the given byte array and return the result;
   static std::vector<char> compress(const void* src, size_t numBytes,
                                     int compressionLevel = 3) {
-    std::vector<char> result(ZSTD_compressBound(numBytes));
-    auto compressedSize = checkError(ZSTD_compress(
-        result.data(), result.size(), src, numBytes, compressionLevel));
-    result.resize(compressedSize);
-    return result;
+    // NOTE: Compress into a buffer that the thread reuses, and copy only the
+    // compressed bytes into the result. Creating the result with the size of
+    // `ZSTD_compressBound` would zero-initialize it, which costs more than the
+    // copy, because the compressed data is typically much smaller.
+    thread_local std::vector<char> buffer;
+    const size_t bound = ZSTD_compressBound(numBytes);
+    if (buffer.size() < bound) {
+      buffer.resize(bound);
+    }
+    auto compressedSize = checkError(
+        ZSTD_compressCCtx(compressionContext(), buffer.data(), buffer.size(),
+                          src, numBytes, compressionLevel));
+    return std::vector<char>(buffer.begin(), buffer.begin() + compressedSize);
   }
 
   // The error that is reported by the non-throwing functions below. The
@@ -82,7 +90,8 @@ class ZstdWrapper {
     knownOriginalSize *= sizeof(T);
     std::vector<T> result(knownOriginalSize / sizeof(T));
     auto compressedSize =
-        ZSTD_decompress(result.data(), knownOriginalSize, src, numBytes);
+        ZSTD_decompressDCtx(decompressionContext(), result.data(),
+                            knownOriginalSize, src, numBytes);
     AD_CONTRACT_CHECK(compressedSize == knownOriginalSize);
     return result;
   }
@@ -95,8 +104,8 @@ class ZstdWrapper {
       requires(std::is_trivially_copyable_v<T>)) static SizeOrError
       tryToDecompressToBuffer(const char* src, size_t numBytes, T* buffer,
                               size_t bufferCapacity) noexcept {
-    auto decompressedSize =
-        ZSTD_decompress(buffer, bufferCapacity, src, numBytes);
+    auto decompressedSize = ZSTD_decompressDCtx(decompressionContext(), buffer,
+                                                bufferCapacity, src, numBytes);
     if (auto error = toError(decompressedSize)) {
       return error.value();
     }
@@ -258,6 +267,23 @@ class ZstdWrapper {
     int log = numBytes <= 1 ? 1 : absl::bit_width(numBytes - 1);
     auto bounds = ZSTD_cParam_getBounds(ZSTD_c_windowLog);
     return std::clamp(log, bounds.lowerBound, bounds.upperBound);
+  }
+
+  // The (de)compression context of the calling thread. The one-shot
+  // `ZSTD_compress`/`ZSTD_decompress` functions create, initialize, and free a
+  // context on every call, which is a noticeable cost when many small blocks
+  // are compressed; a context that the thread reuses avoids that.
+  static ZSTD_CCtx* compressionContext() {
+    thread_local std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> context{
+        ZSTD_createCCtx(), &ZSTD_freeCCtx};
+    AD_CORRECTNESS_CHECK(context != nullptr);
+    return context.get();
+  }
+  static ZSTD_DCtx* decompressionContext() {
+    thread_local std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> context{
+        ZSTD_createDCtx(), &ZSTD_freeDCtx};
+    AD_CORRECTNESS_CHECK(context != nullptr);
+    return context.get();
   }
 
   // Return the size of the `result`, or throw a `std::runtime_error` with the

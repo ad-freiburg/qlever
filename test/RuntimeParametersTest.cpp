@@ -195,6 +195,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.materializedViewPatternMatchNumReplacementPlans_);
   check(params.serviceAllowedIriPrefixes_);
   check(params.permutationWriterNumBlocksInFlight_);
+  check(params.permutationCompressionLevel_);
   check(params.vacuumMinimumBlockSize_);
   check(params.disableCaching_);
   check(params.logLevel_);
