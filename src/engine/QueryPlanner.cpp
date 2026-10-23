@@ -1853,13 +1853,9 @@ void QueryPlanner::addNonRewritableGeoDistanceFilterWarning(
       "example geof:distance(?a, ?b) <= constant, can be optimized. See "
       "https://docs.qlever.dev/geosparql/ for the supported patterns.");
   // The same filter may be seeded more than once (see
-  // `optimizeCommutatively`), so avoid duplicate warnings.
-  // TODO<ullingerc> Remove this check once #3762 is merged, because then
-  // `Operation::addWarning` (to which `warnings_` are forwarded in
-  // `createExecutionTree`) ignores duplicates.
-  if (ql::ranges::find(warnings_, warning) == warnings_.end()) {
-    warnings_.push_back(std::move(warning));
-  }
+  // `optimizeCommutatively`), but `Operation::addWarning` (to which
+  // `warnings_` are forwarded in `createExecutionTree`) ignores duplicates.
+  warnings_.push_back(std::move(warning));
 }
 
 // _____________________________________________________________________________
