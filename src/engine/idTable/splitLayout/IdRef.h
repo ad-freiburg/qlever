@@ -357,8 +357,8 @@ using ConstIdRef = BasicIdRef<true>;
 }  // namespace columnBasedIdTable::splitLayout
 
 // The `IdRef` and the `ConstIdRef` are cheap to copy and refer to an element of
-// a column, so they may be stored by value. The restricted references returned
-// by `column[i]` are stored as them (see their `FullProxyType`).
+// a column, so they may be stored by value, also in place of the restricted
+// references returned by `column[i]` (see `FullProxyType` there).
 template <bool IsConst>
 inline constexpr bool
     qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst>> =
