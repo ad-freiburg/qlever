@@ -407,9 +407,6 @@ class MaterializedViewsManager {
   explicit MaterializedViewsManager(
       ad_utility::AllocatorWithLimit<Id> allocator)
       : allocator_{std::move(allocator)} {}
-  MaterializedViewsManager(std::string onDiskBase,
-                           ad_utility::AllocatorWithLimit<Id> allocator)
-      : onDiskBase_{std::move(onDiskBase)}, allocator_{std::move(allocator)} {}
 
   // For use with the default constructor: set the index basename after creation
   // of the `MaterializedViewsManager`. This should only be called once and
