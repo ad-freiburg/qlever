@@ -251,7 +251,9 @@ TEST(TripleSerializer, serializeOnlyBlankNodeBlocksFromLocalVocab) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that an IRI of a serialized local vocab that the deserializing index
+// encodes directly in an `Id` is mapped to that `Id`, not to a local vocab
+// entry.
 TEST(TripleSerializer, encodableIrisAreDeserializedAsEncodedIds) {
   // Serialize a local vocab from an index that does not encode any IRIs.
   auto* qecWithoutEncoding = ad_utility::testing::getQec();
