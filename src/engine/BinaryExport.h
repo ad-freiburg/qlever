@@ -2,9 +2,9 @@
 //
 // 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -28,13 +28,16 @@ namespace qlever::binary_export {
 // the strings that its IDs refer to (see `StringMapping`). A batch ends after
 // the first row with which its IDs take up at least
 // `defaultMinNumIdBytesPerBatch` bytes, or its (distinct) strings take up at
-// least `defaultMinNumStringBytesPerBatch` bytes. These are no upper limits: a
-// batch is at least as large as the last row (with all of its strings), which
-// can be arbitrarily large (for example a single WKT literal of a large
-// `MULTIPOLYGON` can take up tens of megabytes). The minimum for the strings is
-// much larger than the one for the IDs, such that also batches with large
-// strings consist of several rows, which benefit from the deduplication of the
-// strings within a batch.
+// least `defaultMinNumStringBytesPerBatch` bytes.
+//
+// NOTE 1: These are no upper limits. A batch is at least as large as the last
+// row (with all of its strings), which can be arbitrarily large (for example a
+// single WKT literal of a large `MULTIPOLYGON` can take up tens of megabytes).
+//
+// NOTE 2: The minimum for the strings is much larger than the one for the IDs,
+// such that also batches with large strings consist of several rows, which
+// benefit from the deduplication of the strings within a batch.
+//
 // TODO<joka921> These values are arbitrary.
 inline constexpr size_t defaultMinNumIdBytesPerBatch = 1 << 20;
 inline constexpr size_t defaultMinNumStringBytesPerBatch = 16 << 20;
