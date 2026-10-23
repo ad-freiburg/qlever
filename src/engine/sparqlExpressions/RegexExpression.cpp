@@ -253,21 +253,21 @@ ExpressionResult PrefixRegexExpression::evaluate(
   // In this function, the expression is a simple variable. If the input is
   // sorted by that variable, the result can be computed by a constant number
   // of binary searches and the result is a set of intervals.
-  if (auto sortedColumn = context->getSortedColumnOrNullopt(variable_);
-      sortedColumn.has_value() &&
-      (sortedColumn->empty() || !sortedColumn->front().isUndefined())) {
-    auto beg = sortedColumn->begin();
-    auto end = sortedColumn->end();
+  if (auto sortedColumn =
+          context->getSortedAlwaysDefinedColumnOrNullopt(variable_);
+      sortedColumn.has_value()) {
+    auto column = sortedColumn.value();
     std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.
-      auto lower = std::lower_bound(beg, end, lowerId);
-      auto upper = std::lower_bound(beg, end, upperId);
+      auto lower = ql::ranges::lower_bound(column, lowerId);
+      auto upper = ql::ranges::lower_bound(column, upperId);
       // Return the empty result as an empty `SetOfIntervals` instead of as an
       // empty range.
       if (lower != upper) {
         resultSetOfIntervals.push_back(ad_utility::SetOfIntervals{
-            {{lower - beg, upper - beg}}, context->size()});
+            {{lower - column.begin(), upper - column.begin()}},
+            context->size()});
       }
       checkCancellation(context);
     }

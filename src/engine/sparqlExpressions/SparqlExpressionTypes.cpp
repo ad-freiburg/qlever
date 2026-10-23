@@ -46,6 +46,18 @@ std::optional<ql::span<const Id>> EvaluationContext::getSortedColumnOrNullopt(
 }
 
 // _____________________________________________________________________________
+std::optional<ql::span<const Id>>
+EvaluationContext::getSortedAlwaysDefinedColumnOrNullopt(
+    const Variable& variable) const {
+  auto column = getSortedColumnOrNullopt(variable);
+  // UNDEF sorts first.
+  if (column.has_value() && !column->empty() && column->front().isUndefined()) {
+    return std::nullopt;
+  }
+  return column;
+}
+
+// _____________________________________________________________________________
 [[nodiscard]] size_t EvaluationContext::size() const {
   return _endIndex - _beginIndex;
 }

@@ -34,16 +34,14 @@ evaluateDatatypesWithBinarySearch(const SparqlExpression& child,
       context->_groupedVariables.contains(variable.value())) {
     return std::nullopt;
   }
-  auto optColumn = context->getSortedColumnOrNullopt(variable.value());
+  auto optColumn =
+      ad_utility::contains(datatypes, Datatype::Undefined)
+          ? context->getSortedColumnOrNullopt(variable.value())
+          : context->getSortedAlwaysDefinedColumnOrNullopt(variable.value());
   if (!optColumn.has_value()) {
     return std::nullopt;
   }
   auto column = optColumn.value();
-  // UNDEF sorts first.
-  if (!column.empty() && column.front().isUndefined() &&
-      !ad_utility::contains(datatypes, Datatype::Undefined)) {
-    return std::nullopt;
-  }
   ad_utility::SetOfIntervals::Vec intervals;
   for (Datatype datatype : datatypes) {
     auto [begin, end] = valueIdComparators::getRangeForDatatype(
