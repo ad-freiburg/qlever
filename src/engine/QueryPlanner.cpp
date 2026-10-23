@@ -16,6 +16,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
+#include <limits>
 #include <memory>
 #include <optional>
 #include <range/v3/view/cartesian_product.hpp>
@@ -95,6 +96,68 @@ template <typename Op>
 SubtreePlan makeSubtreePlan(std::shared_ptr<Op> operation) {
   auto* qec = operation->getExecutionContext();
   return {qec, std::move(operation)};
+}
+
+// Create the plan for the `OptionalJoin` of `left` with the OPTIONAL `right`.
+// If `right` is a `Bind` (a `BIND` at the end of the OPTIONAL group), the
+// `Bind` is moved above the join when that does not change the result.
+//
+// NOTE: Inside the group, the `BIND` is evaluated on all rows of the group's
+// pattern, although only the rows that match `left` survive the join. The
+// move is possible if the target is not a join column, all variables of the
+// expression are bound by the pattern, the expression contains no `EXISTS`
+// (whose pattern would otherwise be evaluated with the variables of `left`
+// bound), and the pattern has a variable that is always defined and not shared
+// with `left`. That variable is UNDEF exactly for the rows without a match, so
+// the moved `Bind` leaves the target UNDEF for them, see `Bind::Bind`.
+SubtreePlan makeOptionalJoinPlan(QueryExecutionContext* qec,
+                                 std::shared_ptr<QueryExecutionTree> left,
+                                 std::shared_ptr<QueryExecutionTree> right) {
+  auto makeJoin = [&]() {
+    return makeSubtreePlan<OptionalJoin>(qec, std::move(left),
+                                         std::move(right));
+  };
+  auto bind = std::dynamic_pointer_cast<Bind>(right->getRootOperation());
+  if (!bind) {
+    return makeJoin();
+  }
+  const auto& parsedBind = bind->bind();
+  const auto& pattern = bind->getSubtree();
+
+  // Check the conditions on the target and the expression.
+  auto variables = parsedBind._expression.containedVariables();
+  bool canBeMoved = !left->containsVariable(parsedBind._target) &&
+                    ql::ranges::all_of(variables,
+                                       [&pattern](const Variable* var) {
+                                         return pattern->containsVariable(*var);
+                                       }) &&
+                    parsedBind._expression.getExistsExpressions().empty();
+  if (!canBeMoved) {
+    return makeJoin();
+  }
+
+  // Find the always defined variable of the pattern that is not shared with
+  // `left` and has the smallest column index (for a deterministic choice).
+  std::optional<Variable> onlyIfBound;
+  ColumnIndex columnOfOnlyIfBound = std::numeric_limits<ColumnIndex>::max();
+  for (const auto& [var, info] : pattern->getVariableColumns()) {
+    if (info.mightContainUndef_ ==
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined &&
+        !left->containsVariable(var) &&
+        info.columnIndex_ < columnOfOnlyIfBound) {
+      onlyIfBound = var;
+      columnOfOnlyIfBound = info.columnIndex_;
+    }
+  }
+  if (!onlyIfBound.has_value()) {
+    return makeJoin();
+  }
+
+  // Join with the pattern (which may end with further `BIND`s) and evaluate
+  // the `BIND` on the result.
+  auto join = makeOptionalJoinPlan(qec, std::move(left), pattern);
+  return makeSubtreePlan<Bind>(qec, std::move(join._qet), parsedBind,
+                               std::move(onlyIfBound));
 }
 
 // Update the `target` query plan such that it knows that it includes all the
@@ -2355,7 +2418,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
+    return {makeOptionalJoinPlan(_qec, a._qet, b._qet)};
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {

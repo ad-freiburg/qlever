@@ -15,19 +15,33 @@ class Bind : public Operation {
  public:
   static constexpr size_t CHUNK_SIZE = 10'000;
 
-  // ____________________________________________________________________________
+  // Construct a `BIND` that evaluates `b` on the result of `subtree`. If
+  // `onlyIfBound` is given, it must be a variable of `subtree`, and the target
+  // of the `BIND` is UNDEF for all rows where that variable is UNDEF.
+  //
+  // NOTE: The query planner uses `onlyIfBound` when it moves a `BIND` from
+  // the end of an OPTIONAL group above the `OptionalJoin`, see
+  // `QueryPlanner::createJoinCandidates`. The variable is then one that is
+  // always defined when the optional pattern matches, so the target stays
+  // UNDEF exactly for the rows without a match, as if the `BIND` had been
+  // evaluated inside the group.
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       parsedQuery::Bind b);
+       parsedQuery::Bind b, std::optional<Variable> onlyIfBound = std::nullopt);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   parsedQuery::Bind _bind;
+  std::optional<Variable> onlyIfBound_;
   // For the documentation of the overridden members, see Operation.h
  protected:
   [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  public:
   const parsedQuery::Bind& bind() const { return _bind; }
+  const std::shared_ptr<QueryExecutionTree>& getSubtree() const {
+    return _subtree;
+  }
+  const std::optional<Variable>& onlyIfBound() const { return onlyIfBound_; }
   [[nodiscard]] std::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
 
