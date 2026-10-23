@@ -96,7 +96,6 @@ TEST(IdMapWriters, numGroupsIsBoundedByNumMaps) {
   EXPECT_EQ(oneGroup.numGroups(), 1u);
 }
 
-// _____________________________________________________________________________
 // Test that a segment must have the entries of exactly as many partial
 // vocabularies as there are maps.
 TEST(IdMapWriters, writeChecksNumPartialVocabularies) {
@@ -112,7 +111,6 @@ TEST(IdMapWriters, writeChecksNumPartialVocabularies) {
   writers.finish();
 }
 
-// _____________________________________________________________________________
 // Test that once a task has failed, the tasks of the remaining segments as well
 // as further calls to `write` are skipped, and that `finish()` rethrows the
 // exception of the failed task.
