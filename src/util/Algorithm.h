@@ -314,10 +314,10 @@ CPP_template(typename RandomAccessIterator, typename Predicate)(
 // some further optimizations.
 CPP_template_2(typename R1, typename R2, typename Compare = std::less<>,
                typename Proj1 = ql::identity, typename Proj2 = ql::identity)(
-    requires ql::ranges::range<R1> CPP_and_2 ql::ranges::range<R2> CPP_and_2
-        ql::concepts::mergeable<
-            ql::ranges::iterator_t<R1>, ql::ranges::iterator_t<R2>,
-            ql::ranges::iterator_t<R1>, Compare, Proj1, Proj2>)
+    requires ql::ranges::range<R1> && ql::ranges::range<R2> &&
+    ql::concepts::mergeable<ql::ranges::iterator_t<R1>,
+                            ql::ranges::iterator_t<R2>,
+                            ql::ranges::iterator_t<R1>, Compare, Proj1, Proj2>)
 auto inplace_set_difference(R1&& r1, R2&& r2, Compare comp = {},
                             Proj1 proj1 = {}, Proj2 proj2 = {}) {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(r1, comp, proj1));

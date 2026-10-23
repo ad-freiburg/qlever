@@ -96,9 +96,9 @@ CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
 // currently require, so the handler has to be called with a `Value` even on the
 // error path, where there is no result to report.
 CPP_template(typename Executor, typename CompletionToken, typename Function)(
-    requires ql::concepts::invocable<Function> CPP_and(
-        std::is_default_constructible_v<std::invoke_result_t<Function>> ||
-        std::is_void_v<std::invoke_result_t<Function>>))
+    requires ql::concepts::invocable<Function> &&
+    (std::is_default_constructible_v<std::invoke_result_t<Function>> ||
+     std::is_void_v<std::invoke_result_t<Function>>))
 auto runFunctionOnExecutor(Executor executor, Function function,
                            CompletionToken&& completionToken) {
   using Value = std::invoke_result_t<Function>;

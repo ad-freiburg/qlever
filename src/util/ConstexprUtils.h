@@ -97,13 +97,12 @@ template <auto FirstCase, auto... Cases>
 struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(
               requires ql::concepts::equality_comparable_with<
-                  ValueType, decltype(FirstCase)>
-                  CPP_and(ql::concepts::equality_comparable_with<
-                              ValueType, decltype(Cases)> &&
-                          ...)
-                      CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
-                          CPP_and(InvocableWithCase<FuncType, Cases, Args...> &&
-                                  ...))
+                  ValueType, decltype(FirstCase)> &&
+              (ql::concepts::equality_comparable_with<ValueType,
+                                                      decltype(Cases)> &&
+               ...) &&
+              InvocableWithCase<FuncType, FirstCase, Args...> &&
+              (InvocableWithCase<FuncType, Cases, Args...> && ...))
   constexpr auto operator()(FuncType&& function, const ValueType& value,
                             Args&&... args) const -> decltype(auto) {
     if (value == FirstCase) {

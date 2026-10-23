@@ -133,15 +133,15 @@ class ConfigOptionValidatorManager {
   CPP_template(typename TranslationFunction, typename ExceptionValidatorFunc,
                typename... ExceptionValidatorParameterTypes)(
               requires(...&& isInstantiation<ExceptionValidatorParameterTypes,
-                                             ConstConfigOptionProxy>)
-                  CPP_and(... && ql::concepts::invocable<
-                                     TranslationFunction,
-                                     const ExceptionValidatorParameterTypes>)
-                      CPP_and ExceptionValidatorFunction<
-                          ExceptionValidatorFunc,
-                          std::invoke_result_t<
-                              TranslationFunction,
-                              const ExceptionValidatorParameterTypes>...>)
+                                             ConstConfigOptionProxy>) &&
+              (... && ql::concepts::invocable<
+                          TranslationFunction,
+                          const ExceptionValidatorParameterTypes>) &&
+              ExceptionValidatorFunction<
+                  ExceptionValidatorFunc,
+                  std::invoke_result_t<
+                      TranslationFunction,
+                      const ExceptionValidatorParameterTypes>...>)
   ConfigOptionValidatorManager(
       ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
       TranslationFunction translationFunction,

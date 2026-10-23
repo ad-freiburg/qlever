@@ -123,9 +123,8 @@ class SortedSequence {
   // (elements are deduplicated before calling this function). Duplicates in
   // `r2` make no difference.
   CPP_template_2(typename R1, typename R2)(
-      requires ql::ranges::forward_range<R1> CPP_and_2
-          ql::ranges::output_range<R1, ValueType>
-              CPP_and_2 ql::ranges::input_range<R2>)
+      requires ql::ranges::forward_range<R1> &&
+      ql::ranges::output_range<R1, ValueType> && ql::ranges::input_range<R2>)
   size_t eraseSortedSubRange(R1&& r1, R2&& r2) {
     auto newEndOfSubrange =
         ad_utility::inplace_set_difference(r1, r2, comp_, proj_, proj_);

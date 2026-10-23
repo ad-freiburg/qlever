@@ -46,8 +46,8 @@ CPP_concept IteratorAction =
 /// every `CHUNK_SIZE` iteration steps, and at least a single time at the end if
 /// the range is not empty.
 CPP_template(std::size_t CHUNK_SIZE, typename Action, typename ChunkOpT)(
-    requires detail::IteratorAction<Action> CPP_and
-        ql::concepts::invocable<ChunkOpT>)
+    requires detail::IteratorAction<Action> &&
+    ql::concepts::invocable<ChunkOpT>)
 inline void chunkedForLoop(std::size_t start, std::size_t end,
                            const Action& action,
                            const ChunkOpT& chunkOperation) {
@@ -76,10 +76,9 @@ CPP_concept SizedInputRange =
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 CPP_template(typename R, typename O, typename ChunkOperationFunc)(
-    requires SizedInputRange<R> CPP_and ql::concepts::weakly_incrementable<O>
-        CPP_and ql::concepts::invocable<ChunkOperationFunc>
-            CPP_and
-                ql::concepts::indirectly_copyable<ql::ranges::iterator_t<R>, O>)
+    requires SizedInputRange<R> && ql::concepts::weakly_incrementable<O> &&
+    ql::concepts::invocable<ChunkOperationFunc> &&
+    ql::concepts::indirectly_copyable<ql::ranges::iterator_t<R>, O>)
 inline void chunkedCopy(R&& inputRange, O result,
                         ql::ranges::range_difference_t<R> chunkSize,
                         const ChunkOperationFunc& chunkOperation) {
@@ -105,8 +104,8 @@ CPP_concept SizedOutputRange =
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 CPP_template(typename T, typename R, typename ChunkOperationFunc)(
-    requires SizedOutputRange<R, T> CPP_and
-        ql::concepts::invocable<ChunkOperationFunc>)
+    requires SizedOutputRange<R, T> &&
+    ql::concepts::invocable<ChunkOperationFunc>)
 inline void chunkedFill(R&& outputRange, const T& value,
                         ql::ranges::range_difference_t<R> chunkSize,
                         const ChunkOperationFunc& chunkOperation) {
