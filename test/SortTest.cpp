@@ -271,15 +271,18 @@ TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
   EXPECT_FALSE(sort.makeSortedTree({1, 0}).has_value());
 }
 
-// `IdTableUtils::sort` (the in-memory sort of `Sort`, `OrderBy`, ...) throws
-// when its cancellation handle has been cancelled.
+// Test that `IdTableUtils::sort` (the in-memory sort of `Sort`, `OrderBy`,
+// ...) throws when its cancellation handle has been cancelled.
 TEST(Sort, inMemorySortIsCancellable) {
+  // The same permutation of 1M rows as in `sortNumTasksInFlight` above.
   constexpr int64_t numRows = 1'000'000;
   IdTable table{2, ad_utility::testing::makeAllocator()};
   for (int64_t i = 0; i < numRows; ++i) {
     int64_t j = (i * 7919) % numRows;
     table.push_back({Id::makeFromInt(j), Id::makeFromInt(-j)});
   }
+
+  // A sort with a cancelled handle throws, in a single task and in parallel.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   handle->cancel(ad_utility::CancellationState::MANUAL);
   for (uint32_t numTasks : {1, 8}) {

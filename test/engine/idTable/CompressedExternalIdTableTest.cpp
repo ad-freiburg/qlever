@@ -273,10 +273,11 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
       ::testing::ContainsRegex("Insufficient memory"));
 }
 
-// The sorter can be cancelled via its cancellation handle, both while the rows
-// are pushed (the sorts of the blocks) and in the merge phase.
+// Test that the sorter can be cancelled via its cancellation handle, both
+// while the rows are pushed (the sorts of the blocks) and in the merge phase.
 TEST(CompressedExternalIdTable, sorterIsCancellable) {
   auto test = [](bool cancelBeforePushing) {
+    // A sorter whose 1 KB memory limit makes the 1000 rows blocks of 15 rows.
     std::string filename = gtestCurrentTestName();
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
@@ -289,6 +290,9 @@ TEST(CompressedExternalIdTable, sorterIsCancellable) {
         handle};
     CopyableIdTable<0> randomTable =
         createRandomlyFilledIdTable(1000, NUM_COLS);
+
+    // Push all rows and consume the sorted result, cancelling before the merge
+    // phase unless the handle was already cancelled before pushing.
     auto pushAndSort = [&]() {
       for (const auto& row : randomTable) {
         sorter.push(row);
@@ -298,6 +302,8 @@ TEST(CompressedExternalIdTable, sorterIsCancellable) {
       }
       std::ignore = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
     };
+
+    // Either way, the cancellation surfaces as a `CancellationException`.
     if (cancelBeforePushing) {
       handle->cancel(ad_utility::CancellationState::MANUAL);
     }
@@ -307,7 +313,7 @@ TEST(CompressedExternalIdTable, sorterIsCancellable) {
   test(false);
 }
 
-// The cancellation handle of the sorter must not be `nullptr`.
+// Test that the cancellation handle of the sorter must not be `nullptr`.
 TEST(CompressedExternalIdTable, sorterRequiresCancellationHandle) {
   auto makeSorter = []() {
     ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
