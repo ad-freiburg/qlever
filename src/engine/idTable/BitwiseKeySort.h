@@ -82,13 +82,45 @@ namespace bitwiseKeySort::detail {
 template <size_t Width>
 using KeyRow = std::array<uint64_t, Width>;
 
-// The memory for the key rows. Each thread reuses one such buffer for all its
-// sorts (see `keyRowsOfThread`), because a freshly allocated buffer of the
-// size of a sorter block has to be faulted in page by page, which costs more
-// than the sort itself for large blocks.
+// The memory for the key rows.
 using KeyBuffer = std::vector<
     uint64_t,
     ad_utility::default_init_allocator<uint64_t, std::allocator<uint64_t>>>;
+
+// The memory for the bucket indices of the parallel sample sort (see
+// `sampleSortInParallel`), one byte per row.
+using BucketBuffer = std::vector<
+    uint8_t,
+    ad_utility::default_init_allocator<uint8_t, std::allocator<uint8_t>>>;
+}  // namespace bitwiseKeySort::detail
+
+// The memory that `sortByBitwiseKeys` works in: the key rows, the second
+// buffer that the parallel sample sort scatters the rows into, and the bucket
+// indices of the sample sort. Together this is up to `2 * 8 * width + 1` bytes
+// per row, see `bitwiseKeySortBytesPerRow` below.
+//
+// The owner of such buffers (e.g. the `BlockSorter` in
+// `CompressedExternalIdTable.h`) reuses them for all its sorts, because a
+// freshly allocated buffer of the size of a sorter block has to be faulted in
+// page by page, which costs more than the sort itself for large blocks. When
+// there will be no more sorts, the owner calls `release`, so that the memory is
+// not held for the rest of the lifetime of the owner.
+struct BitwiseKeySortBuffers {
+  bitwiseKeySort::detail::KeyBuffer keys_;
+  bitwiseKeySort::detail::KeyBuffer scratch_;
+  bitwiseKeySort::detail::BucketBuffer buckets_;
+
+  // Free the memory of all the buffers. A `clear()` would keep the capacity.
+  void release() { *this = BitwiseKeySortBuffers{}; }
+
+  // The memory that the buffers currently hold, in bytes.
+  size_t numBytes() const {
+    return (keys_.capacity() + scratch_.capacity()) * sizeof(uint64_t) +
+           buckets_.capacity();
+  }
+};
+
+namespace bitwiseKeySort::detail {
 
 // Return `numRows` key rows of `Width` in the given `buffer` (which is grown
 // if necessary), as a span over the (trivially copyable, padding-free)
@@ -103,22 +135,6 @@ ql::span<KeyRow<Width>> keyRowsInBuffer(KeyBuffer& buffer, size_t numRows) {
     buffer.resize(numWords);
   }
   return {reinterpret_cast<KeyRow<Width>*>(buffer.data()), numRows};
-}
-
-// The key rows of `Width` for `numRows` rows in the buffer of the calling
-// thread, see `KeyBuffer`.
-template <size_t Width>
-ql::span<KeyRow<Width>> keyRowsOfThread(size_t numRows) {
-  thread_local KeyBuffer buffer;
-  return keyRowsInBuffer<Width>(buffer, numRows);
-}
-
-// The same for the second buffer of the calling thread, which the parallel
-// sample sort (see `sampleSortInParallel`) scatters the rows into.
-template <size_t Width>
-ql::span<KeyRow<Width>> scratchRowsOfThread(size_t numRows) {
-  thread_local KeyBuffer buffer;
-  return keyRowsInBuffer<Width>(buffer, numRows);
 }
 
 // Lexicographic comparison of the key rows. The loop over a constant number of
@@ -136,17 +152,6 @@ struct LessKeyRow {
   }
 };
 
-// The buffer for the bucket indices of the parallel sample sort (see
-// `sampleSortInParallel`), one byte per row, which the thread reuses.
-inline std::vector<uint8_t, ad_utility::default_init_allocator<
-                                uint8_t, std::allocator<uint8_t>>>&
-bucketIndicesOfThread() {
-  thread_local std::vector<uint8_t, ad_utility::default_init_allocator<
-                                        uint8_t, std::allocator<uint8_t>>>
-      buffer;
-  return buffer;
-}
-
 // Below this many rows, the parallel sort uses `blockIndirectSort`, above it
 // the sample sort below.
 constexpr size_t MIN_ROWS_FOR_SAMPLE_SORT = 1 << 20;
@@ -162,10 +167,11 @@ constexpr size_t MIN_ROWS_FOR_SAMPLE_SORT = 1 << 20;
 //
 // This needs a second buffer of the size of the `rows` (the rows are scattered
 // into it, sorted there, and copied back) and one byte per row for the bucket
-// indices, both of which the calling thread keeps for its next sort.
+// indices, which are taken from the `buffers`.
 template <size_t Width>
 void sampleSortInParallel(ql::span<KeyRow<Width>> rows,
-                          const BitwiseKeySortParallelism& parallelism) {
+                          const BitwiseKeySortParallelism& parallelism,
+                          BitwiseKeySortBuffers& buffers) {
   using Row = KeyRow<Width>;
   const size_t numRows = rows.size();
   const size_t numThreads = parallelism.numThreads_;
@@ -206,11 +212,10 @@ void sampleSortInParallel(ql::span<KeyRow<Width>> rows,
   // Pass 1: the bucket of each row, and a histogram per task.
   const size_t numTasks = numThreads * 4;
   const size_t rowsPerTask = (numRows + numTasks - 1) / numTasks;
-  // NOTE: A reference to the buffer of this thread is taken here, because a
-  // `thread_local` variable that is named inside the lambdas below would
-  // refer to the buffer of whichever thread runs the lambda.
-  auto& buckets = bucketIndicesOfThread();
+  auto& buckets = buffers.buckets_;
   if (buckets.size() < numRows) {
+    // Free the old memory before allocating the new one.
+    buckets = BucketBuffer{};
     buckets.resize(numRows);
   }
   std::vector<std::vector<size_t>> histograms(
@@ -250,9 +255,8 @@ void sampleSortInParallel(ql::span<KeyRow<Width>> rows,
     AD_CORRECTNESS_CHECK(offset == numRows);
   }
 
-  // Pass 2: scatter the rows into the buckets of the second buffer (which
-  // the thread reuses as well, see `KeyBuffer`).
-  ql::span<Row> scattered = scratchRowsOfThread<Width>(numRows);
+  // Pass 2: scatter the rows into the buckets of the second buffer.
+  ql::span<Row> scattered = keyRowsInBuffer<Width>(buffers.scratch_, numRows);
   runIndexedTasksOnExecutor(parallelism.executor_, numThreads, numTasks,
                             [&](size_t taskIdx) {
                               auto [begin, end] = taskRange(taskIdx);
@@ -310,19 +314,11 @@ void forRowRanges(size_t numRows, const BitwiseKeySortParallelism& parallelism,
 // to permute the columns that are not keys.
 template <size_t Width, bool WithIndex, size_t NumKeys, typename Table>
 void sortImpl(Table& table, const std::array<size_t, NumKeys>& keyColumns,
-              const BitwiseKeySortParallelism& parallelism) {
+              const BitwiseKeySortParallelism& parallelism,
+              BitwiseKeySortBuffers& buffers) {
   static_assert(Width == NumKeys + (WithIndex ? 1 : 0));
   const size_t numRows = table.numRows();
-  // NOTE: Only a parallel sort (of a large block, by a dedicated thread, see
-  // `BlockSorter`) uses the buffer of the thread. A serial sort typically
-  // runs on one of many short-lived threads (e.g. the twin sorters of the
-  // chunks of the permutation writer), which should not each hold a large
-  // buffer; the allocator reuses the memory of a freed buffer for the next
-  // sort anyway.
-  KeyBuffer localBuffer;
-  auto rows = parallelism.isParallel()
-                  ? keyRowsOfThread<Width>(numRows)
-                  : keyRowsInBuffer<Width>(localBuffer, numRows);
+  auto rows = keyRowsInBuffer<Width>(buffers.keys_, numRows);
   // Gather the keys row by row (one contiguous write per row), reading from
   // all the key columns at the same time.
   std::array<const Id*, NumKeys> keyPointers;
@@ -342,7 +338,7 @@ void sortImpl(Table& table, const std::array<size_t, NumKeys>& keyColumns,
   });
 
   if (parallelism.isParallel() && numRows >= MIN_ROWS_FOR_SAMPLE_SORT) {
-    sampleSortInParallel(rows, parallelism);
+    sampleSortInParallel(rows, parallelism, buffers);
   } else if (parallelism.isParallel()) {
     blockSort::blockIndirectSort(rows, LessKeyRow<Width>{},
                                  static_cast<uint32_t>(parallelism.numThreads_),
@@ -396,13 +392,15 @@ void sortImpl(Table& table, const std::array<size_t, NumKeys>& keyColumns,
 // `compressedRelationHelpers::pickBitsOfColumns`. The sort is stable. It runs
 // serially in the calling thread, unless the `parallelism` says otherwise.
 //
-// The sort needs additional memory of `(keyColumns.size() + 1) * 8` bytes per
-// row (8 bytes less per row if the keys are exactly all the columns), which
-// the calling thread keeps for its next sort, see `keyRowsOfThread`.
+// The sort works in the `buffers` (see `BitwiseKeySortBuffers`), which keep
+// their memory for the next sort of the caller. Without `buffers`, the sort
+// uses buffers of its own that are freed when it returns. The memory needed
+// per row is `bitwiseKeySortBytesPerRow`, see there.
 template <size_t NumKeys, typename Table>
 void sortByBitwiseKeys(Table& table,
                        const std::array<size_t, NumKeys>& keyColumns,
-                       const BitwiseKeySortParallelism& parallelism = {}) {
+                       const BitwiseKeySortParallelism& parallelism = {},
+                       BitwiseKeySortBuffers* buffers = nullptr) {
   static_assert(NumKeys > 0);
   if (table.numRows() < 2) {
     return;
@@ -417,12 +415,14 @@ void sortByBitwiseKeys(Table& table,
   bool keysAreAllColumns =
       table.numColumns() == NumKeys &&
       ql::ranges::adjacent_find(sortedKeys) == sortedKeys.end();
+  BitwiseKeySortBuffers localBuffers;
+  auto& usedBuffers = buffers != nullptr ? *buffers : localBuffers;
   if (keysAreAllColumns) {
     bitwiseKeySort::detail::sortImpl<NumKeys, false>(table, keyColumns,
-                                                     parallelism);
+                                                     parallelism, usedBuffers);
   } else {
-    bitwiseKeySort::detail::sortImpl<NumKeys + 1, true>(table, keyColumns,
-                                                        parallelism);
+    bitwiseKeySort::detail::sortImpl<NumKeys + 1, true>(
+        table, keyColumns, parallelism, usedBuffers);
   }
 }
 
