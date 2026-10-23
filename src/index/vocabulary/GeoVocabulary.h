@@ -68,12 +68,18 @@ class GeoVocabulary {
   // See `endIndex`, computed once when the vocabulary is opened.
   uint64_t endIndex_ = 0;
 
+  // The `GeometryInfo` version of the opened `geoInfoFile_`, see
+  // `GEOMETRY_INFO_VERSION` for the versions that can be read.
+  uint64_t geoInfoVersion_ = ad_utility::GEOMETRY_INFO_VERSION;
+
   // TODO<ullingerc> Possibly add in-memory cache of bounding boxes here
 
   // Filename suffix for geometry information file
   static constexpr std::string_view geoInfoSuffix = ".geoinfo";
 
-  // Offset per index inside the geometry information file
+  // Offset per index inside the geometry information file of the current
+  // version. When reading a file of an older version, the offset is
+  // `geometryInfoSize(geoInfoVersion_)`.
   static constexpr size_t geoInfoOffset = sizeof(GeometryInfo);
 
   // Serialized version of `GeometryInfo`

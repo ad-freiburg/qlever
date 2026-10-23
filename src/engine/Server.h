@@ -172,7 +172,12 @@ class Server {
   // turn requires a type with linkage.
   class MockSend {
    public:
-    Awaitable<void> operator()(auto response) {
+    // Same signature and contract as the corresponding overload of
+    // `HttpMessageSender` (all responses of the `Server` have a
+    // `streamable_body`).
+    Awaitable<void> operator()(ResponseT response,
+                               boost::asio::any_io_executor bodyExecutor) {
+      AD_CONTRACT_CHECK(bodyExecutor);
       response_ = std::move(response);
       co_return;
     }
@@ -478,11 +483,15 @@ class Server {
   /// The returned callback can be used to prevent this task from executing
   /// either because the `cancellationHandle` has been aborted by some other
   /// means or because the task has been completed successfully.
-  auto cancelAfterDeadline(
+  absl::AnyInvocable<void()> cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-      TimeLimit timeLimit)
-      -> QL_CONCEPT_OR_NOTHING(
-          ad_utility::InvocableWithExactReturnType<void>) auto;
+      TimeLimit timeLimit);
+  FRIEND_TEST(ServerTest, cancelAfterDeadline);
+
+  /// Return the `RunAfter` for the watchdog of a single `CancellationHandle`,
+  /// which runs the steps of the watchdog on the `timerExecutor_`.
+  ad_utility::CancellationHandle<>::RunAfter makeWatchDogRunAfter();
+  FRIEND_TEST(ServerTest, makeWatchDogRunAfter);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
@@ -519,7 +528,7 @@ class Server {
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
           const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-          SharedCancellationHandle cancellationHandle) const;
+          SharedCancellationHandle cancellationHandle);
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 

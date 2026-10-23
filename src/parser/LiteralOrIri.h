@@ -109,7 +109,7 @@ class alignas(16) BasicLiteralOrIri {
 
   // Return iri content of contained Iri object without any leading or trailing
   // angled brackets. Throws Exception if object does not contain an Iri object.
-  NormalizedStringView getIriContent() const;
+  std::string_view getIriContent() const;
 
   // Return true if object contains a Literal object.
   bool isLiteral() const;
@@ -124,20 +124,20 @@ class alignas(16) BasicLiteralOrIri {
 
   // Return content of contained Literal as string without leading or trailing
   // quotation marks. Throw exception if no Literal object is contained.
-  NormalizedStringView getLiteralContent() const;
+  std::string_view getLiteralContent() const;
 
   // Return the language tag of the contained Literal without leading @
   // character. Throw exception if no Literal object is contained or object has
   // no language tag.
-  NormalizedStringView getLanguageTag() const;
+  std::string_view getLanguageTag() const;
 
   // Return the datatype of the contained Literal without "^^" prefix.
   // Throw exception if no Literal object is contained or object has no
   // datatype.
-  NormalizedStringView getDatatype() const;
+  std::string_view getDatatype() const;
 
   // Return the content of the contained Iri, or the contained Literal.
-  NormalizedStringView getContent() const;
+  std::string_view getContent() const;
 
   // Printing for GTest.
   friend void PrintTo(const BasicLiteralOrIri& literalOrIri, std::ostream* os) {

@@ -1,6 +1,12 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
 #define QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
@@ -76,7 +82,7 @@ static_assert(isVector<Collection<CoordType>>);
 inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
-  return std::string{asStringViewUnsafe(lit.getContent())};
+  return std::string{lit.getContent()};
 }
 
 // Adds quotation marks and the `geo:wktLiteral` datatype to a given string
@@ -91,9 +97,11 @@ inline std::string addDatatype(const std::string_view wkt) {
 // Tries to extract the geometry type and parse the geometry given by a WKT
 // literal with quotes and datatype using `pb_util`. The coordinates are
 // projected to `projCrs` while parsing (from the CRS named by the IRI at the
-// start of the literal, or CRS84 if there is no such IRI).
-inline ParseResult parseWkt(const std::string_view& wkt,
-                            CRSType projCrs = defaultCrs) {
+// start of the literal, or CRS84 if there is no such IRI). The WKT is parsed
+// in the strict mode of `pb_util`: invalid WKT throws a `WKTParseException`.
+inline ParseResult parseWktOrThrow(const std::string_view& wkt,
+                                   CRSType projCrs = defaultCrs) {
+  constexpr bool strict = true;
   auto wktLiteral = removeDatatype(wkt);
   auto c = wktLiteral.c_str();
   std::optional<ParsedWkt> parsed = std::nullopt;
@@ -108,10 +116,11 @@ inline ParseResult parseWkt(const std::string_view& wkt,
   try {
     switch (type) {
       case POINT:
-        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         break;
       case LINESTRING: {
-        auto line = lineFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        auto line =
+            lineFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (line.empty()) {
           throw std::runtime_error("Cannot parse line from WKT");
         }
@@ -119,7 +128,8 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       case POLYGON: {
-        auto polygon = polygonFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        auto polygon =
+            polygonFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (polygon.getOuter().empty()) {
           throw std::runtime_error("Cannot parse polygon from WKT");
         }
@@ -128,7 +138,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case MULTIPOINT: {
         auto multipoint =
-            multiPointFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+            multiPointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (multipoint.empty()) {
           throw std::runtime_error("Cannot parse multipoint from WKT");
         }
@@ -137,7 +147,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case MULTILINESTRING: {
         auto multiline =
-            multiLineFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+            multiLineFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (multiline.empty()) {
           throw std::runtime_error("Cannot parse multiline from WKT");
         }
@@ -145,8 +155,8 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       case MULTIPOLYGON: {
-        auto multipolygon =
-            multiPolygonFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        auto multipolygon = multiPolygonFromWKTProj<CoordType>(c, &c, projFunc,
+                                                               crsType, strict);
         if (multipolygon.empty()) {
           throw std::runtime_error("Cannot parse multipolygon from WKT");
         }
@@ -155,7 +165,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case COLLECTION: {
         auto collection =
-            collectionFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+            collectionFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (collection.empty()) {
           throw std::runtime_error("Cannot parse collection from WKT");
         }
@@ -163,8 +173,13 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       default:
-        break;
+        throw WKTParseException("Unsupported WKT geometry type");
     }
+  } catch (const WKTParseException&) {
+    // Report invalid WKT to the caller (`WKTParseException` is derived from
+    // `std::runtime_error`, so without this handler it would be swallowed by
+    // the one below).
+    throw;
   } catch (const std::runtime_error& error) {
     AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
                  << std::endl;
@@ -178,6 +193,21 @@ inline ParseResult parseWkt(const std::string_view& wkt,
     crsType = CRSType::UNSUPPORTED;
   }
   return ParseResult{std::move(parsed), type, projCrs, crsType};
+}
+
+// Like `parseWktOrThrow`, but invalid WKT yields a `ParseResult` without a
+// geometry instead of throwing. In SPARQL, this corresponds to an expression
+// error, see GeoSPARQL 1.1, Section 10.9.1.
+inline ParseResult parseWkt(const std::string_view& wkt,
+                            CRSType projCrs = defaultCrs) {
+  try {
+    return parseWktOrThrow(wkt, projCrs);
+  } catch (const WKTParseException& error) {
+    AD_LOG_DEBUG << "Invalid WKT literal `" << wkt << "`: " << error.what()
+                 << std::endl;
+    return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
+                       CRSType::UNSUPPORTED};
+  }
 }
 
 // Convert a point from `pb_util` to a `GeoPoint`
@@ -273,6 +303,29 @@ inline constexpr auto SF_WKT_TYPE_IRI = []() {
 inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   if (type < 8) {
     return SF_WKT_TYPE_IRI.at(type);
+  }
+  return std::nullopt;
+}
+
+namespace detail::crsStrings {
+constexpr inline std::string_view crs84 =
+    "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
+constexpr inline std::string_view wgs84 =
+    "http://www.opengis.net/def/crs/EPSG/0/4326";
+constexpr inline std::string_view webMerc =
+    "http://www.opengis.net/def/crs/EPSG/0/3857";
+}  // namespace detail::crsStrings
+inline constexpr auto CRS_TYPE_IRI = []() {
+  using namespace detail::crsStrings;
+  return std::array<std::optional<std::string_view>, 4>{
+      std::nullopt,  // Invalid CRS
+      crs84, wgs84, webMerc};
+}();
+
+// Lookup the IRI for a given CRS type in the array of prepared IRIs.
+inline std::optional<std::string_view> crsTypeToIri(uint16_t type) {
+  if (type < CRS_TYPE_IRI.size()) {
+    return CRS_TYPE_IRI.at(type);
   }
   return std::nullopt;
 }
@@ -812,8 +865,8 @@ struct MetricDistanceVisitor {
     if (!a.parsedWkt_.has_value() || !b.parsedWkt_.has_value()) {
       return std::nullopt;
     }
-    AD_CORRECTNESS_CHECK(a.actualCrs_ == WEB_MERCATOR);
-    AD_CORRECTNESS_CHECK(b.actualCrs_ == WEB_MERCATOR);
+    AD_CORRECTNESS_CHECK(a.actualCrs_ == CRSType::WEB_MERCATOR);
+    AD_CORRECTNESS_CHECK(b.actualCrs_ == CRSType::WEB_MERCATOR);
     return MetricDistanceVisitor{}(a.parsedWkt_.value(), b.parsedWkt_.value());
   }
 

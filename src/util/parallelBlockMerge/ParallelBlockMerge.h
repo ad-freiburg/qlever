@@ -106,15 +106,17 @@ namespace ad_utility::parallelBlockMerge {
 //
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks.
-CPP_template(bool moveElements, typename Input, typename Comparator)(
+CPP_template(bool moveElements, typename Input,
+             typename Comparator)(
     requires InputConcept<Input>)
-ad_utility::InputRangeTypeErased<typename Input::Block> serialBlockMergeToRange(
-    Input input, Comparator comparator, MergeOptions options = {},
-    ad_utility::SharedCancellationHandle cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>(),
-    std::vector<ChunkBoundary<typename Input::Element>> chunkBoundaries =
-        singleChunk<typename Input::Element>()) {
-  using Block = typename Input::Block;
+ad_utility::
+    InputRangeTypeErased<detail::OutputBlockT<Input>> serialBlockMergeToRange(
+        Input input, Comparator comparator, MergeOptions options = {},
+        ad_utility::SharedCancellationHandle cancellationHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>(),
+        std::vector<ChunkBoundary<typename Input::Element>> chunkBoundaries =
+            singleChunk<typename Input::Element>()) {
+  using Block = detail::OutputBlockT<Input>;
   using Merger = detail::ChunkMerger<moveElements, Input, Comparator>;
   auto state = std::make_shared<const typename Merger::State>(
       std::move(input), std::move(comparator), std::move(options),
@@ -198,7 +200,7 @@ ad_utility::InputRangeTypeErased<typename Input::Block> serialBlockMergeToRange(
 template <bool moveElements, typename Input, typename Comparator,
           typename SinkFactory>
 requires InputConcept<Input> &&
-             SinkFactoryConcept<SinkFactory, typename Input::Block>
+             SinkFactoryConcept<SinkFactory, detail::OutputBlockT<Input>>
 auto parallelBlockMergeToSink(
     ql::any_io_executor executor, Input input, Comparator comparator,
     SinkFactory makeSink, MergeOptions options = {},
@@ -274,7 +276,7 @@ auto parallelBlockMergeToSink(
 CPP_template(bool moveElements, typename Input, typename Comparator,
              typename StorageFactory)(requires InputConcept<Input>)
 ad_utility::
-    InputRangeTypeErased<typename Input::Block> parallelBlockMergeToRange(
+    InputRangeTypeErased<detail::OutputBlockT<Input>> parallelBlockMergeToRange(
         ql::any_io_executor executor, Input input, Comparator comparator,
         StorageFactory storageFactory, MergeOptions options = {},
         ad_utility::SharedCancellationHandle cancellationHandle =
@@ -296,7 +298,7 @@ ad_utility::
   if (options.shouldMergeSerially(detail::totalNumElements(input))) {
     return mergeSerially();
   }
-  using Block = typename Input::Block;
+  using Block = detail::OutputBlockT<Input>;
   using Result = ad_utility::InputRangeTypeErased<Block>;
   using Storage = std::invoke_result_t<StorageFactory&, const Strand&>;
   using Sink = InOrderBlockSink<Block, Storage>;
