@@ -448,11 +448,6 @@ class IndexImpl {
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
-  // Throw if `vocabularyType` has no `GeoVocabulary` and hence cannot hold a
-  // geo cell grid (see `GeoCellGrid`).
-  static void checkVocabularyTypeForGeoCellGrid(
-      ad_utility::VocabularyType vocabularyType);
-
   // ___________________________________________________________________________
   TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 

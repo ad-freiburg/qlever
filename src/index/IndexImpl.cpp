@@ -1471,17 +1471,6 @@ void IndexImpl::applyGeoPointEncoding() {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::checkVocabularyTypeForGeoCellGrid(
-    ad_utility::VocabularyType vocabularyType) {
-  if (vocabularyType !=
-      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
-    throw std::runtime_error{
-        "A geo cell grid requires the vocabulary type "
-        "`on-disk-compressed-geo-split`"};
-  }
-}
-
-// _____________________________________________________________________________
 void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
@@ -1605,13 +1594,19 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
           "Invalid value ", geoCellGridLevel,
           " for the key \"geo-cell-grid-level\" in the `meta-data.json`")};
     }
-    checkVocabularyTypeForGeoCellGrid(vocabType);
     ad_utility::GeoCellGridScheme geoCellGridScheme =
         ad_utility::GeoCellGridScheme::Flat;
     loadDataMember("geo-cell-grid-scheme", geoCellGridScheme,
                    geoCellGridScheme);
     vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
         static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
   }
 
   // Initialize BlankNodeManager
