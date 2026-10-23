@@ -23,6 +23,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/EnumWithStrings.h"
 #include "util/Exception.h"
+#include "util/UnitOfMeasurement.h"
 
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
@@ -158,6 +159,10 @@ struct SpatialJoinConfiguration {
   // Cache name for precomputed right child with s2 index (only for
   // s2-point-polyline algorithm)
   std::optional<std::string> rightCacheName_ = std::nullopt;
+
+  // The unit of the values in the column of the `distanceVariable_`. Must be
+  // set iff the `distanceVariable_` is set.
+  std::optional<UnitOfMeasurement> distanceUnit_ = std::nullopt;
 
   // Extract the maximum distance constraint from `task_`, if the task type
   // specifies one. Every task type has a (possibly always-empty) `maxDist_`

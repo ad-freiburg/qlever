@@ -45,7 +45,12 @@ template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
   vocabulary_.open(fileName);
+  computePrefixRanges();
+}
 
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+void Vocabulary<S, C, I>::computePrefixRanges() {
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
   //

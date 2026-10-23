@@ -744,6 +744,42 @@ TYPED_TEST(HttpServerBodyTest, ConnectionCloseEndsSession) {
   EXPECT_EQ(ec, net::error::eof);
 }
 
+// Test that a response with a `streamable_body` to an HTTP/1.0 request (for
+// which the body is not chunked, but ends with the connection) is sent exactly
+// once.
+TYPED_TEST(HttpServerBodyTest, StreamableResponseToHttp10Request) {
+  auto handler = [](auto req, auto&& send,
+                    auto...) -> boost::asio::awaitable<void> {
+    auto body = []() -> cppcoro::generator<std::string> {
+      co_yield "first";
+      co_yield "second";
+    };
+    co_await send(
+        createOkResponse(body(), req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+
+  net::io_context ioContext;
+  tcp::socket socket{ioContext};
+  socket.connect(
+      tcp::endpoint{net::ip::address_v4::loopback(), httpServer.getPort()});
+  http::request<http::empty_body> request{verb::get, "/target", 10};
+  request.set(field::host, "localhost");
+  http::write(socket, request);
+
+  // Without a `Content-Length`, the body of the response extends to the end of
+  // the connection, so anything sent after the body would be part of it.
+  beast::flat_buffer buffer;
+  http::response<http::string_body> response;
+  http::read(socket, buffer, response);
+  EXPECT_EQ(response.version(), 10);
+  EXPECT_FALSE(response.chunked());
+  EXPECT_EQ(response.body(), "firstsecond");
+}
+
 // Minimal stubs to instantiate `HttpServer` solely for accessing its public
 // static helpers `readIntoBuffer` and `materializeBody`. No actual server is
 // constructed.

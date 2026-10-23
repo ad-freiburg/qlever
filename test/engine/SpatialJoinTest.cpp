@@ -25,6 +25,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -332,12 +333,14 @@ class SpatialJoinVarColParamTest
                                       : std::nullopt,
                                   std::nullopt};
     }
+    SpatialJoinConfiguration config{
+        task, Variable{"?point1"}, Variable{"?point2"}, dist, pv, alg};
+    if (addDist) {
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
+    }
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
-            qec,
-            SpatialJoinConfiguration{task, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv, alg},
-            std::nullopt, std::nullopt);
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, std::move(config),
+                                                   std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
@@ -516,9 +519,21 @@ class SpatialJoinVarColParamTest
           ASSERT_THAT(
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
           if (matchWarning) {
-            ASSERT_THAT(spatialJoin->collectWarnings(),
-                        ::testing::Contains(
-                            ::testing::HasSubstr(matchWarning.value())));
+            // The payload variables are also checked when computing the cache
+            // key, which must not add the warning a second time (hence
+            // `Times(1)` below).
+            spatialJoin->getCacheKey();
+            EXPECT_THAT(
+                spatialJoin->collectWarnings(),
+                ::testing::Contains(::testing::HasSubstr(matchWarning.value()))
+                    .Times(1));
+            // With `throw-on-unbound-variables`, the warning becomes an error.
+            auto cleanup = setRuntimeParameterForTest<
+                &RuntimeParameters::throwOnUnboundVariables_>(true);
+            AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+                spatialJoin->computeVariableToColumnMap(),
+                ::testing::HasSubstr(matchWarning.value()),
+                InvalidSparqlQueryException);
           }
         };
 
@@ -1250,12 +1265,12 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       auto rightChild =
           buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
+      SpatialJoinConfiguration config{MaxDistanceConfig{10000000}, subj, obj,
+                                      Variable{"?distanceForTesting"}};
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(
-              qec,
-              SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj,
-                                       Variable{"?distanceForTesting"}},
-              std::nullopt, std::nullopt);
+              qec, std::move(config), std::nullopt, std::nullopt);
 
       // add children and test, that multiplicity is a dummy return before all
       // children are added
@@ -1358,8 +1373,8 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
         LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
   };
   Id pointLeft = ValueId::makeFromGeoPoint({0, 0});
-  Id invalidLiteralA = wktId("<a>");
-  Id invalidLiteralB = wktId("<b>");
+  Id invalidLiteralA = wktId("POINT(1 2, 3 4)");
+  Id invalidLiteralB = wktId("not wkt");
   Id validLiteral = ValueId::makeFromGeoPoint({1, 1});
 
   // `?a`: a single, valid point.
@@ -1402,7 +1417,75 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // are never prefiltered) but fail to parse.
   EXPECT_THAT(details,
               AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                    HasKeyMatching("num-geoms-after-bbox-prefilter", Eq(2))));
+                    HasKeyMatching("num-geoms-after-bbox-prefilter", Eq(2)),
+                    HasKeyMatching("num-geoms-invalid", Eq(2))));
+  EXPECT_THAT(spatialJoin->collectWarnings(),
+              Contains(HasSubstr(
+                  "Spatial Join of ?a and ?b using contains: skipped rows with "
+                  "invalid or unsupported geometry literals (?b: 2)")));
+}
+
+// Test that the warning for skipped rows lists the left side before the
+// right side, no matter which of the two is the smaller side (which the
+// algorithm parses first).
+TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto wktLiteralIri =
+      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+          GEO_WKT_LITERAL);
+  auto wktId = [&](std::string_view wkt) {
+    auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
+        wkt, wktLiteralIri);
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
+  };
+
+  // Compute the spatial join of the single-column inputs `left` and `right`
+  // and return its warnings.
+  auto warningsOf = [&](const Variable& leftVar, const VectorTable& left,
+                        const Variable& rightVar, const VectorTable& right) {
+    auto makeChild = [&](const Variable& var, const VectorTable& rows) {
+      return ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector(rows),
+          std::vector<std::optional<Variable>>{var}, false,
+          std::vector<ColumnIndex>{}, localVocab.clone());
+    };
+    auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec,
+        SpatialJoinConfiguration{
+            LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, leftVar,
+            rightVar, std::nullopt, PayloadVariables::all(),
+            SpatialJoinAlgorithm::LIBSPATIALJOIN},
+        makeChild(leftVar, left), makeChild(rightVar, right));
+    auto spatialJoin =
+        std::dynamic_pointer_cast<SpatialJoin>(tree->getRootOperation());
+    auto result = spatialJoin->computeResult(false);
+    return spatialJoin->collectWarnings();
+  };
+
+  // `?a`: a valid point and one invalid literal. `?b`: a valid point and two
+  // invalid literals.
+  VectorTable a{{ValueId::makeFromGeoPoint({0, 0})},
+                {wktId("POINT(1 2, 3 4)")}};
+  VectorTable b{{ValueId::makeFromGeoPoint({1, 1})},
+                {wktId("not wkt")},
+                {wktId("POLYGON((0 0")}};
+
+  // With `?a` on the left, the left side is the smaller one.
+  EXPECT_THAT(warningsOf(Variable{"?a"}, a, Variable{"?b"}, b),
+              Contains(HasSubstr(
+                  "Spatial Join of ?a and ?b using intersects: skipped rows "
+                  "with invalid or unsupported geometry literals (?a: 1, ?b: "
+                  "2)")));
+
+  // With the sides swapped, the right side is the smaller one, and the
+  // warning still lists the left side first.
+  EXPECT_THAT(warningsOf(Variable{"?b"}, b, Variable{"?a"}, a),
+              Contains(HasSubstr(
+                  "Spatial Join of ?b and ?a using intersects: skipped rows "
+                  "with invalid or unsupported geometry literals (?b: 2, ?a: "
+                  "1)")));
 }
 
 }  // namespace invalidGeometries

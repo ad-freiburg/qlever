@@ -252,10 +252,8 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       if constexpr (AreIncomparable<X, Y>) {
         result.push_back(Id::makeUndefined());
       } else {
-        result.push_back(
-            toValueId(sparqlExpression::compareIdsOrStrings<
-                      Comp, valueIdComparators::ComparisonForIncompatibleTypes::
-                                AlwaysUndef>(x, y, context)));
+        result.push_back(toValueId(
+            sparqlExpression::compareIdsOrStrings<Comp>(x, y, context)));
       }
     };
     ad_utility::visitWithVariantsAndParameters(impl, *itA, *itB);

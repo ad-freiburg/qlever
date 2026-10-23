@@ -1935,6 +1935,83 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
   EXPECT_EQ(noMatchRes.idTableView().numRows(), 0);
 }
 
+// Test that all algorithms report the distances in the configured unit, and
+// that the unit is part of the cache key.
+TEST(SpatialJoin, DistanceUnit) {
+  std::string kg;
+  addPoint(kg, "1", "\"Uni Freiburg TF\"",
+           makePointLiteral("7.83505", "48.01267"));
+  addPoint(kg, "2", "\"Freiburg Minster\"",
+           makePointLiteral("7.85298", "47.99557"));
+  auto qec = buildQec(kg);
+  Variable distVar{"?dist"};
+  using enum UnitOfMeasurement;
+
+  // Compute a spatial join with a maximum distance of 5 km using the given
+  // algorithm and distance unit. Return the sorted distances of all result
+  // rows and the cache key.
+  auto run = [&](SpatialJoinAlgorithm algorithm,
+                 std::optional<UnitOfMeasurement> unit) {
+    SpatialJoinTask task = MaxDistanceConfig{5000};
+    if (algorithm == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      task = LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 5000,
+                                  std::nullopt};
+    }
+    SpatialJoinConfiguration config{
+        task,    Variable{"?geo1"},       Variable{"?geo2"},
+        distVar, PayloadVariables::all(), algorithm};
+    config.distanceUnit_ = unit;
+    auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, std::move(config),
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"}),
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"}));
+    auto result = spatialJoinTree->getResult();
+    auto col = spatialJoinTree->getVariableColumn(distVar);
+    std::vector<double> dists;
+    for (const auto& row : result->idTableView()) {
+      dists.push_back(row[col].getDouble());
+    }
+    ql::ranges::sort(dists);
+    return std::pair{dists, spatialJoinTree->getCacheKey()};
+  };
+
+  for (auto algorithm :
+       {SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinAlgorithm::BASELINE,
+        SpatialJoinAlgorithm::S2_GEOMETRY,
+        SpatialJoinAlgorithm::BOUNDING_BOX}) {
+    auto trace =
+        generateLocationTrace(AD_CURRENT_SOURCE_LOC(), algorithm.toString());
+    auto [meters, cacheKeyMeters] = run(algorithm, METERS);
+    auto [kilometers, cacheKeyKilometers] = run(algorithm, KILOMETERS);
+    auto [miles, cacheKeyMiles] = run(algorithm, MILES);
+
+    // Both points with themselves, and the two points with each other in both
+    // directions (about 2.3 km apart).
+    ASSERT_EQ(meters.size(), 4);
+    ASSERT_EQ(kilometers.size(), 4);
+    ASSERT_EQ(miles.size(), 4);
+    EXPECT_NEAR(kilometers.back(), 2.3, 0.1);
+    // The unit conversion may introduce small rounding errors.
+    auto expectNear = [](double actual, double expected) {
+      EXPECT_NEAR(actual, expected, 1e-9 * expected);
+    };
+    for (size_t i = 0; i < meters.size(); ++i) {
+      expectNear(meters[i], kilometers[i] * 1000);
+      expectNear(miles[i],
+                 ad_utility::detail::kilometerToUnit(kilometers[i], MILES));
+    }
+
+    // The unit is part of the cache key.
+    EXPECT_EQ((ad_utility::HashSet<std::string>{
+                  cacheKeyMeters, cacheKeyKilometers, cacheKeyMiles}
+                   .size()),
+              3);
+
+    // A distance variable requires a unit.
+    EXPECT_ANY_THROW(run(algorithm, std::nullopt));
+  }
+}
+
 // _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   std::string kg;

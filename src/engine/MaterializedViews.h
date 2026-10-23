@@ -192,7 +192,8 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
 
   // Helper to create an empty `LocatedTriplesState` for `IndexScan`s as
   // materialized views do not support updates yet.
-  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState() const;
+  std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState(
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   FRIEND_TEST(MaterializedViewsTest, ManualConfigurations);
 
@@ -201,8 +202,8 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   // constructor will throw an exception if the name is invalid or the view does
   // not exist. All scans of the view allocate through `allocator`, which
   // therefore should be the allocator of the query memory limit whenever the
-  // view is used to answer queries; the overload without an allocator (for
-  // standalone uses like the index converter) does not limit the memory.
+  // view is used to answer queries. The overload without an allocator (for
+  // uses outside an engine, currently only tests) does not limit the memory.
   MaterializedView(std::string onDiskBase, std::string name,
                    ad_utility::AllocatorWithLimit<Id> allocator);
   MaterializedView(std::string onDiskBase, std::string name)
@@ -406,9 +407,6 @@ class MaterializedViewsManager {
   explicit MaterializedViewsManager(
       ad_utility::AllocatorWithLimit<Id> allocator)
       : allocator_{std::move(allocator)} {}
-  MaterializedViewsManager(std::string onDiskBase,
-                           ad_utility::AllocatorWithLimit<Id> allocator)
-      : onDiskBase_{std::move(onDiskBase)}, allocator_{std::move(allocator)} {}
 
   // For use with the default constructor: set the index basename after creation
   // of the `MaterializedViewsManager`. This should only be called once and

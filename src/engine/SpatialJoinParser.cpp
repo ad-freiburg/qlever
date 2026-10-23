@@ -120,7 +120,9 @@ void WKTParser::processQueue(size_t t) {
 
         // If the geometry was parsed at index build time, add it to the
         // sweeper in its stored form (see `ParsedGeometry`). Otherwise read
-        // and parse the full string.
+        // and parse the full string. Invalid WKT (according to the strict
+        // parsing mode) is skipped, so it never matches (see GeoSPARQL 1.1,
+        // Section 10.9.1).
         auto parsed =
             _index.getVocab().getParsedGeometry(job.valueId.getVocabIndex());
         if (parsed.has_value()) {
@@ -130,8 +132,8 @@ void WKTParser::processQueue(size_t t) {
           fromIndexCounter++;
         } else {
           job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
-                    false);
+          parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
+                           job.side, true);
         }
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
@@ -158,20 +160,12 @@ void WKTParser::processQueue(size_t t) {
       } else if (dt == Datatype::LocalVocabIndex) {
         // `LocalVocabEntry` has to be parsed in any case: we have no
         // information except the string.
-        //
-        // Invalid WKT (according to the strict parsing mode) is skipped, so
-        // it never matches (see GeoSPARQL 1.1, Section 10.9.1).
-        // TODO<ullingerc> This parses the literal twice. To make this more
-        // efficient, `parseLine` of `libspatialjoin` needs a strict mode. This
-        // would also allow parsing the `VocabIndex` literals above strictly if
-        // there is no `GeoVocabulary`.
+        // Invalid WKT is skipped as above.
         const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
-        if (literalOrIri.isLiteral() &&
-            GeometryInfo::isValidWktStrict(
-                literalOrIri.toStringRepresentation())) {
+        if (literalOrIri.isLiteral()) {
           job.wkt = literalOrIri.getLiteral().getContent();
-          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
-                    false);
+          parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
+                           job.side, true);
           parseCounter++;
         }
       }

@@ -137,6 +137,11 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkConsistencyForCol0IdAndPermutation =
       [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
+        // Name the permutation and the relation in the messages of the checks
+        // below, so that a failure can be attributed.
+        SCOPED_TRACE(absl::StrCat(
+            "permutation ", Permutation::toString(permutation.permutation()),
+            ", col0Id ", ::testing::PrintToString(col0Id)));
         auto scanResult = permutation.scan(
             permutation.getScanSpecAndBlocks(
                 ScanSpecification{col0Id, std::nullopt, std::nullopt},
@@ -146,6 +151,11 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
             cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
+          SCOPED_TRACE(absl::StrCat("row ",
+                                    ::testing::PrintToString(Id{row[0]}), " ",
+                                    ::testing::PrintToString(Id{row[1]}), " ",
+                                    ::testing::PrintToString(Id{row[2]}), " ",
+                                    ::testing::PrintToString(Id{row[3]})));
           auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(patternIdx, subjectId);
@@ -243,6 +253,14 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         "\"zz\"@en . <zz> <label> <zz> .";
   }
 
+  // Use the explicitly configured vocabulary type, or a random one otherwise.
+  // Name it in the messages of all the checks of the index below, so that a
+  // failure that only occurs with one of the random types can be reproduced.
+  VocabularyType vocabularyType =
+      c.vocabularyType.has_value() ? c.vocabularyType.value()
+                                   : VocabularyType::randomForIndexBuilding();
+  SCOPED_TRACE(absl::StrCat("vocabulary type ", vocabularyType.toString()));
+
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
@@ -281,12 +299,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       spec.parseInParallel_ = c.parseInParallel.value();
       spec.parseInParallelSetExplicitly_ = true;
     }
-    // Use the explicitly configured vocabulary type, or a random one
-    // otherwise.
-    index.getImpl().setVocabularyTypeForIndexBuilding(
-        c.vocabularyType.has_value()
-            ? c.vocabularyType.value()
-            : VocabularyType::randomForIndexBuilding());
+    index.getImpl().setVocabularyTypeForIndexBuilding(vocabularyType);
     if (c.geoCellGridLevel > 0) {
       index.getImpl().setGeoCellGridForIndexBuilding(
           ad_utility::GeoCellGrid{c.geoCellGridLevel, c.geoCellGridScheme});

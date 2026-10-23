@@ -64,7 +64,7 @@ Result BaselineAlgorithm::run() {
       // If there is no `maxResults_` we can add the result row immediately
       if (!maxResults_.has_value()) {
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                            rowRight, dist);
+                            rowRight, kilometersToDistanceId(dist.getDouble()));
         continue;
       }
 
@@ -86,7 +86,7 @@ Result BaselineAlgorithm::run() {
         intermediate.pop();
 
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                            rowRight, Id::makeFromDouble(dist));
+                            rowRight, kilometersToDistanceId(dist));
       }
     }
   }

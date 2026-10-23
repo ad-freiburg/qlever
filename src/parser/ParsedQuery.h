@@ -161,7 +161,7 @@ class ParsedQuery {
       const std::vector<Variable>& variables);
 
   // Return all the warnings that have been added via `addWarning()` or
-  // `addWarningOrThrow`.
+  // `addUnboundVariableWarningOrThrow`.
   const std::vector<std::string>& warnings() const { return warnings_; }
 
   // Add a warning to the query. The warning becomes part of the return value of
@@ -172,8 +172,8 @@ class ParsedQuery {
 
   // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a
-  // warning.
-  void addWarningOrThrow(std::string warning);
+  // warning. Only use this for warnings about unbound variables.
+  void addUnboundVariableWarningOrThrow(std::string warning);
 
   // Returns all variables that are visible in the Query Body.
   const std::vector<Variable>& getVisibleVariables() const;
@@ -219,8 +219,8 @@ class ParsedQuery {
 
   // If the `variable` is neither visible in the query body nor contained in the
   // `additionalVisibleVariables`, add a warning or throw an exception (see
-  // `addWarningOrThrow`) that uses the `locationDescription` inside the
-  // message.
+  // `addUnboundVariableWarningOrThrow`) that uses the `locationDescription`
+  // inside the message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
@@ -245,7 +245,8 @@ class ParsedQuery {
   // `GROUP BY` (`isGroupBy`), each expression becomes an internal alias (using
   // `internalVariableGenerator`). Without, see `addHavingClauseWithoutGroupBy`.
   // Variables that are not visible yield a warning (or an exception, see
-  // `addWarningOrThrow`). `postQueryValues` is only used for the warnings.
+  // `addUnboundVariableWarningOrThrow`). `postQueryValues` is only used for the
+  // warnings.
   void addHavingClause(
       std::vector<SparqlFilter> havingClause, bool isGroupBy,
       InternalVariableGenerator internalVariableGenerator,

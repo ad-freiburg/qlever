@@ -11,6 +11,7 @@
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
+#include <absl/strings/str_cat.h>
 #include <spatialjoin/BoxIds.h>
 
 #include <thread>
@@ -232,12 +233,30 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
-  return {parser.getBoundingBox(),
-          numGeomsParsed,
-          numGeomsDropped,
-          parser.getCellPrefilterCounter(),
-          numThreads,
-          parser.getFromIndexCounter()};
+  return {
+      parser.getBoundingBox(),          numGeomsParsed,         numGeomsDropped,
+      parser.getCellPrefilterCounter(), parser.getNumInvalid(), numThreads,
+      parser.getFromIndexCounter()};
+}
+
+// ____________________________________________________________________________
+void LibspatialjoinAlgorithm::addInvalidGeometriesWarning(
+    size_t numInvalidLeft, size_t numInvalidRight) const {
+  std::string counts;
+  if (numInvalidLeft > 0) {
+    absl::StrAppend(&counts, config_.left_.name(), ": ", numInvalidLeft);
+  }
+  if (numInvalidRight > 0) {
+    absl::StrAppend(&counts, counts.empty() ? "" : ", ", config_.right_.name(),
+                    ": ", numInvalidRight);
+  }
+  if (counts.empty()) {
+    return;
+  }
+  spatialJoin_.value()->addWarning(absl::StrCat(
+      spatialJoin_.value()->getDescriptor(),
+      ": skipped rows with invalid or unsupported geometry literals (", counts,
+      ")"));
 }
 
 // ____________________________________________________________________________
@@ -350,8 +369,8 @@ Result LibspatialjoinAlgorithm::run() {
         "num-geoms-after-block-prefilter", numGeomsAfterBlockPrefilter);
 
     // Parse and add all geometries of the smaller side
-    auto [boxSmall, countSmall, droppedSmall, droppedSmallByCell, threadsSmall,
-          fromIndexSmall] =
+    auto [boxSmall, countSmall, droppedSmall, droppedSmallByCell, invalidSmall,
+          threadsSmall, fromIndexSmall] =
         parse(smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     auto numValidGeomsSmall = sweeper.numElements();
@@ -366,10 +385,11 @@ Result LibspatialjoinAlgorithm::run() {
     // Parse and add the relevant geometries from the larger side: those whose
     // bounding box intersects the bounding box of the smaller side, or lies
     // inside it if the join type requires that (see `sideMustBeContained`).
-    auto [boxLarge, countLarge, droppedLarge, droppedLargeByCell, threadsLarge,
-          fromIndexLarge] = parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
-                                  sweeper.getPaddedBoundingBox(boxSmall),
-                                  sideMustBeContained(!smallerIsRight));
+    auto [boxLarge, countLarge, droppedLarge, droppedLargeByCell, invalidLarge,
+          threadsLarge, fromIndexLarge] =
+        parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
+              sweeper.getPaddedBoundingBox(boxSmall),
+              sideMustBeContained(!smallerIsRight));
     auto numValidGeomsTotal = sweeper.numElements();
     AD_CORRECTNESS_CHECK(numValidGeomsTotal >= numValidGeomsSmall);
     auto numValidGeomsLarge = numValidGeomsTotal - numValidGeomsSmall;
@@ -386,6 +406,15 @@ Result LibspatialjoinAlgorithm::run() {
                                                   numValidGeomsTotal);
     numParserThreadsSmaller = threadsSmall;
     numParserThreadsLarger = threadsLarge;
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-dropped-by-prefilter", droppedLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
+                                                  invalidSmall + invalidLarge);
+    if (smallerIsRight) {
+      addInvalidGeometriesWarning(invalidLarge, invalidSmall);
+    } else {
+      addInvalidGeometriesWarning(invalidSmall, invalidLarge);
+    }
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
@@ -424,7 +453,8 @@ Result LibspatialjoinAlgorithm::run() {
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
   // Collect the results and add them to the result table. For `WITHIN_DIST`,
-  // also add the distance for each pair of objects in the result.
+  // also add the distance for each pair of objects in the result (which
+  // `libspatialjoin` reports in meters).
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
       throwIfCancelled();
@@ -435,7 +465,8 @@ Result LibspatialjoinAlgorithm::run() {
         dist = resultDists[t][i];
       }
       addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
-                          res.second, Id::makeFromDouble(dist), swapBack);
+                          res.second, kilometersToDistanceId(dist / 1000),
+                          swapBack);
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
