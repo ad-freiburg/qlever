@@ -220,21 +220,21 @@ class Server {
   Awaitable<json> processVacuumDeltaTriples(
       std::optional<std::string_view> userTimeout, bool accessTokenOk);
 
-  // Handle a `write-materialized-view` command: extract the view name, query,
-  // and timeout from `parameters`/`operation`, execute the query, and store
-  // its result as a named materialized view, and return the resulting
-  // materialized-view stats. On success, the caller is
-  // responsible for resetting the request's operation to `None{}` so that
-  // `process()` doesn't also try to execute it as a regular query.
+  // Handle a `write-materialized-view` command: extract the view name and
+  // query from `parameters`/`operation`, execute the query, store its result
+  // as a named materialized view, and return the resulting materialized-view
+  // stats. On success, the caller is responsible for resetting the request's
+  // operation to `None{}` so that `process()` doesn't also try to execute it
+  // as a regular query.
   Awaitable<json> processWriteMaterializedView(
       const ParamValueMap& parameters, const SparqlOperation& operation,
       const ad_utility::Timer& requestTimer);
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
-  // manager. Unlike `processWriteMaterializedView` above, this neither
-  // executes a query nor honors a timeout, so it runs synchronously and
-  // either returns its result or throws.
+  // manager. Unlike `processWriteMaterializedView` above, this does not
+  // execute a query, so it runs synchronously and either returns its result or
+  // throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
                                    const SharedIndexAndView& indexAndViews);
 

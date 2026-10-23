@@ -1196,12 +1196,14 @@ class CompressedExternalIdTableSorter
       compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
 
  public:
-  // Constructor. The sorter can be cancelled via the `cancellationHandle`
-  // (which must not be `nullptr`): it is checked regularly by the sorts of the
-  // blocks and by the merge phase, which then throw a `CancellationException`.
-  // An exception of the sort of a block (which runs in the background) is
-  // thrown by the next call to `push`, `pushBlock`, or `getSortedBlocks`. The
-  // default is a handle that is never cancelled.
+  // Constructor. The sorter can be cancelled via the `cancellationHandle`,
+  // which must not be `nullptr` (the default is a handle that is never
+  // cancelled): the sorts of the blocks and the merge phase check it regularly
+  // and throw a `CancellationException`.
+  //
+  // NOTE: The sort of a block runs in the background, so its exception is
+  // rethrown by a later `push` or `pushBlock` (when the next block is written)
+  // or by `getSortedBlocks`.
   CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
