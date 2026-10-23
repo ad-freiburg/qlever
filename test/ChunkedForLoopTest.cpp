@@ -5,8 +5,12 @@
 #include <gmock/gmock.h>
 
 #include <atomic>
+#include <list>
+#include <range/v3/view/zip.hpp>
+#include <vector>
 
 #include "util/ChunkedForLoop.h"
+#include "util/Forward.h"
 
 using ad_utility::chunkedCopy;
 using ad_utility::chunkedFill;
@@ -141,4 +145,45 @@ TEST(ChunkedForLoop, chunkedCopyCopiesCorrectly) {
 
   EXPECT_EQ(chunkCounter, 3);
   EXPECT_EQ(input, output);
+}
+
+// _____________________________________________________________________________
+TEST(ChunkedForLoop, chunkedForEach) {
+  // Run `chunkedForEach` on the `range` and return the visited elements, with
+  // a `-1` for each call of the `chunkOperation`.
+  auto visit = [](auto&& range, size_t chunkSize) {
+    std::vector<int> visited;
+    ad_utility::chunkedForEach(
+        AD_FWD(range), [&visited](int element) { visited.push_back(element); },
+        [&visited]() { visited.push_back(-1); }, chunkSize);
+    return visited;
+  };
+  using ::testing::ElementsAre;
+  std::vector<int> input{1, 2, 3, 4, 5};
+  // A random access range.
+  EXPECT_THAT(visit(input, 2), ElementsAre(1, 2, -1, 3, 4, -1, 5, -1));
+  EXPECT_THAT(visit(input, 5), ElementsAre(1, 2, 3, 4, 5, -1));
+  EXPECT_THAT(visit(input, 7), ElementsAre(1, 2, 3, 4, 5, -1));
+  EXPECT_THAT(visit(std::vector<int>{}, 2), ElementsAre());
+  // A range that is not random access.
+  std::list<int> list{input.begin(), input.end()};
+  EXPECT_THAT(visit(list, 2), ElementsAre(1, 2, -1, 3, 4, -1, 5, -1));
+  EXPECT_THAT(visit(std::list<int>{}, 2), ElementsAre());
+  // A move-only view.
+  auto moveOnlyView = ql::views::transform(std::vector<int>{1, 2, 3},
+                                           [](int i) { return 2 * i; });
+  static_assert(!std::is_copy_constructible_v<decltype(moveOnlyView)>);
+  EXPECT_THAT(visit(moveOnlyView, 2), ElementsAre(2, 4, -1, 6, -1));
+  // A zipped range.
+  std::vector<int> visited;
+  ad_utility::chunkedForEach(
+      ::ranges::views::zip(input, list),
+      [&visited](const auto& pair) {
+        const auto& [a, b] = pair;
+        visited.push_back(a * b);
+      },
+      [&visited]() { visited.push_back(-1); }, 3);
+  EXPECT_THAT(visited, ElementsAre(1, 4, 9, -1, 16, 25, -1));
+  // The chunk size must not be zero.
+  EXPECT_ANY_THROW(visit(input, 0));
 }

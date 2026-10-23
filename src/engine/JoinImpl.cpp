@@ -341,7 +341,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
   std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
 
-  auto cancellationCallback = [this]() { checkCancellation(); };
+  auto cancellationCallback = cancellationChecker();
 
   // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&

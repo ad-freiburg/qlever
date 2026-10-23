@@ -34,6 +34,7 @@
 #include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "util/Algorithm.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
@@ -1177,6 +1178,9 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   for (size_t i = 0; i < subresult->idTableView().size(); ++i) {
     auto id = subresult->idTableView()(i, columnIndex);
     if (id != currentId) {
+      // `getExactCardinality` may read and decompress blocks, so this loop
+      // can be expensive for many distinct IDs.
+      checkCancellation();
       pushRow();
       currentId = id;
       currentCount = 0;
@@ -1854,14 +1858,22 @@ static constexpr auto makeProcessGroupsVisitor =
 
         auto hashEntryIndex = 0;
 
-        for (const auto& val : generator) {
-          auto vectorOffset = hashEntries[hashEntryIndex];
-          auto& aggregateData = aggregationDataVector.at(vectorOffset);
+        // `addValue` might look up strings in the vocabulary (e.g. for
+        // `GROUP_CONCAT`), so a block of rows can take a while.
+        ad_utility::chunkedForEach(
+            generator,
+            [&hashEntries, &hashEntryIndex, &aggregationDataVector,
+             evaluationContext](const auto& val) {
+              auto vectorOffset = hashEntries[hashEntryIndex];
+              auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
-          aggregateData.addValue(val, evaluationContext);
+              aggregateData.addValue(val, evaluationContext);
 
-          ++hashEntryIndex;
-        }
+              ++hashEntryIndex;
+            },
+            [evaluationContext]() {
+              evaluationContext->cancellationHandle_->throwIfCancelled();
+            });
       };
     };
 

@@ -94,7 +94,7 @@ Result Sort::computeResult(bool requestLaziness) {
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
     if (input->idTableView().numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(input->cloneIdTable(),
+      return computeResultInMemory(input->cloneIdTable(cancellationChecker()),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
@@ -132,6 +132,7 @@ Result Sort::computeResult(bool requestLaziness) {
   IdTable combined{numColumns, allocator()};
   combined.reserve(totalRows);
   for (auto& block : collectedBlocks) {
+    checkCancellation();
     combined.insertAtEnd(block);
   }
   return computeResultInMemory(std::move(combined),

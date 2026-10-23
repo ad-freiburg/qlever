@@ -38,6 +38,7 @@ Result S2GeometryAlgorithm::run() {
 
   // Populate the index
   for (size_t row = 0; row < indexTable->size(); row++) {
+    throwIfCancelled();
     auto p = getPoint(indexTable, row, indexJoinCol);
     if (p.has_value()) {
       s2index.Add(toS2Point(p.value()), row);
@@ -62,6 +63,7 @@ Result S2GeometryAlgorithm::run() {
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
   // Use the index to lookup the points of the other table
   for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
+    throwIfCancelled();
     auto p = getPoint(searchTable, searchRow, searchJoinCol);
     if (!p.has_value()) {
       continue;

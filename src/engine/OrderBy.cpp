@@ -270,7 +270,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
       "Sort for COUNT(DISTINCT *)");
 
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->cloneIdTable();
+  IdTable idTable = subRes->cloneIdTable(cancellationChecker());
 
   size_t width = idTable.numColumns();
 

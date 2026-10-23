@@ -42,6 +42,8 @@ Result BaselineAlgorithm::run() {
 
     // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
+      // Each iteration might parse a geometry, which is expensive.
+      throwIfCancelled();
       auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
 
       if (!entryLeft || !entryRight) {

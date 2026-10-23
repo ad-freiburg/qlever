@@ -193,7 +193,8 @@ CPP_template_def(int WIDTH,
         // The binary filter contains all elements of the input, and we have
         // no previous results, so we can simply copy or move the complete
         // table.
-        dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+        dynamicResultTable =
+            AD_FWD(inputTable).moveOrClone(cancellationChecker());
         return;
       }
       checkCancellation();

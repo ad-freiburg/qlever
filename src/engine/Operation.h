@@ -635,6 +635,14 @@ class Operation {
                                           [this]() { return getDescriptor(); });
   }
 
+  // Return a function that calls `checkCancellation` (with the location of the
+  // caller of this function), e.g. as the `chunkOperation` of
+  // `ad_utility::chunkedForLoop`.
+  auto cancellationChecker(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
+    return [this, location]() { checkCancellation(location); };
+  }
+
   std::chrono::milliseconds remainingTime() const;
 
   // Get the mapping from variables to column indices. This mapping may only be

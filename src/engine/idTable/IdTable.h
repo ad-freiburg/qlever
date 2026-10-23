@@ -21,13 +21,16 @@
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ChunkedForLoop.h"
 #include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
 #include "util/SourceLocation.h"
+#include "util/TransparentFunctors.h"
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
+#include "util/views/ChunkedIotaView.h"
 
 namespace columnBasedIdTable {
 // The `IdTable` class is QLever's central data structure. It is used to store
@@ -506,30 +509,52 @@ class IdTable {
   // exception: If `this` is a view (because the `isView` template parameter is
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
-  // that the view points to
-  CPP_template(typename = void)(requires(isCloneable)) OwnedTable
-      clone() const {
+  // that the view points to. The columns are copied in chunks of `chunkSize`
+  // rows, with a call to `chunkOperation` (e.g. a cancellation check) after
+  // each chunk. With the default `Noop`, each column is copied in one chunk.
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(
+      requires(isCloneable&& columnsAreAllocatable)
+          CPP_and ql::concepts::invocable<ChunkOperation>) OwnedTable
+      clone(
+          ChunkOperation chunkOperation = {},
+          size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const {
+    const size_t numRows = size();
+    if constexpr (std::is_same_v<ChunkOperation, ad_utility::Noop>) {
+      chunkSize = std::max(numRows, size_t{1});
+    }
     Storage storage;
     for (const auto& column : getColumns()) {
-      storage.emplace_back(column.begin(), column.end(), getAllocator());
+      auto& target = storage.emplace_back(getAllocator());
+      target.reserve(numRows);
+      for (auto [begin, end] :
+           ad_utility::chunkedIotaView(size_t{0}, numRows, chunkSize)) {
+        target.insert(target.end(), column.begin() + begin,
+                      column.begin() + end);
+        std::invoke(chunkOperation);
+      }
     }
     return OwnedTable{std::move(storage), numColumns_, numRows_, allocator_};
   }
 
   // `moveOrClone` always returns an `OwnedTable`. For r-value `IdTables` (no
   // views), this moves the table. For l-value referenced `IdTable`s and
-  // all `IdTableView`s return a deep copy via `clone()`. The typical usage is
+  // all `IdTableView`s return a deep copy via `clone()`, with the given
+  // `chunkOperation` and `chunkSize`. The typical usage is
   // `auto newTable = AD_FWD(oldTable).moveOrClone()` meaning "I want to take
   // ownership of an `IdTable` that owns its data as efficiently as possible".
-  CPP_member auto moveOrClone() const& -> CPP_ret(OwnedTable)(
-                                           requires isCloneable) {
-    return clone();
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(requires isCloneable)
+      OwnedTable moveOrClone(
+          ChunkOperation chunkOperation = {},
+          size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const& {
+    return clone(std::move(chunkOperation), chunkSize);
   }
 
-  CPP_member auto moveOrClone() && -> CPP_ret(OwnedTable)(
-                                       requires isCloneable) {
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(requires isCloneable)
+      OwnedTable moveOrClone(
+          ChunkOperation chunkOperation = {},
+          size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) && {
     if constexpr (isView) {
-      return clone();
+      return clone(std::move(chunkOperation), chunkSize);
     } else {
       return std::move(*this);
     }

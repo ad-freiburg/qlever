@@ -527,6 +527,13 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
+  // Adding a node takes time linear in the number of nodes so far, so reject
+  // too many nodes before adding them all.
+  auto countNode = [&numNodesInTripleGraph]() {
+    if (++numNodesInTripleGraph > 64) {
+      AD_THROW("At most 64 triples allowed at the moment.");
+    }
+  };
   ad_utility::HashMap<Variable, std::string> optTermForCvar;
   ad_utility::HashMap<Variable, vector<std::string>> potentialTermsForCvar;
   vector<const SparqlTriple*> entityTriples;
@@ -546,18 +553,18 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
               "contains-word is not allowed inside GRAPH clauses or in queries "
               "with FROM/FROM NAMED clauses.");
         }
+        countNode();
         addNodeToTripleGraph(
             TripleGraph::Node{tg._nodeStorage.size(), t.s_.getVariable(), s, t},
             tg);
-        numNodesInTripleGraph++;
       }
     } else if (t.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
+      countNode();
       addNodeToTripleGraph(
           TripleGraph::Node{tg._nodeStorage.size(), t, activeGraphVariable_},
           tg);
-      numNodesInTripleGraph++;
     }
   }
   for (const auto& [cvar, terms] : potentialTermsForCvar) {
@@ -572,13 +579,10 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
           "statement always also needs corresponding ql:contains-word "
           "statement.");
     }
+    countNode();
     addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), currentVar,
                                            optTermForCvar[currentVar], *t),
                          tg);
-    numNodesInTripleGraph++;
-  }
-  if (numNodesInTripleGraph > 64) {
-    AD_THROW("At most 64 triples allowed at the moment.");
   }
   return tg;
 }
