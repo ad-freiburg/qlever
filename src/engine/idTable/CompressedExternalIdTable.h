@@ -620,6 +620,17 @@ struct PushBlockCallback {
   }
 };
 
+namespace compressedExternalIdTable {
+// Whether a block transformation of a `CompressedExternalIdTableBase` keeps
+// memory for its next block that it can free via `releaseBuffers()` (see
+// `BlockSorter`).
+template <typename T, typename = void>
+constexpr bool hasReleaseBuffers = false;
+template <typename T>
+constexpr bool hasReleaseBuffers<
+    T, std::void_t<decltype(std::declval<T&>().releaseBuffers())>> = true;
+}  // namespace compressedExternalIdTable
+
 // The conversion between the memory limit and the number of rows per block of
 // a `CompressedExternalIdTableBase` (see below). These functions have rather
 // general names, but are tied to that class, hence the dedicated namespace.
@@ -882,6 +893,7 @@ class CompressedExternalIdTableBase {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();
+    releaseTransformationBuffers();
     writer_.clear();
     numBlocksPushed_ = 0;
     isFirstIteration_ = true;
@@ -1017,12 +1029,25 @@ class CompressedExternalIdTableBase {
       AD_CORRECTNESS_CHECK(this->numElementsPushed_ ==
                            this->currentBlock_.size());
       blockTransformation_(this->currentBlock_);
+      releaseTransformationBuffers();
       return false;
     }
     transformAndWriteBlock(std::move(this->currentBlock_));
     resetCurrentBlock(false);
     waitForFuture();
+    releaseTransformationBuffers();
     return true;
+  }
+
+  // Free the memory that the `blockTransformation_` keeps for its next block
+  // (see `BlockSorter`), at the end of the input phase.
+  //
+  // PRECONDITION: No task of the background thread is in flight.
+  void releaseTransformationBuffers() {
+    if constexpr (compressedExternalIdTable::hasReleaseBuffers<
+                      BlockTransformation>) {
+      blockTransformation_.releaseBuffers();
+    }
   }
 };
 
@@ -1179,6 +1204,17 @@ void sortBlockRange(
 // faster `sortByBitwiseKeys`, in parallel on the executor of the
 // `parallelism_` (see `BitwiseKeySortParallelism`). Any other comparator is
 // sorted via `sortBlockRange` above.
+//
+// The `buffers_` of `sortByBitwiseKeys` are reused for all the blocks of one
+// sorter and released by `releaseBuffers` at the end of its input phase (see
+// `CompressedExternalIdTableBase::transformAndPushLastBlock`), so that a
+// sorter that is done with sorting does not keep their memory (which is about
+// as large as the memory of its blocks) until it is destroyed.
+//
+// NOTE: The `operator()` is never called concurrently: it runs either on the
+// dedicated background thread of the sorter, or in the thread that ends the
+// input phase, after the background thread is done (see
+// `CompressedExternalIdTableBase`).
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
@@ -1186,16 +1222,24 @@ struct BlockSorter {
   // See the `inCallingThread` argument of `sortBlockRange`.
   bool inCallingThread_ = false;
   BitwiseKeySortParallelism parallelism_{};
+  BitwiseKeySortBuffers buffers_{};
   template <typename T>
   void operator()(T& block) {
     if constexpr (hasBitwiseKeyColumns<Comparator>) {
       // The bitwise sort itself is not cancellable, so check once per block.
       cancellationHandle_->throwIfCancelled();
-      sortByBitwiseKeys(block, Comparator::bitwiseKeyColumns, parallelism_);
+      sortByBitwiseKeys(block, Comparator::bitwiseKeyColumns, parallelism_,
+                        &buffers_);
     } else {
       sortBlockRange(block, comparator_, cancellationHandle_, inCallingThread_);
     }
   }
+
+  // Free the memory of the `buffers_`, see above.
+  void releaseBuffers() { buffers_.release(); }
+
+  // The memory that the `buffers_` currently hold, in bytes.
+  size_t bufferBytes() const { return buffers_.numBytes(); }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
 // in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
@@ -1264,6 +1308,12 @@ class CompressedExternalIdTableSorter
       compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
 
  public:
+  // The memory that the sorts of the blocks currently keep for the next block,
+  // in bytes (see `BlockSorter`). For testing.
+  size_t sortBufferBytes() const {
+    return this->blockTransformation_.bufferBytes();
+  }
+
   // Constructor. The sorter can be cancelled via the `cancellationHandle`,
   // which must not be `nullptr` (the default is a handle that is never
   // cancelled): the sorts of the blocks and the merge phase check it regularly
