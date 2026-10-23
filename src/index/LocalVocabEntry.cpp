@@ -66,7 +66,7 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   auto [lower, upper] = [&]() -> std::pair<Id, Id> {
     if (auto opt = context_->encodeAsId(toStringRepresentation());
         opt.has_value()) {
-      return {opt.value(), Id::fromBits(opt.value().getBits() + 1)};
+      return {opt.value(), opt.value().incremented()};
     }
     // Look up the word in the vocabularies of the index. A word that is
     // contained in one of them is positioned exactly at its `Id`, so its range
@@ -76,7 +76,7 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
     auto idOrBounds =
         context_->lookupWordInVocabularies(toStringRepresentation());
     if (const auto* id = std::get_if<Id>(&idOrBounds)) {
-      return {*id, Id::fromBits(id->getBits() + 1)};
+      return {*id, id->incremented()};
     }
     auto [l, u] = std::get<LocalVocabContext::VocabBounds>(idOrBounds);
     return {Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
@@ -112,6 +112,6 @@ LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
 
 // _____________________________________________________________________________
 LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
-    NormalizedStringView view, const LocalVocabContext& ctx) {
+    std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
 }

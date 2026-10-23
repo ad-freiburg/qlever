@@ -12,6 +12,20 @@ if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-lto)
 endif()
 
+# Emscripten link options for all test binaries:
+# - `-sPROXY_TO_PTHREAD`: run `main` on a pthread. Emscripten starts threads
+#   and frees the stacks of finished threads on the main JavaScript thread, so a
+#   test that blocks the main thread would otherwise starve both.
+# - `-sEXIT_RUNTIME=1`: exit when `main` returns (required with the above).
+# - `-sGROWABLE_ARRAYBUFFERS=2`: avoid a check for memory growth on every memory
+#   access from JavaScript (requires Node.js >= 26).
+# - `-O1`: link without `wasm-opt -O3` (the objects are still compiled with
+#   `-O3`). This makes linking ~35x faster, and the tests even run faster.
+if (EMSCRIPTEN)
+    add_link_options(
+            -sPROXY_TO_PTHREAD -sEXIT_RUNTIME=1 -sGROWABLE_ARRAYBUFFERS=2 -O1)
+endif ()
+
 # Needed for creating the `testUil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
@@ -152,8 +166,10 @@ endfunction()
 # The directory with the test data that is checked in (currently only an index
 # in the previous index format, see `data/oldIndexFormat/README.md`). Tests must
 # only read from this directory; anything they write belongs into their working
-# directory.
-add_compile_definitions(QLEVER_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+# directory. Emscripten tests cannot access the host filesystem, so tests that
+# read from it have to embed it into their binary (see `index/CMakeLists.txt`).
+set(QLEVER_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data")
+add_compile_definitions(QLEVER_TEST_DATA_DIR="${QLEVER_TEST_DATA_DIR}")
 
 add_subdirectory(engine)
 add_subdirectory(parser)
@@ -165,27 +181,28 @@ add_subdirectory(libqlever)
 add_subdirectory(parallelBlockMerge)
 add_subdirectory(blockSort)
 
-OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
-
-if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
+# Only register tests whose libraries are built (not the case for Emscripten).
+if (TARGET benchmark)
     addLinkAndDiscoverTestSerial(BenchmarkMeasurementContainerTest benchmark testUtil)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
+endif ()
 
+if (TARGET server)
     addLinkAndDiscoverTest(ServerTest engine server)
 
     addLinkAndDiscoverTest(HttpApiHelpersTest server)
 
-    addLinkAndDiscoverTest(SparqlProtocolTest engine)
-
-    addLinkAndDiscoverTest(UrlParserTest)
-
     addLinkAndDiscoverTest(GraphStoreProtocolTest engine server)
-
-    addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
-
-    addLinkAndDiscoverTest(ExceptionHandlingTest)
 endif ()
+
+addLinkAndDiscoverTest(SparqlProtocolTest engine)
+
+addLinkAndDiscoverTest(UrlParserTest)
+
+addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+
+addLinkAndDiscoverTest(ExceptionHandlingTest)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest qlever_util)
 
@@ -223,6 +240,8 @@ addLinkAndDiscoverTest(PermutationTest index)
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
+
+addLinkAndDiscoverTest(TextMetaDataTest index)
 
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
@@ -313,7 +332,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser testUtil)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
@@ -329,6 +348,8 @@ addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
+
+addLinkAndDiscoverTest(ConcurrencyLimitedExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -398,6 +419,8 @@ addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
+addLinkAndDiscoverTest(TieTest qlever_util)
+
 addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
@@ -426,10 +449,9 @@ addLinkAndDiscoverTest(ServiceTest engine)
 
 addLinkAndDiscoverTest(LoadTest engine)
 
-# HttpTest is disabled for Emscripten: emsdk 6.0.2 miscompiles the boost::beast
-# websocket coroutine code under both Wasm EH modes (legacy: wasm-opt rejects an
-# invalid `rethrow`; standard EH: the WebAssemblyLateEHPrepare backend pass segfaults).
-if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
+# Not for Emscripten: it tests the native HTTP client (Emscripten uses `fetch`)
+# and triggers https://github.com/llvm/llvm-project/issues/208409.
+if (NOT EMSCRIPTEN)
     addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 endif ()
 
@@ -520,6 +542,10 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
+addLinkAndDiscoverTest(ComparisonOfIntAndDoubleTest)
+
+addLinkAndDiscoverTest(OrderByComparatorTest engine)
+
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
@@ -535,10 +561,9 @@ addLinkAndDiscoverTest(JsonUtilTest)
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
 
 addLinkAndDiscoverTest(AsioHelpersTest)
-# With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
-# crashes on the coroutine `.resume` body in this file. Compiling just this
-# translation unit at -O1 avoids the crashing pass (and makes the precompiled
-# header of `testUtil`, which is compiled with the default flags, unusable).
+# Emscripten's clang crashes on this file at -O2/-O3, see
+# https://github.com/llvm/llvm-project/issues/226735. The precompiled header is
+# compiled with -O3 and hence cannot be used.
 if (EMSCRIPTEN)
     set_source_files_properties(AsioHelpersTest.cpp PROPERTIES
             COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)
@@ -564,7 +589,6 @@ addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
-addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
@@ -635,7 +659,7 @@ addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
-addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+addLinkAndDiscoverTest(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 

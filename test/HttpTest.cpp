@@ -8,6 +8,7 @@
 
 #include <boost/url/url_view.hpp>
 #include <charconv>
+#include <future>
 #include <thread>
 
 #include "HttpTestHelpers.h"
@@ -15,6 +16,7 @@
 #include "util/GTestHelpers.h"
 #include "util/Random.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/Timer.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -69,7 +71,8 @@ auto makeEchoHandler() {
         co_await send(
             createOkResponse(absl::StrCat(verbName(req.method()), "\n",
                                           toStd(req.target()), "\n", body),
-                             req, ad_utility::MediaType::textPlain));
+                             req, ad_utility::MediaType::textPlain),
+            co_await boost::asio::this_coro::executor);
       };
 }
 
@@ -86,8 +89,9 @@ template <BodyReadMode mode>
 auto makeIgnoreBodyServer(size_t chunkSize) {
   auto handler = [](auto req, auto&& send,
                     auto...) -> boost::asio::awaitable<void> {
-    co_await send(createOkResponse("ignored body", req,
-                                   ad_utility::MediaType::textPlain));
+    co_await send(
+        createOkResponse("ignored body", req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
   };
   return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
 }
@@ -100,7 +104,8 @@ boost::asio::awaitable<void> throwingEchoBody(const Req& req, Send& send,
                                               std::exception_ptr exception) {
   co_await send(createOkResponse(absl::StrCat(verbName(req.method()), "\n",
                                               toStd(req.target()), "\n", body),
-                                 req, ad_utility::MediaType::textPlain));
+                                 req, ad_utility::MediaType::textPlain),
+                co_await boost::asio::this_coro::executor);
   std::rethrow_exception(exception);
 }
 
@@ -125,7 +130,8 @@ boost::asio::awaitable<void> redirectHandlerCore(const Req& req, Send& send,
   auto redirectIt = url.params().find("location");
   if (redirectIt == url.params().end()) {
     co_return co_await send(
-        createOkResponse("Success", req, ad_utility::MediaType::textPlain));
+        createOkResponse("Success", req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
   }
   http::response<http::string_body> resp;
   unsigned redirectStatus = 200;
@@ -597,6 +603,183 @@ TYPED_TEST(HttpServerBodyTest, Redirects) {
 
 namespace {
 
+// Test that a body that is computed on an executor passed to `send` does not
+// block the threads of the server: while the body of one response is still
+// being computed, the server (which runs with a single thread in this test)
+// still answers other requests.
+TYPED_TEST(HttpServerBodyTest, SlowResponseBodyDoesNotBlockServer) {
+  std::promise<void> releaseSlowBody;
+  std::shared_future<void> slowBodyReleased =
+      releaseSlowBody.get_future().share();
+  net::thread_pool bodyThreadPool{1};
+  auto handler = [slowBodyReleased, &bodyThreadPool](
+                     auto req, auto&& send,
+                     auto...) -> boost::asio::awaitable<void> {
+    if (req.target() != "/slow") {
+      co_return co_await send(
+          createOkResponse("fast", req, ad_utility::MediaType::textPlain),
+          co_await boost::asio::this_coro::executor);
+    }
+    auto slowBody = [](std::shared_future<void> released)
+        -> cppcoro::generator<std::string> {
+      co_yield "slow-start";
+      // Don't block forever if the test fails.
+      released.wait_for(std::chrono::seconds(10));
+      co_yield "slow-end";
+    };
+    co_await send(createOkResponse(slowBody(slowBodyReleased), req,
+                                   ad_utility::MediaType::textPlain),
+                  bodyThreadPool.get_executor());
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+  auto port = std::to_string(httpServer.getPort());
+
+  auto slowResponse =
+      HttpClient::sendRequest(std::make_unique<HttpClient>("localhost", port),
+                              verb::get, "localhost", "/slow", this->handle_);
+  EXPECT_EQ(slowResponse.status_, boost::beast::http::status::ok);
+
+  // The body of the slow response is still being computed.
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto fastResponse =
+      HttpClient::sendRequest(std::make_unique<HttpClient>("localhost", port),
+                              verb::get, "localhost", "/fast", this->handle_);
+  EXPECT_EQ(toString(std::move(fastResponse.body_)), "fast");
+  EXPECT_LT(timer.msecs(), std::chrono::seconds(5));
+
+  releaseSlowBody.set_value();
+  EXPECT_EQ(toString(std::move(slowResponse.body_)), "slow-startslow-end");
+}
+
+// Test that an exception while computing the body of a response is logged and
+// closes the connection, so that the client receives an incomplete response.
+TYPED_TEST(HttpServerBodyTest, ExceptionInResponseBody) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  net::thread_pool bodyThreadPool{1};
+  auto handler = [&bodyThreadPool](auto req, auto&& send,
+                                   auto...) -> boost::asio::awaitable<void> {
+    auto throwingBody = []() -> cppcoro::generator<std::string> {
+      co_yield "partial";
+      throw std::runtime_error{"body generation failed"};
+    };
+    co_await send(
+        createOkResponse(throwingBody(), req, ad_utility::MediaType::textPlain),
+        bodyThreadPool.get_executor());
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+  auto response = HttpClient::sendRequest(
+      std::make_unique<HttpClient>("localhost",
+                                   std::to_string(httpServer.getPort())),
+      verb::get, "localhost", "/target", this->handle_);
+  EXPECT_EQ(response.status_, boost::beast::http::status::ok);
+  EXPECT_ANY_THROW(toString(std::move(response.body_)));
+
+  // Shut down the server first to not have a race condition on the logging
+  // stream.
+  httpServer.shutDown();
+  if constexpr (ad_utility::compileTimeLogLevel >=
+                ad_utility::LogLevel::Enum::ERROR) {
+    EXPECT_THAT(logStream.str(), HasSubstr("body generation failed"));
+  }
+}
+
+// Test that sending a response with a `streamable_body` requires a (non-empty)
+// executor on which its body is computed.
+TYPED_TEST(HttpServerBodyTest, StreamableResponseRequiresExecutor) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  auto handler = [](auto req, auto&& send,
+                    auto...) -> boost::asio::awaitable<void> {
+    co_await send(
+        createOkResponse("never sent", req, ad_utility::MediaType::textPlain),
+        net::any_io_executor{});
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+  EXPECT_ANY_THROW(HttpClient::sendRequest(
+      std::make_unique<HttpClient>("localhost",
+                                   std::to_string(httpServer.getPort())),
+      verb::get, "localhost", "/target", this->handle_));
+
+  // Shut down the server first to not have a race condition on the logging
+  // stream.
+  httpServer.shutDown();
+  if constexpr (ad_utility::compileTimeLogLevel >=
+                ad_utility::LogLevel::Enum::ERROR) {
+    EXPECT_THAT(logStream.str(), HasSubstr("bodyExecutor"));
+  }
+}
+
+// Test that the session is closed after a response that announces this via
+// `Connection: close`.
+TYPED_TEST(HttpServerBodyTest, ConnectionCloseEndsSession) {
+  auto httpServer = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
+  httpServer.runInOwnThread();
+
+  // A request with `Connection: close` on a raw socket, so that the closing of
+  // the connection can be observed below.
+  net::io_context ioContext;
+  tcp::socket socket{ioContext};
+  socket.connect(
+      tcp::endpoint{net::ip::address_v4::loopback(), httpServer.getPort()});
+  http::request<http::empty_body> request{verb::get, "/target", 11};
+  request.set(field::host, "localhost");
+  request.keep_alive(false);
+  http::write(socket, request);
+
+  // The response is complete and announces the closing of the connection.
+  beast::flat_buffer buffer;
+  http::response<http::string_body> response;
+  http::read(socket, buffer, response);
+  EXPECT_EQ(response.body(), "GET\n/target\n");
+  EXPECT_TRUE(response.need_eof());
+
+  // The server has closed the connection.
+  beast::error_code ec;
+  socket.read_some(buffer.prepare(1), ec);
+  EXPECT_EQ(ec, net::error::eof);
+}
+
+// Test that a response with a `streamable_body` to an HTTP/1.0 request (for
+// which the body is not chunked, but ends with the connection) is sent exactly
+// once.
+TYPED_TEST(HttpServerBodyTest, StreamableResponseToHttp10Request) {
+  auto handler = [](auto req, auto&& send,
+                    auto...) -> boost::asio::awaitable<void> {
+    auto body = []() -> cppcoro::generator<std::string> {
+      co_yield "first";
+      co_yield "second";
+    };
+    co_await send(
+        createOkResponse(body(), req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+
+  net::io_context ioContext;
+  tcp::socket socket{ioContext};
+  socket.connect(
+      tcp::endpoint{net::ip::address_v4::loopback(), httpServer.getPort()});
+  http::request<http::empty_body> request{verb::get, "/target", 10};
+  request.set(field::host, "localhost");
+  http::write(socket, request);
+
+  // Without a `Content-Length`, the body of the response extends to the end of
+  // the connection, so anything sent after the body would be part of it.
+  beast::flat_buffer buffer;
+  http::response<http::string_body> response;
+  http::read(socket, buffer, response);
+  EXPECT_EQ(response.version(), 10);
+  EXPECT_FALSE(response.chunked());
+  EXPECT_EQ(response.body(), "firstsecond");
+}
+
 // Minimal stubs to instantiate `HttpServer` solely for accessing its public
 // static helpers `readIntoBuffer` and `materializeBody`. No actual server is
 // constructed.
@@ -747,10 +930,12 @@ using ad_utility::httpProxy::Proxy;
 auto makeProxyEchoServer() {
   auto handler = [](auto req, auto&& send,
                     auto...) -> boost::asio::awaitable<void> {
-    co_await send(createOkResponse(
-        absl::StrCat(toStd(req.target()), "\n", toStd(req[field::host]), "\n",
-                     toStd(req[field::proxy_authorization])),
-        req, ad_utility::MediaType::textPlain));
+    co_await send(
+        createOkResponse(
+            absl::StrCat(toStd(req.target()), "\n", toStd(req[field::host]),
+                         "\n", toStd(req[field::proxy_authorization])),
+            req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
   };
   return TestHttpServer{std::move(handler)};
 }

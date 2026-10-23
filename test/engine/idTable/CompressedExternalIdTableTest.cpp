@@ -513,7 +513,7 @@ namespace {
 // The number of rows per block that results from the given uncompressed block
 // size. The blocks are formed per column, hence the size of a single `Id`.
 size_t rowsPerBlockFor(ad_utility::MemorySize blockSize) {
-  return blockSize.getBytes() / sizeof(Id);
+  return blockSize.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
 }
 
 // Write all the `tables` to the `writer` and then flush it, such that the
@@ -649,11 +649,10 @@ TEST(CompressedExternalIdTable, concurrentBlockReads) {
   EXPECT_NO_THROW(writer.writeIdTable(tables.at(0)));
 }
 
-// _____________________________________________________________________________
-// With a tiny block size and several columns, `writeIdTable` compresses and
-// writes thousands of (block, column) pairs in parallel. Check that the result
-// is exactly the same as for a sequential write, also after a `clear()`, which
-// starts writing at the beginning of the file again.
+// Test that `writeIdTable` with a tiny block size and several columns (so that
+// it compresses and writes thousands of (block, column) pairs in parallel)
+// stores exactly the blocks of a sequential write, also after a `clear()`,
+// which starts writing at the beginning of the file again.
 TEST(CompressedExternalIdTable, writerWithManyBlocksAndColumns) {
   constexpr size_t numColumns = 5;
   std::vector<CopyableIdTable<0>> tables;

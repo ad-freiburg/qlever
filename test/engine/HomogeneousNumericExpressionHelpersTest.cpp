@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <map>
 #include <memory>
 #include <tuple>
 #include <variant>
@@ -19,6 +20,31 @@
 #include "../util/IndexTestHelpers.h"
 #include "backports/concepts.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
+
+namespace sparqlExpression::detail {
+// The counters distinguish typed rows, direct `UNDEF` and generic
+// getter/variant evaluation without replacing the exact production getter type.
+struct DateAwareTestFunction {
+  static inline size_t genericCalls = 0;
+  Id operator()(DateYearOrDuration, DateYearOrDuration) const {
+    return Id::makeFromInt(7);
+  }
+  template <typename Left, typename Right>
+  Id operator()(Left left, Right right) const {
+    if constexpr (std::is_arithmetic_v<Left> && std::is_arithmetic_v<Right>) {
+      return Id::makeFromDouble(left + right);
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+  Id operator()(NumericOrDateValue left, NumericOrDateValue right) const {
+    ++genericCalls;
+    return std::visit(*this, left, right);
+  }
+};
+template <>
+inline constexpr bool undefForNonNumericOrDate<DateAwareTestFunction> = true;
+}  // namespace sparqlExpression::detail
 
 namespace {
 
@@ -97,6 +123,40 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
     context_._endIndex = table_.size();
   }
 };
+
+// Test that `hasNonNumericOperand` rejects exactly the non-numeric `Id`s, and
+// only for functions with `undefForNonNumeric` and the `NumericValueGetter`.
+TEST_F(HomogeneousNumericExpressionHelpersTest, NonNumericFallbackEligibility) {
+  // `MakeNumericExpression` opts in, an arbitrary function does not.
+  using Function = MakeNumericExpression<std::multiplies<>>;
+  using Getters = std::tuple<NumericValueGetter>;
+  static_assert(undefForNonNumeric<Function>);
+  static_assert(!undefForNonNumeric<TestNumericAdd>);
+
+  // Integers, doubles and booleans are numeric.
+  for (auto value :
+       {I(1), D(2.5), Id::makeFromBool(true), Id::makeFromBool(false)}) {
+    EXPECT_FALSE((hasNonNumericOperand<Function, Getters>(value)));
+  }
+
+  // All other datatypes are rejected, but not for a function without the
+  // property or for a getter other than `NumericValueGetter`.
+  for (auto value :
+       {Id::makeUndefined(), Id::makeFromVocabIndex(VocabIndex::make(4)),
+        Id::makeFromGeoPoint(GeoPoint{1.0, 2.0})}) {
+    EXPECT_TRUE((hasNonNumericOperand<Function, Getters>(value)));
+    EXPECT_FALSE((hasNonNumericOperand<TestNumericAdd, Getters>(value)));
+    EXPECT_FALSE(
+        (hasNonNumericOperand<Function, std::tuple<NumericOrDateValueGetter>>(
+            value)));
+  }
+
+  // One non-numeric operand among several is enough.
+  EXPECT_TRUE(
+      (hasNonNumericOperand<Function,
+                            std::tuple<NumericValueGetter, NumericValueGetter>>(
+          I(1), Id::makeUndefined())));
+}
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedValueGetters) {
@@ -461,6 +521,271 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, GetMajorityNumericTypes) {
 
   classifications[1].majorityType_ = NumericType::Other;
   EXPECT_FALSE(getMajorityNumericTypes(classifications).has_value());
+}
+
+// Test `numericTypeForDatatype` at runtime, with and without dates: the
+// numeric-only variant rejects dates, the date-aware variant accepts them, and
+// booleans need the generic conversion in both cases.
+TEST_F(HomogeneousNumericExpressionHelpersTest, NumericTypeForDatatype) {
+  for (auto [datatype, numericType, dateAwareType] :
+       {std::tuple{Datatype::Int, NumericType::Int, NumericType::Int},
+        std::tuple{Datatype::Double, NumericType::Double, NumericType::Double},
+        std::tuple{Datatype::Date, NumericType::Other, NumericType::Date},
+        std::tuple{Datatype::Bool, NumericType::Other, NumericType::Other},
+        std::tuple{Datatype::Undefined, NumericType::Other,
+                   NumericType::Other}}) {
+    // `volatile`, so that the mapping also runs at runtime.
+    volatile Datatype runtimeType = datatype;
+    EXPECT_EQ(numericTypeForDatatype(runtimeType), numericType);
+    EXPECT_EQ(numericTypeForDatatype<true>(runtimeType), dateAwareType);
+  }
+}
+
+// Test the classification of dates with and without `IncludeDates`, and its
+// cancellation.
+TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
+  const auto date =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
+  const auto datetime = Id::makeFromDate(
+      DateYearOrDuration::parseXsdDatetime("2020-01-01T12:00:00Z"));
+  const auto duration =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDayTimeDuration("P1D"));
+  const auto undef = Id::makeUndefined();
+  const auto vocab = Id::makeFromVocabIndex(VocabIndex::make(4));
+  EXPECT_EQ(classifyNumericOperand(date).homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classifyNumericOperand<true>(date).homogeneousType_,
+            NumericType::Date);
+  auto check = [&](std::vector<Id> values, NumericType homogeneous,
+                   NumericType majority) {
+    auto result =
+        classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_);
+    EXPECT_EQ(result.homogeneousType_, homogeneous);
+    EXPECT_EQ(result.majorityType_, majority);
+  };
+  check({date, datetime, duration}, NumericType::Date, NumericType::Date);
+  check({date, date, undef}, NumericType::Other, NumericType::Date);
+  check({date, date, I(1), undef, vocab}, NumericType::Other,
+        NumericType::Date);
+  check({date, I(1)}, NumericType::Other, NumericType::Other);
+  check({date, date, undef, undef}, NumericType::Other, NumericType::Other);
+  check({date, date, undef, undef, undef}, NumericType::Other,
+        NumericType::Other);
+  check({I(1), I(2), date}, NumericType::Other, NumericType::Int);
+  check({D(1), D(2), date}, NumericType::Other, NumericType::Double);
+  check({}, NumericType::Other, NumericType::Other);
+  // Numeric-only classification still counts dates as competing values.
+  std::vector<Id> values{I(1), I(2), date, date};
+  EXPECT_EQ(
+      classifyNumericOperand(ConstIdColumnRef{values}, &context_).majorityType_,
+      NumericType::Other);
+  context_.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(
+      classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_),
+      ad_utility::CancellationException);
+}
+
+// Test the classifier against independent per-value frequency counts across
+// homogeneous/mixed blocks, incomplete blocks, and a cancellation-chunk
+// boundary.
+TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
+  const auto date =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
+  const std::array types{I(1),
+                         D(2),
+                         date,
+                         Id::makeUndefined(),
+                         Id::makeFromBool(true),
+                         Id::makeFromVocabIndex(VocabIndex::make(4))};
+  auto check = [&]<bool IncludeDates>(const std::vector<Id>& values) {
+    std::map<Datatype, size_t> frequencies;
+    for (auto value : values) {
+      ++frequencies[value.getDatatype()];
+    }
+    NumericOperandClassification expected;
+    if (!values.empty()) {
+      expected.containsValueRejectedByGetter_ =
+          std::any_of(values.begin(), values.end(), [](Id value) {
+            const auto type = value.getDatatype();
+            return type != Datatype::Int && type != Datatype::Double &&
+                   type != Datatype::Bool &&
+                   (!IncludeDates || type != Datatype::Date);
+          });
+    }
+    const std::array candidates{
+        std::pair{Datatype::Int, NumericType::Int},
+        std::pair{Datatype::Double, NumericType::Double},
+        std::pair{Datatype::Date, NumericType::Date}};
+    for (auto [datatype, type] : candidates) {
+      if (!IncludeDates && datatype == Datatype::Date) {
+        continue;
+      }
+      const size_t count = frequencies[datatype];
+      if (!values.empty() && count == values.size()) {
+        expected.homogeneousType_ = type;
+      }
+      if (count != 0 &&
+          std::all_of(frequencies.begin(), frequencies.end(), [&](auto item) {
+            return item.first == datatype || item.second < count;
+          })) {
+        expected.majorityType_ = type;
+      }
+    }
+    auto actual = classifyNumericOperand<IncludeDates>(ConstIdColumnRef{values},
+                                                       &context_);
+    EXPECT_EQ(actual.homogeneousType_, expected.homogeneousType_);
+    EXPECT_EQ(actual.majorityType_, expected.majorityType_);
+    EXPECT_EQ(actual.containsValueRejectedByGetter_,
+              expected.containsValueRejectedByGetter_);
+  };
+  for (size_t size :
+       {0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 100001}) {
+    SCOPED_TRACE(size);
+    std::vector<Id> values(size, I(1));
+    check.template operator()<false>(values);
+    check.template operator()<true>(values);
+    // Exercise the aggregated two-type branch as well as arbitrary mixtures.
+    for (size_t i = 0; i < size; ++i) {
+      values[i] = i % 3 == 0 ? date : Id::makeUndefined();
+    }
+    check.template operator()<false>(values);
+    check.template operator()<true>(values);
+    for (size_t i = 0; i < size; ++i) {
+      values[i] = i / 8 % 3 == 0 ? I(1) : types[(i * 7 + i / 8) % types.size()];
+    }
+    check.template operator()<false>(values);
+    check.template operator()<true>(values);
+  }
+}
+
+// Test `containsValueRejectedByGetter_` for columns and constants that contain
+// only datatypes accepted by the getter, and for one that does not.
+TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedMixedOperands) {
+  const auto date =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
+  std::vector<Id> values{I(1), D(2), Id::makeFromBool(true), date};
+  EXPECT_FALSE(classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_)
+                   .containsValueRejectedByGetter_);
+  EXPECT_TRUE(classifyNumericOperand(ConstIdColumnRef{values}, &context_)
+                  .containsValueRejectedByGetter_);
+  EXPECT_FALSE(classifyNumericOperand(Id::makeFromBool(true))
+                   .containsValueRejectedByGetter_);
+  EXPECT_FALSE(
+      classifyNumericOperand<true>(date).containsValueRejectedByGetter_);
+  values.push_back(Id::makeUndefined());
+  EXPECT_TRUE(classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_)
+                  .containsValueRejectedByGetter_);
+}
+
+// Test which datatypes `hasNonNumericOperand` rejects for a date-aware
+// function.
+TEST_F(HomogeneousNumericExpressionHelpersTest, DateAwareUndefinedEligibility) {
+  using Function = DateAwareTestFunction;
+  using Getters = std::tuple<NumericOrDateValueGetter>;
+  const auto date =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
+  static_assert(supportsDateOperands<Getters>);
+  static_assert(!supportsDateOperands<std::tuple<NumericValueGetter>>);
+  static_assert(!supportsDateOperands<
+                std::tuple<NumericValueGetter, NumericOrDateValueGetter>>);
+  for (auto value : {date, I(1), D(2), Id::makeFromBool(true)}) {
+    EXPECT_FALSE((hasNonNumericOperand<Function, Getters>(value)));
+  }
+  for (auto value :
+       {Id::makeUndefined(), Id::makeFromVocabIndex(VocabIndex::make(4)),
+        Id::makeFromGeoPoint(GeoPoint{1.0, 2.0})}) {
+    EXPECT_TRUE((hasNonNumericOperand<Function, Getters>(value)));
+    EXPECT_FALSE((hasNonNumericOperand<TestNumericAdd, Getters>(value)));
+  }
+}
+
+// Test that the speculative binary and N-ary paths evaluate date rows without
+// the generic getter.
+TEST_F(HomogeneousNumericExpressionHelpersTest,
+       SpeculativeDateBypassesGenericGetter) {
+  using Function = DateAwareTestFunction;
+  using Getter = NumericOrDateValueGetter;
+  using Getters = std::tuple<Getter, Getter>;
+  const auto date =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
+  const auto undef = Id::makeUndefined();
+  VectorWithMemoryLimit<Id> left{{date, undef, date}, context_._allocator};
+  VectorWithMemoryLimit<Id> right{{date, date, undef}, context_._allocator};
+  Function::genericCalls = 0;
+  auto binary = evaluateSpeculativeNumericOperation<
+      Function, Getter, Getter, DateYearOrDuration, DateYearOrDuration>(
+      left, right, &context_);
+  EXPECT_EQ(
+      (std::get<VectorWithMemoryLimit<Id>>(binary)),
+      (VectorWithMemoryLimit<Id>{{I(7), undef, undef}, context_._allocator}));
+  EXPECT_EQ(Function::genericCalls, 0);
+  auto nary = evaluateSpeculativeNaryNumericOperation<
+      Function, Getters, DateYearOrDuration, DateYearOrDuration>(
+      std::tie(left, right), &context_);
+  EXPECT_EQ(
+      (std::get<VectorWithMemoryLimit<Id>>(nary)),
+      (VectorWithMemoryLimit<Id>{{I(7), undef, undef}, context_._allocator}));
+  EXPECT_EQ(Function::genericCalls, 0);
+  // Defined numeric and boolean outliers keep the getter's existing conversion.
+  left[1] = Id::makeFromBool(true);
+  right[1] = I(2);
+  auto boolean = evaluateSpeculativeNumericOperation<
+      Function, Getter, Getter, DateYearOrDuration, DateYearOrDuration>(
+      left, right, &context_);
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(boolean)[1], D(3));
+  EXPECT_EQ(Function::genericCalls, 1);
+}
+
+// Test that date outliers in columns with a numeric majority use the typed
+// date branch of the speculative path, not the generic getter.
+TEST_F(HomogeneousNumericExpressionHelpersTest,
+       SpeculativeDateOutliersBypassGenericGetter) {
+  using Function = DateAwareTestFunction;
+  using Getter = NumericOrDateValueGetter;
+  const auto date =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
+  const auto datetime = Id::makeFromDate(
+      DateYearOrDuration::parseXsdDatetime("2020-01-01T12:00:00Z"));
+  const auto duration =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDayTimeDuration("P1D"));
+  VectorWithMemoryLimit<Id> left{
+      {I(1), I(2), I(3), I(4), date, datetime, duration}, context_._allocator};
+  VectorWithMemoryLimit<Id> right{
+      {I(5), I(6), I(7), I(8), date, datetime, duration}, context_._allocator};
+  context_._endIndex = left.size();
+  const auto classifications =
+      classifyNumericOperands<true>(&context_, left, right);
+  ASSERT_EQ(classifications[0].majorityType_, NumericType::Int);
+  ASSERT_EQ(classifications[1].majorityType_, NumericType::Int);
+
+  // Numeric rows take the speculative hot path. Date pairs miss its expected
+  // types and must use the typed date branch of the slow path, not variants.
+  Function::genericCalls = 0;
+  auto binary =
+      evaluateSpeculativeNumericOperation<Function, Getter, Getter, int64_t,
+                                          int64_t>(left, right, &context_);
+  EXPECT_EQ(
+      (std::get<VectorWithMemoryLimit<Id>>(binary)),
+      (VectorWithMemoryLimit<Id>{{D(6), D(8), D(10), D(12), I(7), I(7), I(7)},
+                                 context_._allocator}));
+  EXPECT_EQ(Function::genericCalls, 0);
+
+  // With a date constant, numeric rows yield UNDEF and the date outliers still
+  // bypass generic dispatch. Check both operand orders.
+  const VectorWithMemoryLimit<Id> expected{
+      {Id::makeUndefined(), Id::makeUndefined(), Id::makeUndefined(),
+       Id::makeUndefined(), I(7), I(7), I(7)},
+      context_._allocator};
+  auto vectorConstant =
+      evaluateSpeculativeNumericOperation<Function, Getter, Getter, int64_t,
+                                          DateYearOrDuration>(left, date,
+                                                              &context_);
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(vectorConstant), expected);
+  auto constantVector =
+      evaluateSpeculativeNumericOperation<Function, Getter, Getter,
+                                          DateYearOrDuration, int64_t>(
+          date, left, &context_);
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(constantVector), expected);
+  EXPECT_EQ(Function::genericCalls, 0);
 }
 
 }  // namespace

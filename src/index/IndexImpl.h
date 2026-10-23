@@ -47,6 +47,7 @@
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
+#include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
@@ -275,6 +276,17 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t numThreads);
 
+ private:
+  // Check the configuration and read the settings file, before the input files
+  // of `createFromFiles` are processed.
+  void prepareIndexBuild();
+
+  // The part of `createFromFiles` after `prepareIndexBuild`.
+  void createFromFilesAfterPreparation(
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t numThreads);
+
+ public:
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const std::string& onDiskBase,
@@ -749,12 +761,12 @@ class IndexImpl {
                                         bool internal) const;
 
   // Create a `CompressedRelationWriter` and a callback that adds the metadata
-  // of large relations to the `metaData` object. If `numWriterThreads` is
-  // set, it overrides the number of compress/write threads of the writer
-  // (see the `CompressedRelationWriter` constructor).
+  // of large relations to the `metaData` object. The writer compresses and
+  // writes its blocks on the `executor` (see the `CompressedRelationWriter`
+  // constructor).
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
       IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
-      std::optional<size_t> numWriterThreads = std::nullopt) const;
+      qlever::Executor executor) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
@@ -772,14 +784,14 @@ class IndexImpl {
   // columns in the relation (usually 4, sometimes 6 with patterns).
   // `fileName` is the base name of the files to write to (without suffixes).
   // `sortedTriples` is an input range that provides the triples in the correct
-  // order. If `numWriterThreads` is set, it overrides the number of
-  // compress/write threads (see `getWriterAndCallback`).
+  // order. The blocks are compressed and written on the `executor` (see
+  // `getWriterAndCallback`).
   // Return the number of triples written and the metadata for the written
   // permutation.
   std::tuple<size_t, IndexMetaData> createPermutationImpl(
       size_t numColumns, const std::string& fileName,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      std::optional<size_t> numWriterThreads = std::nullopt);
+      qlever::Executor executor);
 
  protected:
   // _______________________________________________________________________
@@ -831,13 +843,15 @@ class IndexImpl {
   // `permutation` specifies which permutation to write.
   // `internal` specifies whether this is an internal permutation and adjusts
   // the filename of the generated file on disk accordingly.
+  // The blocks are compressed and written on the `executor`, by at most
+  // `rebuild-permutation-writer-num-threads` threads at the same time.
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
   // OSP/OPS) and the metadata for the written permutation.
   std::pair<size_t, IndexMetaData> createPermutationWithoutMetadata(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      const Permutation& permutation, bool internal);
+      const Permutation& permutation, bool internal, qlever::Executor executor);
 
   // Finalize the writing of a permutation by appending the metadata to
   // the corresponding file on disk.
@@ -1148,11 +1162,14 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state. `progress` is called (possibly from several
-  // threads) with the number of newly scanned rows; this is used by the index
-  // rebuild for progress reporting and defaults to a no-op.
+  // triples shared state. The permutations are scanned on the `executor`, each
+  // scan by at most `rebuild-index-scan-num-threads` threads at the
+  // same time. `progress` is called (possibly from several threads) with the
+  // number of newly scanned rows; this is used by the index rebuild for
+  // progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
       const LocatedTriplesSharedState& locatedTriplesSharedState,
+      qlever::Executor executor,
       const std::function<void(size_t)>& progress = ad_utility::noop) const;
 };
 

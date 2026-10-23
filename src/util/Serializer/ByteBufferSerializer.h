@@ -172,6 +172,14 @@ class ByteBufferReadSerializerT : public NoCopy {
   }
 };
 
+// Deduce the `Storage` from the constructor argument, so that a plain (not
+// aligned) read serializer can be constructed as `ByteBufferReadSerializerT
+// reader{buffer}` for any kind of buffer (`std::vector`s with any allocator,
+// `ql::span<const char>`, ...). An aligned read serializer has to spell out
+// its template arguments, as it has stricter requirements on the buffer.
+template <typename Storage>
+ByteBufferReadSerializerT(Storage) -> ByteBufferReadSerializerT<false, Storage>;
+
 // Backward-compatible aliases for the default (unaligned) serializers.
 using ByteBufferWriteSerializer = ByteBufferWriteSerializerT<false>;
 using ByteBufferReadSerializer = ByteBufferReadSerializerT<false>;

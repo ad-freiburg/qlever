@@ -17,8 +17,10 @@
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
+#include "index/IdTableUtils.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/Tie.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -81,23 +83,49 @@ void testSort(IdTable input, const IdTable& expected,
 }
 }  // namespace
 
-// _____________________________________________________________________________
-// The runtime parameter `parallel-sort-num-threads` bounds the number of
-// threads of the parallel sort; the result must be the same for any value
-// (`0` is treated as `1`).
-TEST(Sort, parallelSortNumThreads) {
-  for (size_t numThreads : {0, 1, 2, 3}) {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::parallelSortNumThreads_>(
-            numThreads);
-    VectorTable input, expected;
-    for (int i = 1000; i > 0; --i) {
-      input.push_back({i});
-      expected.push_back({1001 - i});
-    }
-    testSort(makeIdTableFromVector(input, &Id::makeFromInt),
-             makeIdTableFromVector(expected, &Id::makeFromInt));
+// Test that the result of `IdTableUtils::sort` is the same for any number of
+// tasks of the `SortConfig`. With two columns, `blockIndirectSort` uses at most
+// one task per 131,072 rows, so the 1M rows allow all `8` tasks, which also
+// exercises the sorting in blocks (6 or more tasks, see `blockIndirectSort`).
+TEST(Sort, sortNumTasksInFlight) {
+  constexpr int64_t numRows = 1'000'000;
+  IdTable shuffled{2, ad_utility::testing::makeAllocator()};
+  IdTable expected{2, ad_utility::testing::makeAllocator()};
+  for (int64_t i = 0; i < numRows; ++i) {
+    // `7919` is coprime to `numRows`, so this is a permutation of the rows.
+    int64_t j = (i * 7919) % numRows;
+    shuffled.push_back({Id::makeFromInt(j), Id::makeFromInt(-j)});
+    expected.push_back({Id::makeFromInt(i), Id::makeFromInt(-i)});
   }
+  for (uint32_t numTasks : {0, 1, 2, 3, 8}) {
+    IdTable input = shuffled.clone();
+    IdTableUtils::sort(
+        input, {0},
+        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks});
+    EXPECT_EQ(input, expected) << "numTasks = " << numTasks;
+  }
+}
+
+// Test that the number of tasks of the `SortConfig` of a query is the runtime
+// parameter `sort-num-tasks-in-flight`, not capped by
+// `max-num-threads-per-query` (which limits the threads of the query's executor
+// instead).
+TEST(Sort, makeSortConfig) {
+  auto numTasks = [](size_t sortNumTasks, size_t maxNumThreadsPerQuery) {
+    auto cleanup1 =
+        setRuntimeParameterForTest<&RuntimeParameters::sortNumTasksInFlight_>(
+            sortNumTasks);
+    auto cleanup2 =
+        setRuntimeParameterForTest<&RuntimeParameters::maxNumThreadsPerQuery_>(
+            maxNumThreadsPerQuery);
+    auto config = QueryExecutionContext::makeSortConfig(
+        ad_utility::testing::singleThreadExecutor());
+    EXPECT_TRUE(static_cast<bool>(config.executor_));
+    return config.numTasksInFlight_;
+  };
+  EXPECT_EQ(numTasks(3, 6), 3);
+  EXPECT_EQ(numTasks(10, 4), 10);
+  EXPECT_EQ(numTasks(1, 6), 1);
 }
 
 TEST(Sort, ComputeSortSingleIntColumn) {
@@ -257,7 +285,8 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   const_cast<SortPerformanceEstimator&>(
       sort.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
+          sort.sortConfig());
 
   sort.recursivelySetTimeConstraint(0ms);
 
@@ -274,6 +303,33 @@ TEST(Sort, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(sort, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
+}
+
+// Test that cloning also works if the original has already computed its
+// mapping from variables to columns (here via the runtime information), while
+// the freshly constructed clone has not (regression test for #3568). A `Sort`
+// is used because its constructor does not compute the mapping.
+TEST(Sort, cloneAfterVariableColumnsWereComputed) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.createRuntimeInfoFromEstimates(sort.getRuntimeInfoPointer());
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+}
+
+// Test that a clone hides the same variables as the original (see #1943).
+TEST(Sort, cloneKeepsHiddenVariablesHidden) {
+  // A `Sort` with the variables `?0` and `?1`, of which the enclosing subquery
+  // selects only `?0`.
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.setSelectedVariablesForSubquery({Variable{"?0"}});
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+  EXPECT_FALSE(
+      clone->getExternallyVisibleVariableColumns().contains(Variable{"?1"}));
 }
 
 // Test external sorting with lazy input (multiple IdTable blocks). The test
@@ -319,8 +375,8 @@ TEST(Sort, externalSortLazyInput) {
   EXPECT_EQ(8000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -367,8 +423,8 @@ TEST(Sort, externalSortMaterializedInput) {
   EXPECT_EQ(5000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -463,8 +519,8 @@ TEST(Sort, inMemorySortMaterializedInput) {
   EXPECT_EQ(100u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }

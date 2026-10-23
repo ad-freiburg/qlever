@@ -132,7 +132,7 @@ WriteResult writeRows(const TestRows& rows, const std::string& basename,
     return WriterAndCallback{
         std::make_unique<CompressedRelationWriter>(
             config.numColumns_, ad_utility::File{filename, "w"},
-            config.blocksize_),
+            config.blocksize_, ad_utility::globalExecutor()),
         [&metadata](ql::span<const CompressedRelationMetadata> md) {
           metadata.insert(metadata.end(), md.begin(), md.end());
         }};
@@ -192,7 +192,7 @@ IdTable scanRelation(const std::string& filename,
   return reader.scan(
       CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
       additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-      emptyLocatedTriples);
+      emptyLocatedTriples, ad_utility::globalExecutor());
 }
 
 // Return the `rows` permuted by the `permutation` (the first three columns

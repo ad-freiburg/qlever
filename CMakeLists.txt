@@ -194,6 +194,12 @@ else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
+# Clang stores a timestamp in each precompiled header, so `ccache` would never
+# reuse the objects compiled with one. CMake doesn't remove it on its own.
+if (CMAKE_CXX_COMPILER_LAUNCHER MATCHES "ccache" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options("SHELL:-Xclang -fno-pch-timestamp")
+endif ()
+
 # Additionally fall back to `range-v3` whenever the C++ standard library is
 # libstdc++ older than version 12, independent of the compiler. Such versions
 # (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
@@ -322,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 6540731c0dd7a0e4335474a5e2df28fbbb07ab8b
+        GIT_TAG b05b342a0aa48279bf66030205e432b2d43cb93f
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -659,16 +665,6 @@ FetchContent_Declare(
 )
 
 
-if (USE_PARALLEL)
-    include(FindOpenMP)
-    if (OPENMP_FOUND)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-        add_compile_definitions(_PARALLEL_SORT)
-    endif ()
-endif ()
-
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
     add_compile_definitions(_QLEVER_NO_TIMING_TESTS)
@@ -788,6 +784,13 @@ if (EMSCRIPTEN)
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
+# The library `pb_util_geo` of `spatialjoin` uses the JSON writer of
+# `pb_util_json`, but does not link against it. With `BUILD_SHARED_LIBS`, the
+# linker of Ubuntu 26.04 (binutils 2.46, and also `mold`) then rejects every
+# executable that links against `libpb_util_geo.so` with "undefined reference
+# to `util::json::Writer::...`".
+target_link_libraries(pb_util_geo PUBLIC pb_util_json)
+
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest
 # of the build can link against the correct one without further case
@@ -893,11 +896,22 @@ if (BRANCHLESS_LOGGING)
     add_compile_definitions(QLEVER_BRANCHLESS_LOGGING)
 endif ()
 
+# The conditions of the `AD_CORRECTNESS_CHECK` macro (see `src/util/Exception.h`)
+# are invariants that never fail, so branches inside these conditions (e.g.
+# from `&&` or `||`) can never be fully covered by unit tests. With this option,
+# the condition is evaluated inside a lambda that is excluded from the coverage
+# instrumentation. It is used for the coverage build; see `src/util/Exception.h`
+# for why this option is not set unconditionally.
+option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
+if (COVERAGE_FRIENDLY_CHECKS)
+    add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
+endif ()
+
 ##################################################
 # Warnings about incorrect combination of CMake variables
 
 if (LOGLEVEL_NAME MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE STREQUAL "ENABLED")
-  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL_NAME}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
+  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL_NAME}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but the server still runs a watchdog that decides when to print those messages)")
 endif ()
 
 add_subdirectory(src/parser)
@@ -978,9 +992,9 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
-
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+# The command-line tools are not built for Emscripten (and `qlever-server`
+# cannot be, see `src/engine/CMakeLists.txt`).
+if (NOT EMSCRIPTEN)
     add_executable(qlever-index src/index/IndexBuilderMain.cpp)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
@@ -1003,16 +1017,22 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_enable_lto(qlever-upgrade-index)
 endif()
 
-add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
+# Tools that are only needed natively: `LibQLeverExample` and
+# `VocabularyMergerMain` work on files on the host file system, which a
+# WebAssembly build cannot access, and `PrintIndexVersionMain` is only used by
+# the index version check in CI.
+if (NOT EMSCRIPTEN)
+    add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+    qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
 
-add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
+    add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
+    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser vocabulary Boost::program_options ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+    add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+    qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+endif()
 
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+if (NOT EMSCRIPTEN)
     install(TARGETS
         qlever-index
         qlever-server

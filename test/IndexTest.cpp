@@ -42,6 +42,9 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
 
+// Multi-threaded, to exercise the concurrency of the tested code.
+static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
+
 using namespace ad_utility::testing;
 using namespace std::string_literals;
 
@@ -88,7 +91,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
                 .toScanSpecification(index),
             locatedTriplesSnapshot),
         additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, executor());
     ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
@@ -113,7 +116,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
             locatedTriplesSnapshot),
         Permutation::ColumnIndicesRef{},
         std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, executor());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -692,8 +695,7 @@ TEST(IndexTest, textRecordExportDoesNotUnescapeTheExcerpt) {
 
   auto exported = ql::exportIds::getLiteralOrIriFromTextRecordIndex(index, id);
   ASSERT_TRUE(exported.has_value());
-  EXPECT_EQ(asStringViewUnsafe(exported.value().getLiteral().getContent()),
-            docText);
+  EXPECT_EQ(exported.value().getLiteral().getContent(), docText);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
@@ -1036,6 +1038,69 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   }
 }
 
+// Test that `parallel-parsing` in the settings file is respected when building
+// an index from a single input file that does not specify parallel parsing.
+TEST(IndexTest, parallelParsingFromSettingsFile) {
+  std::string basename = gtestCurrentTestName();
+  std::string settingsFilename = basename + ".settings.json";
+  absl::Cleanup cleanup = [&basename, &settingsFilename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+    ad_utility::deleteFile(settingsFilename);
+  };
+  // An input file with a multiline literal, which the parallel parser does not
+  // support.
+  ad_utility::makeOfstream(basename + ".ttl")
+      << "<s> <p> \"\"\"multiline\nliteral\"\"\" .\n";
+
+  // Build the index with `parallel-parsing` set to the given value in the
+  // settings file.
+  auto buildIndex = [&](bool parallelParsing) {
+    ad_utility::makeOfstream(settingsFilename)
+        << nlohmann::json{{"parallel-parsing", parallelParsing}};
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.setSettingsFile(settingsFilename);
+    index.createFromFiles(
+        {qlever::InputFileSpecification{
+            basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
+        1);
+  };
+
+  // With `false` the sequential parser is used and the build succeeds, with
+  // `true` the parallel parser rejects the multiline literal.
+  EXPECT_NO_THROW(buildIndex(false));
+  AD_EXPECT_THROW_WITH_MESSAGE(buildIndex(true),
+                               ::testing::HasSubstr("multiline string"));
+}
+
+// Test that an index can be built from a type-erased range of input files.
+TEST(IndexTest, createFromFilesTypeErased) {
+  std::string basename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&basename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+  // Build an index from an input file with two triples.
+  ad_utility::makeOfstream(basename + ".ttl") << "<s> <p> <o1>, <o2> .\n";
+  {
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.getImpl().createFromFiles(
+        ad_utility::InputRangeTypeErased{
+            std::vector<qlever::InputFileSpecification>{
+                {basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}}},
+        1);
+  }
+
+  // The index can be loaded and contains both triples.
+  Index index = makeIndexWithTestSettings();
+  index.createFromOnDiskIndex(basename, false);
+  EXPECT_EQ(index.numTriples().normal, 2u);
+}
+
 TEST(IndexTest, getBlankNodeManager) {
   // The `blankNodeManager_` is initialized after initializing the Index itself.
   // Therefore we expect a throw when the getter is called by an
@@ -1072,7 +1137,8 @@ TEST(IndexImpl, recomputeStatistics) {
   auto& indexImpl = index.getImpl();
   // No-op, should return the same stats.
   auto result = indexImpl.recomputeStatistics(
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+      executor());
   EXPECT_EQ(result, indexImpl.configurationJson_);
 
   // Now, modify the index by adding triples.
@@ -1109,7 +1175,8 @@ TEST(IndexImpl, recomputeStatistics) {
     }
 
     auto newStats = indexImpl.recomputeStatistics(
-        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+        executor());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
     EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
     EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
@@ -1155,7 +1222,7 @@ TEST(IndexImpl, createPermutation) {
       4,
       ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
           tables.at(0).clone(), tables.at(1).clone()}},
-      permutation, false);
+      permutation, false, executor());
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
@@ -1163,11 +1230,11 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "fall back to `permutation-writer-num-threads`") must give the
-  // same result. Together with the default of 1 used by the calls above and
-  // below, this exercises the translation of the runtime parameter to the
-  // writer-thread override on both of its branches. Use a separate base name,
-  // so that the permutation that was already finalized above stays intact.
+  // (0 means "no limit") must give the same result. Together with the default
+  // of 1 used by the calls above and below, this exercises the translation of
+  // the runtime parameter to a concurrency-limited executor on both of its
+  // branches. Use a separate base name, so that the permutation that was
+  // already finalized above stays intact.
   {
     auto cleanupParameter = setRuntimeParameterForTest<
         &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
@@ -1177,7 +1244,7 @@ TEST(IndexImpl, createPermutation) {
             4,
             ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
                 tables.at(0).clone(), tables.at(1).clone()}},
-            permutation, false);
+            permutation, false, executor());
     index.setOnDiskBase(onDiskBase);
     EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
   }
@@ -1185,7 +1252,7 @@ TEST(IndexImpl, createPermutation) {
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
           4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
-          true);
+          true, executor());
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
@@ -1208,7 +1275,7 @@ TEST(IndexImpl, createPermutation) {
         actualPermutation.getScanSpecAndBlocks(scanSpec, *state), std::nullopt,
         std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
-        *state);
+        *state, executor());
     auto begin = scan.begin();
     ASSERT_NE(begin, scan.end());
     EXPECT_EQ(*begin, makeIdTableFromVector({{1, 1, 1, 0},
@@ -1587,8 +1654,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
                    .front()
                    .firstTriple_.col0Id_;
     ASSERT_EQ(point.getDatatype(), Datatype::GeoPoint);
-    EXPECT_EQ(point.getBits() &
-                  ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits),
+    EXPECT_EQ(point.getPayloadBits(),
               GeoPoint::combineCoordinates(
                   GeoPoint::quantizeCoordinate(48.0, 90),
                   GeoPoint::quantizeCoordinate(7.8, 180), encoding));

@@ -4,9 +4,11 @@
 
 #include "IndexTestHelpers.h"
 
+#include <absl/base/no_destructor.h>
 #include <absl/strings/str_cat.h>
 
 #include <array>
+#include <boost/asio/thread_pool.hpp>
 #include <memory>
 #include <utility>
 
@@ -29,6 +31,22 @@
 
 using qlever::TextScoringMetric;
 namespace ad_utility::testing {
+
+// ______________________________________________________________
+qlever::Executor singleThreadExecutor() {
+  // Deliberately never destroyed (like the global thread pool, see
+  // `util/GlobalExecutor.h`), such that it outlives the static
+  // `QueryExecutionContext`s of `getQec` that refer to it.
+  static absl::NoDestructor<boost::asio::thread_pool> pool{1};
+  return pool->get_executor();
+}
+
+// ______________________________________________________________
+qlever::Executor multiThreadExecutor() {
+  // Deliberately never destroyed, see `singleThreadExecutor` above.
+  static absl::NoDestructor<boost::asio::thread_pool> pool{4};
+  return pool->get_executor();
+}
 
 // ______________________________________________________________
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
@@ -92,13 +110,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
                              &indexImpl](size_t patternIdx, Id id) {
     const auto& permutation =
         indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
-    auto scanResultHasPattern =
-        permutation.scan(permutation.getScanSpecAndBlocks(
-                             ScanSpecificationAsTripleComponent{
-                                 iriOfHasPattern, id, std::nullopt}
-                                 .toScanSpecification(indexImpl),
-                             locatedTriplesSnapshot),
-                         {}, cancellationDummy, locatedTriplesSnapshot);
+    auto scanResultHasPattern = permutation.scan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{iriOfHasPattern, id,
+                                               std::nullopt}
+                .toScanSpecification(indexImpl),
+            locatedTriplesSnapshot),
+        {}, cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -114,15 +132,25 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkConsistencyForCol0IdAndPermutation =
       [&](Id col0Id, const Permutation& permutation, size_t subjectColIdx,
           size_t objectColIdx) {
+        // Name the permutation and the relation in the messages of the checks
+        // below, so that a failure can be attributed.
+        SCOPED_TRACE(absl::StrCat(
+            "permutation ", Permutation::toString(permutation.permutation()),
+            ", col0Id ", ::testing::PrintToString(col0Id)));
         auto scanResult = permutation.scan(
             permutation.getScanSpecAndBlocks(
                 ScanSpecification{col0Id, std::nullopt, std::nullopt},
                 locatedTriplesSnapshot),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy, locatedTriplesSnapshot);
+            cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
+          SCOPED_TRACE(absl::StrCat("row ",
+                                    ::testing::PrintToString(Id{row[0]}), " ",
+                                    ::testing::PrintToString(Id{row[1]}), " ",
+                                    ::testing::PrintToString(Id{row[2]}), " ",
+                                    ::testing::PrintToString(Id{row[3]})));
           auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(patternIdx, subjectId);
@@ -220,6 +248,14 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         "\"zz\"@en . <zz> <label> <zz> .";
   }
 
+  // Use the explicitly configured vocabulary type, or a random one otherwise.
+  // Name it in the messages of all the checks of the index below, so that a
+  // failure that only occurs with one of the random types can be reproduced.
+  VocabularyType vocabularyType =
+      c.vocabularyType.has_value() ? c.vocabularyType.value()
+                                   : VocabularyType::randomForIndexBuilding();
+  SCOPED_TRACE(absl::StrCat("vocabulary type ", vocabularyType.toString()));
+
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP() = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
@@ -257,12 +293,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       spec.parseInParallel_ = c.parseInParallel.value();
       spec.parseInParallelSetExplicitly_ = true;
     }
-    // Use the explicitly configured vocabulary type, or a random one
-    // otherwise.
-    index.getImpl().setVocabularyTypeForIndexBuilding(
-        c.vocabularyType.has_value()
-            ? c.vocabularyType.value()
-            : VocabularyType::randomForIndexBuilding());
+    index.getImpl().setVocabularyTypeForIndexBuilding(vocabularyType);
     index.getImpl().setGeoPointEncodingForIndexBuilding(c.geoPointEncoding);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
         !c.encodedIriPatterns.empty()) {
@@ -401,7 +432,7 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
         std::make_unique<QueryExecutionContext>(
             index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
-            materializedViewsManager_);
+            materializedViewsManager_, singleThreadExecutor());
   };
 
   static ad_utility::HashMap<std::pair<TestIndexConfig, std::string>, Context>

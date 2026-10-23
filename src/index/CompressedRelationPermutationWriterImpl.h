@@ -24,7 +24,6 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
-#include "util/GlobalExecutor.h"
 #include "util/ProgressBar.h"
 #include "util/TaskQueueOnExecutor.h"
 
@@ -52,8 +51,8 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     // Note: it is important that we store these two IDs before moving the
     // `relation`, because the evaluation order of function arguments is
     // unspecified.
-    auto firstCol0 = blockOfSmallRelations.at(0, 0);
-    auto lastCol0 =
+    Id firstCol0 = blockOfSmallRelations.at(0, 0);
+    Id lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
     // NOTE: This function is called from within a task of the block write
     // queue of the other writer, which runs on the global thread pool. We
@@ -74,16 +73,23 @@ struct BlockCallbackManager {
   const CompressedRelationWriter::PerBlockCallbacks perBlockCallbacks_;
 
   // A queue for the callbacks that have to be applied for each triple. It runs
-  // on a strand of the global thread pool (and not directly on the pool), so
+  // on a strand of the `executor` (and not directly on the `executor`), so
   // that the callbacks are invoked one after the other and in the order in
   // which the blocks were pushed (both is crucial).
   //
   // NOTE: A strand only preserves the order of tasks that are posted by a
   // single thread. This is the case here, because `passToBlockCallbacks` is
   // only called by the thread that drives the `PermutationWriter`.
-  ad_utility::TaskQueueOnExecutor blockCallbackQueue_{
-      boost::asio::make_strand(ad_utility::globalExecutor()), 3,
-      "Additional callbacks during permutation building"};
+  ad_utility::TaskQueueOnExecutor blockCallbackQueue_;
+
+  // Run the `perBlockCallbacks` on a strand of the `executor`.
+  BlockCallbackManager(
+      CompressedRelationWriter::PerBlockCallbacks perBlockCallbacks,
+      const qlever::Executor& executor)
+      : perBlockCallbacks_{std::move(perBlockCallbacks)},
+        blockCallbackQueue_{boost::asio::make_strand(executor), 3,
+                            "Additional callbacks during permutation "
+                            "building"} {}
   ad_utility::Timer blockCallbackTimer_{ad_utility::Timer::Stopped};
 
   // Enqueue a call to each of the `perBlockCallbacks` for the current block.
@@ -203,12 +209,12 @@ struct CompressedRelationWriter::PermutationWriter {
   // metadata is sorted at the end, see `getFinishedBlocks`).
   //
   // NOTE 1: The queue is configured exactly like the `blockWriteQueue_` of
-  // `writer1_`, so that the blocks of large relations respect the same
-  // concurrency setting as all the other blocks (in particular, the runtime
-  // index rebuild throttles the writers to a single block at a time, see
-  // `rebuild-permutation-writer-num-threads`). Each block in flight is held in
-  // memory until it has been written, so the bound of the queue also bounds the
-  // memory that the background writing consumes.
+  // `writer1_`, so that the blocks of large relations run on the same executor
+  // and with the same bound on the blocks in flight as all the other blocks (in
+  // particular, the runtime index rebuild limits the concurrency of that
+  // executor, see `rebuild-permutation-writer-num-threads`). Each block in
+  // flight is held in memory until it has been written, so the bound of the
+  // queue also bounds the memory that the background writing consumes.
   //
   // NOTE 2: The tasks never block (in particular they never wait for other
   // tasks of the global thread pool), which is what makes it safe to run them
@@ -222,7 +228,7 @@ struct CompressedRelationWriter::PermutationWriter {
   // runs before those members are destroyed.
   ad_utility::TaskQueueOnExecutor largeRelationBlockQueue_{
       CompressedRelationWriter::makeBlockWriteQueue(
-          writer1_->numConcurrentBlocks_)};
+          writer1_->executor_, writer1_->numBlocksInFlight_)};
 
   size_t numTriplesProcessed_ = 0;
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
@@ -247,7 +253,8 @@ struct CompressedRelationWriter::PermutationWriter {
         largeTwinRelationTimer_{ad_utility::Timer::Stopped},
         twinRelationSorter_{basename + ".twin-twinRelationSorter", numColumns_,
                             4_GB, alloc_},
-        blockCallbackManager_{std::move(perBlockCallbacks)} {
+        blockCallbackManager_{std::move(perBlockCallbacks),
+                              writer1_->executor_} {
     static_assert(WritePair);
     // This logic only works for permutations that have the graph as the fourth
     // column.
@@ -278,7 +285,8 @@ struct CompressedRelationWriter::PermutationWriter {
         writer1_{std::move(writerAndCallback1.writer_)},
         writeMetadata_{std::move(writerAndCallback1.callback_),
                        writer1_->blocksize()},
-        blockCallbackManager_{std::move(perBlockCallbacks)},
+        blockCallbackManager_{std::move(perBlockCallbacks),
+                              writer1_->executor_},
         showProgressBar_{showProgressBar} {
     static_assert(!WritePair);
     // This logic only works for permutations that have the graph as the fourth

@@ -179,6 +179,14 @@ class Vocabulary {
     return prefixRangesLiterals_.contain(index);
   }
 
+  // Return the range `[begin, end)` of the indices of the IRIs. The literals
+  // come before it. The WKT literals of a geo-split vocabulary come after it
+  // (their indices carry a marker bit, see `SplitVocabulary`), as do the
+  // internal language-tagged predicates like `@en@<...>`.
+  std::pair<IndexT, IndexT> getRangeOfIris() const {
+    return prefixRangesIris_.ranges()[0];
+  }
+
   bool shouldBeExternalized(std::string_view word) const;
 
   bool shouldEntityBeExternalized(std::string_view word) const;
@@ -243,6 +251,13 @@ class Vocabulary {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 
+  // The parallel counterpart of `makeWordWriterPtr`, see
+  // `ParallelWordWriterBase` in `index/vocabulary/VocabularyTypes.h`.
+  auto makeParallelWriterPtr(const std::string& filename) const {
+    return vocabulary_.getUnderlyingVocabulary().makeParallelWriterPtr(
+        filename);
+  }
+
   // Return a reference to the vocabulary that actually holds the words, i.e.
   // the vocabulary below the wrapping `UnicodeVocabulary`. The latter is
   // bypassed because its only additional state is a comparator (see
@@ -303,6 +318,7 @@ class Vocabulary {
           using T = std::decay_t<decltype(vocab)>;
           vocab = T::fromZeroCopyDeserializer(serializer);
         });
+    computePrefixRanges();
   }
 
   // Serialize the currently held vocabulary to `serializer`, in a format that
@@ -324,6 +340,10 @@ class Vocabulary {
   }
 
  private:
+  // Compute `prefixRangesIris_` and `prefixRangesLiterals_` for the currently
+  // held words. Must be called whenever the words are (re)loaded.
+  void computePrefixRanges();
+
   // Apply `function` to the vocabulary that actually holds the words, i.e. to
   // the vocabulary below the wrapping `UnicodeVocabulary` (whose comparator
   // plays no role for a zero-copy blob and is therefore neither written nor

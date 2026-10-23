@@ -7,9 +7,12 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELEXECUTOR_H
 #define QLEVER_SRC_UTIL_PARALLELEXECUTOR_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <algorithm>
 #include <atomic>
 #include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
 #include <condition_variable>
 #include <exception>
 #include <future>
@@ -18,14 +21,14 @@
 #include <range/v3/algorithm/fold_left.hpp>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
-#include "backports/algorithm.h"
-#include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
-#include "util/TaskQueue.h"
+#include "util/Executor.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 #include "util/jthread.h"
 
 namespace ad_utility {
@@ -68,20 +71,20 @@ auto runTasksInParallel(std::vector<std::packaged_task<R()>>&& tasks)
 
 // Split the range `[0, numElements)` into consecutive chunks of `chunkSize`
 // elements (the last chunk may be smaller), fold all of them into a single
-// `Result`, and return it. Each of `numThreads` worker threads (`0`, the
-// default, means the number of logical cores) keeps one `Result` of its own
-// and calls `computeChunk(result, begin, end)` for each of the chunks it gets.
-// The chunks are handed out to the threads dynamically. At the end, the
-// per-thread results are combined via `result.mergeWith(otherResult)`. The
-// `Result` (which is deduced from the first parameter of `computeChunk`) has to
-// be default-constructible and movable, and to provide such a `mergeWith`
-// function. Note that `computeChunk` is called concurrently from several
-// threads, so it has to be const-invocable (which in particular rules out a
-// `mutable` lambda).
+// `Result`, and return it. Each of `numTasks` tasks (`0`, the default, means
+// the number of logical cores), which run on the `executor`, keeps one `Result`
+// of its own and calls `computeChunk(result, begin, end)` for each of the
+// chunks it gets. The chunks are handed out to the tasks dynamically. At the
+// end, the per-task results are combined via `result.mergeWith(otherResult)`.
+// The `Result` (which is deduced from the first parameter of `computeChunk`)
+// has to be default-constructible and movable, and to provide such a
+// `mergeWith` function. Note that `computeChunk` is called concurrently from
+// several threads, so it has to be const-invocable (which in particular rules
+// out a `mutable` lambda).
 //
-// NOTE: There is one `Result` per THREAD, not one per chunk. The `chunkSize`
+// NOTE: There is one `Result` per TASK, not one per chunk. The `chunkSize`
 // hence only controls the granularity of the load balancing, and not the number
-// of merges: it should be small enough that each thread typically processes
+// of merges: it should be small enough that each task typically processes
 // several chunks (which balances the load, especially when the chunks require
 // different amounts of work), but large enough that the per-chunk overhead (one
 // atomic increment) is negligible. Since the chunks are handed out dynamically,
@@ -89,24 +92,28 @@ auto runTasksInParallel(std::vector<std::packaged_task<R()>>&& tasks)
 // `mergeWith` therefore has to be associative and commutative.
 //
 // If the range holds at most `chunkSize` elements, then `computeChunk` is
-// called exactly once, in the calling thread. No thread is spawned in that
-// case, and no merging takes place. This makes the function cheap for small
-// inputs, where the cost of spawning threads would dominate the actual work.
+// called exactly once, in the calling thread. No task is posted in that case,
+// and no merging takes place. This makes the function cheap for small inputs,
+// where the cost of the tasks would dominate the actual work.
 // For an empty range, `computeChunk` is not called at all, and a
 // default-constructed result is returned.
 //
-// If `computeChunk` throws for one of the chunks, the thread that ran that
-// chunk stops (the chunks it has not taken yet are then processed by the other
-// threads), and the exception is rethrown in the calling thread once all
-// threads have finished. If several threads throw, it is unspecified which of
-// the exceptions is rethrown.
+// If `computeChunk` throws for one of the chunks, the task that ran that chunk
+// stops (the chunks it has not taken yet are then processed by the other
+// tasks), and the exception is rethrown in the calling thread once all tasks
+// have finished. If several tasks throw, it is unspecified which of the
+// exceptions is rethrown.
+//
+// NOTE: The calling thread blocks until all the tasks have finished, so it must
+// not be a thread of the `executor`.
 CPP_template(typename ChunkFunction)(
     requires ql::concepts::invocable<
         const ChunkFunction&, detail::FirstArgumentT<ChunkFunction>&, size_t,
-        size_t>) auto computeInParallelChunks(size_t numElements,
+        size_t>) auto computeInParallelChunks(const qlever::Executor& executor,
+                                              size_t numElements,
                                               size_t chunkSize,
                                               const ChunkFunction& computeChunk,
-                                              size_t numThreads = 0) {
+                                              size_t numTasks = 0) {
   // The `Result` is the type of the first argument of `computeChunk`.
   using Result = detail::FirstArgumentT<ChunkFunction>;
   // Guard against a subtle bug: if `computeChunk` took its first parameter by
@@ -124,17 +131,17 @@ CPP_template(typename ChunkFunction)(
     computeChunk(result, 0, numElements);
     return result;
   }
-  if (numThreads == 0) {
-    numThreads = std::max(1u, std::thread::hardware_concurrency());
+  if (numTasks == 0) {
+    numTasks = std::max(1u, std::thread::hardware_concurrency());
   }
   size_t numChunks = (numElements + chunkSize - 1) / chunkSize;
-  // Threads beyond the number of chunks would have nothing to do.
-  numThreads = std::min(numThreads, numChunks);
+  // Tasks beyond the number of chunks would have nothing to do.
+  numTasks = std::min(numTasks, numChunks);
   // The index of the next chunk that has not been handed out yet. Taking the
   // chunks from this counter hands them out dynamically, which balances the
   // load also when the chunks require different amounts of work.
   std::atomic<size_t> nextChunk = 0;
-  // Fold all the chunks that a single thread gets into one partial result.
+  // Fold all the chunks that a single task gets into one partial result.
   auto computeChunks = [&computeChunk, &nextChunk, numChunks, chunkSize,
                         numElements]() {
     Result partialResult{};
@@ -145,15 +152,21 @@ CPP_template(typename ChunkFunction)(
     }
     return partialResult;
   };
-  // Run exactly one of these tasks per thread, so that there is one partial
-  // result per THREAD and not one per chunk. Note: The destructor of the
-  // `TaskQueue` waits for all the tasks to complete, also if one of them
-  // throws.
-  TaskQueue<false> queue{numThreads, numThreads, "computeInParallelChunks"};
   std::vector<std::future<Result>> futures;
-  futures.reserve(numThreads);
-  for (size_t i = 0; i < numThreads; ++i) {
-    futures.push_back(queue.submit(computeChunks));
+  futures.reserve(numTasks);
+  // The tasks refer to the stack of this function, so wait for all of them,
+  // also if posting a task or one of the tasks throws. Note: A future becomes
+  // invalid once its `get()` has been called.
+  absl::Cleanup waitForAllTasks{[&futures]() {
+    for (auto& future : futures) {
+      if (future.valid()) {
+        future.wait();
+      }
+    }
+  }};
+  for (size_t i = 0; i < numTasks; ++i) {
+    futures.push_back(
+        boost::asio::post(executor, boost::asio::use_future(computeChunks)));
   }
   // Merge the partial results into the first of them. Note: Using the first
   // one (instead of a default-constructed `Result`) as the initial value of the
@@ -189,11 +202,16 @@ struct RunIndexedTasksState {
 // Claim and run tasks of the `state` until there are none left. Never throw:
 // after a task has thrown, store the exception in the `state` and stop handing
 // out the remaining tasks.
+//
+// NOTE: The function is `noexcept`, because the bookkeeping of the callers
+// (see `runIndexedTasksOnExecutor`) relies on it returning. The only thing
+// that can still throw is the locking of the `mutex_`, and such a failure is
+// not recoverable anyway.
 template <typename RunTask>
 void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
-                             const RunTask& runTask) {
+                             const RunTask& runTask) noexcept {
   try {
-    while (true) {
+    for (;;) {
       size_t taskIdx = state.nextTaskIdx_.fetch_add(1);
       if (taskIdx >= numTasks) {
         return;
@@ -208,15 +226,40 @@ void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
     }
   }
 }
+
+// Called by the caller of `runIndexedTasksOnExecutor` after it has run out of
+// tasks to claim: close the `state`, such that helpers that start later return
+// right away, wait for the helpers that are still running a task, and return
+// the first exception that any task has thrown (or `nullptr`).
+//
+// NOTE 1: The function is `noexcept`, because returning early (with an
+// exception) while a helper is still running would leave that helper with a
+// dangling reference to the `runTask` of the caller.
+//
+// NOTE 2: The exception is moved out of the `state` (instead of copied), such
+// that the caller holds the only reference to it. Otherwise, a helper that is
+// the last owner of the `state` might destroy the exception after the caller
+// has read it. That would be correct (the reference count of the exception is
+// atomic), but ThreadSanitizer reports it as a data race, because it can't see
+// that synchronization (it happens in the uninstrumented `libstdc++`).
+inline std::exception_ptr closeAndWaitForHelpers(
+    RunIndexedTasksState& state) noexcept {
+  std::unique_lock lock{state.mutex_};
+  state.isClosed_ = true;
+  state.helperFinished_.wait(
+      lock, [&state]() { return state.numActiveHelpers_ == 0; });
+  return std::exchange(state.firstException_, nullptr);
+}
 }  // namespace detail
 
 // Run the `numTasks` tasks `runTask(0), ..., runTask(numTasks - 1)` on the
 // `executor`, which is expected to have `numThreads` threads (this only bounds
-// the number of helpers that are posted to it, see below). Return only when
-// all of the tasks are done, rethrowing the first exception that any of them
-// has thrown. After a task has thrown, the tasks that have not been started
-// yet are skipped. The tasks are started in the order of their indices. Note
-// that `runTask` is called concurrently from several threads.
+// the number of helpers that are posted to it, see below), and return when all
+// of them are done. The tasks are started in the order of their indices, and
+// `runTask` is called concurrently from several threads.
+//
+// If a task throws, the tasks that have not been started yet are skipped, and
+// the first exception is rethrown once all the started tasks are done.
 //
 // NOTE: The calling thread doesn't only wait for the executor, but also runs
 // tasks itself, and it waits only for the helpers on the executor that have
@@ -226,17 +269,28 @@ void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
 // that the threads of the executor are (indirectly) waiting for, and from the
 // threads of the executor themselves.
 template <typename RunTask>
-void runIndexedTasksOnExecutor(const ql::any_io_executor& executor,
+void runIndexedTasksOnExecutor(const qlever::Executor& executor,
                                size_t numThreads, size_t numTasks,
                                const RunTask& runTask) {
   if (numTasks == 0) {
     return;
   }
-  // NOTE: The `state` is shared with the helpers, because a helper may only be
-  // started after this function has returned. Such a helper then sees that the
-  // `state` is closed and returns without touching the `runTask`.
+  // The state that this function shares with the helpers.
+  //
+  // NOTE: The helpers own it jointly with this function (via the `shared_ptr`),
+  // because a helper may only be started after this function has returned.
+  // Such a helper then sees that the `state` is closed and returns without
+  // touching the `runTask`.
   auto state = std::make_shared<detail::RunIndexedTasksState>();
-  auto helper = [state, numTasks, &runTask]() {
+
+  // The helper that is posted to the executor: register as active (unless the
+  // `state` is already closed), run tasks until there are none left, and
+  // unregister.
+  //
+  // NOTE: The helper is `noexcept` for the same reason as the functions in
+  // the `detail` namespace above: if it threw after incrementing the
+  // `numActiveHelpers_`, the caller would wait forever.
+  auto helper = [state, numTasks, &runTask]() noexcept {
     {
       std::lock_guard lock{state->mutex_};
       if (state->isClosed_) {
@@ -251,20 +305,25 @@ void runIndexedTasksOnExecutor(const ql::any_io_executor& executor,
     }
     state->helperFinished_.notify_all();
   };
+  // Post one helper per thread of the executor (minus the calling thread, and
+  // never more helpers than tasks), then run tasks in the calling thread.
+  //
+  // NOTE: The posting lambda is `noexcept`, because if posting one of the
+  // helpers failed (which can only happen if the executor runs out of memory),
+  // the helpers that have already been posted might still use the `runTask`
+  // after this function has returned. Such a failure is not recoverable anyway.
   size_t numHelpers = std::min(numTasks, std::max(numThreads, size_t{1})) - 1;
-  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numHelpers)) {
-    boost::asio::post(executor, helper);
-  }
+  [&]() noexcept {
+    for ([[maybe_unused]] size_t i : ad_utility::integerRange(numHelpers)) {
+      boost::asio::post(executor, helper);
+    }
+  }();
   detail::claimAndRunIndexedTasks(*state, numTasks, runTask);
 
   // All the tasks have been claimed, so wait for the helpers that are still
   // running one of them, and keep all the other ones from starting.
-  std::unique_lock lock{state->mutex_};
-  state->isClosed_ = true;
-  state->helperFinished_.wait(
-      lock, [&state]() { return state->numActiveHelpers_ == 0; });
-  if (state->firstException_) {
-    std::rethrow_exception(state->firstException_);
+  if (auto exception = detail::closeAndWaitForHelpers(*state)) {
+    std::rethrow_exception(exception);
   }
 }
 }  // namespace ad_utility

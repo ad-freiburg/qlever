@@ -35,6 +35,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -152,12 +153,13 @@ CPP_template_def(typename RequestT, typename SendT)(
   using namespace ad_utility::httpUtils;
 
   auto sendWithAccessControlHeaders =
-      [&send](auto response) -> boost::asio::awaitable<void> {
+      [&send](ResponseT response,
+              net::any_io_executor bodyExecutor) -> Awaitable<void> {
     response.set(http::field::access_control_allow_origin, "*");
     response.set(http::field::access_control_allow_headers, "*");
     response.set(http::field::access_control_allow_methods,
                  "GET, POST, OPTIONS");
-    co_return co_await send(std::move(response));
+    co_return co_await send(std::move(response), std::move(bodyExecutor));
   };
 
   if (request.method() == http::verb::options) {
@@ -165,7 +167,8 @@ CPP_template_def(typename RequestT, typename SendT)(
     AD_LOG_INFO << "Request received via " << request.method()
                 << ", allowing everything" << std::endl;
     co_return co_await sendWithAccessControlHeaders(
-        createOkResponse("", request, MediaType::textPlain));
+        createOkResponse("", request, MediaType::textPlain),
+        co_await net::this_coro::executor);
   }
 
   // The C++ standard forbids a suspend point (`co_await`) inside a `catch`
@@ -184,7 +187,7 @@ CPP_template_def(typename RequestT, typename SendT)(
   }
   if (errorResponse.has_value()) {
     co_return co_await sendWithAccessControlHeaders(
-        std::move(errorResponse.value()));
+        std::move(errorResponse.value()), co_await net::this_coro::executor);
   }
 }
 
@@ -274,12 +277,20 @@ class QueryAlreadyInUseError : public std::runtime_error {
                            "' is already in use!"} {}
 };
 
+namespace {
+// Return an executor for a single query, which runs at most
+// `max-num-threads-per-query` tasks on the `executor` at the same time.
+qlever::Executor makeQueryExecutor(qlever::Executor executor) {
+  return ad_utility::makeConcurrencyLimitedExecutor(
+      std::move(executor),
+      getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
+}
+}  // namespace
+
 // _____________________________________________________________________________
-auto Server::cancelAfterDeadline(
+absl::AnyInvocable<void()> Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-    TimeLimit timeLimit)
-    -> QL_CONCEPT_OR_NOTHING(
-        ad_utility::InvocableWithExactReturnType<void>) auto {
+    TimeLimit timeLimit) {
   // The timer must not be moved once `async_wait` has registered a
   // `wait_op` against its implementation: the queued op references the
   // original impl by address, and moving the timer leaves the op
@@ -288,12 +299,38 @@ auto Server::cancelAfterDeadline(
   auto timer = std::make_shared<net::steady_timer>(timerExecutor_, timeLimit);
 
   timer->async_wait([cancellationHandle = std::move(cancellationHandle)](
-                        const boost::system::error_code&) {
+                        const boost::system::error_code& error) {
+    // The timer was cancelled via the returned callback.
+    if (error == boost::asio::error::operation_aborted) {
+      return;
+    }
     if (auto pointer = cancellationHandle.lock()) {
       pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
   });
   return [timer = std::move(timer)]() { timer->cancel(); };
+}
+
+// _____________________________________________________________________________
+ad_utility::CancellationHandle<>::RunAfter Server::makeWatchDogRunAfter() {
+  // All steps reuse one timer, which is safe because they never overlap
+  // (see `RunAfter`). The pending `task` keeps the timer alive, and the
+  // `shared_ptr` keeps it from moving (see `cancelAfterDeadline`).
+  return [timer = std::make_shared<net::steady_timer>(timerExecutor_)](
+             std::chrono::milliseconds delay, absl::AnyInvocable<void()> task) {
+    size_t numCancelledWaits = timer->expires_after(delay);
+    AD_CORRECTNESS_CHECK(numCancelledWaits == 0,
+                         "`RunAfter` must not be called while a previous "
+                         "wait of the watchdog timer is still pending.");
+    timer->async_wait(
+        [task = std::move(task)](const boost::system::error_code&) mutable {
+          // The error is only set if the timer is cancelled or destroyed
+          // during the wait, which can't happen (see above). Even then,
+          // running the step early would be harmless, whereas throwing
+          // here would terminate the server, so we don't assert.
+          task();
+        });
+  };
 }
 
 // _____________________________________________________________________________
@@ -303,7 +340,8 @@ auto Server::setupCancellationHandle(
                              CancellationHandleAndTimeoutTimerCancel>) auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  cancellationHandle->startWatchDog();
+  ad_utility::CancellationHandle<>::registerWatchDog(cancellationHandle,
+                                                     makeWatchDogRunAfter());
   absl::Cleanup cancelCancellationHandle{
       cancelAfterDeadline(cancellationHandle, timeLimit)};
   return CancellationHandleAndTimeoutTimerCancel{
@@ -338,7 +376,7 @@ auto Server::prepareOperation(
        resultPinning = std::move(resultPinning),
        accessTokenOk](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
-            std::move(indexAndViews),
+            std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
@@ -448,7 +486,8 @@ nlohmann::json Server::processLoadMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
-  auto qec = qlever().createQueryExecutionContext(indexAndViews);
+  auto qec = qlever().createQueryExecutionContext(
+      indexAndViews, makeQueryExecutor(qlever().executor()));
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 
   return json{{"materialized-view-loaded", name}};
@@ -898,22 +937,28 @@ CPP_template_def(typename RequestT, typename SendT)(
         std::move(operationString), tracer);
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
+    // All the responses below are cheap to compute, so their bodies can be
+    // serialized on the executor of this coroutine.
+    auto ioExecutor = co_await net::this_coro::executor;
     // If there was no "query", but any of the URL parameters processed before
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
     if (response.has_value()) {
-      return send(std::move(response.value()));
+      co_return co_await send(std::move(response.value()), ioExecutor);
     }
 
     // At this point, if there is a "?" in the query string, it means that there
     // are URL parameters which QLever does not know or did not process.
     if (request.target().find("?") != std::string::npos) {
-      return send(createBadRequestResponse("Unknown query parameters",
-                                           std::move(request)));
+      co_return co_await send(
+          createBadRequestResponse("Unknown query parameters",
+                                   std::move(request)),
+          ioExecutor);
     }
     // No path matched up until this point, so return 404 to indicate the client
     // made an error and the server will not serve anything else.
-    return send(createNotFoundResponse("Unknown path", std::move(request)));
+    co_return co_await send(
+        createNotFoundResponse("Unknown path", std::move(request)), ioExecutor);
   };
 
   co_return co_await processOperation(
@@ -1083,10 +1128,21 @@ CPP_template_def(typename RequestT, typename SendT)(
     Awaitable<void> Server::sendStreamableResponse(
         const RequestT& request, SendT& send, MediaType mediaType,
         const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-        SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
-      requestTimer, std::move(cancellationHandle));
+        SharedCancellationHandle cancellationHandle) {
+  // `computeResult` already computes the first block of the result (see
+  // `convertStreamGeneratorForChunkedTransfer`), which might take arbitrarily
+  // long, so it must not run on the threads of the `HttpServer`. For the same
+  // reason as in `processQuery`, the coroutine is stored in an explicit
+  // variable instead of directly `co_await`-ing it.
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [&plannedQuery, mediaType, &requestTimer, &cancellationHandle]() {
+        return ExportQueryExecutionTrees::computeResult(
+            plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(),
+            mediaType, requestTimer, cancellationHandle);
+      },
+      cancellationHandle);
+  auto responseGenerator = co_await std::move(coroutine);
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -1096,7 +1152,9 @@ CPP_template_def(typename RequestT, typename SendT)(
             std::move(response));
   }
   try {
-    co_await send(std::move(response));
+    // The result of the query is computed lazily while the response is being
+    // sent, so compute it on the same thread pool as the query planning.
+    co_await send(std::move(response), queryThreadPool_.get_executor());
   } catch (const boost::system::system_error& e) {
     // "Broken Pipe" errors are thrown and reported by `streamable_body`,
     // so we can safely ignore these kind of exceptions. In practice this
@@ -1440,7 +1498,9 @@ CPP_template_def(typename RequestT, typename SendT)(
   for (auto& middleware : responseMiddlewares) {
     response = middleware.applyUpdate(std::move(response), metadatas);
   }
-  co_await send(std::move(response));
+  // The body of the response is a single string, so it can be serialized on
+  // the executor of this coroutine.
+  co_await send(std::move(response), co_await net::this_coro::executor);
   co_return;
 }
 
@@ -1515,7 +1575,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     // 304.
     auto resp =
         createResponseWithEmptyBody(responseStatus, request, std::nullopt);
-    co_return co_await send(std::move(resp));
+    co_return co_await send(std::move(resp), co_await net::this_coro::executor);
   }
   if (exceptionErrorMsg) {
     logErrorAndHighlightedMetadata(exceptionErrorMsg.value(), metadata);
@@ -1530,7 +1590,8 @@ CPP_template_def(typename VisitorT, typename RequestT, typename SendT)(
     }
     auto errResponse =
         createJsonResponse(errorResponseJson, request, responseStatus);
-    co_return co_await send(std::move(errResponse));
+    co_return co_await send(std::move(errResponse),
+                            co_await net::this_coro::executor);
   }
 }
 

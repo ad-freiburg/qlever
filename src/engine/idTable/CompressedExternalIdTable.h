@@ -164,13 +164,16 @@ class CompressedExternalIdTableWriter {
   // written in parallel, see `compressAndWriteBlockOfColumn`.
   void writeIdTable(const IdTable& table) {
     const BlockLayout layout = prepareWrite(table);
+    // Compress and write the (block, column) pairs of the `table` as tasks on
+    // the global thread pool, in the order of the blocks (and within a block,
+    // in the order of the columns).
+    //
     // NOTE: The unit of parallelism is a single column of a single block. The
     // columns of a table are typically few, while its blocks are many, so the
     // tasks are small enough to keep all the threads of the pool busy until the
-    // very end of the table. The tasks are started in the order of the blocks
-    // (and within a block, in the order of the columns), such that the parts
-    // that are later read together (see `readBlockSequential`) tend to end up
-    // close to each other in the file.
+    // very end of the table. Starting the tasks in the order of the blocks
+    // makes the parts that are later read together (see `readBlockSequential`)
+    // tend to end up close to each other in the file.
     ad_utility::runIndexedTasksOnExecutor(
         ad_utility::globalExecutor(), ad_utility::globalExecutorNumThreads(),
         layout.numBlocks_ * numColumns(),
@@ -204,7 +207,8 @@ class CompressedExternalIdTableWriter {
           "over");
     }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
+    size_t blockSize =
+        blockSizeUncompressed_.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
     AD_CONTRACT_CHECK(blockSize > 0);
     size_t firstBlockIdx = blocksPerColumn_.at(0).size();
     startOfSingleIdTables_.push_back(firstBlockIdx);
@@ -229,13 +233,15 @@ class CompressedExternalIdTableWriter {
 
   // Compress the part of the `columnIdx`-th column of the `table` that belongs
   // to the block with index `blockIdx` (counted relative to the `table`), write
-  // it to the file, and store the resulting metadata.
+  // it to the file, and store the resulting metadata. This function may be
+  // called concurrently for arbitrary combinations of `blockIdx` and
+  // `columnIdx`.
   //
-  // This function may be called concurrently for arbitrary combinations of
-  // `blockIdx` and `columnIdx`: each call first reserves a range of the file of
-  // its own and then writes to it with the positioned `File::write`, which only
-  // needs a shared lock, and the metadata of each block is stored in an element
-  // of its own, which `prepareWrite` has allocated beforehand.
+  // NOTE: The concurrent calls need no synchronization among each other: each
+  // call first reserves a range of the file of its own (via the `nextOffset_`)
+  // and then writes to it with the positioned `File::write`, which only needs
+  // a shared lock, and the metadata of each block is stored in an element of
+  // its own, which `prepareWrite` has allocated beforehand.
   void compressAndWriteBlockOfColumn(const IdTable& table, size_t blockIdx,
                                      size_t columnIdx,
                                      const BlockLayout& layout) {
@@ -243,7 +249,8 @@ class CompressedExternalIdTableWriter {
     size_t lower = blockIdx * layout.blockSize_;
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
-    auto uncompressedSize = (upper - lower) * sizeof(Id);
+    static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
+    auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed = ZstdWrapper::compress(
         column.data() + lower, uncompressedSize, compressionLevel_);
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
@@ -346,7 +353,8 @@ class CompressedExternalIdTableWriter {
 
   // The number of rows in the block with the given global index.
   size_t numRowsInBlock(size_t blockIdx) const {
-    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
+    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ /
+           BYTES_PER_ID_COLUMN_ENTRY;
   }
 
   // The index (in the `ColumnMetadata` of a single column) of the first block
@@ -574,7 +582,7 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   // the input concept of `parallelBlockMerge`.
   template <typename R>
   MemorySize memorySizeOfElement([[maybe_unused]] const R& row) const {
-    return MemorySize::bytes(writer().numColumns() * sizeof(Id));
+    return MemorySize::bytes(writer().numColumns() * BYTES_PER_ID_COLUMN_ENTRY);
   }
 
  private:
@@ -623,7 +631,7 @@ namespace compressedExternalIdTable {
 // being sorted and written to disk in the background, and one that is used to
 // collect rows in the calls to `push`.
 inline size_t blockMemoryPerRow(size_t numColumns) {
-  return numColumns * sizeof(Id) * 2;
+  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2;
 }
 
 // The number of rows per block that a `CompressedExternalIdTableBase` with

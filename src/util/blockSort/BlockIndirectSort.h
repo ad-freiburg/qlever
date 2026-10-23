@@ -21,12 +21,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <numeric>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "backports/concepts.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/TransparentFunctors.h"
 #include "util/blockSort/BoostSortHeaders.h"
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -118,20 +122,20 @@ template <typename Value>
 // `blockIndirectSort` below. Should run on `exec`: the tasks of the sort resume
 // their parents on the executor of the parent, so running elsewhere is correct,
 // but costs a hop between the executors for every join.
-template <typename Iterator, typename Compare>
+template <typename Iterator, typename Compare, typename CheckCancellation>
 net::awaitable<void> sortOnExecutor(Iterator begin, Iterator end, Compare comp,
                                     uint32_t numThreads,
-                                    ql::any_io_executor exec,
-                                    SortParams params) {
+                                    ql::any_io_executor exec, SortParams params,
+                                    CheckCancellation checkCancellation) {
   AD_CORRECTNESS_CHECK(params.blockSize > 0);
   AD_CORRECTNESS_CHECK(params.maxElementsPerTask >= 16);
   // Cheap special cases: already sorted (including empty), or sorted in
   // reverse.
-  if (ql::ranges::is_sorted(begin, end, comp)) {
+  if (isSorted(begin, end, comp, checkCancellation)) {
     co_return;
   }
-  if (isDescending(begin, end, comp)) {
-    ql::ranges::reverse(begin, end);
+  if (isDescending(begin, end, comp, checkCancellation)) {
+    reverseRange(begin, end, checkCancellation);
     co_return;
   }
 
@@ -141,31 +145,69 @@ net::awaitable<void> sortOnExecutor(Iterator begin, Iterator end, Compare comp,
       numThreads, static_cast<uint32_t>(
                       numElements / (params.blockSize * BLOCKS_PER_TASK) + 1));
 
-  // Sort small inputs (or without threads) in a single task.
+  // Sort small inputs (or without threads) in a single task. A cancellable
+  // sort is split into parts between which the cancellation is checked, a
+  // sort that can't be cancelled is one `pdqsort` (the split costs 5-10% on a
+  // big input of `IdTable` rows).
   if (numElements < params.maxElementsPerTask || numThreads < 2) {
-    boost::sort::pdqsort(begin, end, comp);
+    if constexpr (std::is_same_v<CheckCancellation, ad_utility::Noop>) {
+      boost::sort::pdqsort(begin, end, comp);
+    } else {
+      serialQuicksort(begin, end, comp, params.maxElementsPerTask,
+                      checkCancellation);
+    }
     co_return;
   }
 
-  BlockSortState<Iterator, Compare> state{begin, end, std::move(comp), params,
-                                          exec};
+  BlockSortState<Iterator, Compare, CheckCancellation> state{
+      begin, end, std::move(comp), params, exec, std::move(checkCancellation)};
   co_await startSort(state, numThreads);
 }
 
 // Blocking version of `sortOnExecutor`, see the note at `blockIndirectSort`.
 // Rethrows the first exception of any task.
-template <typename Iterator, typename Compare>
+template <typename Iterator, typename Compare, typename CheckCancellation>
 void runSort(Iterator begin, Iterator end, Compare comp, uint32_t numThreads,
-             ql::any_io_executor exec, SortParams params) {
-  net::co_spawn(
-      exec,
-      sortOnExecutor(begin, end, std::move(comp), numThreads, exec, params),
-      net::use_future)
+             ql::any_io_executor exec, SortParams params,
+             CheckCancellation checkCancellation) {
+  net::co_spawn(exec,
+                sortOnExecutor(begin, end, std::move(comp), numThreads, exec,
+                               params, std::move(checkCancellation)),
+                net::use_future)
       .get();
 }
 
 }  // namespace detail
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+namespace detail {
+// The cancellation check of the overloads of `blockIndirectSort` and
+// `blockIndirectSortAsync` that take a `cancellationHandle`. Keeps the handle
+// alive.
+struct ThrowIfCancelled {
+  ad_utility::SharedCancellationHandle handle_;
+  void operator()() const { handle_->throwIfCancelled(); }
+};
+
+// The implementation of both overloads of `blockIndirectSort` below.
+// `checkCancellation` is `ad_utility::Noop` or a `ThrowIfCancelled`.
+template <typename Range, typename Compare, typename CheckCancellation>
+void blockIndirectSortImpl(
+    Range&& range, Compare comp, [[maybe_unused]] uint32_t numThreads,
+    ql::any_io_executor exec,
+    [[maybe_unused]] CheckCancellation checkCancellation) {
+  AD_CONTRACT_CHECK(static_cast<bool>(exec));
+  auto begin = ql::ranges::begin(range);
+  auto end = begin + ql::ranges::distance(range);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  boost::sort::pdqsort(begin, end, comp);
+#else
+  using Value = ql::ranges::range_value_t<Range>;
+  runSort(begin, end, std::move(comp), numThreads, std::move(exec),
+          defaultSortParams<Value>(), std::move(checkCancellation));
+#endif
+}
+}  // namespace detail
 
 // Sort `range` by `comp` (a strict weak ordering) on `exec`, which must not be
 // empty. The sort is not stable. Small inputs and `numThreads < 2` are sorted
@@ -193,21 +235,60 @@ void runSort(Iterator begin, Iterator end, Compare comp, uint32_t numThreads,
 CPP_template(typename Range, typename Compare)(
     requires ql::ranges::random_access_range<
         Range>) void blockIndirectSort(Range&& range, Compare comp,
-                                       [[maybe_unused]] uint32_t numThreads,
+                                       uint32_t numThreads,
                                        ql::any_io_executor exec) {
-  AD_CONTRACT_CHECK(static_cast<bool>(exec));
-  auto begin = ql::ranges::begin(range);
-  auto end = begin + ql::ranges::distance(range);
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  boost::sort::pdqsort(begin, end, comp);
-#else
-  using Value = ql::ranges::range_value_t<Range>;
-  detail::runSort(begin, end, std::move(comp), numThreads, std::move(exec),
-                  detail::defaultSortParams<Value>());
-#endif
+  detail::blockIndirectSortImpl(AD_FWD(range), std::move(comp), numThreads,
+                                std::move(exec), ad_utility::noop);
+}
+
+// Like above, but the sort can be cancelled via `cancellationHandle` (must not
+// be `nullptr`): it then throws a `CancellationException`, like any other
+// exception (see above).
+//
+// The handle is checked often enough for its watchdog: at the start of every
+// task (a task sorts at most `defaultMaxElementsPerTask` elements, or merges
+// or moves at most `BLOCKS_PER_TASK` blocks), for every element that a
+// partition scans, and every `ELEMENTS_PER_CANCELLATION_CHECK` elements of the
+// other linear passes over a bigger range (scans and reversals). A sort in a
+// single task (`numThreads < 2`) is split into parts of the size of a task,
+// see `serialQuicksort`.
+//
+// NOTE: In C++17 mode, the sort can't be cancelled.
+CPP_template(typename Range, typename Compare)(
+    requires ql::ranges::random_access_range<
+        Range>) void blockIndirectSort(Range&& range, Compare comp,
+                                       uint32_t numThreads,
+                                       ql::any_io_executor exec,
+                                       ad_utility::SharedCancellationHandle
+                                           cancellationHandle) {
+  AD_CONTRACT_CHECK(cancellationHandle != nullptr);
+  detail::blockIndirectSortImpl(
+      AD_FWD(range), std::move(comp), numThreads, std::move(exec),
+      detail::ThrowIfCancelled{std::move(cancellationHandle)});
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+namespace detail {
+// The implementation of both overloads of `blockIndirectSortAsync` below, see
+// `blockIndirectSortImpl`.
+template <typename Range, typename Compare, typename CheckCancellation>
+net::awaitable<void> blockIndirectSortAsyncImpl(
+    Range&& range, Compare comp, uint32_t numThreads, ql::any_io_executor exec,
+    CheckCancellation checkCancellation) {
+  AD_CONTRACT_CHECK(static_cast<bool>(exec));
+  auto begin = ql::ranges::begin(range);
+  auto end = begin + ql::ranges::distance(range);
+  using Value = ql::ranges::range_value_t<Range>;
+  // The sort runs on `exec`, see `sortOnExecutor`, and the `co_spawn` brings
+  // us back to our own executor.
+  co_await net::co_spawn(
+      exec,
+      sortOnExecutor(begin, end, std::move(comp), numThreads, exec,
+                     defaultSortParams<Value>(), std::move(checkCancellation)),
+      net::use_awaitable);
+}
+}  // namespace detail
+
 // Like `blockIndirectSort`, but the calling coroutine suspends until the sort
 // is done instead of blocking its thread, so it may also run on `exec` (e.g. on
 // a `boost::asio::thread_pool` with a single thread). Afterwards, it resumes on
@@ -220,17 +301,22 @@ CPP_template(typename Range,
     boost::asio::awaitable<void> blockIndirectSortAsync(
         Range&& range, Compare comp, uint32_t numThreads,
         ql::any_io_executor exec) {
-  AD_CONTRACT_CHECK(static_cast<bool>(exec));
-  auto begin = ql::ranges::begin(range);
-  auto end = begin + ql::ranges::distance(range);
-  using Value = ql::ranges::range_value_t<Range>;
-  // The sort runs on `exec`, see `sortOnExecutor`, and the `co_spawn` brings
-  // us back to our own executor.
-  co_await boost::asio::co_spawn(
-      exec,
-      detail::sortOnExecutor(begin, end, std::move(comp), numThreads, exec,
-                             detail::defaultSortParams<Value>()),
-      boost::asio::use_awaitable);
+  return detail::blockIndirectSortAsyncImpl(AD_FWD(range), std::move(comp),
+                                            numThreads, std::move(exec),
+                                            ad_utility::noop);
+}
+
+// Like above, but cancellable, see the second overload of `blockIndirectSort`.
+CPP_template(typename Range,
+             typename Compare)(requires ql::ranges::random_access_range<Range>)
+    boost::asio::awaitable<void> blockIndirectSortAsync(
+        Range&& range, Compare comp, uint32_t numThreads,
+        ql::any_io_executor exec,
+        ad_utility::SharedCancellationHandle cancellationHandle) {
+  AD_CONTRACT_CHECK(cancellationHandle != nullptr);
+  return detail::blockIndirectSortAsyncImpl(
+      AD_FWD(range), std::move(comp), numThreads, std::move(exec),
+      detail::ThrowIfCancelled{std::move(cancellationHandle)});
 }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 

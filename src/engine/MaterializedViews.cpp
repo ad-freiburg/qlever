@@ -330,10 +330,11 @@ IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
   // NOTE: The block size of an index is not necessarily the default, see
-  // `INDEX_ROWS_PER_BLOCK_KEY`.
+  // `INDEX_ROWS_PER_BLOCK_KEY`. The blocks are written on the executor of the
+  // query that computes the view.
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
-      qec_->getIndex().rowsPerBlock());
+      qec_->getIndex().rowsPerBlock(), qec_->executor());
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaData spoMetaData;
@@ -460,10 +461,13 @@ const Variable& MaterializedView::dummyObject() {
 }
 
 // _____________________________________________________________________________
-MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
+MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
+                                   ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
-      locatedTriplesState_{makeEmptyLocatedTriplesState()} {
+      permutation_{std::allocate_shared<Permutation>(
+          allocator, Permutation::Enum::SPO, allocator, name_)},
+      locatedTriplesState_{makeEmptyLocatedTriplesState(allocator)} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");
   throwIfInvalidName(name_);
@@ -572,7 +576,8 @@ MaterializedViewsManager::loadViewIntoLockedState(
   if (auto it = state.views_.find(name); it != state.views_.end()) {
     return it->second;
   }
-  auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
+  auto view = std::allocate_shared<MaterializedView>(allocator_, onDiskBase_,
+                                                     name, allocator_);
   view->connectPermutationBackReference();
   state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
@@ -840,14 +845,16 @@ LocatedTriplesSharedState MaterializedView::locatedTriplesState() const {
 
 // _____________________________________________________________________________
 std::shared_ptr<LocatedTriplesState>
-MaterializedView::makeEmptyLocatedTriplesState() const {
+MaterializedView::makeEmptyLocatedTriplesState(
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
   emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
       .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
   LocalVocab emptyVocab;
 
-  return std::make_shared<LocatedTriplesState>(
+  return std::allocate_shared<LocatedTriplesState>(
+      allocator,
       LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
                           emptyVocab.getLifetimeExtender(), 0});
 }
