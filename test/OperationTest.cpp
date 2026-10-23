@@ -345,8 +345,8 @@ TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
   }
 }
 
-// _____________________________________________________________________________
-
+// Test that an operation and its child use the cancellation handle of their
+// context, and that cancelling the handle aborts the running computation.
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   // Use a separate context, such that the handle of the context that is shared
   // between the tests (see `getQec`) is not cancelled.
