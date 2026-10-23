@@ -507,6 +507,12 @@ TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
   constexpr size_t blockSize = 1000;
   using Sorter =
       ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS>;
+  // The memory for a sorter with blocks of `n` rows, see `BlockSorter`.
+  auto memoryForRows = [](size_t n) {
+    return memoryForBlocksize(
+        n, NUM_COLS,
+        ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS));
+  };
   auto block = createRandomlyFilledIdTable(blockSize, NUM_COLS);
   auto sortedSize = [](Sorter& sorter) {
     size_t numRows = 0;
@@ -530,7 +536,7 @@ TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
 
   // Several blocks, sorted on the background thread.
   {
-    Sorter sorter{filename, memoryForBlocksize(blockSize, NUM_COLS), alloc};
+    Sorter sorter{filename, memoryForRows(blockSize), alloc};
     for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, size_t{5})) {
       sorter.pushBlock(block);
     }
@@ -541,7 +547,7 @@ TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
   // A single block that is smaller than the block size, sorted in the calling
   // thread when the input phase ends.
   {
-    Sorter sorter{filename, memoryForBlocksize(2 * blockSize, NUM_COLS), alloc};
+    Sorter sorter{filename, memoryForRows(2 * blockSize), alloc};
     sorter.pushBlock(block);
     EXPECT_EQ(sortedSize(sorter), blockSize);
     EXPECT_EQ(sorter.sortBufferBytes(), 0u);
@@ -549,7 +555,7 @@ TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
 
   // A sorter that is cleared during its input phase.
   {
-    Sorter sorter{filename, memoryForBlocksize(blockSize, NUM_COLS), alloc};
+    Sorter sorter{filename, memoryForRows(blockSize), alloc};
     for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, size_t{3})) {
       sorter.pushBlock(block);
     }
@@ -565,10 +571,31 @@ TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
 TEST(CompressedExternalIdTable, blocksizeAndMemoryAreInverses) {
   for (size_t numColumns : {1u, 2u, 3u, 7u}) {
     for (size_t blocksize : {1u, 2u, 6u, 1000u}) {
-      auto memory = memoryForBlocksize(blocksize, numColumns);
-      EXPECT_EQ(blocksizeForMemory(memory, numColumns), blocksize);
+      for (size_t sortBytesPerRow : {0u, 65u}) {
+        auto memory =
+            memoryForBlocksize(blocksize, numColumns, sortBytesPerRow);
+        EXPECT_EQ(blocksizeForMemory(memory, numColumns, sortBytesPerRow),
+                  blocksize);
+      }
     }
   }
+}
+
+// Test that the memory per row of a sorter accounts for the sorts of its
+// blocks: for the bitwise key sort of the triples with their graph (two key
+// rows of 32 bytes and one byte for the bucket index per row), and not at all
+// for the other sorts.
+TEST(CompressedExternalIdTable, sortBytesPerRow) {
+  static_assert(NUM_COLS == 4);
+  EXPECT_EQ(ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS), 65u);
+
+  // With a payload column, the key rows also carry the index of the row, and
+  // the payload is permuted through a buffer of one column.
+  EXPECT_EQ(ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(5), 89u);
+
+  // A comparator without bitwise key columns.
+  EXPECT_EQ(ad_utility::BlockSorter<std::less<>>::sortBytesPerRow(NUM_COLS),
+            0u);
 }
 
 namespace {
@@ -1695,7 +1722,11 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
     auto trace = generateLocationTrace(l);
     SCOPED_TRACE(
         absl::StrCat("blocksize = ", blocksize, ", numRows = ", numRows));
-    auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+    // The memory of the sorter includes the memory of the sort of a block,
+    // see `BlockSorter::sortBytesPerRow`.
+    auto memory = memoryForBlocksize(
+        blocksize, NUM_COLS,
+        ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS));
     // Each time `blocksize` rows have accumulated, a block is written to disk.
     // A possible remainder becomes one additional block.
     size_t expectedNumBlocks = (numRows + blocksize - 1) / blocksize;
