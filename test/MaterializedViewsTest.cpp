@@ -248,6 +248,76 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, PatternRewriteWarnings) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
+  MaterializedViewsManager manager{testIndexBase_};
+
+  // Write a view for `query` and return the warnings collected while doing
+  // so, checking that each of them was also logged via `AD_LOG_WARN`.
+  auto writeAndGetWarnings = [&](std::string viewName, std::string query,
+                                 ad_utility::source_location location =
+                                     AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
+    clearLog();
+    auto plan = qlv().parseAndPlanQuery(std::move(query));
+    auto warnings = manager.writeViewToDisk(std::move(viewName), plan);
+    for (const auto& warning : warnings) {
+      EXPECT_THAT(log_.str(), ::testing::HasSubstr(warning));
+    }
+    return warnings;
+  };
+
+  // Blank node label.
+  EXPECT_THAT(writeAndGetWarnings("blankNodeView",
+                                  "SELECT * { ?s <p1> _:b1 . _:b1 <p2> ?o }"),
+              ::testing::ElementsAre(::testing::HasSubstr("blank nodes")));
+
+  // `[ ... ]` shorthand.
+  EXPECT_THAT(
+      writeAndGetWarnings("shorthandView", "SELECT * { ?s <p1> [ <p2> ?o ] }"),
+      ::testing::ElementsAre(::testing::HasSubstr("shorthand")));
+
+  // Simple sequence property path (`/`).
+  EXPECT_THAT(
+      writeAndGetWarnings("seqPathView", "SELECT * { ?s <p1>/<p2> ?o }"),
+      ::testing::ElementsAre(::testing::HasSubstr("property path")));
+
+  // Simple inverse property path (`^`).
+  EXPECT_THAT(writeAndGetWarnings("invPathView",
+                                  "SELECT * { ?s ^<p1> ?m . ?m <p2> ?o }"),
+              ::testing::ElementsAre(::testing::HasSubstr("property path")));
+
+  // Both obstacles at once.
+  EXPECT_THAT(
+      writeAndGetWarnings("bothView", "SELECT * { ?s <p1>/<p2> [ <p3> ?o ] }"),
+      ::testing::UnorderedElementsAre(::testing::HasSubstr("blank nodes"),
+                                      ::testing::HasSubstr("property path")));
+
+  // No warnings if the query could not be rewritten anyway: a single triple
+  // (even after expanding the path), an alternative path (`|`), a variable
+  // predicate, an aggregating query (whose internal `GROUP BY` variable must
+  // not count as a blank node) or a subquery.
+  for (auto [viewName, query] :
+       std::vector<std::pair<std::string, std::string>>{
+           {"singleInvView", "SELECT * { ?s ^<p1> ?o }"},
+           {"altPathView", "SELECT * { ?s <p1>|<p2> ?o . ?o <p3> ?x }"},
+           {"varPredView", "SELECT * { ?s ?p _:b1 . _:b1 <p2> ?o }"},
+           {"groupByView",
+            "SELECT (SAMPLE(?s) AS ?x) (COUNT(?o) AS ?c) "
+            "{ ?s <p1> [ <p2> ?o ] } GROUP BY (STR(?s))"},
+           {"subqueryView",
+            "SELECT ?s ?o { { SELECT ?s ?o { ?s <p1>/<p2> ?o } "
+            "ORDER BY (STR(?o)) } }"}}) {
+    EXPECT_THAT(writeAndGetWarnings(viewName, query), ::testing::IsEmpty())
+        << query;
+  }
+
+  // A plain query without any of the above gets no warnings.
+  EXPECT_THAT(writeAndGetWarnings("plainView", simpleWriteQuery_),
+              ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
   // Simple materialized view for testing the checks when querying.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
