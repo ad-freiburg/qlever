@@ -641,22 +641,47 @@ namespace compressedExternalIdTable {
 // `numColumns` columns requires per row of its block size. The factor of two is
 // there because we store two blocks at the same time: One that is currently
 // being sorted and written to disk in the background, and one that is used to
-// collect rows in the calls to `push`.
-inline size_t blockMemoryPerRow(size_t numColumns) {
-  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2;
+// collect rows in the calls to `push`. The `transformationBytesPerRow` are the
+// bytes per row that the transformation of a block needs in addition (see
+// `BlockSorter::sortBytesPerRow`).
+inline size_t blockMemoryPerRow(size_t numColumns,
+                                size_t transformationBytesPerRow = 0) {
+  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2 + transformationBytesPerRow;
 }
 
 // The number of rows per block that a `CompressedExternalIdTableBase` with
 // `numColumns` columns uses for the given `memory` limit.
-inline size_t blocksizeForMemory(MemorySize memory, size_t numColumns) {
-  return memory.getBytes() / blockMemoryPerRow(numColumns);
+inline size_t blocksizeForMemory(MemorySize memory, size_t numColumns,
+                                 size_t transformationBytesPerRow = 0) {
+  return memory.getBytes() /
+         blockMemoryPerRow(numColumns, transformationBytesPerRow);
 }
 
 // The inverse of `blocksizeForMemory`: the memory limit for which a
 // `CompressedExternalIdTableBase` with `numColumns` columns uses exactly
 // `blocksize` rows per block.
-inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
-  return MemorySize::bytes(blocksize * blockMemoryPerRow(numColumns));
+inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns,
+                                     size_t transformationBytesPerRow = 0) {
+  return MemorySize::bytes(
+      blocksize * blockMemoryPerRow(numColumns, transformationBytesPerRow));
+}
+
+// The bytes per row that a block transformation `T` of a
+// `CompressedExternalIdTableBase` needs in addition to the block, see
+// `BlockSorter::sortBytesPerRow`. Zero for a transformation that doesn't say.
+template <typename T, typename = void>
+constexpr bool hasSortBytesPerRow = false;
+template <typename T>
+constexpr bool
+    hasSortBytesPerRow<T, std::void_t<decltype(T::sortBytesPerRow(size_t{}))>> =
+        true;
+template <typename T>
+size_t transformationBytesPerRow(size_t numColumns) {
+  if constexpr (hasSortBytesPerRow<T>) {
+    return T::sortBytesPerRow(numColumns);
+  } else {
+    return 0;
+  }
 }
 
 }  // namespace compressedExternalIdTable
@@ -690,8 +715,10 @@ CPP_class_template(size_t NumStaticCols,
   MemorySize memory_;
 
   // The number of rows per block in the first phase.
-  size_t blocksize_{
-      compressedExternalIdTable::blocksizeForMemory(memory_, numColumns_)};
+  size_t blocksize_{compressedExternalIdTable::blocksizeForMemory(
+      memory_, numColumns_,
+      compressedExternalIdTable::transformationBytesPerRow<BlockTransformation>(
+          numColumns_))};
   CompressedExternalIdTableWriter writer_;
 
   // The dedicated thread on which the blocks are transformed (for the
@@ -1208,6 +1235,18 @@ struct BlockSorter {
 
   // Free the memory of the `buffers_`, see above.
   void releaseBuffers() { buffers_.release(); }
+
+  // The memory in bytes per row that a sort of a block with `numColumns`
+  // columns needs in addition to the block (which the sorter's memory limit
+  // has to account for, see `compressedExternalIdTable::blockMemoryPerRow`).
+  static size_t sortBytesPerRow(size_t numColumns) {
+    if constexpr (hasBitwiseKeyColumns<Comparator>) {
+      return bitwiseKeySortBytesPerRow(numColumns,
+                                       Comparator::bitwiseKeyColumns);
+    } else {
+      return 0;
+    }
+  }
 
   // The memory that the `buffers_` currently hold, in bytes.
   size_t bufferBytes() const { return buffers_.numBytes(); }
