@@ -476,9 +476,15 @@ void IndexImpl::prepareIndexBuild() {
   // thereby recreates the word comparator, and before any parsing, which
   // already sorts words.
   if (geoCellGridForIndexBuilding_.has_value()) {
-    checkVocabularyTypeForGeoCellGrid(vocabularyTypeForIndexBuilding_);
     const auto& grid = geoCellGridForIndexBuilding_.value();
     vocab_.setGeoCellGrid(grid);
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
     AD_LOG_INFO << "Using a geo cell grid for WKT literals, level "
                 << static_cast<int>(grid.level()) << ", scheme "
                 << grid.scheme() << std::endl;
