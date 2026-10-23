@@ -53,6 +53,12 @@ inline constexpr auto pickBitsOfColumns =
 // any payload columns). The comparison is performed on the bits of the `Id`s,
 // see `pickBitsOfColumns` above.
 struct ComparatorForConstCol0 {
+  // The columns whose bits are compared, see `ad_utility::sortByBitwiseKeys`
+  // in `BitwiseKeySort.h`. The constant column `c0Idx` is added as the last
+  // key, so that the keys of a table without payload columns are complete rows
+  // (which that function sorts without an additional index).
+  static constexpr std::array<size_t, 4> bitwiseKeyColumns{
+      c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID, c0Idx};
   template <typename A, typename B>
   constexpr bool operator()(const A& a, const B& b) const {
     auto pickBits = pickBitsOfColumns<c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>;
