@@ -19,16 +19,18 @@ namespace ad_utility {
 
 // Return the type in which `tie` stores an argument of type `T`, as a
 // `ql::type_identity`. An lvalue stays a reference, a proxy that is returned by
-// value is stored by value.
+// value is stored by value as its full proxy (see `qlever::FullProxy`), so that
+// it can be written to like a reference.
 template <typename T>
 constexpr auto tieElement() {
   if constexpr (std::is_lvalue_reference_v<T>) {
     return ql::type_identity<T>{};
   } else {
-    static_assert(qlever::isProxy<std::decay_t<T> >,
+    using Proxy = qlever::FullProxyT<std::decay_t<T> >;
+    static_assert(qlever::isProxy<Proxy>,
                   "A tied element that is returned by value must be a proxy. "
                   "Mark such a type via `qlever::isProxy`.");
-    return ql::type_identity<std::decay_t<T> >{};
+    return ql::type_identity<Proxy>{};
   }
 }
 
