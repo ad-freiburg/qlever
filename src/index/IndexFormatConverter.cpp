@@ -810,7 +810,7 @@ std::string conversionDescription() {
 
 // _____________________________________________________________________________
 Id convertId(Id id) {
-  auto datatypeBits = id.getBits() >> ValueId::numDataBits;
+  auto datatypeBits = id.getDatatypeBits();
   if (datatypeBits >= datatypesOfSourceFormat.size()) {
     throw std::runtime_error{absl::StrCat(
         "Encountered an `Id` with the invalid datatype ", datatypeBits,
@@ -823,10 +823,7 @@ Id convertId(Id id) {
         "stored on disk (it holds a pointer into the memory of the process "
         "that created it), so the index that is converted is corrupted"};
   }
-  auto valueBits =
-      id.getBits() & ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
-  return Id::fromBits(
-      valueBits | (static_cast<uint64_t>(datatype) << ValueId::numDataBits));
+  return Id::fromBits(datatype, id.getPayloadBits());
 }
 
 // _____________________________________________________________________________
