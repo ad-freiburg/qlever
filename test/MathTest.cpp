@@ -15,7 +15,8 @@
 
 using ad_utility::ceilDiv;
 
-// _____________________________________________________________________________
+// Test that `ceilDiv` rounds up, does not overflow for large numerators, and
+// rejects a zero denominator.
 TEST(Math, ceilDiv) {
   static_assert(ceilDiv(0, 3) == 0);
   static_assert(ceilDiv(1, 3) == 1);

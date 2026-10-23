@@ -102,7 +102,8 @@ TEST(ExceptionCollector, isNoOpWhenEmpty) {
   EXPECT_NO_THROW(collector.rethrowIfException());
 }
 
-// _____________________________________________________________________________
+// Test that `hasException` reports a captured exception until it is
+// rethrown.
 TEST(ExceptionCollector, hasException) {
   ad_utility::ExceptionCollector collector;
   EXPECT_FALSE(collector.hasException());
