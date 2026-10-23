@@ -74,6 +74,14 @@ RuntimeParameters::RuntimeParameters() {
   add(logLevel_);
   add(constructDeduplication_);
 
+  // Deprecated aliases (old names of renamed parameters), so that existing
+  // configurations keep working.
+  auto addAlias = [this](std::string alias, auto& parameter) {
+    AD_CONTRACT_CHECK(!ad_utility::contains(runtimeMap_, alias));
+    runtimeMap_[std::move(alias)] = &parameter;
+  };
+  addAlias("sparql-results-json-with-time", sparqlResultsJsonWithMeta_);
+
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is
   // in sync with the parameter default from the start.

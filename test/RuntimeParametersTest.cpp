@@ -202,5 +202,16 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   EXPECT_EQ(totalSize,
             static_cast<size_t>(reinterpret_cast<char*>(&params.runtimeMap_) -
                                 reinterpret_cast<char*>(&params)));
-  EXPECT_EQ(numParameters, keys.size());
+  // The deprecated aliases registered in the constructor are additional keys.
+  constexpr size_t numAliases = 1;
+  EXPECT_EQ(numParameters + numAliases, keys.size());
+}
+
+// Test that a deprecated alias sets the same parameter as its new name.
+TEST(RuntimeParameters, deprecatedAlias) {
+  RuntimeParameters params;
+  params.setFromString("sparql-results-json-with-time", "false");
+  EXPECT_FALSE(params.sparqlResultsJsonWithMeta_.get());
+  params.setFromAssignment("sparql-results-json-with-time=true");
+  EXPECT_TRUE(params.sparqlResultsJsonWithMeta_.get());
 }
