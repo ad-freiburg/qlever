@@ -39,6 +39,10 @@ class Filter : public Operation {
     return _subtree->resultSortedOn();
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -69,7 +73,9 @@ class Filter : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    return _subtree->getVariableColumns();
+  }
 
   // The method is directly invoked with the construction of this `Filter`
   // object. Its implementation retrieves <PrefilterExpression, Variable> pairs

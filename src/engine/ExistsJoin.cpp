@@ -6,6 +6,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Result.h"
@@ -594,4 +595,39 @@ void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
                            }),
       idTable.getColumn(idTable.numColumns() - 1).begin(),
       qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  using namespace columnStrippingHelpers;
+  // The subtree has to provide the requested variables and all variables of the
+  // left subtree and `existsVariable_`.
+  VarsRequiredFromSubtree varsRequiredFromSubtree(&requestedVariables);
+  std::vector<const Variable*> keepVars;
+  VariableToColumnMap v2cMap = computeVariableToColumnMap();
+  for (const auto& [variable, _] : v2cMap) {
+    varsRequiredFromSubtree.add(variable);
+    keepVars.push_back(&variable);
+  }
+
+  // Strip the left and right subtree.
+  auto left = QueryExecutionTree::makeTreeWithStrippedColumns(
+      left_, varsRequiredFromSubtree.get());
+  auto right = QueryExecutionTree::makeTreeWithStrippedColumns(
+      right_, varsRequiredFromSubtree.get());
+
+  // Strip the subtree and only keep `ExistsJoin` operation in the
+  // `QueryExecutionTree` if `existsVariable_` is requested by the parent.
+  if (!ad_utility::contains(requestedVariables, existsVariable_)) {
+    return left;
+  }
+
+  // The new `ExistsJoin` also exports variables of the left subtree that the
+  // parent did not request, the helper adds a `StripColumns` operation for
+  // them.
+  return makeTreeWithOptionalStripOperation<ExistsJoin>(
+      getExecutionContext(), requestedVariables, std::move(left),
+      std::move(right), existsVariable_);
 }

@@ -9,6 +9,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -266,4 +267,36 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
     return std::nullopt;
   }
   return pushDownBindToAnyChild(bind, {_subtree});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Bind::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and the variables that
+  // are required by `Bind` to build its target.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  bool bindTargetRequested = true;
+  if (requestedVariables.find(_bind._target) != requestedVariables.end()) {
+    for (const Variable* bindVar : _bind._expression.containedVariables()) {
+      varsRequiredFromSubtree.add(*bindVar);
+    }
+  } else {
+    bindTargetRequested = false;
+  }
+
+  // Strip the subtree and only keep `Bind` operation in the
+  // `QueryExecutionTree` if its target is requested by the parent.
+  std::shared_ptr<QueryExecutionTree> subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(
+          _subtree, varsRequiredFromSubtree.get());
+  if (!bindTargetRequested) {
+    return subtree;
+  }
+
+  // The new `Bind` also exports evaluated variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Bind>(
+      getExecutionContext(), requestedVariables, std::move(subtree), _bind);
 }
