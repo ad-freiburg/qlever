@@ -41,6 +41,35 @@ TEST(DatatypeTest, isDatatypeTrivial) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
+  constexpr std::array allDatatypes{Undefined,
+                                    Bool,
+                                    Int,
+                                    Double,
+                                    VocabIndex,
+                                    LocalVocabIndex,
+                                    SecondaryVocabIndex,
+                                    TextRecordIndex,
+                                    Date,
+                                    GeoPoint,
+                                    WordVocabIndex,
+                                    BlankNodeIndex,
+                                    EncodedVal};
+  static_assert(isListOfAllDatatypesInOrder(allDatatypes));
+  EXPECT_TRUE(isListOfAllDatatypesInOrder(allDatatypes));
+
+  // A datatype is missing.
+  constexpr std::array tooShort{Undefined, Bool, Int};
+  static_assert(!isListOfAllDatatypesInOrder(tooShort));
+  EXPECT_FALSE(isListOfAllDatatypesInOrder(tooShort));
+
+  // Two datatypes are swapped.
+  auto swapped = allDatatypes;
+  std::swap(swapped[1], swapped[2]);
+  EXPECT_FALSE(isListOfAllDatatypesInOrder(swapped));
+}
+
 // Test the string of each datatype. Note that `EncodedVal` is printed as
 // `EncodedIri`.
 TEST(DatatypeTest, toString) {

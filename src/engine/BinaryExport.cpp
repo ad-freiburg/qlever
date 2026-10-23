@@ -11,9 +11,8 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/BinaryExport.h"
 
-#include <absl/strings/str_cat.h>
-
 #include <cstring>
+#include <range/v3/numeric/accumulate.hpp>
 #include <utility>
 
 #include "engine/ExportQueryExecutionTrees.h"
@@ -54,31 +53,20 @@ AD_ALWAYS_INLINE Id toExportableId(Id originalId,
 // The following assertions only detect a change of the datatype tags.
 static_assert(ad_utility::binaryQleverExportVersion == 1);
 static_assert(Id::numDatatypeBits == 4);
-static_assert([]() {
-  using enum Datatype;
-  constexpr std::array datatypesOfVersion1{Undefined,
-                                           Bool,
-                                           Int,
-                                           Double,
-                                           VocabIndex,
-                                           LocalVocabIndex,
-                                           SecondaryVocabIndex,
-                                           TextRecordIndex,
-                                           Date,
-                                           GeoPoint,
-                                           WordVocabIndex,
-                                           BlankNodeIndex,
-                                           EncodedVal};
-  if (datatypesOfVersion1.size() != static_cast<size_t>(MaxValue) + 1) {
-    return false;
-  }
-  for (size_t i = 0; i < datatypesOfVersion1.size(); ++i) {
-    if (static_cast<size_t>(datatypesOfVersion1[i]) != i) {
-      return false;
-    }
-  }
-  return true;
-}());
+static constexpr std::array datatypesOfVersion1{Datatype::Undefined,
+                                                Datatype::Bool,
+                                                Datatype::Int,
+                                                Datatype::Double,
+                                                Datatype::VocabIndex,
+                                                Datatype::LocalVocabIndex,
+                                                Datatype::SecondaryVocabIndex,
+                                                Datatype::TextRecordIndex,
+                                                Datatype::Date,
+                                                Datatype::GeoPoint,
+                                                Datatype::WordVocabIndex,
+                                                Datatype::BlankNodeIndex,
+                                                Datatype::EncodedVal};
+static_assert(isListOfAllDatatypesInOrder(datatypesOfVersion1));
 
 static constexpr std::string_view magicBytes = "QLEVER.EXPORT";
 
@@ -94,7 +82,9 @@ struct Header {
   // The names of the variables, one per column.
   std::vector<std::string> variableNames_;
   // The names of the selected variables that are not bound in the result, and
-  // therefore have no column.
+  // therefore have no column. The reader could treat every missing variable
+  // as unbound without them, but with them it can check that the result
+  // contains exactly the variables it expects.
   std::vector<std::string> unboundVariableNames_;
 
   // Return the serialized header.
@@ -144,12 +134,38 @@ bool ExportBatch::shouldFinish() const {
 
 // _____________________________________________________________________________
 std::string ExportBatch::finish() {
+  auto strings = stringMapping_.takeStrings();
+  // Grow the `buffer_` at most once for the marker and the strings.
+  buffer_.reserve(buffer_.size() + sizeof(vocabMarker) +
+                  BinaryExportHelpers::serializedSize(strings));
   // The marker tells the reader that the strings follow, see `vocabMarker`.
-  absl::StrAppend(
-      &buffer_, raw(vocabMarker),
-      BinaryExportHelpers::writeVectorOfStrings(stringMapping_.takeStrings()));
+  buffer_.append(raw(vocabMarker));
+  BinaryExportHelpers::appendVectorOfStrings(buffer_, strings);
   numRows_ = 0;
   return std::exchange(buffer_, std::string{});
+}
+
+// _____________________________________________________________________________
+size_t BinaryExportHelpers::serializedSize(
+    const std::vector<std::string>& strings) {
+  // The serialization of a vector or a string consists of its size followed
+  // by its elements.
+  return sizeof(size_t) +
+         ::ranges::accumulate(strings, size_t{0}, {}, [](const auto& string) {
+           return sizeof(size_t) + string.size();
+         });
+}
+
+// _____________________________________________________________________________
+void BinaryExportHelpers::appendVectorOfStrings(
+    std::string& target, const std::vector<std::string>& strings) {
+  [[maybe_unused]] size_t sizeBefore = target.size();
+  auto write = [&target](const char* src, size_t numBytes) {
+    target.append(src, numBytes);
+  };
+  ad_utility::serialization::WriteViaCallableSerializer writer{write};
+  writer << strings;
+  AD_EXPENSIVE_CHECK(target.size() - sizeBefore == serializedSize(strings));
 }
 
 // The special case of a result without columns, for which only the number of

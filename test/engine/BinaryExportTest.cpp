@@ -61,6 +61,15 @@ std::string serialized(std::string_view string) {
   return absl::StrCat(bytesOf(string.size()), string);
 }
 
+// A vector of strings as serialized by QLever's serialization framework.
+std::string serialized(const std::vector<std::string>& strings) {
+  std::string result = bytesOf(strings.size());
+  for (const auto& string : strings) {
+    result.append(serialized(string));
+  }
+  return result;
+}
+
 // A batch consists of the IDs, followed by a marker (which has the size of an
 // `Id`) and the strings.
 void expectBatch(std::string_view batch, const std::vector<Id>& ids,
@@ -68,7 +77,7 @@ void expectBatch(std::string_view batch, const std::vector<Id>& ids,
                  ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   auto idBytes = bytesOf(ids);
-  auto stringBytes = BinaryExportHelpers::writeVectorOfStrings(strings);
+  auto stringBytes = serialized(strings);
   ASSERT_EQ(batch.size(), idBytes.size() + sizeof(Id::T) + stringBytes.size());
   EXPECT_EQ(batch.substr(0, idBytes.size()), idBytes);
   EXPECT_EQ(batch.substr(idBytes.size() + sizeof(Id::T)), stringBytes);
@@ -100,20 +109,16 @@ QueryExecutionTree makeQet(QueryExecutionContext* qec, IdTable table,
 }  // namespace
 
 // _____________________________________________________________________________
-TEST(BinaryExportHelpers, isTrivial) {
-  // Test trivial types
-  EXPECT_TRUE(Id::makeUndefined().isTrivial());
-  EXPECT_TRUE(Id::makeFromBool(true).isTrivial());
-  EXPECT_TRUE(Id::makeFromInt(42).isTrivial());
-  EXPECT_TRUE(Id::makeFromDouble(3.14).isTrivial());
-  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration::parseXsdDate("2000-01-01"))
-                  .isTrivial());
-
-  // Test non-trivial types
-  EXPECT_FALSE(Id::makeFromVocabIndex(VocabIndex::make(0)).isTrivial());
-  EXPECT_FALSE(
-      Id::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(0x100))
-          .isTrivial());
+TEST(BinaryExportHelpers, appendVectorOfStrings) {
+  for (const std::vector<std::string>& strings :
+       std::vector<std::vector<std::string>>{
+           {}, {""}, {"a"}, {"abc", "", "defgh"}}) {
+    std::string target = "prefix";
+    BinaryExportHelpers::appendVectorOfStrings(target, strings);
+    EXPECT_EQ(target, absl::StrCat("prefix", serialized(strings)));
+    EXPECT_EQ(BinaryExportHelpers::serializedSize(strings),
+              serialized(strings).size());
+  }
 }
 
 // _____________________________________________________________________________
@@ -221,9 +226,8 @@ TEST(BinaryExport, format) {
     return absl::StrCat(serialized("QLEVER.EXPORT"),
                         bytesOf(ad_utility::binaryQleverExportVersion),
                         bytesOf(GeoPoint::encoding()),
-                        serialized(patterns.dump()),
-                        BinaryExportHelpers::writeVectorOfStrings(variables),
-                        BinaryExportHelpers::writeVectorOfStrings(unbound));
+                        serialized(patterns.dump()), serialized(variables),
+                        serialized(unbound));
   };
   // Return the bytes after the expected header.
   auto skipHeader = [&header](std::string_view bytes,
@@ -252,7 +256,7 @@ TEST(BinaryExport, format) {
   // A large result is sent in several batches: The first one ends as soon as
   // it reaches the minimum size, the last one is always sent.
   std::vector<Id> ids;
-  for (size_t i = 0; i < minNumIdBytesPerBatch / sizeof(Id::T) + 1; ++i) {
+  for (size_t i = 0; i <= defaultMinNumIdBytesPerBatch / sizeof(Id::T); ++i) {
     ids.push_back(I(static_cast<int64_t>(i)));
   }
   IdTable large{1, ad_utility::makeUnlimitedAllocator<Id>()};
@@ -261,7 +265,7 @@ TEST(BinaryExport, format) {
   }
   bytes = exportBytes(makeQet(qec, std::move(large), {Variable{"?a"}}), {"?a"});
   auto batches = skipHeader(bytes, {"?a"}, {});
-  size_t firstBatchSize = minNumIdBytesPerBatch + 2 * sizeof(Id::T);
+  size_t firstBatchSize = defaultMinNumIdBytesPerBatch + 2 * sizeof(Id::T);
   Id lastId = ids.back();
   ids.pop_back();
   expectBatch(batches.substr(0, firstBatchSize), ids, {});

@@ -20,9 +20,6 @@
 #include "parser/SelectClause.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
-#include "util/Serializer/FromCallableSerializer.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/stream_generator.h"
 
 namespace qlever::binary_export {
@@ -34,23 +31,24 @@ Id toExportableId(Id originalId, StringMapping& stringMapping);
 
 // The exporter sends the IDs of the rows in batches. Each batch is followed by
 // the strings that its IDs refer to (see `StringMapping`). A batch ends after
-// the first row with which its IDs take up at least `minNumIdBytesPerBatch`
-// bytes, or its (distinct) strings take up at least `minNumStringBytesPerBatch`
-// bytes. These are no upper limits: a batch is at least as large as the last
-// row (with all of its strings), which can be arbitrarily large (for example a
-// single WKT literal of a large `MULTIPOLYGON` can take up tens of megabytes).
-// The minimum for the strings is much larger than the one for the IDs, such
-// that also batches with large strings consist of several rows, which
-// benefit from the deduplication of the strings within a batch.
+// the first row with which its IDs take up at least
+// `defaultMinNumIdBytesPerBatch` bytes, or its (distinct) strings take up at
+// least `defaultMinNumStringBytesPerBatch` bytes. These are no upper limits: a
+// batch is at least as large as the last row (with all of its strings), which
+// can be arbitrarily large (for example a single WKT literal of a large
+// `MULTIPOLYGON` can take up tens of megabytes). The minimum for the strings is
+// much larger than the one for the IDs, such that also batches with large
+// strings consist of several rows, which benefit from the deduplication of the
+// strings within a batch.
 // TODO<joka921> These values are arbitrary.
-inline constexpr size_t minNumIdBytesPerBatch = 1 << 20;
-inline constexpr size_t minNumStringBytesPerBatch = 16 << 20;
+inline constexpr size_t defaultMinNumIdBytesPerBatch = 1 << 20;
+inline constexpr size_t defaultMinNumStringBytesPerBatch = 16 << 20;
 
 // The minimum sizes of an `ExportBatch`, see above. They can be changed for
 // testing.
 struct ExportBatchSizes {
-  size_t minNumIdBytes_ = minNumIdBytesPerBatch;
-  size_t minNumStringBytes_ = minNumStringBytesPerBatch;
+  size_t minNumIdBytes_ = defaultMinNumIdBytesPerBatch;
+  size_t minNumStringBytes_ = defaultMinNumStringBytesPerBatch;
 };
 
 // A batch of the binary export (see above and `exportAsQLeverBinary`). The IDs
@@ -105,26 +103,15 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 // that they can be tested individually.
 class BinaryExportHelpers {
  public:
-  // Serialize the `strings` (via QLever's serialization framework) into a
-  // single string of bytes.
-  static std::string writeVectorOfStrings(
-      const std::vector<std::string>& strings) {
-    // The serialization of a vector or a string consists of its size followed
-    // by its elements.
-    size_t totalSize = sizeof(size_t);
-    for (const auto& string : strings) {
-      totalSize += sizeof(size_t) + string.size();
-    }
-    std::string result;
-    result.reserve(totalSize);
-    auto write = [&result](const char* src, size_t numBytes) {
-      result.append(src, numBytes);
-    };
-    ad_utility::serialization::WriteViaCallableSerializer writer{write};
-    writer << strings;
-    AD_EXPENSIVE_CHECK(result.size() == totalSize);
-    return result;
-  }
+  // Return the number of bytes of the serialization of the `strings`, see
+  // `appendVectorOfStrings`.
+  static size_t serializedSize(const std::vector<std::string>& strings);
+
+  // Append the serialization of the `strings` (via QLever's serialization
+  // framework) to the `target`. To avoid reallocations, the caller can reserve
+  // the `serializedSize` beforehand.
+  static void appendVectorOfStrings(std::string& target,
+                                    const std::vector<std::string>& strings);
 };
 
 }  // namespace qlever::binary_export
