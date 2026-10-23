@@ -208,8 +208,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   // size of the result, so we can reserve exactly the right amount of space.
   //
   // TODO: We could tell `getSortedBlocks` to give us a single block and thus
-  // avoid the loop. However, we would then have to handle cancellation inside
-  // `getSortedBlocks`.
+  // avoid the loop (the merge checks the cancellation handle itself).
   if (!requestLaziness) {
     IdTable result{numColumns, allocator()};
     result.reserve(sorter->size());
