@@ -11,7 +11,6 @@
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
-#include "backports/StartsWithAndEndsWith.h"
 #include "index/vocabulary/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;
@@ -71,54 +70,85 @@ TEST(LocaleManagerTest, Normalization) {
 }
 
 // _____________________________________________________________________________
-TEST(LocaleManager, PrefixSortKey) {
-  SimpleStringComparator comp("en", "US", true);
-  LocaleManager locIgnorePunct = comp.getLocaleManager();
-  LocaleManager locRespectPunct("en", "US", false);
+TEST(LocaleManagerTest, StartsWithOnPrimaryLevel) {
+  LocaleManager loc("en", "US", false);
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", ""));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("", ""));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hell"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "HELL"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hello"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("héllo", "hell"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hé"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("hello", "help"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("he", "hello"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("", "a"));
 
-  // Assert that all possible prefix sort keys of `s` are indeed prefixes
-  // of the `SortKey` of `s`.
-  auto testSortKeysForLocale = [](std::string_view s,
-                                  const LocaleManager& loc) {
-    auto complete = loc.getSortKey(s, LocaleManager::Level::PRIMARY).get();
-    for (size_t i = 0; i < s.size(); ++i) {
-      auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
-      (void)numCodepoints;
-      ASSERT_TRUE(ql::starts_with(complete, partial.get()));
-    }
-  };
+  // Characters that expand to several collation elements.
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("groß", "gros"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("große", "gross"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("gross", "groß"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("vivæ", "viva"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("vivæ", "vivb"));
 
-  auto testSortKeys = [&testSortKeysForLocale, &locIgnorePunct,
-                       &locRespectPunct](std::string_view s) {
-    testSortKeysForLocale(s, locIgnorePunct);
-    testSortKeysForLocale(s, locRespectPunct);
-  };
+  // Characters without a primary weight (here a combining acute accent).
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("cafe\xcc\x81s", "café"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("cafes", "cafe\xcc\x81"));
 
-  testSortKeys("original");
-  testSortKeys("Häll!!ö.ö");
+  // Punctuation is relevant if it is not ignored.
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel(".hello", "hello"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("a.b", "ab"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("a.b", "a."));
 
-  testSortKeys("vivæ");
-  testSortKeys("vivae");
-  testSortKeys("vivaret");
+  // Characters with a primary weight longer than 16 bits. The upper 16 bits of
+  // the weights of these two characters are equal.
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("中文", "中"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("中", "中文"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("丮", "中"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("中", "丮"));
+}
 
-  testSortKeys("viɡorous");
-  testSortKeys("vigorous");
+// _____________________________________________________________________________
+TEST(LocaleManagerTest, StartsWithOnPrimaryLevelIgnorePunctuation) {
+  LocaleManager loc("en", "US", true);
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel(".hello", "hello"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", ".h.e"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("a.b", "ab"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("ab", "a."));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("abc", "..."));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("", "\"<@ "));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello world", "hellowo"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("a.c", "ab"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("...", "a"));
+}
 
-  // Show the current limitations:
-  // The words vivæ and vivae compare equal on the primary level, but they
-  // get different prefixSortKeys for prefix length 4, because "ae" are two
-  // codepoints, whereas "æ" is one.
-  auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second;
-  auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second;
+// _____________________________________________________________________________
+TEST(LocaleManagerTest, HaveEqualPrimaryPrefix) {
+  LocaleManager loc("en", "US", false);
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("abcdx", "abcdy", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("abcdx", "abcdy", 5));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("abcd", "ABCD", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("ab", "ab", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("ab", "AB", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("ab", "abcd", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("abcd", "ab", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("a", "b", 0));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("", "", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("", "a", 4));
 
-  ASSERT_GT(a.size(), b.size());
-  ASSERT_TRUE(a.starts_with(b));
-  // Also test the defaulted consistent comparison.
-  ASSERT_GT(a, b);
-  ASSERT_EQ(a, a);
-  ASSERT_NE(a, b);
-  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
-  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
+  // "æ" has the same primary weights as "ae".
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("vivæ", "vivae", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("vivæt", "vivaeb", 5));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("vivæt", "vivaeb", 6));
+
+  // A primary weight longer than 16 bits is a single element.
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("中a", "中b", 1));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("中a", "中b", 2));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("中a", "丮a", 1));
+
+  LocaleManager ignorePunct("en", "US", true);
+  EXPECT_TRUE(ignorePunct.haveEqualPrimaryPrefix("a.bcd", "abce", 3));
+  EXPECT_FALSE(ignorePunct.haveEqualPrimaryPrefix("a.bcd", "abce", 4));
+  EXPECT_TRUE(ignorePunct.haveEqualPrimaryPrefix("...", "", 4));
 }
 
 #ifndef QLEVER_NO_UNICODE
@@ -169,23 +199,17 @@ TEST(LocaleManagerTest, RaiseThrowsOnIcuError) {
 // ICU, so that the ICU-free code path is covered.
 
 // _____________________________________________________________________________
-TEST(LocaleManager, NoICUPrefixSortKey) {
-  using L = LocaleManagerNoICU::Level;
+TEST(LocaleManager, NoICUPrimaryPrefix) {
   LocaleManagerNoICU loc;
-  // The bytewise prefix sort key is the first `min(prefixLength, size)` bytes.
-  auto expectPrefix = [&loc](std::string_view s, size_t prefixLength,
-                             size_t expectedNum,
-                             std::string_view expectedBytes) {
-    auto [num, key] = loc.getPrefixSortKey(s, prefixLength);
-    EXPECT_EQ(num, expectedNum);
-    EXPECT_EQ(key.get(), loc.getSortKey(expectedBytes, L::PRIMARY).get());
-  };
-  // Prefix shorter than the string.
-  expectPrefix("abcdef", 3, 3, "abc");
-  // Prefix length exceeding the string: the whole string is returned.
-  expectPrefix("abc", 10, 3, "abc");
-  // Empty string.
-  expectPrefix("", 5, 0, "");
+  // Every byte is its own collation element.
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("abc", "ab"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("abc", ""));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("abc", "AB"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("ab", "abc"));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("abcd", "abce", 3));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("abcd", "abce", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("ab", "ab", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("ab", "abc", 4));
 }
 
 // _____________________________________________________________________________
@@ -214,11 +238,4 @@ TEST(LocaleManager, NoICU) {
   std::string decomposed = "e\xcc\x81";  // é as e + combining accent
   EXPECT_EQ(loc.normalizeUtf8(composed), composed);
   EXPECT_EQ(loc.normalizeUtf8(decomposed), decomposed);
-
-  // The sort key is just the bytes of the input.
-  auto sortKey = loc.getSortKey("abc", L::PRIMARY);
-  EXPECT_EQ(sortKey.get().size(), 3u);
-  EXPECT_EQ(loc.compare(loc.getSortKey("abc", L::PRIMARY),
-                        loc.getSortKey("abd", L::PRIMARY)),  // codespell-ignore
-            -1);
 }
