@@ -458,6 +458,10 @@ class ValueId {
     return {std::numeric_limits<T>::max()};
   }
 
+  // Return the smallest `Id` that is greater than this one. The overflow of
+  // the payload carries into the datatype, as the bits form one integer.
+  [[nodiscard]] constexpr ValueId incremented() const { return _bits + 1; }
+
   // Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
   // and `ad_utility::HashMap`
   template <typename H>
