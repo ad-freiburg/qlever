@@ -145,8 +145,11 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   const size_t maxSegmentsInFlight = maxNumSegmentsInFlight();
   AD_LOG_INFO << "Merging " << input.numRuns() << " partial vocabularies ("
               << inputStatistics.numWords_ << " words in "
-              << inputStatistics.numBlocks_ << " blocks) in "
-              << options.targetNumChunks() << " chunks, using "
+              << inputStatistics.numBlocks_ << " blocks, block index "
+              << ad_utility::MemorySize::bytes(
+                     inputStatistics.numBytesOfBlockIndex_)
+                     .asString()
+              << ") in " << options.targetNumChunks() << " chunks, using "
               << options.parallelism() << " threads, up to "
               << options.maxNumChunksInFlight << " chunks and up to "
               << maxSegmentsInFlight << " segments in flight ..." << std::endl;
