@@ -265,7 +265,9 @@ TEST(BinaryExport, format) {
   }
   bytes = exportBytes(makeQet(qec, std::move(large), {Variable{"?a"}}), {"?a"});
   auto batches = skipHeader(bytes, {"?a"}, {});
-  size_t firstBatchSize = defaultMinNumIdBytesPerBatch + 2 * sizeof(Id::T);
+  // The IDs, the marker, and the size of the (empty) vector of strings.
+  size_t firstBatchSize =
+      defaultMinNumIdBytesPerBatch + sizeof(Id::T) + sizeof(size_t);
   Id lastId = ids.back();
   ids.pop_back();
   expectBatch(batches.substr(0, firstBatchSize), ids, {});

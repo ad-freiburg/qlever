@@ -24,11 +24,6 @@
 
 namespace qlever::binary_export {
 
-// Convert `originalId`, which might contain references into this process'
-// memory space to an id that completely inlines a value, or one that only has
-// a reference to the passed `stringMapping`.
-Id toExportableId(Id originalId, StringMapping& stringMapping);
-
 // The exporter sends the IDs of the rows in batches. Each batch is followed by
 // the strings that its IDs refer to (see `StringMapping`). A batch ends after
 // the first row with which its IDs take up at least
@@ -68,7 +63,7 @@ class ExportBatch {
       : sizes_{sizes}, stringMapping_{index} {}
 
   // Append the IDs of the row `row` of `idTable` (only the `columns` in this
-  // order) to the batch, see `toExportableId`.
+  // order) to the batch, see `toExportableId` in the `.cpp` file.
   void addRow(const IdTableView<0>& idTable, size_t row,
               ql::span<const ColumnIndex> columns);
 
@@ -88,11 +83,12 @@ class ExportBatch {
 // efficient transfer of results between two QLever instances (see
 // `ad_utility::MediaType::binaryQleverExport`). The format consists of a
 // header (see `Header` in the `.cpp` file), followed by the IDs of the
-// rows (as produced by `toExportableId`), which are interrupted by batches of
-// the strings that the non-trivial IDs refer to (see `StringMapping`). The
-// format always ends with such a batch. Only the selected variables that are
-// bound in the result get a column, the header lists the others as unbound. If
-// there are no columns, the header is followed by the number of rows only.
+// rows (as produced by `toExportableId` in the `.cpp` file), which are
+// interrupted by batches of the strings that the non-trivial IDs refer to (see
+// `StringMapping`). The format always ends with such a batch. Only the selected
+// variables that are bound in the result get a column, the header lists the
+// others as unbound. If there are no columns, the header is followed by the
+// number of rows only.
 ad_utility::streams::stream_generator exportAsQLeverBinary(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -116,6 +112,6 @@ class BinaryExportHelpers {
 
 }  // namespace qlever::binary_export
 
-#endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif
+#endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H

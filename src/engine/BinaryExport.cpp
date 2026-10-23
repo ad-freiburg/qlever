@@ -22,7 +22,6 @@
 #include "util/Generator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
-#include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 
@@ -36,9 +35,11 @@ std::string_view raw(const std::integral auto& value) {
 
 namespace qlever::binary_export {
 
-// _____________________________________________________________________________
-AD_ALWAYS_INLINE Id toExportableId(Id originalId,
-                                   StringMapping& stringMapping) {
+// Convert `originalId`, which might contain references into this process'
+// memory space to an id that completely inlines a value, or one that only has
+// a reference to the passed `stringMapping`.
+AD_ALWAYS_INLINE static Id toExportableId(Id originalId,
+                                          StringMapping& stringMapping) {
   if (originalId.isTrivial() ||
       originalId.getDatatype() == Datatype::BlankNodeIndex ||
       originalId.getDatatype() == Datatype::EncodedVal) {
