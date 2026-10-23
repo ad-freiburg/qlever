@@ -106,7 +106,7 @@ template <typename Allocator, typename CheckCancellation>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
     ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ConstIdColumnRef input,
-    const CheckCancellation& checkCancellation) {
+    CheckCancellation checkCancellation) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);
@@ -124,7 +124,7 @@ static IdTable getNewBlankNodes(
         resultColumn[i] = id;
         ++i;
       },
-      checkCancellation);
+      std::move(checkCancellation));
   result.resize(i);
   return result;
 }

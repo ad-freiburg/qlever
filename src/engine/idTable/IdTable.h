@@ -30,6 +30,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
+#include "util/views/ChunkedIotaView.h"
 
 namespace columnBasedIdTable {
 // The `IdTable` class is QLever's central data structure. It is used to store
@@ -515,23 +516,20 @@ class IdTable {
       requires(isCloneable&& columnsAreAllocatable)
           CPP_and ql::concepts::invocable<ChunkOperation>) OwnedTable
       clone(
-          const ChunkOperation& chunkOperation = {},
+          ChunkOperation chunkOperation = {},
           size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const {
     const size_t numRows = size();
     if constexpr (std::is_same_v<ChunkOperation, ad_utility::Noop>) {
       chunkSize = std::max(numRows, size_t{1});
     }
-    AD_CONTRACT_CHECK(chunkSize > 0);
     Storage storage;
     for (const auto& column : getColumns()) {
-      // NOTE: With the `default_init_allocator`, this leaves the memory
-      // uninitialized, so only the copy below writes to it.
-      auto& target = storage.emplace_back(numRows, getAllocator());
-      for (size_t begin = 0; begin < numRows; begin += chunkSize) {
-        size_t end = std::min(numRows, begin + chunkSize);
-        // NOTE: `std::copy` and not `ql::ranges::copy`, see `insertAtEnd`.
-        std::copy(column.begin() + begin, column.begin() + end,
-                  target.begin() + begin);
+      auto& target = storage.emplace_back(getAllocator());
+      target.reserve(numRows);
+      for (auto [begin, end] :
+           ad_utility::chunkedIotaView(size_t{0}, numRows, chunkSize)) {
+        target.insert(target.end(), column.begin() + begin,
+                      column.begin() + end);
         std::invoke(chunkOperation);
       }
     }
@@ -546,17 +544,17 @@ class IdTable {
   // ownership of an `IdTable` that owns its data as efficiently as possible".
   CPP_template(typename ChunkOperation = ad_utility::Noop)(requires isCloneable)
       OwnedTable moveOrClone(
-          const ChunkOperation& chunkOperation = {},
+          ChunkOperation chunkOperation = {},
           size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const& {
-    return clone(chunkOperation, chunkSize);
+    return clone(std::move(chunkOperation), chunkSize);
   }
 
   CPP_template(typename ChunkOperation = ad_utility::Noop)(requires isCloneable)
       OwnedTable moveOrClone(
-          const ChunkOperation& chunkOperation = {},
+          ChunkOperation chunkOperation = {},
           size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) && {
     if constexpr (isView) {
-      return clone(chunkOperation, chunkSize);
+      return clone(std::move(chunkOperation), chunkSize);
     } else {
       return std::move(*this);
     }

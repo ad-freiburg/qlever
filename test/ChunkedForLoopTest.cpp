@@ -169,6 +169,11 @@ TEST(ChunkedForLoop, chunkedForEach) {
   std::list<int> list{input.begin(), input.end()};
   EXPECT_THAT(visit(list, 2), ElementsAre(1, 2, -1, 3, 4, -1, 5, -1));
   EXPECT_THAT(visit(std::list<int>{}, 2), ElementsAre());
+  // A move-only view.
+  auto moveOnlyView = ql::views::transform(std::vector<int>{1, 2, 3},
+                                           [](int i) { return 2 * i; });
+  static_assert(!std::is_copy_constructible_v<decltype(moveOnlyView)>);
+  EXPECT_THAT(visit(moveOnlyView, 2), ElementsAre(2, 4, -1, 6, -1));
   // A zipped range.
   std::vector<int> visited;
   ad_utility::chunkedForEach(

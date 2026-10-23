@@ -272,8 +272,8 @@ class Result : public ad_utility::NoCopy {
   // `chunkOperation` (e.g. a cancellation check) regularly, see
   // `IdTable::clone`.
   template <typename ChunkOperation = ad_utility::Noop>
-  IdTable cloneIdTable(const ChunkOperation& chunkOperation = {}) const {
-    return idTableView().clone(chunkOperation);
+  IdTable cloneIdTable(ChunkOperation chunkOperation = {}) const {
+    return idTableView().clone(std::move(chunkOperation));
   }
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
