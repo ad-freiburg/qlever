@@ -122,10 +122,9 @@ CPP_template_def(typename W,
   // Iterate (avoid duplicates).
   for (const auto& top : words) {
     if (!hasPendingWord_ || top.iriOrLiteral() != pendingWord_) {
-      AD_EXPENSIVE_CHECK(
-          !hasPendingWord_ || comparator(pendingWord_, top.iriOrLiteral()),
-          "Total vocabulary order violated for ", pendingWord_, " and ",
-          top.iriOrLiteral());
+      if (hasPendingWord_) {
+        checkVocabularyOrder(comparator, pendingWord_, top.iriOrLiteral());
+      }
       // A word that differs from the `pendingWord_` was merged, so no further
       // occurrence of the latter can arrive and it can be committed.
       commitPendingWord();
