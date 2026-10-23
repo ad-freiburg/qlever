@@ -1,12 +1,20 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/SpatialJoinParser.h"
 
 #include <range/v3/numeric/accumulate.hpp>
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/ParsedGeometry.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -14,17 +22,45 @@ namespace ad_utility::detail::parallel_wkt_parser {
 WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
                      bool usePrefiltering,
                      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-                     const Index& index)
+                     bool requireContainment, const Index& index)
     : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
       _numSkipped(numThreads),
+      _numSkippedByCell(numThreads),
       _numParsed(numThreads),
+      _numFromIndex(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
+      _requireContainment(requireContainment),
       _index(index) {
+  // If the vocabulary carries a geo cell grid, geometries can additionally be
+  // prefiltered by the cell bits of their `ValueId`s alone (without reading
+  // their bounding box from disk).
+  if (_usePrefiltering && _prefilterLatLngBox.has_value()) {
+    const auto& grid = index.getVocab().getGeoCellGrid();
+    if (grid.has_value()) {
+      const auto& box = _prefilterLatLngBox.value();
+      _geoCellPrefilter.emplace(
+          grid,
+          GeoRectangle{box.getLowerLeft().getX(), box.getLowerLeft().getY(),
+                       box.getUpperRight().getX(), box.getUpperRight().getY()});
+    }
+  }
   for (size_t i = 0; i < _thrds.size(); i++) {
     _thrds[i] = std::thread(&WKTParser::processQueue, this, i);
   }
   _curBatch.reserve(WKT_PARSER_BATCH_SIZE);
+}
+
+// _____________________________________________________________________________
+WKTParser::~WKTParser() {
+  _cancelled = true;
+  // An empty batch is the end event of the job queue (see `done()`).
+  _jobs.add({});
+  for (auto& thread : _thrds) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -33,15 +69,27 @@ size_t WKTParser::getPrefilterCounter() {
 }
 
 // _____________________________________________________________________________
+size_t WKTParser::getCellPrefilterCounter() {
+  return ::ranges::accumulate(_numSkippedByCell, 0);
+}
+
+// _____________________________________________________________________________
 size_t WKTParser::getParseCounter() {
   return ::ranges::accumulate(_numParsed, 0);
+}
+
+// _____________________________________________________________________________
+size_t WKTParser::getFromIndexCounter() {
+  return ::ranges::accumulate(_numFromIndex, 0);
 }
 
 // _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
   std::vector<SpatialJoinParseJob> batch;
   size_t prefilterCounter = 0;
+  size_t cellPrefilterCounter = 0;
   size_t parseCounter = 0;
+  size_t fromIndexCounter = 0;
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
     for (auto& job : batch) {
@@ -49,22 +97,44 @@ void WKTParser::processQueue(size_t t) {
 
       auto dt = job.valueId.getDatatype();
       if (dt == Datatype::VocabIndex) {
+        // Cheapest test first: if the `ValueId` carries geo cell bits and its
+        // cell does not intersect the prefilter box, skip the geometry
+        // without reading anything from disk.
+        if (_geoCellPrefilter.has_value() &&
+            _geoCellPrefilter->canBeSkipped(
+                job.valueId.getVocabIndex().get())) {
+          prefilterCounter++;
+          cellPrefilterCounter++;
+          continue;
+        }
+
         // If we have a prefilter box, check if we also have a precomputed
         // bounding box for the geometry this `VocabIndex` is referring to.
         if (_usePrefiltering &&
             LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
                 _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
-                job.boundingBox)) {
+                job.boundingBox, _requireContainment)) {
           prefilterCounter++;
           continue;
         }
 
-        // If we have not filtered out this geometry, read and parse the full
-        // string. Invalid WKT (according to the strict parsing mode) is
-        // skipped, so it never matches (see GeoSPARQL 1.1, Section 10.9.1).
-        job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
-                         job.side, true);
+        // If the geometry was parsed at index build time, add it to the
+        // sweeper in its stored form (see `ParsedGeometry`). Otherwise read
+        // and parse the full string. Invalid WKT (according to the strict
+        // parsing mode) is skipped, so it never matches (see GeoSPARQL 1.1,
+        // Section 10.9.1).
+        auto parsed =
+            _index.getVocab().getParsedGeometry(job.valueId.getVocabIndex());
+        if (parsed.has_value()) {
+          _bboxes[t] = ::util::geo::extendBox(
+              parsed.value().addToBatch(*_sweeper, job.line, job.side, w),
+              _bboxes[t]);
+          fromIndexCounter++;
+        } else {
+          job.wkt = _index.indexToString(job.valueId.getVocabIndex());
+          parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
+                           job.side, true);
+        }
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
@@ -105,7 +175,9 @@ void WKTParser::processQueue(size_t t) {
   }
 
   _numSkipped[t] = prefilterCounter;
+  _numSkippedByCell[t] = cellPrefilterCounter;
   _numParsed[t] = parseCounter;
+  _numFromIndex[t] = fromIndexCounter;
 }
 
 // _____________________________________________________________________________

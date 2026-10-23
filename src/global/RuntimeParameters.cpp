@@ -24,6 +24,7 @@ RuntimeParameters::RuntimeParameters() {
 
   add(stripColumns_);
   add(sortEstimateCancellationFactor_);
+  add(memoryForQueries_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);
@@ -52,6 +53,8 @@ RuntimeParameters::RuntimeParameters() {
   add(divisionByZeroIsUndef_);
   add(throwOnInvalidWkt_);
   add(enablePrefilterOnIndexScans_);
+  add(geoPrefilterPlanningMaxRows_);
+  add(geoPrefilterPlanningMaxCost_);
   add(spatialJoinMaxNumThreads_);
   add(patternTrickNumTasksInFlight_);
   add(sortNumTasksInFlight_);

@@ -1744,6 +1744,68 @@ TEST(SpatialJoin, NumberOfThreads) {
   testNumberOfThreads(hardwareThreads + 5, hardwareThreads);
 }
 
+// Test that a spatial join yields the same result with the geometries parsed
+// at index build time (see `ParsedGeometry`) as with parsing them at query
+// time, and that it then takes them from the index instead of parsing them.
+TEST(SpatialJoin, LibspatialJoinWithParsedGeometries) {
+  // Two areas and a point. With the minimum length 1, all WKT literals of the
+  // geo vocabulary (the two areas, points are not stored there) get a parsed
+  // geometry.
+  std::string kg;
+  addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+  addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+  addPoint(kg, "3", "\"Minster Freiburg\"", pointMinster);
+  auto makeQec = [&kg](size_t parsedGeometriesMinLength) {
+    ad_utility::testing::TestIndexConfig config{kg};
+    using enum ad_utility::VocabularyType::Enum;
+    config.vocabularyType =
+        ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
+    config.parsedGeometriesMinLength = parsedGeometriesMinLength;
+    config.rowsPerBlock = 2'000'000;
+    config.parserBufferSize = 10_kB;
+    return ad_utility::testing::getQec(std::move(config));
+  };
+  auto qecParsedAtQueryTime = makeQec(0);
+  auto qecParsedAtIndexBuild = makeQec(1);
+
+  // The sorted rows of the spatial join of all geometries with all geometries,
+  // and the number of geometries that the join took from the index.
+  auto run = [](QueryExecutionContext* qec, LibSpatialJoinConfig task) {
+    auto leftChild =
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geom1"});
+    auto rightChild =
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geom2"});
+    SpatialJoinConfiguration config{task, Variable{"?geom1"},
+                                    Variable{"?geom2"}};
+    config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+    auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, config, leftChild, rightChild);
+    auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+        spatialJoinOperation->getRootOperation());
+    auto res = spatialJoin->computeResult(false);
+    auto rows = printTable(qec, &res);
+    ql::ranges::sort(rows);
+    return std::pair{rows, spatialJoin->runtimeInfo()
+                               .details_.at("num-geoms-from-index")
+                               .get<size_t>()};
+  };
+
+  // For an `INTERSECTS` join and a `WITHIN_DIST` join (which pads the
+  // bounding boxes), the results agree, and only the second index provides
+  // parsed geometries: the two areas on each of the two sides.
+  for (auto task : {LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
+                    LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 5000,
+                                         std::nullopt}}) {
+    auto [rows, numFromIndex] = run(qecParsedAtQueryTime, task);
+    auto [rowsFromIndex, numFromIndexFromIndex] =
+        run(qecParsedAtIndexBuild, task);
+    EXPECT_GE(rows.size(), 3);
+    EXPECT_EQ(rowsFromIndex, rows);
+    EXPECT_EQ(numFromIndex, 0);
+    EXPECT_EQ(numFromIndexFromIndex, 4);
+  }
+}
+
 // _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
   std::string kg;

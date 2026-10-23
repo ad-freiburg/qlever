@@ -93,7 +93,8 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&,
+                                        bool childrenAreExclusivelyOwned) {
   // Note that we use the merged `getLimitOffset()` and not the clause that was
   // passed in, which only holds the increment that was just added. The bound
   // below depends on the total limit and offset, so for nested subqueries the
@@ -113,8 +114,8 @@ void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
     // the left side. This can significantly speed up the query if the left side
     // is large and the limit is small. The right side is optional, so reducing
     // it can drop matches; we leave it untouched.
-    _left = _left->clone();
-    _left->applyLimitOffset(LimitOffsetClause{safeLimit});
+    applyLimitOffsetToChild(_left, LimitOffsetClause{safeLimit},
+                            childrenAreExclusivelyOwned);
 
     // The pushdown may have un-sorted `_left`, which our join algorithms
     // require to be sorted on the join columns, so restore that order (see the

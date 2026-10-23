@@ -124,6 +124,21 @@ TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
   }
 }
 
+// Test that the budgets of the planning-time evaluation of geo prefilters
+// are registered, so that they can be set at runtime.
+TEST(RuntimeParameters, geoPrefilterPlanningBudgets) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.geoPrefilterPlanningMaxRows_.get(), 1'000u);
+  EXPECT_EQ(params.geoPrefilterPlanningMaxCost_.get(), 10'000'000u);
+  params.setFromAssignment("geo-prefilter-planning-max-rows=7");
+  params.setFromAssignment("geo-prefilter-planning-max-cost=42");
+  EXPECT_EQ(params.geoPrefilterPlanningMaxRows_.get(), 7u);
+  EXPECT_EQ(params.geoPrefilterPlanningMaxCost_.get(), 42u);
+  auto map = params.toMap();
+  EXPECT_EQ(map.at("geo-prefilter-planning-max-rows"), "7");
+  EXPECT_EQ(map.at("geo-prefilter-planning-max-cost"), "42");
+}
+
 // Test that every parameter declared in `RuntimeParameters` is registered in
 // the constructor, and can thus be set via `setFromString`. If this test fails
 // after you added a parameter, add it to the list below AND register it in the
@@ -199,6 +214,9 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.disableCaching_);
   check(params.logLevel_);
   check(params.constructDeduplication_);
+  check(params.memoryForQueries_);
+  check(params.geoPrefilterPlanningMaxRows_);
+  check(params.geoPrefilterPlanningMaxCost_);
   EXPECT_EQ(totalSize,
             static_cast<size_t>(reinterpret_cast<char*>(&params.runtimeMap_) -
                                 reinterpret_cast<char*>(&params)));

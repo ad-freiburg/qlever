@@ -18,8 +18,12 @@ Result BaselineAlgorithm::run() {
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
-      params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              numRowsBeforeBlockPrefilterLeft, numRowsBeforeBlockPrefilterRight,
+              timeBlockPrefilter] = params_;
+  (void)numRowsBeforeBlockPrefilterLeft;
+  (void)numRowsBeforeBlockPrefilterRight;
+  (void)timeBlockPrefilter;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
