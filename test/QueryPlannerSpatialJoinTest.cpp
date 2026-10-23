@@ -1518,6 +1518,8 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
   notReplaced("STR(?y)");
 
   notReplaced("geof:distance(?y, ?b) + 0");
+  notReplaced("geof:distance(\"POINT(1 2)\", ?b)");
+  notReplaced("geof:distance(?b, ?a)");
 
   // The `BIND` is not replaced if the `SpatialJoin` does not compute the
   // distances.
@@ -1529,6 +1531,34 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
               SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::INTERSECTS,
               std::nullopt, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
           "geof:distance(?y, ?b)", V{"?d"}));
+
+  // Only the first `BIND` is replaced, because the `SpatialJoin` then already
+  // has a distance variable.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE { ?a <p> ?b . ?x <p> ?y . "
+      "FILTER(geof:distance(?y, ?b) <= 0.5) "
+      "BIND(geof:distance(?y, ?b) AS ?d) "
+      "BIND(geof:distance(?y, ?b) AS ?e) }",
+      h::Bind(sj(V{"?d"}, UnitOfMeasurement::KILOMETERS),
+              "geof:distance(?y, ?b)", V{"?e"}));
+
+  // The `BIND` is not replaced for algorithms other than `libspatialjoin`.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE { ?x <p> ?y . "
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 ."
+      "{ ?a <p> ?b } } BIND(geof:distance(?y, ?b) AS ?d) }",
+      h::Bind(h::spatialJoin(
+                  100, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables{},
+                  SpatialJoinAlgorithm::S2_GEOMETRY, std::nullopt, std::nullopt,
+                  scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+              "geof:distance(?y, ?b)", V{"?d"}));
 }
 
 // _____________________________________________________________________________
