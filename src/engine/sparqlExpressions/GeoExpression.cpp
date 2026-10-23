@@ -334,6 +334,42 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
+namespace {
+// Return true iff `expr` or any of its descendants is a `geof:distance` or
+// `geof:metricDistance` call for which `pred` holds.
+template <typename P>
+bool anyGeoDistanceExpression(const SparqlExpression& expr, const P& pred) {
+  using namespace detail;
+  if ((dynamic_cast<const DistExpression*>(&expr) ||
+       dynamic_cast<const MetricDistExpression*>(&expr) ||
+       dynamic_cast<const DistWithUnitExpression*>(&expr)) &&
+      pred(expr)) {
+    return true;
+  }
+  return ql::ranges::any_of(expr.children(), [&pred](const auto& child) {
+    return anyGeoDistanceExpression(*child, pred);
+  });
+}
+}  // namespace
+
+// _____________________________________________________________________________
+bool containsGeoDistanceExpression(const SparqlExpression& expr) {
+  return anyGeoDistanceExpression(expr, [](const auto&) { return true; });
+}
+
+// _____________________________________________________________________________
+bool containsGeoDistanceExpressionWithOneFixedGeometry(
+    const SparqlExpression& expr) {
+  auto isFixed = [](const SparqlExpression& arg) {
+    auto operand = extractGeometryOperand(arg);
+    return operand.has_value() && !operand.value().isVariable();
+  };
+  return anyGeoDistanceExpression(expr, [&isFixed](const auto& dist) {
+    auto children = dist.children();
+    return isFixed(*children[0]) != isFixed(*children[1]);
+  });
+}
+
 }  // namespace sparqlExpression
 
 // Explicit instantiations for the different geometric relations to avoid linker
