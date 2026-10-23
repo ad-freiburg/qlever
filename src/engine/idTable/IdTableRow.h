@@ -16,6 +16,7 @@
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
@@ -128,15 +129,7 @@ class Row {
 // First the variation of the `RowReference` that can be created by `auto`
 // but has no mutable access for lvalues.
 class RowReferenceImpl {
- private:
-  // The actual implementation is in a private subclass and only the
-  // `RowReference` and the `IdTable` have direct access to it.
-  template <typename Table, ad_utility::IsConst isConst>
-  friend class RowReference;
-
-  template <typename T, int NumCols, typename Allocator, IsView isView>
-  friend class IdTable;
-
+ public:
   // The actual implementation of a reference to a row that allows mutable
   // access only for rvalues. The rather long name is chosen deliberately so
   // that the most likely problem becomes visible from the compiler's error
@@ -182,8 +175,8 @@ class RowReferenceImpl {
     TablePtr table_ = nullptr;
     size_t row_ = 0;
 
-    // The constructor is public, but the whole class is private. the
-    // constructor must be public, because `IdTable` must have access to it.
+    // The constructor is public, because the `RowReference` inherits it, which
+    // is also created for other tables than the `IdTable` (e.g. in tests).
    public:
     explicit RowReferenceWithRestrictedAccess(TablePtr table, size_t row)
         : table_{table}, row_{row} {}
@@ -260,7 +253,7 @@ class RowReferenceImpl {
     CPP_template(typename AType, typename BType)(
         requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+        ql::ranges::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
     }
 
@@ -477,5 +470,16 @@ class RowReference
 };
 
 }  // namespace columnBasedIdTable
+
+// The above `RowReference` and its base `RowReferenceWithRestrictedAccess` are
+// proxies (value types that behave like references), so we specialize
+// `qlever::isProxy` for them.
+template <typename Table, ad_utility::IsConst isConstTag>
+inline constexpr bool
+    qlever::isProxy<columnBasedIdTable::RowReference<Table, isConstTag>> = true;
+template <typename Table, ad_utility::IsConst isConstTag>
+inline constexpr bool qlever::isProxy<
+    columnBasedIdTable::RowReferenceImpl::RowReferenceWithRestrictedAccess<
+        Table, isConstTag>> = true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

@@ -64,6 +64,8 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
     size_t numGeomsParsed_;
     // Number of geometries dropped by prefilter
     size_t numGeomsDropped_;
+    // Number of parsed geometries skipped because they are invalid WKT
+    size_t numGeomsInvalid_;
     // Actual number of threads used (might be lower than result of
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;
@@ -107,6 +109,15 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   // defaults to the parent directory of the index's on-disk base path, but
   // can be overridden via the `spatial-join-tmp-dir` runtime parameter.
   SweeperTempPath getSweeperTempPath() const;
+
+  // Add a warning to the `SpatialJoin` operation if rows of the left and/or
+  // right input were skipped because their geometry literal is invalid or
+  // unsupported (e.g. an unsupported CRS).
+  //
+  // TODO<ullingerc>: Replace by
+  // `SpatialJoinAlgorithmBase::addSkippedRowsWarning` once #3774 is merged.
+  void addInvalidGeometriesWarning(size_t numInvalidLeft,
+                                   size_t numInvalidRight) const;
 
   // Maximum area of bounding box in square coordinates for prefiltering
   // libspatialjoin input by bounding box. If exceeded, prefiltering is

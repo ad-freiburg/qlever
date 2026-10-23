@@ -85,7 +85,7 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
 
   IdTable idTable{1, getExecutionContext()->getAllocator()};
   idTable.resize(graphIds.size());
-  ql::ranges::transform(graphIds, idTable.getColumn(0).begin(), Id::fromBits);
+  ql::ranges::transform(graphIds, idTable.getColumn(0).begin(), Id::fromBitsL);
   numOfDistinctGraphs_ = graphIds.size();
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
