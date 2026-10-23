@@ -5,7 +5,6 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
-#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -67,12 +66,13 @@ TEST(ParallelExecutor, multipleTaskWithOneException) {
     tasks.push_back(std::packaged_task{[&executed, i]() {
       executed.at(i) = true;
       if (i == 5) {
-        throw std::runtime_error("Error");
+        // Note: The task runs on a thread of the executor, so we throw a
+        // `TestException`, see `test/util/TestException.h` for details.
+        throw TestException("Error");
       }
     }});
   }
-  EXPECT_THROW(ad_utility::runTasksInParallel(std::move(tasks)),
-               std::runtime_error);
+  EXPECT_THROW(ad_utility::runTasksInParallel(std::move(tasks)), TestException);
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
   }
@@ -102,13 +102,15 @@ TEST(ParallelExecutor, multipleTaskWithOnlyExceptions) {
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     tasks.push_back(std::packaged_task{[&executed, i]() {
       executed.at(i) = true;
-      throw std::runtime_error(absl::StrCat("Error ", i));
+      // Note: The task runs on a thread of the executor, so we throw a
+      // `TestException`, see `test/util/TestException.h` for details.
+      throw TestException(i == 0 ? "Error 0" : "Error i > 0");
     }});
   }
   // Only the first error should be rethrown for simplicity.
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ad_utility::runTasksInParallel(std::move(tasks)),
-      ::testing::StrEq("Error 0"), std::runtime_error);
+      ::testing::StrEq("Error 0"), TestException);
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
   }
