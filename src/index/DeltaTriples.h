@@ -47,7 +47,8 @@ struct LocatedTriplesState {
   std::optional<LocalVocab::LifetimeExtender> localVocabLifetimeExtender_;
   // A unique index for this snapshot. If one version has been modified later
   // than another, then the version that has been modified last has a higher
-  // index. The index is used in the query cache.
+  // index. The index is used in the query cache and continues across index
+  // rebuilds (see `DeltaTriples::addFromSnapshotDiff`).
   size_t index_;
   // Counts of the external triples. Only set when this is a deep copy, not for
   // references.

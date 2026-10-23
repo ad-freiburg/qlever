@@ -704,11 +704,11 @@ void Qlever::swapInRebuiltIndex(
   // repaired manually before the next restart.
   moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
-  // Clear the query cache, including pinned entries: cached results were
-  // computed against the old index and are never hit again, because
-  // `addFromSnapshotDiff` above continued the snapshot index of the old index
-  // in the new one. This also holds for the results that queries still
-  // running on the old index insert after this point.
+  // Clear the query cache, including pinned entries, to free the memory of
+  // the results that were computed against the old index. They can never be
+  // hit again, because `addFromSnapshotDiff` above continued the snapshot
+  // index of the old index in the new one. This also holds for the results
+  // that queries still running on the old index insert after this point.
   cache_.clearAll();
 }
 #endif
