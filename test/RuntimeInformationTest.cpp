@@ -74,6 +74,39 @@ TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
   ASSERT_EQ(parent.getOperationCostEstimate(), 45);
 }
 
+// Test that the total times of optimized out children are recursively set to
+// the sum of the total times of their children.
+TEST(RuntimeInformation, updateTotalTimeOfOptimizedOutChildren) {
+  auto grandchild = std::make_shared<RuntimeInformation>();
+  auto child = std::make_shared<RuntimeInformation>();
+  child->status_ = RuntimeInformation::Status::optimizedOut;
+  child->children_.push_back(grandchild);
+  auto optimizedOutLeaf = std::make_shared<RuntimeInformation>();
+  optimizedOutLeaf->status_ = RuntimeInformation::Status::optimizedOut;
+  // A stale time that is reset by the recursive update.
+  optimizedOutLeaf->totalTime_ = 3ms;
+  child->children_.push_back(optimizedOutLeaf);
+  RuntimeInformation parent;
+  parent.children_.push_back(child);
+
+  // The grandchild is only computed after the child was optimized out (e.g. a
+  // skipped `Sort` below an `OptionalJoin`), so the time of the grandchild
+  // must not be attributed to the parent.
+  grandchild->totalTime_ = 5ms;
+  parent.totalTime_ = 7ms;
+  parent.updateTotalTimeOfOptimizedOutChildren();
+  EXPECT_EQ(child->totalTime_, 5ms);
+  EXPECT_EQ(child->getOperationTime(), 0ms);
+  EXPECT_EQ(optimizedOutLeaf->totalTime_, 0ms);
+  EXPECT_EQ(parent.getOperationTime(), 2ms);
+
+  // Children that were not optimized out are left untouched.
+  grandchild->totalTime_ = 6ms;
+  child->updateTotalTimeOfOptimizedOutChildren();
+  EXPECT_EQ(grandchild->totalTime_, 6ms);
+  EXPECT_EQ(child->totalTime_, 5ms);
+}
+
 // ________________________________________________________________
 TEST(RuntimeInformation, setColumnNames) {
   RuntimeInformation rti;
@@ -149,7 +182,7 @@ TEST(RuntimeInformation, toStringAndJson) {
   child.columnNames_.emplace_back("?y");
   child.totalTime_ = 3ms;
   child.cacheStatus_ = ad_utility::CacheStatus::cachedPinned;
-  child.status_ = RuntimeInformation::Status::optimizedOut;
+  child.status_ = RuntimeInformation::Status::fullyMaterializedCompleted;
   child.addDetail("minor detail", 42);
 
   RuntimeInformation parent;
@@ -180,7 +213,7 @@ TEST(RuntimeInformation, toStringAndJson) {
 │  │  columns: ?x, ?y
 │  │  total_time: 3 ms
 │  │  operation_time: 3 ms
-│  │  status: optimized out
+│  │  status: fully materialized completed
 │  │  cache_status: cached_pinned
 │  │  original_total_time: 0 ms
 │  │  original_operation_time: 0 ms
@@ -227,7 +260,7 @@ TEST(RuntimeInformation, toStringAndJson) {
         "estimated_operation_cost": 0,
         "estimated_column_multiplicities": [],
         "estimated_size": 0,
-        "status": "optimized out",
+        "status": "fully materialized completed",
         "children": []
     }
 ]

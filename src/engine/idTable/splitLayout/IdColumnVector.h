@@ -37,8 +37,11 @@ class IdColumnVector {
       std::allocator_traits<Allocator>::template rebind_alloc<uint8_t>;
 
   using value_type = Id;
+  // The two reference types, see `BasicIdColumnIterator`.
   using reference = IdRef;
   using const_reference = ConstIdRef;
+  using reference_restricted = IdRef::Base;
+  using const_reference_restricted = ConstIdRef::Base;
   using iterator = IdColumnIterator;
   using const_iterator = ConstIdColumnIterator;
 
@@ -62,8 +65,8 @@ class IdColumnVector {
         datatypes_(size, DatatypeAllocator{allocator}) {}
 
   // Construct from a range of elements that are convertible to `Id` (e.g.
-  // `Id` itself, or `IdRef`/`ConstIdRef` as yielded by another column's
-  // iterators). Needed e.g. for `IdTable::clone()` on this storage.
+  // `Id` itself, or the references that the iterators of another column
+  // yield). Needed e.g. for `IdTable::clone()` on this storage.
   //
   // TODO<pas-kes>: This element-wise interface is inefficient as soon as the
   // iterators point into another split column. Check its performance and
@@ -99,9 +102,8 @@ class IdColumnVector {
   }
 
   void push_back(const Id id) {
-    auto [datatype, payload] = getBitsCompat(id);
-    payloads_.push_back(payload);
-    datatypes_.push_back(datatype);
+    payloads_.push_back(id.getPayloadBits());
+    datatypes_.push_back(id.getDatatypeBits());
   }
 
   void emplace_back() {
@@ -109,17 +111,17 @@ class IdColumnVector {
     datatypes_.emplace_back();
   }
 
-  [[nodiscard]] reference operator[](size_t i) {
+  [[nodiscard]] reference_restricted operator[](size_t i) {
     return {&payloads_[i], &datatypes_[i]};
   }
-  [[nodiscard]] const_reference operator[](size_t i) const {
+  [[nodiscard]] const_reference_restricted operator[](size_t i) const {
     return {&payloads_[i], &datatypes_[i]};
   }
-  [[nodiscard]] reference at(size_t i) {
+  [[nodiscard]] reference_restricted at(size_t i) {
     AD_CONTRACT_CHECK(i < size());
     return (*this)[i];
   }
-  [[nodiscard]] const_reference at(size_t i) const {
+  [[nodiscard]] const_reference_restricted at(size_t i) const {
     AD_CONTRACT_CHECK(i < size());
     return (*this)[i];
   }
@@ -164,9 +166,9 @@ class IdColumnVector {
     std::vector<uint64_t> newPayloads;
     std::vector<uint8_t> newDatatypes;
     for (; first != last; ++first) {
-      auto [datatype, payload] = getBitsCompat(static_cast<Id>(*first));
-      newPayloads.push_back(payload);
-      newDatatypes.push_back(datatype);
+      const auto id = static_cast<Id>(*first);
+      newPayloads.push_back(id.getPayloadBits());
+      newDatatypes.push_back(id.getDatatypeBits());
     }
     payloads_.insert(payloads_.begin() + offset, newPayloads.begin(),
                      newPayloads.end());
