@@ -1177,6 +1177,9 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   for (size_t i = 0; i < subresult->idTableView().size(); ++i) {
     auto id = subresult->idTableView()(i, columnIndex);
     if (id != currentId) {
+      // The lookup of the cardinality reads the index, so check for
+      // cancellation once per distinct `id`.
+      checkCancellation();
       pushRow();
       currentId = id;
       currentCount = 0;
