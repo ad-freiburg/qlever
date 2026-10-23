@@ -19,6 +19,9 @@
 
 namespace columnBasedIdTable::splitLayout {
 
+template <bool IsConst>
+class BasicIdRef;
+
 // A proxy reference to a single `Id` stored in the experimental split layout
 // (a payload word + datatype byte in two separate arrays, instead of one
 // contiguous legacy `Id`). This class mirrors the legacy `Id`'s full read API,
@@ -54,6 +57,11 @@ class BasicIdRefImpl {
     DatatypePointer datatype_;
 
    public:
+    // The full proxy in which this restricted reference is stored when it is
+    // kept by value, for example by `ad_utility::tie` (see
+    // `qlever::FullProxy`), so that it can be written to like a reference.
+    using FullProxyType = BasicIdRef<IsConst>;
+
     BasicIdRefWithRestrictedAccess(PayloadPointer payload,
                                    DatatypePointer datatype)
         : payload_{payload}, datatype_{datatype} {}
@@ -349,7 +357,8 @@ using ConstIdRef = BasicIdRef<true>;
 }  // namespace columnBasedIdTable::splitLayout
 
 // The `IdRef` and the `ConstIdRef` are cheap to copy and refer to an element of
-// a column, so they may be stored by value.
+// a column, so they may be stored by value. The restricted references returned
+// by `column[i]` are stored as them (see their `FullProxyType`).
 template <bool IsConst>
 inline constexpr bool
     qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst>> =
