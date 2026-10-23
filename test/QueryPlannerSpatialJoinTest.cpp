@@ -1466,7 +1466,10 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                   "1", Variable{"?unrelated"})));
 }
 
-// _____________________________________________________________________________
+// Test that a `BIND` of the distance between the join variables of a
+// `SpatialJoin` that computes exact distances is replaced by the distance
+// variable of the `SpatialJoin`, with the unit of the `BIND` expression, and
+// that any other `BIND` is kept.
 TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -1516,7 +1519,6 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
   notReplaced("geof:distance(?y, ?b, <http://qudt.org/vocab/unit/M2>)");
   notReplaced("geof:distance(?y, \"POINT(1 2)\")");
   notReplaced("STR(?y)");
-
   notReplaced("geof:distance(?y, ?b) + 0");
   notReplaced("geof:distance(\"POINT(1 2)\", ?b)");
   notReplaced("geof:distance(?b, ?a)");
@@ -1561,7 +1563,8 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
               "geof:distance(?y, ?b)", V{"?d"}));
 }
 
-// _____________________________________________________________________________
+// Test that the distances bound by the `SpatialJoin` are equal to the distances
+// computed by the `BIND` expression, for all supported units.
 TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
   std::string kg;
   auto addPoint = [&kg](std::string_view subject, std::string_view predicate,
