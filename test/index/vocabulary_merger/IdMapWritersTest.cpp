@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "../../util/GTestHelpers.h"
 #include "VocabularyMergerTestHelpers.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/IdMapWriters.h"
@@ -25,9 +26,6 @@ using namespace vocabularyMergerTestHelpers;
 using ::testing::ElementsAre;
 
 namespace {
-// The basename of the partial vocabularies of the tests below.
-const std::string partialVocabBasename = "idMapWritersTest";
-
 // Build the segment of the given `blocks` (see `makeMergedBlocks`) for a
 // vocabulary with `numPartialVocabularies` partial vocabularies.
 std::shared_ptr<const Segment> makeSegmentOfBlocks(
@@ -42,8 +40,9 @@ std::shared_ptr<const Segment> makeSegmentOfBlocks(
 // Test that the entries of the segments are written to the map of their
 // partial vocabulary with the global IDs, in groups of consecutive maps.
 TEST(IdMapWriters, writeSegments) {
+  const std::string basename = gtestCurrentTestName();
   auto [filenames, cleanup] =
-      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 5);
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 5);
   size_t numWords = 0;
   auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
   // Segment 0: `"a"` in the partial vocabularies 0 and 2, `"b"` in 4.
@@ -61,8 +60,7 @@ TEST(IdMapWriters, writeSegments) {
       segment0->idConverterForNextSegment(converter0);
 
   {
-    IdMapWriters writers{
-        partialVocabularyIdMapFilenames(partialVocabBasename, 5), 2};
+    IdMapWriters writers{partialVocabularyIdMapFilenames(basename, 5), 2};
     EXPECT_EQ(writers.numPartialVocabularies(), 5u);
     // Two groups of three and two maps.
     EXPECT_EQ(writers.numGroups(), 2u);
@@ -83,12 +81,11 @@ TEST(IdMapWriters, writeSegments) {
 
 // Test that the number of groups is bounded by the number of maps.
 TEST(IdMapWriters, numGroupsIsBoundedByNumMaps) {
+  const std::string basename = gtestCurrentTestName();
   auto [filenames, cleanup] =
-      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 3);
-  IdMapWriters writers{partialVocabularyIdMapFilenames(partialVocabBasename, 3),
-                       100};
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 3);
+  IdMapWriters writers{partialVocabularyIdMapFilenames(basename, 3), 100};
   EXPECT_EQ(writers.numGroups(), 3u);
-  IdMapWriters oneGroup{
-      partialVocabularyIdMapFilenames(partialVocabBasename, 3), 0};
+  IdMapWriters oneGroup{partialVocabularyIdMapFilenames(basename, 3), 0};
   EXPECT_EQ(oneGroup.numGroups(), 1u);
 }
