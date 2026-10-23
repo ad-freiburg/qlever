@@ -131,30 +131,41 @@ class NaryExpressionStronglyTyped
 
       using ValueGetters = typename NaryOperation::ValueGetters;
 
-      auto convertedOperands =
-          std::tuple{convertToVectorOrConstant(AD_FWD(operands), context)...};
+      auto convertedOperands = std::make_tuple(
+          convertToVectorOrConstant(AD_FWD(operands), context)...);
 
       using ConvertedOperands = decltype(convertedOperands);
 
+      // Check for datatypes rejected by the numeric getters unless
+      // classification proves that every value is accepted (including
+      // booleans). Only functions with an `UNDEF` opt-in use this check; see
+      // `hasNonNumericOperand`.
+      [[maybe_unused]] bool checkForValuesRejectedByGetter = true;
       constexpr bool useNumericFastPath =
           canUseNumericFastPath<ValueGetters, ConvertedOperands>();
 
-      // For numeric N-ary expressions, first try homogeneous execution, then a
-      // speculative majority-type path. Fall back to the generic indexed
+      // For numeric/date N-ary expressions, first try homogeneous execution,
+      // then a speculative majority-type path. Fall back to the generic indexed
       // evaluation if neither optimization applies.
       if constexpr (useNumericFastPath && !resultIsConstant) {
+        constexpr bool includeDates =
+            homogeneousNumeric::supportsDateOperands<ValueGetters>;
         auto classifications = std::apply(
             [context](const auto&... values) {
-              return homogeneousNumeric::classifyNumericOperands(context,
-                                                                 values...);
+              return homogeneousNumeric::classifyNumericOperands<includeDates>(
+                  context, values...);
             },
             convertedOperands);
+        checkForValuesRejectedByGetter =
+            ql::ranges::any_of(classifications, [](const auto& operand) {
+              return operand.containsValueRejectedByGetter_;
+            });
 
         auto homogeneousTypes =
             homogeneousNumeric::getHomogeneousNumericTypes(classifications);
 
         if (homogeneousTypes.has_value()) {
-          return homogeneousNumeric::dispatchNumericTypes(
+          return homogeneousNumeric::dispatchNumericTypes<includeDates>(
               homogeneousTypes.value(),
               [&convertedOperands,
                context]<typename... NumericTypes>(NumericTypes...) {
@@ -168,7 +179,7 @@ class NaryExpressionStronglyTyped
             homogeneousNumeric::getMajorityNumericTypes(classifications);
 
         if (majorityTypes.has_value()) {
-          return homogeneousNumeric::dispatchNumericTypes(
+          return homogeneousNumeric::dispatchNumericTypes<includeDates>(
               majorityTypes.value(),
               [&convertedOperands,
                context]<typename... NumericTypes>(NumericTypes...) {
@@ -189,8 +200,9 @@ class NaryExpressionStronglyTyped
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
-      // Return UNDEF directly for rows with a non-numeric operand of a numeric
-      // function, otherwise pass the converted values to the N-ary function.
+      // Return `UNDEF` directly for getter-rejected datatypes of
+      // numeric/date-aware functions, otherwise pass the converted values to
+      // the N-ary function.
       //
       // NOTE: The `if constexpr` is required although `hasNonNumericOperand`
       // already checks `undefForNonNumeric` at compile time: `computeValue` has
@@ -198,14 +210,18 @@ class NaryExpressionStronglyTyped
       // (e.g. `IdOrLiteralOrIri` for the string functions), the `Id` branch
       // would not compile.
       auto computeValue = [&](size_t i) {
-        if constexpr (undefForNonNumeric<typename NaryOperation::Function>) {
-          const bool nonNumeric = std::apply(
-              [i](const auto&... values) {
-                return hasNonNumericOperand<typename NaryOperation::Function,
-                                            ValueGetters>(
-                    getValueAt(values, i)...);
-              },
-              convertedOperands);
+        if constexpr (undefForNonNumeric<typename NaryOperation::Function> ||
+                      undefForNonNumericOrDate<
+                          typename NaryOperation::Function>) {
+          const bool nonNumeric =
+              checkForValuesRejectedByGetter &&
+              std::apply(
+                  [i](const auto&... values) {
+                    return hasNonNumericOperand<
+                        typename NaryOperation::Function, ValueGetters>(
+                        getValueAt(values, i)...);
+                  },
+                  convertedOperands);
           if (nonNumeric) {
             return Id::makeUndefined();
           }

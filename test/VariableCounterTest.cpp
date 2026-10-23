@@ -220,6 +220,7 @@ TEST(VariableCounterTest, MagicServices) {
           "qlss:right ?z ;"
           "qlss:maxDistance 500 ;"
           "qlss:algorithm qlss:s2 ;"
+          "qlss:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
           "qlss:bindDistance ?dist . } }"),
       counts({{V{"?e"}, 1}, {V{"?z"}, 1}, {V{"?dist"}, 1}}));
   EXPECT_THAT(

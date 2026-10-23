@@ -61,7 +61,7 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   options.targetChunksPerThread = std::max<size_t>(
       1, (numChunks + options.parallelism() - 1) / options.parallelism());
   // The blocks in memory are larger than their serialized form (a
-  // `MergeWord` per word next to the bytes, and the output of a chunk copies
+  // `InputWord` per word next to the bytes, and the output of a chunk copies
   // the words), by up to a factor of two.
   constexpr size_t decodedFactor = 2;
   const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
@@ -88,16 +88,17 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
-  using detail::MergeBlock;
-  using detail::MergeWord;
+  using detail::InputWord;
+  using detail::MergedBlock;
+  using detail::MergedWord;
   using detail::QueueWord;
   // Return true iff `p1` is smaller than `p2` according to the order of the
   // IRI or literal.
-  auto lessThan = [&comparator](const MergeWord& p1, const MergeWord& p2) {
+  auto lessThan = [&comparator](const InputWord& p1, const InputWord& p2) {
     return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
   // The index of the partial vocabulary that a merged word comes from is
-  // stored in 32 bits (see `detail::MergeWord` and
+  // stored in 32 bits (see `detail::InputWord` and
   // `detail::LocalIdxToBatchMapping`). NOTE: This check is done here (and not
   // per merged word, which would be on the hot path of the merging), because
   // `partialFileId_` is always one of the indices below.
@@ -124,7 +125,7 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
               << std::endl;
   auto mergedWords = parallelBlockMerge::parallelBlockMergeToRange<true>(
       ad_utility::globalExecutor(), std::move(input), lessThan,
-      parallelBlockMerge::makeInMemoryStorageFactory<MergeBlock>(
+      parallelBlockMerge::makeInMemoryStorageFactory<MergedBlock>(
           VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK,
           /*releaseChunkOnConsumption=*/true),
       std::move(options));
@@ -140,23 +141,29 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
     pipeline.push(std::move(batch), wordCallback, blankNodeIriRegexes);
   };
 
-  for (MergeBlock& block : mergedWords) {
+  for (MergedBlock& block : mergedWords) {
     // Stop merging as soon as one of the stages of the pipeline has failed,
     // the exception is rethrown by `finish()` below.
     if (pipeline.hasFailed()) {
       break;
     }
-    // The pipeline consumes owning `QueueWord`s, so the merged words are
-    // copied out of the block (and the block's buffers go back to the pool).
+    // The pipeline consumes owning `QueueWord`s, one per occurrence of a word,
+    // so the merged words are copied out of the block (and the block's buffers
+    // go back to the pool). The occurrences that the merge folded into a word
+    // (see `MergedBlock::addWord`) all get the external flag of that word,
+    // which is the OR over them; the `batchBuilder` combines the flags of the
+    // occurrences of a word in the same way.
     // TODO<joka921> This copy is temporary: the next slice of the parallel
     // vocabulary merge replaces the pipeline by one that works on the blocks.
     std::vector<QueueWord> currentWords;
-    currentWords.reserve(block.size());
-    for (const MergeWord& word : block) {
-      currentWords.emplace_back(
-          TripleComponentWithIndex{std::string{word.iriOrLiteral()},
-                                   word.isExternal(), word.id()},
-          word.partialFileId_);
+    currentWords.reserve(block.numOccurrences());
+    for (const MergedWord& word : block) {
+      for (const auto& [partialFileId, localIndex] : block.occurrences(word)) {
+        currentWords.emplace_back(
+            TripleComponentWithIndex{std::string{word.iriOrLiteral()},
+                                     word.isExternal(), localIndex},
+            partialFileId);
+      }
     }
     block.clear();
     batchBuilder.addMergedWords(std::move(currentWords), comparator,
@@ -169,22 +176,23 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
 }
 
 // ____________________________________________________________________________________________________________
-inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
+inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries) {
   HashMap<uint64_t, uint64_t> res;
-  res.reserve(els.size());
+  res.reserve(entries.size());
   std::optional<std::string_view> lastWord;
   // This value will overflow on the first entry.
   size_t nextWordId = -1;
-  for (auto& [word, idAndExternal] : els) {
-    auto id = idAndExternal.id();
-    if (lastWord != word) {
+  for (auto& entry : entries) {
+    auto& indexAndFlag = entry.indexAndFlag_;
+    auto index = indexAndFlag.index();
+    if (lastWord != entry.word_) {
       nextWordId++;
-      lastWord = word;
+      lastWord = entry.word_;
     }
-    auto inserted = res.try_emplace(id, nextWordId).second;
+    auto inserted = res.try_emplace(index, nextWordId).second;
     AD_CORRECTNESS_CHECK(inserted);
-    idAndExternal = PartialVocabIndexWithExternalFlag{
-        nextWordId, idAndExternal.isExternal()};
+    indexAndFlag = PartialVocabIndexWithExternalFlag{nextWordId,
+                                                     indexAndFlag.isExternal()};
   }
   return res;
 }
@@ -251,12 +259,12 @@ inline IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
 }
 
 // _________________________________________________________________________________________________________
-inline void writePartialVocabularyToFile(const ItemVec& els,
+inline void writePartialVocabularyToFile(const ItemVec& entries,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   PartialVocabularyWriter writer{fileName};
-  for (const auto& [word, idAndExternal] : els) {
-    writer(word, idAndExternal);
+  for (const auto& entry : entries) {
+    writer(entry.word_, entry.indexAndFlag_);
   }
   writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
@@ -264,12 +272,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
 
 // __________________________________________________________________________________________________
 inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
-  ItemVec els;
-  els.resize(map.map_.size());
+  ItemVec entries;
+  entries.resize(map.map_.size());
   using T = ItemVec::value_type;
-  ql::ranges::transform(map.map_, els.begin(),
+  ql::ranges::transform(map.map_, entries.begin(),
                         [](auto& el) -> T { return {el.first, el.second}; });
-  return els;
+  return entries;
 }
 
 // _____________________________________________________________________
