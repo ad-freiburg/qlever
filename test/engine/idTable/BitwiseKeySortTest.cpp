@@ -144,6 +144,40 @@ TEST(BitwiseKeySort, veryLargeTables) {
   });
 }
 
+// Test that the sorts work in the given `BitwiseKeySortBuffers`, reuse them
+// for the next sort, and that `release` frees them.
+TEST(BitwiseKeySort, explicitBuffers) {
+  // Large enough for the parallel sample sort, which uses all three buffers.
+  constexpr size_t numRows =
+      ad_utility::bitwiseKeySort::detail::MIN_ROWS_FOR_SAMPLE_SORT + 12345;
+  constexpr std::array<size_t, 4> keyColumns{3, 1, 2, 0};
+  boost::asio::thread_pool pool{8};
+  BitwiseKeySortParallelism parallelism{pool.get_executor(), 8};
+  BitwiseKeySortBuffers buffers;
+  EXPECT_EQ(buffers.numBytes(), 0u);
+
+  // The keys are all the columns: two buffers of 4 IDs per row, one byte per
+  // row for the bucket indices.
+  constexpr size_t expectedBytes = numRows * (2 * 4 * sizeof(uint64_t) + 1);
+  size_t bytesAfterFirstSort = 0;
+  for (unsigned seed : {16u, 17u}) {
+    auto input = randomTable(numRows, 4, seed);
+    auto expected = expectedResult(input, keyColumns);
+    sortByBitwiseKeys(input, keyColumns, parallelism, &buffers);
+    EXPECT_EQ(input, expected);
+    EXPECT_GE(buffers.numBytes(), expectedBytes);
+    if (bytesAfterFirstSort == 0) {
+      bytesAfterFirstSort = buffers.numBytes();
+    } else {
+      // The second sort of the same size did not allocate anything new.
+      EXPECT_EQ(buffers.numBytes(), bytesAfterFirstSort);
+    }
+  }
+  buffers.release();
+  EXPECT_EQ(buffers.numBytes(), 0u);
+  pool.join();
+}
+
 // _____________________________________________________________________________
 TEST(BitwiseKeySort, invalidKeyColumn) {
   IdTable table = randomTable(10, 2, 13);
