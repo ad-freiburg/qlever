@@ -43,14 +43,14 @@ Result BaselineAlgorithm::run() {
         intermediate(compare);
 
     auto entryLeft = getRtreeEntry(idTableLeft, rowLeft, leftJoinCol);
-    numSkippedLeft += !entryLeft.has_value();
+    numSkippedLeft += static_cast<size_t>(!entryLeft.has_value());
 
     // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
       auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
       // Count each right row only once, not once per left row.
       if (rowLeft == 0) {
-        numSkippedRight += !entryRight.has_value();
+        numSkippedRight += static_cast<size_t>(!entryRight.has_value());
       }
 
       if (!entryLeft || !entryRight) {
