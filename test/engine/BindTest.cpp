@@ -321,12 +321,14 @@ TEST(Bind, cloneSucceedsForNondeterministicBind) {
   EXPECT_FALSE(clone->isDeterministic());
 }
 
-// IRIs that are computed by an expression and that match a pattern of the
-// `EncodedIriManager` must get the same `Id` as the same IRIs from the index,
-// so that a join on them finds all matches. In the index, the non-encodable
-// `<http://example.org/5a>` (a `VocabIndex`) is sorted before the encoded
-// `<http://example.org/5>` (an `EncodedVal`), while the computed IRIs used to
-// be sorted by their string value, so in the opposite order.
+// Test that IRIs that are computed by an expression and that match a pattern of
+// the `EncodedIriManager` get the same `Id` as the same IRIs from the index, so
+// that a join on them finds all matches.
+//
+// NOTE: In the index, the non-encodable `<http://example.org/5a>` (a
+// `VocabIndex`) is sorted before the encoded `<http://example.org/5>` (an
+// `EncodedVal`), while the computed IRIs used to be sorted by their string
+// value, so in the opposite order.
 TEST(Bind, joinOfComputedEncodableIris) {
   ad_utility::testing::TestIndexConfig config{
       "<http://example.org/5> <p> \"five\" . "

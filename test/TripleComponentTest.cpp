@@ -375,7 +375,8 @@ TEST(TripleComponent, toString) {
   EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
 }
 
-// _____________________________________________________________________________
+// Test that `toIdOrLocalVocabEntry` returns the encoded `Id` of an encodable
+// IRI and a `LocalVocabEntry` for everything else.
 TEST(TripleComponent, toIdOrLocalVocabEntry) {
   using ad_utility::triple_component::Iri;
   using ad_utility::triple_component::Literal;

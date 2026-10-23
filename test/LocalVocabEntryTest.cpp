@@ -136,7 +136,9 @@ TEST(LocalVocabEntry, compareThreeWayOnlyOneEntryIsContainedInVocabulary) {
   EXPECT_LT(notContained, contained);
 }
 
-// _____________________________________________________________________________
+// Test that `reanchoredTo` returns an equal entry with the position in the
+// vocabulary of the new index, and that it rejects an IRI that the new index
+// encodes directly in an `Id`.
 TEST(LocalVocabEntry, reanchoredTo) {
   using namespace ad_utility::testing;
   Index oldIndex =

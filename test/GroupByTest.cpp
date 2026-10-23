@@ -3731,9 +3731,9 @@ TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
             makeIdTableFromVector({{I(3)}}));
 }
 
-// An IRI that is computed inside of an aggregate and that can be encoded
-// directly in an `Id` (see `EncodedIriManager`) must get that `Id`, both with
-// and without the hash map optimization.
+// Test that an IRI that is computed inside of an aggregate and that can be
+// encoded directly in an `Id` (see `EncodedIriManager`) gets that `Id`, both
+// with and without the hash map optimization.
 TEST(GroupBy, aggregateOfComputedEncodableIri) {
   TestIndexConfig config{"<http://example.org/1> <p> <o> ."};
   config.encodedPrefixesWithoutAngleBrackets =
