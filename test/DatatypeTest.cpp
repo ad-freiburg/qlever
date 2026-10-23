@@ -43,19 +43,10 @@ TEST(DatatypeTest, isDatatypeTrivial) {
 
 // _____________________________________________________________________________
 TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
-  constexpr std::array allDatatypes{Undefined,
-                                    Bool,
-                                    Int,
-                                    Double,
-                                    VocabIndex,
-                                    LocalVocabIndex,
-                                    SecondaryVocabIndex,
-                                    TextRecordIndex,
-                                    Date,
-                                    GeoPoint,
-                                    WordVocabIndex,
-                                    BlankNodeIndex,
-                                    EncodedVal};
+  constexpr auto allDatatypes =
+      std::to_array({Undefined, Bool, Int, Double, VocabIndex, LocalVocabIndex,
+                     SecondaryVocabIndex, TextRecordIndex, Date, GeoPoint,
+                     WordVocabIndex, BlankNodeIndex, EncodedVal});
   static_assert(isListOfAllDatatypesInOrder(allDatatypes));
   EXPECT_TRUE(isListOfAllDatatypesInOrder(allDatatypes));
 

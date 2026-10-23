@@ -11,10 +11,11 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/BinaryExport.h"
 
+#include <array>
 #include <cstring>
-#include <range/v3/numeric/accumulate.hpp>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
 #include "engine/StringMapping.h"
@@ -54,19 +55,13 @@ AD_ALWAYS_INLINE static Id toExportableId(Id originalId,
 // The following assertions only detect a change of the datatype tags.
 static_assert(ad_utility::binaryQleverExportVersion == 1);
 static_assert(Id::numDatatypeBits == 4);
-static constexpr std::array datatypesOfVersion1{Datatype::Undefined,
-                                                Datatype::Bool,
-                                                Datatype::Int,
-                                                Datatype::Double,
-                                                Datatype::VocabIndex,
-                                                Datatype::LocalVocabIndex,
-                                                Datatype::SecondaryVocabIndex,
-                                                Datatype::TextRecordIndex,
-                                                Datatype::Date,
-                                                Datatype::GeoPoint,
-                                                Datatype::WordVocabIndex,
-                                                Datatype::BlankNodeIndex,
-                                                Datatype::EncodedVal};
+static constexpr auto datatypesOfVersion1 = []() {
+  using enum Datatype;
+  return std::to_array({Undefined, Bool, Int, Double, VocabIndex,
+                        LocalVocabIndex, SecondaryVocabIndex, TextRecordIndex,
+                        Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
+                        EncodedVal});
+}();
 static_assert(isListOfAllDatatypesInOrder(datatypesOfVersion1));
 
 static constexpr std::string_view magicBytes = "QLEVER.EXPORT";
