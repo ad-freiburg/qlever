@@ -57,8 +57,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                Allocator<Id> allocator, qlever::Executor executor)
     : allocator_{std::move(allocator)},
       executor_{std::move(executor)},
-      indexAndViews_{std::make_shared<IndexAndViews>(
-          Index{allocator_}, MaterializedViewsManager{})},
+      indexAndViews_{std::allocate_shared<IndexAndViews>(
+          allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -659,8 +659,8 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
   auto mapping =
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
                          ownedBlocks, handle, executor_, logFileName);
-  auto indexAndViews = std::make_shared<IndexAndViews>(
-      Index{allocator()}, MaterializedViewsManager{});
+  auto indexAndViews = std::allocate_shared<IndexAndViews>(
+      allocator(), Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
   newIndex.usePatterns() = index.usePatterns();
   newIndex.loadAllPermutations() = index.loadAllPermutations();
@@ -704,13 +704,11 @@ void Qlever::swapInRebuiltIndex(
   // repaired manually before the next restart.
   moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
-  // Clear the query cache, including pinned entries: cached results were
-  // computed against the old index, so their `VocabIndex` ids are in the old
-  // vocabulary's coordinates and their `LocalVocabEntry`s are anchored to the
-  // old index. The cache key alone does not protect against serving them: it
-  // only contains the query string and the delta triples version counter,
-  // and the counter of the new index starts over and can collide with a
-  // pre-swap value.
+  // Clear the query cache, including pinned entries, to free the memory of
+  // the results that were computed against the old index. They can never be
+  // hit again, because `addFromSnapshotDiff` above continued the snapshot
+  // index of the old index in the new one. This also holds for the results
+  // that queries still running on the old index insert after this point.
   cache_.clearAll();
 }
 #endif

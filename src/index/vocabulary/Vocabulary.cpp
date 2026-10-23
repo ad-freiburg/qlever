@@ -44,7 +44,12 @@ template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
   vocabulary_.open(fileName);
+  computePrefixRanges();
+}
 
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+void Vocabulary<S, C, I>::computePrefixRanges() {
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
   //
@@ -258,10 +263,16 @@ template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
                                                  bool ignorePunctuation) {
-  vocabulary_.getComparator() =
-      ComparatorType(language, country, ignorePunctuation);
-  vocabulary_.getComparator() =
-      ComparatorType(language, country, ignorePunctuation);
+  // A `TripleComponentComparator` keeps the geo cell grid of the comparator
+  // it replaces (see `TripleComponentComparator::setGeoCellGrid`).
+  auto& comparator = vocabulary_.getComparator();
+  if constexpr (std::is_same_v<ComparatorType, TripleComponentComparator>) {
+    auto geoCellGrid = comparator.getGeoCellGrid();
+    comparator = ComparatorType(language, country, ignorePunctuation);
+    comparator.setGeoCellGrid(std::move(geoCellGrid));
+  } else {
+    comparator = ComparatorType(language, country, ignorePunctuation);
+  }
 }
 
 // _____________________________________________________________________________

@@ -870,7 +870,19 @@ TEST(LibQlever, clearDeltaTriples) {
   auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
   EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
 
+  auto runQuery = [&engine]() {
+    return engine.query(
+        engine.planQuery(engine.parseQuery("SELECT ?s WHERE { ?s <b> ?o }")),
+        ad_utility::MediaType::tsv);
+  };
+  // The result of this query is cached.
+  EXPECT_EQ(runQuery(), "?s\n<a>\n");
+  ASSERT_GT(engine.cache().numNonPinnedEntries(), 0U);
+
   EXPECT_THAT(engine.clearDeltaTriples(), Eq(DeltaTriplesCount{0, 0}));
+
+  // The cached result from before the clear must not be reused.
+  EXPECT_EQ(runQuery(), "?s\n");
 }
 
 // _____________________________________________________________________________
