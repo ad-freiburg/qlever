@@ -109,7 +109,7 @@ Bytes diffAndCheck(ql::span<const char> base, ql::span<const char> target,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto diff = computeBlobDiff(base, target, compressionLevel);
-  EXPECT_THAT(applyBlobDiffToDecompressed(base, diff),
+  EXPECT_THAT(applyBlobDiffToDecompressedBase(base, diff),
               isBlob(Bytes(target.begin(), target.end())));
   EXPECT_THAT(
       readBlobDiffHeader(diff),
@@ -184,12 +184,12 @@ TEST(BlobDiff, invalidInputsAreReported) {
 
   // The diff only fits its base (same size, different content).
   EXPECT_THAT(
-      applyBlobDiffToDecompressed(other, diff),
+      applyBlobDiffToDecompressedBase(other, diff),
       isError(ErrorType::wrongBase, "does not belong to the given base"));
   // Garbage instead of a diff, also when applied.
   EXPECT_THAT(readBlobDiffHeader(garbage),
               isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
-  EXPECT_THAT(applyBlobDiffToDecompressed(base, garbage),
+  EXPECT_THAT(applyBlobDiffToDecompressedBase(base, garbage),
               isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
   EXPECT_THAT(readBlobDiffHeader(Bytes(5, 'x')),
               isError(ErrorType::invalidMagicBytes, "too small"));
@@ -204,12 +204,12 @@ TEST(BlobDiff, invalidInputsAreReported) {
   // Truncated and extended diffs.
   auto truncated = diff;
   truncated.pop_back();
-  EXPECT_THAT(applyBlobDiffToDecompressed(base, truncated),
+  EXPECT_THAT(applyBlobDiffToDecompressedBase(base, truncated),
               isError(ErrorType::invalidPayloadSize,
                       "truncated or has trailing bytes"));
   auto extended = diff;
   extended.push_back('x');
-  EXPECT_THAT(applyBlobDiffToDecompressed(base, extended),
+  EXPECT_THAT(applyBlobDiffToDecompressedBase(base, extended),
               isError(ErrorType::invalidPayloadSize,
                       "truncated or has trailing bytes"));
   // A corrupted size of the target is detected before the target is
@@ -230,12 +230,12 @@ TEST(BlobDiff, invalidInputsAreReported) {
   auto corrupted = diff;
   corrupted[corrupted.size() / 2] ^= 0x55;
   corrupted.back() ^= 0x55;
-  EXPECT_THAT(applyBlobDiffToDecompressed(base, corrupted),
+  EXPECT_THAT(applyBlobDiffToDecompressedBase(base, corrupted),
               isError(ErrorType::corruptedPayload, "corrupted"));
   // A corrupted checksum of the target is detected.
   auto wrongTarget = diff;
   wrongTarget[targetChecksumOffset] ^= 0x55;
-  EXPECT_THAT(applyBlobDiffToDecompressed(base, wrongTarget),
+  EXPECT_THAT(applyBlobDiffToDecompressedBase(base, wrongTarget),
               isError(ErrorType::corruptedPayload, "checksum of the result"));
 }
 
@@ -287,7 +287,7 @@ TEST(BlobDiff, realBlobsAfterUpdate) {
   // Applying the diff to the compressed base gives the compressed target (byte
   // for byte, because the recompression is deterministic), and the result is a
   // standard blob that answers queries.
-  auto result = applyBlobDiff(baseCompressed, diff);
+  auto result = applyBlobDiffToCompressedBase(baseCompressed, diff);
   ASSERT_THAT(result, isBlob(targetCompressed));
   const auto& resultCompressed = std::get<Bytes>(result);
   Qlever loaded{EngineConfig{}, /*skipLoading=*/true};
@@ -304,12 +304,12 @@ TEST(BlobDiff, realBlobsAfterUpdate) {
 
   // The diff only fits its base, and garbage is rejected.
   EXPECT_THAT(
-      applyBlobDiff(targetCompressed, diff),
+      applyBlobDiffToCompressedBase(targetCompressed, diff),
       isError(ErrorType::wrongBase, "does not belong to the given base"));
   Bytes garbage(100, 'x');
-  EXPECT_THAT(applyBlobDiff(garbage, diff),
+  EXPECT_THAT(applyBlobDiffToCompressedBase(garbage, diff),
               isError(ErrorType::baseNotDecompressible,
                       "base blob cannot be decompressed"));
-  EXPECT_THAT(applyBlobDiff(baseCompressed, garbage),
+  EXPECT_THAT(applyBlobDiffToCompressedBase(baseCompressed, garbage),
               isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
 }

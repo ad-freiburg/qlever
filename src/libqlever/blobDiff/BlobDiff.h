@@ -45,7 +45,7 @@ namespace qlever::blobDiff {
 //   payload   a ZSTD frame of the decompressed target, compressed with the
 //             decompressed base as reference
 // The checksums identify the base (a diff applies to exactly one base) and
-// verify the result of `applyBlobDiff` (the ZSTD frame itself only stores a
+// verify the result of applying the diff (the ZSTD frame itself only stores a
 // 32-bit checksum, which detects a wrong base only with high probability).
 
 // The fields of the header of a diff file (see the file format above).
@@ -92,7 +92,8 @@ enum class BlobDiffErrorType {
   // This is detected before the target is allocated, so a corrupted size
   // cannot lead to a huge allocation.
   invalidTargetSize,
-  // The compressed base blob cannot be decompressed (see `applyBlobDiff`).
+  // The compressed base blob cannot be decompressed (see
+  // `applyBlobDiffToCompressedBase`).
   baseNotDecompressible,
   // The diff does not belong to the given base (the size or the checksum of
   // the base differs from the one that is stored in the header).
@@ -128,17 +129,17 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile);
 // checksum differ), or if the payload is corrupted (it cannot be decompressed,
 // or the result does not have the checksum that is stored in the diff). Do not
 // throw for any input, except if the target cannot be allocated.
-BlobOrError applyBlobDiffToDecompressed(ql::span<const char> base,
-                                        ql::span<const char> diffFile);
+BlobOrError applyBlobDiffToDecompressedBase(ql::span<const char> base,
+                                            ql::span<const char> diffFile);
 
 // Apply `diffFile` to the compressed blob `compressedBase` and return the
 // compressed target blob (a standard blob that can be loaded by
 // `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`). Report an error
 // if the base cannot be decompressed, or in the cases of
-// `applyBlobDiffToDecompressed`. Do not throw for any input, except if the
+// `applyBlobDiffToDecompressedBase`. Do not throw for any input, except if the
 // decompressed base or the target cannot be allocated.
-BlobOrError applyBlobDiff(ql::span<const char> compressedBase,
-                          ql::span<const char> diffFile);
+BlobOrError applyBlobDiffToCompressedBase(ql::span<const char> compressedBase,
+                                          ql::span<const char> diffFile);
 
 // Return a human-readable description of `diffFile` (the sizes of base, target
 // and payload). Throw if the header cannot be parsed.

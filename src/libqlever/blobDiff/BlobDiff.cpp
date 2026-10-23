@@ -157,8 +157,8 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile) {
 }
 
 // _____________________________________________________________________________
-BlobOrError applyBlobDiffToDecompressed(ql::span<const char> base,
-                                        ql::span<const char> diffFile) {
+BlobOrError applyBlobDiffToDecompressedBase(ql::span<const char> base,
+                                            ql::span<const char> diffFile) {
   auto headerOrError = readBlobDiffHeader(diffFile);
   if (auto* error = std::get_if<BlobDiffError>(&headerOrError)) {
     return std::move(*error);
@@ -194,14 +194,14 @@ BlobOrError applyBlobDiffToDecompressed(ql::span<const char> base,
 }
 
 // _____________________________________________________________________________
-BlobOrError applyBlobDiff(ql::span<const char> compressedBase,
-                          ql::span<const char> diffFile) {
+BlobOrError applyBlobDiffToCompressedBase(ql::span<const char> compressedBase,
+                                          ql::span<const char> diffFile) {
   auto base = Manager::tryToDecompressBlob(compressedBase, {});
   if (auto* error = std::get_if<Manager::BlobError>(&base)) {
     return makeError(ErrorType::baseNotDecompressible,
                      "The base blob cannot be decompressed: ", error->message_);
   }
-  auto target = applyBlobDiffToDecompressed(
+  auto target = applyBlobDiffToDecompressedBase(
       ql::span<const char>{std::get<0>(base)}, diffFile);
   if (auto* bytes = std::get_if<std::vector<char>>(&target)) {
     return Manager::compressBlob(ql::span<const char>{*bytes});
