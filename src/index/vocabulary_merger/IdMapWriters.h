@@ -56,16 +56,18 @@ class IdMapWriters {
   // The first exception that a task threw, if any. The remaining segments are
   // then skipped and the exception is rethrown by `finish()`.
   ad_utility::ExceptionCollector exceptionCollector_;
-  // The queue of the tasks of each group, see above. The queues are bounded,
-  // so a segment whose entries cannot be written yet blocks the thread that
-  // commits the segments. NOTE: Declared after everything that the tasks use,
-  // because the destructor of a queue waits for its tasks. The queues are held
-  // by `std::unique_ptr` because a `TaskQueueOnExecutor` (which holds a mutex
-  // and a condition variable) can be neither copied nor moved, which a
-  // `std::vector` of the queues themselves would require.
-  std::vector<std::unique_ptr<ad_utility::TaskQueueOnExecutor>> queues_;
   // The total time that the tasks have spent writing.
   ad_utility::timer::ThreadSafeTimer busyTime_;
+  // The queue of the tasks of each group, see above. The queues are bounded,
+  // so a segment whose entries cannot be written yet blocks the thread that
+  // commits the segments. The queues are held by `std::unique_ptr` because a
+  // `TaskQueueOnExecutor` (which holds a mutex and a condition variable) can be
+  // neither copied nor moved, which a `std::vector` of the queues themselves
+  // would require.
+  //
+  // NOTE: Declared last, because the destructor of a queue waits for its
+  // tasks, which use the members declared above.
+  std::vector<std::unique_ptr<ad_utility::TaskQueueOnExecutor>> queues_;
 
  public:
   // Create the ID map of each of the partial vocabularies, in the files
