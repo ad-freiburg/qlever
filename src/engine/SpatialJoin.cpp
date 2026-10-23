@@ -44,6 +44,7 @@
 #include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/RuntimeParameters.h"
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/AllocatorWithLimit.h"
