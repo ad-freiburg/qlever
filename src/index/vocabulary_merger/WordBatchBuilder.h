@@ -80,7 +80,7 @@ class WordBatchBuilder {
   // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
   // costly.
   CPP_template(typename W, typename F)(
-      requires WordComparator<W> CPP_and WordBatchCallback<
+      requires WordComparator<W>&& WordBatchCallback<
           F>) void addMergedWords(std::vector<QueueWord> buffer,
                                   const W& comparator, const F& batchCallback);
 
@@ -107,8 +107,8 @@ class WordBatchBuilder {
 };
 
 // _____________________________________________________________________________
-CPP_template_def(typename W, typename F)(
-    requires WordComparator<W> CPP_and_def WordBatchCallback<F>)
+CPP_template_def(typename W, typename F)(requires WordComparator<W> &&
+                                           WordBatchCallback<F>)
 void WordBatchBuilder::addMergedWords(std::vector<QueueWord> buffer,
                                       [[maybe_unused]] const W& comparator,
                                       const F& batchCallback) {

@@ -127,14 +127,13 @@ decltype(auto) ConfigManager::HashMapEntry::visit(Visitor&& vis) const {
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor, typename PointerType)(
     requires ad_utility::SimilarTo<
-        std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-        CPP_and_def ql::concepts::invocable<
-            Visitor, std::conditional_t<std::is_const_v<PointerType>,
-                                        const ConfigOption&, ConfigOption&>>
-            CPP_and_def ql::concepts::invocable<
-                Visitor,
-                std::conditional_t<std::is_const_v<PointerType>,
-                                   const ConfigManager&, ConfigManager&>>)
+        std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType> &&
+    ql::concepts::invocable<
+        Visitor, std::conditional_t<std::is_const_v<PointerType>,
+                                    const ConfigOption&, ConfigOption&>> &&
+    ql::concepts::invocable<
+        Visitor, std::conditional_t<std::is_const_v<PointerType>,
+                                    const ConfigManager&, ConfigManager&>>)
 decltype(auto) ConfigManager::HashMapEntry::visitImpl(Visitor&& vis,
                                                       PointerType& data) {
   // Make sure, that it is not a null pointer.
@@ -198,8 +197,8 @@ void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
 CPP_template_def(typename HashMapType, typename Callable)(
             requires SimilarTo<
                 ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
-                HashMapType>
-                CPP_and_def std::is_object_v<HashMapType>)
+                HashMapType> &&
+            std::is_object_v<HashMapType>)
 auto ConfigManager::allHashMapEntries(HashMapType& hashMap,
                                       std::string_view pathPrefix,
                                       const Callable& predicate)
