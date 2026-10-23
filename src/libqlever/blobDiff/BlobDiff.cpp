@@ -11,6 +11,7 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
+#include <zstd.h>
 
 #include <cstring>
 
@@ -22,12 +23,13 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/TransparentFunctors.h"
 
-namespace qlever {
+namespace qlever::blobDiff {
 
 namespace {
 using Manager = NamedCachedQueryBlobManager;
 using ad_utility::serialization::ByteBufferReadSerializerT;
 using ad_utility::serialization::ByteBufferWriteSerializer;
+using ErrorType = BlobDiffErrorType;
 
 constexpr std::array<char, 8> diffFileMagic{'Q', 'L', 'V', 'R',
                                             'B', 'D', 'I', 'F'};
@@ -39,16 +41,11 @@ constexpr size_t headerSize = diffFileMagic.size() + sizeof(diffFileVersion) +
                               3 * sizeof(uint64_t) +
                               2 * sizeof(BlobDiffHeader::Checksum);
 
-// Decompress a compressed blob, or throw with a message that starts with
-// `what`.
-std::vector<char, Manager::BlobAllocator> decompressOrThrow(
-    ql::span<const char> compressedBlob, std::string_view what) {
-  auto result = Manager::tryToDecompressBlob(compressedBlob, {});
-  if (auto* error = std::get_if<Manager::BlobError>(&result)) {
-    throw std::runtime_error{
-        absl::StrCat(what, " cannot be decompressed: ", error->message_)};
-  }
-  return std::get<0>(std::move(result));
+// Create a `BlobDiffError` of the given `type` with a message that is the
+// concatenation of the `messageParts`.
+template <typename... Parts>
+BlobDiffError makeError(BlobDiffErrorType type, const Parts&... messageParts) {
+  return BlobDiffError{type, absl::StrCat(messageParts...)};
 }
 }  // namespace
 
@@ -85,23 +82,29 @@ std::vector<char> computeBlobDiff(ql::span<const char> base,
 }
 
 // _____________________________________________________________________________
-BlobDiffHeader readBlobDiffHeader(ql::span<const char> diffFile) {
-  AD_CONTRACT_CHECK(diffFile.size() >= headerSize,
-                    "The given file is too small to be a blob diff file");
+BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile) {
+  if (diffFile.size() < headerSize) {
+    return makeError(ErrorType::invalidMagicBytes,
+                     "The given file is too small to be a blob diff file");
+  }
   ByteBufferReadSerializerT<false, ql::span<const char>> reader{diffFile};
   auto readArray = [&reader](auto& array) {
     reader.serializeBytes(array.data(), array.size());
   };
   std::array<char, 8> magic{};
   readArray(magic);
-  AD_CONTRACT_CHECK(magic == diffFileMagic,
-                    "The given file is not a blob diff file");
+  if (magic != diffFileMagic) {
+    return makeError(ErrorType::invalidMagicBytes,
+                     "The given file is not a blob diff file");
+  }
   uint16_t version = 0;
   reader >> version;
-  AD_CONTRACT_CHECK(version == diffFileVersion,
-                    "The blob diff file has the unsupported format version ",
-                    version, " (the supported version is ", diffFileVersion,
-                    ")");
+  if (version != diffFileVersion) {
+    return makeError(ErrorType::invalidVersion,
+                     "The blob diff file has the unsupported format version ",
+                     version, " (the supported version is ", diffFileVersion,
+                     ")");
+  }
   BlobDiffHeader header;
   reader >> header.baseSize_;
   readArray(header.baseChecksum_);
@@ -109,56 +112,110 @@ BlobDiffHeader readBlobDiffHeader(ql::span<const char> diffFile) {
   readArray(header.targetChecksum_);
   reader >> header.payloadSize_;
   AD_CORRECTNESS_CHECK(reader.getCurrentPosition() == headerSize);
-  AD_CONTRACT_CHECK(
-      header.payloadSize_ == diffFile.size() - headerSize,
-      "The blob diff file is truncated or has trailing bytes (the header "
-      "announces a payload of ",
-      header.payloadSize_, " bytes, but ", diffFile.size() - headerSize,
-      " bytes follow the header)");
+  if (header.payloadSize_ != diffFile.size() - headerSize) {
+    return makeError(
+        ErrorType::invalidPayloadSize,
+        "The blob diff file is truncated or has trailing bytes (the header "
+        "announces a payload of ",
+        header.payloadSize_, " bytes, but ", diffFile.size() - headerSize,
+        " bytes follow the header)");
+  }
+  // The size of the target is later used to allocate the target, so it is
+  // validated here. First, it has to match the size that is stored in the
+  // header of the ZSTD frame of the payload.
+  auto payload = diffFile.subspan(headerSize);
+  auto frameSize =
+      ZstdWrapper::tryToGetUncompressedSize(payload.data(), payload.size());
+  if (auto* error = std::get_if<ZstdWrapper::Error>(&frameSize)) {
+    return makeError(ErrorType::corruptedPayload,
+                     "The payload of the blob diff file is not a valid ZSTD "
+                     "frame (the file is corrupted): ",
+                     error->message_);
+  }
+  if (std::get<size_t>(frameSize) != header.targetSize_) {
+    return makeError(
+        ErrorType::invalidTargetSize,
+        "The blob diff file announces a target of ", header.targetSize_,
+        " bytes, but its payload encodes a target of ",
+        std::get<size_t>(frameSize), " bytes (the file is corrupted)");
+  }
+  // Second, both sizes might be corrupted consistently, so check that the size
+  // is plausible. Every block of a ZSTD frame has a header of at least 3 bytes
+  // and decodes to at most `ZSTD_BLOCKSIZE_MAX` bytes, so a payload of `n`
+  // bytes decodes to less than `n * ZSTD_BLOCKSIZE_MAX` bytes, no matter how
+  // much of the target is copied from the base. NOTE: A bound in terms of the
+  // size of the base would be wrong, because highly repetitive data compresses
+  // to almost nothing even without a base.
+  if (header.targetSize_ / ZSTD_BLOCKSIZE_MAX >= header.payloadSize_) {
+    return makeError(
+        ErrorType::invalidTargetSize,
+        "The blob diff file announces a target of ", header.targetSize_,
+        " bytes, which is more than a payload of ", header.payloadSize_,
+        " bytes can encode (the file is corrupted)");
+  }
   return header;
 }
 
 // _____________________________________________________________________________
-std::vector<char> applyBlobDiffToDecompressed(ql::span<const char> base,
-                                              ql::span<const char> diffFile) {
-  auto header = readBlobDiffHeader(diffFile);
+BlobOrError applyBlobDiffToDecompressed(ql::span<const char> base,
+                                        ql::span<const char> diffFile) {
+  auto headerOrError = readBlobDiffHeader(diffFile);
+  if (auto* error = std::get_if<BlobDiffError>(&headerOrError)) {
+    return std::move(*error);
+  }
+  const auto& header = std::get<BlobDiffHeader>(headerOrError);
   // The size is checked first, because it is much cheaper than the checksum.
-  AD_CONTRACT_CHECK(
-      header.baseSize_ == base.size() &&
-          header.baseChecksum_ == blobChecksum(base),
-      "The blob diff does not belong to the given base blob (the size or the "
-      "checksum of the base does not match). Note that a diff has to be "
-      "applied to exactly the blob of the previous week.");
+  if (header.baseSize_ != base.size() ||
+      header.baseChecksum_ != blobChecksum(base)) {
+    return makeError(
+        ErrorType::wrongBase,
+        "The blob diff does not belong to the given base blob (the size or the "
+        "checksum of the base does not match). Note that a diff has to be "
+        "applied to exactly the blob of the previous week.");
+  }
   auto payload = diffFile.subspan(headerSize);
   std::vector<char> target(header.targetSize_);
   auto size = ZstdWrapper::tryToDecompressWithReference(
       base, payload, target.data(), target.size());
   if (auto* error = std::get_if<ZstdWrapper::Error>(&size)) {
-    throw std::runtime_error{
-        absl::StrCat("The payload of the blob diff file cannot be "
+    return makeError(ErrorType::corruptedPayload,
+                     "The payload of the blob diff file cannot be "
                      "decompressed (the file is corrupted): ",
-                     error->message_)};
+                     error->message_);
   }
-  AD_CONTRACT_CHECK(std::get<size_t>(size) == target.size() &&
-                        blobChecksum(target) == header.targetChecksum_,
-                    "Applying the blob diff did not yield the expected result "
-                    "(the checksum of the result does not match), the diff "
-                    "file is corrupted");
+  if (std::get<size_t>(size) != target.size() ||
+      blobChecksum(target) != header.targetChecksum_) {
+    return makeError(ErrorType::corruptedPayload,
+                     "Applying the blob diff did not yield the expected result "
+                     "(the checksum of the result does not match), the diff "
+                     "file is corrupted");
+  }
   return target;
 }
 
 // _____________________________________________________________________________
-std::vector<char> applyBlobDiff(ql::span<const char> compressedBase,
-                                ql::span<const char> diffFile) {
-  auto base = decompressOrThrow(compressedBase, "The base blob");
-  auto target =
-      applyBlobDiffToDecompressed(ql::span<const char>{base}, diffFile);
-  return Manager::compressBlob(ql::span<const char>{target});
+BlobOrError applyBlobDiff(ql::span<const char> compressedBase,
+                          ql::span<const char> diffFile) {
+  auto base = Manager::tryToDecompressBlob(compressedBase, {});
+  if (auto* error = std::get_if<Manager::BlobError>(&base)) {
+    return makeError(ErrorType::baseNotDecompressible,
+                     "The base blob cannot be decompressed: ", error->message_);
+  }
+  auto target = applyBlobDiffToDecompressed(
+      ql::span<const char>{std::get<0>(base)}, diffFile);
+  if (auto* bytes = std::get_if<std::vector<char>>(&target)) {
+    return Manager::compressBlob(ql::span<const char>{*bytes});
+  }
+  return target;
 }
 
 // _____________________________________________________________________________
 std::string describeBlobDiff(ql::span<const char> diffFile) {
-  auto header = readBlobDiffHeader(diffFile);
+  auto headerOrError = readBlobDiffHeader(diffFile);
+  if (auto* error = std::get_if<BlobDiffError>(&headerOrError)) {
+    throw std::runtime_error{error->message_};
+  }
+  const auto& header = std::get<BlobDiffHeader>(headerOrError);
   auto percent = [](uint64_t part, uint64_t whole) {
     return whole == 0
                ? 0.0
@@ -171,4 +228,4 @@ std::string describeBlobDiff(ql::span<const char> diffFile) {
       header.payloadSize_, percent(header.payloadSize_, header.targetSize_));
 }
 
-}  // namespace qlever
+}  // namespace qlever::blobDiff

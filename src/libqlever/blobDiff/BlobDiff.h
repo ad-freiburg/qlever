@@ -13,11 +13,12 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "backports/span.h"
 
-namespace qlever {
+namespace qlever::blobDiff {
 
 // A blob diff file turns a (compressed) blob `base` into a (compressed) blob
 // `target`. It is a generic binary delta: the decompressed `target` is
@@ -72,28 +73,77 @@ std::vector<char> computeBlobDiff(
     ql::span<const char> base, ql::span<const char> target,
     int compressionLevel = defaultBlobDiffCompressionLevel);
 
-// Parse the header of `diffFile`. Throw if `diffFile` is not a diff file, has
-// an unsupported version, or is truncated.
-BlobDiffHeader readBlobDiffHeader(ql::span<const char> diffFile);
+// The reasons why reading or applying a diff file fails (see
+// `BlobDiffError`).
+enum class BlobDiffErrorType {
+  // The diff file does not start with the expected magic bytes. This also
+  // covers the case that it is too short to hold a complete header.
+  invalidMagicBytes,
+  // The magic bytes are correct, but the format version is not the supported
+  // one.
+  invalidVersion,
+  // The size of the payload that is stored in the header does not match the
+  // number of bytes that follow the header (the diff file is truncated or has
+  // trailing bytes).
+  invalidPayloadSize,
+  // The size of the target that is stored in the header is not plausible: it
+  // differs from the size that is stored in the ZSTD frame of the payload, or
+  // it is larger than any ZSTD frame of the size of the payload can encode.
+  // This is detected before the target is allocated, so a corrupted size
+  // cannot lead to a huge allocation.
+  invalidTargetSize,
+  // The compressed base blob cannot be decompressed (see `applyBlobDiff`).
+  baseNotDecompressible,
+  // The diff does not belong to the given base (the size or the checksum of
+  // the base differs from the one that is stored in the header).
+  wrongBase,
+  // The payload cannot be decompressed, or the result does not have the
+  // checksum of the target that is stored in the header.
+  corruptedPayload
+};
+
+// The error that is reported by the functions below: the reason for the
+// failure, and a descriptive message (which includes the details, for example
+// the underlying ZSTD error).
+struct BlobDiffError {
+  BlobDiffErrorType type_;
+  std::string message_;
+};
+
+// The result of `readBlobDiffHeader`.
+using BlobDiffHeaderOrError = std::variant<BlobDiffHeader, BlobDiffError>;
+
+// The result of the functions that apply a diff: the resulting blob on
+// success, and the error otherwise.
+using BlobOrError = std::variant<std::vector<char>, BlobDiffError>;
+
+// Parse and validate the header of `diffFile` (see `BlobDiffErrorType` for the
+// checks). On success, the `targetSize_` of the header can safely be
+// allocated. Do not throw for any input.
+BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile);
 
 // Apply `diffFile` to the decompressed blob `base` and return the decompressed
-// target blob. Throw if the diff does not belong to the `base` (size or
-// checksum differ), or if the result does not have the checksum that is stored
-// in the diff.
-std::vector<char> applyBlobDiffToDecompressed(ql::span<const char> base,
-                                              ql::span<const char> diffFile);
+// target blob. Report an error if the header of `diffFile` is invalid (see
+// `readBlobDiffHeader`), if the diff does not belong to the `base` (size or
+// checksum differ), or if the payload is corrupted (it cannot be decompressed,
+// or the result does not have the checksum that is stored in the diff). Do not
+// throw for any input, except if the target cannot be allocated.
+BlobOrError applyBlobDiffToDecompressed(ql::span<const char> base,
+                                        ql::span<const char> diffFile);
 
 // Apply `diffFile` to the compressed blob `compressedBase` and return the
 // compressed target blob (a standard blob that can be loaded by
-// `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`). Throw if the base
-// cannot be decompressed, or if the diff does not belong to it (see above).
-std::vector<char> applyBlobDiff(ql::span<const char> compressedBase,
-                                ql::span<const char> diffFile);
+// `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`). Report an error
+// if the base cannot be decompressed, or in the cases of
+// `applyBlobDiffToDecompressed`. Do not throw for any input, except if the
+// decompressed base or the target cannot be allocated.
+BlobOrError applyBlobDiff(ql::span<const char> compressedBase,
+                          ql::span<const char> diffFile);
 
 // Return a human-readable description of `diffFile` (the sizes of base, target
 // and payload). Throw if the header cannot be parsed.
 std::string describeBlobDiff(ql::span<const char> diffFile);
 
-}  // namespace qlever
+}  // namespace qlever::blobDiff
 
 #endif  // QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFF_H

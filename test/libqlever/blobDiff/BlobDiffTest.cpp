@@ -7,64 +7,46 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
-#include <iostream>
+#include <cstring>
 #include <random>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
 #include "../QleverTestHelpers.h"
 #include "backports/algorithm.h"
-#include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/BlobDiff.h"
-#include "util/File.h"
 
 using namespace qlever;
+using namespace qlever::blobDiff;
 using namespace testing;
+using ad_utility::testing::buildTestIndex;
+using ad_utility::testing::decompressOrFail;
 
 namespace {
-using Manager = NamedCachedQueryBlobManager;
 using Bytes = std::vector<char>;
+using ErrorType = BlobDiffErrorType;
 
-// Write the `turtleContents` to a turtle file, build an index with an
-// in-memory vocabulary from it, and return the `IndexBuilderConfig`. The
-// basename is derived from the name of the running test.
-IndexBuilderConfig buildTestIndex(std::string_view turtleContents) {
-  std::string basename = gtestCurrentTestName();
-  // Updates that were persisted by a previous run of the test must not be
-  // applied to the new index.
-  ad_utility::deleteFile(absl::StrCat(basename, ".update-triples"), false);
-  std::string sourceFilename = absl::StrCat(basename, ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(sourceFilename);
-    ofs << turtleContents;
-  }
-  absl::Cleanup cleanup = [&sourceFilename] {
-    ad_utility::deleteFile(sourceFilename);
-  };
-  IndexBuilderConfig config;
-  config.inputFiles_.push_back(
-      {sourceFilename, Filetype::Turtle, std::nullopt});
-  config.baseName_ = std::move(basename);
-  config.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
-  EXPECT_NO_THROW(Qlever::buildIndex(config));
-  return config;
-}
+// The offsets of some fields of the header of a diff file (see the file format
+// in `BlobDiff.h`), used to corrupt them.
+constexpr size_t versionOffset = 8;
+constexpr size_t targetSizeOffset = versionOffset + 2 + 8 + 32;
+constexpr size_t targetChecksumOffset = targetSizeOffset + 8;
+constexpr size_t payloadSizeOffset = targetChecksumOffset + 32;
+constexpr size_t payloadOffset = payloadSizeOffset + 8;
 
-// Decompress `compressedBlob` (fail the test on error).
-Bytes decompressOrFail(ql::span<const char> compressedBlob) {
-  auto result = Manager::tryToDecompressBlob(compressedBlob, {});
-  if (const auto* error = std::get_if<Manager::BlobError>(&result)) {
-    ADD_FAILURE() << error->message_;
-    return {};
-  }
-  const auto& bytes = std::get<0>(result);
+// Return a copy of the decompressed `compressedBlob` as `Bytes` (fail the test
+// on error).
+Bytes decompressToBytes(
+    ql::span<const char> compressedBlob,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto bytes = decompressOrFail(compressedBlob, {}, l);
   return {bytes.begin(), bytes.end()};
 }
 
@@ -96,19 +78,48 @@ Bytes randomBytes(size_t numBytes, unsigned seed) {
   return result;
 }
 
+// Return a copy of `bytes` in which the `uint64_t` at `offset` is replaced by
+// `value`.
+Bytes withUint64At(Bytes bytes, size_t offset, uint64_t value) {
+  std::memcpy(bytes.data() + offset, &value, sizeof(value));
+  return bytes;
+}
+
+// Matcher for a `BlobDiffError` of the given `type` whose message contains
+// `messageSubstring`.
+auto blobDiffErrorWith(ErrorType type, std::string_view messageSubstring) {
+  return AllOf(AD_FIELD(BlobDiffError, type_, Eq(type)),
+               AD_FIELD(BlobDiffError, message_,
+                        HasSubstr(std::string{messageSubstring})));
+}
+
+// Matcher for the result of one of the functions in `BlobDiff.h` that failed
+// with a `BlobDiffError` (see `blobDiffErrorWith`).
+auto isError(ErrorType type, std::string_view messageSubstring) {
+  return VariantWith<BlobDiffError>(blobDiffErrorWith(type, messageSubstring));
+}
+
+// Matcher for the successful result of applying a diff that yields `expected`.
+auto isBlob(const Bytes& expected) { return VariantWith<Bytes>(Eq(expected)); }
+
 // Compute the diff of `base` and `target`, check that applying it to `base`
 // yields `target` and that the header is consistent, and return it.
-Bytes diffAndCheck(const Bytes& base, const Bytes& target,
-                   int compressionLevel = defaultBlobDiffCompressionLevel) {
+Bytes diffAndCheck(ql::span<const char> base, ql::span<const char> target,
+                   int compressionLevel = defaultBlobDiffCompressionLevel,
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
   auto diff = computeBlobDiff(base, target, compressionLevel);
-  EXPECT_EQ(applyBlobDiffToDecompressed(base, diff), target);
-  auto header = readBlobDiffHeader(diff);
-  EXPECT_EQ(header.baseSize_, base.size());
-  EXPECT_EQ(header.targetSize_, target.size());
-  EXPECT_EQ(header.baseChecksum_, blobChecksum(base));
-  EXPECT_EQ(header.targetChecksum_, blobChecksum(target));
-  EXPECT_GT(header.payloadSize_, 0u);
-  EXPECT_LT(header.payloadSize_, diff.size());
+  EXPECT_THAT(applyBlobDiffToDecompressed(base, diff),
+              isBlob(Bytes(target.begin(), target.end())));
+  EXPECT_THAT(
+      readBlobDiffHeader(diff),
+      VariantWith<BlobDiffHeader>(AllOf(
+          AD_FIELD(BlobDiffHeader, baseSize_, Eq(base.size())),
+          AD_FIELD(BlobDiffHeader, targetSize_, Eq(target.size())),
+          AD_FIELD(BlobDiffHeader, baseChecksum_, Eq(blobChecksum(base))),
+          AD_FIELD(BlobDiffHeader, targetChecksum_, Eq(blobChecksum(target))),
+          AD_FIELD(BlobDiffHeader, payloadSize_,
+                   AllOf(Gt(0u), Eq(diff.size() - payloadOffset))))));
   return diff;
 }
 
@@ -132,19 +143,16 @@ TEST(BlobDiff, syntheticBytes) {
   target.insert(target.end(), inserted.begin(), inserted.end());
   target.insert(target.end(), base.begin(), base.begin() + 100'000);
   auto diff = diffAndCheck(base, target);
-  std::cout << describeBlobDiff(diff) << std::endl;
   EXPECT_THAT(describeBlobDiff(diff), HasSubstr("payload"));
   // The random inserted bytes are incompressible, the rest costs almost
   // nothing.
-  EXPECT_LT(diff.size(), 1'000u + 500u);
-  EXPECT_GT(diff.size(), 1'000u);
+  EXPECT_THAT(diff.size(), AllOf(Gt(1'000u), Lt(1'000u + 500u)));
 
   // Unrelated random data cannot be compressed at all, the diff is then a
   // little larger than the target.
   auto unrelated = randomBytes(50'000, 99);
-  auto largeDiff = diffAndCheck(base, unrelated);
-  EXPECT_GT(largeDiff.size(), unrelated.size());
-  EXPECT_LT(largeDiff.size(), unrelated.size() + 1'000);
+  EXPECT_THAT(diffAndCheck(base, unrelated).size(),
+              AllOf(Gt(unrelated.size()), Lt(unrelated.size() + 1'000)));
 
   // Edge cases: identical inputs (also in memory, which ZSTD itself does not
   // handle, see `ZstdWrapper::compressWithReference`), empty base, empty
@@ -155,6 +163,11 @@ TEST(BlobDiff, syntheticBytes) {
   diffAndCheck(base, {});
   diffAndCheck({}, {});
 
+  // A highly repetitive target is much larger than the base and the payload
+  // together, which is still a valid (and plausible) target size.
+  auto zeros = Bytes(10'000'000, '\0');
+  EXPECT_LT(diffAndCheck({}, zeros).size(), 2'000u);
+
   // All compression levels work.
   for (int level : {1, 3, 9, 22}) {
     diffAndCheck(base, target, level);
@@ -162,46 +175,93 @@ TEST(BlobDiff, syntheticBytes) {
 }
 
 // _____________________________________________________________________________
-TEST(BlobDiff, invalidInputsThrow) {
+TEST(BlobDiff, invalidInputsAreReported) {
   auto base = randomBytes(10'000, 1);
   auto other = randomBytes(10'000, 2);
   auto target = randomBytes(10'000, 3);
   auto diff = diffAndCheck(base, target);
+  Bytes garbage(100, 'x');
 
   // The diff only fits its base (same size, different content).
-  AD_EXPECT_THROW_WITH_MESSAGE(applyBlobDiffToDecompressed(other, diff),
-                               HasSubstr("does not belong to the given base"));
-  // Garbage instead of a diff.
-  Bytes garbage(100, 'x');
-  AD_EXPECT_THROW_WITH_MESSAGE(readBlobDiffHeader(garbage),
+  EXPECT_THAT(
+      applyBlobDiffToDecompressed(other, diff),
+      isError(ErrorType::wrongBase, "does not belong to the given base"));
+  // Garbage instead of a diff, also when applied.
+  EXPECT_THAT(readBlobDiffHeader(garbage),
+              isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
+  EXPECT_THAT(applyBlobDiffToDecompressed(base, garbage),
+              isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
+  EXPECT_THAT(readBlobDiffHeader(Bytes(5, 'x')),
+              isError(ErrorType::invalidMagicBytes, "too small"));
+  AD_EXPECT_THROW_WITH_MESSAGE(describeBlobDiff(garbage),
                                HasSubstr("not a blob diff file"));
-  AD_EXPECT_THROW_WITH_MESSAGE(readBlobDiffHeader(Bytes(5, 'x')),
-                               HasSubstr("too small"));
   // A wrong version.
   auto wrongVersion = diff;
-  wrongVersion[8] = 1;
-  AD_EXPECT_THROW_WITH_MESSAGE(readBlobDiffHeader(wrongVersion),
-                               HasSubstr("unsupported format version 1"));
+  wrongVersion[versionOffset] = 1;
+  EXPECT_THAT(
+      readBlobDiffHeader(wrongVersion),
+      isError(ErrorType::invalidVersion, "unsupported format version 1"));
   // Truncated and extended diffs.
   auto truncated = diff;
   truncated.pop_back();
-  AD_EXPECT_THROW_WITH_MESSAGE(applyBlobDiffToDecompressed(base, truncated),
-                               HasSubstr("truncated or has trailing bytes"));
+  EXPECT_THAT(applyBlobDiffToDecompressed(base, truncated),
+              isError(ErrorType::invalidPayloadSize,
+                      "truncated or has trailing bytes"));
   auto extended = diff;
   extended.push_back('x');
-  AD_EXPECT_THROW_WITH_MESSAGE(applyBlobDiffToDecompressed(base, extended),
-                               HasSubstr("truncated or has trailing bytes"));
+  EXPECT_THAT(applyBlobDiffToDecompressed(base, extended),
+              isError(ErrorType::invalidPayloadSize,
+                      "truncated or has trailing bytes"));
+  // A corrupted size of the target is detected before the target is
+  // allocated, both if it is huge and if it only differs a little from the
+  // size in the ZSTD frame.
+  for (uint64_t targetSize : {uint64_t{1} << 60, uint64_t{10'001}}) {
+    EXPECT_THAT(
+        readBlobDiffHeader(withUint64At(diff, targetSizeOffset, targetSize)),
+        isError(ErrorType::invalidTargetSize, "but its payload encodes"));
+  }
+  // A corrupted header of the ZSTD frame is detected.
+  auto corruptedFrameHeader = diff;
+  corruptedFrameHeader[payloadOffset] ^= 0x55;
+  EXPECT_THAT(readBlobDiffHeader(corruptedFrameHeader),
+              isError(ErrorType::corruptedPayload, "not a valid ZSTD frame"));
   // A corrupted payload is detected (by ZSTD or by the checksum of the
   // target).
   auto corrupted = diff;
   corrupted[corrupted.size() / 2] ^= 0x55;
   corrupted.back() ^= 0x55;
-  EXPECT_ANY_THROW(applyBlobDiffToDecompressed(base, corrupted));
+  EXPECT_THAT(applyBlobDiffToDecompressed(base, corrupted),
+              isError(ErrorType::corruptedPayload, "corrupted"));
   // A corrupted checksum of the target is detected.
   auto wrongTarget = diff;
-  wrongTarget[8 + 2 + 8 + 32 + 8] ^= 0x55;
-  AD_EXPECT_THROW_WITH_MESSAGE(applyBlobDiffToDecompressed(base, wrongTarget),
-                               HasSubstr("checksum of the result"));
+  wrongTarget[targetChecksumOffset] ^= 0x55;
+  EXPECT_THAT(applyBlobDiffToDecompressed(base, wrongTarget),
+              isError(ErrorType::corruptedPayload, "checksum of the result"));
+}
+
+// _____________________________________________________________________________
+TEST(BlobDiff, implausibleTargetSizeIsReported) {
+  // A ZSTD frame of a few bytes whose header consistently announces a huge
+  // content size, as could be forged. No frame of that size can encode such a
+  // target, so the diff is rejected before the target is allocated.
+  auto diff = computeBlobDiff({}, {});
+  // Replace the payload by a frame header that announces `2^60` bytes (the
+  // single segment flag is not set, the frame content size field has 8 bytes,
+  // and the window descriptor is the smallest possible one), followed by an
+  // empty last raw block.
+  Bytes forged(diff.begin(), diff.begin() + payloadOffset);
+  Bytes frame{'\x28', '\xb5', '\x2f', '\xfd', '\xc0', '\x00'};
+  Bytes contentSize(8, '\0');
+  uint64_t hugeSize = uint64_t{1} << 60;
+  std::memcpy(contentSize.data(), &hugeSize, sizeof(hugeSize));
+  frame.insert(frame.end(), contentSize.begin(), contentSize.end());
+  frame.insert(frame.end(), {'\x01', '\x00', '\x00'});
+  forged.insert(forged.end(), frame.begin(), frame.end());
+  forged = withUint64At(std::move(forged), targetSizeOffset, hugeSize);
+  forged = withUint64At(std::move(forged), payloadSizeOffset, frame.size());
+  EXPECT_THAT(readBlobDiffHeader(forged),
+              isError(ErrorType::invalidTargetSize,
+                      "more than a payload of 17 bytes can encode"));
 }
 
 // _____________________________________________________________________________
@@ -218,20 +278,18 @@ TEST(BlobDiff, realBlobsAfterUpdate) {
       source, "DELETE DATA { <s5> <p> <o5> . <s1500> <q> \"literal 1500\" }");
   auto targetCompressed = pinAndSerialize(source);
 
-  auto base = decompressOrFail(baseCompressed);
-  auto target = decompressOrFail(targetCompressed);
+  auto base = decompressToBytes(baseCompressed);
+  auto target = decompressToBytes(targetCompressed);
   auto diff = diffAndCheck(base, target);
-  std::cout << "Diff for an update (compressed target has "
-            << targetCompressed.size() << " bytes): " << describeBlobDiff(diff)
-            << std::endl;
   // The diff is a lot smaller than the (compressed) target.
   EXPECT_LT(diff.size(), targetCompressed.size() / 10);
 
   // Applying the diff to the compressed base gives the compressed target (byte
   // for byte, because the recompression is deterministic), and the result is a
   // standard blob that answers queries.
-  auto resultCompressed = applyBlobDiff(baseCompressed, diff);
-  EXPECT_EQ(resultCompressed, targetCompressed);
+  auto result = applyBlobDiff(baseCompressed, diff);
+  ASSERT_THAT(result, isBlob(targetCompressed));
+  const auto& resultCompressed = std::get<Bytes>(result);
   Qlever loaded{EngineConfig{}, /*skipLoading=*/true};
   EXPECT_NO_THROW(
       loaded.deserializeVocabAndNamedCacheFromCompressedBlob(resultCompressed));
@@ -245,11 +303,13 @@ TEST(BlobDiff, realBlobsAfterUpdate) {
   EXPECT_THAT(expected, Not(HasSubstr("<s5>\t<p>\t<o5>")));
 
   // The diff only fits its base, and garbage is rejected.
-  AD_EXPECT_THROW_WITH_MESSAGE(applyBlobDiff(targetCompressed, diff),
-                               HasSubstr("does not belong to the given base"));
+  EXPECT_THAT(
+      applyBlobDiff(targetCompressed, diff),
+      isError(ErrorType::wrongBase, "does not belong to the given base"));
   Bytes garbage(100, 'x');
-  AD_EXPECT_THROW_WITH_MESSAGE(applyBlobDiff(garbage, diff),
-                               HasSubstr("base blob cannot be decompressed"));
-  AD_EXPECT_THROW_WITH_MESSAGE(applyBlobDiff(baseCompressed, garbage),
-                               HasSubstr("not a blob diff file"));
+  EXPECT_THAT(applyBlobDiff(garbage, diff),
+              isError(ErrorType::baseNotDecompressible,
+                      "base blob cannot be decompressed"));
+  EXPECT_THAT(applyBlobDiff(baseCompressed, garbage),
+              isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
 }
