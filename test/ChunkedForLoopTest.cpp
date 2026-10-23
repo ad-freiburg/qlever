@@ -147,7 +147,9 @@ TEST(ChunkedForLoop, chunkedCopyCopiesCorrectly) {
   EXPECT_EQ(input, output);
 }
 
-// _____________________________________________________________________________
+// Test that `chunkedForEach` visits every element in order and calls the
+// `chunkOperation` after every `chunkSize` elements and at the end, for random
+// access ranges, non-random-access ranges, move-only views and zipped ranges.
 TEST(ChunkedForLoop, chunkedForEach) {
   // Run `chunkedForEach` on the `range` and return the visited elements, with
   // a `-1` for each call of the `chunkOperation`.

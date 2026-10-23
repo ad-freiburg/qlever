@@ -1569,7 +1569,9 @@ TEST(IdTable, rowReferenceWithMutableAndConstProxies) {
   EXPECT_EQ(*constRow[1].id_, V(4));
 }
 
-// _____________________________________________________________________________
+// Test that `clone` and `moveOrClone` copy the table in chunks of the given
+// size, call the `chunkOperation` once per chunk and column, and propagate its
+// exceptions.
 TEST(IdTable, cloneWithChunkOperation) {
   IdTable table{2, makeAllocator()};
   for (size_t i = 0; i < 10; ++i) {
