@@ -87,8 +87,11 @@ class HttpMessageSender {
     // they can be written after `serializeNext` has returned. The underlying
     // data remains valid until the call to `serializer.consume`.
     std::vector<net::const_buffer> buffers;
-    // Get the next buffers to write from the `serializer`.
+    // Get the next buffers to write from the `serializer`. These are empty if
+    // the `serializer` completes without producing any (e.g. at the end of a
+    // body that is not chunked, as for HTTP/1.0).
     auto serializeNext = [&serializer, &buffers]() {
+      buffers.clear();
       beast::error_code ec;
       serializer.next(ec, [&buffers](beast::error_code&, const auto& next) {
         buffers.assign(net::buffer_sequence_begin(next),
@@ -101,6 +104,9 @@ class HttpMessageSender {
     while (!serializer.is_done()) {
       co_await ad_utility::runFunctionOnExecutor(bodyExecutor, serializeNext,
                                                  net::use_awaitable);
+      if (buffers.empty()) {
+        continue;
+      }
       serializer.consume(
           co_await net::async_write(stream_, buffers, net::use_awaitable));
     }

@@ -20,6 +20,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -327,12 +328,14 @@ class SpatialJoinVarColParamTest
                                       : std::nullopt,
                                   std::nullopt};
     }
+    SpatialJoinConfiguration config{
+        task, Variable{"?point1"}, Variable{"?point2"}, dist, pv, alg};
+    if (addDist) {
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
+    }
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
-            qec,
-            SpatialJoinConfiguration{task, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv, alg},
-            std::nullopt, std::nullopt);
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, std::move(config),
+                                                   std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
@@ -511,9 +514,21 @@ class SpatialJoinVarColParamTest
           ASSERT_THAT(
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
           if (matchWarning) {
-            ASSERT_THAT(spatialJoin->collectWarnings(),
-                        ::testing::Contains(
-                            ::testing::HasSubstr(matchWarning.value())));
+            // The payload variables are also checked when computing the cache
+            // key, which must not add the warning a second time (hence
+            // `Times(1)` below).
+            spatialJoin->getCacheKey();
+            EXPECT_THAT(
+                spatialJoin->collectWarnings(),
+                ::testing::Contains(::testing::HasSubstr(matchWarning.value()))
+                    .Times(1));
+            // With `throw-on-unbound-variables`, the warning becomes an error.
+            auto cleanup = setRuntimeParameterForTest<
+                &RuntimeParameters::throwOnUnboundVariables_>(true);
+            AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+                spatialJoin->computeVariableToColumnMap(),
+                ::testing::HasSubstr(matchWarning.value()),
+                InvalidSparqlQueryException);
           }
         };
 
@@ -1245,12 +1260,12 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       auto rightChild =
           buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
+      SpatialJoinConfiguration config{MaxDistanceConfig{10000000}, subj, obj,
+                                      Variable{"?distanceForTesting"}};
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(
-              qec,
-              SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj,
-                                       Variable{"?distanceForTesting"}},
-              std::nullopt, std::nullopt);
+              qec, std::move(config), std::nullopt, std::nullopt);
 
       // add children and test, that multiplicity is a dummy return before all
       // children are added
@@ -1353,8 +1368,8 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
         LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
   };
   Id pointLeft = ValueId::makeFromGeoPoint({0, 0});
-  Id invalidLiteralA = wktId("<a>");
-  Id invalidLiteralB = wktId("<b>");
+  Id invalidLiteralA = wktId("POINT(1 2, 3 4)");
+  Id invalidLiteralB = wktId("not wkt");
   Id validLiteral = ValueId::makeFromGeoPoint({1, 1});
 
   // `?a`: a single, valid point.
@@ -1393,7 +1408,8 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
   EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                             HasKeyMatching("num-geoms-parsed", Eq(3))));
+                             HasKeyMatching("num-geoms-parsed", Eq(3)),
+                             HasKeyMatching("num-geoms-invalid", Eq(2))));
 }
 
 }  // namespace invalidGeometries
