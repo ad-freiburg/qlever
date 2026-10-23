@@ -98,7 +98,7 @@ jobs:
         # `llvm-cov` only warns about a nonexistent source filter, and then reports everything.
         test -d "${{github.workspace}}/src"
         llvm-profdata-${{env.compiler-version}} merge -sparse *.profraw -o default.profdata
-        llvm-cov-${{env.compiler-version}} export ./QLeverAllUnitTestsMain --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/generated/" "${{github.workspace}}/src" > ./coverage.lcov
+        llvm-cov-${{env.compiler-version}} export ./QLeverAllUnitTestsMain --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/generated/" "${{github.workspace}}/src" > ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.
