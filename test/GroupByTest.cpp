@@ -1250,9 +1250,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
       {Variable{"?w"}, {3, PossiblyUndefined}}};
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  auto expected = makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
-                                         {d(3), d(1), d(13.37), d(18.37)},
-                                         {d(4), undef, undef, undef}});
+  // Not `18.37`: the split `Id` stores the exact sum.
+  auto expected =
+      makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
+                             {d(3), d(1), d(13.37), d(13.37 + 1.0 + 4.0)},
+                             {d(4), undef, undef, undef}});
   EXPECT_EQ(table, expected);
 }
 
