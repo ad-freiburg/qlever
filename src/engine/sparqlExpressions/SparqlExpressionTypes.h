@@ -182,7 +182,16 @@ struct EvaluationContext {
                           inputTable.asStaticView<0>(), allocator, localVocab,
                           std::move(cancellationHandle), deadline) {}
 
-  bool isResultSortedBy(const Variable& variable);
+  // The `Id`s of `variable` in the rows `[_beginIndex, _endIndex)` if the input
+  // is sorted by `variable`, `std::nullopt` otherwise.
+  std::optional<ql::span<const Id>> getSortedColumnOrNullopt(
+      const Variable& variable) const;
+
+  // Like `getSortedColumnOrNullopt`, but also `std::nullopt` if the column
+  // contains UNDEF.
+  std::optional<ql::span<const Id>> getSortedAlwaysDefinedColumnOrNullopt(
+      const Variable& variable) const;
+
   // The size (in number of elements) that this evaluation context refers to.
   [[nodiscard]] size_t size() const;
 

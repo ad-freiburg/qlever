@@ -13,6 +13,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -240,6 +241,50 @@ class LogicalExpression : public PrefilterExpression {
 // that are encoded in the `Id` (datatype `GeoPoint`), not the WKT literals of
 // the vocabulary.
 enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC, ENCODED_IRI, GEO_POINT };
+
+namespace detail {
+inline constexpr std::array<Datatype, 1> blankDatatypes{
+    Datatype::BlankNodeIndex};
+inline constexpr std::array<Datatype, 2> numericDatatypes{Datatype::Int,
+                                                          Datatype::Double};
+inline constexpr std::array<Datatype, 1> encodedIriDatatypes{
+    Datatype::EncodedVal};
+inline constexpr std::array<Datatype, 1> geoPointDatatypes{Datatype::GeoPoint};
+inline constexpr std::array<Datatype, 5> inlinedLiteralDatatypes{
+    Datatype::Bool, Datatype::Int, Datatype::Double, Datatype::Date,
+    Datatype::GeoPoint};
+}  // namespace detail
+
+// The (sorted) datatypes of the `Id`s for which `D` holds. For `IRI` and
+// `LITERAL`, these are only the `Id`s that directly encode their value, the
+// words of the vocabularies have to be handled separately.
+template <IsDatatype D>
+ql::span<const Datatype> getDatatypes() {
+  if constexpr (D == IsDatatype::BLANK) {
+    return detail::blankDatatypes;
+  } else if constexpr (D == IsDatatype::NUMERIC) {
+    return detail::numericDatatypes;
+  } else if constexpr (D == IsDatatype::IRI || D == IsDatatype::ENCODED_IRI) {
+    return detail::encodedIriDatatypes;
+  } else if constexpr (D == IsDatatype::GEO_POINT) {
+    return detail::geoPointDatatypes;
+  } else {
+    static_assert(D == IsDatatype::LITERAL);
+    return detail::inlinedLiteralDatatypes;
+  }
+}
+
+// True iff `D` holds for exactly the `Id`s of `getDatatypes<D>()`, and each of
+// these datatypes forms one contiguous range in a sorted column. `D` can then
+// be evaluated on a sorted column with one binary search per datatype.
+//
+// NOTE: This is not the case for `IRI` and `LITERAL` (see above), and not for
+// `ENCODED_IRI`, because local vocab entries of encoded IRIs may lie within
+// the `EncodedVal` range (see `Id::compareThreeWay`).
+template <IsDatatype D>
+inline constexpr bool isDatatypeComputableViaBinarySearch =
+    D == IsDatatype::BLANK || D == IsDatatype::NUMERIC ||
+    D == IsDatatype::GEO_POINT;
 
 // The specialized `PrefilterExpression` class that actually applies the
 // pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.

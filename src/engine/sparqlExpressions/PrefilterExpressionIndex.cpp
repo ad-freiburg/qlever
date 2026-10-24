@@ -676,10 +676,9 @@ std::string IsDatatypeExpression<Datatype>::asString(
 }
 
 //______________________________________________________________________________
-static BlockMetadataRanges getRangesForDatatypes(const ValueIdSubrange& idRange,
-                                                 BlockMetadataSpan blockRange,
-                                                 const bool isNegated,
-                                                 ql::span<Datatype> datatypes) {
+static BlockMetadataRanges getRangesForDatatypes(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+    const bool isNegated, ql::span<const Datatype> datatypes) {
   std::vector<ValueIdItPair> relevantRanges;
   for (Datatype datatype : datatypes) {
     relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
@@ -696,23 +695,17 @@ static BlockMetadataRanges getRangesForDatatypes(const ValueIdSubrange& idRange,
 }
 
 //______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::BLANK>::evaluateImpl(
+// `BLANK`, `NUMERIC`, `ENCODED_IRI`, and `GEO_POINT` hold for exactly the
+// `Id`s of their datatypes (for `GEO_POINT`, the WKT literals of the vocabulary
+// are not points), see `getDatatypes`. `IRI` and `LITERAL` are specialized
+// below.
+template <IsDatatype Datatype>
+BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
     [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  std::array datatypes{Datatype::BlankNodeIndex};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
-}
-
-//______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::NUMERIC>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  std::array datatypes{Datatype::Int, Datatype::Double};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  return getRangesForDatatypes(idRange, blockRange, isNegated_,
+                               getDatatypes<Datatype>());
 }
 
 //______________________________________________________________________________
@@ -748,38 +741,12 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // prefilter above does not cover them and we have to add their datatype range
   // explicitly. Otherwise, blocks that consist entirely of encoded IRIs would
   // be incorrectly pruned.
-  std::array datatypes{Datatype::EncodedVal};
-  auto encodedIriRanges =
-      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  auto encodedIriRanges = getRangesForDatatypes(
+      idRange, blockRange, isNegated_, getDatatypes<IsDatatype::IRI>());
   // `IRI = vocabIri || encodedIri` (an intersection under negation, see the
   // helper for details).
   return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
       vocabIriRanges, encodedIriRanges, isNegated_);
-}
-
-//______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
-  std::array datatypes{Datatype::EncodedVal};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
-}
-
-//______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::GEO_POINT>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  // The geo points that are encoded in the `Id` are exactly the `ValueId`s of
-  // datatype `GeoPoint` (the WKT literals of the vocabulary are not points).
-  // They sort in one contiguous range, so only the blocks of points are kept,
-  // or, for the negation, only the other blocks.
-  std::array datatypes{Datatype::GeoPoint};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
 //______________________________________________________________________________
@@ -795,10 +762,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   // TODO<joka921> Just as for `IsDatatype::IRI` above, the literals of a
   // secondary vocabulary are not covered, because their `Id`s sort after the
   // `< <>` bound that is used here. See the note there.
-  std::array datatypes{Datatype::Int, Datatype::Double, Datatype::Date,
-                       Datatype::Bool, Datatype::GeoPoint};
-  auto inlinedRanges =
-      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  auto inlinedRanges = getRangesForDatatypes(
+      idRange, blockRange, isNegated_, getDatatypes<IsDatatype::LITERAL>());
   auto nonInlinedRanges =
       make<LessThanExpression>(smallestIri(index))
           ->evaluateImpl(index, idRange, blockRange, isNegated_);
