@@ -396,6 +396,7 @@ bool TurtleParser<T>::blankNodePropertyList() {
   if (!skip<TurtleTokenId::OpenSquared>()) {
     return false;
   }
+  auto nestingGuard = enterNestedTerm();
   // save subject and predicate
   auto savedSubject = activeSubject_;
   auto savedPredicate = activePredicate_;
@@ -419,6 +420,7 @@ bool TurtleParser<T>::collection() {
   if (!skip<TurtleTokenId::OpenRound>()) {
     return false;
   }
+  auto nestingGuard = enterNestedTerm();
   std::vector<TripleComponent> objects;
   while (object()) {
     objects.push_back(std::move(lastParseResult_));

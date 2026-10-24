@@ -646,6 +646,49 @@ TEST(ServerTest, setIndexAndTextDescription) {
   EXPECT_THAT(server.getIndex().getTextName(), testing::Eq("new-text-name"));
 }
 
+// Test that an update via the Graph Store Protocol requires a valid access
+// token before its body is parsed, so that the server never parses input from
+// unauthorized clients. A read via `GET` needs no token.
+TEST(ServerTest, graphStoreProtocolAccessToken) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+  auto postTurtle = [](std::string body,
+                       std::optional<std::string> accessToken) {
+    auto request = makeRequest(http::verb::post, "/?graph=g",
+                               {{http::field::content_type, "text/turtle"}},
+                               std::move(body));
+    if (accessToken.has_value()) {
+      request.set(http::field::authorization, "Bearer " + accessToken.value());
+    }
+    return request;
+  };
+
+  auto expectError = [&server](auto request, http::status status,
+                               std::string_view message) {
+    auto response = server.process(std::move(request));
+    EXPECT_THAT(response, StatusIs(status));
+    EXPECT_THAT(responseBodyToString(std::move(response.body())),
+                testing::HasSubstr(message));
+  };
+
+  // Without a token, the update is rejected for the missing token and not for
+  // the parse error in its body.
+  expectError(postTurtle("<a> <b> not turtle .", std::nullopt),
+              http::status::forbidden,
+              "Update from Graph Store Protocol requires a valid access token");
+
+  // With a token, the same body is a parse error, and a valid body is
+  // inserted.
+  expectError(postTurtle("<a> <b> not turtle .", "accessToken"),
+              http::status::bad_request, "Parse error");
+  EXPECT_THAT(server.process(postTurtle("<d> <e> <f> .", "accessToken")),
+              StatusIs(http::status::ok));
+
+  // A read needs no token.
+  EXPECT_THAT(server.process(makeGetRequest("/?graph=g")),
+              StatusIs(http::status::ok));
+}
+
 // _____________________________________________________________________________
 TEST(ServerTest, clearDeltaTriples) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});

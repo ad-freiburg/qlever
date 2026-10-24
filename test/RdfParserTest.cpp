@@ -443,6 +443,49 @@ TEST(RdfParserTest, blankNodePropertyList) {
   testPropertyListAsSubject(ctreParser());
 }
 
+// Test that blank node property lists and collections are parsed up to the
+// maximum nesting depth and rejected with a parse error beyond it (deeper
+// input would otherwise overflow the stack of this recursive descent parser).
+TEST(RdfParserTest, nestingDepthLimit) {
+  // A statement whose object is `depth` nested terms around `<o>`.
+  auto nested = [](std::string_view open, std::string_view close,
+                   size_t depth) {
+    std::string result = "<s> <p> ";
+    for (size_t i = 0; i < depth; ++i) {
+      absl::StrAppend(&result, open);
+    }
+    absl::StrAppend(&result, "<o>");
+    for (size_t i = 0; i < depth; ++i) {
+      absl::StrAppend(&result, close);
+    }
+    return absl::StrCat(result, " .");
+  };
+  auto testNesting = [&nested](auto makeParser, std::string_view open,
+                               std::string_view close, size_t triplesPerLevel) {
+    using Parser = decltype(makeParser());
+    constexpr size_t max = Parser::maxNestingDepth;
+
+    // The maximum depth is parsed, with the outer triple plus the triples of
+    // each level.
+    auto parser = makeParser();
+    parser.setInputStream(nested(open, close, max));
+    EXPECT_EQ(parser.parseAndReturnAllTriples().size(),
+              1 + max * triplesPerLevel);
+
+    // One level more is a parse error.
+    auto deeperParser = makeParser();
+    deeperParser.setInputStream(nested(open, close, max + 1));
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        deeperParser.parseAndReturnAllTriples(),
+        ::testing::HasSubstr("deeper than the maximum of"),
+        typename Parser::ParseException);
+  };
+  testNesting(re2Parser, "[ <p> ", " ]", 1);
+  testNesting(re2Parser, "( ", " )", 2);
+  testNesting(ctreParser, "[ <p> ", " ]", 1);
+  testNesting(ctreParser, "( ", " )", 2);
+}
+
 TEST(RdfParserTest, base) {
   auto testForGivenParser = [](auto parser) {
     parser.setInputStream("@base <http://www.example.org/path/> .");

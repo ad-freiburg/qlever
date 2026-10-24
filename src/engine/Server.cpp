@@ -916,18 +916,25 @@ Awaitable<void> Server::processSparqlOperation(
   auto visitGraphStore =
       [&request, &visitOperation, &requireValidAccessToken,
        &index](GraphStoreOperation operation) -> Awaitable<void> {
+    // Every method except `GET` and `HEAD` is an update, which requires a valid
+    // access token. Check it before parsing the request body, so that the
+    // server never parses input from unauthorized clients.
+    using boost::beast::http::verb;
+    bool isUpdate =
+        request.method() != verb::get && request.method() != verb::head;
+    if (isUpdate) {
+      requireValidAccessToken("Update from Graph Store Protocol");
+    }
+
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
                                                         request, index);
     tracer->endTrace("parsing");
-
-    if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
-      AD_CORRECTNESS_CHECK(
-          ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
-      requireValidAccessToken("Update from Graph Store Protocol");
-    }
+    AD_CORRECTNESS_CHECK(
+        ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause) ==
+        isUpdate);
 
     std::string operationString = parsedOperations[0]._originalString;
     return visitOperation(
