@@ -114,13 +114,6 @@ void Operation::addUnboundVariableWarningOrThrow(std::string warning) const {
 }
 
 // ________________________________________________________________________
-
-void Operation::recursivelySetTimeConstraint(
-    std::chrono::steady_clock::time_point deadline) {
-  deadline_ = deadline;
-  forAllDescendants([deadline](auto child) {
-    child->getRootOperation()->deadline_ = deadline;
-  });
 }
 
 // _____________________________________________________________________________
@@ -452,13 +445,6 @@ std::shared_ptr<const Result> Operation::getResult(
     throw ad_utility::AbortException(
         "Unexpected exception that is not a subclass of std::exception");
   }
-}
-
-// ______________________________________________________________________
-std::chrono::milliseconds Operation::remainingTime() const {
-  auto interval = deadline_ - std::chrono::steady_clock::now();
-  return std::max(
-      0ms, std::chrono::duration_cast<std::chrono::milliseconds>(interval));
 }
 
 // _____________________________________________________________________________

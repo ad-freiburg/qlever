@@ -1369,8 +1369,8 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 // _____________________________________________________________________________
 CPP_variadic_template_def(typename T, typename... Args)(
     requires std::is_constructible_v<T, Args...>)
-    parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
-        Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
+parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
+    Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
   T target{AD_FWD(args)...};
   auto parseGraphPattern =
       [&target](const parsedQuery::GraphPatternOperation& op) {

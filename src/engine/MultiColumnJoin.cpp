@@ -276,7 +276,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols, sortConfig());
+    IdTableUtils::sort(*result, cols, sortConfig(), cancellationHandle());
   }
 
   // The result that `zipperJoinWithUndef` produces has a different order of

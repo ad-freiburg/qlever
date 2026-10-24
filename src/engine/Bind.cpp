@@ -182,7 +182,7 @@ IdTable Bind::computeExpressionBind(
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       idTable.asStaticView<0>(), getExecutionContext()->getAllocator(),
-      *localVocab, cancellationHandle(), deadline_);
+      *localVocab, cancellationHandle());
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);

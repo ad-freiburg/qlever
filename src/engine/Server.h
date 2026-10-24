@@ -24,7 +24,6 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "libqlever/Qlever.h"
@@ -221,23 +220,21 @@ class Server {
   Awaitable<json> processVacuumDeltaTriples(
       std::optional<std::string_view> userTimeout, bool accessTokenOk);
 
-  // Handle a `write-materialized-view` command: extract the view name, query,
-  // and timeout from `parameters`/`operation`, execute the query, and store
-  // its result as a named materialized view. Like `processVacuumDeltaTriples`
-  // above, a rejected timeout throws an `HttpError` that unwinds out of
-  // `process()`, all the way up to `handleHttpRequest`. Otherwise the
-  // resulting materialized-view stats are returned. On success, the caller is
-  // responsible for resetting the request's operation to `None{}` so that
-  // `process()` doesn't also try to execute it as a regular query.
+  // Handle a `write-materialized-view` command: extract the view name and
+  // query from `parameters`/`operation`, execute the query, store its result
+  // as a named materialized view, and return the resulting materialized-view
+  // stats. On success, the caller is responsible for resetting the request's
+  // operation to `None{}` so that `process()` doesn't also try to execute it
+  // as a regular query.
   Awaitable<json> processWriteMaterializedView(
       const ParamValueMap& parameters, const SparqlOperation& operation,
-      bool accessTokenOk, const ad_utility::Timer& requestTimer);
+      const ad_utility::Timer& requestTimer);
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
-  // manager. Unlike `processWriteMaterializedView` above, this neither
-  // executes a query nor honors a timeout, so it runs synchronously and
-  // either returns its result or throws.
+  // manager. Unlike `processWriteMaterializedView` above, this does not
+  // execute a query, so it runs synchronously and either returns its result or
+  // throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
                                    const SharedIndexAndView& indexAndViews);
 
@@ -383,10 +380,10 @@ class Server {
   // visitor on the given operation.
   CPP_template(typename VisitorT, typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> processOperation(
-          SparqlOperation operation, VisitorT visitor,
-          const ad_utility::Timer& requestTimer, const RequestT& request,
-          SendT& send, const std::optional<PlannedQuery>& plannedQuery);
+  Awaitable<void> processOperation(
+      SparqlOperation operation, VisitorT visitor,
+      const ad_utility::Timer& requestTimer, const RequestT& request,
+      SendT& send, const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -404,7 +401,7 @@ class Server {
           const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, SendT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
+          std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
@@ -419,7 +416,7 @@ class Server {
           MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          const RequestT& request, SendT&& send, TimeLimit timeLimit,
+          const RequestT& request, SendT&& send,
           std::optional<PlannedQuery>& plannedUpdate);
 
   //  Prepare the execution of an operation.
@@ -440,7 +437,6 @@ class Server {
   // Plan a parsed query. The planning and the execution use the cancellation
   // handle of the `qec`.
   PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
-                         TimeLimit timeLimit,
                          const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
@@ -581,12 +577,6 @@ class Server {
   }
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return qlever().allocator();
-  }
-  SortPerformanceEstimator& sortPerformanceEstimator() {
-    return qlever().sortPerformanceEstimator();
-  }
-  const SortPerformanceEstimator& sortPerformanceEstimator() const {
-    return qlever().sortPerformanceEstimator();
   }
   NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
   const NamedResultCache& namedResultCache() const {

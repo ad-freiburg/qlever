@@ -17,7 +17,6 @@
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
-#include "engine/SortPerformanceEstimator.h"
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -113,7 +112,6 @@ class QueryExecutionContext
   QueryExecutionContext(
       std::shared_ptr<const Index> index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
       qlever::Executor executor,
@@ -153,11 +151,6 @@ class QueryExecutionContext
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
-
-  [[nodiscard]] const SortPerformanceEstimator& getSortPerformanceEstimator()
-      const {
-    return _sortPerformanceEstimator;
-  }
 
   [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
@@ -312,7 +305,6 @@ class QueryExecutionContext
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
-  SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;
 
   // Cache the state of both runtime parameters to reduce the contention of the

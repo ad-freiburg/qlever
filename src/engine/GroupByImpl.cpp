@@ -589,8 +589,7 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
       idTable,
       getExecutionContext()->getAllocator(),
       localVocab,
-      cancellationHandle(),
-      deadline_};
+      cancellationHandle()};
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -1898,8 +1897,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // Setup the `EvaluationContext` for this input block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
-        getExecutionContext()->getAllocator(), localVocab, cancellationHandle(),
-        deadline_);
+        getExecutionContext()->getAllocator(), localVocab,
+        cancellationHandle());
     evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
         _groupByVariables.begin(), _groupByVariables.end()};
     evaluationContext._isPartOfGroupBy = true;

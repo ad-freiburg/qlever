@@ -34,7 +34,6 @@ std::chrono::milliseconds QueryExecutionContext::websocketUpdateInterval() {
 QueryExecutionContext::QueryExecutionContext(
     std::shared_ptr<const Index> index, QueryResultCache* const cache,
     ad_utility::AllocatorWithLimit<Id> allocator,
-    SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
     qlever::Executor executor, std::function<void(std::string)> updateCallback,
@@ -46,7 +45,6 @@ QueryExecutionContext::QueryExecutionContext(
       _index(std::move(index)),
       _subtreeCache(cache),
       _allocator(std::move(allocator)),
-      _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
       materializedViewsManager_(std::move(materializedViewsManager)),
