@@ -1418,6 +1418,20 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
+      if constexpr (mode == FilterMode::KeepUnfiltered) {
+        if (!filterAndSubst.filter_.expression_.getExistsExpressions()
+                 .empty()) {
+          // Speculatively applying a filter that contains `EXISTS` to every
+          // candidate subplan multiplies the DP row (the unfiltered plans are
+          // kept alongside) and wraps each candidate in the `ExistsJoin`s for
+          // the filter's argument, which together make planning exponential
+          // in the number of `FILTER (NOT) EXISTS` clauses in a group. Leave
+          // such filters to the final `ReplaceUnfiltered*` passes, which
+          // apply them exactly once per surviving plan.
+          continue;
+        }
+      }
+
       // In `SeedSubstitutesOnly` mode there are no joining rounds afterwards
       // that could complete a partial `SpatialJoin`. Therefore only enforced
       // substitutes may be applied there, because they are complete as soon as
