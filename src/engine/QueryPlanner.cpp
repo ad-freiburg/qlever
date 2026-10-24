@@ -3494,6 +3494,13 @@ void QueryPlanner::GraphPatternPlanner::visitMaterializedViewQuery(
 void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     parsedQuery::SpatialQuery& spatialQuery) {
   auto config = spatialQuery.toSpatialJoinConfiguration();
+  if (config.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
+    planner_.warnings_.push_back(
+        "The spatial search algorithm `<boundingBox>` is deprecated and will "
+        "be removed in a future version of QLever. Please use "
+        "`<libspatialjoin>` or `<s2>` instead. For more information, please "
+        "see the QLever Docs (https://docs.qlever.dev/geosparql/).");
+  }
 
   // If there is no child graph pattern, we need to construct a neutral element
   std::vector<SubtreePlan> candidatesIn;

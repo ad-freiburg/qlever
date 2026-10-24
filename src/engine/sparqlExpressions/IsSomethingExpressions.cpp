@@ -79,8 +79,8 @@ evaluateDatatypesWithBinarySearch(const SparqlExpression& child,
 //    function should be declared in `NaryExpression.h`.
 CPP_class_template(typename NaryOperation,
                    prefilterExpressions::IsDatatype Datatype)(
-    requires(isOperation<NaryOperation>)) class IsDatatypeExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    requires(isOperation<NaryOperation>))
+class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 

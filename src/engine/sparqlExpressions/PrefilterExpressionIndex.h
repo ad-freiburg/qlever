@@ -21,6 +21,7 @@
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/LocalVocab.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
@@ -43,7 +44,7 @@ class IndexImpl;
 
 namespace prefilterExpressions {
 
-using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using IdOrLocalVocabEntry = ::IdOrLocalVocabEntry;
 using Vocab = RdfsVocabulary;
 
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`

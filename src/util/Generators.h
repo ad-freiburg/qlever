@@ -26,12 +26,10 @@ CPP_template(typename InputRange, typename AggregatorT,
              typename T = ql::ranges::range_value_t<InputRange>,
              typename FullyCachedFuncT = int)(
     requires InvocableWithExactReturnType<AggregatorT, bool, std::optional<T>&,
-                                          const T&>
-        CPP_and InvocableWithExactReturnType<
-            FullyCachedFuncT, void,
-            T>) auto wrapGeneratorWithCache(InputRange generator,
-                                            AggregatorT aggregator,
-                                            FullyCachedFuncT onFullyCached) {
+                                          const T&> &&
+    InvocableWithExactReturnType<FullyCachedFuncT, void, T>)
+auto wrapGeneratorWithCache(InputRange generator, AggregatorT aggregator,
+                            FullyCachedFuncT onFullyCached) {
   struct CachingWrapper : public InputRangeFromGet<T> {
     InputRange generator_;
     AggregatorT aggregator_;
