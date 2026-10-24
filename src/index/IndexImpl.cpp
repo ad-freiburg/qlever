@@ -456,6 +456,10 @@ void IndexImpl::prepareIndexBuild() {
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+  // The normalization of the `ql:has-word` triples is stored so that
+  // `ql:normalize` can apply the same normalization at query time.
+  configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
+      hasWordNormalization_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1504,6 +1508,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   }
 
   applyGeoPointEncoding();
+
+  // Indexes built before the normalization was recorded use `Lowercase`.
+  hasWordNormalization_ = configurationJson_.value(
+      std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY},
+      ad_utility::HasWordNormalization::Lowercase);
 
   // The index and the current binary must agree on whether ICU (Unicode)
   // support is available: the two use different string collations, so mixing

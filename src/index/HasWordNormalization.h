@@ -49,6 +49,11 @@ const inline HasWordNormalization HasWordNormalization::Lowercase{
 const inline HasWordNormalization HasWordNormalization::LowercaseNoAccents{
     HasWordNormalization::Enum::LowercaseNoAccents};
 
+// The key under which the normalization is stored in the configuration of an
+// index.
+inline constexpr std::string_view HAS_WORD_NORMALIZATION_KEY =
+    "has-word-normalization";
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_INDEX_HASWORDNORMALIZATION_H

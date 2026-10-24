@@ -822,6 +822,26 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
   }
 }
 
+// _____________________________________________________________________________
+// The normalization of the `ql:has-word` triples is stored in the configuration
+// of the index, so that `getHasWordWords` (used by `ql:normalize`) also applies
+// it after the index has been loaded.
+TEST(IndexTest, hasWordNormalizationIsStored) {
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    TestIndexConfig config{"<a> <b> \"Caf\xc3\xa9\" ."};
+    config.addHasWordTriples = true;
+    config.hasWordNormalization = normalization;
+    return getQec(std::move(config))
+        ->getIndex()
+        .getImpl()
+        .getHasWordWords("Caf\xc3\xa9 CAFE\xcc\x81s!");
+  };
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::Lowercase),
+              ::testing::ElementsAre("caf\xc3\xa9", "cafe", "s"));
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              ::testing::ElementsAre("cafe", "cafes"));
+}
+
 TEST(IndexTest, NumDistinctEntities) {
   std::string turtleInput =
       "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
