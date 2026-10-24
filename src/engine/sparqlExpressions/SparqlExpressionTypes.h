@@ -150,13 +150,6 @@ struct EvaluationContext {
 
   ad_utility::SharedCancellationHandle cancellationHandle_;
 
-  // A point in time at which the evaluation of the expression is to be
-  // cancelled because of a timeout. This is used by mechanisms that can't use
-  // the `cancellationHandle_` directly, like the sorting in a `COUNT DISTINCT
-  // *` expression.
-  using TimePoint = std::chrono::steady_clock::time_point;
-  TimePoint deadline_;
-
   // The order of `ORDER BY`, which `MIN` and `MAX` use. It is constructed once
   // here, because its construction is too expensive for each comparison.
   OrderByComparator orderByComparator_;
@@ -167,20 +160,7 @@ struct EvaluationContext {
                     IdTableView<0> inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle,
-                    TimePoint deadline);
-
-  /// Overload that accepts a materialized `IdTable` and converts it to a view.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnMap& variableToColumnMap,
-                    const IdTable& inputTable,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle,
-                    TimePoint deadline)
-      : EvaluationContext(qec, variableToColumnMap,
-                          inputTable.asStaticView<0>(), allocator, localVocab,
-                          std::move(cancellationHandle), deadline) {}
+                    ad_utility::SharedCancellationHandle cancellationHandle);
 
   bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.

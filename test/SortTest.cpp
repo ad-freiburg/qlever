@@ -23,7 +23,6 @@
 #include "util/Tie.h"
 
 using namespace std::string_literals;
-using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
@@ -101,7 +100,8 @@ TEST(Sort, sortNumTasksInFlight) {
     IdTable input = shuffled.clone();
     IdTableUtils::sort(
         input, {0},
-        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks});
+        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks},
+        std::make_shared<ad_utility::CancellationHandle<>>());
     EXPECT_EQ(input, expected) << "numTasks = " << numTasks;
   }
 }
@@ -271,28 +271,30 @@ TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
   EXPECT_FALSE(sort.makeSortedTree({1, 0}).has_value());
 }
 
-// _____________________________________________________________________________
-
-TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
-  VectorTable input;
-  // Make sure the estimator estimates a couple of ms to sort this
-  for (int64_t i = 0; i < 1000; i++) {
-    input.push_back({0, i});
+// Test that `IdTableUtils::sort` (the in-memory sort of `Sort`, `OrderBy`,
+// ...) throws when its cancellation handle has been cancelled.
+TEST(Sort, inMemorySortIsCancellable) {
+  // The same permutation of 1M rows as in `sortNumTasksInFlight` above.
+  constexpr int64_t numRows = 1'000'000;
+  IdTable table{2, ad_utility::testing::makeAllocator()};
+  for (int64_t i = 0; i < numRows; ++i) {
+    int64_t j = (i * 7919) % numRows;
+    table.push_back({Id::makeFromInt(j), Id::makeFromInt(-j)});
   }
-  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  Sort sort = makeSort(std::move(inputTable), {1, 0});
-  // Safe to do, because we know the underlying estimator is mutable
-  const_cast<SortPerformanceEstimator&>(
-      sort.getExecutionContext()->getSortPerformanceEstimator())
-      .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
-          sort.sortConfig());
 
-  sort.recursivelySetTimeConstraint(0ms);
-
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::CancellationException);
+  // A sort with a cancelled handle throws, in a single task and in parallel.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  for (uint32_t numTasks : {1, 8}) {
+    IdTable input = table.clone();
+    EXPECT_THROW(
+        IdTableUtils::sort(
+            input, {0},
+            SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks},
+            handle),
+        ad_utility::CancellationException)
+        << "numTasks = " << numTasks;
+  }
 }
 
 // _____________________________________________________________________________
