@@ -744,7 +744,38 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<numNearestNeighbors>` expects an integer"));
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
+  // Zero and negative limits are rejected (zero used to crash the `s2`
+  // algorithm, which pops an empty result queue for `max_results == 0`).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:numNearestNeighbors 0 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:numNearestNeighbors -1 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1951,6 +1982,23 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                                          "?y <nearest-neighbors:0:-1> ?b }",
                                          ::testing::_),
                                ::testing::ContainsRegex("unknown triple"));
+
+  // A limit of zero matches the regex but is rejected like for the `SERVICE`
+  // syntax, also when it stems from a number too large for `size_t`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:0> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("must be a positive integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:99999999999999999999> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("must be a positive integer"));
 
   EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"

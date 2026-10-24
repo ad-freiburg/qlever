@@ -16,6 +16,9 @@
 #include <s2/s2point_index.h>
 #include <s2/util/units/length-units.h>
 
+#include <algorithm>
+#include <limits>
+
 #include "util/GeoConverters.h"
 
 using namespace geometryConverters;
@@ -52,9 +55,14 @@ Result S2GeometryAlgorithm::run() {
   // Construct a query object with the given constraints
   auto s2query = S2ClosestPointQuery<size_t>{&s2index};
 
+  // The parser guarantees a limit of at least one. Clamp it to `INT_MAX`
+  // (which `s2` cannot exceed anyway), because a plain cast of a larger value
+  // could yield zero or a negative number, both of which crash `s2`.
   if (maxResults_.has_value()) {
-    s2query.mutable_options()->set_max_results(
-        static_cast<int>(maxResults_.value()));
+    auto maxResults =
+        std::min(maxResults_.value(),
+                 static_cast<size_t>(std::numeric_limits<int>::max()));
+    s2query.mutable_options()->set_max_results(static_cast<int>(maxResults));
   }
   if (maxDist_.has_value()) {
     s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(

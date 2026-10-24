@@ -823,6 +823,18 @@ class SpatialJoinParamTest
           mergeToRow(Mun, TF, expectedDistUniMun),
           mergeToRow(Eye, Eif, expectedDistEyeEif),
           mergeToRow(Eif, Eye, expectedDistEyeEif)}}}},
+      // A limit far above `INT_MAX` behaves like no limit (the `s2` algorithm
+      // clamps it instead of truncating it to zero). Within 4000 m every point
+      // has at most two neighbors, so the rows are those for a limit of two.
+      {size_t{1} << 32,
+       {{4000,
+         {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf),
+          mergeToRow(TF, Mun, expectedDistUniMun),
+          mergeToRow(Mun, TF, expectedDistUniMun)}}}},
       {3,
        {{500000,
          {mergeToRow(TF, TF, expectedDistSelf),
@@ -1009,7 +1021,8 @@ INSTANTIATE_TEST_SUITE_P(
                           NearestNeighborsConfig{2, 400000},
                           NearestNeighborsConfig{2, 4000},
                           NearestNeighborsConfig{2, 40},
-                          NearestNeighborsConfig{3, 500000}),
+                          NearestNeighborsConfig{3, 500000},
+                          NearestNeighborsConfig{size_t{1} << 32, 4000}),
         ::testing::Bool(), ::testing::Bool()));
 
 }  // namespace computeResultTest
