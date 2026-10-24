@@ -110,9 +110,36 @@ class Service : public Operation {
   // `OptionalJoin` and `Minus`), only the right operation can be a `Service`.
   // `Sort` and `StripColumns` operations on top of the children are looked
   // through.
-  static void precomputeSiblingResult(std::shared_ptr<Operation> left,
-                                      std::shared_ptr<Operation> right,
-                                      bool rightOnly, bool requestLaziness);
+  //
+  // The returned guard has to be kept alive by the caller until its
+  // `computeResult` returns or throws, see `SiblingResultGuard`.
+  class SiblingResultGuard;
+  [[nodiscard]] static SiblingResultGuard precomputeSiblingResult(
+      std::shared_ptr<Operation> left, std::shared_ptr<Operation> right,
+      bool rightOnly, bool requestLaziness);
+
+  // Releases the precomputed result of the sibling on destruction if the
+  // sibling has not consumed it via `getResult` by then (e.g. because the
+  // parent's computation threw after the precomputation). Otherwise, the
+  // result, which may be lazy and then calls back into the sibling when it is
+  // destroyed, would only be destroyed by the destructor of the sibling, when
+  // the derived parts of the sibling are already gone ("pure virtual method
+  // called").
+  class SiblingResultGuard {
+    std::shared_ptr<Operation> sibling_;
+
+   public:
+    SiblingResultGuard() = default;
+    explicit SiblingResultGuard(std::shared_ptr<Operation> sibling)
+        : sibling_{std::move(sibling)} {}
+    SiblingResultGuard(const SiblingResultGuard&) = delete;
+    SiblingResultGuard& operator=(const SiblingResultGuard&) = delete;
+    ~SiblingResultGuard() {
+      if (sibling_ != nullptr) {
+        sibling_->precomputedResultBecauseSiblingOfService().reset();
+      }
+    }
+  };
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -197,8 +224,11 @@ class Service : public Operation {
 // `preco completely disabn completely in the C++17 mode, hen we canthen we
 // still can't// wffix  th
 struct Service {
+  struct SiblingResultGuard {};
   template <typename... Ts>
-  static void precomputeSiblingResult(Ts&&...) {}
+  static SiblingResultGuard precomputeSiblingResult(Ts&&...) {
+    return {};
+  }
 };
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 

@@ -114,9 +114,9 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 
   // If one of the RootOperations is a Service, precompute the result of its
   // sibling.
-  Service::precomputeSiblingResult(left_->getRootOperation(),
-                                   right_->getRootOperation(), false,
-                                   requestLaziness);
+  auto siblingResultGuard = Service::precomputeSiblingResult(
+      left_->getRootOperation(), right_->getRootOperation(), false,
+      requestLaziness);
 
   // Always materialize results that meet one of the following criteria:
   // * They are already present in the cache

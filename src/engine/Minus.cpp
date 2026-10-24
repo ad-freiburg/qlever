@@ -45,9 +45,9 @@ Result Minus::computeResult(bool requestLaziness) {
 
   // If the right of the RootOperations is a Service, precompute the result of
   // its sibling.
-  Service::precomputeSiblingResult(_left->getRootOperation(),
-                                   _right->getRootOperation(), true,
-                                   requestLaziness);
+  auto siblingResultGuard = Service::precomputeSiblingResult(
+      _left->getRootOperation(), _right->getRootOperation(), true,
+      requestLaziness);
 
   if (auto res = tryIndexNestedLoopJoinIfSuitable(requestLaziness)) {
     return std::move(res).value();

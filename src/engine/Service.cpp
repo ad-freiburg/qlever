@@ -631,16 +631,16 @@ VariableToColumnMap getSiblingVariables(const Operation& sibling,
 }  // namespace
 
 // ____________________________________________________________________________
-void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
-                                      std::shared_ptr<Operation> right,
-                                      bool rightOnly, bool requestLaziness) {
+Service::SiblingResultGuard Service::precomputeSiblingResult(
+    std::shared_ptr<Operation> left, std::shared_ptr<Operation> right,
+    bool rightOnly, bool requestLaziness) {
   AD_CORRECTNESS_CHECK(left && right);
 
   // Remember the original operations, needed for `getSiblingVariables`.
   const auto outerLeft = left;
   const auto outerRight = right;
   if (!skipSortAndStripColumns(left) || !skipSortAndStripColumns(right)) {
-    return;
+    return {};
   }
 
   auto a = std::dynamic_pointer_cast<Service>(left);
@@ -655,7 +655,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>() ||
       (rightOnly && !static_cast<bool>(b)) ||
       (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
-    return;
+    return {};
   }
 
   const auto& [service, sibling] = [&]() {
@@ -671,7 +671,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // If this operation is constrained by a `LIMIT` or `OFFSET` we can't apply
   // the optimization.
   if (!service->getLimitOffset().isUnconstrained()) {
-    return;
+    return {};
   }
 
   auto siblingVariables =
@@ -698,7 +698,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     sibling->precomputedResultBecauseSiblingOfService() =
         std::move(siblingResult);
     addRuntimeInfo(resultIsSmall);
-    return;
+    return SiblingResultGuard{sibling};
   }
 
   // Start materializing the lazy `siblingResult`.
@@ -732,7 +732,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
                   ql::views::join},
               siblingResult->sortedBy());
       addRuntimeInfo(false);
-      return;
+      return SiblingResultGuard{sibling};
     }
   }
 
@@ -755,6 +755,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;
   addRuntimeInfo(true);
+  return SiblingResultGuard{sibling};
 }
 
 // _____________________________________________________________________________

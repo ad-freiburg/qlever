@@ -10,6 +10,7 @@
 #include <regex>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/Join.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
@@ -890,8 +891,8 @@ TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
 
   auto sibling = std::make_shared<AlwaysFailOperation>(testQec, Variable{"?x"});
 
-  EXPECT_NO_THROW(
-      Service::precomputeSiblingResult(sibling, service, true, false));
+  EXPECT_NO_THROW(auto guard = Service::precomputeSiblingResult(
+                      sibling, service, true, false));
   EXPECT_FALSE(service->siblingInfo_.has_value());
 }
 
@@ -922,11 +923,44 @@ TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit) {
     auto sibling =
         std::make_shared<AlwaysFailOperation>(testQec, Variable{"?x"});
 
-    EXPECT_NO_THROW(
-        Service::precomputeSiblingResult(sibling, service, true, false));
+    EXPECT_NO_THROW(auto guard = Service::precomputeSiblingResult(
+                        sibling, service, true, false));
     EXPECT_FALSE(service->siblingInfo_.has_value());
   }
 }
+
+namespace {
+// Adaptation of the `Values` class that computes lazy results (one row per
+// chunk) when laziness is requested.
+class MockValues : public Values {
+ public:
+  MockValues(QueryExecutionContext* qec, parsedQuery::SparqlValues parsedValues)
+      : Operation{qec}, Values(qec, parsedValues) {}
+
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
+    Result res = Values::computeResult(false);
+
+    if (!requestLaziness) {
+      return Result(Result::IdTableVocabPair(res.cloneIdTable(),
+                                             res.localVocab().clone()),
+                    res.sortedBy());
+    }
+
+    // yield each row individually
+    return {[&](IdTable clone) -> Result::Generator {
+              IdTable idt{clone.numColumns(),
+                          ad_utility::makeUnlimitedAllocator<IdTable>()};
+              for (size_t i = 0; i < clone.size(); ++i) {
+                idt.push_back(clone[i]);
+                Result::IdTableVocabPair pair{std::move(idt), LocalVocab{}};
+                co_yield pair;
+                idt.clear();
+              }
+            }(res.cloneIdTable()),
+            res.sortedBy()};
+  }
+};
+}  // namespace
 
 // ____________________________________________________________________________
 TEST_F(ServiceTest, precomputeSiblingResult) {
@@ -945,37 +979,6 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
           boost::beast::http::status::ok, "application/sparql-results+json"));
 
   auto service2 = std::make_shared<Service>(*service);
-
-  // Adaptation of the Values class, allowing to compute lazy Results.
-  class MockValues : public Values {
-   public:
-    MockValues(QueryExecutionContext* qec,
-               parsedQuery::SparqlValues parsedValues)
-        : Operation{qec}, Values(qec, parsedValues) {}
-
-    Result computeResult([[maybe_unused]] bool requestLaziness) override {
-      Result res = Values::computeResult(false);
-
-      if (!requestLaziness) {
-        return Result(Result::IdTableVocabPair(res.cloneIdTable(),
-                                               res.localVocab().clone()),
-                      res.sortedBy());
-      }
-
-      // yield each row individually
-      return {[&](IdTable clone) -> Result::Generator {
-                IdTable idt{clone.numColumns(),
-                            ad_utility::makeUnlimitedAllocator<IdTable>()};
-                for (size_t i = 0; i < clone.size(); ++i) {
-                  idt.push_back(clone[i]);
-                  Result::IdTableVocabPair pair{std::move(idt), LocalVocab{}};
-                  co_yield pair;
-                  idt.clear();
-                }
-              }(res.cloneIdTable()),
-              res.sortedBy()};
-    }
-  };
 
   auto iri = ad_utility::testing::iri;
   using TC = TripleComponent;
@@ -996,7 +999,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   };
 
   // Right requested but it is not a Service -> no computation
-  Service::precomputeSiblingResult(service, sibling, true, false);
+  auto guard1 = Service::precomputeSiblingResult(service, sibling, true, false);
   EXPECT_FALSE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_FALSE(service->siblingInfo_.has_value());
@@ -1004,7 +1007,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   reset();
 
   // Two Service operations -> no computation
-  Service::precomputeSiblingResult(service, service2, false, false);
+  auto guard2 =
+      Service::precomputeSiblingResult(service, service2, false, false);
   EXPECT_FALSE(
       service2->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_FALSE(service->siblingInfo_.has_value());
@@ -1012,7 +1016,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   reset();
 
   // Right requested and two Service operations -> compute
-  Service::precomputeSiblingResult(service, service2, true, false);
+  auto guard3 =
+      Service::precomputeSiblingResult(service, service2, true, false);
   EXPECT_TRUE(service2->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_TRUE(service->siblingInfo_.has_value());
   EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
@@ -1020,7 +1025,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Right requested and it is a service -> sibling result is computed and
   // shared with service
-  Service::precomputeSiblingResult(sibling, service, true, false);
+  auto guard4 = Service::precomputeSiblingResult(sibling, service, true, false);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
@@ -1034,7 +1039,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
-    Service::precomputeSiblingResult(sibling, service, true, false);
+    auto guard =
+        Service::precomputeSiblingResult(sibling, service, true, false);
     ASSERT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
                     .has_value());
     EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
@@ -1048,7 +1054,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
   // shared with service
-  Service::precomputeSiblingResult(service, sibling, false, true);
+  auto guard5 = Service::precomputeSiblingResult(service, sibling, false, true);
   ASSERT_TRUE(
       siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
@@ -1063,7 +1069,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
-    Service::precomputeSiblingResult(service, sibling, false, true);
+    auto guard =
+        Service::precomputeSiblingResult(service, sibling, false, true);
     ASSERT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
                     .has_value());
     EXPECT_FALSE(siblingOperation->precomputedResultBecauseSiblingOfService()
@@ -1074,12 +1081,51 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
         service->precomputedResultBecauseSiblingOfService().has_value());
   }
 
-  // consume the sibling result-generator
-  for ([[maybe_unused]] auto& _ :
-       siblingOperation->precomputedResultBecauseSiblingOfService()
-           .value()
-           ->idTables()) {
-  }
+  // The guard has released the unconsumed lazy result of the sibling.
+  EXPECT_FALSE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+}
+
+// ____________________________________________________________________________
+// Regression test: if the computation of a `Join` fails after the lazy result
+// of the sibling of a `Service` was precomputed, but before the sibling has
+// consumed it (here: because the `Service` fails, in practice because of a
+// timeout while the `Service` result is sorted), then the result must be
+// released when the computation ends. It used to be destroyed only by the
+// destructor of the sibling, and then called back into the half-destroyed
+// sibling ("pure virtual method called").
+TEST_F(ServiceTest, unconsumedLazySiblingResultIsReleased) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          false},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }", "service failed",
+          boost::beast::http::status::internal_server_error, "text/plain"));
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto sibling = std::make_shared<MockValues>(
+      testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?z"}},
+                                         {{TC(iri("<x>")), TC(iri("<y>"))},
+                                          {TC(iri("<z>")), TC(iri("<a>"))}}});
+  // The `Service` is the left child, so it is computed (and fails) before the
+  // sibling on the right consumes its precomputed result.
+  auto join = std::make_shared<Join>(
+      testQec, std::make_shared<QueryExecutionTree>(testQec, service),
+      std::make_shared<QueryExecutionTree>(testQec, sibling), 0, 0, true,
+      false);
+  EXPECT_ANY_THROW(join->computeResult(true));
+  EXPECT_FALSE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  // Used to terminate the program.
+  join.reset();
+  sibling.reset();
 }
 
 // ____________________________________________________________________________
@@ -1135,7 +1181,8 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    Service::precomputeSiblingResult(sibling, wrap(service), true, false);
+    auto guard =
+        Service::precomputeSiblingResult(sibling, wrap(service), true, false);
     ASSERT_TRUE(service->siblingInfo_.has_value());
     EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
     EXPECT_TRUE(
@@ -1147,7 +1194,8 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    Service::precomputeSiblingResult(service, wrap(sibling), false, false);
+    auto guard =
+        Service::precomputeSiblingResult(service, wrap(sibling), false, false);
     ASSERT_TRUE(service->siblingInfo_.has_value());
     EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
     EXPECT_TRUE(
@@ -1156,7 +1204,8 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    Service::precomputeSiblingResult(wrap(sibling), service, true, false);
+    auto guard =
+        Service::precomputeSiblingResult(wrap(sibling), service, true, false);
     ASSERT_TRUE(service->siblingInfo_.has_value());
     EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
     EXPECT_TRUE(
@@ -1168,7 +1217,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    Service::precomputeSiblingResult(
+    auto guard = Service::precomputeSiblingResult(
         sibling, wrap(service, LimitOffsetClause{1}), true, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(
@@ -1177,8 +1226,8 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    Service::precomputeSiblingResult(wrap(service, LimitOffsetClause{1}),
-                                     sibling, false, false);
+    auto guard = Service::precomputeSiblingResult(
+        wrap(service, LimitOffsetClause{1}), sibling, false, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(
         sibling->precomputedResultBecauseSiblingOfService().has_value());
@@ -1194,7 +1243,8 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     innerSort->applyLimitOffset(LimitOffsetClause{1});
     auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
                                             std::vector<ColumnIndex>{0});
-    Service::precomputeSiblingResult(sibling, outerSort, true, false);
+    auto guard =
+        Service::precomputeSiblingResult(sibling, outerSort, true, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(
         sibling->precomputedResultBecauseSiblingOfService().has_value());
