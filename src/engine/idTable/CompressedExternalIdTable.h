@@ -196,7 +196,8 @@ class CompressedExternalIdTableWriter {
           "over");
     }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
+    size_t blockSize =
+        blockSizeUncompressed_.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
     AD_CONTRACT_CHECK(blockSize > 0);
     size_t firstBlockIdx = blocksPerColumn_.at(0).size();
     startOfSingleIdTables_.push_back(firstBlockIdx);
@@ -237,7 +238,8 @@ class CompressedExternalIdTableWriter {
     size_t lower = blockIdx * layout.blockSize_;
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
-    auto uncompressedSize = (upper - lower) * sizeof(Id);
+    static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
+    auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed =
         ZstdWrapper::compress(column.data() + lower, uncompressedSize);
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
@@ -340,7 +342,8 @@ class CompressedExternalIdTableWriter {
 
   // The number of rows in the block with the given global index.
   size_t numRowsInBlock(size_t blockIdx) const {
-    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
+    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ /
+           BYTES_PER_ID_COLUMN_ENTRY;
   }
 
   // The index (in the `ColumnMetadata` of a single column) of the first block
@@ -563,7 +566,7 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   // the input concept of `parallelBlockMerge`.
   template <typename R>
   MemorySize memorySizeOfElement([[maybe_unused]] const R& row) const {
-    return MemorySize::bytes(writer().numColumns() * sizeof(Id));
+    return MemorySize::bytes(writer().numColumns() * BYTES_PER_ID_COLUMN_ENTRY);
   }
 
  private:
@@ -612,7 +615,7 @@ namespace compressedExternalIdTable {
 // being sorted and written to disk in the background, and one that is used to
 // collect rows in the calls to `push`.
 inline size_t blockMemoryPerRow(size_t numColumns) {
-  return numColumns * sizeof(Id) * 2;
+  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2;
 }
 
 // The number of rows per block that a `CompressedExternalIdTableBase` with
@@ -634,10 +637,10 @@ inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
 // class.
 CPP_class_template(size_t NumStaticCols,
-                   typename BlockTransformation = ad_utility::Noop)(requires(
-    ql::concepts::invocable<
-        BlockTransformation,
-        IdTableStatic<NumStaticCols>&>)) class CompressedExternalIdTableBase {
+                   typename BlockTransformation = ad_utility::Noop)(
+    requires(ql::concepts::invocable<BlockTransformation,
+                                     IdTableStatic<NumStaticCols>&>))
+class CompressedExternalIdTableBase {
  public:
   using value_type = typename IdTableStatic<NumStaticCols>::row_type;
   using reference = typename IdTableStatic<NumStaticCols>::row_reference;
@@ -892,8 +895,8 @@ CPP_class_template(size_t NumStaticCols,
   }
 
   // Asynchronously compress the `block` and write it to the underlying
-  // `writer_`. Before compressing, apply the transformation that is specified
-  // by the `Impl` via the `transformBlock` function.
+  // `writer_`. Before compressing, apply the `blockTransformation_` (e.g. the
+  // `BlockSorter` of the `CompressedExternalIdTableSorter`).
   //
   // Return the block of the *previous* such task (empty, but with its memory
   // still allocated), or `std::nullopt` if there was no previous task. Reusing
@@ -1110,28 +1113,34 @@ inline std::atomic<bool>
 // left to run the sort and the process deadlocks. So before `asyncPushBlock` is
 // used with the global executor, either the sink must not block on the pool,
 // or the sort has to become non-blocking (see `blockIndirectSortAsync`).
+//
+// The sort can be cancelled via the `cancellationHandle`.
 template <typename Range, typename Comparator>
-void sortBlockRange(Range& block, const Comparator& comparator) {
+void sortBlockRange(
+    Range& block, const Comparator& comparator,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
   ad_utility::blockSort::blockIndirectSort(
       ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
       static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
-      ad_utility::globalExecutor());
+      ad_utility::globalExecutor(), cancellationHandle);
 }
 
 // The implementation of sorting a single block, see `sortBlockRange` above.
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
+  ad_utility::SharedCancellationHandle cancellationHandle_;
   template <typename T>
   void operator()(T& block) {
-    sortBlockRange(block, comparator_);
+    sortBlockRange(block, comparator_, cancellationHandle_);
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
 // in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
 // it.
 template <typename Comparator>
-BlockSorter(Comparator) -> BlockSorter<Comparator>;
+BlockSorter(Comparator,
+            ad_utility::SharedCancellationHandle) -> BlockSorter<Comparator>;
 
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
@@ -1142,6 +1151,9 @@ class CompressedExternalIdTableSorter
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
   [[no_unique_address]] Comparator comparator_{};
+  // Checked by the sorts of the blocks and by the merge phase, see the
+  // constructor.
+  ad_utility::SharedCancellationHandle cancellationHandle_;
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
 
@@ -1184,19 +1196,30 @@ class CompressedExternalIdTableSorter
       compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
 
  public:
-  // Constructor.
+  // Constructor. The sorter can be cancelled via the `cancellationHandle`,
+  // which must not be `nullptr` (the default is a handle that is never
+  // cancelled): the sorts of the blocks and the merge phase check it regularly
+  // and throw a `CancellationException`.
+  //
+  // NOTE: The sort of a block runs in the background, so its exception is
+  // rethrown by a later `push` or `pushBlock` (when the next block is written)
+  // or by `getSortedBlocks`.
   CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      Comparator comparator = {})
+      Comparator comparator = {},
+      ad_utility::SharedCancellationHandle cancellationHandle =
+          std::make_shared<ad_utility::CancellationHandle<>>())
       : Base{std::move(filename),
              numCols,
              memory,
              std::move(allocator),
              blocksizeCompression,
-             BlockSorter{comparator}},
-        comparator_{comparator} {
+             BlockSorter{comparator, cancellationHandle}},
+        comparator_{comparator},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
     this->setAsyncPushExecutor(mergeExecutor_);
   }
 
@@ -1206,10 +1229,13 @@ class CompressedExternalIdTableSorter
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      Comparator comp = {})(requires(NumStaticCols > 0))
-      : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
-                                        memory, std::move(allocator),
-                                        blocksizeCompression, comp) {}
+      Comparator comp = {},
+      ad_utility::SharedCancellationHandle cancellationHandle =
+          std::make_shared<ad_utility::CancellationHandle<>>())(
+      requires(NumStaticCols > 0))
+      : CompressedExternalIdTableSorter(
+            std::move(filename), NumStaticCols, memory, std::move(allocator),
+            blocksizeCompression, comp, std::move(cancellationHandle)) {}
 
   // Explicitly inherit the `push` function, such that we can use it unqualified
   // within this class.
@@ -1415,11 +1441,7 @@ class CompressedExternalIdTableSorter
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
             this->comparator_, makeBlockStorageFactory<N>(parameters),
-            std::move(options),
-            // NOTE: The sorter has no cancellation handle of its own, and the
-            // merge requires one that is not `nullptr`, so this is a fresh
-            // handle that is never cancelled.
-            std::make_shared<ad_utility::CancellationHandle<>>());
+            std::move(options), cancellationHandle_);
     return ad_utility::InputRangeTypeErased{
         checkedMergeResult<N>(std::move(merged))};
   }
@@ -1475,16 +1497,6 @@ class CompressedExternalIdTableSorter
                 << this->memory_.asString()
                 << ". Increasing the memory limit will speed up the merge."
                 << std::endl;
-  }
-
-  // _____________________________________________________________
-  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockRange(block, comparator_);
-  }
-
-  // A function with this name is needed by the mixin base class.
-  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockInPlace(block);
   }
 };
 }  // namespace ad_utility

@@ -50,9 +50,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(nquads, "application", "n-quads", {".nq"});
     add(octetStream, "application", "octet-stream", {});
     add(binaryQleverExport, "application",
-        absl::StrCat("qlever-export-v", binaryQleverExportVersion,
-                     "+octet-stream"),
-        {});
+        absl::StrCat("vnd.qlever.results.v", binaryQleverExportVersion), {});
     return t;
   }();
   return types;

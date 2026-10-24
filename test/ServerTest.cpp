@@ -6,7 +6,9 @@
 #include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
+#include <future>
 #include <optional>
+#include <thread>
 
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
@@ -108,6 +110,58 @@ TEST(ServerTest, getQueryId) {
                                     QueryOperation::QUERY);
   auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }",
                                     QueryOperation::QUERY);
+}
+
+// Test that the timeout timer cancels the handle at the deadline and does not
+// if it is cancelled before.
+TEST(ServerTest, cancelAfterDeadline) {
+  using namespace std::chrono_literals;
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
+
+  // The deadline is reached, so the handle is cancelled.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // The returned callback owns the timer, so it has to be kept alive.
+  auto cancelTimeout = server.cancelAfterDeadline(handle, 1ms);
+  auto giveUp = std::chrono::steady_clock::now() + 10s;
+  while (!handle->isCancelled() && std::chrono::steady_clock::now() < giveUp) {
+    std::this_thread::sleep_for(1ms);
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle->throwIfCancelled(),
+                                        ::testing::HasSubstr("timed out"),
+                                        ad_utility::CancellationException);
+
+  // The timer is cancelled before the deadline, so the handle is not.
+  handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  server.cancelAfterDeadline(handle, 1h)();
+  // Cancelling the timer has queued its handler on the single timer thread, so
+  // it has run once a task that is posted afterwards has run.
+  std::promise<void> handlerHasRun;
+  boost::asio::post(server.timerExecutor_,
+                    [&handlerHasRun]() { handlerHasRun.set_value(); });
+  handlerHasRun.get_future().wait();
+  EXPECT_FALSE(handle->isCancelled());
+}
+
+// Test that the `RunAfter` of the server runs its task after the delay, can
+// be reused and rejects overlapping waits.
+TEST(ServerTest, makeWatchDogRunAfter) {
+  using namespace std::chrono_literals;
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
+  auto runAfter = server.makeWatchDogRunAfter();
+
+  // The task is run, and the timer can be reused once it has.
+  for (size_t i = 0; i < 2; ++i) {
+    auto taskHasRun = std::make_shared<std::promise<void>>();
+    runAfter(1ms, [taskHasRun]() { taskHasRun->set_value(); });
+    EXPECT_EQ(taskHasRun->get_future().wait_for(10s),
+              std::future_status::ready);
+  }
+
+  // `RunAfter` must not be called while a previous wait is still pending.
+  runAfter(1h, []() {});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runAfter(1ms, []() {}),
+      ::testing::HasSubstr("must not be called while a previous wait"));
 }
 
 // _____________________________________________________________________________
@@ -684,6 +738,24 @@ TEST(ServerTest, processCommands) {
       boost::beast::http::status::bad_request,
       testing::HasSubstr(
           "Unknown value \"not-a-real-command\" for parameter \"cmd\""));
+}
+
+// Test that a request with neither a known URL parameter nor a known path is
+// answered with an error response.
+TEST(ServerTest, unknownParametersAndPath) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown URL parameter results in a 400 Bad Request response.
+  auto response = server.process(makeGetRequest("/?nexistepas=1"));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown query parameters"));
+
+  // An unknown path without URL parameters results in a 404 Not Found response.
+  response = server.process(makeGetRequest("/nexistepas"));
+  EXPECT_THAT(response, StatusIs(http::status::not_found));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown path"));
 }
 
 // _____________________________________________________________________________

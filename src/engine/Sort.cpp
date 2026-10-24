@@ -86,7 +86,7 @@ Result Sort::computeResult(bool requestLaziness) {
   size_t maxNumRowsToBeSortedInMemory =
       getRuntimeParameter<&RuntimeParameters::sortInMemoryThreshold_>()
           .getBytes() /
-      (numColumns * sizeof(Id));
+      (numColumns * BYTES_PER_ID_COLUMN_ENTRY);
 
   // Always request lazy input to avoid premature materialization.
   std::shared_ptr<const Result> input = subtree_->getResult(true);
@@ -143,15 +143,8 @@ Result Sort::computeResultInMemory(IdTable idTable,
                                    LocalVocab localVocab) const {
   runtimeInfo().addDetail("is-external", "false");
 
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
-
-  IdTableUtils::sort(idTable, sortColumnIndices_);
-
-  // Don't report missed timeout check because the in-memory sort is currently
-  // not cancellable.
-  cancellationHandle_->resetWatchDogState();
-  checkCancellation();
+  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig(),
+                     cancellationHandle_);
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
@@ -183,7 +176,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      SortByColumns{sortColumnIndices_});
+      SortByColumns{sortColumnIndices_}, cancellationHandle_);
 
   // Push the already collected blocks and the remaining blocks from the
   // iterator. For lazy input, the iterator yields `IdTableVocabPair` (move the
@@ -215,8 +208,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   // size of the result, so we can reserve exactly the right amount of space.
   //
   // TODO: We could tell `getSortedBlocks` to give us a single block and thus
-  // avoid the loop. However, we would then have to handle cancellation inside
-  // `getSortedBlocks`.
+  // avoid the loop (the merge checks the cancellation handle itself).
   if (!requestLaziness) {
     IdTable result{numColumns, allocator()};
     result.reserve(sorter->size());
@@ -224,7 +216,6 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       checkCancellation();
       result.insertAtEnd(block);
     }
-    cancellationHandle_->resetWatchDogState();
     checkCancellation();
     return {std::move(result), resultSortedOn(), std::move(mergedLocalVocab)};
   }

@@ -276,6 +276,17 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t numThreads);
 
+ private:
+  // Check the configuration and read the settings file, before the input files
+  // of `createFromFiles` are processed.
+  void prepareIndexBuild();
+
+  // The part of `createFromFiles` after `prepareIndexBuild`.
+  void createFromFilesAfterPreparation(
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+      size_t numThreads);
+
+ public:
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const std::string& onDiskBase,

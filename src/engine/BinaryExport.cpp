@@ -2,9 +2,9 @@
 //
 // 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -14,9 +14,11 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <array>
 #include <cstring>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
 #include "engine/StringMapping.h"
@@ -25,7 +27,6 @@
 #include "util/Generator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
-#include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 // TODO<joka921> Can we get further type erasure here to not include the
@@ -42,9 +43,11 @@ std::string_view raw(const std::integral auto& value) {
 
 namespace qlever::binary_export {
 
-// _____________________________________________________________________________
-AD_ALWAYS_INLINE Id toExportableId(Id originalId,
-                                   StringMapping& stringMapping) {
+// Convert `originalId`, which might contain references into this process'
+// memory space to an id that completely inlines a value, or one that only has
+// a reference to the passed `stringMapping`.
+AD_ALWAYS_INLINE static Id toExportableId(Id originalId,
+                                          StringMapping& stringMapping) {
   if (originalId.isTrivial() ||
       originalId.getDatatype() == Datatype::BlankNodeIndex ||
       originalId.getDatatype() == Datatype::EncodedVal) {
@@ -59,31 +62,14 @@ AD_ALWAYS_INLINE Id toExportableId(Id originalId,
 // The following assertions only detect a change of the datatype tags.
 static_assert(ad_utility::binaryQleverExportVersion == 1);
 static_assert(Id::numDatatypeBits == 4);
-static_assert([]() {
+static constexpr auto datatypesOfVersion1 = []() {
   using enum Datatype;
-  constexpr std::array datatypesOfVersion1{Undefined,
-                                           Bool,
-                                           Int,
-                                           Double,
-                                           VocabIndex,
-                                           LocalVocabIndex,
-                                           SecondaryVocabIndex,
-                                           TextRecordIndex,
-                                           Date,
-                                           GeoPoint,
-                                           WordVocabIndex,
-                                           BlankNodeIndex,
-                                           EncodedVal};
-  if (datatypesOfVersion1.size() != static_cast<size_t>(MaxValue) + 1) {
-    return false;
-  }
-  for (size_t i = 0; i < datatypesOfVersion1.size(); ++i) {
-    if (static_cast<size_t>(datatypesOfVersion1[i]) != i) {
-      return false;
-    }
-  }
-  return true;
-}());
+  return std::to_array({Undefined, Bool, Int, Double, VocabIndex,
+                        LocalVocabIndex, SecondaryVocabIndex, TextRecordIndex,
+                        Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
+                        EncodedVal});
+}();
+static_assert(isListOfAllDatatypesInOrder(datatypesOfVersion1));
 
 static constexpr std::string_view magicBytes = "QLEVER.EXPORT";
 
@@ -98,7 +84,7 @@ void BinaryExportHelpers::throwIfTooLarge(size_t size, size_t maxSize) {
 }
 
 // The header of the format. Its serialization starts with the `magicBytes` and
-// the version, which are checked when reading it.
+// the version, such that the reader can check the format and its version.
 struct Header {
   // The encoding of the `GeoPoint`s of the exporting instance, see
   // `GeoPoint::encoding()`.
@@ -109,7 +95,9 @@ struct Header {
   // The names of the variables, one per column.
   std::vector<std::string> variableNames_;
   // The names of the selected variables that are not bound in the result, and
-  // therefore have no column.
+  // therefore have no column. The reader could treat every missing variable
+  // as unbound without them, but with them it can check that the result
+  // contains exactly the variables it expects.
   std::vector<std::string> unboundVariableNames_;
 
   // Return the serialized header.
@@ -197,12 +185,38 @@ bool ExportBatch::shouldFinish() const {
 
 // _____________________________________________________________________________
 std::string ExportBatch::finish() {
+  auto strings = stringMapping_.takeStrings();
+  // Grow the `buffer_` at most once for the marker and the strings.
+  buffer_.reserve(buffer_.size() + sizeof(vocabMarker) +
+                  BinaryExportHelpers::serializedSize(strings));
   // The marker tells the reader that the strings follow, see `vocabMarker`.
-  absl::StrAppend(
-      &buffer_, raw(vocabMarker),
-      BinaryExportHelpers::writeVectorOfStrings(stringMapping_.takeStrings()));
+  buffer_.append(raw(vocabMarker));
+  BinaryExportHelpers::appendVectorOfStrings(buffer_, strings);
   numRows_ = 0;
   return std::exchange(buffer_, std::string{});
+}
+
+// _____________________________________________________________________________
+size_t BinaryExportHelpers::serializedSize(
+    const std::vector<std::string>& strings) {
+  // The serialization of a vector or a string consists of its size followed
+  // by its elements.
+  return sizeof(size_t) +
+         ::ranges::accumulate(strings, size_t{0}, {}, [](const auto& string) {
+           return sizeof(size_t) + string.size();
+         });
+}
+
+// _____________________________________________________________________________
+void BinaryExportHelpers::appendVectorOfStrings(
+    std::string& target, const std::vector<std::string>& strings) {
+  [[maybe_unused]] size_t sizeBefore = target.size();
+  auto write = [&target](const char* src, size_t numBytes) {
+    target.append(src, numBytes);
+  };
+  ad_utility::serialization::WriteViaCallableSerializer writer{write};
+  writer << strings;
+  AD_EXPENSIVE_CHECK(target.size() - sizeBefore == serializedSize(strings));
 }
 
 // The special case of a result without columns, for which only the number of
@@ -290,9 +304,10 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 
   for (const std::string& batch :
        exportRows(limitAndOffset, std::move(result),
-                  ad_utility::transform(
-                      columns,
-                      [](const auto& column) { return column->columnIndex_; }),
+                  ad_utility::transform(columns,
+                                        [](const auto& column) -> ColumnIndex {
+                                          return column->columnIndex_;
+                                        }),
                   qet.getQec()->getIndex(), std::move(cancellationHandle))) {
     co_yield batch;
   }

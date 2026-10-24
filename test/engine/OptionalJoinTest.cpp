@@ -1419,7 +1419,7 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
       optionalJoin.getRuntimeInfoPointer());
   auto result = optionalJoin.computeResultOnlyForTesting();
   for (const auto& row : result.idTableView()) {
-    for (const Id& id : row) {
+    for (ConstIdRef id : row) {
       EXPECT_NE(id, Id::makeUndefined());
     }
   }
@@ -1474,7 +1474,7 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
       optionalJoin.getRuntimeInfoPointer());
   auto result = optionalJoin.computeResultOnlyForTesting();
   for (const auto& row : result.idTableView()) {
-    for (const Id& id : row) {
+    for (ConstIdRef id : row) {
       EXPECT_NE(id, Id::makeUndefined());
     }
   }

@@ -39,10 +39,11 @@ enum class MediaType {
 };
 
 // The version of the format of `MediaType::binaryQleverExport`. It is part of
-// the name of the media type, such that two QLever instances only agree on
-// this format if they use the same version (and otherwise fall back to a
-// different format like JSON). Increase it whenever the format changes, in
-// particular when the bit representation of an `Id` changes.
+// the name of the media type (`application/vnd.qlever.results.v1`), such that
+// two QLever instances only agree on this format if they use the same version
+// (and otherwise fall back to a different format like JSON). Increase it
+// whenever the format changes, in particular when the bit representation of an
+// `Id` changes.
 inline constexpr uint16_t binaryQleverExportVersion = 1;
 
 struct MediaTypeWithQuality {

@@ -50,13 +50,25 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   geoInfoFile_.read(&versionOfFile, geoInfoHeader, 0);
 
   // Check version of geo info file
-  if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
+  if (!ad_utility::isLoadableGeometryInfoVersion(versionOfFile)) {
     throw std::runtime_error(absl::StrCat(
         "The geometry info version of ", getGeoInfoFilename(filename), " is ",
-        versionOfFile, ", which is incompatible with version ",
+        versionOfFile, ", which is incompatible with versions ",
+        ad_utility::MIN_LOADABLE_GEOMETRY_INFO_VERSION, " to ",
         ad_utility::GEOMETRY_INFO_VERSION,
-        " as required by this version of QLever. Please rebuild your index."));
+        " as supported by this version of QLever. Please rebuild your index."));
   }
+  if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
+    AD_LOG_WARN << "The geometry info version of "
+                << getGeoInfoFilename(filename) << " is " << versionOfFile
+                << ", which is older than the current version "
+                << ad_utility::GEOMETRY_INFO_VERSION
+                << ". Geometry information that this version does not "
+                   "precompute will be computed on the fly. Rebuild your "
+                   "index to make use of all precomputed geometry information."
+                << std::endl;
+  }
+  geoInfoVersion_ = versionOfFile;
 
   endIndex_ = computeEndIndex();
 }
@@ -184,6 +196,8 @@ template <typename V>
 auto GeoVocabulary<V>::computeGeoInfoRecord(
     std::string_view word, std::atomic<size_t>& numInvalidGeometries,
     std::atomic<size_t>& numInvalidPolygonArea) -> GeometryInfoBuffer {
+  // Invalid WKT (according to the strict parsing mode) is treated as an
+  // invalid geometry.
   auto info = GeometryInfo::fromWktLiteral(word);
   if (!info.has_value()) {
     ++numInvalidGeometries;
@@ -417,13 +431,12 @@ template <typename V>
 std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
     uint64_t position) const {
   AD_CONTRACT_CHECK(position < size());
-  // Allocate the required number of bytes
-  std::array<uint8_t, geoInfoOffset> buffer;
-  void* ptr = &buffer;
-
-  // Read into the buffer
-  geoInfoFile_.read(ptr, geoInfoOffset,
-                    geoInfoHeader + position * geoInfoOffset);
+  // Read into a buffer of the current size (records of older versions are
+  // smaller, see `GEOMETRY_INFO_VERSION`).
+  const size_t recordSize = ad_utility::geometryInfoSize(geoInfoVersion_);
+  GeometryInfoBuffer buffer{};
+  geoInfoFile_.read(buffer.data(), recordSize,
+                    geoInfoHeader + position * recordSize);
 
   // If all bytes are zero, this record on disk represents an invalid geometry.
   // The `GeometryInfo` class makes the guarantee that it can not have an
@@ -432,8 +445,8 @@ std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
     return std::nullopt;
   }
 
-  // Interpret the buffer as a `GeometryInfo` object
-  return absl::bit_cast<GeometryInfo>(buffer);
+  return GeometryInfo::fromSerialized(
+      ql::span<const uint8_t>{buffer.data(), recordSize}, geoInfoVersion_);
 }
 
 // Explicit template instantiations

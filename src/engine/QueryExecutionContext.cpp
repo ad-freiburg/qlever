@@ -11,6 +11,16 @@
 using namespace std::chrono_literals;
 
 // _____________________________________________________________________________
+SortConfig QueryExecutionContext::makeSortConfig(qlever::Executor executor) {
+  size_t numTasks =
+      getRuntimeParameter<&RuntimeParameters::sortNumTasksInFlight_>();
+  AD_CORRECTNESS_CHECK(numTasks > 0);
+  return {std::move(executor),
+          static_cast<uint32_t>(std::min<size_t>(
+              numTasks, std::numeric_limits<uint32_t>::max()))};
+}
+
+// _____________________________________________________________________________
 bool QueryExecutionContext::areWebSocketUpdatesEnabled() {
   return getRuntimeParameter<&RuntimeParameters::websocketUpdatesEnabled_>();
 }
@@ -24,7 +34,6 @@ std::chrono::milliseconds QueryExecutionContext::websocketUpdateInterval() {
 QueryExecutionContext::QueryExecutionContext(
     std::shared_ptr<const Index> index, QueryResultCache* const cache,
     ad_utility::AllocatorWithLimit<Id> allocator,
-    SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
     qlever::Executor executor, std::function<void(std::string)> updateCallback,
@@ -35,7 +44,6 @@ QueryExecutionContext::QueryExecutionContext(
       _index(std::move(index)),
       _subtreeCache(cache),
       _allocator(std::move(allocator)),
-      _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
       materializedViewsManager_(std::move(materializedViewsManager)),

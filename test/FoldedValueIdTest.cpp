@@ -179,6 +179,142 @@ TEST_F(ValueIdTest, Undefined) {
   EXPECT_FALSE(ValueId::makeFromInt(42).visit(isUndefinedType));
 }
 
+// Test `getDatatypeBits` and `getPayloadBits`, the two parts of the bits of
+// an `Id`.
+TEST_F(ValueIdTest, getDatatypeBitsAndGetPayloadBits) {
+  // The datatype bits and the payload bits are the two parts of the bits of an
+  // `Id`: the datatype in the highest `numDatatypeBits` bits, the payload in
+  // the lower `numDataBits` bits.
+  auto checkParts = [](ValueId id) {
+    EXPECT_EQ(id.getDatatypeBits(), static_cast<uint8_t>(id.getDatatype()));
+    EXPECT_LT(id.getPayloadBits(), uint64_t{1} << ValueId::numDataBits);
+    EXPECT_EQ(id.getBits(),
+              (uint64_t{id.getDatatypeBits()} << ValueId::numDataBits) |
+                  id.getPayloadBits());
+  };
+  for (auto id : makeRandomIds()) {
+    checkParts(id);
+  }
+
+  // Some known values.
+  auto expectParts = [&checkParts](ValueId id, Datatype datatype,
+                                   uint64_t payload) {
+    checkParts(id);
+    EXPECT_EQ(id.getDatatypeBits(), static_cast<uint8_t>(datatype));
+    EXPECT_EQ(id.getPayloadBits(), payload);
+  };
+  expectParts(ValueId::makeUndefined(), Datatype::Undefined, 0);
+  expectParts(ValueId::makeFromBool(false), Datatype::Bool, 0);
+  expectParts(ValueId::makeFromBool(true), Datatype::Bool, 1);
+  expectParts(ValueId::makeFromInt(0), Datatype::Int, 0);
+  expectParts(ValueId::makeFromInt(1), Datatype::Int, 1);
+  expectParts(makeVocabId(42), Datatype::VocabIndex, 42);
+  // The largest index fills the whole payload, but does not touch the datatype
+  // bits.
+  expectParts(ValueId::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)),
+              Datatype::VocabIndex, ValueId::maxIndex);
+  // A negative integer has all payload bits set, and its sign must not leak
+  // into the datatype bits.
+  expectParts(ValueId::makeFromInt(-1), Datatype::Int,
+              ad_utility::bitMaskForLowerBits(ValueId::numDataBits));
+
+  // Both functions can be used at compile time.
+  static_assert(ValueId::makeFromInt(5).getPayloadBits() == 5);
+  static_assert(ValueId::makeFromInt(5).getDatatypeBits() ==
+                static_cast<uint8_t>(Datatype::Int));
+}
+
+// Test `fromBits(datatype, payload)`, the counterpart of `getDatatypeBits` and
+// `getPayloadBits`.
+TEST_F(ValueIdTest, fromBitsWithDatatypeAndPayload) {
+  auto datatypeBits = [](Datatype datatype) {
+    return static_cast<uint8_t>(datatype);
+  };
+  constexpr uint64_t payloadMask =
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+
+  // Putting the two parts of an `Id` together again yields the same bits, and
+  // agrees with the overload that takes all bits at once.
+  for (auto id : makeRandomIds()) {
+    auto rebuilt = ValueId::fromBits(id.getDatatypeBits(), id.getPayloadBits());
+    EXPECT_EQ(rebuilt.getBits(), id.getBits());
+    EXPECT_EQ(rebuilt.getBits(), ValueId::fromBits(id.getBits()).getBits());
+  }
+
+  // Some known values.
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Undefined), 0),
+            ValueId::makeUndefined());
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Bool), 0),
+            ValueId::makeFromBool(false));
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Bool), 1),
+            ValueId::makeFromBool(true));
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Int), 42),
+            ValueId::makeFromInt(42));
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::VocabIndex), 42),
+            makeVocabId(42));
+  // The largest index fills the whole payload.
+  EXPECT_EQ(
+      ValueId::fromBits(datatypeBits(Datatype::VocabIndex), ValueId::maxIndex),
+      ValueId::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+  // A negative integer has all payload bits set.
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Int), payloadMask),
+            ValueId::makeFromInt(-1));
+
+  // Every datatype can be combined with every payload, and the two parts do
+  // not influence each other.
+  for (uint64_t datatype = 0;
+       datatype < (uint64_t{1} << ValueId::numDatatypeBits); ++datatype) {
+    for (uint64_t payload :
+         {uint64_t{0}, uint64_t{1}, uint64_t{123456789}, payloadMask}) {
+      auto id = ValueId::fromBits(datatype, payload);
+      EXPECT_EQ(uint64_t{id.getDatatypeBits()}, datatype);
+      EXPECT_EQ(id.getPayloadBits(), payload);
+    }
+  }
+
+  // The function can be used at compile time.
+  static_assert(
+      ValueId::fromBits(static_cast<uint8_t>(Datatype::Int), 5).getBits() ==
+      ValueId::makeFromInt(5).getBits());
+  static_assert(
+      ValueId::fromBits(static_cast<uint8_t>(Datatype::Int), 5).getInt() == 5);
+}
+
+// Test the overload `fromBits(Datatype, payload)`, which takes the `Datatype`
+// directly instead of its number.
+TEST_F(ValueIdTest, fromBitsWithDatatype) {
+  constexpr uint64_t payloadMask =
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+
+  // The `Datatype` overload yields the same bits as the overload that takes the
+  // number of the datatype, for every datatype and a few payloads.
+  for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
+    const auto datatype = static_cast<Datatype>(i);
+    for (uint64_t payload :
+         {uint64_t{0}, uint64_t{1}, uint64_t{123456789}, payloadMask}) {
+      auto id = ValueId::fromBits(datatype, payload);
+      EXPECT_EQ(id.getBits(), ValueId::fromBits(i, payload).getBits());
+      EXPECT_EQ(id.getDatatype(), datatype);
+      EXPECT_EQ(id.getPayloadBits(), payload);
+    }
+  }
+
+  // Some known values.
+  EXPECT_EQ(ValueId::fromBits(Datatype::Undefined, 0),
+            ValueId::makeUndefined());
+  EXPECT_EQ(ValueId::fromBits(Datatype::Bool, 0), ValueId::makeFromBool(false));
+  EXPECT_EQ(ValueId::fromBits(Datatype::Bool, 1), ValueId::makeFromBool(true));
+  EXPECT_EQ(ValueId::fromBits(Datatype::Int, 42), ValueId::makeFromInt(42));
+  EXPECT_EQ(ValueId::fromBits(Datatype::VocabIndex, 42), makeVocabId(42));
+  EXPECT_EQ(ValueId::fromBits(Datatype::Int, payloadMask),
+            ValueId::makeFromInt(-1));
+
+  // The overload can be used at compile time.
+  static_assert(ValueId::fromBits(Datatype::Int, 5).getBits() ==
+                ValueId::makeFromInt(5).getBits());
+  static_assert(ValueId::fromBits(Datatype::Int, 5).getInt() == 5);
+}
+
 TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());
@@ -404,6 +540,51 @@ TEST_F(ValueIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<ValueId>);
 }
 
+// Test that `incremented` returns the next bit pattern, that is, the smallest
+// `Id` that is greater than the original one, with the overflow of the payload
+// carrying into the datatype.
+TEST_F(ValueIdTest, incremented) {
+  // Without an overflow, only the payload changes.
+  EXPECT_EQ(makeVocabId(17).incremented(), makeVocabId(18));
+  EXPECT_EQ(makeVocabId(17).incremented().getDatatype(), Datatype::VocabIndex);
+  EXPECT_EQ(makeSecondaryVocabId(0).incremented(), makeSecondaryVocabId(1));
+  EXPECT_EQ(makeBlankNodeId(0).incremented(), makeBlankNodeId(1));
+  EXPECT_EQ(ValueId::makeFromInt(41).incremented(), ValueId::makeFromInt(42));
+
+  // The `Id` after UNDEF has the datatype `Undefined` too, but it is not UNDEF
+  // (its payload is 1). The join algorithms use it as the end of the range of
+  // the UNDEF values, see `findSmallerUndefRanges...`.
+  const auto afterUndefined = ValueId::makeUndefined().incremented();
+  EXPECT_EQ(afterUndefined.getDatatype(), Datatype::Undefined);
+  EXPECT_FALSE(afterUndefined.isUndefined());
+  EXPECT_EQ(afterUndefined.getBits(), 1u);
+
+  // The largest payload of a datatype carries into the next datatype, with the
+  // payload 0.
+  const auto carried = makeVocabId(ValueId::maxIndex).incremented();
+  EXPECT_EQ(static_cast<size_t>(carried.getDatatype()),
+            static_cast<size_t>(Datatype::VocabIndex) + 1);
+  EXPECT_EQ(carried.getBits(), (static_cast<ValueId::T>(Datatype::VocabIndex) +
+                                1) << ValueId::numDataBits);
+
+  // The result is the smallest greater `Id`: Its bits are the successor of the
+  // bits, so no other `Id` lies between the two.
+  for (const ValueId id :
+       {ValueId::makeUndefined(), ValueId::makeFromBool(true),
+        ValueId::makeFromInt(-42), ValueId::makeFromDouble(1.5), makeVocabId(5),
+        makeTextRecordId(3), makeWordVocabId(4), makeBlankNodeId(7),
+        makeSecondaryVocabId(9), ValueId::makeFromEncodedVal(11)}) {
+    SCOPED_TRACE(id);
+    const auto next = id.incremented();
+    EXPECT_EQ(next.getBits(), id.getBits() + 1);
+    EXPECT_LT(id, next);
+  }
+
+  // There is no greater `Id` than the maximum. The increment wraps around, like
+  // the integer of the bits.
+  EXPECT_EQ(ValueId::max().incremented().getBits(), ValueId::min().getBits());
+}
+
 // Pin down that the `ValueId` functions that can be evaluated at compile time
 // actually are `constexpr`. Note that several of them contain an
 // `AD_CONTRACT_CHECK`/`AD_EXPENSIVE_CHECK`, which is only possible because
@@ -430,6 +611,9 @@ static_assert(
         .getSecondaryVocabIndex() == SecondaryVocabIndex::make(17));
 static_assert(ValueId::makeFromBool(true).getBoolLiteral() == "true");
 static_assert(ValueId::makeBoolFromZeroOrOne(true).getBoolLiteral() == "1");
+static_assert(ValueId::makeFromVocabIndex(VocabIndex::make(17))
+                  .incremented()
+                  .getVocabIndex() == VocabIndex::make(18));
 #ifndef QLEVER_CPP_17
 // `getInt` performs a signed left shift, which is only a constant expression
 // since C++20.
@@ -523,6 +707,16 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 // please the coverage tool.
 TEST(ValueId, isTrivial) {
   EXPECT_TRUE(ValueId::makeUndefined().isTrivial());
+  EXPECT_TRUE(ValueId::makeFromBool(true).isTrivial());
+  EXPECT_TRUE(ValueId::makeFromInt(42).isTrivial());
+  EXPECT_TRUE(ValueId::makeFromDouble(3.14).isTrivial());
+  EXPECT_TRUE(
+      ValueId::makeFromDate(DateYearOrDuration::parseXsdDate("2000-01-01"))
+          .isTrivial());
+  EXPECT_FALSE(ValueId::makeFromVocabIndex(VocabIndex::make(0)).isTrivial());
+  EXPECT_FALSE(
+      ValueId::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(0x100))
+          .isTrivial());
   EXPECT_FALSE(
       ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
   EXPECT_FALSE(ValueId::makeFromEncodedVal(738).isTrivial());
@@ -666,6 +860,42 @@ TEST(ValueId, forwardingLambdas) {
             ids.begin() + 2);
   EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, ValueId::getDatatypeL),
             proxies.begin() + 2);
+}
+
+// Test that the lambda `Id::fromBitsL` forwards to the `fromBits` overload that
+// takes all bits at once. In contrast to `fromBits`, which is overloaded, it
+// can be passed to generic algorithms.
+TEST(ValueId, fromBitsL) {
+  std::vector<ValueId> ids{
+      ValueId::makeUndefined(),
+      ValueId::makeFromBool(true),
+      ValueId::makeFromInt(42),
+      ValueId::makeFromInt(-42),
+      ValueId::makeFromDouble(13.37),
+      ValueId::makeFromVocabIndex(VocabIndex::make(123)),
+      ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(7))};
+
+  // The lambda returns what `fromBits` returns, and is the inverse of
+  // `getBitsL`.
+  for (ValueId id : ids) {
+    EXPECT_EQ(ValueId::fromBitsL(id.getBits()).getBits(),
+              ValueId::fromBits(id.getBits()).getBits());
+    EXPECT_EQ(ValueId::fromBitsL(ValueId::getBitsL(id)), id);
+  }
+
+  // The lambda works as the transformation of a generic algorithm.
+  std::vector<ValueId::T> bits;
+  ql::ranges::transform(ids, std::back_inserter(bits), ValueId::getBitsL);
+  std::vector<ValueId> rebuilt(bits.size());
+  ql::ranges::transform(bits, rebuilt.begin(), ValueId::fromBitsL);
+  EXPECT_EQ(rebuilt, ids);
+
+  // The lambda can be used at compile time.
+  static_assert(
+      ValueId::fromBitsL(ValueId::makeFromInt(5).getBits()).getBits() ==
+      ValueId::makeFromInt(5).getBits());
+  static_assert(
+      ValueId::fromBitsL(ValueId::makeFromInt(5).getBits()).getInt() == 5);
 }
 
 }  // namespace foldedValueId

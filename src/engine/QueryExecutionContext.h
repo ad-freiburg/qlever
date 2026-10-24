@@ -17,10 +17,10 @@
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
-#include "engine/SortPerformanceEstimator.h"
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/SortConfig.h"
 #include "util/AllocateShared.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -57,7 +57,7 @@ class CacheValue {
       requires IdTableLike<IdTableT>) static ad_utility::MemorySize
       getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
-                                         sizeof(Id));
+                                         BYTES_PER_ID_COLUMN_ENTRY);
   }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
@@ -111,7 +111,6 @@ class QueryExecutionContext
   QueryExecutionContext(
       std::shared_ptr<const Index> index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
       qlever::Executor executor,
@@ -149,11 +148,6 @@ class QueryExecutionContext
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
-
-  [[nodiscard]] const SortPerformanceEstimator& getSortPerformanceEstimator()
-      const {
-    return _sortPerformanceEstimator;
-  }
 
   [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
@@ -271,6 +265,15 @@ class QueryExecutionContext
   // `max-num-threads-per-query`).
   const qlever::Executor& executor() const { return executor_; }
 
+  // How the in-memory sorts of this query run in parallel (see
+  // `IdTableUtils::sort`), created by `makeSortConfig(executor())` when this
+  // context is constructed.
+  const SortConfig& sortConfig() const { return sortConfig_; }
+
+  // Return a `SortConfig` for sorting on the `executor`, the number of tasks
+  // of which is the runtime parameter `sort-num-tasks-in-flight`.
+  static SortConfig makeSortConfig(qlever::Executor executor);
+
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
   // header.
@@ -291,7 +294,6 @@ class QueryExecutionContext
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
-  SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;
 
   // Cache the state of both runtime parameters to reduce the contention of the
@@ -343,6 +345,9 @@ class QueryExecutionContext
 
   // See the documentation for the getter with the same name above.
   qlever::Executor executor_;
+
+  // See the documentation for the getter with the same name above.
+  SortConfig sortConfig_ = makeSortConfig(executor_);
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

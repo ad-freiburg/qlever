@@ -2,9 +2,9 @@
 //
 // 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -26,38 +26,34 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Serializer/FromCallableSerializer.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/http/HttpClient.h"
 #include "util/stream_generator.h"
 
 namespace qlever::binary_export {
 
-// Convert `originalId`, which might contain references into this process'
-// memory space to an id that completely inlines a value, or one that only has
-// a reference to the passed `stringMapping`.
-Id toExportableId(Id originalId, StringMapping& stringMapping);
-
 // The exporter sends the IDs of the rows in batches. Each batch is followed by
 // the strings that its IDs refer to (see `StringMapping`). A batch ends after
-// the first row with which its IDs take up at least `minNumIdBytesPerBatch`
-// bytes, or its (distinct) strings take up at least `minNumStringBytesPerBatch`
-// bytes. These are no upper limits: a batch is at least as large as the last
+// the first row with which its IDs take up at least
+// `defaultMinNumIdBytesPerBatch` bytes, or its (distinct) strings take up at
+// least `defaultMinNumStringBytesPerBatch` bytes.
+//
+// NOTE 1: These are no upper limits. A batch is at least as large as the last
 // row (with all of its strings), which can be arbitrarily large (for example a
 // single WKT literal of a large `MULTIPOLYGON` can take up tens of megabytes).
-// The minimum for the strings is much larger than the one for the IDs, such
-// that also batches with large strings consist of several rows, which
+//
+// NOTE 2: The minimum for the strings is much larger than the one for the IDs,
+// such that also batches with large strings consist of several rows, which
 // benefit from the deduplication of the strings within a batch.
+//
 // TODO<joka921> These values are arbitrary.
-inline constexpr size_t minNumIdBytesPerBatch = 1 << 20;
-inline constexpr size_t minNumStringBytesPerBatch = 16 << 20;
+inline constexpr size_t defaultMinNumIdBytesPerBatch = 1 << 20;
+inline constexpr size_t defaultMinNumStringBytesPerBatch = 16 << 20;
 
 // The minimum sizes of an `ExportBatch`, see above. They can be changed for
 // testing.
 struct ExportBatchSizes {
-  size_t minNumIdBytes_ = minNumIdBytesPerBatch;
-  size_t minNumStringBytes_ = minNumStringBytesPerBatch;
+  size_t minNumIdBytes_ = defaultMinNumIdBytesPerBatch;
+  size_t minNumStringBytes_ = defaultMinNumStringBytesPerBatch;
 };
 
 // A batch of the binary export (see above and `exportAsQLeverBinary`). The IDs
@@ -77,7 +73,7 @@ class ExportBatch {
       : sizes_{sizes}, stringMapping_{index} {}
 
   // Append the IDs of the row `row` of `idTable` (only the `columns` in this
-  // order) to the batch, see `toExportableId`.
+  // order) to the batch, see `toExportableId` in the `.cpp` file.
   void addRow(const IdTableView<0>& idTable, size_t row,
               ql::span<const ColumnIndex> columns);
 
@@ -97,11 +93,12 @@ class ExportBatch {
 // efficient transfer of results between two QLever instances (see
 // `ad_utility::MediaType::binaryQleverExport`). The format consists of a
 // header (see `Header` in the `.cpp` file), followed by the IDs of the
-// rows (as produced by `toExportableId`), which are interrupted by batches of
-// the strings that the non-trivial IDs refer to (see `StringMapping`). The
-// format always ends with such a batch. Only the selected variables that are
-// bound in the result get a column, the header lists the others as unbound. If
-// there are no columns, the header is followed by the number of rows only.
+// rows (as produced by `toExportableId` in the `.cpp` file), which are
+// interrupted by batches of the strings that the non-trivial IDs refer to (see
+// `StringMapping`). The format always ends with such a batch. Only the selected
+// variables that are bound in the result get a column, the header lists the
+// others as unbound. If there are no columns, the header is followed by the
+// number of rows only.
 ad_utility::streams::stream_generator exportAsQLeverBinary(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -185,7 +182,7 @@ class BinaryExportHelpers {
     return result;
   }
 
-  // Read a vector of strings as written by `writeVectorOfStrings` from the
+  // Read a vector of strings as written by `appendVectorOfStrings` from the
   // `reader`. Throw if the strings (including the `std::string` objects
   // themselves) take up more than `maxNumBytes`.
   template <typename Reader>
@@ -203,26 +200,15 @@ class BinaryExportHelpers {
     return result;
   }
 
-  // Serialize the `strings` (via QLever's serialization framework) into a
-  // single string of bytes, which can be read by `readVectorOfStrings`.
-  static std::string writeVectorOfStrings(
-      const std::vector<std::string>& strings) {
-    // The serialization of a vector or a string consists of its size followed
-    // by its elements.
-    size_t totalSize = sizeof(size_t);
-    for (const auto& string : strings) {
-      totalSize += sizeof(size_t) + string.size();
-    }
-    std::string result;
-    result.reserve(totalSize);
-    auto write = [&result](const char* src, size_t numBytes) {
-      result.append(src, numBytes);
-    };
-    ad_utility::serialization::WriteViaCallableSerializer writer{write};
-    writer << strings;
-    AD_EXPENSIVE_CHECK(result.size() == totalSize);
-    return result;
-  }
+  // Return the number of bytes of the serialization of the `strings`, see
+  // `appendVectorOfStrings`.
+  static size_t serializedSize(const std::vector<std::string>& strings);
+
+  // Append the serialization of the `strings` (via QLever's serialization
+  // framework) to the `target`. To avoid reallocations, the caller can reserve
+  // the `serializedSize` beforehand.
+  static void appendVectorOfStrings(std::string& target,
+                                    const std::vector<std::string>& strings);
 
  private:
   // Throw if `size` is larger than `maxSize`, which protects against
@@ -230,15 +216,16 @@ class BinaryExportHelpers {
   static void throwIfTooLarge(size_t size, size_t maxSize);
 };
 
-// Convert the IDs that the exporting instance sent (see `toExportableId`) to
-// IDs of the local instance. This is the counterpart of `toExportableId` and
-// `StringMapping` on the importing side. In addition to the strings, it also
-// handles all the other IDs that depend on the instance: encoded IRIs (whose
-// patterns might differ), blank nodes, and `GeoPoint`s (whose encoding might
-// differ). The strings and the IRIs that can't be encoded with the same local
-// pattern are converted like any other input (see `toValueId`), so they become
-// encoded IRIs or IDs of the vocabularies of the local index if possible, and
-// are added to the local vocab (see `takeLocalVocab`) otherwise.
+// Convert the IDs that the exporting instance sent (see `toExportableId` in the
+// `.cpp` file) to IDs of the local instance. This is the counterpart of
+// `toExportableId` and `StringMapping` on the importing side. In addition to
+// the strings, it also handles all the other IDs that depend on the instance:
+// encoded IRIs (whose patterns might differ), blank nodes, and `GeoPoint`s
+// (whose encoding might differ). The strings and the IRIs that can't be
+// encoded with the same local pattern are converted like any other input (see
+// `toValueId`), so they become encoded IRIs or IDs of the vocabularies of the
+// local index if possible, and are added to the local vocab (see
+// `takeLocalVocab`) otherwise.
 class IdRewriter {
   const QueryExecutionContext* qec_;
   // The patterns of the encoded IRIs of the exporting instance, and the
@@ -327,8 +314,9 @@ Result importBinaryHttpResponse(
     std::vector<ColumnIndex> resultSortedOn,
     ad_utility::MemorySize maxStringBatchSize,
     ad_utility::SharedCancellationHandle cancellationHandle);
+
 }  // namespace qlever::binary_export
 
-#endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif
+#endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H

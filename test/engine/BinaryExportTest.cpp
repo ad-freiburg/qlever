@@ -2,13 +2,14 @@
 //
 // 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -31,97 +32,6 @@
 #include "util/http/HttpClient.h"
 
 using namespace qlever::binary_export;
-
-// _____________________________________________________________________________
-TEST(BinaryExportHelpers, isTrivial) {
-  // Test trivial types
-  EXPECT_TRUE(Id::makeUndefined().isTrivial());
-  EXPECT_TRUE(Id::makeFromBool(true).isTrivial());
-  EXPECT_TRUE(Id::makeFromInt(42).isTrivial());
-  EXPECT_TRUE(Id::makeFromDouble(3.14).isTrivial());
-  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration::parseXsdDate("2000-01-01"))
-                  .isTrivial());
-
-  // Test non-trivial types
-  EXPECT_FALSE(Id::makeFromVocabIndex(VocabIndex::make(0)).isTrivial());
-  EXPECT_FALSE(
-      Id::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(0x100))
-          .isTrivial());
-}
-
-namespace {
-// Split the `bytes` into consecutive spans of the given `sizes`, followed by a
-// span with the remaining bytes.
-std::vector<ql::span<const std::byte>> split(std::string_view bytes,
-                                             const std::vector<size_t>& sizes) {
-  auto remaining = ql::as_bytes(ql::span{bytes});
-  std::vector<ql::span<const std::byte>> spans;
-  for (size_t size : sizes) {
-    spans.push_back(remaining.first(size));
-    remaining = remaining.subspan(size);
-  }
-  spans.push_back(remaining);
-  return spans;
-}
-}  // namespace
-
-// _____________________________________________________________________________
-TEST(ByteSpanReader, readAcrossSpans) {
-  uint64_t value = 0x0123456789ABCDEF;
-  std::string bytes = absl::StrCat(
-      std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)},
-      "xy");
-  // The value is split across two spans, and there are empty spans.
-  auto spans = split(bytes, {0, 3, 0, 5, 0});
-  ByteSpanReader reader{spans};
-  EXPECT_FALSE(reader.atEnd());
-  EXPECT_EQ(BinaryExportHelpers::read<uint64_t>(reader), value);
-  EXPECT_EQ(BinaryExportHelpers::read<char>(reader), 'x');
-  EXPECT_FALSE(reader.atEnd());
-  EXPECT_EQ(BinaryExportHelpers::read<char>(reader), 'y');
-  EXPECT_TRUE(reader.atEnd());
-  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::read<char>(reader),
-                               ::testing::HasSubstr("ended unexpectedly"));
-
-  // The range ends in the middle of a value.
-  auto shortSpans = split("abc", {});
-  ByteSpanReader shortReader{shortSpans};
-  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::read<uint64_t>(shortReader),
-                               ::testing::HasSubstr("ended unexpectedly"));
-
-  std::vector<ql::span<const std::byte>> noSpans;
-  EXPECT_TRUE(ByteSpanReader{noSpans}.atEnd());
-}
-
-// _____________________________________________________________________________
-TEST(BinaryExportHelpers, readStrings) {
-  std::vector<std::string> strings{"foo", "", "barbaz"};
-  auto bytes = BinaryExportHelpers::writeVectorOfStrings(strings);
-  auto read = [&bytes](size_t maxNumBytes) {
-    auto spans = split(bytes, {5, 10});
-    ByteSpanReader reader{spans};
-    auto result = BinaryExportHelpers::readVectorOfStrings(reader, maxNumBytes);
-    EXPECT_TRUE(reader.atEnd());
-    return result;
-  };
-
-  // The strings take up 9 bytes, plus the `std::string` objects.
-  size_t numBytes = 3 * sizeof(std::string) + 9;
-  EXPECT_EQ(read(numBytes), strings);
-  auto tooLarge = ::testing::HasSubstr("larger than the maximum size");
-  AD_EXPECT_THROW_WITH_MESSAGE(read(numBytes - 1), tooLarge);
-  // There are too many strings, which is detected before reading them.
-  AD_EXPECT_THROW_WITH_MESSAGE(read(2 * sizeof(std::string)), tooLarge);
-
-  // No memory is allocated for the size of an invalid string.
-  size_t hugeSize = size_t{1} << 60;
-  std::string hugeString{reinterpret_cast<const char*>(&hugeSize),
-                         sizeof(hugeSize)};
-  auto spans = split(hugeString, {});
-  ByteSpanReader reader{spans};
-  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::readString(reader, 1000),
-                               tooLarge);
-}
 
 namespace {
 // The `Id` with which the exporter refers to the `i`-th transmitted string of
@@ -154,6 +64,86 @@ Id localVocabId(LocalVocab& localVocab, std::string word,
                                                 qec.getLocalVocabContext())));
 }
 
+// The bytes of the trivially copyable `value`.
+template <typename T>
+std::string bytesOf(const T& value) {
+  return std::string{reinterpret_cast<const char*>(&value), sizeof(value)};
+}
+
+// The bytes of the `ids`.
+std::string bytesOf(const std::vector<Id>& ids) {
+  std::string result;
+  for (Id id : ids) {
+    result.append(bytesOf(id.getBits()));
+  }
+  return result;
+}
+
+// A string as serialized by QLever's serialization framework.
+std::string serialized(std::string_view string) {
+  return absl::StrCat(bytesOf(string.size()), string);
+}
+
+// A vector of strings as serialized by QLever's serialization framework.
+std::string serialized(const std::vector<std::string>& strings) {
+  std::string result = bytesOf(strings.size());
+  for (const auto& string : strings) {
+    result.append(serialized(string));
+  }
+  return result;
+}
+
+// A batch consists of the IDs, followed by a marker (which has the size of an
+// `Id`) and the strings.
+void expectBatch(std::string_view batch, const std::vector<Id>& ids,
+                 const std::vector<std::string>& strings,
+                 ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto t = generateLocationTrace(l);
+  auto idBytes = bytesOf(ids);
+  auto stringBytes = serialized(strings);
+  ASSERT_EQ(batch.size(), idBytes.size() + sizeof(Id::T) + stringBytes.size());
+  EXPECT_EQ(batch.substr(0, idBytes.size()), idBytes);
+  EXPECT_EQ(batch.substr(idBytes.size() + sizeof(Id::T)), stringBytes);
+}
+
+// Export the `varNames` of the result of `qet` and return all the bytes.
+std::string exportBytes(const QueryExecutionTree& qet,
+                        const std::vector<std::string>& varNames,
+                        LimitOffsetClause limitAndOffset = {}) {
+  parsedQuery::SelectClause selectClause;
+  selectClause.setSelected(ad_utility::transform(
+      varNames, [](const std::string& name) { return Variable{name}; }));
+  std::string result;
+  for (std::string_view chunk : exportAsQLeverBinary(
+           qet, selectClause, limitAndOffset,
+           std::make_shared<ad_utility::CancellationHandle<>>())) {
+    result.append(chunk);
+  }
+  return result;
+}
+
+// A `QueryExecutionTree` with the result `table` and the `variables`.
+QueryExecutionTree makeQet(QueryExecutionContext* qec, IdTable table,
+                           std::vector<std::optional<Variable>> variables) {
+  return QueryExecutionTree{
+      qec, std::make_shared<ValuesForTesting>(qec, std::move(table),
+                                              std::move(variables))};
+}
+
+// Split the `bytes` into consecutive spans of the given `sizes`, followed by a
+// span with the remaining bytes.
+std::vector<ql::span<const std::byte>> split(std::string_view bytes,
+                                             const std::vector<size_t>& sizes) {
+  auto remaining = ql::as_bytes(ql::span{bytes});
+  std::vector<ql::span<const std::byte>> spans;
+  for (size_t size : sizes) {
+    spans.push_back(remaining.first(size));
+    remaining = remaining.subspan(size);
+  }
+  spans.push_back(remaining);
+  return spans;
+}
+
 // Return the result of `f`, which is called while `GeoPoint`s use the
 // `encoding` (the default encoding is restored afterwards).
 template <typename F>
@@ -164,6 +154,78 @@ auto withGeoPointEncoding(GeoPointEncodingEnum encoding, F f) {
   return f();
 }
 }  // namespace
+
+// Test that `appendVectorOfStrings` appends the serialization of the strings,
+// whose size `serializedSize` predicts.
+TEST(BinaryExportHelpers, appendVectorOfStrings) {
+  for (const std::vector<std::string>& strings :
+       std::vector<std::vector<std::string>>{
+           {}, {""}, {"a"}, {"abc", "", "defgh"}}) {
+    std::string target = "prefix";
+    BinaryExportHelpers::appendVectorOfStrings(target, strings);
+    EXPECT_EQ(target, absl::StrCat("prefix", serialized(strings)));
+    EXPECT_EQ(BinaryExportHelpers::serializedSize(strings),
+              serialized(strings).size());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ByteSpanReader, readAcrossSpans) {
+  uint64_t value = 0x0123456789ABCDEF;
+  std::string bytes = absl::StrCat(
+      std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)},
+      "xy");
+  // The value is split across two spans, and there are empty spans.
+  auto spans = split(bytes, {0, 3, 0, 5, 0});
+  ByteSpanReader reader{spans};
+  EXPECT_FALSE(reader.atEnd());
+  EXPECT_EQ(BinaryExportHelpers::read<uint64_t>(reader), value);
+  EXPECT_EQ(BinaryExportHelpers::read<char>(reader), 'x');
+  EXPECT_FALSE(reader.atEnd());
+  EXPECT_EQ(BinaryExportHelpers::read<char>(reader), 'y');
+  EXPECT_TRUE(reader.atEnd());
+  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::read<char>(reader),
+                               ::testing::HasSubstr("ended unexpectedly"));
+
+  // The range ends in the middle of a value.
+  auto shortSpans = split("abc", {});
+  ByteSpanReader shortReader{shortSpans};
+  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::read<uint64_t>(shortReader),
+                               ::testing::HasSubstr("ended unexpectedly"));
+
+  std::vector<ql::span<const std::byte>> noSpans;
+  EXPECT_TRUE(ByteSpanReader{noSpans}.atEnd());
+}
+
+// _____________________________________________________________________________
+TEST(BinaryExportHelpers, readStrings) {
+  std::vector<std::string> strings{"foo", "", "barbaz"};
+  auto bytes = serialized(strings);
+  auto read = [&bytes](size_t maxNumBytes) {
+    auto spans = split(bytes, {5, 10});
+    ByteSpanReader reader{spans};
+    auto result = BinaryExportHelpers::readVectorOfStrings(reader, maxNumBytes);
+    EXPECT_TRUE(reader.atEnd());
+    return result;
+  };
+
+  // The strings take up 9 bytes, plus the `std::string` objects.
+  size_t numBytes = 3 * sizeof(std::string) + 9;
+  EXPECT_EQ(read(numBytes), strings);
+  auto tooLarge = ::testing::HasSubstr("larger than the maximum size");
+  AD_EXPECT_THROW_WITH_MESSAGE(read(numBytes - 1), tooLarge);
+  // There are too many strings, which is detected before reading them.
+  AD_EXPECT_THROW_WITH_MESSAGE(read(2 * sizeof(std::string)), tooLarge);
+
+  // No memory is allocated for the size of an invalid string.
+  size_t hugeSize = size_t{1} << 60;
+  std::string hugeString{reinterpret_cast<const char*>(&hugeSize),
+                         sizeof(hugeSize)};
+  auto spans = split(hugeString, {});
+  ByteSpanReader reader{spans};
+  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::readString(reader, 1000),
+                               tooLarge);
+}
 
 // _____________________________________________________________________________
 TEST(IdRewriter, rewriteRows) {
@@ -323,7 +385,8 @@ TEST(IdRewriter, rewriteGeoPoint) {
   EXPECT_EQ(rewriter(remote), local);
 }
 
-// _____________________________________________________________________________
+// Test that an `ExportBatch` exports the selected columns, ends after the row
+// that reaches one of its minimum sizes, and appends each string once.
 TEST(ExportBatch, minimumSizesAndFormat) {
   auto* qec = ad_utility::testing::getQec();
   const auto& index = qec->getIndex();
@@ -335,27 +398,6 @@ TEST(ExportBatch, minimumSizesAndFormat) {
   table.push_back({I(7), I(8), I(9)});
   // Only two of the columns are exported, in a different order.
   std::vector<ColumnIndex> columns{2, 0};
-
-  // Return the bytes of the IDs in `ids`.
-  auto bytesOf = [](std::vector<Id> ids) {
-    std::string result;
-    for (Id id : ids) {
-      Id::T bits = id.getBits();
-      result.append(reinterpret_cast<const char*>(&bits), sizeof(bits));
-    }
-    return result;
-  };
-  // A batch consists of the IDs, followed by a marker (which has the size of
-  // an `Id`) and the strings.
-  auto expectBatch = [&](const std::string& batch, std::vector<Id> ids,
-                         const std::vector<std::string>& strings) {
-    auto idBytes = bytesOf(std::move(ids));
-    auto stringBytes = BinaryExportHelpers::writeVectorOfStrings(strings);
-    ASSERT_EQ(batch.size(),
-              idBytes.size() + sizeof(Id::T) + stringBytes.size());
-    EXPECT_EQ(batch.substr(0, idBytes.size()), idBytes);
-    EXPECT_EQ(batch.substr(idBytes.size() + sizeof(Id::T)), stringBytes);
-  };
 
   // The minimum size of the IDs (two IDs per row). The batch is finished after
   // the row that reaches the minimum, so it can be larger.
@@ -422,6 +464,81 @@ TEST(ExportBatch, minimumSizesAndFormat) {
     EXPECT_FALSE(largeBatch.shouldFinish());
     expectBatch(largeBatch.finish(), {string(0), string(0)}, {huge});
   }
+}
+
+// Test the complete format of `exportAsQLeverBinary`: the header, the IDs as
+// they are sent, unbound variables, results without columns, and results that
+// are sent in several batches.
+TEST(BinaryExport, format) {
+  ad_utility::testing::TestIndexConfig config;
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& index = qec->getIndex();
+  auto I = [](int64_t i) { return Id::makeFromInt(i); };
+  Id vocab = ad_utility::testing::makeGetId(index)("<x>");
+  Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3));
+  Id encoded =
+      index.encodedIriManager().encode("<http://example.org/42>").value();
+  auto qet = makeQet(
+      qec,
+      makeIdTableFromVector({{I(1), vocab, blankNode}, {I(2), encoded, vocab}}),
+      {Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
+
+  nlohmann::json patterns;
+  detail::patternsToJson(patterns, index.encodedIriManager().patterns_,
+                         EncodedIriManager::NumBitsEncoding);
+  auto header = [&patterns](const std::vector<std::string>& variables,
+                            const std::vector<std::string>& unbound) {
+    return absl::StrCat(serialized("QLEVER.EXPORT"),
+                        bytesOf(ad_utility::binaryQleverExportVersion),
+                        bytesOf(GeoPoint::encoding()),
+                        serialized(patterns.dump()), serialized(variables),
+                        serialized(unbound));
+  };
+  // Return the bytes after the expected header.
+  auto skipHeader = [&header](std::string_view bytes,
+                              const std::vector<std::string>& variables,
+                              const std::vector<std::string>& unbound) {
+    auto expected = header(variables, unbound);
+    EXPECT_EQ(bytes.substr(0, expected.size()), expected);
+    return bytes.substr(expected.size());
+  };
+
+  // `?z` is selected, but not bound in the result.
+  auto bytes = exportBytes(qet, {"?c", "?a", "?b", "?z"});
+  // Blank nodes, encoded IRIs, and trivial IDs are sent as they are, the
+  // string of the `VocabIndex` is sent once.
+  expectBatch(skipHeader(bytes, {"?c", "?a", "?b"}, {"?z"}),
+              {blankNode, I(1), transmitted(0), transmitted(0), I(2), encoded},
+              {"<x>"});
+
+  // For a result without columns, only the number of exported rows is sent.
+  IdTable noColumns{0, ad_utility::makeUnlimitedAllocator<Id>()};
+  noColumns.resize(5);
+  bytes = exportBytes(makeQet(qec, std::move(noColumns), {}), {"?z"},
+                      {._limit = 3, ._offset = 1, .exportLimit_ = 2});
+  EXPECT_EQ(skipHeader(bytes, {}, {"?z"}), bytesOf(uint64_t{2}));
+
+  // A large result is sent in several batches: The first one ends as soon as
+  // it reaches the minimum size, the last one is always sent.
+  std::vector<Id> ids;
+  for (size_t i = 0; i <= defaultMinNumIdBytesPerBatch / sizeof(Id::T); ++i) {
+    ids.push_back(I(static_cast<int64_t>(i)));
+  }
+  IdTable large{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  for (Id id : ids) {
+    large.push_back({id});
+  }
+  bytes = exportBytes(makeQet(qec, std::move(large), {Variable{"?a"}}), {"?a"});
+  auto batches = skipHeader(bytes, {"?a"}, {});
+  // The IDs, the marker, and the size of the (empty) vector of strings.
+  size_t firstBatchSize =
+      defaultMinNumIdBytesPerBatch + sizeof(Id::T) + sizeof(size_t);
+  Id lastId = ids.back();
+  ids.pop_back();
+  expectBatch(batches.substr(0, firstBatchSize), ids, {});
+  expectBatch(batches.substr(firstBatchSize), {lastId}, {});
 }
 
 // _____________________________________________________________________________
@@ -878,7 +995,8 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
   // Large distinct strings (of about 1 MB each), which take up more than the
   // minimum size of the strings of a batch, see `ExportBatch`.
   static constexpr size_t stringSize = 1 << 20;
-  static constexpr size_t numRows = minNumStringBytesPerBatch / stringSize + 2;
+  static constexpr size_t numRows =
+      defaultMinNumStringBytesPerBatch / stringSize + 2;
   auto word = [](size_t i) {
     return absl::StrCat("\"word", i, std::string(stringSize, 'x'), "\"");
   };
@@ -902,7 +1020,7 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
 
   // More IDs than the minimum size of the IDs of a batch.
   static constexpr size_t numIntRows =
-      minNumIdBytesPerBatch / sizeof(Id::T) + 1;
+      defaultMinNumIdBytesPerBatch / sizeof(Id::T) + 1;
   IdTable intTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
   for (size_t i = 0; i < numIntRows; ++i) {
     intTable.push_back({Id::makeFromInt(static_cast<int64_t>(i))});
