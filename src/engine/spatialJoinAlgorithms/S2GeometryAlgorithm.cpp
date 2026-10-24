@@ -37,10 +37,13 @@ Result S2GeometryAlgorithm::run() {
   auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
 
   // Populate the index
+  size_t numSkippedIndex = 0;
   for (size_t row = 0; row < indexTable->size(); row++) {
     auto p = getPoint(indexTable, row, indexJoinCol);
     if (p.has_value()) {
       s2index.Add(toS2Point(p.value()), row);
+    } else {
+      ++numSkippedIndex;
     }
   }
   // Performs a nearest neighbor search on the index and returns the closest
@@ -61,9 +64,11 @@ Result S2GeometryAlgorithm::run() {
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
   // Use the index to lookup the points of the other table
+  size_t numSkippedSearch = 0;
   for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
     auto p = getPoint(searchTable, searchRow, searchJoinCol);
     if (!p.has_value()) {
+      ++numSkippedSearch;
       continue;
     }
     auto s2target =
@@ -82,6 +87,9 @@ Result S2GeometryAlgorithm::run() {
     }
   }
 
+  addSkippedRowsWarning(indexOfRight ? numSkippedSearch : numSkippedIndex,
+                        indexOfRight ? numSkippedIndex : numSkippedSearch,
+                        "values that are not points");
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }
