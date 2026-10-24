@@ -196,6 +196,12 @@ template <typename S, typename C, typename I>
 std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
     const string& word) const {
   AD_CONTRACT_CHECK(ql::ends_with(word, PREFIX_CHAR));
+  // An empty vocabulary (for example, on a server without a text index)
+  // matches no prefix. Without this check, the range for the bare `*` below
+  // would underflow to `[0, UINT64_MAX]`.
+  if (size() == 0) {
+    return std::nullopt;
+  }
   IdRange<I> range;
   if (word.size() == 1) {
     range = IdRange{I::make(0), I::make(size()).decremented()};
