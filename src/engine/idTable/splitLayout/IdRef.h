@@ -18,7 +18,6 @@
 #include "util/IsProxy.h"
 
 namespace columnBasedIdTable::splitLayout {
-
 template <bool IsConst>
 class BasicIdRef;
 
@@ -48,9 +47,9 @@ class BasicIdRefImpl {
   class BasicIdRefWithRestrictedAccess {
    public:
     using PayloadPointer =
-        std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
+        std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
     using DatatypePointer =
-        std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+        std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
 
    protected:
     PayloadPointer payload_;
@@ -140,7 +139,9 @@ class BasicIdRefImpl {
 
     [[nodiscard]] Id::T getBits() const noexcept { return toId().getBits(); }
 
-    [[nodiscard]] Id::T getPayloadBits() const noexcept { return *payload_; }
+    [[nodiscard]] Id::PayloadType getPayloadBits() const noexcept {
+      return *payload_;
+    }
 
     [[nodiscard]] Datatype getDatatype() const noexcept {
       return static_cast<Datatype>(*datatype_);
@@ -167,7 +168,7 @@ class BasicIdRefImpl {
       return toId().getVocabIndex();
     }
 
-    [[nodiscard]] uint64_t getEncodedVal() const noexcept {
+    [[nodiscard]] Id::PayloadType getEncodedVal() const noexcept {
       return toId().getEncodedVal();
     }
 
@@ -353,7 +354,6 @@ class BasicIdRef
 
 using IdRef = BasicIdRef<false>;
 using ConstIdRef = BasicIdRef<true>;
-
 }  // namespace columnBasedIdTable::splitLayout
 
 // The `IdRef` and the `ConstIdRef` are cheap to copy and refer to an element of
@@ -361,7 +361,7 @@ using ConstIdRef = BasicIdRef<true>;
 // references returned by `column[i]` (see `FullProxyType` there).
 template <bool IsConst>
 inline constexpr bool
-    qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst>> =
+    qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst> > =
         true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDREF_H

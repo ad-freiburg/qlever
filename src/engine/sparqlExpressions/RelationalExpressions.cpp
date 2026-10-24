@@ -174,8 +174,9 @@ ad_utility::SetOfIntervals compareSetsOfIntervals(
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
 CPP_template(Comparison Comp, typename S1, typename S2)(
-    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<S2>
-        CPP_and AreComparable<S1, S2>) ExpressionResult
+    requires SingleExpressionResult<S1> && SingleExpressionResult<S2> &&
+    AreComparable<S1, S2>)
+ExpressionResult
     evaluateRelationalExpression(S1&& value1, S2&& value2,
                                  const EvaluationContext* context) {
   auto resultSize =
@@ -265,9 +266,9 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
   }
 }
 
-CPP_template(Comparison Comp, typename A,
-             typename B)(requires AreIncomparable<A, B>) Id
-    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+CPP_template(Comparison Comp, typename A, typename B)(
+    requires AreIncomparable<A, B>)
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
     return Id::makeFromBool(true);
@@ -279,9 +280,9 @@ CPP_template(Comparison Comp, typename A,
 // For comparisons where exactly one of the operands is a variable, the variable
 // must come first.
 CPP_template(Comparison Comp, typename A, typename B)(
-    requires SingleExpressionResult<A> CPP_and SingleExpressionResult<B> CPP_and
-        CPP_NOT(AreComparable<A, B>)
-            CPP_and AreComparable<B, A>) ExpressionResult
+    requires SingleExpressionResult<A> && SingleExpressionResult<B> &&
+    CPP_NOT(AreComparable<A, B>) && AreComparable<B, A>)
+ExpressionResult
     evaluateRelationalExpression(A&& a, B&& b,
                                  const EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
