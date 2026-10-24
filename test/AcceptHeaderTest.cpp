@@ -49,11 +49,11 @@ TEST(AcceptHeaderParser, singleTypeNQuads) {
 
 // Test that the name of QLever's binary export format contains its version.
 TEST(AcceptHeaderParser, singleTypeBinaryQleverExport) {
-  auto c = parseAcceptHeader("application/qlever-export-v1");
+  auto c = parseAcceptHeader("application/vnd.qlever.results.v1");
   ASSERT_EQ(c.size(), 1u);
   ASSERT_EQ(c[0], MediaType::binaryQleverExport);
   ASSERT_EQ(toString(MediaType::binaryQleverExport),
-            "application/qlever-export-v1");
+            "application/vnd.qlever.results.v1");
 }
 
 // _____________________________________________________________________________
