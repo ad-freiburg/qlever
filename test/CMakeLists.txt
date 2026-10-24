@@ -659,6 +659,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTest(ParallelExecutorTest)
 
+addLinkAndDiscoverTest(MathTest)
+
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)

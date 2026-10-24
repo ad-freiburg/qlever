@@ -102,6 +102,17 @@ TEST(ExceptionCollector, isNoOpWhenEmpty) {
   EXPECT_NO_THROW(collector.rethrowIfException());
 }
 
+// Test that `hasException` reports a captured exception until it is
+// rethrown.
+TEST(ExceptionCollector, hasException) {
+  ad_utility::ExceptionCollector collector;
+  EXPECT_FALSE(collector.hasException());
+  collector(std::make_exception_ptr(std::runtime_error{"captured"}));
+  EXPECT_TRUE(collector.hasException());
+  EXPECT_THROW(collector.rethrowIfException(), std::runtime_error);
+  EXPECT_FALSE(collector.hasException());
+}
+
 // _____________________________________________________________________________
 TEST(ExceptionCollector, asCompletionHandler) {
   auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
