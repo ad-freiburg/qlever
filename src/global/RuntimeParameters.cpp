@@ -59,7 +59,7 @@ RuntimeParameters::RuntimeParameters() {
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
-  add(sparqlResultsJsonWithTime_);
+  add(sparqlResultsJsonWithMeta_);
   add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
@@ -73,6 +73,14 @@ RuntimeParameters::RuntimeParameters() {
   add(disableCaching_);
   add(logLevel_);
   add(constructDeduplication_);
+
+  // Deprecated aliases (old names of renamed parameters), so that existing
+  // configurations keep working.
+  auto addAlias = [this](std::string alias, auto& parameter) {
+    AD_CONTRACT_CHECK(!ad_utility::contains(runtimeMap_, alias));
+    runtimeMap_[std::move(alias)] = &parameter;
+  };
+  addAlias("sparql-results-json-with-time", sparqlResultsJsonWithMeta_);
 
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is

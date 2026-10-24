@@ -150,7 +150,7 @@ void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(
@@ -194,7 +194,7 @@ void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
@@ -1457,7 +1457,7 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
 
   // The SPARQL JSON and XML exports contain the whole text as a plain literal.
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
   EXPECT_EQ(
       nlohmann::json::parse(
           runQueryStreamableResult(config, query, sparqlJson)),
@@ -2267,8 +2267,9 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
 }
 
 // _____________________________________________________________________________
-// Test that a `sparql-results+json` export includes a `meta` field if and
-// only if the respective runtime parameter is enabled.
+// Test that a `sparql-results+json` export includes a `meta` field (with the
+// query time, the result size, and the warnings) if and only if the respective
+// runtime parameter is enabled.
 TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
   std::string kg = "<x> <y> <z>";
   std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
@@ -2276,7 +2277,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
   // Case 1: Runtime parameter enabled (default).
   {
     auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+        &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
     auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
     ASSERT_TRUE(result.contains("head"));
     ASSERT_TRUE(result.contains("results"));
@@ -2288,12 +2289,25 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
     ASSERT_TRUE(result["meta"]["result-size-total"].is_number());
     EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
     EXPECT_EQ(result["meta"]["result-size-total"].get<int64_t>(), 1);
+    EXPECT_THAT(result["meta"]["warnings"], ::testing::ElementsAre());
+  }
+
+  // Case 1b: Runtime parameter enabled and the query produces a warning.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
+    auto result = runJSONQuery(
+        kg, "SELECT (COUNT(?s) AS ?c) WHERE {?s ?p ?o} ORDER BY ?c",
+        ad_utility::MediaType::sparqlJson);
+    EXPECT_THAT(result["meta"]["warnings"],
+                ::testing::ElementsAre(
+                    ::testing::HasSubstr("The ORDER BY clause has no effect")));
   }
 
   // Case 2: Runtime parameter disabled.
   {
     auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+        &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
     auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
     ASSERT_TRUE(result.contains("head"));
     ASSERT_TRUE(result.contains("results"));
