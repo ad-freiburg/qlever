@@ -285,6 +285,19 @@ int main(int argc, char** argv) {
                    ad_utility::HasWordNormalization::getListOfSupportedValues(),
                    ", the default is `lowercase`.")
           .c_str());
+  add("add-normalized-triples", po::bool_switch(&config.addNormalizedTriples_),
+      "Add a triple `<literal> ql:normalized \"normalized literal\"` for each "
+      "literal. The normalized literal is obtained by removing the matches of "
+      "the `--normalization-regexes`, removing accents, and lowercasing the "
+      "words of the literal, separated by single spaces. This enables "
+      "efficient matching of literals via their normalized form.");
+  add("normalization-regexes",
+      po::value(&config.normalizationRegexes_)->composing()->multitoken(),
+      "Space-separated list of regexes (RE2 syntax), whose matches are "
+      "replaced by a space before a literal is normalized for "
+      "`--add-normalized-triples` (in the given order), e.g. `\\(.*?\\)` "
+      "to remove text in parentheses, or `(?i)official video` to remove "
+      "this phrase case-insensitively.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());

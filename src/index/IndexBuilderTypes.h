@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -294,11 +295,14 @@ struct alignas(256) ItemMapManager {
 
 // A triple together with the language tag of its object (if any). If the object
 // is a text literal, and the option to add `ql:has-word` triples is enabled,
-// also store each word in the literal together with its term frequency.
+// also store each word in the literal together with its term frequency. If the
+// option to add `ql:normalized` triples is enabled, also store the normalized
+// form of the literal (if it is non-empty).
 struct ProcessedTriple {
   Triple triple_;
   std::string langtag_;
   ad_utility::HashMap<std::string, size_t> wordFrequencies_;
+  std::optional<std::string> normalized_;
 };
 
 // The Ids of a triple, once its string components have been mapped via an
@@ -377,6 +381,18 @@ void mapTripleToIds(Triple&& triple, ItemMapManager& map, IndexPtr* index,
     }
     // Update the counter for the number of `ql:has-word` triples.
     numHasWordTriples += lt.wordFrequencies_.size();
+  }
+
+  // Fourth, if applicable, add the internal triple
+  // `<literal> ql:normalized "normalized literal"`.
+  if (lt.normalized_.has_value()) {
+    auto normalizedPredId = map.getId(TripleComponent{
+        ad_utility::triple_component::Iri::fromIriref(NORMALIZED_PREDICATE)});
+    auto normalizedId = map.getId(TripleComponent{
+        ad_utility::triple_component::Literal::literalWithoutQuotes(
+            lt.normalized_.value())});
+    result.push_back(
+        IdRow{spoIds[2], normalizedPredId, normalizedId, tripleGraphId});
   }
 }
 

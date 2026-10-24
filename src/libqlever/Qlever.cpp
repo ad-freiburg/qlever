@@ -162,6 +162,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
+  index.getImpl().addNormalizedTriples() = config.addNormalizedTriples_;
+  index.getImpl().setNormalizationRegexes(config.normalizationRegexes_);
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,

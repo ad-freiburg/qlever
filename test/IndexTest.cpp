@@ -769,6 +769,40 @@ TEST(IndexTest, processTriple) {
 }
 
 // _____________________________________________________________________________
+TEST(IndexTest, normalizedTriples) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto process = [&index](std::string literal) {
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+                              lit(std::move(literal))};
+    return index.processTriple(std::move(turtleTriple)).normalized_;
+  };
+  // Disabled by default.
+  EXPECT_EQ(process("\"Café\""), std::nullopt);
+
+  index.addNormalizedTriples() = true;
+  EXPECT_EQ(process("\"Café (Live), OLÉ!  42\""), "cafe live ole 42");
+  // A literal without words has no normalized form.
+  EXPECT_EQ(process("\"?!\""), std::nullopt);
+  // Not a literal.
+  EXPECT_EQ(
+      index.processTriple(TurtleTriple{iri("<s>"), iri("<p>"), iri("<o>")})
+          .normalized_,
+      std::nullopt);
+
+  // The matches of the regexes are replaced by a space, in the given order.
+  index.setNormalizationRegexes(
+      {"\\([^)]*\\)|\\[[^\\]]*\\]", "(?i)official( hd)? video"});
+  EXPECT_EQ(process("\"Café (Live) [2020] Olé Official HD Video\""),
+            "cafe ole");
+  EXPECT_EQ(process("\"Song(feat. X)Title\""), "song title");
+  EXPECT_EQ(index.normalizeLiteralContent("(only brackets)"), "");
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setNormalizationRegexes({"(unclosed"}),
+      ::testing::HasSubstr("not a valid regular expression"));
+}
+
+// _____________________________________________________________________________
 // The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
 // therefore have to start with `<`) and must be valid regular expressions;
 // otherwise the setter throws. Valid regexes are compiled and stored.

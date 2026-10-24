@@ -10,6 +10,7 @@
 #include <absl/strings/str_join.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
+#include <re2/re2.h>
 #include <sys/stat.h>
 
 #include <atomic>
@@ -1655,6 +1656,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
         ++result.wordFrequencies_[std::move(word)];
       }
     }
+    if (addNormalizedTriples_) {
+      auto normalized = normalizeLiteralContent(lit.getContent());
+      if (!normalized.empty()) {
+        result.normalized_ = std::move(normalized);
+      }
+    }
   }
 
   // The following lambda deals with triple elements that might be strings
@@ -2222,6 +2229,36 @@ void IndexImpl::setBlankNodeIriRegexes(
   blankNodeIriRegexes_ =
       ad_utility::RegexSet{std::move(blankNodeIriRegexes),
                            "passed to `--iri-as-blank-node-regexes`"};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setNormalizationRegexes(
+    const std::vector<std::string>& regexes) {
+  normalizationRegexes_.clear();
+  for (const std::string& regex : regexes) {
+    auto compiled = std::make_shared<const re2::RE2>(regex, re2::RE2::Quiet);
+    if (!compiled->ok()) {
+      throw std::runtime_error{absl::StrCat(
+          "The regex \"", regex,
+          "\" passed to `--normalization-regexes` is not a valid regular "
+          "expression (as understood by Google's RE2 library): ",
+          compiled->error())};
+    }
+    normalizationRegexes_.push_back(std::move(compiled));
+  }
+}
+
+// _____________________________________________________________________________
+std::string IndexImpl::normalizeLiteralContent(std::string_view content) const {
+  std::string cleaned{content};
+  for (const auto& regex : normalizationRegexes_) {
+    re2::RE2::GlobalReplace(&cleaned, *regex, " ");
+  }
+  std::string withoutAccents = ad_utility::removeAccentsUtf8(cleaned);
+  return absl::StrJoin(
+      ::ranges::to<std::vector<std::string>>(
+          tokenizeAndNormalizeText(withoutAccents, vocab_.getLocaleManager())),
+      " ");
 }
 
 // _____________________________________________________________________________

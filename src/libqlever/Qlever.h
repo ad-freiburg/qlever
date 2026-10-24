@@ -97,6 +97,12 @@ struct CommonConfig {
   // triples, see `ad_utility::HasWordNormalization`.
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
+
+  // Option to add a triple `<literal> ql:normalized "normalized literal"` for
+  // each literal, see `IndexImpl::normalizeLiteralContent`. The
+  // `normalizationRegexes_` are removed from the literals before.
+  bool addNormalizedTriples_ = false;
+  std::vector<std::string> normalizationRegexes_;
 };
 
 // Additional configuration used for building an index for a given dataset.

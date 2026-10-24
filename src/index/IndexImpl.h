@@ -99,6 +99,10 @@ struct IndexBuilderDataAsFirstPermutationSorter {
   SorterPtr sorter_;
 };
 
+namespace re2 {
+class RE2;
+}  // namespace re2
+
 class IndexImpl {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
@@ -149,6 +153,14 @@ class IndexImpl {
   // triples.
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
+
+  // If true, add a `ql:normalized` triple for each literal, see
+  // `normalizeLiteralContent`.
+  bool addNormalizedTriples_ = false;
+
+  // The regexes whose matches are removed from a literal before it is
+  // normalized, see `normalizeLiteralContent`.
+  std::vector<std::shared_ptr<const re2::RE2>> normalizationRegexes_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -455,6 +467,20 @@ class IndexImpl {
   void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
     hasWordNormalization_ = normalization;
   }
+
+  bool& addNormalizedTriples() { return addNormalizedTriples_; }
+
+  // Set the regexes for `normalizeLiteralContent`. Throw if one of them is not
+  // a valid regular expression (as understood by Google's RE2 library).
+  void setNormalizationRegexes(const std::vector<std::string>& regexes);
+
+  // Return the normalized form of the `content` of a literal, which is the
+  // object of its `ql:normalized` triple: Replace each match of the
+  // `normalizationRegexes_` (in order) by a space, remove all accents, split
+  // the result at non-alphanumeric characters, and join the lowercased words
+  // with a single space. For example, with the regex `\(.*?\)`, the content
+  // "Café (Live), Olé!" becomes "cafe ole".
+  std::string normalizeLiteralContent(std::string_view content) const;
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
