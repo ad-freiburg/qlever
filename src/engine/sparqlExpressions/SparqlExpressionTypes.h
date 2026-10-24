@@ -16,6 +16,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/ContainersWithAllocator.h"
@@ -36,7 +37,7 @@ using ad_utility::VectorWithMemoryLimit;
 // `ExpressionResult`. `IdOrLiteralOrIri` is the lighter type that expression
 // helpers can return without needing vocab position bounds; it gets promoted
 // to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
-using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using IdOrLocalVocabEntry = ::IdOrLocalVocabEntry;
 using IdOrLiteralOrIri =
     std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 // Printing for GTest.
@@ -192,6 +193,8 @@ CPP_template(typename T, typename LocalVocabT)(
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
+            // NOTE: `el` cannot be an IRI that has to be encoded as an `Id`,
+            // see `toIdOrLocalVocabEntry`.
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
           } else {
@@ -376,8 +379,8 @@ using PromoteToLocalVocabEntry =
                        T>;
 
 // Helper function to upgrade the variant type from `IdOrLiteralOrIri` to
-// `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
-// For other types, the functor just returns the input as is.
+// `IdOrLocalVocabEntry` using `toIdOrLocalVocabEntry`. For other types, the
+// functor just returns the input as is.
 template <typename T>
 decltype(auto) promoteToLocalVocabEntry(T&& value,
                                         const LocalVocabContext& context) {
@@ -386,7 +389,7 @@ decltype(auto) promoteToLocalVocabEntry(T&& value,
         ad_utility::OverloadCallOperator{
             [](Id id) -> IdOrLocalVocabEntry { return id; },
             [&context](auto&& literalOrIri) -> IdOrLocalVocabEntry {
-              return {LocalVocabEntry{AD_FWD(literalOrIri), context}};
+              return toIdOrLocalVocabEntry(AD_FWD(literalOrIri), context);
             }},
         AD_FWD(value));
   } else {

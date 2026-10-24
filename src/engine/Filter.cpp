@@ -145,10 +145,9 @@ IdTable Filter::filterIdTable(qlm::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(int WIDTH,
-                 typename Table)(requires IdTableLike<Table>) void Filter::
-    computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      qlm::vector<ColumnIndex> sortedBy) const {
+CPP_template_def(int WIDTH, typename Table)(requires IdTableLike<Table>)
+void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
+                               qlm::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =

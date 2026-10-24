@@ -3729,3 +3729,52 @@ TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
   EXPECT_EQ(compute(nonEmptyInput(), {unbound}),
             makeIdTableFromVector({{I(3)}}));
 }
+
+// Test that an IRI that is computed inside of an aggregate and that can be
+// encoded directly in an `Id` (see `EncodedIriManager`) gets that `Id`, both
+// with and without the hash map optimization.
+TEST(GroupBy, aggregateOfComputedEncodableIri) {
+  TestIndexConfig config{"<http://example.org/1> <p> <o> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& encodedIriManager = qec->getIndex().encodedIriManager();
+  auto encoded = [&](std::string_view iri) {
+    return encodedIriManager.encode(iri).value();
+  };
+
+  std::string query =
+      "SELECT ?g (MIN(IRI(CONCAT(\"http://example.org/\", ?n))) AS ?min) "
+      "(MAX(IRI(CONCAT(\"http://example.org/\", ?n))) AS ?max) "
+      "WHERE { VALUES (?g ?n) { (1 \"5\") (2 \"6\") (2 \"7\") } } GROUP BY ?g";
+  for (bool hashMapEnabled : {true, false}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+            hashMapEnabled);
+    qec->clearCacheUnpinnedOnly();
+    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {});
+    QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+    auto qet = qp.createExecutionTree(parsedQuery);
+    auto result = qet->getResult();
+    // `timeMapLookup` is only reported by the hash map optimization.
+    auto groupBy =
+        std::dynamic_pointer_cast<const GroupBy>(qet->getRootOperation());
+    ASSERT_NE(groupBy, nullptr);
+    EXPECT_EQ(
+        groupBy->getImpl().runtimeInfo().details_.contains("timeMapLookup"),
+        hashMapEnabled);
+    auto e5 = encoded("<http://example.org/5>");
+    auto e6 = encoded("<http://example.org/6>");
+    auto e7 = encoded("<http://example.org/7>");
+    const auto& table = result->idTableView();
+    EXPECT_THAT(table,
+                matchesIdTableFromVector({{I(1), e5, e5}, {I(2), e6, e7}}));
+    // The comparison above also succeeds for a `LocalVocabIndex` of the same
+    // IRIs, so check the datatype explicitly.
+    for (size_t col : {1, 2}) {
+      for (Id id : table.getColumn(col)) {
+        EXPECT_EQ(id.getDatatype(), Datatype::EncodedVal);
+      }
+    }
+  }
+}

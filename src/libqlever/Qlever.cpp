@@ -647,6 +647,11 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
   newIndex.loadAllPermutations() = index.loadAllPermutations();
   newIndex.createFromOnDiskIndex(indexBaseName,
                                  index.deltaTriplesManager().persists());
+  // The rebuilt index has to encode exactly the same IRIs directly in an `Id`,
+  // otherwise the `Id`s and `LocalVocabEntry`s of the old index cannot be
+  // carried over (see `LocalVocabEntry::reanchoredTo`).
+  AD_CORRECTNESS_CHECK(index.getImpl().encodedIriManager() ==
+                       newIndex.getImpl().encodedIriManager());
   newManager.setOnDiskBase(indexBaseName);
   return {std::move(currentSnapshot), std::move(mapping),
           std::move(indexAndViews)};
@@ -685,13 +690,11 @@ void Qlever::swapInRebuiltIndex(
   // repaired manually before the next restart.
   moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
-  // Clear the query cache, including pinned entries: cached results were
-  // computed against the old index, so their `VocabIndex` ids are in the old
-  // vocabulary's coordinates and their `LocalVocabEntry`s are anchored to the
-  // old index. The cache key alone does not protect against serving them: it
-  // only contains the query string and the delta triples version counter,
-  // and the counter of the new index starts over and can collide with a
-  // pre-swap value.
+  // Clear the query cache, including pinned entries, to free the memory of
+  // the results that were computed against the old index. They can never be
+  // hit again, because `addFromSnapshotDiff` above continued the snapshot
+  // index of the old index in the new one. This also holds for the results
+  // that queries still running on the old index insert after this point.
   cache_.clearAll();
 }
 #endif
