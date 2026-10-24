@@ -13,6 +13,9 @@
 #include <cstddef>
 #include <string>
 #include <utility>
+#if __has_include(<version>)
+#include <version>
+#endif
 
 #include "backports/concepts.h"
 #include "util/Exception.h"
@@ -24,10 +27,14 @@ namespace ql {
 // `std::basic_string::resize_and_overwrite` as a free function taking the
 // string first. Like the standard, `op` is taken by value, called once as an
 // rvalue with `(data, count)`, must write at most `count` bytes, must not
-// throw, and returns the new size. Unlike the standard (a result larger than
-// `count` is UB), the result is checked with `AD_CONTRACT_CHECK` after the
-// call. Before C++23 there is no performance benefit: the fallback
-// zero-fills all `count` bytes with `resize` first.
+// throw, and returns the new size. Writing more than `count` bytes is UB
+// (as in the standard) and cannot be checked after the fact; only a returned
+// size larger than `count` is checked with `AD_CONTRACT_CHECK` after the
+// call, and the string is then left empty on the C++23 path (the wrapper
+// clamps the size it reports to the standard member, whose contract would
+// otherwise be violated) resp. at size `count` with the written contents on
+// the fallback path. Before C++23 there is no performance benefit: the
+// fallback zero-fills all `count` bytes with `resize` first.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Operation)(
     requires ad_utility::InvocableWithConvertibleReturnType<

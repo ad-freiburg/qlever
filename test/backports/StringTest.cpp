@@ -12,6 +12,9 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#if __has_include(<version>)
+#include <version>
+#endif
 
 #include "backports/string.h"
 
@@ -63,11 +66,33 @@ TEST(StringTest, ResizeAndOverwriteZeroCapacity) {
 }
 
 // _____________________________________________________________________________
-// Oversize results violate the contract on both branches.
+// Oversize results violate the contract on both branches. The state after
+// the throw is branch-specific (documented in `backports/string.h`): empty
+// on the C++23 path (the wrapper clamps what it reports to the standard
+// member), the full `count` with the written contents on the fallback path.
 TEST(StringTest, ResizeAndOverwriteOversizedResultThrows) {
   std::string s;
   ASSERT_THROW(ql::resize_and_overwrite(s, 4, [](char*, size_t) { return 5u; }),
                ad_utility::Exception);
+#if defined(__cpp_lib_string_resize_and_overwrite) && \
+    __cpp_lib_string_resize_and_overwrite >= 202110L
+  EXPECT_TRUE(s.empty());
+#else
+  EXPECT_EQ(s.size(), 4u);
+#endif
+}
+
+// _____________________________________________________________________________
+// The backport is generic in the character type, like the standard member.
+TEST(StringTest, ResizeAndOverwriteWideString) {
+  std::wstring s = L"initial";
+  const std::wstring text = L"wide";
+  ql::resize_and_overwrite(s, text.size(), [&](wchar_t* buf, size_t count) {
+    EXPECT_EQ(count, text.size());
+    std::memcpy(buf, text.data(), text.size() * sizeof(wchar_t));
+    return text.size();
+  });
+  EXPECT_EQ(s, text);
 }
 
 // _____________________________________________________________________________
