@@ -1630,6 +1630,21 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 }
 
 // ___________________________________________________________________________
+std::vector<std::string> IndexImpl::getHasWordWords(
+    std::string_view text) const {
+  // Remove the accents before tokenizing: combining marks are not
+  // alphanumeric, so they would otherwise split words.
+  std::string textWithoutAccents;
+  if (hasWordNormalization_ ==
+      ad_utility::HasWordNormalization::LowercaseNoAccents) {
+    textWithoutAccents = ad_utility::removeAccentsUtf8(text);
+    text = textWithoutAccents;
+  }
+  return ::ranges::to<std::vector<std::string>>(
+      tokenizeAndNormalizeText(text, vocab_.getLocaleManager()));
+}
+
+// ___________________________________________________________________________
 ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   ProcessedTriple result;
   auto& resultTriple = result.triple_;
@@ -1641,17 +1656,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = lit.getContent();
-      const auto& localeManager = vocab_.getLocaleManager();
-      // Remove the accents before tokenizing: combining marks are not
-      // alphanumeric, so they would otherwise split words.
-      std::string contentWithoutAccents;
-      if (hasWordNormalization_ ==
-          ad_utility::HasWordNormalization::LowercaseNoAccents) {
-        contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
-        content = contentWithoutAccents;
-      }
-      for (auto&& word : tokenizeAndNormalizeText(content, localeManager)) {
+      for (auto& word : getHasWordWords(lit.getContent())) {
         ++result.wordFrequencies_[std::move(word)];
       }
     }

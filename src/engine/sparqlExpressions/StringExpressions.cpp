@@ -72,6 +72,9 @@ class StrExpression : public StrExpressionImpl {
   bool isStrExpression() const override { return true; }
 };
 
+// `ql:normalize`, see `NormalizedStringGetter`.
+using NormalizeExpression = NARY<1, FV<StrImpl, NormalizedStringGetter>>;
+
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
 // references) and returns an `Id` or `std::string` to a function that takes the
 // same number of `std::optional<std::string>` and returns `Id` or
@@ -676,6 +679,10 @@ Expr makeStrStartsExpression(Expr child1, Expr child2) {
 
 Expr makeLowercaseExpression(Expr child) {
   return make<LowercaseExpression>(child);
+}
+
+Expr makeNormalizeExpression(Expr child) {
+  return make<NormalizeExpression>(child);
 }
 
 Expr makeUppercaseExpression(Expr child) {

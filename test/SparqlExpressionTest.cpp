@@ -1395,6 +1395,15 @@ TEST(SparqlExpression, uppercaseAndLowercase) {
 }
 
 // _____________________________________________________________________________________
+auto checkNormalize = testUnaryExpression<&makeNormalizeExpression>;
+TEST(SparqlExpression, normalize) {
+  checkNormalize(IdOrLocalVocabEntryVec{lit("Café"), lit("  Hello, WORLD!? "),
+                                        lit("Olé", "@es"), lit("?!"), U, I(12)},
+                 IdOrLocalVocabEntryVec{lit("café"), lit("hello world"),
+                                        lit("olé"), lit(""), U, lit("12")});
+}
+
+// _____________________________________________________________________________________
 auto checkStrStarts =
     std::bind_front(testNaryExpression, &makeStrStartsExpression);
 auto checkStrEnds = std::bind_front(testNaryExpression, &makeStrEndsExpression);
