@@ -93,6 +93,22 @@ TEST(StringUtils, utf8ToLowerUpperNoICU) {
 }
 
 // _____________________________________________________________________________
+TEST(StringUtils, removeAccentsUtf8) {
+  using ad_utility::removeAccentsUtf8;
+  EXPECT_EQ(removeAccentsUtf8("plain ascii"), "plain ascii");
+  // Composed and decomposed é.
+  EXPECT_EQ(removeAccentsUtf8("Caf\xc3\xa9"), "Cafe");
+  EXPECT_EQ(removeAccentsUtf8("Cafe\xcc\x81"), "Cafe");
+  EXPECT_EQ(removeAccentsUtf8("äöüñçÅ"), "aouncA");
+  // ß and ø have no decomposition and are kept.
+  EXPECT_EQ(removeAccentsUtf8("ßø"), "ßø");
+  // Hangul syllables decompose into jamo (not marks) and are recomposed.
+  EXPECT_EQ(removeAccentsUtf8("한"), "한");
+  // Without ICU, the input is returned unchanged.
+  EXPECT_EQ(removeAccentsUtf8<false>("Caf\xc3\xa9"), "Caf\xc3\xa9");
+}
+
+// _____________________________________________________________________________
 // `getUTF8Prefix` counts Unicode codepoints, never splits a multi-byte
 // character, and is ICU-free.
 TEST(StringUtils, getUTF8Prefix) {

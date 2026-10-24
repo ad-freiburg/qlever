@@ -1648,7 +1648,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
       std::string contentWithoutAccents;
       if (hasWordNormalization_ ==
           ad_utility::HasWordNormalization::LowercaseNoAccents) {
-        contentWithoutAccents = localeManager.removeAccentsUtf8(content);
+        contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
         content = contentWithoutAccents;
       }
       for (auto&& word : tokenizeAndNormalizeText(content, localeManager)) {

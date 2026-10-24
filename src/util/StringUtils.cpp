@@ -10,6 +10,9 @@
 #ifndef QLEVER_NO_UNICODE
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
+#include <unicode/normalizer2.h>
+#include <unicode/uchar.h>
+#include <unicode/unistr.h>
 #endif
 
 #include <cctype>
@@ -235,6 +238,51 @@ std::string utf8ToUpper(std::string_view s, const char* localeName) {
 // Explicit instantiations for both configurations.
 template std::string utf8ToUpper<true>(std::string_view, const char*);
 template std::string utf8ToUpper<false>(std::string_view, const char*);
+
+// ____________________________________________________________________________
+template <bool useICU>
+std::string removeAccentsUtf8(std::string_view s) {
+  bool isAscii =
+      ql::ranges::all_of(s, [](unsigned char c) { return c < 0x80; });
+  if constexpr (useICU) {
+    if (!isAscii) {
+      QLEVER_UNICODE_ONLY("removeAccentsUtf8", {
+        auto raise = [](UErrorCode err) {
+          if (U_FAILURE(err)) {
+            throw std::runtime_error(u_errorName(err));
+          }
+        };
+        UErrorCode err = U_ZERO_ERROR;
+        const icu::Normalizer2* nfd = icu::Normalizer2::getNFDInstance(err);
+        raise(err);
+        const icu::Normalizer2* nfc = icu::Normalizer2::getNFCInstance(err);
+        raise(err);
+        icu::UnicodeString decomposed =
+            nfd->normalize(icu::UnicodeString::fromUTF8(icu::StringPiece{
+                               s.data(), static_cast<int32_t>(s.size())}),
+                           err);
+        raise(err);
+        icu::UnicodeString stripped;
+        for (int32_t i = 0; i < decomposed.length();) {
+          UChar32 c = decomposed.char32At(i);
+          if (u_charType(c) != U_NON_SPACING_MARK) {
+            stripped.append(c);
+          }
+          i += U16_LENGTH(c);
+        }
+        icu::UnicodeString recomposed = nfc->normalize(stripped, err);
+        raise(err);
+        std::string result;
+        recomposed.toUTF8String(result);
+        return result;
+      });
+    }
+  }
+  return std::string(s);
+}
+// Explicit instantiations for both configurations.
+template std::string removeAccentsUtf8<true>(std::string_view);
+template std::string removeAccentsUtf8<false>(std::string_view);
 
 // ____________________________________________________________________________
 std::string_view getUTF8Substring(const std::string_view str, size_t start,
