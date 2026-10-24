@@ -355,6 +355,12 @@ int main(int argc, char** argv) {
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
       logLevelDescription.c_str());
+  add("permutation-compression-level",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::permutationCompressionLevel_>(),
+      "The ZSTD compression level of the blocks of the permutations. Default: "
+      "3. A lower level (e.g. 1) makes the index build faster at the price of "
+      "a slightly larger index.");
   add("num-threads,j", po::value(&config.numThreads_),
       "The number of threads used during the index build. Must be at least 1. "
       "Default: the number of hardware threads of the machine. NOTE: Currently "
