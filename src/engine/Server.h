@@ -383,10 +383,10 @@ class Server {
   // visitor on the given operation.
   CPP_template(typename VisitorT, typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> processOperation(
-          SparqlOperation operation, VisitorT visitor,
-          const ad_utility::Timer& requestTimer, const RequestT& request,
-          SendT& send, const std::optional<PlannedQuery>& plannedQuery);
+  Awaitable<void> processOperation(
+      SparqlOperation operation, VisitorT visitor,
+      const ad_utility::Timer& requestTimer, const RequestT& request,
+      SendT& send, const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the

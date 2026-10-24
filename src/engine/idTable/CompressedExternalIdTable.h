@@ -637,10 +637,10 @@ inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
 // `CompressedExternalIdTableSorter` (see below). It is implemented as a mixin
 // class.
 CPP_class_template(size_t NumStaticCols,
-                   typename BlockTransformation = ad_utility::Noop)(requires(
-    ql::concepts::invocable<
-        BlockTransformation,
-        IdTableStatic<NumStaticCols>&>)) class CompressedExternalIdTableBase {
+                   typename BlockTransformation = ad_utility::Noop)(
+    requires(ql::concepts::invocable<BlockTransformation,
+                                     IdTableStatic<NumStaticCols>&>))
+class CompressedExternalIdTableBase {
  public:
   using value_type = typename IdTableStatic<NumStaticCols>::row_type;
   using reference = typename IdTableStatic<NumStaticCols>::row_reference;
