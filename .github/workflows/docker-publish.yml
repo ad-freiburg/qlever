@@ -43,11 +43,15 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'run-full-ci')
     strategy:
       matrix:
+        # The amd64 unit tests already run in the native builds, so the amd64
+        # image skips them. This is the only place the unit tests run on arm64.
         include:
           - platform: linux/amd64
             runner: ubuntu-24.04
+            run-tests: false
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
+            run-tests: true
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -103,6 +107,7 @@ jobs:
           # cache instead of recompiling.
           build-args: |
             QLEVER_ENABLE_LTO=${{ github.event_name != 'pull_request' }}
+            RUN_TESTS=${{ matrix.run-tests }}
           # push-by-digest means that the built image is not associated with a tag. Instead, the only way to refer to it
           # is by using its digest (which is basically a unique hash).
           outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
@@ -138,6 +143,7 @@ jobs:
           context: .
           build-args: |
             QLEVER_ENABLE_LTO=${{ github.event_name != 'pull_request' }}
+            RUN_TESTS=${{ matrix.run-tests }}
           load: true
           push: false
           tags: ${{ env.IMAGE }}:tmp-${{ github.sha }}
