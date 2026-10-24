@@ -754,14 +754,6 @@ class Operation {
   // `getInternallyVisibleVariableColumns`.
   virtual VariableToColumnMap computeVariableToColumnMap() const = 0;
 
-  // Recursively call a function on all children.
-  template <typename F>
-  void forAllDescendants(F f);
-
-  // Recursively call a function on all children.
-  template <typename F>
-  void forAllDescendants(F f) const;
-
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
