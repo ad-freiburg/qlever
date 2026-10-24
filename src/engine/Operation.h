@@ -71,9 +71,6 @@ class Operation {
   SharedCancellationHandle cancellationHandle_ =
       makeShared<SharedCancellationHandle::element_type>();
 
-  std::chrono::steady_clock::time_point deadline_ =
-      std::chrono::steady_clock::time_point::max();
-
  private:
   // Return the given `executionContext`, or throw if it is `nullptr` (see the
   // constructor below).
@@ -386,15 +383,6 @@ class Operation {
   void recursivelySetCancellationHandle(
       SharedCancellationHandle cancellationHandle);
 
-  template <typename Rep, typename Period>
-  void recursivelySetTimeConstraint(
-      std::chrono::duration<Rep, Period> duration) {
-    recursivelySetTimeConstraint(std::chrono::steady_clock::now() + duration);
-  }
-
-  void recursivelySetTimeConstraint(
-      std::chrono::steady_clock::time_point deadline);
-
   // Optimization for lazy operations where the very nature of the operation
   // makes it unlikely to ever fit in cache when completely materialized.
   virtual bool unlikelyToFitInCache(
@@ -634,8 +622,6 @@ class Operation {
     cancellationHandle_->throwIfCancelled(location,
                                           [this]() { return getDescriptor(); });
   }
-
-  std::chrono::milliseconds remainingTime() const;
 
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different

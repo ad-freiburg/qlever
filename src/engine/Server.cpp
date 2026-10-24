@@ -439,7 +439,7 @@ Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
 // _____________________________________________________________________________
 Awaitable<nlohmann::json> Server::processWriteMaterializedView(
     const ParamValueMap& parameters, const SparqlOperation& operation,
-    bool accessTokenOk, const ad_utility::Timer& requestTimer) {
+    const ad_utility::Timer& requestTimer) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
@@ -454,12 +454,6 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
             "Action 'write-materialized-view' requires a 'SELECT' query.");
       });
 
-  // Extract time limit.
-  auto timeLimit =
-      verifyUserSubmittedQueryTimeout(ad_utility::url_parser::checkParameter(
-                                          parameters, "timeout", std::nullopt),
-                                      accessTokenOk);
-
   // Call `Qlever::writeMaterializedView` with the extracted parameters. This
   // assumes that the access token has already been checked. Note that storing
   // the coroutine in a variable first and then awaiting it is required due to
@@ -468,11 +462,10 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
       std::make_shared<ad_utility::CancellationHandle<>>();
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [name, query, requestTimer, cancellationHandle, timeLimit,
-       this]() mutable {
+      [name, query, requestTimer, cancellationHandle, this]() mutable {
         qlever().writeMaterializedView(
             name, std::move(query.query_), query.datasetClauses_,
-            std::move(cancellationHandle), timeLimit, requestTimer);
+            std::move(cancellationHandle), requestTimer);
       },
       cancellationHandle);
   co_await std::move(coroutine);
@@ -776,7 +769,7 @@ Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
     co_return ProcessCommandsResult{std::move(rebuildIndexResponse)};
   } else if (commandIs("write-materialized-view")) {
     auto materializedViewStats = co_await processWriteMaterializedView(
-        parameters, operation, accessTokenOk, requestTimer);
+        parameters, operation, requestTimer);
     // Flag that this command already consumed the query operation, so
     // `process()` doesn't also try to run it as a regular query.
     co_return ProcessCommandsResult{makeJsonResponse(materializedViewStats),
@@ -855,8 +848,7 @@ Awaitable<void> Server::processSparqlOperation(
         AD_CORRECTNESS_CHECK(tracer != nullptr);
         co_await processUpdate(std::move(makeQec), std::move(operations),
                                requestTimer, tracer, cancellationHandle,
-                               std::move(request), send, timeLimit,
-                               plannedQuery);
+                               std::move(request), send, plannedQuery);
       } else {
         AD_CORRECTNESS_CHECK(operations.size() == 1);
         ParsedQuery query = std::move(operations[0]);
@@ -868,7 +860,7 @@ Awaitable<void> Server::processSparqlOperation(
         auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
                               cancellationHandle, *qecPtr, std::move(request),
-                              send, timeLimit, plannedQuery);
+                              send, plannedQuery);
       }
       queryStatus->store(OK);
       co_return;
@@ -1087,10 +1079,10 @@ Server::process<Server::StringBodyRequest, Server::MockSend&>(
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, QueryExecutionContext& qec,
-    ad_utility::SharedCancellationHandle handle, TimeLimit timeLimit,
+    ad_utility::SharedCancellationHandle handle,
     const ad_utility::Timer& requestTimer) const {
   PlannedQuery plannedQuery = qlever().planQuery(
-      std::move(operation), qec, std::move(handle), timeLimit, requestTimer);
+      std::move(operation), qec, std::move(handle), requestTimer);
 
   const auto& qet = plannedQuery.queryExecutionTree();
   const auto& queryPlanningInfo =
@@ -1244,7 +1236,7 @@ Awaitable<void> Server::processQuery(
     const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     QueryExecutionContext& qec, const RequestT& request, SendT&& send,
-    TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
+    std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
   ad_utility::metrics::ActiveCounterGuard queryGuard{
       *metrics_->runningSparqlOperations_, "query"};
@@ -1269,10 +1261,10 @@ Awaitable<void> Server::processQuery(
   // an explicit variable instead of directly `co_await`-ing it.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [this, &query, &requestTimer, &timeLimit, &qec,
+      [this, &query, &requestTimer, &qec,
        &cancellationHandle]() -> std::optional<PlannedQuery> {
         return this->planQuery(std::move(query), qec, cancellationHandle,
-                               timeLimit, requestTimer);
+                               requestTimer);
       },
       cancellationHandle);
   plannedQuery = co_await std::move(coroutine);
@@ -1385,7 +1377,7 @@ Awaitable<void> Server::processUpdate(
     MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
     const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
     ad_utility::SharedCancellationHandle cancellationHandle,
-    const RequestT& request, SendT&& send, TimeLimit timeLimit,
+    const RequestT& request, SendT&& send,
     std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
@@ -1408,7 +1400,7 @@ Awaitable<void> Server::processUpdate(
   static_assert(UPDATE_THREAD_POOL_SIZE == 1);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &makeQec, &requestTimer, &cancellationHandle, &updates, &timeLimit,
+      [this, &makeQec, &requestTimer, &cancellationHandle, &updates,
        &plannedUpdate, outerTracer, &metadatas]() {
         outerTracer->endTrace("waitingForUpdateThread");
         // Snapshot and build the context on the update thread (see
@@ -1421,7 +1413,7 @@ Awaitable<void> Server::processUpdate(
         auto& qec = *qecPtr;
         return index.deltaTriplesManager().modify<json>(
             [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
-             &timeLimit, &qec, &metadatas](DeltaTriples& deltaTriples) {
+             &qec, &metadatas](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
@@ -1438,9 +1430,8 @@ Awaitable<void> Server::processUpdate(
                 }
                 tracer.endTrace("updateMetadata");
                 tracer.beginTrace("planning");
-                plannedUpdate =
-                    planQuery(std::move(update), qec, cancellationHandle,
-                              timeLimit, requestTimer);
+                plannedUpdate = planQuery(std::move(update), qec,
+                                          cancellationHandle, requestTimer);
                 tracer.endTrace("planning");
                 tracer.beginTrace("execution");
                 // Update the delta triples.
