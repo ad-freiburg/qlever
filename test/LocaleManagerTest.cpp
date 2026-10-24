@@ -71,6 +71,21 @@ TEST(LocaleManagerTest, Normalization) {
 }
 
 // _____________________________________________________________________________
+TEST(LocaleManagerTest, RemoveAccents) {
+  LocaleManager loc;
+  EXPECT_EQ(loc.removeAccentsUtf8("plain ascii"), "plain ascii");
+  // Composed and decomposed é.
+  EXPECT_EQ(loc.removeAccentsUtf8("Caf\xc3\xa9"), "Cafe");
+  EXPECT_EQ(loc.removeAccentsUtf8("Cafe\xcc\x81"), "Cafe");
+  EXPECT_EQ(loc.removeAccentsUtf8("\xc3\xa4\xc3\xb6\xc3\xbc\xc3\xb1\xc3\xa7"),
+            "aounc");
+  // ß and ø have no decomposition and are kept.
+  EXPECT_EQ(loc.removeAccentsUtf8("\xc3\x9f\xc3\xb8"), "\xc3\x9f\xc3\xb8");
+  // Hangul syllables decompose into jamo (not marks) and are recomposed.
+  EXPECT_EQ(loc.removeAccentsUtf8("\xed\x95\x9c"), "\xed\x95\x9c");
+}
+
+// _____________________________________________________________________________
 TEST(LocaleManager, PrefixSortKey) {
   SimpleStringComparator comp("en", "US", true);
   LocaleManager locIgnorePunct = comp.getLocaleManager();
@@ -214,6 +229,7 @@ TEST(LocaleManager, NoICU) {
   std::string decomposed = "e\xcc\x81";  // é as e + combining accent
   EXPECT_EQ(loc.normalizeUtf8(composed), composed);
   EXPECT_EQ(loc.normalizeUtf8(decomposed), decomposed);
+  EXPECT_EQ(loc.removeAccentsUtf8(composed), composed);
 
   // The sort key is just the bytes of the input.
   auto sortKey = loc.getSortKey("abc", L::PRIMARY);

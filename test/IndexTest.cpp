@@ -746,6 +746,24 @@ TEST(IndexTest, processTriple) {
     EXPECT_EQ(Id::makeFromDouble(42.0),
               result.triple_[2].tripleComponent_.getId());
   }
+  // The words for the `ql:has-word` triples with the different
+  // normalizations.
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.addHasWordTriples() = true;
+    index.setHasWordNormalization(normalization);
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+                              lit("\"Caf\xc3\xa9 cafe, CAFE\xcc\x81!\"")};
+    return index.processTriple(std::move(turtleTriple)).wordFrequencies_;
+  };
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+  // Note: Combining marks (as in the decomposed "CAFE\xcc\x81") are not
+  // alphanumeric, so the tokenizer already drops them.
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::Lowercase),
+              UnorderedElementsAre(Pair("caf\xc3\xa9", 1), Pair("cafe", 2)));
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              UnorderedElementsAre(Pair("cafe", 3)));
 }
 
 // _____________________________________________________________________________

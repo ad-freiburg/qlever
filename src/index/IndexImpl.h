@@ -30,6 +30,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "index/GeoPointEncoding.h"
 #include "index/GraphNameManager.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -143,6 +144,11 @@ class IndexImpl {
 
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -442,6 +448,12 @@ class IndexImpl {
   void setGeoPointEncodingForIndexBuilding(
       ad_utility::GeoPointEncoding encoding) {
     geoPointEncodingForIndexBuilding_ = encoding;
+  }
+
+  // Set the normalization of the words of the `ql:has-word` triples; see
+  // `ad_utility::HasWordNormalization` for details.
+  void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
+    hasWordNormalization_ = normalization;
   }
 
   // __________________________________________________________________________

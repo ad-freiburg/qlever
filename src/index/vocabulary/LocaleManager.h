@@ -15,6 +15,7 @@
 #include <unicode/coll.h>
 #include <unicode/locid.h>
 #include <unicode/normalizer2.h>
+#include <unicode/uchar.h>
 #include <unicode/unistr.h>
 #include <unicode/unorm2.h>
 #include <unicode/utypes.h>
@@ -296,6 +297,34 @@ class LocaleManagerICU : public LocaleManagerBase {
     return res;
   }
 
+  // Remove all accents from a UTF-8 string, e.g. "Café" becomes "Cafe". This
+  // decomposes `input` (NFD), drops all nonspacing marks (Unicode category
+  // `Mn`) and recomposes the result (NFC). Independent from the locale.
+  [[nodiscard]] std::string removeAccentsUtf8(std::string_view input) const {
+    if (ql::ranges::all_of(input, [](unsigned char c) { return c < 0x80; })) {
+      return std::string(input);
+    }
+    UErrorCode err = U_ZERO_ERROR;
+    const icu::Normalizer2* nfd = icu::Normalizer2::getNFDInstance(err);
+    raise(err);
+    icu::UnicodeString decomposed =
+        nfd->normalize(icu::UnicodeString::fromUTF8(toStringPiece(input)), err);
+    raise(err);
+    icu::UnicodeString stripped;
+    for (int32_t i = 0; i < decomposed.length();) {
+      UChar32 c = decomposed.char32At(i);
+      if (u_charType(c) != U_NON_SPACING_MARK) {
+        stripped.append(c);
+      }
+      i += U16_LENGTH(c);
+    }
+    icu::UnicodeString recomposed = normalizer_->normalize(stripped, err);
+    raise(err);
+    std::string res;
+    recomposed.toUTF8String(res);
+    return res;
+  }
+
  private:
   // raise an exception if the error code holds an error.
   static void raise(const UErrorCode& err) {
@@ -417,6 +446,11 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 
   // As this class does no unicode handling, normalization is a no-op.
   [[nodiscard]] std::string normalizeUtf8(std::string_view input) const {
+    return std::string(input);
+  }
+
+  // As this class does no unicode handling, accents are not removed.
+  [[nodiscard]] std::string removeAccentsUtf8(std::string_view input) const {
     return std::string(input);
   }
 };

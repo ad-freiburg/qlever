@@ -1642,8 +1642,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // count their term frequencies.
     if (addHasWordTriples_) {
       std::string_view content = lit.getContent();
-      for (auto&& word :
-           tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+      const auto& localeManager = vocab_.getLocaleManager();
+      for (auto&& word : tokenizeAndNormalizeText(content, localeManager)) {
+        if (hasWordNormalization_ ==
+            ad_utility::HasWordNormalization::LowercaseNoAccents) {
+          word = localeManager.removeAccentsUtf8(word);
+        }
         ++result.wordFrequencies_[std::move(word)];
       }
     }
