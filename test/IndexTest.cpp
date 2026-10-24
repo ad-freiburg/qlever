@@ -752,18 +752,20 @@ TEST(IndexTest, processTriple) {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.addHasWordTriples() = true;
     index.setHasWordNormalization(normalization);
-    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
-                              lit("\"Caf\xc3\xa9 cafe, CAFE\xcc\x81!\"")};
+    TurtleTriple turtleTriple{
+        iri("<subject>"), iri("<predicate>"),
+        lit("\"Caf\xc3\xa9 cafe, CAFE\xcc\x81! cafe\xcc\x81s\"")};
     return index.processTriple(std::move(turtleTriple)).wordFrequencies_;
   };
   using ::testing::Pair;
   using ::testing::UnorderedElementsAre;
   // Note: Combining marks (as in the decomposed "CAFE\xcc\x81") are not
-  // alphanumeric, so the tokenizer already drops them.
+  // alphanumeric, so without removing the accents they split words.
   EXPECT_THAT(getWords(ad_utility::HasWordNormalization::Lowercase),
-              UnorderedElementsAre(Pair("caf\xc3\xa9", 1), Pair("cafe", 2)));
+              UnorderedElementsAre(Pair("caf\xc3\xa9", 1), Pair("cafe", 3),
+                                   Pair("s", 1)));
   EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
-              UnorderedElementsAre(Pair("cafe", 3)));
+              UnorderedElementsAre(Pair("cafe", 3), Pair("cafes", 1)));
 }
 
 // _____________________________________________________________________________

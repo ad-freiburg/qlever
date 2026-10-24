@@ -1643,11 +1643,15 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (addHasWordTriples_) {
       std::string_view content = lit.getContent();
       const auto& localeManager = vocab_.getLocaleManager();
+      // Remove the accents before tokenizing: combining marks are not
+      // alphanumeric, so they would otherwise split words.
+      std::string contentWithoutAccents;
+      if (hasWordNormalization_ ==
+          ad_utility::HasWordNormalization::LowercaseNoAccents) {
+        contentWithoutAccents = localeManager.removeAccentsUtf8(content);
+        content = contentWithoutAccents;
+      }
       for (auto&& word : tokenizeAndNormalizeText(content, localeManager)) {
-        if (hasWordNormalization_ ==
-            ad_utility::HasWordNormalization::LowercaseNoAccents) {
-          word = localeManager.removeAccentsUtf8(word);
-        }
         ++result.wordFrequencies_[std::move(word)];
       }
     }
