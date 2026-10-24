@@ -1630,6 +1630,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 }
 
 // ___________________________________________________________________________
+std::vector<std::string> IndexImpl::getHasWordWords(
+    std::string_view text) const {
+  return ::ranges::to<std::vector<std::string>>(
+      tokenizeAndNormalizeText(text, vocab_.getLocaleManager()));
+}
+
+// ___________________________________________________________________________
 ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   ProcessedTriple result;
   auto& resultTriple = result.triple_;
@@ -1641,9 +1648,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = lit.getContent();
-      for (auto&& word :
-           tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+      for (auto& word : getHasWordWords(lit.getContent())) {
         ++result.wordFrequencies_[std::move(word)];
       }
     }

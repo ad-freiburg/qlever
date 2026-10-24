@@ -178,6 +178,19 @@ struct StringValueGetter : Mixin<StringValueGetter> {
   }
 };
 
+// The string value (see `StringValueGetter`), split into words that are
+// normalized like the words of the `ql:has-word` triples of the index (see
+// `IndexImpl::getHasWordWords`), joined by a single space. Used by
+// `ql:normalize`.
+struct NormalizedStringGetter : Mixin<NormalizedStringGetter> {
+  using Value = std::optional<std::string>;
+  using Mixin<NormalizedStringGetter>::operator();
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const;
+};
+
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It implicitly applies the STR() function. In particular,
 // all datatypes are removed, language tags are preserved,

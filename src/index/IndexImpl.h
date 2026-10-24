@@ -933,6 +933,11 @@ class IndexImpl {
   // 3. If the IRI or literal can be encoded directly into an `Id`, do so
   ProcessedTriple processTriple(TurtleTriple&& triple) const;
 
+  // Return the words of `text` as they are stored in the `ql:has-word` triples
+  // (in order and with duplicates). Also used by the SPARQL function
+  // `ql:normalize`, so that strings in queries can be normalized the same way.
+  std::vector<std::string> getHasWordWords(std::string_view text) const;
+
  protected:
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
