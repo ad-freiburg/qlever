@@ -316,7 +316,7 @@ Result BoundingBoxAlgorithm::run() {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    std::set<AddedPair> pairs;
+    qlm::set<AddedPair> pairs{qec_->getAllocator()};
     ql::ranges::for_each(results, [&](Value& res) {
       size_t rowLeft = res.second.row_;
       size_t rowRight = i;
@@ -342,7 +342,7 @@ Result BoundingBoxAlgorithm::run() {
     });
   }
   auto resTable =
-      Result(std::move(result), std::vector<ColumnIndex>{},
+      Result(std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
              Result::getMergedLocalVocab(*resultLeft, *resultRight));
   return resTable;
 #endif

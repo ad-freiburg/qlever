@@ -265,8 +265,14 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
-  std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
-  std::vector<std::vector<double>> resultDists(NUM_THREADS);
+  qlm::vector<qlm::vector<std::pair<size_t, size_t>>> results{
+      qec_->getAllocator()};
+  qlm::vector<qlm::vector<double>> resultDists{qec_->getAllocator()};
+  for (size_t t = 0; t < NUM_THREADS; ++t) {
+    results.emplace_back(
+        qlever::Allocator<std::pair<size_t, size_t>>{qec_->getAllocator()});
+    resultDists.emplace_back(qlever::Allocator<double>{qec_->getAllocator()});
+  }
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
   auto joinTypeVal = config_.getJoinType().value();
   // Within should be replaced by contains on swapped tables.
@@ -428,6 +434,7 @@ Result LibspatialjoinAlgorithm::run() {
       "time-for-collecting-results-from-threads", tCollect.msecs().count());
 
   // Return the result.
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }
