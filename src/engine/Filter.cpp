@@ -32,7 +32,7 @@ Filter::Filter(QueryExecutionContext* qec,
       _expression{std::move(expression)} {
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
-      cancellationHandle_);
+      cancellationHandle());
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
@@ -156,7 +156,7 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
-      cancellationHandle_);
+      cancellationHandle());
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.

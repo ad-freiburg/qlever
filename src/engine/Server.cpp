@@ -373,14 +373,16 @@ auto Server::prepareOperation(
   // `processUpdate`).
   MakeQueryExecutionContext makeQec =
       [this, sharedMessageSender = std::move(sharedMessageSender),
-       resultPinning = std::move(resultPinning),
-       accessTokenOk](SharedIndexAndView indexAndViews) mutable {
+       resultPinning = std::move(resultPinning), accessTokenOk,
+       cancellationHandle](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
             std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
-            resultPinning.pinSubtrees_, resultPinning.pinResult_);
+            resultPinning.pinSubtrees_, resultPinning.pinResult_,
+            QueryExecutionContext::DisableCaching::FromRuntimeParameter,
+            cancellationHandle);
         configurePinnedResultWithName(
             std::move(resultPinning.pinResultWithName_), accessTokenOk, *qec);
         return qec;
@@ -1079,10 +1081,9 @@ Server::process<Server::StringBodyRequest, Server::MockSend&>(
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, QueryExecutionContext& qec,
-    ad_utility::SharedCancellationHandle handle,
     const ad_utility::Timer& requestTimer) const {
-  PlannedQuery plannedQuery = qlever().planQuery(
-      std::move(operation), qec, std::move(handle), requestTimer);
+  PlannedQuery plannedQuery =
+      qlever().planQuery(std::move(operation), qec, requestTimer);
 
   const auto& qet = plannedQuery.queryExecutionTree();
   const auto& queryPlanningInfo =
@@ -1261,10 +1262,8 @@ Awaitable<void> Server::processQuery(
   // an explicit variable instead of directly `co_await`-ing it.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [this, &query, &requestTimer, &qec,
-       &cancellationHandle]() -> std::optional<PlannedQuery> {
-        return this->planQuery(std::move(query), qec, cancellationHandle,
-                               requestTimer);
+      [this, &query, &requestTimer, &qec]() -> std::optional<PlannedQuery> {
+        return this->planQuery(std::move(query), qec, requestTimer);
       },
       cancellationHandle);
   plannedQuery = co_await std::move(coroutine);
@@ -1430,8 +1429,7 @@ Awaitable<void> Server::processUpdate(
                 }
                 tracer.endTrace("updateMetadata");
                 tracer.beginTrace("planning");
-                plannedUpdate = planQuery(std::move(update), qec,
-                                          cancellationHandle, requestTimer);
+                plannedUpdate = planQuery(std::move(update), qec, requestTimer);
                 tracer.endTrace("planning");
                 tracer.beginTrace("execution");
                 // Update the delta triples.
