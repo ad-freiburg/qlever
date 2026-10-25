@@ -36,22 +36,23 @@ using namespace ad_utility::memory_literals;
 
 namespace {
 
-// `bytes` per 8 bytes of an `Id`, so that the row counts below are the same for
-// every size of an `Id`.
-ad_utility::MemorySize scaledBytes(size_t bytes) {
-  return ad_utility::MemorySize::bytes(bytes * BYTES_PER_ID_COLUMN_ENTRY / 8);
+// The memory of `numIds` entries of an `Id` column. The sizes below are given
+// as numbers of `Id`s, so that the results are the same for every size of an
+// `Id`.
+ad_utility::MemorySize memoryForIds(size_t numIds) {
+  return ad_utility::MemorySize::bytes(numIds * BYTES_PER_ID_COLUMN_ENTRY);
 }
 
 // The base configuration of all the tests below. The numbers are chosen such
-// that the memory arithmetic can be verified by hand: a row has
-// `2 * 8 = 16` bytes (before scaling), and the input blocks of a single
-// chunk occupy `numRuns_ * numColumns_ * inputBlockSizePerColumn_ = 200` bytes.
+// that the memory arithmetic can be verified by hand: a row has 2 `Id`s, and
+// the input blocks of a single chunk occupy
+// `numRuns_ * numColumns_ * inputBlockSizePerColumn_ = 200` `Id`s.
 MergePhaseConfig baseConfig() {
   MergePhaseConfig config;
   config.numRuns_ = 1;
   config.numColumns_ = 2;
-  config.memoryLimit_ = scaledBytes(20'000'400);
-  config.inputBlockSizePerColumn_ = scaledBytes(100);
+  config.memoryLimit_ = memoryForIds(2'500'400);
+  config.inputBlockSizePerColumn_ = memoryForIds(100);
   config.numBufferedOutputBlocks_ = 4;
   config.maxOutputBlockSize_ = 1_GB;
   config.parallelism_ = 2;
@@ -62,8 +63,8 @@ MergePhaseConfig baseConfig() {
 // _____________________________________________________________________________
 // With plenty of memory, all the chunks that the parallelism offers are in
 // flight, and the output blocks get whatever is left: two chunks occupy 400
-// bytes of input blocks, which leaves `20'000'000` bytes for the
-// `4 + 3 * 2 = 10` output blocks, hence `2'000'000 / 16 = 125'000` rows each.
+// `Id`s of input blocks, which leaves `2'500'000` `Id`s for the
+// `4 + 3 * 2 = 10` output blocks, hence `250'000 / 2 = 125'000` rows each.
 TEST(ExternalIdTableSorterMergeConfig, fullParallelism) {
   auto parameters = computeMergePhaseParameters(baseConfig());
   EXPECT_EQ(parameters.numChunksInFlight_, 2u);
@@ -72,36 +73,37 @@ TEST(ExternalIdTableSorterMergeConfig, fullParallelism) {
 
 // _____________________________________________________________________________
 // The number of concurrent chunks is reduced rather than letting the output
-// blocks fall below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`: with a limit of 16 MB,
-// two chunks would leave only `1'599'960 / 16 = 99'997` rows per block, which
-// is just below that minimum, so a single chunk is used, which then gets the
-// whole limit minus its 200 bytes of input blocks, divided by `4 + 3 = 7`.
+// blocks fall below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`: with a limit of
+// 2'000'000 `Id`s, two chunks would leave only `199'960 / 2 = 99'980` rows per
+// block, which is just below that minimum, so a single chunk is used, which
+// then gets the whole limit minus its 200 `Id`s of input blocks, divided by
+// `4 + 3 = 7`, that is `285'685 / 2 = 142'842` rows.
 TEST(ExternalIdTableSorterMergeConfig, parallelismIsReducedForLargeBlocks) {
   auto config = baseConfig();
-  config.memoryLimit_ = scaledBytes(16'000'000);
+  config.memoryLimit_ = memoryForIds(2'000'000);
   auto parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numChunksInFlight_, 1u);
-  EXPECT_EQ(parameters.outputBlockSize_, 142'855u);
+  EXPECT_EQ(parameters.outputBlockSize_, 142'842u);
   EXPECT_GT(parameters.outputBlockSize_, MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE);
 }
 
 // _____________________________________________________________________________
 // A parallelism of one is the serial merge, which is a single chunk that gets
-// all the memory.
+// all the memory: `2'500'200 / 7 / 2 = 178'585` rows.
 TEST(ExternalIdTableSorterMergeConfig, serialMerge) {
   auto config = baseConfig();
   config.parallelism_ = 1;
   auto parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numChunksInFlight_, 1u);
-  EXPECT_EQ(parameters.outputBlockSize_, 178'573u);
+  EXPECT_EQ(parameters.outputBlockSize_, 178'585u);
 }
 
 // _____________________________________________________________________________
 // A single output block never exceeds `maxOutputBlockSize_`, which caps the
-// `125'000` rows of `fullParallelism` at `1'600'000 / 16 = 100'000`.
+// `125'000` rows of `fullParallelism` at `200'000 / 2 = 100'000`.
 TEST(ExternalIdTableSorterMergeConfig, outputBlockSizeIsCapped) {
   auto config = baseConfig();
-  config.maxOutputBlockSize_ = scaledBytes(1'600'000);
+  config.maxOutputBlockSize_ = memoryForIds(200'000);
   auto parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numChunksInFlight_, 2u);
   EXPECT_EQ(parameters.outputBlockSize_, 100'000u);
@@ -113,12 +115,12 @@ TEST(ExternalIdTableSorterMergeConfig, outputBlockSizeIsCapped) {
 // alone already exceed the limit, and if what is left over is too small.
 TEST(ExternalIdTableSorterMergeConfig, insufficientMemory) {
   auto config = baseConfig();
-  config.memoryLimit_ = ad_utility::MemorySize::bytes(500'000);
+  config.memoryLimit_ = memoryForIds(50'000);
   AD_EXPECT_THROW_WITH_MESSAGE(
       computeMergePhaseParameters(config),
       ::testing::HasSubstr("Insufficient memory for merging 1 blocks"));
 
-  config.memoryLimit_ = ad_utility::MemorySize::bytes(150);
+  config.memoryLimit_ = memoryForIds(150);
   AD_EXPECT_THROW_WITH_MESSAGE(
       computeMergePhaseParameters(config),
       ::testing::HasSubstr("Insufficient memory for merging"));
@@ -137,7 +139,7 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedOutputBlockSize) {
   // A pinned block size is never overridden, not even by a memory limit that
   // does not suffice for a single chunk. The merge then falls back to a single
   // chunk (which is exactly the serial merge) instead of throwing.
-  config.memoryLimit_ = ad_utility::MemorySize::bytes(150);
+  config.memoryLimit_ = memoryForIds(150);
   parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.outputBlockSize_, 1'000u);
   EXPECT_EQ(parameters.numChunksInFlight_, 1u);
@@ -147,7 +149,7 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedOutputBlockSize) {
 // A merge phase that chooses the size of its output blocks itself spends the
 // whole memory limit on them, so nothing is left over and a chunk buffers the
 // minimal number of blocks: with 125'000 rows per block (see `fullParallelism`)
-// a block occupies 2'000'000 bytes, of which the limit affords exactly the
+// a block occupies 250'000 `Id`s, of which the limit affords exactly the
 // `4 + 3 * 2 = 10` that the minimal buffering already needs.
 TEST(ExternalIdTableSorterMergeConfig, derivedBlockSizeLeavesNothingToBuffer) {
   auto parameters = computeMergePhaseParameters(baseConfig());
@@ -159,8 +161,8 @@ TEST(ExternalIdTableSorterMergeConfig, derivedBlockSizeLeavesNothingToBuffer) {
 // A caller that pins a *small* output block size leaves a large part of the
 // memory limit unspent, and that part is given to the chunks as additional
 // buffered output blocks, so that they spill far less (or nothing at all). With
-// 1'000 rows per block a block occupies 16'000 bytes, of which the limit
-// affords `20'000'000 / 16'000 = 1250`, and `(1250 - 8) / 2 = 621` of them are
+// 1'000 rows per block a block occupies 2'000 `Id`s, of which the limit
+// affords `2'500'000 / 2'000 = 1250`, and `(1250 - 8) / 2 = 621` of them are
 // left for each of the two chunks that are in flight.
 TEST(ExternalIdTableSorterMergeConfig, pinnedBlockSizeIsSpentOnBuffering) {
   auto config = baseConfig();
@@ -180,14 +182,14 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedBlockSizeIsSpentOnBuffering) {
   // chunk leaves nothing to buffer with, and a pinned block size is still not
   // overridden, see `pinnedOutputBlockSize`.
   config.outputBlockSizeOverride_ = 1'000;
-  config.memoryLimit_ = ad_utility::MemorySize::bytes(150);
+  config.memoryLimit_ = memoryForIds(150);
   parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
             MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
 
   // A pinned size that is too large for even a single chunk (while the input
   // blocks alone still fit) leaves nothing to buffer either: a block of
-  // 1'000'000 rows occupies 16'000'000 bytes, of which the limit affords only
+  // 1'000'000 rows occupies 2'000'000 `Id`s, of which the limit affords only
   // one, while `4 + 2 * 1 = 6` of them are unbuffered anyway.
   config.outputBlockSizeOverride_ = 1'000'000;
   config.memoryLimit_ = baseConfig().memoryLimit_;
