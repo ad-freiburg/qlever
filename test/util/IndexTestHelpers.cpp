@@ -415,13 +415,9 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<NamedResultCache> namedCache_;
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
-    // 100 MB per 8 bytes of an `Id`, so that the same number of rows fits into
-    // the limit for every size of an `Id`.
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            index_, cache_.get(),
-            makeAllocator(MemorySize::megabytes(
-                100 * BYTES_PER_ID_COLUMN_ENTRY / sizeof(uint64_t))),
+            index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
             materializedViewsManager_, singleThreadExecutor());
   };
