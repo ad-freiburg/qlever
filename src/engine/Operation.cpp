@@ -123,16 +123,6 @@ void Operation::recursivelySetCancellationHandle(
   cancellationHandle_ = std::move(cancellationHandle);
 }
 
-// ________________________________________________________________________
-
-void Operation::recursivelySetTimeConstraint(
-    std::chrono::steady_clock::time_point deadline) {
-  deadline_ = deadline;
-  forAllDescendants([deadline](auto child) {
-    child->getRootOperation()->deadline_ = deadline;
-  });
-}
-
 // _____________________________________________________________________________
 void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
                                    uint64_t numCols,
@@ -462,13 +452,6 @@ std::shared_ptr<const Result> Operation::getResult(
     throw ad_utility::AbortException(
         "Unexpected exception that is not a subclass of std::exception");
   }
-}
-
-// ______________________________________________________________________
-std::chrono::milliseconds Operation::remainingTime() const {
-  auto interval = deadline_ - std::chrono::steady_clock::now();
-  return std::max(
-      0ms, std::chrono::duration_cast<std::chrono::milliseconds>(interval));
 }
 
 // _____________________________________________________________________________

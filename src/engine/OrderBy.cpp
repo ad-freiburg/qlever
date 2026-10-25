@@ -264,11 +264,6 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
             subRes->getSharedLocalVocab()};
   }
 
-  // TODO<joka921> proper timeout for sorting operations
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      subTable.numRows(), subTable.numColumns(), deadline_,
-      "Sort for COUNT(DISTINCT *)");
-
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
   IdTable idTable = subRes->cloneIdTable(cancellationChecker());
 
@@ -320,11 +315,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // function deals with) but also on the `comparison`.
   ad_utility::callFixedSizeVi(
       width, [this, &idTable, &comparison](auto numColumns) {
-        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig());
+        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig(),
+                                       cancellationHandle_);
       });
-  // We can't check during sort, so reset status here
-  cancellationHandle_->resetWatchDogState();
-  checkCancellation();
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
