@@ -29,10 +29,6 @@ using valueIdComparators::Comparison;
 // First some internal helper functions and constants.
 namespace {
 
-auto lit = [](std::string_view s) {
-  return ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s));
-};
-
 // Convenient access to constants for "infinity" and "not a number". The
 // spelling `NaN` was chosen because `nan` conflicts with the standard library.
 const auto inf = std::numeric_limits<double>::infinity();
