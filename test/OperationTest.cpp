@@ -344,14 +344,35 @@ TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
   }
 }
 
-// _____________________________________________________________________________
-
+// Test that an operation and its child use the cancellation handle of their
+// context, and that cancelling the handle aborts the running computation.
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
-  auto qec = getQec();
+  // Use a separate context, such that the handle of the context that is shared
+  // between the tests (see `getQec`) is not cancelled.
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "verifyExceptionIsThrownOnCancellation", TestIndexConfig{}));
+  QueryResultCache cache;
+  NamedResultCache namedCache;
   auto handle = std::make_shared<CancellationHandle<>>();
+  QueryExecutionContext qec{index,
+                            &cache,
+                            makeAllocator(),
+                            &namedCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            executor(),
+                            ad_utility::noop,
+                            false,
+                            false,
+                            QueryExecutionContext::DisableCaching::False,
+                            false,
+                            handle};
   ShallowParentOperation operation =
-      ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetCancellationHandle(handle);
+      ShallowParentOperation::of<StallForeverOperation>(&qec);
+  // All operations use the handle of the context.
+  EXPECT_EQ(operation.cancellationHandle(), handle);
+  EXPECT_EQ(
+      operation.getChildren().at(0)->getRootOperation()->cancellationHandle(),
+      handle);
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);

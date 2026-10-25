@@ -144,7 +144,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
   runtimeInfo().addDetail("is-external", "false");
 
   IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig(),
-                     cancellationHandle_);
+                     cancellationHandle());
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
@@ -176,7 +176,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      SortByColumns{sortColumnIndices_}, cancellationHandle_);
+      SortByColumns{sortColumnIndices_}, cancellationHandle());
 
   // Push the already collected blocks and the remaining blocks from the
   // iterator. For lazy input, the iterator yields `IdTableVocabPair` (move the
