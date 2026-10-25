@@ -218,7 +218,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
   const size_t maxRedirects =
       getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
   HttpOrHttpsResponse response = getResultFunction_(
-      serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
+      serviceUrl, cancellationHandle(), boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query", accept, maxRedirects);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
@@ -278,7 +278,7 @@ Result Service::computeBinaryResult(bool requestLaziness,
                             &Variable::name),
       resultSortedOn(),
       getRuntimeParameter<&RuntimeParameters::serviceMaxBinaryBatchSize_>(),
-      cancellationHandle_);
+      cancellationHandle());
 }
 
 // _____________________________________________________________________________
