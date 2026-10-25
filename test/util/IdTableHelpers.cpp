@@ -63,10 +63,12 @@ void compareIdTableWithExpectedContent(
 // ____________________________________________________________________________
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
   SortConfig sortConfig{ad_utility::testing::singleThreadExecutor()};
-  ad_utility::callFixedSizeVi(table.idTable.numColumns(), [&table, &sortConfig](
-                                                              auto numCols) {
-    IdTableUtils::sort<numCols>(&table.idTable, table.joinColumn, sortConfig);
-  });
+  ad_utility::callFixedSizeVi(
+      table.idTable.numColumns(), [&table, &sortConfig](auto numCols) {
+        IdTableUtils::sort<numCols>(
+            &table.idTable, table.joinColumn, sortConfig,
+            std::make_shared<ad_utility::CancellationHandle<>>());
+      });
 }
 
 // ____________________________________________________________________________

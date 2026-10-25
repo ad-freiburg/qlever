@@ -139,10 +139,10 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
              typename LiteralOrIriType = LiteralOrIri,
              typename EscapeFunction = ql::identity)(
     requires ad_utility::SameAsAny<LiteralOrIriType, LiteralOrIri,
-                                   LiteralOrIriView>) std::
-    optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
-        const LiteralOrIriType& word,
-        EscapeFunction&& escapeFunction = EscapeFunction{}) {
+                                   LiteralOrIriView>)
+std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
+    const LiteralOrIriType& word,
+    EscapeFunction&& escapeFunction = EscapeFunction{}) {
   if constexpr (returnOnlyLiterals) {
     if (!word.isLiteral()) {
       return std::nullopt;

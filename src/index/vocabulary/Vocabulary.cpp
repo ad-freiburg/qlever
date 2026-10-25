@@ -44,7 +44,12 @@ template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
   vocabulary_.open(fileName);
+  computePrefixRanges();
+}
 
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+void Vocabulary<S, C, I>::computePrefixRanges() {
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
   //
@@ -191,6 +196,12 @@ template <typename S, typename C, typename I>
 std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
     const string& word) const {
   AD_CONTRACT_CHECK(ql::ends_with(word, PREFIX_CHAR));
+  // An empty vocabulary (for example, on a server without a text index)
+  // matches no prefix. Without this check, the range for the bare `*` below
+  // would underflow to `[0, UINT64_MAX]`.
+  if (size() == 0) {
+    return std::nullopt;
+  }
   IdRange<I> range;
   if (word.size() == 1) {
     range = IdRange{I::make(0), I::make(size()).decremented()};
@@ -258,10 +269,16 @@ template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
                                                  bool ignorePunctuation) {
-  vocabulary_.getComparator() =
-      ComparatorType(language, country, ignorePunctuation);
-  vocabulary_.getComparator() =
-      ComparatorType(language, country, ignorePunctuation);
+  // A `TripleComponentComparator` keeps the geo cell grid of the comparator
+  // it replaces (see `TripleComponentComparator::setGeoCellGrid`).
+  auto& comparator = vocabulary_.getComparator();
+  if constexpr (std::is_same_v<ComparatorType, TripleComponentComparator>) {
+    auto geoCellGrid = comparator.getGeoCellGrid();
+    comparator = ComparatorType(language, country, ignorePunctuation);
+    comparator.setGeoCellGrid(std::move(geoCellGrid));
+  } else {
+    comparator = ComparatorType(language, country, ignorePunctuation);
+  }
 }
 
 // _____________________________________________________________________________

@@ -10,17 +10,21 @@
 #include <gtest/gtest.h>
 
 #include <sstream>
+#include <type_traits>
 
 #include "IdColumnTestHelpers.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 
 using namespace columnBasedIdTable::splitLayout;
+using testHelpers::getBitsCompat;
 using testHelpers::sampleIds;
 
-// Test that `getBitsCompat` and `idFromBitsCompat` are inverse to each other.
-TEST(IdRefTest, getBitsCompatAndIdFromBitsCompatRoundtrip) {
+// Test that putting the datatype and the payload of an `Id` together again
+// yields the same `Id`.
+TEST(IdRefTest, datatypeAndPayloadRoundtrip) {
   for (const Id id : sampleIds()) {
-    EXPECT_EQ(idFromBitsCompat(getBitsCompat(id)), id);
+    auto [datatype, payload] = getBitsCompat(id);
+    EXPECT_EQ(Id::fromBits(datatype, payload), id);
   }
 }
 
@@ -34,20 +38,20 @@ TEST(IdRefTest, conversionAndReadApi) {
     const ConstIdRef constRef{&payload, &datatype};
     EXPECT_EQ(static_cast<Id>(constRef), id);
     EXPECT_EQ(constRef.getDatatype(), id.getDatatype());
-    EXPECT_EQ(constRef.getBits(), getBitsCompat(id));
+    EXPECT_EQ(constRef.getBits(), id.getBits());
     EXPECT_EQ(constRef.getPayloadBits(), payload);
     EXPECT_EQ(constRef.isUndefined(), id.isUndefined());
     EXPECT_TRUE(constRef == id);
     EXPECT_TRUE(id == constRef);
 
     // Assigning to the mutable proxy changes the referenced slot.
-    const IdRef mutableRef{&payload, &datatype};
+    IdRef mutableRef{&payload, &datatype};
     EXPECT_EQ(static_cast<Id>(mutableRef), id);
     const auto other = Id::makeFromInt(999);
     mutableRef = other;
     EXPECT_EQ(static_cast<Id>(mutableRef), other);
-    EXPECT_EQ(payload, getBitsCompat(other).payload_);
-    EXPECT_EQ(datatype, getBitsCompat(other).datatype_);
+    EXPECT_EQ(payload, other.getPayloadBits());
+    EXPECT_EQ(datatype, other.getDatatypeBits());
   }
 }
 
@@ -55,19 +59,19 @@ TEST(IdRefTest, conversionAndReadApi) {
 // referenced slot.
 TEST(IdRefTest, assignmentWritesThroughToTheReferencedSlot) {
   auto [datatype, payload] = getBitsCompat(Id::makeFromInt(1));
-  const IdRef ref{&payload, &datatype};
+  IdRef ref{&payload, &datatype};
 
   // Assign an `Id`.
   ref = Id::makeFromInt(2);
-  EXPECT_EQ(payload, getBitsCompat(Id::makeFromInt(2)).payload_);
-  EXPECT_EQ(datatype, getBitsCompat(Id::makeFromInt(2)).datatype_);
+  EXPECT_EQ(payload, Id::makeFromInt(2).getPayloadBits());
+  EXPECT_EQ(datatype, Id::makeFromInt(2).getDatatypeBits());
 
   // Assign another `IdRef`, which copies the referenced value.
   auto [datatype2, payload2] = getBitsCompat(Id::makeFromInt(3));
   const IdRef other{&payload2, &datatype2};
   ref = other;
   EXPECT_EQ(static_cast<Id>(ref), Id::makeFromInt(3));
-  EXPECT_EQ(payload, getBitsCompat(Id::makeFromInt(3)).payload_);
+  EXPECT_EQ(payload, Id::makeFromInt(3).getPayloadBits());
 }
 
 // Test that `swap` exchanges the referenced values, not the pointers.
@@ -79,16 +83,17 @@ TEST(IdRefTest, swapExchangesTheReferencedValues) {
   swap(a, b);
   EXPECT_EQ(static_cast<Id>(a), Id::makeFromInt(20));
   EXPECT_EQ(static_cast<Id>(b), Id::makeFromInt(10));
-  EXPECT_EQ(payloadA, getBitsCompat(Id::makeFromInt(20)).payload_);
-  EXPECT_EQ(payloadB, getBitsCompat(Id::makeFromInt(10)).payload_);
+  EXPECT_EQ(payloadA, Id::makeFromInt(20).getPayloadBits());
+  EXPECT_EQ(payloadB, Id::makeFromInt(10).getPayloadBits());
 }
 
 // Test the comparison operators between proxies and `Id`s, between two
 // proxies, and that the ordering is datatype-major like for `Id`.
 TEST(IdRefTest, comparisonOperators) {
-  auto bitsSmall = getBitsCompat(Id::makeFromInt(1));
+  const auto idSmall = Id::makeFromInt(1);
+  auto [datatypeSmall, payloadSmall] = getBitsCompat(idSmall);
   auto [datatypeLarge, payloadLarge] = getBitsCompat(Id::makeFromInt(2));
-  const ConstIdRef small{&bitsSmall.payload_, &bitsSmall.datatype_};
+  const ConstIdRef small{&payloadSmall, &datatypeSmall};
   const ConstIdRef large{&payloadLarge, &datatypeLarge};
 
   // Proxy versus `Id`, in both orders.
@@ -107,8 +112,8 @@ TEST(IdRefTest, comparisonOperators) {
   EXPECT_TRUE(large >= small);
   EXPECT_TRUE(small != large);
   EXPECT_FALSE(small == large);
-  auto bitsSmallCopy = bitsSmall;
-  const IdRef mutableSmall{&bitsSmallCopy.payload_, &bitsSmallCopy.datatype_};
+  auto [datatypeSmallCopy, payloadSmallCopy] = getBitsCompat(idSmall);
+  const IdRef mutableSmall{&payloadSmallCopy, &datatypeSmallCopy};
   EXPECT_TRUE(small == mutableSmall);
   EXPECT_TRUE(mutableSmall == small);
 
@@ -131,5 +136,70 @@ TEST(IdRefTest, streamingMatchesId) {
     std::ostringstream idStream;
     idStream << id;
     EXPECT_EQ(refStream.str(), idStream.str());
+  }
+}
+
+// Test the restricted reference (what `auto x = column[i];` deduces): It has
+// the read API, can be assigned to only if it is an rvalue, and converts to the
+// full `IdRef`, which writes through for lvalues, too.
+TEST(IdRefTest, restrictedReference) {
+  using Restricted = IdRef::Base;
+  using ConstRestricted = ConstIdRef::Base;
+
+  // Writing is only possible for rvalues.
+  static_assert(std::is_assignable_v<Restricted, Id>);
+  static_assert(!std::is_assignable_v<Restricted&, Id>);
+  static_assert(!std::is_assignable_v<const Restricted&, Id>);
+  static_assert(std::is_assignable_v<Restricted, Restricted>);
+  static_assert(!std::is_assignable_v<Restricted&, Restricted>);
+  static_assert(!std::is_assignable_v<Restricted&, Restricted&>);
+  static_assert(!std::is_assignable_v<ConstRestricted, Id>);
+
+  // `IdRef` is the restricted reference plus lvalue assignment.
+  static_assert(std::is_base_of_v<Restricted, IdRef>);
+  static_assert(std::is_base_of_v<ConstRestricted, ConstIdRef>);
+  static_assert(std::is_assignable_v<IdRef&, Id>);
+  static_assert(!std::is_assignable_v<ConstIdRef&, Id>);
+  static_assert(sizeof(IdRef) == sizeof(Restricted));
+
+  for (const Id id : sampleIds()) {
+    auto [datatype, payload] = getBitsCompat(id);
+    const Restricted restricted{&payload, &datatype};
+
+    // The read API is the same as for the full reference, and the restricted
+    // and the full reference can be compared with each other.
+    EXPECT_EQ(static_cast<Id>(restricted), id);
+    EXPECT_EQ(restricted.getDatatype(), id.getDatatype());
+    EXPECT_EQ(restricted.getBits(), id.getBits());
+    EXPECT_EQ(restricted.getPayloadBits(), payload);
+    EXPECT_EQ(restricted.isUndefined(), id.isUndefined());
+    EXPECT_TRUE(restricted == id);
+    EXPECT_TRUE(id == restricted);
+    const IdRef full{&payload, &datatype};
+    const ConstIdRef constFull{&payload, &datatype};
+    EXPECT_TRUE(restricted == full);
+    EXPECT_TRUE(restricted == constFull);
+    EXPECT_FALSE(restricted < full);
+    EXPECT_TRUE(restricted <= constFull);
+
+    // Assigning to an rvalue writes through to the referenced slot.
+    const Id second = Id::makeFromInt(7);
+    Restricted{&payload, &datatype} = second;
+    EXPECT_EQ(static_cast<Id>(restricted), second);
+    auto [otherDatatype, otherPayload] = getBitsCompat(Id::makeFromInt(8));
+    Restricted{&payload, &datatype} = Restricted{&otherPayload, &otherDatatype};
+    EXPECT_EQ(static_cast<Id>(restricted), Id::makeFromInt(8));
+    // Copying the referenced value does not rebind the pointers.
+    otherPayload = Id::makeFromInt(9).getPayloadBits();
+    EXPECT_EQ(static_cast<Id>(restricted), Id::makeFromInt(8));
+
+    // The full reference can be created from the restricted one and writes
+    // through to the same slot, also when assigned to as an lvalue.
+    IdRef fromRestricted = restricted;
+    const Id third = Id::makeFromInt(10);
+    fromRestricted = third;
+    EXPECT_EQ(static_cast<Id>(restricted), third);
+    EXPECT_EQ(payload, third.getPayloadBits());
+    EXPECT_EQ(datatype, third.getDatatypeBits());
   }
 }

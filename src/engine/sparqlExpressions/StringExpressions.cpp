@@ -109,23 +109,23 @@ struct LiftStringFunction {
 // consideration within the `IriOrUriValueGetter`, hence automatically
 // ignores values like `1`, `true`, `Date` etc.
 
-const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
-  AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(litOrIri));
-  const auto& baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
+const Iri& extractIri(const IdOrLiteralOrIri& litOrIri) {
+  AD_CORRECTNESS_CHECK(std::holds_alternative<LiteralOrIri>(litOrIri));
+  const auto& baseIriOrUri = std::get<LiteralOrIri>(litOrIri);
   AD_CORRECTNESS_CHECK(baseIriOrUri.isIri());
   return baseIriOrUri.getIri();
 }
 
 struct ApplyBaseIfPresent {
   IdOrLiteralOrIri operator()(
-      IdOrLocalVocabEntry iri,
+      IdOrLiteralOrIri iri,
       const std::optional<qlever::util::ParsedUri>& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
       return std::get<Id>(iri);
     }
     if (!base.has_value()) {
-      return std::get<LocalVocabEntry>(std::move(iri));
+      return std::get<LiteralOrIri>(std::move(iri));
     }
     return LiteralOrIri{extractIri(iri).resolveAgainstBase(base.value())};
   }

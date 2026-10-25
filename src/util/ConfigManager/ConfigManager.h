@@ -129,11 +129,12 @@ class ConfigManager {
     */
     CPP_template(typename Visitor, typename PointerType)(
         requires ad_utility::SimilarTo<
-            std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-            CPP_and ql::concepts::invocable<
-                Visitor, std::conditional_t<std::is_const_v<PointerType>,
-                                            const ConfigOption&, ConfigOption&>>
-                CPP_and ql::concepts::invocable<
+            std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>&&
+            ql::concepts::invocable<
+                Visitor,
+                std::conditional_t<std::is_const_v<PointerType>,
+                                   const ConfigOption&, ConfigOption&>>&&
+                ql::concepts::invocable<
                     Visitor,
                     std::conditional_t<std::is_const_v<PointerType>,
                                        const ConfigManager&,
@@ -501,8 +502,8 @@ class ConfigManager {
   */
   CPP_template(typename HashMapType, typename Callable)(
       requires SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>,
-                         HashMapType>
-          CPP_and std::is_object_v<HashMapType>) static std::
+                         HashMapType>&&
+          std::is_object_v<HashMapType>) static std::
       conditional_t<
           std::is_const_v<HashMapType>,
           const std::vector<std::pair<const std::string, const HashMapEntry&>>,

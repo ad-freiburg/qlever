@@ -23,7 +23,6 @@ RuntimeParameters::RuntimeParameters() {
   };
 
   add(stripColumns_);
-  add(sortEstimateCancellationFactor_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);
@@ -42,10 +41,12 @@ RuntimeParameters::RuntimeParameters() {
   add(throwOnUnboundVariables_);
   add(cacheMaxSizeLazyResult_);
   add(websocketUpdatesEnabled_);
+  add(websocketUpdateInterval_);
   add(smallIndexScanSizeEstimateDivisor_);
   add(zeroCostEstimateForCachedSubtree_);
   add(requestBodyLimit_);
   add(cacheServiceResults_);
+  add(cacheLoadResults_);
   add(syntaxTestMode_);
   add(divisionByZeroIsUndef_);
   add(throwOnInvalidWkt_);
