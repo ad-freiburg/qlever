@@ -132,7 +132,6 @@ class PartialVocabIndexWithExternalFlag {
   // Access the original values.
   uint64_t index() const { return encodedIndex_ & (uint64_t(-1) >> 1); }
 
-  // TODO<pas-kes>: maybe the isExternal bit can move into the datatype.
   bool isExternal() const { return (encodedIndex_ >> 63) != 0; }
 };
 
