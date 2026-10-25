@@ -12,6 +12,7 @@
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -84,7 +85,8 @@ struct TestContext {
     auto add = [this, &localVocabContext](const std::string& s) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromStringRepresentation(s, localVocabContext)));
+              ad_utility::testing::localVocabEntryFromStringRepresentation(
+                  s, localVocabContext)));
     };
     locVocIri1 = add("<https:://some_example/iri>");
     locVocIri2 = add("<http://www.w3.org/2001/XMLSchema#integer>");
@@ -120,7 +122,7 @@ struct TestContext {
 auto localVocabEntry =
     [](const std::string& literal,
        const LocalVocabContext& context) -> IdOrLocalVocabEntry {
-  return LocalVocabEntry::fromStringRepresentation(
+  return ad_utility::testing::localVocabEntryFromStringRepresentation(
       absl::StrCat("\""sv, literal, "\""sv), context);
 };
 

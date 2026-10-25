@@ -16,8 +16,8 @@
 #include "backports/algorithm.h"
 #include "global/FoldedValueId.h"
 #include "index/LocalVocabEntry.h"
-#include "index/vocabulary/EncodedIriManager.h"
 #include "util/HashSet.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
@@ -477,12 +477,15 @@ TEST_F(ValueIdTest, Hashing) {
     LocalVocab lv1;
     LocalVocab lv2;
     Iri iri = Iri::fromIriref("<foo>");
-    LocalVocabEntry lve1(iri, index.getLocalVocabContext());
-    LocalVocabEntry lve2(iri, index.getLocalVocabContext());
-    LocalVocabEntry lve3 = LocalVocabEntry::fromStringRepresentation(
-        "\"foo\"", index.getLocalVocabContext());
-    LocalVocabEntry lve4 =
-        LocalVocabEntry::fromIriref("<x>", index.getLocalVocabContext());
+    LocalVocabEntry lve1 =
+        ad_utility::testing::localVocabEntry(iri, index.getLocalVocabContext());
+    LocalVocabEntry lve2 =
+        ad_utility::testing::localVocabEntry(iri, index.getLocalVocabContext());
+    LocalVocabEntry lve3 =
+        ad_utility::testing::localVocabEntryFromStringRepresentation(
+            "\"foo\"", index.getLocalVocabContext());
+    LocalVocabEntry lve4 = ad_utility::testing::iriLocalVocabEntry(
+        "<x>", index.getLocalVocabContext());
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };
@@ -632,76 +635,6 @@ static_assert(ValueId::makeUndefined().compareWithoutLocalVocab(
 #endif
 }  // namespace constexprValueId
 
-// _____________________________________________________________________________
-TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
-  // Test that an ID storing an encoded IRI compares equal to a LocalVocabEntry
-  // with the same IRI value.
-
-  // Create an EncodedIriManager with some test prefixes
-  std::vector<std::string> prefixes = {"http://example.org/",
-                                       "http://test.com/"};
-
-  // Create a test index config with the encoded IRI manager and call getQec
-  // to set up the global index state
-  using namespace ad_utility::testing;
-  TestIndexConfig config;
-  config.encodedPrefixesWithoutAngleBrackets = prefixes;
-  qec_ = getQec(config);
-  const auto& encodedIriManager = qec_->getIndex().encodedIriManager();
-
-  // Test case 1: IRI that can be encoded
-  std::string encodableIri = "<http://example.org/123>";
-  auto encodedIdOpt = encodedIriManager.encode(encodableIri);
-  ASSERT_TRUE(encodedIdOpt.has_value())
-      << "Failed to encode IRI: " << encodableIri;
-
-  auto encodedId = *encodedIdOpt;
-  EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
-
-  // Create a LocalVocabEntry with the same IRI
-  auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
-  LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
-  auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
-
-  // The encoded ID should compare equal to the LocalVocabEntry ID
-  EXPECT_EQ(encodedId, localVocabId)
-      << "Encoded ID should equal LocalVocabEntry ID for IRI: " << encodableIri;
-
-  // Test case 2: Another encodable IRI with different prefix
-  std::string encodableIri2 = "<http://test.com/456>";
-  auto encodedIdOpt2 = encodedIriManager.encode(encodableIri2);
-  ASSERT_TRUE(encodedIdOpt2.has_value())
-      << "Failed to encode IRI: " << encodableIri2;
-
-  auto encodedId2 = *encodedIdOpt2;
-  auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
-  LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
-  auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
-
-  EXPECT_EQ(encodedId2, localVocabId2)
-      << "Encoded ID should equal LocalVocabEntry ID for IRI: "
-      << encodableIri2;
-
-  // Test case 3: Encoded IDs should not equal LocalVocabEntries with different
-  // IRIs
-  EXPECT_NE(encodedId, localVocabId2)
-      << "Different encoded IRIs should not be equal";
-  EXPECT_NE(encodedId2, localVocabId)
-      << "Different encoded IRIs should not be equal";
-
-  // Test case 4: Ordering should also work correctly
-
-  auto inconsistentOrderingMessage =
-      "Ordering should be consistent between encoded and local vocab IDs";
-  if (encodableIri < encodableIri2) {
-    EXPECT_LT(encodedId, localVocabId2) << inconsistentOrderingMessage;
-    EXPECT_GT(localVocabId2, encodedId) << inconsistentOrderingMessage;
-  } else {
-    EXPECT_GT(encodedId, localVocabId2) << inconsistentOrderingMessage;
-    EXPECT_LT(localVocabId2, encodedId) << inconsistentOrderingMessage;
-  }
-}
-
 // Note: the `isTrivial` functionality is also tested using `static_assert`s
 // across the codebase, hence we don't test it exhaustively here, but only
 // please the coverage tool.
@@ -759,9 +692,10 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
   // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
   // `SecondaryVocabIndex`.
-  LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
+  LocalVocabEntry entryInVocab =
+      ad_utility::testing::iriLocalVocabEntry("<b>", ctx);
   LocalVocabEntry entryInSecondaryVocab =
-      LocalVocabEntry::fromIriref("<zzz>", ctx);
+      ad_utility::testing::iriLocalVocabEntry("<zzz>", ctx);
   ValueId localVocabId = ValueId::makeFromLocalVocabIndex(&entryInVocab);
   ValueId localVocabIdSecondary =
       ValueId::makeFromLocalVocabIndex(&entryInSecondaryVocab);

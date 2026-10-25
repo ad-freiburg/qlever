@@ -26,6 +26,7 @@
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
@@ -213,8 +214,8 @@ TEST_F(ServiceTest, computeResult) {
           auto get = [this, &localVocabs](
                          std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index =
-                  localVocab.getIndexOrNullopt(LocalVocabEntry::fromIriref(
+              auto index = localVocab.getIndexOrNullopt(
+                  ad_utility::testing::iriLocalVocabEntry(
                       s, testQec->getLocalVocabContext()));
               if (index.has_value()) {
                 return index;
@@ -386,7 +387,7 @@ TEST_F(ServiceTest, computeResult) {
     const auto& localVocabContext = testQec->getLocalVocabContext();
     auto get = [&localVocab, &localVocabContext](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          LocalVocabEntry::fromIriref(s, localVocabContext));
+          ad_utility::testing::iriLocalVocabEntry(s, localVocabContext));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");

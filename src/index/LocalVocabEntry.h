@@ -99,6 +99,15 @@ class alignas(16) LocalVocabEntry
  public:
   LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
       : Base{std::move(literal)}, context_{&context} {}
+
+ private:
+  // The constructors that can store an IRI are private, because an IRI that can
+  // be encoded directly in an `Id` (see `LocalVocabContext::encodeAsId`) must
+  // never be stored in a `LocalVocabEntry`. Create such entries via
+  // `toIdOrLocalVocabEntry` (see `index/TripleComponentConversions.h`), which
+  // checks this and then calls them via `LocalVocabEntryFactory`.
+  friend class LocalVocabEntryFactory;
+
   LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
       : Base{std::move(iri)}, context_{&context} {}
 
@@ -139,19 +148,14 @@ class alignas(16) LocalVocabEntry
                                         IdProxy::make(upper.getBits())}));
   }
 
+ public:
   LocalVocabEntry(const LocalVocabEntry&) = default;
   LocalVocabEntry(LocalVocabEntry&&) noexcept = default;
   LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
   LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
 
   // Convenience functions that delegate to the corresponding static functions
-  // of `IriT` and `LiteralT`.
-  static LocalVocabEntry fromStringRepresentation(std::string s,
-                                                  const LocalVocabContext& ctx);
-
-  static LocalVocabEntry fromIriref(std::string_view view,
-                                    const LocalVocabContext& ctx);
-
+  // of `LiteralT`.
   static LocalVocabEntry literalWithoutQuotes(std::string_view view,
                                               const LocalVocabContext& ctx);
 

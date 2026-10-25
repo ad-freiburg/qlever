@@ -25,6 +25,7 @@
 #include "index/TripleComponentConversions.h"
 #include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -1721,8 +1722,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       std::move(testIndexConfig));
   index.deltaTriplesManager().modify<void>(
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry =
-            LocalVocabEntry::fromIriref("<zzz>", index.getLocalVocabContext());
+        LocalVocabEntry entry = ad_utility::testing::iriLocalVocabEntry(
+            "<zzz>", index.getLocalVocabContext());
         Id id = Id::makeFromLocalVocabIndex(&entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,

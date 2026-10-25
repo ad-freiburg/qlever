@@ -93,18 +93,6 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
 }
 
 // _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromStringRepresentation(
-    std::string s, const LocalVocabContext& ctx) {
-  return LocalVocabEntry{Base::fromStringRepresentation(std::move(s)), ctx};
-}
-
-// _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromIriref(std::string_view view,
-                                            const LocalVocabContext& ctx) {
-  return LocalVocabEntry{IriT::fromIriref(view), ctx};
-}
-
-// _____________________________________________________________________________
 LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
     std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithoutQuotes(view), ctx};

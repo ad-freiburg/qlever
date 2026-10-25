@@ -35,6 +35,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
@@ -153,8 +154,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   }};
 
   auto makeVocabEntry = [&oldIndex](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str),
-                           oldIndex.getLocalVocabContext()};
+    return ad_utility::testing::localVocabEntry(
+        ad_utility::testing::iri(str), oldIndex.getLocalVocabContext());
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -248,9 +249,9 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
   std::deque<LocalVocabEntry> entryStorage;
   std::vector<LocalVocabIndex> entries;
   for (size_t i = 0; i < numEntries; ++i) {
-    entryStorage.emplace_back(
+    entryStorage.push_back(ad_utility::testing::localVocabEntry(
         ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
-        oldIndex.getLocalVocabContext());
+        oldIndex.getLocalVocabContext()));
     entries.push_back(&entryStorage.back());
   }
 
@@ -422,10 +423,10 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry1 =
-            LocalVocabEntry::fromIriref("<a2>", index.getLocalVocabContext());
-        LocalVocabEntry entry2 =
-            LocalVocabEntry::fromIriref("<d2>", index.getLocalVocabContext());
+        LocalVocabEntry entry1 = ad_utility::testing::iriLocalVocabEntry(
+            "<a2>", index.getLocalVocabContext());
+        LocalVocabEntry entry2 = ad_utility::testing::iriLocalVocabEntry(
+            "<d2>", index.getLocalVocabContext());
         auto a2 = Id::makeFromLocalVocabIndex(&entry1);
         auto d2 = Id::makeFromLocalVocabIndex(&entry2);
         deltaTriples.insertTriples(
@@ -636,8 +637,8 @@ TEST(IndexRebuilder, materializeToIndex) {
         LocalVocab outsideVocab;
         Id localA = Id::makeFromLocalVocabIndex(
             outsideVocab.getIndexAndAddIfNotContained(
-                LocalVocabEntry::fromIriref("<a>",
-                                            index.getLocalVocabContext())));
+                ad_utility::testing::iriLocalVocabEntry(
+                    "<a>", index.getLocalVocabContext())));
         deltaTriples.insertTriples(
             cancellationHandle,
             {IdTriple<0>{std::array{localA, V(1), V(2), g}}});

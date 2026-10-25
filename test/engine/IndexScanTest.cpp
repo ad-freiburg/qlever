@@ -16,6 +16,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
@@ -1395,9 +1396,9 @@ TEST_P(IndexScanWithLazyJoin,
   LocalVocab extraVocab;
   const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<e>"), localVocabContext});
+      ad_utility::testing::localVocabEntry(iri("<e>"), localVocabContext));
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<g>"), localVocabContext});
+      ad_utility::testing::localVocabEntry(iri("<g>"), localVocabContext));
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -2026,9 +2027,9 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
 
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
-    return makePrefilterVec(
-        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
-           Var{"?x"}));
+    return makePrefilterVec(pr(lt(ad_utility::testing::iriLocalVocabEntry(
+                                   "<s2>", qec->getLocalVocabContext())),
+                               Var{"?x"}));
   };
 
   // Test with different variable combinations

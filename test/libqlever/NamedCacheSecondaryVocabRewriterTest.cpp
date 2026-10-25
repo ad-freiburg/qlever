@@ -22,6 +22,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
@@ -140,8 +141,8 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
             Id::makeFromInt(42));
   // A local vocab entry whose word is contained in the main vocabulary is
   // rewritten to the `Id` of that word.
-  auto entryOfM =
-      LocalVocabEntry::fromIriref("<m>", qec->getLocalVocabContext());
+  auto entryOfM = ad_utility::testing::iriLocalVocabEntry(
+      "<m>", qec->getLocalVocabContext());
   EXPECT_EQ(rewriteId(Id::makeFromLocalVocabIndex(&entryOfM), secondaryVocab),
             m);
 
@@ -263,7 +264,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   LocalVocab localVocab;
   auto idOf = [&localVocab, &context](std::string_view iriref) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromIriref(iriref, context)));
+        ad_utility::testing::iriLocalVocabEntry(iriref, context)));
   };
   Id m = idOf("<m>");
   Id a = idOf("<a>");

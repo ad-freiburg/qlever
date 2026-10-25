@@ -23,6 +23,7 @@
 #include "util/DateYearDuration.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using ad_utility::testing::DateId;
 
@@ -118,8 +119,8 @@ namespace filterHelper {
 // value with `'`/`'`.
 inline auto LVE = [](std::string litOrIri,
                      const LocalVocabContext& context) -> LocalVocabEntry {
-  return LocalVocabEntry::fromStringRepresentation(std::move(litOrIri),
-                                                   context);
+  return ad_utility::testing::localVocabEntryFromStringRepresentation(
+      std::move(litOrIri), context);
 };
 
 //______________________________________________________________________________

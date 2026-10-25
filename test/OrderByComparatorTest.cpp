@@ -21,6 +21,7 @@
 #include "engine/OrderByComparator.h"
 #include "global/Constants.h"
 #include "index/LocalVocabEntry.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace ad_utility::testing;
 using TermKind = OrderByComparator::TermKind;
@@ -79,14 +80,16 @@ TEST(OrderByComparator, getTermKind) {
   EXPECT_EQ(kind(UndefId()), TermKind::Undefined);
 
   EXPECT_EQ(kind(BlankNodeId(3)), TermKind::BlankNode);
-  auto blankNodeOfBnodeFunction = LocalVocabEntry::fromStringRepresentation(
-      absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un_label_0>"),
-      context);
+  auto blankNodeOfBnodeFunction =
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un_label_0>"),
+          context);
   EXPECT_EQ(kind(Id::makeFromLocalVocabIndex(&blankNodeOfBnodeFunction)),
             TermKind::BlankNode);
 
   EXPECT_EQ(kind(getId("<x>")), TermKind::Iri);
-  auto localIri = LocalVocabEntry::fromStringRepresentation("<a:1>", context);
+  auto localIri = ad_utility::testing::localVocabEntryFromStringRepresentation(
+      "<a:1>", context);
   EXPECT_EQ(kind(Id::makeFromLocalVocabIndex(&localIri)), TermKind::Iri);
   EXPECT_EQ(kind(Id::makeFromEncodedVal(5)), TermKind::Iri);
   EXPECT_EQ(kind(Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(2))),
@@ -120,11 +123,14 @@ TEST(OrderByComparator, compare) {
   auto local = [](const LocalVocabEntry& entry) {
     return Id::makeFromLocalVocabIndex(&entry);
   };
-  auto blankNodeOfBnodeFunction = LocalVocabEntry::fromStringRepresentation(
-      absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un_label_0>"),
-      context);
-  auto a1 = LocalVocabEntry::fromStringRepresentation("<a:1>", context);
-  auto a2 = LocalVocabEntry::fromStringRepresentation("<a:2>", context);
+  auto blankNodeOfBnodeFunction =
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un_label_0>"),
+          context);
+  auto a1 = ad_utility::testing::localVocabEntryFromStringRepresentation(
+      "<a:1>", context);
+  auto a2 = ad_utility::testing::localVocabEntryFromStringRepresentation(
+      "<a:2>", context);
   auto alx = LocalVocabEntry::literalWithoutQuotes("alx", context);
 
   constexpr int64_t twoToThe53 = int64_t{1} << 53;

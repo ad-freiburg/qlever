@@ -15,6 +15,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
@@ -304,7 +305,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto LVI = [&localVocab, qec](std::string_view iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromIriref(iri, qec->getLocalVocabContext())));
+              ad_utility::testing::iriLocalVocabEntry(
+                  iri, qec->getLocalVocabContext())));
     };
 
     expectComputeGraphUpdateQuads(
@@ -451,7 +453,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
-                  LocalVocabEntry{literalOrIri, index.getLocalVocabContext()});
+                  ad_utility::testing::localVocabEntry(
+                      literalOrIri, index.getLocalVocabContext()));
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),

@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/ExistsJoin.h"
@@ -196,10 +197,12 @@ TEST(ExistsJoin, computeResult) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
-      "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
-      "\"b\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryA =
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB =
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -253,10 +256,12 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
-      "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
-      "\"b\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryA =
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB =
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);

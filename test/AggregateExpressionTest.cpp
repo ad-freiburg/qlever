@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/Id.h"
 #include "gtest/gtest.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace sparqlExpression;
 using namespace ad_utility::testing;
@@ -251,8 +252,9 @@ TEST(AggregateExpression, minAndMaxForDifferentKindsOfTerms) {
   auto testMinId = testAggregate<MinExpression, Id>;
   auto testMaxId = testAggregate<MaxExpression, Id>;
   auto t = TestContext{};
-  LocalVocabEntry iriEntry = LocalVocabEntry::fromStringRepresentation(
-      "<x:1>", t.qec->getLocalVocabContext());
+  LocalVocabEntry iriEntry =
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "<x:1>", t.qec->getLocalVocabContext());
   Id iri = Id::makeFromLocalVocabIndex(&iriEntry);
   Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3));
   Id alpha = t.alpha;

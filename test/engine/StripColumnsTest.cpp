@@ -13,6 +13,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
@@ -71,7 +72,7 @@ TEST(StripColumns, computeResult) {
   auto qec = ad_utility::testing::getQec();
   auto makeOp = [&qec]() {
     LocalVocab voc;
-    voc.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+    voc.getIndexAndAddIfNotContained(ad_utility::testing::iriLocalVocabEntry(
         "<kartoffel>", qec->getLocalVocabContext()));
     qec->clearCacheUnpinnedOnly();
     std::vector<IdTable> children;
@@ -86,7 +87,7 @@ TEST(StripColumns, computeResult) {
 
   auto localVocabMatcher =
       ResultOf(std::mem_fn(&LocalVocab::getAllWordsForTesting),
-               ElementsAre(LocalVocabEntry::fromIriref(
+               ElementsAre(ad_utility::testing::iriLocalVocabEntry(
                    "<kartoffel>", qec->getLocalVocabContext())));
   // Test materialized result.
   {

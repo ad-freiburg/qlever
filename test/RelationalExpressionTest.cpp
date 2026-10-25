@@ -17,6 +17,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "index/Index.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace sparqlExpression;
 using namespace ad_utility::testing;
@@ -324,7 +325,8 @@ TEST(RelationalExpression, DoubleAndDouble) {
 TEST(RelationalExpression, StringAndString) {
   auto* qec = getQec();
   auto lve = [qec](std::string_view literal) {
-    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+    return LocalVocabEntry{tripleComponentLiteral(literal),
+                           qec->getLocalVocabContext()};
   };
   testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry, IdOrLocalVocabEntry>(
       {lve("alpha"), lve("beta")}, {lve("sigma"), lve("delta")},
@@ -341,7 +343,8 @@ TEST(RelationalExpression, StringAndString) {
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   auto* qec = getQec();
   auto lve = [qec](std::string_view literal) {
-    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+    return LocalVocabEntry{tripleComponentLiteral(literal),
+                           qec->getLocalVocabContext()};
   };
   auto stringVec = VectorWithMemoryLimit<IdOrLocalVocabEntry>(
       {lve("hallo"), lve("by"), lve("")}, makeAllocator());
@@ -577,7 +580,8 @@ TEST(RelationalExpression, NumericConstantAndNumericVector) {
 TEST(RelationalExpression, StringConstantsAndStringVector) {
   auto* qec = getQec();
   auto lve = [qec](std::string_view literal) {
-    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+    return LocalVocabEntry{tripleComponentLiteral(literal),
+                           qec->getLocalVocabContext()};
   };
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vec(
       {lve("alpha"), lve("alpaka"), lve("bertram"), lve("sigma"), lve("zeta"),
@@ -638,7 +642,8 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
 TEST(RelationalExpression, StringVectorAndStringVector) {
   auto* qec = getQec();
   auto lve = [qec](std::string_view literal) {
-    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+    return LocalVocabEntry{tripleComponentLiteral(literal),
+                           qec->getLocalVocabContext()};
   };
   VectorWithMemoryLimit<IdOrLocalVocabEntry> vecA{
       {lve("alpha"), lve("beta"), lve("g"), lve("epsilon"), lve("fraud"),
@@ -718,7 +723,8 @@ void testWithExplicitResult(T1 leftValue, T2 rightValue,
 TEST(RelationalExpression, VariableAndConstant) {
   auto* qec = testContext().qec;
   auto lve = [qec](std::string_view literal) {
-    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+    return LocalVocabEntry{tripleComponentLiteral(literal),
+                           qec->getLocalVocabContext()};
   };
   // ?ints column is `1, 0, -1`
   testWithExplicitResult<LT>(int64_t{0}, Variable{"?ints"},
@@ -753,12 +759,14 @@ TEST(RelationalExpression, VariableAndConstant) {
   // ?mixed column is `1, -0.1, <x>`
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
-  testWithExplicitIdResult<GT>(IdOrLocalVocabEntry{LocalVocabEntry::fromIriref(
-                                   "<xa>", qec->getLocalVocabContext())},
-                               Variable{"?mixed"}, {U, U, B(true)});
-  testWithExplicitIdResult<LT>(IdOrLocalVocabEntry{LocalVocabEntry::fromIriref(
-                                   "<u>", qec->getLocalVocabContext())},
-                               Variable{"?mixed"}, {U, U, B(true)});
+  testWithExplicitIdResult<GT>(
+      IdOrLocalVocabEntry{ad_utility::testing::iriLocalVocabEntry(
+          "<xa>", qec->getLocalVocabContext())},
+      Variable{"?mixed"}, {U, U, B(true)});
+  testWithExplicitIdResult<LT>(
+      IdOrLocalVocabEntry{ad_utility::testing::iriLocalVocabEntry(
+          "<u>", qec->getLocalVocabContext())},
+      Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
   // comparison returns false.
@@ -845,7 +853,8 @@ void testSortedVariableAndConstant(
 TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   auto* qec = testContext().qec;
   auto lve = [qec](std::string_view literal) {
-    return LocalVocabEntry{lit(literal), qec->getLocalVocabContext()};
+    return LocalVocabEntry{tripleComponentLiteral(literal),
+                           qec->getLocalVocabContext()};
   };
   // Sorted order (by bits of the valueIds):
   // ?ints column is `0, 1,  -1`
@@ -899,8 +908,8 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
                                     std::vector{B(true), B(true), U});
   testSortedVariableAndConstant<LE>(
       mixed,
-      IdOrLocalVocabEntry{
-          LocalVocabEntry::fromIriref("<z>", qec->getLocalVocabContext())},
+      IdOrLocalVocabEntry{ad_utility::testing::iriLocalVocabEntry(
+          "<z>", qec->getLocalVocabContext())},
       std::vector{U, U, B(true)});
 }
 

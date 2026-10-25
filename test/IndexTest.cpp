@@ -39,6 +39,7 @@
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
 
@@ -1146,10 +1147,11 @@ TEST(IndexImpl, recomputeStatistics) {
   index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz =
-        LocalVocabEntry::fromIriref("<zzz>", indexImpl.getLocalVocabContext());
-    LocalVocabEntry literal = LocalVocabEntry::fromStringRepresentation(
-        "\"test\"@en", indexImpl.getLocalVocabContext());
+    LocalVocabEntry zzz = ad_utility::testing::iriLocalVocabEntry(
+        "<zzz>", indexImpl.getLocalVocabContext());
+    LocalVocabEntry literal =
+        ad_utility::testing::localVocabEntryFromStringRepresentation(
+            "\"test\"@en", indexImpl.getLocalVocabContext());
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
     // Create duplicate in different graph.
