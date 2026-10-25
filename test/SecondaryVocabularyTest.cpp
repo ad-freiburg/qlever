@@ -446,12 +446,14 @@ TEST(SecondaryVocabIndex, valueIdBasics) {
   // Unlike a `LocalVocabIndex`, a `SecondaryVocabIndex` carries its value in
   // its bits.
   EXPECT_TRUE(id.canBeComparedBitwise());
-  // TODO<pas-kes>: Check why its limitied by 60 bits
-  // The index of the secondary vocabulary is limited to 60 bits (also in the
-  // split layout, where `Id::maxIndex` is larger).
-  EXPECT_THROW(Id::makeFromSecondaryVocabIndex(
-                   SecondaryVocabIndex::make(uint64_t{1} << 60)),
-               Id::IndexTooLargeException);
+  // An index larger than `Id::maxIndex` throws. With a 64 bit payload every
+  // index fits.
+  if constexpr (Id::maxIndex < std::numeric_limits<uint64_t>::max()) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Id::makeFromSecondaryVocabIndex(
+            SecondaryVocabIndex::make(Id::maxIndex + 1)),
+        ::testing::HasSubstr("is bigger than"));
+  }
 
   auto visitor = [](const auto& value) -> std::optional<uint64_t> {
     if constexpr (std::is_same_v<std::decay_t<decltype(value)>,
