@@ -479,7 +479,7 @@ class IndexImpl {
   // `normalizationRegexes_` (in order) by a space, remove all accents, split
   // the result at non-alphanumeric characters, and join the lowercased words
   // with a single space. For example, with the regex `\(.*?\)`, the content
-  // "Café (Live), Olé!" becomes "cafe ole".
+  // "Café (Paris), Olé!" becomes "cafe ole".
   std::string normalizeLiteralContent(std::string_view content) const;
 
   // __________________________________________________________________________

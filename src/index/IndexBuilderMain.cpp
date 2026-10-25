@@ -296,8 +296,8 @@ int main(int argc, char** argv) {
       "Space-separated list of regexes (RE2 syntax), whose matches are "
       "replaced by a space before a literal is normalized for "
       "`--add-normalized-triples` (in the given order), e.g. `\\(.*?\\)` "
-      "to remove text in parentheses, or `(?i)official video` to remove "
-      "this phrase case-insensitively.");
+      "to remove text in parentheses, or `(?i)\\bltd\\b` to remove "
+      "this word case-insensitively.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());

@@ -780,7 +780,7 @@ TEST(IndexTest, normalizedTriples) {
   EXPECT_EQ(process("\"Café\""), std::nullopt);
 
   index.addNormalizedTriples() = true;
-  EXPECT_EQ(process("\"Café (Live), OLÉ!  42\""), "cafe live ole 42");
+  EXPECT_EQ(process("\"Café (Paris), OLÉ!  42\""), "cafe paris ole 42");
   // A literal without words has no normalized form.
   EXPECT_EQ(process("\"?!\""), std::nullopt);
   // Not a literal.
@@ -791,10 +791,9 @@ TEST(IndexTest, normalizedTriples) {
 
   // The matches of the regexes are replaced by a space, in the given order.
   index.setNormalizationRegexes(
-      {"\\([^)]*\\)|\\[[^\\]]*\\]", "(?i)official( hd)? video"});
-  EXPECT_EQ(process("\"Café (Live) [2020] Olé Official HD Video\""),
-            "cafe ole");
-  EXPECT_EQ(process("\"Song(feat. X)Title\""), "song title");
+      {"\\([^)]*\\)|\\[[^\\]]*\\]", "(?i)\\bco(mpany)?\\.? ltd\\b"});
+  EXPECT_EQ(process("\"Café (Paris) [2020] Olé Company Ltd\""), "cafe ole");
+  EXPECT_EQ(process("\"Foo(Bar)Baz\""), "foo baz");
   EXPECT_EQ(index.normalizeLiteralContent("(only brackets)"), "");
 
   AD_EXPECT_THROW_WITH_MESSAGE(
