@@ -440,17 +440,21 @@ class QueryPlanner {
   // Store the join columns for a transitive path operation. If the target
   // sides' columns exist, the start side's must also exist.
   using SideTuple = std::optional<std::tuple<size_t, size_t>>;
-  // Store both sides for a transitive path by left (`first`) and right
-  // (`second`).
-  using TransitivePathJoinCols = std::pair<SideTuple, SideTuple>;
+  // Store both sides for a transitive path by left and right.
+  struct TransitivePathJoinCols {
+    SideTuple left;
+    SideTuple right;
+  };
 
-  // Return two pairs of join columns (the first from the transitive path
-  // operation, the second from the other operation with which the result of the
-  // transitive path operation is joined). Otherwise return `std::nullopt`, in
-  // which case the full transitive path will be computed, If the Boolean
+  // Return join columns for the transitive path's left and right side, packaged
+  // in the `TransitivePathJoinCols` helper. Each side consists of a join column
+  // for the transitive path operation and one from the other operation with
+  // which the result of the transitive path operation is joined. If a side is
+  // not bound to a variable, it will be `std::nullopt`, indicating that the
+  // full transitive path  will be computed; if the Boolean
   // `leftSideTransitivePath` is true, the column indices of the transitive path
   // are on the "left side" of the pairs from `jcs`, otherwise they are on the
-  // "right side".
+  // "right side"
   static TransitivePathJoinCols getJoinColumnsForTransitivePath(
       const JoinColumns& jcs, bool leftSideTransitivePath);
 

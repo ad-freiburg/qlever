@@ -2612,7 +2612,6 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
       colsRight = std::make_tuple(transCol, otherCol);
     }
   }
-
   return TransitivePathJoinCols(colsLeft, colsRight);
 #endif
 }
@@ -2643,9 +2642,8 @@ auto QueryPlanner::createJoinWithTransitivePath(
     return std::nullopt;
   }
 
-  // Do not bind the side of a path twice and don't bind on graph variable.
   // Get all columns that can be joined with each other. May either be zero, one
-  // or two pairs.
+  // or two pairs. Graph variable is ignored here.
   auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
 
   auto getColFromSideOrNullopt =
@@ -2657,13 +2655,13 @@ auto QueryPlanner::createJoinWithTransitivePath(
     AD_CORRECTNESS_CHECK(colTransPath <= 1);
     return colOther;
   };
-  const auto& leftSideOther = getColFromSideOrNullopt(joinCols.first);
-  const auto& rightSideOther = getColFromSideOrNullopt(joinCols.second);
+  const auto& leftSideOther = getColFromSideOrNullopt(joinCols.left);
+  const auto& rightSideOther = getColFromSideOrNullopt(joinCols.right);
 
   // If both sides are given, we need to ensure the join cols are not the same.
   if (leftSideOther.has_value() && rightSideOther.has_value()) {
-    AD_CORRECTNESS_CHECK(std::get<0>(joinCols.first.value()) !=
-                         std::get<0>(joinCols.second.value()));
+    AD_CORRECTNESS_CHECK(std::get<0>(joinCols.left.value()) !=
+                         std::get<0>(joinCols.right.value()));
   } else if (!leftSideOther.has_value() && !rightSideOther.has_value()) {
     return std::nullopt;
   }

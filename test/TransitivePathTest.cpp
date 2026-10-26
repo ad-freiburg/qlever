@@ -626,7 +626,10 @@ TEST_P(TransitivePathTest, bothBoundToVarWithUndef) {
   };
 
   {
-    auto opTable = makeIdTableFromVector({{10, 1, Id::makeUndefined(), 20}});
+    auto opTable = makeIdTableFromVector({
+        {10, 0, 2, 20},
+        {10, 1, Id::makeUndefined(), 20},
+    });
     auto expected = makeIdTableFromVector({
         {1, 4, 10, 20},
         {1, 2, 10, 20},
@@ -1053,7 +1056,7 @@ TEST_P(TransitivePathTest, emptySideTable) {
   {
     TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
     TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-    // Both sides bound to empty side table.
+    // Both sides bound to empty side table. This should not happen in practice.
     auto T = makePathBoundOnBothSides(
         sub.clone(), {Variable{"?start"}, Variable{"?target"}},
         std::vector<IdTable>{}, 0, 0, {Variable{"?start"}}, left, right, 0,
@@ -1407,7 +1410,8 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   };
 
   // Simulate entries in the delta triples by using entries that are not in
-  // the index Note: the entries in this local vocab are destroyed when this
+  // the index
+  // Note: the entries in this local vocab are destroyed when this
   // test is done. It is therefore crucial that the `makePath...` functions
   // clear the cache, s.t. subsequent tests do not read results with a
   // dangling local vocab from the cache (Currently the indexes used for

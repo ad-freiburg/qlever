@@ -397,7 +397,7 @@ qlm::vector<QueryExecutionTree*> TransitivePathBase::getChildrenImpl() const {
     if (ql::ranges::find(res, tree) == res.end()) {
       res.push_back(tree);
     }
-  };
+  }
   res.push_back(subtree_.get());
   return res;
 }
@@ -462,10 +462,11 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
 
   // Set `op` and the corresponding binding column to each side's
   // `treeAndCol_` member.
-  auto assignTreeAndColToSide = [&](auto& col, auto& side,
+  auto assignTreeAndColToSide = [this, &op, &leftCol, &rightCol, &lhs, &rhs](
+                                    auto& col, auto& side,
                                     bool resetPlaceholder) {
     // Obtain the variable of a column.
-    auto getVar = [&op](const std::optional<size_t> col) {
+    auto getVar = [&op](const std::optional<size_t>& col) {
       return col.has_value()
                  ? std::optional<Variable>(
                        op->getVariableAndInfoByColumnIndex(col.value()).first)
@@ -565,10 +566,8 @@ std::vector<ColumnIndex> TransitivePathBase::computePayloadColumns(
     const std::optional<ColumnIndex>& leftCol,
     const std::optional<ColumnIndex>& rightCol) const {
   auto graphCol = getActualGraphColumnIndex(op);
-  auto isNotPayload = [&](const auto& col) {
-    return (graphCol.has_value() && graphCol.value() == col) ||
-           (leftCol.has_value() && leftCol.value() == col) ||
-           (rightCol.has_value() && rightCol.value() == col);
+  auto isNotPayload = [&graphCol, &leftCol, &rightCol](const auto& col) {
+    return graphCol == col || leftCol == col || rightCol == col;
   };
   std::vector<ColumnIndex> payloadIndices;
   for (ColumnIndex col = 0; col < op->getResultWidth(); col++) {

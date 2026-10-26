@@ -4053,7 +4053,6 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
   // This tests double binding (both columns at once).
   h::expect(
       "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
-
       h::transitivePath(left, right1, 1, std::numeric_limits<size_t>::max(),
                         h::IndexScanFromStrings("?s", "<b>", "?o"),
                         h::Sort(h::IndexScanFromStrings(

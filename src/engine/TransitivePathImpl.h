@@ -116,7 +116,8 @@ class TransitivePathImpl : public TransitivePathBase {
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t numberOfPayloadColumns =
         tree->getResultWidth() -
-        numJoinColumnsWith(tree, joinColumn, targetSide.getJoinColumn());
+        numJoinColumnsWith(tree, joinColumn,
+                           targetSide.getJoinColumnIfPresent());
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce,
                                     numberOfPayloadColumns);
@@ -254,9 +255,9 @@ class TransitivePathImpl : public TransitivePathBase {
           } else if (targetNodesAreBound) {
             // We can treat undef targets the same as a nonexistent target.
             const auto& targetCandidate = tableColumn.targetNodes_[currentRow];
-            if (!targetCandidate.isUndefined()) {
-              targetId = targetCandidate;
-            }
+            targetId = targetCandidate.isUndefined()
+                           ? std::nullopt
+                           : std::optional{targetCandidate};
           }
           edges.setGraphId(graphId);
 
@@ -348,7 +349,8 @@ class TransitivePathImpl : public TransitivePathBase {
     using namespace ad_utility;
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     std::optional<ColumnIndex> graphColumn = getActualGraphColumnIndex(tree);
-    std::optional<ColumnIndex> targetJoinColumn = targetSide.getJoinColumn();
+    std::optional<ColumnIndex> targetJoinColumn =
+        targetSide.getJoinColumnIfPresent();
 
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
         computePayloadColumns(tree, joinColumn, targetJoinColumn);
@@ -372,13 +374,12 @@ class TransitivePathImpl : public TransitivePathBase {
 
     // If it is bound, get the nodes on the target side inside a simple
     // `ql::span`. Otherwise, the span is empty.
-    auto targetNodes = [&targetSide, joinColumn,
-                        targetJoinColumn](const auto& idTable) {
-      if (!targetSide.isBoundVariable()) {
+    auto targetNodes = [joinColumn, targetJoinColumn](const auto& idTable) {
+      if (!targetJoinColumn.has_value()) {
         return ql::span<const Id>();
       }
       ql::span<const Id> targetNodes =
-          idTable.getColumn(static_cast<size_t>(targetJoinColumn.value()));
+          idTable.getColumn(targetJoinColumn.value());
       AD_CORRECTNESS_CHECK(targetNodes.size() ==
                            idTable.getColumn(joinColumn).size());
       return targetNodes;
