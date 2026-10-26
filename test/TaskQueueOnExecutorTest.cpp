@@ -181,6 +181,37 @@ TEST(TaskQueueOnExecutor, submitPropagatesValuesAndExceptions) {
 }
 
 // _____________________________________________________________________________
+TEST(TaskQueueOnExecutor, pushAsyncKeepsTheTaskInFlightUntilDone) {
+  net::thread_pool pool{2};
+  TaskQueueOnExecutor queue{pool.get_executor(), 1, "pushAsync"};
+
+  // The task returns right away, but hands its `done` callback out instead of
+  // calling it.
+  std::promise<TaskQueueOnExecutor::Done> donePromise;
+  auto doneFuture = donePromise.get_future();
+  queue.pushAsync([&donePromise](TaskQueueOnExecutor::Done done) {
+    donePromise.set_value(std::move(done));
+  });
+  ASSERT_TRUE(becomesReady(doneFuture));
+  auto done = doneFuture.get();
+
+  // The task is still in flight, so the next push (the bound is one) blocks.
+  std::atomic<bool> secondPushHasReturned = false;
+  ad_utility::JThread pusher{[&queue, &secondPushHasReturned]() {
+    queue.push([]() {});
+    secondPushHasReturned = true;
+  }};
+  std::this_thread::sleep_for(shortTimeout);
+  EXPECT_FALSE(secondPushHasReturned.load());
+
+  // Calling `done` (from another thread) releases the slot.
+  std::move(done)();
+  pusher.join();
+  EXPECT_TRUE(secondPushHasReturned.load());
+  queue.finish();
+}
+
+// _____________________________________________________________________________
 TEST(TaskQueueOnExecutor, pushFromSeveralThreads) {
   net::thread_pool pool{4};
   std::atomic<size_t> counter = 0;

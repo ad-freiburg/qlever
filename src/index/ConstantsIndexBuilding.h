@@ -126,6 +126,17 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE =
     ad_utility::MemorySize::bytes(
         VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() / 8);
 
+// The number of merged words after which the vocabulary merger cuts a new
+// segment (see `index/vocabulary_merger/Segment.h`), which is the unit of work
+// of the stages behind the merge. Larger segments mean fewer tasks but more
+// memory per task and a later start of the writing.
+constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
+
+// The number of groups into which the partial ID maps are split for writing
+// (the maps of a group are written by one task per segment, on a strand of
+// the global thread pool), see `index/vocabulary_merger/IdMapWriters.h`.
+constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS = 8;
+
 // The amount of input (the serialized words of the partial vocabularies,
 // counted with their repetitions in different partial vocabularies) that a
 // chunk of the parallel merge of the partial vocabularies (see
