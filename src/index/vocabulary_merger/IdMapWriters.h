@@ -11,7 +11,10 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_IDMAPWRITERS_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_IDMAPWRITERS_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <algorithm>
+#include <atomic>
 #include <boost/asio/strand.hpp>
 #include <cstddef>
 #include <memory>
@@ -58,6 +61,8 @@ class IdMapWriters {
   ad_utility::ExceptionCollector exceptionCollector_;
   // The total time that the tasks have spent writing.
   ad_utility::timer::ThreadSafeTimer busyTime_;
+  // The number of tasks that have been pushed, but not completed yet.
+  std::atomic<size_t> numPendingTasks_ = 0;
   // The queue of the tasks of each group, see above. The queues are bounded,
   // so a segment whose entries cannot be written yet blocks the thread that
   // commits the segments. The queues are held by `std::unique_ptr` because a
@@ -91,29 +96,31 @@ class IdMapWriters {
   size_t numPartialVocabularies() const { return idMapWriters_.size(); }
   size_t numGroups() const { return queues_.size(); }
 
-  // Write the entries of the `segment`, whose segment-local IDs are turned
-  // into global ones with the `converter` of that segment. The `segment` is
-  // kept alive until its entries are written. Do nothing if a task has failed.
-  void write(std::shared_ptr<const Segment> segment,
+  // Write the ID map `entries` of a segment (see `Segment::idMapEntries_`),
+  // whose segment-local IDs are turned into global ones with the `converter`
+  // of that segment. The `entries` are kept alive until they are written (and
+  // nothing else of the segment, so that the words of the segment can be
+  // released independently). Do nothing if a task has failed.
+  void write(std::shared_ptr<const SegmentIdMapEntries> entries,
              IdConverterForSegment converter) {
-    AD_CONTRACT_CHECK(segment->idMapEntries_.size() ==
-                      numPartialVocabularies());
+    AD_CONTRACT_CHECK(entries->size() == numPartialVocabularies());
     if (hasFailed()) {
       return;
     }
     // The writer and the entries of each map, side by side, in groups.
     auto groups = ::ranges::views::chunk(
-        ::ranges::views::zip(idMapWriters_, segment->idMapEntries_),
-        groupSize_);
+        ::ranges::views::zip(idMapWriters_, *entries), groupSize_);
     for (auto&& [groupIndex, group] : ::ranges::views::enumerate(groups)) {
       // The task runs after `write` has returned, so it captures by value.
       // Each task needs its own copies (not moves), but they are cheap: the
       // `group` is a view (a few iterators into `idMapWriters_` and the
-      // `idMapEntries_` of the `segment`), the `segment` is a `shared_ptr`
-      // (which keeps the entries that the `group` points to alive), and the
-      // `converter` is a small array of counts.
+      // `entries`), the `entries` are a `shared_ptr` (which keeps what the
+      // `group` points to alive), and the `converter` is a small array of
+      // counts.
+      ++numPendingTasks_;
       queues_[groupIndex]->push(
-          exceptionCollector_.wrap([this, group, segment, converter]() mutable {
+          exceptionCollector_.wrap([this, group, entries, converter]() mutable {
+            absl::Cleanup taskIsDone = [this]() { --numPendingTasks_; };
             // Skip the remaining segments once a task has failed.
             if (hasFailed()) {
               return;
@@ -132,6 +139,11 @@ class IdMapWriters {
   // Whether one of the tasks has thrown an exception that `finish()` has not
   // rethrown yet. The caller should then stop writing segments.
   bool hasFailed() const { return exceptionCollector_.hasException(); }
+
+  // The number of tasks that have been pushed by `write`, but not completed
+  // yet. If it is zero, no task holds any `entries` (or is about to drop
+  // them).
+  size_t numPendingTasks() const { return numPendingTasks_; }
 
   // Wait until all the entries are written, flush and close the maps, and
   // rethrow the first exception that one of the tasks threw, if any. After

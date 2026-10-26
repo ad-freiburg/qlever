@@ -72,6 +72,11 @@ namespace ad_utility::vocabulary_merger {
 //    of their sub-vocabulary, which are prepared (compressed) on the thread
 //    pool and appended to the files in order, by one strand of the pool per
 //    sub-vocabulary (see `index/vocabulary_merger/AsyncBlockWriter.h`).
+//
+// The `memoryToUse` is split between the chunks of the merge in flight and the
+// data behind the merge (see `VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS` in
+// `index/ConstantsIndexBuilding.h`), which is accounted for in a memory budget
+// of its own (see `index/vocabulary_merger/MemoryBudget.h`).
 template <typename W>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, ParallelWordWriterBase& writer,

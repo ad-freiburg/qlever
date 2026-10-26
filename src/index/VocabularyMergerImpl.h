@@ -61,10 +61,12 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
       std::max<size_t>(1, ad_utility::ceilDiv(numInputBytes, inputPerChunk));
   options.targetChunksPerThread = std::max<size_t>(
       1, ad_utility::ceilDiv(numChunks, options.parallelism()));
-  // The blocks in memory are larger than their serialized form (a
-  // `InputWord` per word next to the bytes, and the output of a chunk copies
-  // the words), by up to a factor of two.
-  constexpr size_t decodedFactor = 2;
+  // The blocks in memory are larger than their serialized form: an input
+  // block has an `InputWord` per word next to its bytes, and the output of a
+  // chunk copies the words into `MergedBlock`s, which take less than three
+  // times the serialized size (see `VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK`
+  // in `index/ConstantsIndexBuilding.h`).
+  constexpr size_t decodedFactor = 3;
   const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
                                        PARTIAL_VOCAB_BLOCK_SIZE.getBytes() +
                                    inputPerChunk) *
@@ -83,13 +85,22 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
 
 // The maximal number of segments (see `index/vocabulary_merger/Segment.h`)
 // that are being built or waiting to be committed at the same time: two per
-// thread, so that the pool is never starved, but no more than the memory
-// limit allows (see `VOCAB_MERGER_MEMORY_PER_SEGMENT`).
-inline size_t maxNumSegmentsInFlight(ad_utility::MemorySize memoryToUse) {
-  size_t byThreads = 2 * std::max<size_t>(1, globalExecutorNumThreads());
-  size_t byMemory =
-      memoryToUse.getBytes() / VOCAB_MERGER_MEMORY_PER_SEGMENT.getBytes();
-  return std::clamp<size_t>(byMemory, 1, byThreads);
+// thread, so that the pool is never starved. Their memory is bounded by the
+// memory budget of `detail::SegmentPipeline`, which also cuts them small
+// enough that this many of them fit.
+inline size_t maxNumSegmentsInFlight() {
+  return 2 * std::max<size_t>(1, globalExecutorNumThreads());
+}
+
+// Split the `memoryToUse` of the vocabulary merge into the memory of the
+// chunks of the parallel merge (first) and of the data behind the merge
+// (second), see `VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS`.
+inline std::pair<ad_utility::MemorySize, ad_utility::MemorySize>
+splitMemoryOfVocabularyMerge(ad_utility::MemorySize memoryToUse) {
+  auto forChunks = ad_utility::MemorySize::bytes(
+      static_cast<size_t>(static_cast<double>(memoryToUse.getBytes()) *
+                          VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS));
+  return {forChunks, memoryToUse - forChunks};
 }
 
 // _________________________________________________________________
@@ -123,9 +134,11 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   // see `vocabularyMergeOptions`.
   PartialVocabularyRunsInput input{basename, numPartialVocabularies};
   const auto inputStatistics = input.statistics();
-  auto options = vocabularyMergeOptions(numPartialVocabularies,
-                                        inputStatistics.numBytes_, memoryToUse);
-  const size_t maxSegmentsInFlight = maxNumSegmentsInFlight(memoryToUse);
+  const auto [memoryForChunks, memoryForSegments] =
+      splitMemoryOfVocabularyMerge(memoryToUse);
+  auto options = vocabularyMergeOptions(
+      numPartialVocabularies, inputStatistics.numBytes_, memoryForChunks);
+  const size_t maxSegmentsInFlight = maxNumSegmentsInFlight();
   AD_LOG_INFO << "Merging " << input.numRuns() << " partial vocabularies ("
               << inputStatistics.numWords_ << " words in "
               << inputStatistics.numBlocks_ << " blocks) in "
@@ -147,7 +160,8 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
       numPartialVocabularies,
       blankNodeIriRegexes,
       comparator,
-      maxSegmentsInFlight};
+      maxSegmentsInFlight,
+      memoryForSegments};
   for (MergedBlock& block : mergedWords) {
     // Stop merging as soon as one of the stages has failed, the exception is
     // rethrown by `finish()` below.

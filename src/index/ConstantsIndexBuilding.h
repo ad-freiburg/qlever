@@ -130,11 +130,20 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE =
 // memory per task and a later start of the writing.
 constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
 
-// The estimated memory per segment that is being built or waiting to be
-// committed (its merged words plus its outputs), which bounds the number of
-// segments in flight together with the memory limit of the index build.
-constexpr inline ad_utility::MemorySize VOCAB_MERGER_MEMORY_PER_SEGMENT =
-    ad_utility::MemorySize::megabytes(256);
+// The minimal memory of the merged words after which the vocabulary merger
+// cuts a new segment (it also cuts at `VOCAB_MERGER_SEGMENT_NUM_WORDS`). The
+// actual threshold derives from the memory limit, see `SegmentPipeline` in
+// `index/vocabulary_merger/SegmentPipeline.h`; this minimum only avoids tiny
+// segments for a tiny memory limit.
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_MIN_SEGMENT_MEMORY =
+    ad_utility::MemorySize::megabytes(4);
+
+// The share of the memory limit of the vocabulary merge that the parallel
+// merge of the partial vocabularies may use for its chunks in flight. The
+// rest is for the data behind the merge (the segments and the words and ID map
+// entries that are being written), see `mergeVocabulary` in
+// `index/VocabularyMergerImpl.h`.
+constexpr inline double VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS = 0.5;
 
 // The number of groups into which the partial ID maps are split for writing
 // (the maps of a group are written by one task per segment, on a strand of
@@ -151,8 +160,14 @@ constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS = 8;
 // NOTE: The chunks are cut by bytes and not by words, because the cost of
 // comparing two words grows with their length, so that all chunks cost about
 // the same to merge.
+//
+// NOTE: Smaller chunks mean more chunks in flight for the same memory, which
+// matters more than the overhead per chunk: on dblp (507 partial
+// vocabularies) with a memory limit of 2 GB, chunks of 128 MB allowed only two
+// chunks in flight, which made the merge three times slower than with chunks
+// of 32 MB.
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_INPUT_PER_CHUNK =
-    ad_utility::MemorySize::megabytes(128);
+    ad_utility::MemorySize::megabytes(32);
 
 // The number of chunks of that merge that may be in flight per thread of the
 // pool (bounded further by the memory), see `vocabularyMergeOptions` in
@@ -171,11 +186,11 @@ constexpr inline size_t VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD = 4;
 // 17 bytes (the length, the external flag and the index), so the number of
 // words cuts a chunk of `VOCAB_MERGER_INPUT_PER_CHUNK` of input into at most
 // `VOCAB_MERGER_INPUT_PER_CHUNK / (17 * VOCAB_MERGER_WORD_BATCH_SIZE)` blocks
-// (about 75 for the current values), and a merged word takes less than three
+// (about 20 for the current values), and a merged word takes less than three
 // times its serialized size (a `MergedWord` of 32 bytes and an `Occurrence` of
 // 16 bytes next to the word, see `MergedBlock::memorySizeOfAppended`), so the
 // memory cuts it into fewer than `3 * VOCAB_MERGER_INPUT_PER_CHUNK /
-// VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` blocks (about 39). The factor `8` is a
+// VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` blocks (about 10). The factor `8` is a
 // round number close to the sum of the two (it is unrelated to the eight
 // buffers of a block, see `VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE`); a chunk
 // with more blocks only suspends, see above.

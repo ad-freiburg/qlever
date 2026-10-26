@@ -9,3 +9,5 @@ addLinkAndDiscoverTest(AsyncBlockWriterTest index)
 addLinkAndDiscoverTest(IdMapWritersTest index)
 
 addLinkAndDiscoverTest(SegmentPipelineTest index)
+
+addLinkAndDiscoverTest(MemoryBudgetTest)

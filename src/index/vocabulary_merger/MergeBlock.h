@@ -391,6 +391,17 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
   // The number of occurrences of all the words of this block.
   size_t numOccurrences() const { return occurrences_.size(); }
 
+  // The memory that this block occupies: its buffers, its words, and their
+  // occurrences (by capacity, which is what is actually allocated).
+  ad_utility::MemorySize memorySize() const {
+    size_t numBytes = words().capacity() * sizeof(MergedWord) +
+                      occurrences_.capacity() * sizeof(Occurrence);
+    for (const Buffer& buffer : *buffers_) {
+      numBytes += buffer.capacity();
+    }
+    return ad_utility::MemorySize::bytes(numBytes);
+  }
+
   // Release the words, their occurrences and the buffers (which go back to
   // the pool). The block stays usable.
   void clear() {
