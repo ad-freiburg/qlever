@@ -8,9 +8,12 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <range/v3/view/chunk.hpp>
+#include <range/v3/view/ref.hpp>
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 
 namespace ad_utility {
 
@@ -140,13 +143,12 @@ inline void chunkedForEach(
     R&& range, Action action, ChunkOpT chunkOperation,
     std::size_t chunkSize = CANCELLATION_CHECK_CHUNK_SIZE) {
   AD_CONTRACT_CHECK(chunkSize != 0);
-  // NOTE: We don't use `::ranges::views::chunk`, because it doesn't accept all
-  // `std::ranges` (e.g. move-only views, or the `IdTable` rows with libc++).
-  auto it = ql::ranges::begin(range);
-  auto end = ql::ranges::end(range);
-  while (it != end) {
-    for (std::size_t i = 0; i < chunkSize && it != end; ++i, ++it) {
-      std::invoke(action, *it);
+  // NOTE: `views::ref` is required, because `views::chunk` doesn't accept
+  // move-only views (e.g. a `transform_view` of an `owning_view`) by value.
+  for (auto&& chunk :
+       ::ranges::views::chunk(::ranges::views::ref(range), chunkSize)) {
+    for (auto&& element : chunk) {
+      std::invoke(action, AD_FWD(element));
     }
     std::invoke(chunkOperation);
   }
