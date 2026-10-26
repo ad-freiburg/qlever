@@ -284,18 +284,13 @@ int main(int argc, char** argv) {
       "value given here wins.");
   // Deprecated alias for `--memory-for-queries` (the historical name of that
   // option), kept so that existing scripts continue to work. Deliberately not
-  // part of `options`, so it does not show up in the help message.
+  // part of `options`, so it does not show up in the help message. It is
+  // applied after `po::notify` below, which sets `memory-for-queries` to its
+  // default value.
   po::options_description deprecatedOptions;
-  deprecatedOptions.add_options()(
-      "memory-max-size",
-      po::value<ad_utility::MemorySize>()->notifier(
-          [](ad_utility::MemorySize value) {
-            AD_LOG_WARN << "The option --memory-max-size is deprecated, use "
-                           "--memory-for-queries instead"
-                        << std::endl;
-            setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(value);
-          }),
-      "Deprecated alias for --memory-for-queries.");
+  deprecatedOptions.add_options()("memory-max-size",
+                                  po::value<ad_utility::MemorySize>(),
+                                  "Deprecated alias for --memory-for-queries.");
   po::options_description allOptions;
   allOptions.add(options).add(deprecatedOptions);
 
@@ -329,6 +324,13 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
+    if (optionsMap.count("memory-max-size")) {
+      AD_LOG_WARN << "The option --memory-max-size is deprecated, use "
+                     "--memory-for-queries instead"
+                  << std::endl;
+      setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(
+          optionsMap["memory-max-size"].as<ad_utility::MemorySize>());
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
