@@ -10,6 +10,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -29,6 +31,30 @@ using ::testing::Pair;
 
 namespace {
 const ad_utility::RegexSet noRegexes{};
+
+// A `BlockWriterBase` with blocks of a single word, so that every committed
+// word is immediately handed to the block writer, and whose `AppendBlock`
+// counts its calls in `numAppendCalls` and then throws.
+class ThrowingAppendBlockWriter : public BlockWriterBase {
+ private:
+  std::atomic<size_t>& numAppendCalls_;
+
+ public:
+  explicit ThrowingAppendBlockWriter(std::atomic<size_t>& numAppendCalls)
+      : numAppendCalls_{numAppendCalls} {}
+
+  size_t blockSize() const override { return 1; }
+
+  AppendBlock prepare([[maybe_unused]] WordBlock block) override {
+    return [this]() {
+      ++numAppendCalls_;
+      throw std::runtime_error{"The vocabulary could not be written"};
+    };
+  }
+
+ private:
+  void finishImpl() override {}
+};
 }  // namespace
 
 // Test that the merged blocks are cut into segments of at least the given
@@ -104,6 +130,56 @@ TEST(SegmentPipeline, exceptionOfWriterIsPropagated) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       pipeline.finish(), ::testing::HasSubstr("could not be written"),
       std::runtime_error);
+}
+
+// Test that once a stage has failed, `push` ignores further blocks: it does not
+// throw, the blocks do not reach the writer, and `finish()` rethrows the
+// original exception.
+TEST(SegmentPipeline, pushAfterFailureIsIgnored) {
+  const std::string basename = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 1);
+  std::atomic<size_t> numAppendCalls = 0;
+  SingleVocabularyParallelWriter writer{
+      std::make_unique<ThrowingAppendBlockWriter>(numAppendCalls)};
+  SegmentPipeline<decltype(lessThan)> pipeline{
+      writer,
+      partialVocabularyIdMapFilenames(basename, 1),
+      1,
+      noRegexes,
+      lessThan,
+      /*maxSegmentsInFlight=*/1,
+      /*numWordsPerSegment=*/1};
+  auto blocks = makeMergedBlocks({{{"\"a\"", true, 0, 0}},
+                                  {{"\"b\"", true, 0, 1}},
+                                  {{"\"c\"", true, 0, 2}},
+                                  {{"\"d\"", true, 0, 3}}});
+  // Pushing the second block commits the segment of the first one, whose
+  // writing then fails.
+  pipeline.push(std::move(blocks[0]));
+  pipeline.push(std::move(blocks[1]));
+  ASSERT_TRUE(waitUntil([&pipeline]() { return pipeline.hasFailed(); }));
+  EXPECT_NO_THROW(pipeline.push(std::move(blocks[2])));
+  EXPECT_NO_THROW(pipeline.push(std::move(blocks[3])));
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      pipeline.finish(), ::testing::HasSubstr("could not be written"),
+      std::runtime_error);
+  EXPECT_EQ(numAppendCalls, 1u);
+}
+
+// Test that a pipeline without room for a single segment in flight is
+// rejected.
+TEST(SegmentPipeline, zeroSegmentsInFlightIsRejected) {
+  const std::string basename = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 1);
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SegmentPipeline<decltype(lessThan)>{
+          writer, partialVocabularyIdMapFilenames(basename, 1), 1, noRegexes,
+          lessThan, /*maxSegmentsInFlight=*/0}),
+      ::testing::HasSubstr("maxSegmentsInFlight_ > 0"));
 }
 
 // Test that an exception from the building of a segment (here: a violated
