@@ -400,6 +400,12 @@ int main(int argc, char** argv) {
                             ad_utility::ResourceMonitor::Mode::Truncate,
                             std::chrono::seconds{resourceUsageIntervalS});
     }
+    // When no `--kg-input-file` is given, the KG data is read from stdin (as
+    // documented in `--help`), except when only a text index is added to an
+    // existing index (`--add-text-index`), which needs no KG input.
+    if (inputFile.empty() && !config.onlyAddTextIndex_) {
+      inputFile.emplace_back("-");
+    }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =

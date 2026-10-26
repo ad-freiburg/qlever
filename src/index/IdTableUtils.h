@@ -12,6 +12,7 @@
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "index/SortConfig.h"
+#include "util/CancellationHandle.h"
 #include "util/Log.h"
 #include "util/blockSort/BlockIndirectSort.h"
 
@@ -19,21 +20,22 @@ class IdTableUtils {
  public:
   // The `sort` functions below sort in place (not stable) via
   // `blockIndirectSort`, as configured by the `sortConfig`. They block the
-  // calling thread, which therefore must not belong to its executor.
-  //
-  // TODO<RobinTF> Pass the query's cancellation handle once
-  // `blockIndirectSort` supports it.
+  // calling thread, which therefore must not belong to its executor. The sort
+  // regularly checks the `cancellationHandle` and throws a
+  // `CancellationException` when it has been cancelled. If the sort throws,
+  // the table is left in an unspecified state.
 
   // Sort the rows of `tab` by the column `keyColumn`.
   template <size_t WIDTH>
-  static void sort(IdTable* tab, const size_t keyColumn,
-                   const SortConfig& sortConfig) {
+  static void sort(
+      IdTable* tab, const size_t keyColumn, const SortConfig& sortConfig,
+      const ad_utility::SharedCancellationHandle& cancellationHandle) {
     sort<WIDTH>(
         tab,
         [keyColumn](const auto& a, const auto& b) {
           return a[keyColumn] < b[keyColumn];
         },
-        sortConfig);
+        sortConfig, cancellationHandle);
   }
 
   // Sort the rows of `tab` by the comparator `comp`.
@@ -47,19 +49,23 @@ class IdTableUtils {
       typename = std::enable_if_t<std::is_same_v<
           bool, std::invoke_result_t<C, typename IdTableStatic<WIDTH>::row_type,
                                      typename IdTableStatic<WIDTH>::row_type>>>>
-  static void sort(IdTable* tab, C comp, const SortConfig& sortConfig) {
+  static void sort(
+      IdTable* tab, C comp, const SortConfig& sortConfig,
+      const ad_utility::SharedCancellationHandle& cancellationHandle) {
     AD_LOG_DEBUG << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
-    ad_utility::blockSort::blockIndirectSort(stab, std::move(comp),
-                                             sortConfig.numTasksInFlight_,
-                                             sortConfig.executor_);
+    ad_utility::blockSort::blockIndirectSort(
+        stab, std::move(comp), sortConfig.numTasksInFlight_,
+        sortConfig.executor_, cancellationHandle);
     *tab = std::move(stab).toDynamic();
     AD_LOG_DEBUG << "Sort done.\n";
   }
 
   // Sort the rows of `idTable` lexicographically by the columns `sortCols`.
-  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols,
-                   const SortConfig& sortConfig);
+  static void sort(
+      IdTable& idTable, const std::vector<ColumnIndex>& sortCols,
+      const SortConfig& sortConfig,
+      const ad_utility::SharedCancellationHandle& cancellationHandle);
 
   // Return the number of distinct rows in the `input`. The input must have all
   // duplicates adjacent to each other (e.g. by being sorted), otherwise the

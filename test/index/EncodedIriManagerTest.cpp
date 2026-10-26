@@ -38,7 +38,7 @@ TEST(EncodedIriManger, SimpleExample) {
 TEST(EncodedIriManger, EncodingAndDecoding) {
   auto indices =
       getRandomIndices(0, (1ull << EncodedIriManager::NumDigits) - 1, 10'000);
-  std::vector<std::pair<std::string, uint64_t>> stringsAndEncodings;
+  std::vector<std::pair<std::string, Id::T>> stringsAndEncodings;
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
   EncodedIriManager encodedIriManager{prefixes};
   for (auto index : indices) {

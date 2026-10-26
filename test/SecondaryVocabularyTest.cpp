@@ -799,7 +799,6 @@ struct ContextWithSecondaryVocab {
              &cache_,
              ad_utility::testing::makeAllocator(
                  ad_utility::MemorySize::megabytes(100)),
-             SortPerformanceEstimator{},
              &namedResultCache_,
              materializedViews_,
              executor()} {}

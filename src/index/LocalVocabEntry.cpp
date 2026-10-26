@@ -115,3 +115,13 @@ LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
     std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
 }
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::reanchoredTo(
+    const LocalVocabContext& newContext) const {
+  AD_EXPENSIVE_CHECK(
+      !isIri() || !newContext.encodeAsId(toStringRepresentation()).has_value(),
+      "An IRI that the new index encodes directly in an `Id` must not be "
+      "stored in a `LocalVocabEntry`.");
+  return LocalVocabEntry{asLiteralOrIri(), newContext};
+}

@@ -40,8 +40,8 @@ CPP_template(typename UnderlyingVocabulary,
              typename CompressionWrapper =
                  ad_utility::vocabulary::FsstSquaredCompressionWrapper,
              size_t NumWordsPerBlock = 1UL << 20)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        CompressionWrapper>) class CompressedVocabulary {
+    requires ad_utility::vocabulary::CompressionWrapper<CompressionWrapper>)
+class CompressedVocabulary {
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
