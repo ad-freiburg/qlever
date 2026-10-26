@@ -1400,7 +1400,9 @@ class CompressedExternalIdTableSorter
   // and `parallelBlockMerge::parallelBlockMergeToRange`), which the caller can
   // combine with the runs of other sorters that have the same comparator and
   // the same number of columns into a single merge. Afterwards this sorter can
-  // only be cleared (once the returned input has been destroyed) or destroyed.
+  // be cleared (once the returned input has been destroyed) or destroyed, and
+  // a sorter without `moveResultOnMerge()` can still merge its runs itself via
+  // `getSortedBlocks`.
   template <size_t N = NumStaticCols>
   CompressedIdTableRunsInput<N> finishAndGetRunsInput() {
     static_assert(N == NumStaticCols || N == 0);
@@ -1412,9 +1414,13 @@ class CompressedExternalIdTableSorter
     AD_CONTRACT_CHECK(!mergeIsActive_.load());
     if (!this->transformAndPushLastBlock()) {
       // The single block has been sorted in place, but is still in memory.
+      // Write it like the last block of a larger input (which sorts it once
+      // more, but counts it as a written block, so that a later merge of this
+      // sorter reads it from the file like all the other runs).
       if (!this->currentBlock_.empty()) {
-        this->writer_.writeIdTable(std::move(this->currentBlock_).toDynamic());
+        this->transformAndWriteBlock(std::move(this->currentBlock_));
         this->resetCurrentBlock(false);
+        this->waitForFuture();
       }
     }
     this->isFirstIteration_ = false;

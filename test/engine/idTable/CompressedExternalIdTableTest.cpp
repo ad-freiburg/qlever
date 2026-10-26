@@ -1857,13 +1857,16 @@ TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
     ad_utility::deleteFile(filename, false);
   };
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
-  // Many runs, a single run (which `finishAndGetRunsInput` has to write to
-  // disk first, because the sorter keeps it in memory), and no run at all.
-  for (size_t numRows : {5'000u, 100u, 0u}) {
-    OspSorter<> sorter{
+  // A sorter whose blocks hold 100 rows for the input of 5'000 rows, and all
+  // the rows otherwise.
+  auto makeSorter = [&filename](size_t numRows) {
+    return OspSorter<>{
         filename, NUM_COLS,
         memoryForBlocksize(numRows == 5'000 ? 100 : 10'000, NUM_COLS),
         ad_utility::testing::makeAllocator(), 5_kB};
+  };
+  for (size_t numRows : {5'000u, 100u, 0u}) {
+    auto sorter = makeSorter(numRows);
     auto expected = pushRandomRows(sorter, numRows);
     {
       auto input = sorter.finishAndGetRunsInput();
@@ -1885,12 +1888,22 @@ TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
     EXPECT_THAT(concatenateBlocks(sorter.getSortedBlocks()),
                 ::testing::ElementsAreArray(expected2));
   }
+
+  // Without `moveResultOnMerge()` the sorter can still merge its runs itself
+  // afterwards, also the single run that `finishAndGetRunsInput` wrote to disk.
+  for (size_t numRows : {5'000u, 100u}) {
+    auto sorter = makeSorter(numRows);
+    sorter.moveResultOnMerge() = false;
+    auto expected = pushRandomRows(sorter, numRows);
+    { auto input = sorter.finishAndGetRunsInput(); }
+    EXPECT_THAT(concatenateBlocks(sorter.getSortedBlocks()),
+                ::testing::ElementsAreArray(expected))
+        << numRows;
+  }
 }
 
-// ___________________________________________________________________________
 // `mergeToSink` uses the parallel merge, which is not available in the C++17
 // backports mode.
-// ___________________________________________________________________________
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 namespace {
 using parallelBlockMergeTestHelpers::CollectingBlockSink;
