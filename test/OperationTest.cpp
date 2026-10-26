@@ -756,13 +756,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 // _____________________________________________________________________________
 TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
   auto idTable = makeIdTableFromVector({{}});
-  CustomGeneratorOperation operation{
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       getQec(), [](const IdTable& idTable) -> Result::Generator {
         co_yield {idTable.clone(), LocalVocab{}};
         // Work that is done after the last chunk, e.g. a filter that discards
         // the remaining input, has to be accounted for, too.
         std::this_thread::sleep_for(5ms);
-      }(idTable)};
+      }(idTable));
+  auto& operation = *operationPtr;
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
