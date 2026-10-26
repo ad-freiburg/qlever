@@ -143,9 +143,9 @@ TYPED_TEST(AllocatorBackendTest, ClearOnAllocationHook) {
   alloc.deallocate(p1, 1);
 }
 
-// The memory limit can be changed after construction: increasing always
-// succeeds, decreasing only as long as the difference is currently free.
-// A rejected decrease changes nothing.
+// Test that the memory limit can be changed after construction: increasing
+// always succeeds, decreasing only as long as the difference is currently
+// free, and a rejected decrease changes nothing.
 TYPED_TEST(AllocatorBackendTest, ChangeMemoryLimit) {
   static_assert(sizeof(int) == 4);
   auto alloc = TypeParam::makeLimited(20_B);
@@ -173,8 +173,8 @@ TYPED_TEST(AllocatorBackendTest, ChangeMemoryLimit) {
   EXPECT_EQ(alloc.amountMemoryLeft(), 16_B);
 }
 
-// Increasing the memory limit beyond the maximal `MemorySize` throws and
-// changes nothing.
+// Test that increasing the memory limit beyond the maximal `MemorySize` throws
+// and changes nothing.
 TYPED_TEST(AllocatorBackendTest, IncreaseMemoryLimitOverflow) {
   auto alloc = TypeParam::makeLimited(ad_utility::MemorySize::max());
   EXPECT_THROW(alloc.increaseMemoryLimit(1_B), std::overflow_error);

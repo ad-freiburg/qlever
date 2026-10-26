@@ -143,9 +143,8 @@ TEST(AllocatorPmr, ResourceIsEqual) {
               PolymorphicAllocator{otherAlloc.resource()});
 }
 
-// ____________________________________________________________________________
-// A plain platform resource (non-owning) enforces no limit, so it rejects
-// changing the limit.
+// Test that a plain platform resource (non-owning) enforces no limit, so it
+// rejects changing the limit.
 TEST(AllocatorPmr, FromResourceNoLimit) {
   ql::pmr::monotonic_buffer_resource platformPool;
   auto alloc = makePmrAllocatorFromResource<int>(&platformPool);

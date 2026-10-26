@@ -427,16 +427,14 @@ TEST(LibQlever, disableCaching) {
   }
 }
 
-// _____________________________________________________________________________
-// The runtime parameter `memory-for-queries` mirrors and controls the memory
-// limit of the engine's allocator.
+// Test that the runtime parameter `memory-for-queries` mirrors and controls
+// the memory limit of the engine's allocator.
 TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   using namespace ad_utility::memory_literals;
   EngineConfig ec = buildTestIndex("<s> <p> <o>.");
   ec.memoryLimit_ = 50_MB;
   Qlever engine{ec};
-  // Detach the parameter from the engine again before the engine dies, so
-  // that no later test can fire the update action into a destroyed instance.
+  // Restore the default state of the parameter for the later tests.
   absl::Cleanup cleanup = [] {
     auto runtimeParameters = globalRuntimeParameters.wlock();
     runtimeParameters->memoryForQueries_.clearOnUpdateAction();

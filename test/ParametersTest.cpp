@@ -66,11 +66,12 @@ TEST(Parameter, verifyParameterConstraint) {
   EXPECT_EQ(parameter.get(), 0);
 }
 
-// _____________________________________________________________________________
+// Test that a throwing `onUpdateAction` restores the old value, and that a
+// cleared action is not triggered anymore.
 TEST(Parameter, onUpdateActionThrowIsRolledBack) {
   Parameter<size_t, szt, toString> parameter{42, "test"};
 
-  // A throwing `onUpdateAction` restores the old value.
+  // The value stays at 100 when the action rejects 101.
   parameter.setOnUpdateAction([](size_t value) {
     if (value > 100) {
       throw std::runtime_error{"Test"};
