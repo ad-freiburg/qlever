@@ -1481,7 +1481,7 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that `IndexNestedLoopJoin` requires a cancellation handle.
 TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
   auto makeResult = []() {
     return std::make_shared<const Result>(makeIdTableFromVector({{1}}),

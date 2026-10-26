@@ -301,8 +301,9 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
   EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
-// _____________________________________________________________________________
-
+// Test that the function returned by `cancellationChecker` calls
+// `throwIfCancelled`: it pleases the watchdog and throws once the handle is
+// cancelled.
 TEST(CancellationHandle, cancellationCheckerCallsThrowIfCancelled) {
   CancellationHandle<ENABLED> handle;
   auto checker = handle.cancellationChecker();

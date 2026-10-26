@@ -889,7 +889,7 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that `SortedUnionImpl` requires a cancellation handle.
 TEST(Union, sortedUnionImplRequiresCancellationHandle) {
   auto* qec = ad_utility::testing::getQec();
   using Range = std::vector<Result::IdTableVocabPair>;
@@ -913,8 +913,8 @@ TEST(Union, sortedUnionImplRequiresCancellationHandle) {
       ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
-// The non-lazy merge of a sorted union checks for cancellation after every
-// `Union::chunkSize` merged rows.
+// Test that the non-lazy merge of a sorted union checks for cancellation
+// after every `Union::chunkSize` merged rows.
 TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
   auto* qec = ad_utility::testing::getQec();
   using Range = std::vector<Result::IdTableVocabPair>;
