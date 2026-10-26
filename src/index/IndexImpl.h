@@ -51,6 +51,7 @@
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
+#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
@@ -161,6 +162,10 @@ class IndexImpl {
   // The regexes whose matches are removed from a literal before it is
   // normalized, see `normalizeLiteralContent`.
   std::vector<std::shared_ptr<const re2::RE2>> normalizationRegexes_;
+  // If not empty, the `ql:has-word` and `ql:normalized` triples are only added
+  // for literals that are the object of a triple with one of these predicates
+  // (IRIs in angle brackets).
+  ad_utility::HashSet<std::string> wordTriplePredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -481,6 +486,9 @@ class IndexImpl {
   // with a single space. For example, with the regex `\(.*?\)`, the content
   // "Café (Paris), Olé!" becomes "cafe ole".
   std::string normalizeLiteralContent(std::string_view content) const;
+  // Set the `wordTriplePredicates_`. Throw if one of them is not an IRI in
+  // angle brackets.
+  void setWordTriplePredicates(const std::vector<std::string>& predicates);
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;

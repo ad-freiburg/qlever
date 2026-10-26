@@ -434,9 +434,9 @@ class Server {
       std::optional<QueryExecutionContext::PinResultWithName> pinResultWithName,
       bool accessTokenOk, QueryExecutionContext& qec);
 
-  // Plan a parsed query.
+  // Plan a parsed query. The planning and the execution use the cancellation
+  // handle of the `qec`.
   PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle,
                          const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(

@@ -1639,9 +1639,14 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
+    bool addWordTriples =
+        wordTriplePredicates_.empty() ||
+        (triple.predicate_.isIri() &&
+         wordTriplePredicates_.contains(
+             triple.predicate_.getIri().toStringRepresentation()));
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
-    if (addHasWordTriples_) {
+    if (addHasWordTriples_ && addWordTriples) {
       std::string_view content = lit.getContent();
       const auto& localeManager = vocab_.getLocaleManager();
       // Remove the accents before tokenizing: combining marks are not
@@ -1656,7 +1661,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
         ++result.wordFrequencies_[std::move(word)];
       }
     }
-    if (addNormalizedTriples_) {
+    if (addNormalizedTriples_ && addWordTriples) {
       auto normalized = normalizeLiteralContent(lit.getContent());
       if (!normalized.empty()) {
         result.normalized_ = std::move(normalized);
@@ -2208,6 +2213,21 @@ void IndexImpl::setPrefixesForEncodedValues(
     std::vector<encodedIri::Pattern> patterns) {
   encodedIriManager_ = EncodedIriManager{
       std::move(prefixesWithoutAngleBrackets), std::move(patterns)};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setWordTriplePredicates(
+    const std::vector<std::string>& predicates) {
+  wordTriplePredicates_.clear();
+  for (const std::string& predicate : predicates) {
+    if (!predicate.starts_with('<') || !predicate.ends_with('>')) {
+      throw std::runtime_error{absl::StrCat(
+          "The predicate \"", predicate,
+          "\" passed to `--word-triple-predicates` is not an IRI in angle "
+          "brackets")};
+    }
+    wordTriplePredicates_.insert(predicate);
+  }
 }
 
 // _____________________________________________________________________________

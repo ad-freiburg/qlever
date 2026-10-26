@@ -94,7 +94,7 @@ Result Sort::computeResult(bool requestLaziness) {
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
     if (input->idTableView().numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(input->cloneIdTable(),
+      return computeResultInMemory(input->cloneIdTable(cancellationChecker()),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
@@ -132,6 +132,7 @@ Result Sort::computeResult(bool requestLaziness) {
   IdTable combined{numColumns, allocator()};
   combined.reserve(totalRows);
   for (auto& block : collectedBlocks) {
+    checkCancellation();
     combined.insertAtEnd(block);
   }
   return computeResultInMemory(std::move(combined),
@@ -144,7 +145,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
   runtimeInfo().addDetail("is-external", "false");
 
   IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig(),
-                     cancellationHandle_);
+                     cancellationHandle());
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
@@ -176,7 +177,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      SortByColumns{sortColumnIndices_}, cancellationHandle_);
+      SortByColumns{sortColumnIndices_}, cancellationHandle());
 
   // Push the already collected blocks and the remaining blocks from the
   // iterator. For lazy input, the iterator yields `IdTableVocabPair` (move the

@@ -802,6 +802,33 @@ TEST(IndexTest, normalizedTriples) {
 }
 
 // _____________________________________________________________________________
+TEST(IndexTest, wordTriplePredicates) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.addHasWordTriples() = true;
+  index.addNormalizedTriples() = true;
+  auto process = [&index](std::string predicate) {
+    return index.processTriple(
+        TurtleTriple{iri("<s>"), iri(std::move(predicate)), lit("\"Café\"")});
+  };
+  // By default, the triples are added for all predicates.
+  auto result = process("<p>");
+  EXPECT_EQ(result.wordFrequencies_.size(), 1);
+  EXPECT_EQ(result.normalized_, "cafe");
+
+  index.setWordTriplePredicates({"<p>", "<q>"});
+  result = process("<q>");
+  EXPECT_EQ(result.wordFrequencies_.size(), 1);
+  EXPECT_EQ(result.normalized_, "cafe");
+  result = process("<r>");
+  EXPECT_TRUE(result.wordFrequencies_.empty());
+  EXPECT_EQ(result.normalized_, std::nullopt);
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setWordTriplePredicates({"<p>", "q"}),
+      ::testing::HasSubstr("is not an IRI in angle brackets"));
+}
+
+// _____________________________________________________________________________
 // The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
 // therefore have to start with `<`) and must be valid regular expressions;
 // otherwise the setter throws. Valid regexes are compiled and stored.

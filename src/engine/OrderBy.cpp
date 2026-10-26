@@ -265,7 +265,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   }
 
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->cloneIdTable();
+  IdTable idTable = subRes->cloneIdTable(cancellationChecker());
 
   size_t width = idTable.numColumns();
 
@@ -316,7 +316,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   ad_utility::callFixedSizeVi(
       width, [this, &idTable, &comparison](auto numColumns) {
         IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig(),
-                                       cancellationHandle_);
+                                       cancellationHandle());
       });
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
