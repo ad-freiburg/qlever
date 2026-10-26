@@ -521,7 +521,7 @@ Result::LazyResult Union::computeResultKeepOrder(
                   std::move(leftData), std::move(rightData), requestLaziness,
                   _columnOrigins, allocator(),
                   ql::span<const ColumnIndex, extent>{trimmedTargetOrder},
-                  std::move(applyPermutation)}};
+                  std::move(applyPermutation), cancellationHandle()}};
             });
       },
       std::move(leftRange), std::move(rightRange));

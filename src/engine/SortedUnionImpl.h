@@ -12,6 +12,8 @@
 #include "engine/Union.h"
 #include "engine/idTable/IdTable.h"
 #include "index/LocalVocab.h"
+#include "util/CancellationHandle.h"
+#include "util/views/ChunkedIotaView.h"
 
 namespace sortedUnion {
 // Helper struct that has the same layout as `Result::IdTableVocabPair` but
@@ -22,13 +24,19 @@ struct Wrapper {
 };
 
 // Move the data from a real `Result::IdTableVocabPair`.
-inline Result::IdTableVocabPair moveOrCopy(Result::IdTableVocabPair& element) {
+template <typename CheckCancellation>
+Result::IdTableVocabPair moveOrCopy(Result::IdTableVocabPair& element,
+                                    const CheckCancellation&) {
   return std::move(element);
 }
 
-// Copy the data from a `Wrapper`.
-inline Result::IdTableVocabPair moveOrCopy(const Wrapper& element) {
-  return {element.idTable_.clone(), element.localVocab_.clone()};
+// Copy the data from a `Wrapper`. The table might be large, so
+// `checkCancellation` is called regularly while copying.
+template <typename CheckCancellation>
+Result::IdTableVocabPair moveOrCopy(
+    const Wrapper& element, const CheckCancellation& checkCancellation) {
+  return {element.idTable_.clone(checkCancellation),
+          element.localVocab_.clone()};
 }
 
 // Represent one range of tables to be merged.
@@ -49,12 +57,13 @@ struct IterationData {
 
   // Fetch the next element from the range, make a copy if it's a `Wrapper`.
   // Otherwise move it. If the range is exhausted, return `std::nullopt`.
-  template <typename T>
-  std::optional<Result::IdTableVocabPair> passNext(T applyPermutation) {
+  template <typename T, typename CheckCancellation>
+  std::optional<Result::IdTableVocabPair> passNext(
+      T applyPermutation, const CheckCancellation& checkCancellation) {
     if (it_ == range_.end()) {
       return std::nullopt;
     }
-    Result::IdTableVocabPair pair = moveOrCopy(*it_.value());
+    Result::IdTableVocabPair pair = moveOrCopy(*it_.value(), checkCancellation);
     pair.idTable_ = applyPermutation(std::move(pair.idTable_), permutation_);
 
     index_ = 0;
@@ -63,10 +72,18 @@ struct IterationData {
   }
 
   // Append the remainder of the last partially consumed table to the current
-  // result table and merge the local vocabs.
-  void appendCurrent(IdTable& resultTable, LocalVocab& localVocab) {
-    resultTable.insertAtEnd(it_.value()->idTable_, index_, std::nullopt,
-                            permutation_, Id::makeUndefined());
+  // result table and merge the local vocabs. The table might be large, so it
+  // is appended in chunks, with a call to `checkCancellation` after each.
+  template <typename CheckCancellation>
+  void appendCurrent(IdTable& resultTable, LocalVocab& localVocab,
+                     const CheckCancellation& checkCancellation) {
+    const auto& table = it_.value()->idTable_;
+    for (auto [begin, end] :
+         ad_utility::chunkedIotaView(index_, table.size(), Union::chunkSize)) {
+      resultTable.insertAtEnd(table, begin, end, permutation_,
+                              Id::makeUndefined());
+      checkCancellation();
+    }
     localVocab.mergeWith(it_.value()->localVocab_);
     index_ = 0;
     ++it_.value();
@@ -74,9 +91,11 @@ struct IterationData {
 
   // For the non-lazy case just append the remaining tables to the aggregated
   // result table until the range is exhausted.
-  void appendRemaining(IdTable& resultTable, LocalVocab& localVocab) {
+  template <typename CheckCancellation>
+  void appendRemaining(IdTable& resultTable, LocalVocab& localVocab,
+                       const CheckCancellation& checkCancellation) {
     while (it_ != range_.end()) {
-      appendCurrent(resultTable, localVocab);
+      appendCurrent(resultTable, localVocab, checkCancellation);
     }
   }
 
@@ -114,20 +133,24 @@ struct SortedUnionImpl
   bool done_ = false;
   // Function forwarded from `Union`
   Func applyPermutation_;
+  ad_utility::SharedCancellationHandle cancellationHandle_;
 
   SortedUnionImpl(IterationData<Range1> data1, IterationData<Range2> data2,
                   bool requestLaziness,
                   const std::vector<std::array<size_t, 2>>& columnOrigins,
                   const ad_utility::AllocatorWithLimit<Id>& allocator,
                   ql::span<const ColumnIndex, SPAN_SIZE> comparatorView,
-                  Func applyPermutation)
+                  Func applyPermutation,
+                  ad_utility::SharedCancellationHandle cancellationHandle)
       : data1_{std::move(data1)},
         data2_{std::move(data2)},
         resultTable_{columnOrigins.size(), allocator},
         allocator_{allocator},
         requestLaziness_{requestLaziness},
         columnOrigins_{columnOrigins},
-        applyPermutation_{std::move(applyPermutation)} {
+        applyPermutation_{std::move(applyPermutation)},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
     if (requestLaziness) {
       resultTable_.reserve(Union::chunkSize);
     }
@@ -201,6 +224,12 @@ struct SortedUnionImpl
       localVocab_.mergeWith(data2_.it_.value()->localVocab_);
       size_t& index1 = data1_.index_;
       size_t& index2 = data2_.index_;
+      // In the lazy case, the result is yielded once per chunk. In the non-lazy
+      // case, this loop merges the complete result, so check for cancellation
+      // once per chunk instead.
+      size_t chunkEnd = requestLaziness_
+                            ? Union::chunkSize
+                            : resultTable_.size() + Union::chunkSize;
       while (index1 < idTable1.size() && index2 < idTable2.size()) {
         if (isSmaller(idTable1.at(index1), idTable2.at(index2))) {
           pushRow(true, idTable1.at(index1));
@@ -209,31 +238,36 @@ struct SortedUnionImpl
           pushRow(false, idTable2.at(index2));
           index2++;
         }
-        if (requestLaziness_ && resultTable_.size() >= Union::chunkSize) {
-          auto result = popResult();
-          advanceRangeIfConsumed();
-          return result;
+        if (resultTable_.size() >= chunkEnd) {
+          if (requestLaziness_) {
+            auto result = popResult();
+            advanceRangeIfConsumed();
+            return result;
+          }
+          cancellationHandle_->throwIfCancelled();
+          chunkEnd += Union::chunkSize;
         }
       }
       advanceRangeIfConsumed();
     }
+    auto check = cancellationHandle_->cancellationChecker();
     if (requestLaziness_) {
       if (data1_.index_ != 0) {
-        data1_.appendCurrent(resultTable_, localVocab_);
+        data1_.appendCurrent(resultTable_, localVocab_, check);
       }
       if (data2_.index_ != 0) {
-        data2_.appendCurrent(resultTable_, localVocab_);
+        data2_.appendCurrent(resultTable_, localVocab_, check);
       }
       if (!resultTable_.empty()) {
         return Result::IdTableVocabPair{std::move(resultTable_),
                                         std::move(localVocab_)};
       }
-      auto leftTable = data1_.passNext(applyPermutation_);
+      auto leftTable = data1_.passNext(applyPermutation_, check);
       return leftTable.has_value() ? std::move(leftTable)
-                                   : data2_.passNext(applyPermutation_);
+                                   : data2_.passNext(applyPermutation_, check);
     }
-    data1_.appendRemaining(resultTable_, localVocab_);
-    data2_.appendRemaining(resultTable_, localVocab_);
+    data1_.appendRemaining(resultTable_, localVocab_, check);
+    data2_.appendRemaining(resultTable_, localVocab_, check);
     done_ = true;
     return Result::IdTableVocabPair{std::move(resultTable_),
                                     std::move(localVocab_)};

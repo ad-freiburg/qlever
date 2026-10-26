@@ -272,7 +272,8 @@ std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
   const IdTableView<0>& leftTable = leftRes->idTableView();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+      _matchedColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
 
   auto nonMatchingEntries = nestedLoopJoin.computeLeftExistance();
   return std::optional{Result{
@@ -296,7 +297,8 @@ std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable(
   auto rightRes = _right->getResult(false);
 
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+      _matchedColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
   auto result = nestedLoopJoin.computeRightExistance(
       [this](const auto& idTable, LocalVocab localVocab,
              const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {

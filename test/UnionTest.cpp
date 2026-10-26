@@ -7,12 +7,14 @@
 #include <vector>
 
 #include "./engine/ValuesForTesting.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
 #include "engine/Sort.h"
+#include "engine/SortedUnionImpl.h"
 #include "engine/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
@@ -885,4 +887,28 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
     expectChildLimits(unionOperation, std::nullopt);
     expectResult(unionOperation, makeIdTableFromVector({{9}, {10}}));
   }
+}
+
+// _____________________________________________________________________________
+TEST(Union, sortedUnionImplRequiresCancellationHandle) {
+  auto* qec = ad_utility::testing::getQec();
+  using Range = std::vector<Result::IdTableVocabPair>;
+  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
+  std::vector<ColumnIndex> targetOrder{0};
+  auto makeUnion = [&](ad_utility::SharedCancellationHandle handle) {
+    sortedUnion::SortedUnionImpl sortedUnion{
+        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
+        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
+        false,
+        columnOrigins,
+        qec->getAllocator(),
+        ql::span<const ColumnIndex>{targetOrder},
+        [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
+        std::move(handle)};
+  };
+  EXPECT_NO_THROW(
+      makeUnion(std::make_shared<ad_utility::CancellationHandle<>>()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeUnion(nullptr),
+      ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }

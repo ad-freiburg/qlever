@@ -662,7 +662,8 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _joinColumns, std::move(leftRes), std::move(rightRes)};
+      _joinColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
 
   // This algorithm doesn't produce sorted output
   AD_CORRECTNESS_CHECK(resultSortedOn().empty());
@@ -670,8 +671,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto lazyResult =
       std::move(nestedLoopJoin)
           .computeOptionalJoin(!requestLaziness, getResultWidth(),
-                               cancellationHandle(), _right->getResultWidth(),
-                               keepJoinColumns_);
+                               _right->getResultWidth(), keepJoinColumns_);
   return requestLaziness
              ? Result{std::move(lazyResult), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(lazyResult)),
