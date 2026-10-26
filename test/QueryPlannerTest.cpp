@@ -37,6 +37,11 @@ QueryPlanner makeQueryPlanner() {
                       std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
+TEST(QueryPlanner, constructorRequiresQueryExecutionContext) {
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  EXPECT_ANY_THROW(QueryPlanner(nullptr, handle));
+}
+
 TEST(QueryPlanner, createTripleGraph) {
   using TripleGraph = QueryPlanner::TripleGraph;
   using Node = QueryPlanner::TripleGraph::Node;
@@ -221,6 +226,39 @@ TEST(QueryPlanner, testBFSLeaveOut) {
     out = tg.bfsLeaveOut(1, lo);
     ASSERT_EQ(2u, out.size());
   }
+}
+
+TEST(QueryPlanner, splitAtContextVars) {
+  ParsedQuery pq = parseQuery(
+      "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y> FILTER(?p2 = <Y>)}");
+  QueryPlanner qp = makeQueryPlanner();
+  auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+  const auto& origFilters = pq._rootGraphPattern._filters;
+  qlm::vector<SparqlFilter> filters{origFilters.begin(), origFilters.end(),
+                                    alloc()};
+  ASSERT_EQ(filters.size(), 1u);
+  using TextNodes = ad_utility::HashMap<std::string, qlm::vector<size_t>>;
+
+  // Without context variables the graph is returned unchanged.
+  TextNodes none;
+  EXPECT_EQ(tg.splitAtContextVars(filters, none).size(), 1u);
+
+  // Leaving out node 2 keeps the rest connected, so there is only one split.
+  TextNodes outside;
+  outside.emplace("?c", qlm::vector<size_t>{{2}, alloc()});
+  auto result = tg.splitAtContextVars(filters, outside);
+  ASSERT_EQ(result.size(), 1u);
+  EXPECT_EQ(result.at(0).first._nodeStorage.size(), 2u);
+  EXPECT_EQ(result.at(0).second.size(), 1u);
+
+  // Leaving out node 0 disconnects nodes 1 and 2, so there are two splits.
+  TextNodes inside;
+  inside.emplace("?c", qlm::vector<size_t>{{0}, alloc()});
+  result = tg.splitAtContextVars(filters, inside);
+  ASSERT_EQ(result.size(), 2u);
+  EXPECT_EQ(result.at(0).first._nodeStorage.size(), 1u);
+  EXPECT_EQ(result.at(1).first._nodeStorage.size(), 1u);
+  EXPECT_EQ(result.at(0).second.size() + result.at(1).second.size(), 1u);
 }
 
 TEST(QueryPlanner, indexScanZeroVariables) {

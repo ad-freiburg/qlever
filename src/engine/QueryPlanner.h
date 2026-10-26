@@ -136,6 +136,8 @@ class QueryPlanner {
                                     ad_utility::HashSet<size_t> leaveOut) const;
 
    private:
+    FRIEND_TEST(QueryPlanner, splitAtContextVars);
+
     qlm::vector<std::pair<TripleGraph, qlm::vector<SparqlFilter>>>
     splitAtContextVars(const qlm::vector<SparqlFilter>& origFilters,
                        ad_utility::HashMap<std::string, qlm::vector<size_t>>&
