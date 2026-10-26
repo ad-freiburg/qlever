@@ -17,11 +17,12 @@
 
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/IndexMetaData.h"
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/Executor.h"
 #include "util/File.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
@@ -113,11 +114,13 @@ class Permutation {
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
-  // `CompressedRelationMetaData::scan`.
+  // `CompressedRelationMetaData::scan`, which reads the blocks on the
+  // `executor`.
   IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesState& locatedTriplesState,
+               qlever::Executor executor,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -132,6 +135,23 @@ class Permutation {
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of this permutation.
+  // The `scanSpec` must not fix any of the columns, it is only used for its
+  // graph filter. See `CompressedRelationReader::getDistinctCol0Ids` for the
+  // exact semantics of `addGraphColumn` and `idFilter`.
+  //
+  // NOTE: `locatedTriplesState` and the `executor` (on which the blocks are
+  // read) have to be kept alive until the returned generator has been fully
+  // consumed.
+  cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+  getDistinctCol0Ids(const ScanSpecification& scanSpec, bool addGraphColumn,
+                     std::optional<std::vector<Id>> idFilter,
+                     const CancellationHandle& cancellationHandle,
+                     const LocatedTriplesState& locatedTriplesState,
+                     qlever::Executor executor) const;
+#endif
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
@@ -151,6 +171,8 @@ class Permutation {
   //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
   //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
   //   join-specific prefiltered block metadata.
+  // - The blocks are read and decompressed on the `executor`, see
+  //   `CompressedRelationReader::lazyScan` for the requirements.
   //
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
@@ -160,7 +182,7 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // A lazy scan together with the independent `CompressedRelationReader` it
@@ -174,19 +196,15 @@ class Permutation {
   // Like `lazyScan` above, but the scan is performed through a freshly created
   // `CompressedRelationReader` with an unlimited-memory allocator instead of
   // this permutation's shared reader. This allows the scan to run independently
-  // of memory constraints imposed on most queries.
-  //
-  // `numThreadsOverride`, if set, overrides the number of block read/decompress
-  // threads for this scan (otherwise the `lazy-index-scan-num-threads` runtime
-  // parameter is used, as for query scans). The runtime index rebuild uses this
-  // to throttle its read parallelism (and hence peak CPU) without affecting
-  // queries.
+  // of memory constraints imposed on most queries. The blocks are read on the
+  // `executor`; the runtime index rebuild uses this to throttle its read
+  // parallelism (and hence peak CPU) without affecting queries.
   LazyScanWithReader lazyScanWithUnlimitedReader(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
-      std::optional<size_t> numThreadsOverride = std::nullopt) const;
+      qlever::Executor executor) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
@@ -293,7 +311,7 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
       const LimitOffsetClause& limitOffset) const;
 
   // The base filename of the permutation without the suffix below

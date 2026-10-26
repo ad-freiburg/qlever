@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <initializer_list>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -20,12 +21,16 @@
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ChunkedForLoop.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
 #include "util/SourceLocation.h"
+#include "util/TransparentFunctors.h"
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
+#include "util/views/ChunkedIotaView.h"
 
 namespace columnBasedIdTable {
 // The `IdTable` class is QLever's central data structure. It is used to store
@@ -250,12 +255,16 @@ class IdTable {
   // TODO<joka921> implement a facility (probably via inheritance) where we can
   // also implement the deleted copy operations for C++17
 #ifndef QLEVER_CPP_17
+  // The `RequiresClausePosition` of our `.clang-format` would put the
+  // `= delete` and `= default` on separate lines.
+  // clang-format off
   IdTable(const IdTable&) requires(!isView) = delete;
   IdTable& operator=(const IdTable&) requires(!isView) = delete;
 
   //  Views are copyable, as they are cheap to copy.
   IdTable(const IdTable&) requires isView = default;
   IdTable& operator=(const IdTable&) requires isView = default;
+  // clang-format on
 
 #else
   IdTable(const IdTable&) = default;
@@ -500,30 +509,52 @@ class IdTable {
   // exception: If `this` is a view (because the `isView` template parameter is
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
-  // that the view points to
-  CPP_template(typename = void)(requires(isCloneable)) OwnedTable
-      clone() const {
+  // that the view points to. The columns are copied in chunks of `chunkSize`
+  // rows, with a call to `chunkOperation` (e.g. a cancellation check) after
+  // each chunk. With the default `Noop`, each column is copied in one chunk.
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(
+      requires(isCloneable&& columnsAreAllocatable)
+          CPP_and ql::concepts::invocable<ChunkOperation>) OwnedTable
+      clone(
+          ChunkOperation chunkOperation = {},
+          size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const {
+    const size_t numRows = size();
+    if constexpr (std::is_same_v<ChunkOperation, ad_utility::Noop>) {
+      chunkSize = std::max(numRows, size_t{1});
+    }
     Storage storage;
     for (const auto& column : getColumns()) {
-      storage.emplace_back(column.begin(), column.end(), getAllocator());
+      auto& target = storage.emplace_back(getAllocator());
+      target.reserve(numRows);
+      for (auto [begin, end] :
+           ad_utility::chunkedIotaView(size_t{0}, numRows, chunkSize)) {
+        target.insert(target.end(), column.begin() + begin,
+                      column.begin() + end);
+        std::invoke(chunkOperation);
+      }
     }
     return OwnedTable{std::move(storage), numColumns_, numRows_, allocator_};
   }
 
   // `moveOrClone` always returns an `OwnedTable`. For r-value `IdTables` (no
   // views), this moves the table. For l-value referenced `IdTable`s and
-  // all `IdTableView`s return a deep copy via `clone()`. The typical usage is
+  // all `IdTableView`s return a deep copy via `clone()`, with the given
+  // `chunkOperation` and `chunkSize`. The typical usage is
   // `auto newTable = AD_FWD(oldTable).moveOrClone()` meaning "I want to take
   // ownership of an `IdTable` that owns its data as efficiently as possible".
-  CPP_member auto moveOrClone() const& -> CPP_ret(OwnedTable)(
-                                           requires isCloneable) {
-    return clone();
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(requires isCloneable)
+      OwnedTable moveOrClone(
+          ChunkOperation chunkOperation = {},
+          size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const& {
+    return clone(std::move(chunkOperation), chunkSize);
   }
 
-  CPP_member auto moveOrClone() && -> CPP_ret(OwnedTable)(
-                                       requires isCloneable) {
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(requires isCloneable)
+      OwnedTable moveOrClone(
+          ChunkOperation chunkOperation = {},
+          size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) && {
     if constexpr (isView) {
-      return clone();
+      return clone(std::move(chunkOperation), chunkSize);
     } else {
       return std::move(*this);
     }
@@ -816,9 +847,19 @@ class IdTable {
             ql::ranges::fill(getColumn(i).subspan(oldSize), defaultValue);
             return;
           }
-          ql::ranges::copy(
-              table.getColumn(mappedIndex).subspan(begin, numInserted),
-              getColumn(i).begin() + oldSize);
+          // NOTE: Deliberately use `std::copy` instead of
+          // `ql::ranges::copy`, because only the former is reliably turned
+          // into a `std::memmove` for trivially copyable value types like
+          // `Id` (see the `static_assert` in `global/Id.h`). libstdc++ misses
+          // this optimization for `std::ranges::copy` before version 13.4
+          // (GCC bug 116754; 13.3 is the default on Ubuntu 24.04), and the
+          // `range-v3` implementation that `ql::ranges` uses in C++17 mode
+          // never has it at all. Without the `std::memmove` the compilers
+          // emit a scalar loop, which is significantly slower.
+          auto sourceColumn =
+              table.getColumn(mappedIndex).subspan(begin, numInserted);
+          std::copy(sourceColumn.begin(), sourceColumn.end(),
+                    getColumn(i).begin() + oldSize);
         });
   }
 
@@ -1007,5 +1048,36 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+// Check that the un/restricted RowReferences are specialized via isProxy (see
+// `IdTableRow.h`), for example for the dynamic and the static tables and for
+// views.
+static_assert(qlever::isProxy<IdTable::row_reference>);
+static_assert(qlever::isProxy<IdTable::const_row_reference>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference>);
+
+static_assert(qlever::isProxy<IdTable::row_reference::Base>);
+static_assert(qlever::isProxy<IdTable::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableStatic<3>::row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<3>::const_row_reference::Base>);
+
+// Rows, tables and views are no proxies.
+static_assert(!qlever::isProxy<IdTable::row_type>);
+static_assert(!qlever::isProxy<IdTable>);
+static_assert(!qlever::isProxy<IdTableView<3>>);
+
+// Type aliases for the columns of an `IdTable` (a mutable view, a read-only
+// view, and an owning column) and for the references to a single element (a
+// mutable and a const one). Currently just aliases for `ql::span<Id>`,
+// `ql::span<const Id>`, `std::vector<Id>`, `Id&` and `const Id&`; a later
+// commit switches them to storage-efficient split-column types and proxies,
+// once `IdTable` stores the payload and datatype of each `Id` in separate
+// arrays.
+using IdColumnRef = ql::span<Id>;
+using ConstIdColumnRef = ql::span<const Id>;
+using IdColumn = std::vector<Id>;
+using IdRef = Id&;
+using ConstIdRef = const Id&;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

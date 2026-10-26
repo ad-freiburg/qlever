@@ -17,6 +17,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 namespace {
 using namespace deltaTriplesTestHelpers;
 using ad_utility::testing::encodedIriManager;
@@ -59,7 +61,7 @@ TEST(ExecuteUpdate, executeUpdate) {
                 deltaTriples.updateAugmentedMetadata();
                 QueryPlanner qp{&qec, sharedHandle};
                 const auto qet = qp.createExecutionTree(pq);
-                ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
+                ExecuteUpdate::executeUpdate(index, pq, *qet, deltaTriples,
                                              sharedHandle);
               }
             });
@@ -81,8 +83,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager);
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         expectExecuteUpdateHelper(update, qec, *index);
         index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -103,8 +105,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager);
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };
@@ -244,11 +246,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       QueryPlanner qp{qec, sharedHandle};
       const auto qet = qp.createExecutionTree(pq);
       UpdateMetadata metadata;
-      auto result = qet.getResult(false);
+      auto result = qet->getResult(false);
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
-          index, pq, *result, qet.getVariableColumns(), sharedHandle,
+          index, pq, *result, qet->getVariableColumns(), sharedHandle,
           metadata));
-      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+      ExecuteUpdate::executeUpdate(index, pq, *qet, deltaTriples, sharedHandle);
     }
     return results;
   };

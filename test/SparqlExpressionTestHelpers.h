@@ -48,8 +48,7 @@ struct TestContext {
       table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
   // IDs of literals and entities in the vocabulary of the index.
@@ -145,6 +144,7 @@ inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   for (auto [first, second] : set._intervals) {
     *os << '{' << first << ", " << second << '}';
   }
+  *os << " of size " << set.size();
 }
 }  // namespace ad_utility
 

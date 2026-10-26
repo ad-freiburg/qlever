@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <optional>
 #include <sstream>
 #include <string_view>
 #include <thread>
@@ -139,6 +140,25 @@ TEST(ConcurrentProgressBar, zeroTotalIsComplete) {
   ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 0};
   EXPECT_THAT(progressBar.getFinalProgressString(),
               ::testing::HasSubstr("Steps: 0 of 0 (100.0%)"));
+}
+
+// When the total number of steps is not known in advance (`std::nullopt`),
+// the progress string only shows the count and the average speed, without a
+// total or a percentage.
+TEST(ConcurrentProgressBar, unknownTotal) {
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", std::nullopt, 10};
+  progressBar.add(10);
+  {
+    auto update = progressBar.update();
+    ASSERT_TRUE(update.has_value());
+    EXPECT_THAT(update->getProgressString(),
+                ::testing::HasSubstr("Steps: 10 [average speed"));
+    EXPECT_THAT(update->getProgressString(),
+                ::testing::Not(::testing::HasSubstr(" of ")));
+  }
+  std::string finalString = progressBar.getFinalProgressString();
+  EXPECT_THAT(finalString, ::testing::HasSubstr("Steps: 10 [average speed"));
+  EXPECT_THAT(finalString, ::testing::Not(::testing::HasSubstr(" of ")));
 }
 
 // Concurrent `add` and `update` calls from several threads: the counts are

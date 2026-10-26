@@ -121,15 +121,29 @@ int main(int argc, char** argv) {
       "start/end events is written next to the index files "
       "(`<index-basename>.metrics-log.jsonl`).");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
-      "Disable the resource-usage log. By default a TSV log of the RSS and "
-      "CPU usage of the server is written next to the index files "
-      "(`<index-basename>.server.resource-usage-log.tsv`).");
+      "Disable the resource-usage log. By default a TSV log is written next to "
+      "the index files (`<index-basename>.server.resource-usage-log.tsv`). "
+      "Each row holds the RSS, CPU and disk I/O of the server, the "
+      "system-wide I/O stall (Linux only) and the ID of a running index "
+      "rebuild.");
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(2),
       "The sampling interval of the resource-usage log in seconds.");
   add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
+  add("index-description",
+      po::value<std::string>()->notifier(
+          [&config](const std::string& d) { config.indexDescription_ = d; }),
+      "A description of the index (typically the dataset and its version). "
+      "It is returned by the API (`cmd=stats`, field `name-index`), which is "
+      "used, for example, by the QLever UI. Can also be changed while the "
+      "server is running, via the `index-description` API command.");
+  add("text-description",
+      po::value<std::string>()->notifier(
+          [&config](const std::string& d) { config.textDescription_ = d; }),
+      "A description of the text index, analogous to `--index-description` "
+      "(field `name-text-index`).");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&config.onlyPsoAndPos_),
       "Only load the PSO and POS permutations. This disables queries with "
@@ -238,7 +252,7 @@ int main(int argc, char** argv) {
   auto logLevelDescription = absl::StrCat(
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
       "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
       ") applies as an upper bound — messages above it are never emitted "
       "regardless of this setting.");
   add("log-level",
@@ -380,7 +394,8 @@ int main(int argc, char** argv) {
     }
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  noAccessCheck, std::move(metricsReader));
+                  noAccessCheck, std::move(metricsReader),
+                  resourceMonitor.indexRebuildIdTracker());
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {

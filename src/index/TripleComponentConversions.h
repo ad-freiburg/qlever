@@ -12,6 +12,8 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
+#include <variant>
 
 #include "global/Id.h"
 #include "global/VocabIndex.h"
@@ -60,6 +62,26 @@ class IndexImpl;
 [[nodiscard]] Id toValueId(TripleComponent&& tripleComponent,
                            const IndexImpl& index, LocalVocab& localVocab);
 
+// An `Id` or a `LocalVocabEntry` that has not (yet) been added to a
+// `LocalVocab`.
+using IdOrLocalVocabEntry = std::variant<Id, LocalVocabEntry>;
+
+// Convert `word` to an `Id` if it is an IRI that can be encoded directly in an
+// `Id` (see `LocalVocabContext::encodeAsId`), and else wrap it in a
+// `LocalVocabEntry`. Every `LocalVocabEntry` that stores an IRI has to be
+// created via this function (or `toValueId` above), so that no
+// `LocalVocabEntry` stores an encodable IRI. The index only contains the
+// encoded `Id` of such an IRI, so a `LocalVocabEntry` of it would not match it,
+// e.g. in joins.
+// TODO<RobinTF> Make the constructors of `LocalVocabEntry` that can store an
+// IRI private, so that this is enforced.
+//
+// NOTE: This does not look up `word` in the vocabularies of the index, use
+// `toValueId` for that.
+[[nodiscard]] IdOrLocalVocabEntry toIdOrLocalVocabEntry(
+    ad_utility::triple_component::LiteralOrIri word,
+    const LocalVocabContext& context);
+
 // Convert `tripleComponent` to an RDF literal, where a `std::string` is emitted
 // directly, an `int64_t` becomes an `xsd:integer` literal, and a `double`
 // becomes an `xsd:double` literal.
@@ -67,5 +89,36 @@ class IndexImpl;
 // typing of `Literal`s etc. It should be removed and its calls be replaced by
 // calls that work on the strongly typed `TripleComponent` directly.
 [[nodiscard]] std::string toRdfLiteral(const TripleComponent& tripleComponent);
+
+// Like `toRdfLiteral`, but return a view of the string that `tripleComponent`
+// already stores, instead of a copy of it. This works for variables, strings,
+// literals and IRIs; for the values that are directly encoded in a
+// `TripleComponent` (numbers, dates, geo points, ...) there is no such string
+// to point to, and `std::nullopt` is returned. In particular, this also
+// applies to IRIs that are stored as an encoded `Id` because they are covered
+// by the `EncodedIriManager` (see `TurtleParser::iri()`), so they don't have a
+// string representation to point to either. The returned view is only valid
+// as long as `tripleComponent`. Use this instead of `toRdfLiteral` on hot paths
+// where the result is only read (for example to look it up in a hash map), to
+// avoid an allocation per call.
+//
+// NOTE: This function is deliberately defined in the header. A
+// `std::optional<std::string_view>` is too large to be returned in registers,
+// so a call that cannot be inlined has to pass it via memory, which costs more
+// than the dispatch itself (measured: 0.8 ns vs 6.2 ns per call).
+[[nodiscard]] inline std::optional<std::string_view> toRdfLiteralView(
+    const TripleComponent& tripleComponent) {
+  if (tripleComponent.isVariable()) {
+    return tripleComponent.getVariable().name();
+  } else if (tripleComponent.isString()) {
+    return tripleComponent.getString();
+  } else if (tripleComponent.isLiteral()) {
+    return tripleComponent.getLiteral().toStringRepresentation();
+  } else if (tripleComponent.isIri()) {
+    return tripleComponent.getIri().toStringRepresentation();
+  } else {
+    return std::nullopt;
+  }
+}
 
 #endif  // QLEVER_SRC_INDEX_TRIPLECOMPONENTCONVERSIONS_H

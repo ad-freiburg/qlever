@@ -56,18 +56,13 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 // ____________________________________________________________________________
 updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
     const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-    Quads::BlankNodeAdder& blankNodeAdder) {
+    BlankNodeAdder& blankNodeAdder) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
     tripleGraph = std::get<GraphRef>(graph);
   }
-  auto transformTc =
-      [&blankNodeAdder](TripleComponent&& tc) -> TripleComponent {
-    if (tc.isString()) {
-      return blankNodeAdder.getBlankNodeIndex(tc.getString());
-    } else {
-      return std::move(tc);
-    }
+  auto transformTc = [&blankNodeAdder](TripleComponent&& tc) {
+    return blankNodeAdder.resolveParsedComponent(std::move(tc));
   };
   auto transformTurtleTriple = [&tripleGraph,
                                 &transformTc](TurtleTriple&& triple) {
@@ -91,8 +86,7 @@ ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
   return ResponseMiddleware(
       [graphIri](ResponseMiddleware::ResponseT&& response, const auto&) {
         response.result(http::status::created);
-        response.set(http::field::location,
-                     asStringViewUnsafe(graphIri.getContent()));
+        response.set(http::field::location, graphIri.getContent());
         return std::move(response);
       });
 }

@@ -4,6 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <array>
+#include <string_view>
 #include <utility>
 
 #include "gtest/gtest.h"
@@ -14,6 +16,25 @@
 
 using namespace ad_utility;
 
+// _____________________________________________________________________________
+TEST(ConstexprUtils, allDistinct) {
+  static_assert(allDistinct(std::array<int, 0>{}));
+  static_assert(allDistinct(std::array{1}));
+  static_assert(allDistinct(std::array{1, 2, 3}));
+  static_assert(!allDistinct(std::array{1, 1}));
+  static_assert(!allDistinct(std::array{1, 2, 1}));
+  static_assert(!allDistinct(std::array{1, 2, 2}));
+
+  // The intended use case: filename suffixes.
+  static_assert(allDistinct(std::array<std::string_view, 3>{"", ".a", ".b"}));
+  static_assert(!allDistinct(std::array<std::string_view, 3>{"", ".a", ".a"}));
+
+  // Also works at runtime.
+  EXPECT_TRUE(allDistinct(std::array{1, 2, 3}));
+  EXPECT_FALSE(allDistinct(std::array{3, 2, 3}));
+}
+
+// _____________________________________________________________________________
 TEST(ConstexprUtils, pow) {
   static_assert(pow(0, 0) == 1);
   static_assert(pow(0.0, 0) == 1);

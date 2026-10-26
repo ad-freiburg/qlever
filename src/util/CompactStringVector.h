@@ -12,19 +12,20 @@
 
 #include <cstdint>
 #include <string>
-#include <variant>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
 #include "util/Exception.h"
-#include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/Iterators.h"
-#include "util/ResetWhenMoved.h"
+#include "util/NoCopyNoMove.h"
+#include "util/OwnedOrViewedVector.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
+#include "util/UniqueCleanup.h"
 
 namespace detail {
 template <typename DataT>
@@ -54,13 +55,13 @@ class CompactVectorOfStrings {
   // owned vector (after `build()`, or after reading from a regular,
   // non-zero-copy serializer), or a non-owning view into externally-owned
   // memory (after `fromZeroCopyDeserializer`).
-  using DataStorage = std::vector<data_type>;
-  using OffsetStorage = std::vector<offset_type>;
-  using DataView = ql::span<const data_type>;
-  using OffsetView = ql::span<const offset_type>;
+  using DataStorage = ad_utility::OwnedOrViewedVector<data_type>;
+  using OffsetStorage = ad_utility::OwnedOrViewedVector<offset_type>;
+  using DataView = typename DataStorage::View;
+  using OffsetView = typename OffsetStorage::View;
 
-  std::variant<DataStorage, DataView> data_;
-  std::variant<OffsetStorage, OffsetView> offsets_;
+  DataStorage data_;
+  OffsetStorage offsets_;
 
  public:
   CompactVectorOfStrings() = default;
@@ -76,14 +77,36 @@ class CompactVectorOfStrings {
       fromZeroCopyDeserializer(S& serializer) {
     using namespace ad_utility::serialization;
     CompactVectorOfStrings result;
-    result.data_ = zeroCopyDeserializeToSpan<data_type>(serializer);
-    result.offsets_ = zeroCopyDeserializeToSpan<offset_type>(serializer);
+    result.data_ = DataStorage::fromZeroCopyDeserializer(serializer);
+    result.offsets_ = OffsetStorage::fromZeroCopyDeserializer(serializer);
     return result;
   }
 
   explicit CompactVectorOfStrings(
       const std::vector<std::vector<data_type>>& input) {
     build(input);
+  }
+
+  // Create a `CompactVectorOfStrings` directly from its storage layout: the
+  // concatenated `data` of all the elements and the `offsets` of the elements
+  // in `data` (one more than the number of elements, the last offset is the
+  // size of `data`; see `offsetsSpan()`). Throw if the `offsets` are not a
+  // valid layout for the `data` (start at `0`, non-decreasing, end at
+  // `data.size()`).
+  //
+  // NOTE: This is for callers that produce the elements in this layout anyway
+  // (for example with a counting sort), which thus avoid building them twice.
+  static CompactVectorOfStrings fromDataAndOffsets(
+      std::vector<data_type> data, std::vector<offset_type> offsets) {
+    AD_CONTRACT_CHECK(!offsets.empty() && offsets.front() == 0 &&
+                          offsets.back() == data.size() &&
+                          ql::ranges::is_sorted(offsets),
+                      "The offsets are not a valid layout for the data of a "
+                      "`CompactVectorOfStrings`");
+    CompactVectorOfStrings result;
+    result.data_ = DataStorage{std::move(data)};
+    result.offsets_ = OffsetStorage{std::move(offsets)};
+    return result;
   }
 
   void clear() { *this = CompactVectorOfStrings{}; }
@@ -98,23 +121,48 @@ class CompactVectorOfStrings {
           ql::ranges::sized_range<ql::ranges::range_value_t<T>>&& ad_utility::
               SimilarTo<ql::ranges::range_value_t<ql::ranges::range_value_t<T>>,
                         data_type>) void build(const T& input) {
-    auto& offsets = ownedOffsets();
-    auto& data = ownedData();
-    // Also make room for the end offset of the last element.
-    offsets.reserve(input.size() + 1);
+    // Check both before modifying either of them, so that a failed check
+    // leaves this object unchanged.
+    AD_CONTRACT_CHECK(data_.isOwned() && offsets_.isOwned(),
+                      "A `CompactVectorOfStrings` that is a zero-copy view "
+                      "cannot be built");
     size_t dataSize = 0;
-    for (const auto& element : input) {
+    offsets_.modify([&input, &dataSize](auto& offsets) {
+      // Also make room for the end offset of the last element.
+      offsets.reserve(input.size() + 1);
+      for (const auto& element : input) {
+        offsets.push_back(dataSize);
+        dataSize += element.size();
+      }
+      // The last offset is the offset right after the last element.
       offsets.push_back(dataSize);
-      dataSize += element.size();
-    }
-    // The last offset is the offset right after the last element.
-    offsets.push_back(dataSize);
+    });
 
-    data.reserve(dataSize);
+    data_.modify([&input, dataSize](auto& data) {
+      data.reserve(dataSize);
 
-    for (const auto& el : input) {
-      data.insert(data.end(), el.begin(), el.end());
-    }
+      for (const auto& el : input) {
+        data.insert(data.end(), el.begin(), el.end());
+      }
+    });
+  }
+
+  // Append a single `element` at the end. Only allowed if this object owns its
+  // storage (see `build`). The `element` must not point into this object.
+  void push_back(value_type element) {
+    AD_CONTRACT_CHECK(data_.isOwned() && offsets_.isOwned(),
+                      "A `CompactVectorOfStrings` that is a zero-copy view "
+                      "cannot be appended to");
+    data_.modify([&element](auto& data) {
+      data.insert(data.end(), element.begin(), element.end());
+    });
+    offsets_.modify([dataSize = data_.size()](auto& offsets) {
+      // The first element also adds the start offset of the elements.
+      if (offsets.empty()) {
+        offsets.push_back(0);
+      }
+      offsets.push_back(dataSize);
+    });
   }
 
   // This is a move-only type.
@@ -143,6 +191,15 @@ class CompactVectorOfStrings {
     return {ptr, size};
   }
 
+  // Return a copy of this class, which always owns its storage (even if this
+  // object is a non-owning, zero-copy view).
+  CompactVectorOfStrings clone() const {
+    CompactVectorOfStrings clone;
+    clone.offsets_ = offsets_.clone();
+    clone.data_ = data_.clone();
+    return clone;
+  }
+
   // Copy this class and apply the transformation `mappingFunction` to its
   // elements. The result always owns its storage.
   CPP_template(typename Func)(
@@ -150,9 +207,9 @@ class CompactVectorOfStrings {
                                                           data_type>)
       CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
-    clone.offsets_ = ::ranges::to_vector(offsetsSpan());
-    clone.data_ = ::ranges::to_vector(
-        dataSpan() | ql::views::transform(std::move(mappingFunction)));
+    clone.offsets_ = offsets_.clone();
+    clone.data_ = DataStorage{::ranges::to_vector(
+        dataSpan() | ql::views::transform(std::move(mappingFunction)))};
     return clone;
   }
 
@@ -170,132 +227,98 @@ class CompactVectorOfStrings {
   // `fromZeroCopyDeserializer` to obtain a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-      serializer << arg.dataSpan();
-      serializer << arg.offsetsSpan();
+      serializer << arg.data_;
+      serializer << arg.offsets_;
     } else {
-      auto& data = arg.data_.template emplace<DataStorage>();
-      auto& offsets = arg.offsets_.template emplace<OffsetStorage>();
-      serializer | data;
-      serializer | offsets;
+      serializer >> arg.data_;
+      serializer >> arg.offsets_;
     }
   }
 
- private:
   // Return a read-only view of the data, regardless of whether the storage
   // currently owns its elements or is a non-owning view.
-  DataView dataSpan() const {
-    return std::visit(
-        [](const auto& x) -> DataView { return {x.data(), x.size()}; }, data_);
-  }
+  DataView dataSpan() const { return data_.view(); }
 
   // Return a read-only view of the offsets, regardless of whether the
   // storage currently owns its elements or is a non-owning view.
-  OffsetView offsetsSpan() const {
-    return std::visit(
-        [](const auto& x) -> OffsetView { return {x.data(), x.size()}; },
-        offsets_);
-  }
-
-  // Access the owned vector alternatives. Throws (via `std::get`) if this
-  // object is currently a non-owning view, which is a programming error (a
-  // zero-copy view is read-only, so `build()` must not be called on it).
-  DataStorage& ownedData() { return std::get<DataStorage>(data_); }
-  OffsetStorage& ownedOffsets() { return std::get<OffsetStorage>(offsets_); }
+  // NOTE: The `i`-th element starts at the `i`-th offset, and the last offset
+  // is the end of the last element. The offsets are empty if this object has
+  // no elements and was never built (see `ready()`).
+  OffsetView offsetsSpan() const { return offsets_.view(); }
 };
 
 namespace detail {
 // Allows the incremental writing of a `CompactVectorOfStrings` directly to a
 // file.
 template <typename data_type>
-struct CompactStringVectorWriter {
+struct CompactStringVectorWriter : public ad_utility::NoCopy {
  private:
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
 
-  // The data members are encapsulated in a separate struct to make the
-  // definition of the move-assignment operator easier. NOTE: If you add
-  // additional data members to this class, add them inside the `Data` struct.
+  // The data members are encapsulated in a separate struct, which is managed by
+  // the `UniqueCleanup` below. NOTE: If you add additional data members to this
+  // class, add them inside the `Data` struct.
   struct Data {
     ad_utility::File file_;
     off_t startOfFile_{};
     std::vector<offset_type> offsets_{};
-    // A `CompactStringVectorWriter` that has been moved from may not call
-    // `finish()` any more in its destructor.
-    ad_utility::ResetWhenMoved<bool, true> finished_ = false;
     offset_type nextOffset_ = 0;
   };
-  Data d_;
   static_assert(std::is_nothrow_move_assignable_v<Data>);
   static_assert(std::is_nothrow_move_constructible_v<Data>);
 
+  // Write the offsets and return the moved file. Runs on destruction and when
+  // the writer is overwritten, unless `finish()` was called before.
+  struct Finisher {
+    ad_utility::File operator()(Data&& d) const {
+      d.offsets_.push_back(d.nextOffset_);
+      d.file_.seek(d.startOfFile_, SEEK_SET);
+      d.file_.write(&d.nextOffset_, sizeof(size_t));
+      d.file_.seek(0, SEEK_END);
+      ad_utility::serialization::FileWriteSerializer f{std::move(d.file_)};
+      f << d.offsets_;
+      return std::move(f).file();
+    }
+  };
+  // NOTE: This class is move-only. Because of this `UniqueCleanup`, the
+  // implicit move operations are correct: A moved-from writer doesn't write
+  // anything on destruction, and a move assignment first finishes the
+  // overwritten writer.
+  ad_utility::unique_cleanup::UniqueCleanup<Data, Finisher> d_;
+
  public:
   explicit CompactStringVectorWriter(const std::string& filename)
-      : d_{{filename, "w"}} {
-    commonInitialization();
-  }
+      : CompactStringVectorWriter{ad_utility::File{filename, "w"}} {}
 
   explicit CompactStringVectorWriter(ad_utility::File&& file)
-      : d_{std::move(file)} {
-    commonInitialization();
-  }
+      : d_{initialize(std::move(file)), Finisher{}} {}
 
   void push(const data_type* data, size_t elementSize) {
-    AD_CONTRACT_CHECK(!d_.finished_);
-    d_.offsets_.push_back(d_.nextOffset_);
-    d_.nextOffset_ += elementSize;
-    d_.file_.write(data, elementSize * sizeof(data_type));
+    AD_CONTRACT_CHECK(d_.isActive());
+    d_->offsets_.push_back(d_->nextOffset_);
+    d_->nextOffset_ += elementSize;
+    d_->file_.write(data, elementSize * sizeof(data_type));
   }
 
   // Finish writing, and return the moved file. If the return value is
   // discarded, then the file will be closed immediately by the destructor of
-  // the `File` class.
+  // the `File` class. Calling this again returns an empty `File`.
   ad_utility::File finish() {
-    if (d_.finished_) {
+    if (!d_.isActive()) {
       return {};
     }
-    d_.finished_ = true;
-    d_.offsets_.push_back(d_.nextOffset_);
-    d_.file_.seek(d_.startOfFile_, SEEK_SET);
-    d_.file_.write(&d_.nextOffset_, sizeof(size_t));
-    d_.file_.seek(0, SEEK_END);
-    ad_utility::serialization::FileWriteSerializer f{std::move(d_.file_)};
-    f << d_.offsets_;
-    return std::move(f).file();
-  }
-
-  ~CompactStringVectorWriter() {
-    ad_utility::terminateIfThrows(
-        [this]() { finish(); },
-        "Finishing the underlying File of a `CompactStringVectorWriter` "
-        "during destruction failed");
-  }
-
-  // The copy operations would be deleted implicitly (because `File` is not
-  // copyable.
-  CompactStringVectorWriter(const CompactStringVectorWriter&) = delete;
-  CompactStringVectorWriter& operator=(const CompactStringVectorWriter&) =
-      delete;
-
-  // The defaulted move constructor behave correctly because of the usage
-  // of `ResetWhenMoved` with the `finished` member.
-  CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
-
-  // The move assignment first has to `finish` the current object, which already
-  // might have been written to.
-  CompactStringVectorWriter& operator=(
-      CompactStringVectorWriter&& other) noexcept {
-    finish();
-    d_ = std::move(other.d_);
-    return *this;
+    return std::move(d_).runNow();
   }
 
  private:
-  // Has to be run by all the constructors
-  void commonInitialization() {
-    AD_CORRECTNESS_CHECK(d_.file_.isOpen());
-    // We don't know the data size yet.
-    d_.startOfFile_ = d_.file_.tell();
+  // Reserve the space for the data size, which is not known yet.
+  static Data initialize(ad_utility::File&& file) {
+    AD_CORRECTNESS_CHECK(file.isOpen());
+    Data d{std::move(file)};
+    d.startOfFile_ = d.file_.tell();
     size_t dataSizeDummy = 0;
-    d_.file_.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    d.file_.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    return d;
   }
 };
 static_assert(

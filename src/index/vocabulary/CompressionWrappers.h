@@ -89,7 +89,9 @@ struct DecoderMultiplexer {
 struct FsstCompressionWrapper : detail::DecoderMultiplexer<FsstDecoder> {
   using Base = detail::DecoderMultiplexer<FsstDecoder>;
   using Base::Base;
-  static FsstEncoder::BulkResult compressAll(const Strings& strings) {
+  // The `strings` may be a vector of `std::string`s or of `std::string_view`s.
+  template <typename StringRange = Strings>
+  static FsstEncoder::BulkResult compressAll(const StringRange& strings) {
     return FsstEncoder::compressAll(strings);
   }
 };
@@ -103,7 +105,9 @@ struct FsstSquaredCompressionWrapper
   using BulkResult =
       std::tuple<std::shared_ptr<std::string>, std::vector<std::string_view>,
                  FsstRepeatedDecoder<2>>;
-  static BulkResult compressAll(const Strings& strings) {
+  // The `strings` may be a vector of `std::string`s or of `std::string_view`s.
+  template <typename StringRange = Strings>
+  static BulkResult compressAll(const StringRange& strings) {
     auto [buffer, views, decoder1] = FsstEncoder::compressAll(strings);
     auto [buffer2, views2, decoder2] = FsstEncoder::compressAll(views);
     return {std::move(buffer2), std::move(views2),
@@ -119,9 +123,11 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
   using Base::Base;
   using BulkResult = std::tuple<bool, std::vector<std::string>, Decoder>;
 
-  static BulkResult compressAll(const Strings& strings) {
+  // The `strings` may be a vector of `std::string`s or of `std::string_view`s.
+  template <typename StringRange = Strings>
+  static BulkResult compressAll(const StringRange& strings) {
     PrefixCompressor compressor;
-    auto stringsCopy = strings;
+    Strings stringsCopy(strings.begin(), strings.end());
     ql::ranges::sort(stringsCopy);
     auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES);
     compressor.buildCodebook(prefixes);

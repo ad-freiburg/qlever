@@ -53,23 +53,28 @@ std::optional<Id> toValueIdIfNotString(
   return tripleComponent.visit(visitor);
 }
 
+// _____________________________________________________________________________
+IdOrLocalVocabEntry toIdOrLocalVocabEntry(
+    ad_utility::triple_component::LiteralOrIri word,
+    const LocalVocabContext& context) {
+  if (word.isIri()) {
+    if (auto id = context.encodeAsId(word.toStringRepresentation())) {
+      return id.value();
+    }
+  }
+  return LocalVocabEntry{std::move(word), context};
+}
+
 // ____________________________________________________________________________
 std::string toRdfLiteral(const TripleComponent& tripleComponent) {
-  if (tripleComponent.isVariable()) {
-    return tripleComponent.getVariable().name();
-  } else if (tripleComponent.isString()) {
-    return tripleComponent.getString();
-  } else if (tripleComponent.isLiteral()) {
-    return tripleComponent.getLiteral().toStringRepresentation();
-  } else if (tripleComponent.isIri()) {
-    return tripleComponent.getIri().toStringRepresentation();
-  } else {
-    EncodedIriManager ev;
-    auto [value, type] = ql::exportIds::idToStringAndTypeForEncodedValue(
-                             toValueIdIfNotString(tripleComponent, &ev).value())
-                             .value();
-    return absl::StrCat("\"", value, "\"^^<", type, ">");
+  if (auto view = toRdfLiteralView(tripleComponent)) {
+    return std::string{view.value()};
   }
+  EncodedIriManager ev;
+  auto [value, type] = ql::exportIds::idToStringAndTypeForEncodedValue(
+                           toValueIdIfNotString(tripleComponent, &ev).value())
+                           .value();
+  return absl::StrCat("\"", value, "\"^^<", type, ">");
 }
 
 // _____________________________________________________________________________

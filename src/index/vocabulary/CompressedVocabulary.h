@@ -40,14 +40,11 @@ CPP_template(typename UnderlyingVocabulary,
              typename CompressionWrapper =
                  ad_utility::vocabulary::FsstSquaredCompressionWrapper,
              size_t NumWordsPerBlock = 1UL << 20)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        CompressionWrapper>) class CompressedVocabulary {
+    requires ad_utility::vocabulary::CompressionWrapper<CompressionWrapper>)
+class CompressedVocabulary {
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
-  // We need to store two files, one for the words and one for the codebooks.
-  static constexpr std::string_view wordsSuffix = ".words";
-  static constexpr std::string_view decodersSuffix = ".codebooks";
 
   // Whether the underlying vocabulary has "holes", meaning that not every index
   // in `[0, endIndex())` has a word associated with it. This currently is the
@@ -67,6 +64,12 @@ CPP_template(typename UnderlyingVocabulary,
                     UnderlyingVocabulary>);
 
  public:
+  // Two files are stored, one for the words (which is the base filename of the
+  // `UnderlyingVocabulary`) and one for the codebooks. These suffixes are
+  // appended to the base filename of this vocabulary to obtain their names.
+  static constexpr std::string_view wordsSuffix = ".words";
+  static constexpr std::string_view decodersSuffix = ".codebooks";
+
   // The vocabulary is initialized using the `open()` method, the default
   // constructor leads to an empty vocabulary.
   CompressedVocabulary() = default;
@@ -84,8 +87,8 @@ CPP_template(typename UnderlyingVocabulary,
   // the enclosing class is itself constrained via `CPP_template`.
   CPP_template_2(typename S)(
       requires ad_utility::serialization::SupportsZeroCopyDeserialization<
-          UnderlyingVocabulary, S>) static CompressedVocabulary
-      fromZeroCopyDeserializer(S& serializer) {
+          UnderlyingVocabulary, S>)
+  static CompressedVocabulary fromZeroCopyDeserializer(S& serializer) {
     CompressedVocabulary result;
     result.underlyingVocabulary_ =
         UnderlyingVocabulary::fromZeroCopyDeserializer(serializer);
@@ -289,11 +292,12 @@ CPP_template(typename UnderlyingVocabulary,
     uint64_t counter_ = 0;
 
    public:
-    /// Constructor.
-    explicit DiskWriterFromUncompressedWords(
-        const std::string& filenameWords, const std::string& filenameDecoders)
-        : underlyingWriter_{filenameWords},
-          filenameDecoders_{filenameDecoders} {}
+    /// Constructor. The `filename` is the base filename of the vocabulary; the
+    /// names of the two files that are actually written are derived from it via
+    /// `wordsSuffix` and `decodersSuffix`.
+    explicit DiskWriterFromUncompressedWords(const std::string& filename)
+        : underlyingWriter_{absl::StrCat(filename, wordsSuffix)},
+          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
     uint64_t operator()(std::string_view uncompressedWord,
@@ -421,11 +425,12 @@ CPP_template(typename UnderlyingVocabulary,
     std::optional<uint64_t> lastIndex_ = std::nullopt;
 
    public:
-    // Constructor.
-    explicit DiskWriterWithExplicitIndices(const std::string& filenameWords,
-                                           const std::string& filenameDecoders)
-        : underlyingWriter_{filenameWords},
-          filenameDecoders_{filenameDecoders} {}
+    // Constructor. The `filename` is the base filename of the vocabulary; the
+    // names of the two files that are actually written are derived from it via
+    // `wordsSuffix` and `decodersSuffix`.
+    explicit DiskWriterWithExplicitIndices(const std::string& filename)
+        : underlyingWriter_{absl::StrCat(filename, wordsSuffix)},
+          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {}
 
     // This type can neither be copied nor moved (the user-declared destructor
     // below suppresses the implicit move operations). It is always used
@@ -504,6 +509,123 @@ CPP_template(typename UnderlyingVocabulary,
       std::conditional_t<underlyingHasHoles, DiskWriterWithExplicitIndices,
                          DiskWriterFromUncompressedWords<>>;
 
+  // The block-wise counterpart of the `DiskWriterFromUncompressedWords` (see
+  // `BlockWriterBase`), which writes the same files. A block is compressed in
+  // `prepare`, and the append step hands the compressed block to the block
+  // writer of the underlying vocabulary and stores the decoder.
+  //
+  // NOTE 1: There is one decoder per block, so every block but the last has to
+  // have exactly `NumWordsPerBlock` words, as the word-by-word writer cuts
+  // them.
+  //
+  // NOTE 2: This is a template for the same reason as
+  // `DiskWriterFromUncompressedWords`, see there.
+  template <typename UnderlyingVocab = UnderlyingVocabulary>
+  class BlockWriter : public BlockWriterBase {
+   private:
+    std::unique_ptr<BlockWriterBase> underlyingWriter_;
+    std::vector<typename CompressionWrapper::Decoder> decoders_;
+    std::string filenameDecoders_;
+    ad_utility::MemorySize uncompressedSize_ = bytes(0);
+    ad_utility::MemorySize compressedSize_ = bytes(0);
+    size_t numBlocks_ = 0u;
+    size_t numBlocksLargerWhenCompressed_ = 0u;
+    uint64_t numWords_ = 0;
+
+   public:
+    // Constructor, see `DiskWriterFromUncompressedWords`.
+    explicit BlockWriter(const std::string& filename)
+        : underlyingWriter_{UnderlyingVocab::makeBlockWriterPtr(
+              absl::StrCat(filename, wordsSuffix))},
+          filenameDecoders_{absl::StrCat(filename, decodersSuffix)} {}
+
+    size_t blockSize() const override { return NumWordsPerBlock; }
+
+    // Compress the `block` and prepare the compressed block for the underlying
+    // vocabulary. The append step appends the compressed block to the
+    // underlying vocabulary and stores its decoder.
+    AppendBlock prepare(WordBlock block) override {
+      AD_CONTRACT_CHECK(block.firstPosition_ % NumWordsPerBlock == 0 &&
+                        block.numWords() <= NumWordsPerBlock);
+      const size_t numWords = block.numWords();
+      const size_t uncompressedSize = block.data().size();
+      auto [buffer, compressedWords, decoder] =
+          CompressionWrapper::compressAll(block.words());
+      // The compressed block for the underlying vocabulary.
+      //
+      // NOTE: The `buffer` owns the memory that the `compressedWords` may
+      // point into, so it has to be kept alive until they are copied.
+      WordBlock compressed;
+      compressed.firstPosition_ = block.firstPosition_;
+      compressed.isExternal_.reserve(compressedWords.size());
+      // TODO<joka921> This copies all the compressed words from the `buffer`
+      // into the new `WordBlock`, which is unnecessary. Let the `WordBlock`
+      // take over the `buffer` directly instead.
+      for (size_t i = 0; i < compressedWords.size(); ++i) {
+        compressed.push(compressedWords[i], block.isExternal_[i]);
+      }
+      const size_t compressedSize = compressed.data().size();
+      return [this, numWords, uncompressedSize, compressedSize,
+              decoder = std::move(decoder),
+              appendUnderlying =
+                  underlyingWriter_->prepare(std::move(compressed))]() mutable {
+        AD_CONTRACT_CHECK(numWords_ % NumWordsPerBlock == 0);
+        numWords_ += numWords;
+        uncompressedSize_ += bytes(uncompressedSize);
+        compressedSize_ += bytes(compressedSize);
+        ++numBlocks_;
+        numBlocksLargerWhenCompressed_ +=
+            static_cast<size_t>(compressedSize > uncompressedSize);
+        decoders_.push_back(std::move(decoder));
+        std::move(appendUnderlying)();
+      };
+    }
+
+    // Finish if that has not happened yet, see
+    // `DiskWriterFromUncompressedWords`.
+    ~BlockWriter() override {
+      ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                    "Calling `finish` from the destructor of "
+                                    "`CompressedVocabulary::BlockWriter`");
+    }
+
+   private:
+    // Finish the underlying vocabulary and write the decoders, see
+    // `DiskWriterFromUncompressedWords::finishImpl`.
+    void finishImpl() override {
+      underlyingWriter_->finish();
+      ad_utility::serialization::FileWriteSerializer decoderWriter(
+          filenameDecoders_);
+      decoderWriter << decoders_;
+      auto compressionRatio =
+          (100ULL * std::max(compressedSize_.getBytes(), size_t(1))) /
+          std::max(uncompressedSize_.getBytes(), size_t(1));
+      std::string nameString =
+          readableName().empty() ? std::string{"vocabulary"} : readableName();
+      AD_LOG_INFO << "Finished writing compressed " << nameString
+                  << ", size = " << compressedSize_
+                  << " [uncompressed = " << uncompressedSize_
+                  << ", ratio = " << compressionRatio << "%]" << std::endl;
+      if (numBlocksLargerWhenCompressed_ > 0) {
+        AD_LOG_WARN
+            << "Number of blocks made larger by the compression instead "
+               "of smaller: "
+            << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
+            << std::endl;
+      }
+    }
+  };
+
+  // The files of the underlying vocabulary, which is stored under the base
+  // filename plus `wordsSuffix`, plus the file for the codebooks.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    addFileSuffixesWithPrefix(suffixes, wordsSuffix,
+                              UnderlyingVocabulary::fileSuffixes());
+    suffixes.emplace_back(decodersSuffix);
+    return suffixes;
+  }
+
   // Return a `unique_ptr<DiskWriterFromUncompressedWords>` that can be used to
   // create the vocabulary. For an underlying vocabulary with holes this throws,
   // because such a vocabulary requires an explicit index for each word (see
@@ -521,9 +643,23 @@ CPP_template(typename UnderlyingVocabulary,
           "Such a vocabulary can only be created by filtering an existing "
           "vocabulary.");
     } else {
-      return std::make_unique<DiskWriterFromUncompressedWords<>>(
-          absl::StrCat(filename, wordsSuffix),
-          absl::StrCat(filename, decodersSuffix));
+      return std::make_unique<DiskWriterFromUncompressedWords<>>(filename);
+    }
+  }
+
+  // Return the `BlockWriter` that writes to the given `filename`. Throws for
+  // an underlying vocabulary with holes, see `makeDiskWriterPtr`.
+  static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    if constexpr (underlyingHasHoles) {
+      (void)filename;
+      AD_THROW(
+          "A vocabulary with holes cannot be built word by word, because the "
+          "`WordWriterBase` interface cannot express the explicit indices. "
+          "Such a vocabulary can only be created by filtering an existing "
+          "vocabulary.");
+    } else {
+      return std::make_unique<BlockWriter<>>(filename);
     }
   }
 

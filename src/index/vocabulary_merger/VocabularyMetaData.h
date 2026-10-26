@@ -1,0 +1,208 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_VOCABULARYMETADATA_H
+#define QLEVER_SRC_INDEX_VOCABULARY_MERGER_VOCABULARYMETADATA_H
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "backports/StartsWithAndEndsWith.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "global/SpecialIds.h"
+#include "index/vocabulary_merger/SegmentLocalId.h"
+#include "util/HashMap.h"
+
+// NOTE: This class is the return type of `mergeVocabulary` and hence part of
+// the public interface of the vocabulary merger. It only lives in its own
+// header (instead of in `index/VocabularyMerger.h`, which is the user-facing
+// header and which includes this one) because it is understandable and
+// testable on its own.
+namespace ad_utility::vocabulary_merger {
+
+// The ID of the word with the given global `index` in the merged vocabulary.
+inline Id vocabIdFromIndex(uint64_t index) {
+  return Id::makeFromVocabIndex(VocabIndex::make(index));
+}
+
+// The metadata of a segment of the merged vocabulary (see
+// `index/vocabulary_merger/Segment.h`), with segment-local IDs: the range of
+// the words with each of the two special prefixes (see `VocabularyMetaData`
+// below), the special IDs, and the number of words. It is added to the
+// `VocabularyMetaData` of the whole vocabulary by `addSegment`, which turns
+// the segment-local IDs into global ones.
+struct SegmentMetaData {
+  using SegmentLocalId = detail::SegmentLocalId;
+  // The segment-local IDs of the first and the last word with a prefix.
+  struct LocalIdRange {
+    SegmentLocalId first_;
+    SegmentLocalId last_;
+    bool wasSeen_ = false;
+    void add(SegmentLocalId id) {
+      if (!std::exchange(wasSeen_, true)) {
+        first_ = id;
+      }
+      last_ = id;
+    }
+  };
+  LocalIdRange langTaggedPredicates_;
+  LocalIdRange internalEntities_;
+  std::vector<std::pair<std::string, SegmentLocalId>> specialIds_;
+  size_t numWords_ = 0;
+
+  // Add the next distinct `word` (not a blank node) with its segment-local
+  // `id`. The words have to be added in sorted order.
+  void addWord(std::string_view word, SegmentLocalId id) {
+    ++numWords_;
+    if (ql::starts_with(word, LANGUAGE_TAGGED_PREDICATE_PREFIX)) {
+      langTaggedPredicates_.add(id);
+      return;
+    }
+    if (ql::starts_with(word,
+                        QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
+      internalEntities_.add(id);
+      if (qlever::specialIds().contains(word)) {
+        specialIds_.emplace_back(std::string{word}, id);
+      }
+    }
+  }
+};
+
+// The result of a call to `mergeVocabulary` (see `index/VocabularyMerger.h`).
+struct VocabularyMetaData {
+  // This struct is used to incrementally construct the range of IDs that
+  // correspond to a given prefix. To use it, either pass all the words from
+  // the vocabulary to the member function `addIfWordMatches` in sorted order,
+  // or pass the index ranges of the matching words of consecutive segments to
+  // `extend` (see `addSegment`). After that, the range `[begin(), end())` is
+  // the range of all the words that start with the prefix.
+  struct IdRangeForPrefix {
+    explicit IdRangeForPrefix(std::string prefix)
+        : prefix_{std::move(prefix)} {}
+    // Check if `word` starts with the `prefix_`. If so, `wordIndex`
+    // will become part of the range that this struct represents. The function
+    // returns `true` in this case, else `false`. For this to work, all the
+    // words that start with the `prefix_` have to be passed in consecutively
+    // and their indices have to be consecutive and ascending.
+    bool addIfWordMatches(std::string_view word, size_t wordIndex) {
+      if (!ql::starts_with(word, prefix_)) {
+        return false;
+      }
+      extend(wordIndex, wordIndex);
+      return true;
+    }
+
+    // Extend the range by the words with the (global) indices `first` to
+    // `last`, which have to come after all the words added so far.
+    void extend(uint64_t first, uint64_t last) {
+      if (!beginWasSeen_) {
+        begin_ = vocabIdFromIndex(first);
+        beginWasSeen_ = true;
+      }
+      end_ = vocabIdFromIndex(last + 1);
+    }
+
+    Id begin() const { return begin_; }
+    Id end() const { return end_; }
+
+    // Return true if the `id` belongs to this range.
+    bool contains(Id id) const { return begin_ <= id && id < end_; }
+
+   private:
+    Id begin_ = Id::makeUndefined();
+    Id end_ = Id::makeUndefined();
+    std::string prefix_;
+    bool beginWasSeen_ = false;
+  };
+
+ public:
+  // This function has to be called for every *DISTINCT* word (IRI or literal,
+  // not blank nodes) and the index, which is assigned to this word by the merge
+  // procedure. It automatically updates the various prefix ranges, the total
+  // number of words, and the mapping of the special IDs.
+  void addWord(std::string_view word, size_t wordIndex) {
+    ++numWordsTotal_;
+    if (langTaggedPredicates_.addIfWordMatches(word, wordIndex)) {
+      return;
+    }
+    if (internalEntities_.addIfWordMatches(word, wordIndex)) {
+      if (globalSpecialIds_->contains(word)) {
+        specialIdMapping_[std::string{word}] = vocabIdFromIndex(wordIndex);
+      }
+    }
+  }
+
+  // Return the index of the next blank node and increment the internal counter
+  // of blank nodes. This has to be called for every distinct blank node that
+  // is encountered.
+  size_t getNextBlankNodeIndex() { return numBlankNodesTotal_++; }
+
+  // Add the metadata of the next `segment` of the vocabulary (see
+  // `SegmentMetaData`), whose segment-local IDs are turned into global
+  // indices by `toGlobalIndex`, and its `numBlankNodes`. The segments have to
+  // be added in the order of the vocabulary.
+  template <typename F>
+  void addSegment(const SegmentMetaData& segment, const F& toGlobalIndex,
+                  size_t numBlankNodes) {
+    numWordsTotal_ += segment.numWords_;
+    numBlankNodesTotal_ += numBlankNodes;
+    auto extend = [&toGlobalIndex](IdRangeForPrefix& range,
+                                   const SegmentMetaData::LocalIdRange& local) {
+      if (local.wasSeen_) {
+        range.extend(toGlobalIndex(local.first_), toGlobalIndex(local.last_));
+      }
+    };
+    extend(langTaggedPredicates_, segment.langTaggedPredicates_);
+    extend(internalEntities_, segment.internalEntities_);
+    for (const auto& [word, id] : segment.specialIds_) {
+      specialIdMapping_[word] = vocabIdFromIndex(toGlobalIndex(id));
+    }
+  }
+
+  // The mapping from the `qlever::specialIds` to their actual IDs.
+  // This is created on the fly by the calls to `addWord` or `addSegment`.
+  const auto& specialIdMapping() const { return specialIdMapping_; }
+  // The prefix range for the `@en@<predicate` style predicates.
+  const auto& langTaggedPredicates() const { return langTaggedPredicates_; }
+  // The prefix range for the internal IRIs in the `ql:` namespace.
+  const auto& internalEntities() const { return internalEntities_; }
+  // The number of words that were added via `addWord()` or `addSegment()`.
+  // Needs to return a reference to be used in combination with a
+  // `ProgressBar`.
+  const size_t& numWordsTotal() const { return numWordsTotal_; }
+
+  // Return true iff the `id` belongs to one of the two ranges that contain
+  // the internal IDs that were added by QLever and were not part of the
+  // input.
+  bool isQleverInternalId(Id id) const {
+    return internalEntities_.contains(id) || langTaggedPredicates_.contains(id);
+  }
+
+ private:
+  // The number of distinct words (size of the created vocabulary).
+  size_t numWordsTotal_ = 0;
+  // The number of distinct blank nodes that were found and immediately
+  // converted to an ID without becoming part of the vocabulary.
+  size_t numBlankNodesTotal_ = 0;
+  IdRangeForPrefix langTaggedPredicates_{
+      std::string{LANGUAGE_TAGGED_PREDICATE_PREFIX}};
+  IdRangeForPrefix internalEntities_{
+      std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
+
+  ad_utility::HashMap<std::string, Id> specialIdMapping_;
+  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
+      &qlever::specialIds();
+};
+}  // namespace ad_utility::vocabulary_merger
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_VOCABULARYMETADATA_H

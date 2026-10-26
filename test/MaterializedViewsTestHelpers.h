@@ -14,6 +14,7 @@
 
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
@@ -26,6 +27,8 @@
 #include "util/FilesystemHelpers.h"
 
 namespace materializedViewsTestHelpers {
+
+inline constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 namespace h = queryPlannerTestHelpers;
 
@@ -128,7 +131,8 @@ class MaterializedViewsTest : public ::testing::Test {
 
   // ___________________________________________________________________________
   std::shared_ptr<QueryExecutionContext> getQec() {
-    return qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
+    return qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot(),
+                                             executor());
   }
 
   // ___________________________________________________________________________
@@ -247,7 +251,8 @@ class MaterializedViewsPatternMatchingTest
     config.baseName_ = onDiskBase_;
     qlv_.emplace(config);
     manager_.emplace(onDiskBase_);
-    qec_ = qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
+    qec_ = qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot(),
+                                             executor());
   }
 
   // ___________________________________________________________________________
@@ -347,7 +352,8 @@ inline void expectNotSuitableForRewrite(
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   auto plan = qlv.parseAndPlanQuery(query);
-  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+  auto qec =
+      qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot(), executor());
   manager.writeViewToDisk(viewName, plan);
   auto view = manager.getView(viewName, qec.get());
   qpc.analyzeView(view, qec.get());
@@ -356,10 +362,12 @@ inline void expectNotSuitableForRewrite(
   // cache-key based rewriting, even for queries that (by design) are not
   // suitable for the pattern-based (star/chain) rewriting tested here. So
   // check the latter directly instead of relying on the overall return value.
-  const auto& graphPattern = plan.parsedQuery()._rootGraphPattern;
-  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(
-                     qec.get(), graphPattern._graphPatterns.at(0).getBasic())
-                  .empty());
+  const auto& firstPattern =
+      plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0);
+  if (const auto* basic =
+          std::get_if<parsedQuery::BasicGraphPattern>(&firstPattern)) {
+    EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), *basic).empty());
+  }
   manager.unloadViewIfLoaded(viewName);
 };
 
@@ -372,7 +380,6 @@ inline void expectRewrite(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(sourceLocation);
   qlv.writeMaterializedView(std::string{viewName}, std::string{viewQuery});
-  qlv.loadMaterializedView(std::string{viewName});
   qpExpect(qlv, testQuery, matcher, sourceLocation);
 };
 

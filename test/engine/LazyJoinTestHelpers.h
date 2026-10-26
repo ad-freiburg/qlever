@@ -58,10 +58,10 @@ class LazyJoinTestHelper {
   // size.
   void setupQecWithKnowledgeGraph(
       const std::string& kg,
-      std::optional<ad_utility::MemorySize> blockSize = std::nullopt) {
+      std::optional<size_t> rowsPerBlock = std::nullopt) {
     TestIndexConfig config{kg};
-    if (blockSize.has_value()) {
-      config.blocksizePermutations = blockSize.value();
+    if (rowsPerBlock.has_value()) {
+      config.rowsPerBlock = rowsPerBlock.value();
     }
     qec_ = getQec(std::move(config));
   }

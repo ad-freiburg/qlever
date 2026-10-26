@@ -119,25 +119,25 @@ TEST(GeoCellGrid, cellIndexFromBoundingBoxAndWktLiteral) {
 }
 
 // Test the round trip between a pair of cell index and position and the
-// annotated vocabulary index.
-TEST(GeoCellGrid, annotateIndexRoundtrip) {
+// vocabulary index.
+TEST(GeoCellGrid, indexFromCellAndPositionRoundtrip) {
   GeoCellGrid grid{4};
-  uint64_t annotated = grid.annotateIndex(5, 7);
+  uint64_t index = grid.indexFromCellAndPosition(5, 7);
 
   // `cellOfIndex` and `positionOfIndex` are the two inverses of
-  // `annotateIndex`.
-  EXPECT_EQ(grid.cellOfIndex(annotated), 5u);
-  EXPECT_EQ(grid.positionOfIndex(annotated), 7u);
+  // `indexFromCellAndPosition`.
+  EXPECT_EQ(grid.cellOfIndex(index), 5u);
+  EXPECT_EQ(grid.positionOfIndex(index), 7u);
 
-  // The annotated index has the documented bit layout, with the cell index
-  // above the position.
-  EXPECT_EQ(annotated, (uint64_t{5} << grid.numPositionBits()) | 7);
+  // The index has the documented bit layout, with the cell index above the
+  // position.
+  EXPECT_EQ(index, (uint64_t{5} << grid.numPositionBits()) | 7);
 
   // A cell index above the sentinel or a position that does not fit are
   // caught by the expensive checks.
   if (ad_utility::areExpensiveChecksEnabled) {
-    EXPECT_ANY_THROW(grid.annotateIndex(grid.sentinelCell() + 1, 0));
-    EXPECT_ANY_THROW(grid.annotateIndex(0, grid.maxNumWords()));
+    EXPECT_ANY_THROW(grid.indexFromCellAndPosition(grid.sentinelCell() + 1, 0));
+    EXPECT_ANY_THROW(grid.indexFromCellAndPosition(0, grid.maxNumWords()));
   }
 }
 

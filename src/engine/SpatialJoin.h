@@ -20,6 +20,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 using SpatialJoinBoundingBoxColumns =
     std::optional<std::pair<ColumnIndex, ColumnIndex>>;
@@ -54,7 +55,10 @@ class SpatialJoin : public Operation {
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
               bool substitutesFilterOp = false);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
@@ -171,6 +175,8 @@ class SpatialJoin : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // Get the internal variable names of bounding box columns.
   static std::pair<Variable, Variable> getBoundingBoxColumnNames(

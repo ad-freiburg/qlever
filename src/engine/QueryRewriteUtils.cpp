@@ -102,7 +102,7 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 
   auto left = resolveGeoOperand(call.left_, qec, generateUniqueVarName);
   auto right = resolveGeoOperand(call.right_, qec, generateUniqueVarName);
-  return std::make_shared<SpatialJoin>(
+  return qec->makeShared<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
           std::move(config), std::move(left.variable_),

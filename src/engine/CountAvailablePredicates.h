@@ -12,6 +12,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/CompactStringVector.h"
+#include "util/ContainersWithAllocator.h"
+#include "util/Executor.h"
 
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
@@ -49,11 +51,15 @@ class CountAvailablePredicates : public Operation {
 
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    using R = std::vector<QueryExecutionTree*>;
-    return subtree_ != nullptr ? R{subtree_.get()} : R{};
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    if (subtree_ == nullptr) {
+      return qlm::vector<QueryExecutionTree*>{allocator()};
+    }
+    return {{subtree_.get()}, allocator()};
   }
 
+ public:
   bool knownEmptyResult() override {
     if (subtree_ != nullptr) {
       return subtree_->knownEmptyResult();
@@ -90,13 +96,16 @@ class CountAvailablePredicates : public Operation {
    *                      relations should be counted.
    * @param patternColumnIdx The column containing the pattern IDs (previously
    * obtained via a scan of the `ql:has-pattern` predicate.
+   * @param executor The executor on which the counting runs in parallel (see
+   *                 `ad_utility::computeInParallelChunks`).
    */
   template <size_t I>
   static void computePatternTrick(const IdTableView<0>& input, IdTable* result,
                                   const CompactVectorOfStrings<Id>& patterns,
                                   size_t subjectColumnIdx,
                                   size_t patternColumnIdx,
-                                  RuntimeInformation& runtimeInfo);
+                                  RuntimeInformation& runtimeInfo,
+                                  const qlever::Executor& executor);
 
   // Special implementation for the full pattern trick. Count and expand the
   // patterns in the `patternColumn` of the `subresult`, which is the (possibly

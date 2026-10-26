@@ -367,6 +367,84 @@ TEST(QueryPlanner, testFilterAfterJoin) {
       qec);
 }
 
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3429 : A
+// filter must not be applied to a subtree in which one of its variables might
+// be UNDEF, because a subsequent join can still bind that variable, in which
+// case the filter has to be evaluated on the bound value.
+TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <r> <x>. <s> <r2> <y>.");
+
+  // `?p` might be UNDEF because of the `VALUES` clause. Applying the filter
+  // directly to the `VALUES` clause would remove the UNDEF row and thus make
+  // the whole result empty, although the correct result is "all triples with a
+  // predicate other than `<r>`".
+  auto undefValues = h::ValuesClause("VALUES (?p) { (UNDEF) }");
+  std::string queryWithUndef =
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { UNDEF } }";
+  // The greedy planner applies the filter to the index scan, where `?p` is
+  // always defined.
+  h::expectGreedy(queryWithUndef,
+                  h::Join(h::Sort(undefValues),
+                          h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+                  qec);
+  // The dynamic programming planner applies it after the join.
+  h::expectDynamicProgramming(
+      queryWithUndef,
+      h::Filter("?p != <r>",
+                h::Join(h::Sort(undefValues), scan("?s", "?p", "?o"))),
+      qec);
+
+  // The definedness is tracked per variable: `?s` is always defined by the
+  // `VALUES` clause, so the filter on `?s` may still be applied to it (and to
+  // the index scan), while the filter on the possibly undefined `?o` may only
+  // be applied at the very end.
+  std::string queryWithTwoFilters =
+      "SELECT * { ?s <r> ?x . VALUES (?s ?o) { (<s> UNDEF) } "
+      "FILTER(?s != <x>) FILTER(?o != <y>) }";
+  auto valuesWithFilter = h::Sort(h::Filter(
+      "?s != <x>", h::ValuesClause("VALUES (?s\t?o) { (<s> UNDEF) }")));
+  h::expectGreedy(
+      queryWithTwoFilters,
+      h::Filter("?o != <y>",
+                h::Join(valuesWithFilter,
+                        h::Filter("?s != <x>", scan("?s", "<r>", "?x")))),
+      qec);
+
+  // Sanity check that filters are still applied as early as possible if all
+  // their variables are always defined.
+  h::expectGreedy(
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { <r2> } }",
+      h::Join(h::Sort(h::Filter("?p != <r>",
+                                h::ValuesClause("VALUES (?p) { (<r2>) }"))),
+              h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+      qec);
+}
+
+// Test that a non-deterministic filter is applied only at the end of the
+// group graph pattern, not to one side of a join.
+TEST(QueryPlanner, nonDeterministicFiltersAreAppliedLast) {
+  auto scan = h::IndexScanFromStrings;
+  auto join = h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y"));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3) }",
+                  h::Join(h::Filter("?o > 3", scan("?s", "<p>", "?o")),
+                          scan("?s", "<q>", "?y")));
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3 && RAND() < 0.5) }",
+      h::Filter("?o > 3 && RAND() < 0.5", join));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+                  h::Filter("RAND() < 0.5", join));
+  h::expectDynamicProgramming(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+      h::Filter("RAND() < 0.5", join));
+  // The same holds for an `EXISTS` with a non-deterministic argument.
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y "
+      "FILTER EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) } }",
+      h::Filter("EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) }",
+                h::ExistsJoin(join, ::testing::_)));
+}
+
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
@@ -491,7 +569,7 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
       "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
       "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
   QueryPlanner qp = makeQueryPlanner();
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
 
   // There are four possible outcomes of this test with the same size
   // estimate. It is currently very hard to make the query planning
@@ -584,7 +662,7 @@ qet-width: 3
 }
 )xxx");
 
-  auto actual = strip(qet.getCacheKey());
+  auto actual = strip(qet->getCacheKey());
 
   if (actual != possible1 && actual != possible2 && actual != possible3 &&
       actual != possible4 && actual != possible5) {
@@ -592,7 +670,7 @@ qet-width: 3
     /*
     FAIL() << "query execution tree is none of the possible trees, it is "
               "actually "
-           << qet.getCacheKey() << '\n' << actual << '\n'
+           << qet->getCacheKey() << '\n' << actual << '\n'
            */
   }
 }
@@ -612,9 +690,9 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
       "FILTER (?1 != fb:m.018mts)"
       "} LIMIT 300");
   QueryPlanner qp = makeQueryPlanner();
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_TRUE(qet.isVariableCovered(Variable{"?1"}));
-  ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
+  auto qet = qp.createExecutionTree(pq);
+  ASSERT_TRUE(qet->containsVariable(Variable{"?1"}));
+  ASSERT_TRUE(qet->containsVariable(Variable{"?0"}));
 }
 
 TEST(QueryPlanner, testSimpleOptional) {
@@ -630,6 +708,13 @@ TEST(QueryPlanner, testSimpleOptional) {
       h::OrderBy({{Variable{"?b"}, ::OrderBy::AscOrDesc::Asc}},
                  h::OptionalJoin(scan("?a", "<rel1>", "?b"),
                                  scan("?a", "<rel2>", "?c"))));
+  // The second OPTIONAL is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <rel1> ?b OPTIONAL { ?a <rel2> ?c } "
+      "OPTIONAL { ?a <rel3> ?d } }",
+      h::OptionalJoin(h::OptionalJoin(scan("?a", "<rel1>", "?b"),
+                                      scan("?a", "<rel2>", "?c")),
+                      scan("?a", "<rel3>", "?d")));
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
@@ -2490,8 +2575,27 @@ TEST(QueryPlanner, CountAvailablePredicates) {
 // by the query planner.
 TEST(QueryPlanner, UnboundMinusIgnored) {
   h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
-  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
-            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect("SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } }",
+            h::QetWithWarnings({"MINUS clause that shares no variables"},
+                               h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/3556:
+  // The variables of a MINUS are not part of its result, so they must not
+  // connect a later MINUS.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+               h::IndexScanFromStrings("?a", "<is-a>", "?y")));
+  // The same holds for a later OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } "
+      "OPTIONAL { ?c <is-a> ?d } }",
+      h::CartesianProductJoin(
+          h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+          h::NeutralOptional(h::IndexScanFromStrings("?c", "<is-a>", "?d"))));
 }
 
 // ___________________________________________________________________________
@@ -2499,6 +2603,20 @@ TEST(QueryPlanner, SimpleMinus) {
   h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?a <is-a> ?b}}",
             h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
                      h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // The second MINUS is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } MINUS { ?a <is-a> ?d } }",
+      h::Minus(h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                        h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+               h::IndexScanFromStrings("?a", "<is-a>", "?d")));
+  // A MINUS is connected to the variables of a preceding OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b OPTIONAL { ?a <is-a> ?c } "
+      "MINUS { ?c <is-a> ?d } }",
+      h::Minus(h::Sort(h::OptionalJoin(
+                   h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c"))),
+               h::IndexScanFromStrings("?c", "<is-a>", "?d")));
 }
 
 // ___________________________________________________________________________
@@ -2560,7 +2678,10 @@ TEST(QueryPlanner, DatasetClause) {
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "} }",
-      h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)));
+      h::Bind(h::GroupBy({Variable{"?p"}, Variable{internalVar(0)}}, {},
+                         h::Sort(scan("<d>", "?p", "<z2>", {}, g2,
+                                      {Variable{internalVar(0)}}, {3}))),
+              internalVar(0), Variable{"?g"}));
 
   // A complex example with graph variables.
   h::expect(
@@ -2572,7 +2693,10 @@ TEST(QueryPlanner, DatasetClause) {
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
-          h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
+          h::Bind(h::GroupBy({Variable{"?p"}, Variable{internalVar(0)}}, {},
+                             h::Sort(scan("<d>", "?p", "<z2>", {}, g2,
+                                          {Variable{internalVar(0)}}, {3}))),
+                  internalVar(0), Variable{"?g"}),
           scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
           scan("<e>", "?p", "<z3>", {}, g1)));
 }
@@ -2640,7 +2764,24 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
                      {Variable{internalVar(0)}}, {3})));
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
-      scan("?x", "?p", "?g", {}, NamedTag{}));
+      h::Bind(scan("?x", "?p", "?g", {}, NamedTag{}, {Variable{internalVar(0)}},
+                   {3}),
+              internalVar(0), Variable{"?g"}));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyGraphPattern) {
+  h::expect("SELECT ?g WHERE { GRAPH ?g {} }",
+            h::CartesianProductJoin(h::DistinctGraphs(), h::NeutralElement()));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, graphSubqueryWithoutScan) {
+  h::expect(
+      "SELECT ?x WHERE { GRAPH ?g { { SELECT ?x WHERE { VALUES ?x { 1 } } } } "
+      "}",
+      h::CartesianProductJoin(h::DistinctGraphs(),
+                              h::ValuesClause("VALUES (?x) { (1) }")));
 }
 
 // _____________________________________________________________________________
@@ -2693,6 +2834,18 @@ TEST(QueryPlanner, Describe) {
       h::Describe(::testing::_, h::IndexScanFromStrings(
                                     "?y", "<p>", "<o>", {},
                                     ad_utility::HashSet<std::string>{"<g>"})));
+  // A trailing `VALUES` clause restricts the WHERE clause (the input of the
+  // `Describe`), not the result of the `Describe`.
+  h::expect(
+      "DESCRIBE ?y { ?y <p> ?o } VALUES ?y { <a> }",
+      h::Describe(::testing::_,
+                  h::Join(h::IndexScanFromStrings("?y", "<p>", "?o"),
+                          h::Sort(h::ValuesClause("VALUES (?y) { (<a>) }")))));
+  // The same holds for LIMIT and OFFSET.
+  h::expect("DESCRIBE ?y { ?y <p> ?o } LIMIT 2 OFFSET 1",
+            h::Describe(::testing::_,
+                        h::WithLimitOffset({2, 1}, h::IndexScanFromStrings(
+                                                       "?y", "<p>", "?o"))));
 }
 
 // ____________________________________________________________________________
@@ -2702,6 +2855,27 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY (?x)", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
+}
+
+// Test that a group with many `FILTER (NOT) EXISTS` clauses is planned
+// quickly. These filters used to be applied speculatively in every round of
+// the dynamic programming, which made planning time and memory exponential in
+// their number (about four times per clause).
+TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
+  std::string query = R"(
+  SELECT ?v WHERE {
+    ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .
+    FILTER NOT EXISTS { ?v <q0> ?x0 . FILTER (?x0 != ?w1) }
+    FILTER NOT EXISTS { ?v <q1> ?x1 . FILTER (?x1 != ?w1) }
+    FILTER NOT EXISTS { ?v <q2> ?x2 . FILTER (?x2 != ?w1) }
+    FILTER NOT EXISTS { ?v <q3> ?x3 . FILTER (?x3 != ?w1) }
+    FILTER NOT EXISTS { ?v <q4> ?x4 . FILTER (?x4 != ?w1) }
+    FILTER NOT EXISTS { ?v <q5> ?x5 . FILTER (?x5 != ?w1) }
+    FILTER NOT EXISTS { ?v <q6> ?x6 . FILTER (?x6 != ?w1) }
+    FILTER NOT EXISTS { ?v <q7> ?x7 . FILTER (?x7 != ?w1) }
+  })";
+  EXPECT_NO_THROW(
+      h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
 }
 
 // ____________________________________________________________________________
@@ -2812,6 +2986,68 @@ TEST(QueryPlanner, Exists) {
                                                   {Permutation::Enum::OSP}),
                           h::IndexScanFromStrings("?s", "?p", "?o",
                                                   {Permutation::Enum::SPO}))));
+
+  // A `FILTER` with an `EXISTS` may be applied to several subtrees, which then
+  // must not share the column of the `ExistsJoin` (see GitHub issue #3555).
+  auto filterExistsEmpty = [](const auto& subtree) {
+    return h::Filter("EXISTS {}", h::ExistsJoin(subtree, h::NeutralElement()));
+  };
+  h::expect(
+      "SELECT * { ?x ?y ?z . ?a ?b ?c FILTER EXISTS {} }",
+      h::CartesianProductJoin(filterExistsEmpty(xyz), filterExistsEmpty(abc)));
+  auto filterExistsSRB = [](const auto& subtree) {
+    return h::Filter(
+        "EXISTS { ?s <r> ?b }",
+        h::ExistsJoin(subtree, h::IndexScanFromStrings("?s", "<r>", "?b")));
+  };
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER EXISTS { ?s <r> ?b } }",
+      h::Join(filterExistsSRB(h::IndexScanFromStrings("?s", "<p>", "?o")),
+              filterExistsSRB(h::IndexScanFromStrings("?s", "<q>", "?y"))));
+
+  // The `ExistsJoin` adds a column for the result of the `EXISTS`, which is
+  // then hidden by the `Filter`.
+  using ::testing::Pair;
+  auto variableColumnsAre = [](auto... columns) {
+    return AD_PROPERTY(QueryExecutionTree, getVariableColumns,
+                       ::testing::UnorderedElementsAre(columns...));
+  };
+  auto column = [](const std::string& variable, ColumnIndex columnIndex) {
+    return Pair(Var{variable}, makeAlwaysDefinedColumn(columnIndex));
+  };
+  auto existsColumn = [](ColumnIndex columnIndex) {
+    return Pair(AD_PROPERTY(Var, name, HasSubstr("?ql_internal_exists_")),
+                makeAlwaysDefinedColumn(columnIndex));
+  };
+  auto filterExistsSRBWithColumns =
+      [&](const auto& subtree,
+          const std::string& otherVariable) -> h::QetMatcher {
+    return ::testing::AllOf(
+        h::Filter(
+            "EXISTS { ?s <r> ?b }",
+            ::testing::AllOf(
+                h::ExistsJoin(subtree,
+                              h::IndexScanFromStrings("?s", "<r>", "?b")),
+                variableColumnsAre(column("?s", 0), column(otherVariable, 1),
+                                   existsColumn(2)))),
+        variableColumnsAre(column("?s", 0), column(otherVariable, 1)));
+  };
+  h::expect("SELECT * { ?s <p> ?o FILTER EXISTS { ?s <r> ?b } }",
+            filterExistsSRBWithColumns(
+                h::IndexScanFromStrings("?s", "<p>", "?o"), "?o"));
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER EXISTS { ?s <r> ?b } }",
+      ::testing::AllOf(
+          h::Join(filterExistsSRBWithColumns(
+                      h::IndexScanFromStrings("?s", "<p>", "?o"), "?o"),
+                  filterExistsSRBWithColumns(
+                      h::IndexScanFromStrings("?s", "<q>", "?y"), "?y")),
+          // The hidden columns of the `ExistsJoin`s are still present in the
+          // result (columns 2 and 4), but not visible.
+          // TODO<StripColumns> Adapt once `Filter` can strip columns.
+          AD_PROPERTY(QueryExecutionTree, getResultWidth, ::testing::Eq(5)),
+          variableColumnsAre(column("?s", 0), column("?o", 1),
+                             column("?y", 3))));
 }
 
 // _____________________________________________________________________________
@@ -2900,6 +3136,63 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
       "SELECT * WHERE { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 }",
       h::CartesianProductJoin(h::IndexScanFromStrings("?s1", "?p1", "?o1"),
                               h::IndexScanFromStrings("?s2", "?p2", "?o2")));
+}
+
+// Test that inside a `GRAPH ?g` clause the graph variable connects an OPTIONAL
+// to the preceding patterns that bind it, but a MINUS only if `?g` is in scope
+// on both sides.
+TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
+  auto scan = [](std::string s, std::string p, std::string o) {
+    return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},
+                                   NamedTag{}, {Variable{"?g"}}, {3});
+  };
+  // A MINUS that shares no variable with the preceding triple is ignored.
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?a <q> ?y } } }",
+            h::Minus(h::Sort(scan("?a", "<p>", "?b")),
+                     h::Sort(scan("?a", "<q>", "?y"))));
+  // The implicit graph column of the index scans doesn't connect a MINUS, also
+  // not if the preceding pattern is a nested group (see
+  // https://github.com/ad-freiburg/qlever/issues/3678).
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  // The graph variable only connects a MINUS if it is in scope on both sides.
+  auto anyTree = ::testing::A<const QueryExecutionTree&>();
+  auto isMinus = h::Minus(anyTree, anyTree);
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b MINUS { ?x <q> ?y } } }",
+            ::testing::Not(isMinus));
+  h::expect("SELECT * { GRAPH ?g { { ?g <p> ?b } MINUS { ?x <q> ?y } } }",
+            ::testing::Not(isMinus));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?g <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b MINUS { ?g <q> ?y } } }", isMinus);
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?g { <g1> } ?a <p> ?b "
+      "MINUS { ?x <q> ?y VALUES ?g { <g1> } } } }",
+      isMinus);
+  // The variables of a nested MINUS are not in scope.
+  h::expect(
+      "SELECT * { GRAPH ?g { ?g <p> ?b "
+      "MINUS { ?x <q> ?y MINUS { ?g <r> ?x } } } }",
+      ::testing::Not(isMinus));
+  // The graph variable connects an OPTIONAL, no matter whether the preceding
+  // pattern is a triple or a nested group.
+  auto optionalJoin = h::OptionalJoin(h::Sort(scan("?a", "<p>", "?b")),
+                                      h::Sort(scan("?x", "<q>", "?y")));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
+  // Also when the graph variable is used explicitly.
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b OPTIONAL { ?g <q> ?y } } }",
+            h::OptionalJoin(::testing::A<const QueryExecutionTree&>(),
+                            ::testing::A<const QueryExecutionTree&>()));
+  // But only if the preceding pattern binds the graph variable.
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?v { 1 } OPTIONAL { ?x <q> ?y } } }",
+      h::CartesianProductJoin(h::ValuesClause("VALUES (?v) { (1) }"),
+                              h::NeutralOptional(scan("?x", "<q>", "?y"))));
 }
 
 // _____________________________________________________________________________
@@ -3109,6 +3402,59 @@ TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
                            h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
 }
 
+// Test that a join that is pushed into the children of a `UNION` at the root
+// of a subquery does not join on the variables that the subquery hides.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3688.
+TEST(QueryPlanner, distributiveJoinInUnionKeepsHiddenVariablesHidden) {
+  // With `strip-columns` disabled, the `UNION` (the root of the subquery) only
+  // hides `?z`, which is still visible in its children. The join that is pushed
+  // into the children must not join on this `?z`.
+  auto cleanupDistributive =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  auto cleanupStrip =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+  auto qec = ad_utility::testing::getQec("<a> <b> <c> . <a> <b> <d> .");
+
+  // Plan `SELECT * { { SELECT ?x ?q { <left> UNION <right> } } ?x ?q ?z }` and
+  // check that every candidate plan yields `expectedSize` rows.
+  auto test = [&qec](std::string_view left, std::string_view right,
+                     size_t expectedSize,
+                     ad_utility::source_location sourceLocation =
+                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(sourceLocation);
+    QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+    auto query = parseQuery(absl::StrCat("SELECT * { { SELECT ?x ?q { ", left,
+                                         " UNION ", right, " } } ?x ?q ?z }"));
+    auto plans = qp.createExecutionTrees(query);
+
+    // Make sure that the plan with the join pushed into the `UNION` is among
+    // the candidates, so that this test actually tests something.
+    EXPECT_TRUE(ql::ranges::any_of(plans, [](const auto& plan) {
+      return std::dynamic_pointer_cast<Union>(plan._qet->getRootOperation()) !=
+             nullptr;
+    }));
+    for (const auto& plan : plans) {
+      qec->clearCacheUnpinnedOnly();
+      EXPECT_THAT(*plan._qet, h::hasVariables({"?x", "?q", "?z"}));
+      EXPECT_EQ(plan._qet->getResult()->idTableView().size(), expectedSize);
+    }
+  };
+
+  // The hidden `?z` only appears in the left or the right branch. The subquery
+  // yields `(<a>, <b>)` twice and the empty solution once, each of which is
+  // compatible with both triples.
+  test("{ ?x ?q ?z }", "{ }", 6);
+  test("{ }", "{ ?x ?q ?z }", 6);
+  // The hidden `?z` appears in both branches. The subquery yields `(<a>, <b>)`
+  // four times, each of which is compatible with both triples.
+  test("{ ?x ?q ?z }", "{ ?x ?q ?z }", 8);
+  // Same, but `?z` is bound to different columns in the two branches. The right
+  // branch yields `(<c>, <b>)` and `(<d>, <b>)`, which are compatible with
+  // neither triple.
+  test("{ ?x ?q ?z }", "{ ?z ?q ?x }", 4);
+}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
@@ -3184,7 +3530,17 @@ TEST(QueryPlanner, postQueryValuesClause) {
   h::expect("SELECT ?s ?p1 ?o1 { ?s ?p1 ?o1 } VALUES ?p1 { <pred> }",
             h::Join(h::IndexScanFromStrings("?s", "?p1", "?o1"),
                     h::Sort(h::ValuesClause("VALUES (?p1) { (<pred>) }"))));
-  h::expect("SELECT * { } VALUES () { () }", h::NeutralElement());
+  h::expect("SELECT * { } VALUES () { () }",
+            h::CartesianProductJoin(h::NeutralElement(),
+                                    h::ValuesClause("VALUES () { () }")));
+  // Without variables, the trailing `VALUES` clause must not be ignored: zero
+  // rows make the result empty and multiple rows duplicate its rows.
+  h::expect("SELECT ?s { ?s ?p ?o } VALUES () { }",
+            h::CartesianProductJoin(h::IndexScanFromStrings("?s", "?p", "?o"),
+                                    h::ValuesClause("VALUES () {  }")));
+  h::expect("SELECT ?s { ?s ?p ?o } VALUES () { () () }",
+            h::CartesianProductJoin(h::IndexScanFromStrings("?s", "?p", "?o"),
+                                    h::ValuesClause("VALUES () { () () }")));
   h::expect(
       "SELECT * { } VALUES (?x ?y) { (1 2) }",
       h::CartesianProductJoin(h::NeutralElement(),
@@ -3346,20 +3702,8 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         "SELECT * WHERE { GRAPH ?g { ?a <label>* ?b . VALUES ?a { UNDEF } } }",
         h::transitivePath(
             left, right, 0, std::numeric_limits<size_t>::max(),
-            h::Join(
-                h::Distinct(
-                    {0, 1},
-                    // The sorts of index scans are because of missing graph
-                    // permutations.
-                    h::Union(h::Sort(h::IndexScanFromStrings(
-                                 "?a", "?internal_property_path_variable_a",
-                                 "?internal_property_path_variable_b", {},
-                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
-                             h::Sort(h::IndexScanFromStrings(
-                                 "?internal_property_path_variable_c",
-                                 "?internal_property_path_variable_d", "?a", {},
-                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
-                h::Sort(h::ValuesClause("VALUES (?a) { (UNDEF) }"))),
+            h::EmptyPath(Variable{"?a"}, Variable{"?g"},
+                         h::ValuesClause("VALUES (?a) { (UNDEF) }")),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings(
                 "?_QLever_internal_variable_qp_0", "<label>",
@@ -3367,46 +3711,23 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                 {Variable{"?g"}}, {3}))));
     h::expect(
         "SELECT * WHERE { GRAPH ?g { ?a <label>* ?b . VALUES ?a { 1 } } }",
-        h::transitivePath(
-            left, right, 0, std::numeric_limits<size_t>::max(),
-            h::Join(
-                h::Distinct(
-                    {0, 1},
-                    // The sorts of index scans are because of missing graph
-                    // permutations.
-                    h::Union(h::Sort(h::IndexScanFromStrings(
-                                 "?a", "?internal_property_path_variable_a",
-                                 "?internal_property_path_variable_b", {},
-                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
-                             h::Sort(h::IndexScanFromStrings(
-                                 "?internal_property_path_variable_c",
-                                 "?internal_property_path_variable_d", "?a", {},
-                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
-                h::Sort(h::ValuesClause("VALUES (?a) { (1) }"))),
-            // Sort by ?g
-            h::Sort(h::IndexScanFromStrings(
-                "?_QLever_internal_variable_qp_0", "<label>",
-                "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                {Variable{"?g"}}, {3}))));
+        h::transitivePath(left, right, 0, std::numeric_limits<size_t>::max(),
+                          h::EmptyPath(Variable{"?a"}, Variable{"?g"},
+                                       h::ValuesClause("VALUES (?a) { (1) }")),
+                          // Sort by ?g
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                              {Variable{"?g"}}, {3}))));
 
     h::expectWithGivenBudgets(
         "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>* ?b } }",
         h::transitivePath(
             left, right, 0, std::numeric_limits<size_t>::max(),
-            h::MultiColumnJoin(
-                h::Sort(h::ValuesClause("VALUES (?g\t?a) { (1 1) }")),
-                h::Distinct(
-                    {0, 1},
-                    // The sorts of index scans are because of missing graph
-                    // permutations.
-                    h::Union(h::Sort(h::IndexScanFromStrings(
-                                 "?a", "?internal_property_path_variable_a",
-                                 "?internal_property_path_variable_b", {},
-                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
-                             h::Sort(h::IndexScanFromStrings(
-                                 "?internal_property_path_variable_c",
-                                 "?internal_property_path_variable_d", "?a", {},
-                                 NamedTag{}, {Variable{"?g"}}, {3}, 2))))),
+            // The child already provides the graph variable, so the pairs of
+            // value and graph are checked against the knowledge graph.
+            h::EmptyPath(Variable{"?a"}, Variable{"?g"},
+                         h::ValuesClause("VALUES (?g\t?a) { (1 1) }")),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings(
                 "?_QLever_internal_variable_qp_0", "<label>",
@@ -3419,26 +3740,11 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         "SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }",
         h::transitivePath(
             left2, right, 0, std::numeric_limits<size_t>::max(),
-            h::Join(h::IndexScanFromStrings("?g", "?h", "?i"),
-                    h::Distinct(
-                        {0, 1},
-                        // The sorts of index scans are because of missing graph
-                        // permutations.
-                        h::Union(
-                            h::Sort(h::IndexScanFromStrings(
-                                "?g", "?internal_property_path_variable_a",
-                                "?internal_property_path_variable_b", {},
-                                NamedTag{},
-                                {Variable{
-                                    "?_Qlever_internal_transitive_path_graph"}},
-                                {3}, 2)),
-                            h::Sort(h::IndexScanFromStrings(
-                                "?internal_property_path_variable_c",
-                                "?internal_property_path_variable_d", "?g", {},
-                                NamedTag{},
-                                {Variable{
-                                    "?_Qlever_internal_transitive_path_graph"}},
-                                {3}, 2))))),
+            // We join on the graph variable itself, so an internal helper
+            // variable is used for the graph column.
+            h::EmptyPath(Variable{"?g"},
+                         Variable{"?_Qlever_internal_transitive_path_graph"},
+                         h::IndexScanFromStrings("?g", "?h", "?i")),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings(
                 "?_QLever_internal_variable_qp_0", "<label>",
@@ -3452,42 +3758,24 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
   using HS = ad_utility::HashSet<std::string>;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
-  h::expect(
-      "SELECT * WHERE { GRAPH <abc> { ?x a* ?y } } ",
-      h::transitivePath(
-          left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct({0}, h::Union(h::IndexScanFromStrings(
-                                        "?internal_property_path_variable_x",
-                                        "?internal_property_path_variable_a",
-                                        "?internal_property_path_variable_b",
-                                        {}, HS{"<abc>"}, {}, {}, 1),
-                                    h::IndexScanFromStrings(
-                                        "?internal_property_path_variable_c",
-                                        "?internal_property_path_variable_d",
-                                        "?internal_property_path_variable_x",
-                                        {}, HS{"<abc>"}, {}, {}, 1))),
-          h::IndexScanFromStrings(
-              "?_QLever_internal_variable_qp_0",
-              "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-              "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
-  h::expect(
-      "SELECT * FROM <abc> WHERE { ?x a* ?y } ",
-      h::transitivePath(
-          left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct({0}, h::Union(h::IndexScanFromStrings(
-                                        "?internal_property_path_variable_x",
-                                        "?internal_property_path_variable_a",
-                                        "?internal_property_path_variable_b",
-                                        {}, HS{"<abc>"}, {}, {}, 1),
-                                    h::IndexScanFromStrings(
-                                        "?internal_property_path_variable_c",
-                                        "?internal_property_path_variable_d",
-                                        "?internal_property_path_variable_x",
-                                        {}, HS{"<abc>"}, {}, {}, 1))),
-          h::IndexScanFromStrings(
-              "?_QLever_internal_variable_qp_0",
-              "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-              "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
+  h::expect("SELECT * WHERE { GRAPH <abc> { ?x a* ?y } } ",
+            h::transitivePath(
+                left, right, 0, std::numeric_limits<size_t>::max(),
+                h::EmptyPath(Variable{"?internal_property_path_variable_x"},
+                             std::nullopt),
+                h::IndexScanFromStrings(
+                    "?_QLever_internal_variable_qp_0",
+                    "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+                    "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
+  h::expect("SELECT * FROM <abc> WHERE { ?x a* ?y } ",
+            h::transitivePath(
+                left, right, 0, std::numeric_limits<size_t>::max(),
+                h::EmptyPath(Variable{"?internal_property_path_variable_x"},
+                             std::nullopt),
+                h::IndexScanFromStrings(
+                    "?_QLever_internal_variable_qp_0",
+                    "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+                    "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
 }
 
 // _____________________________________________________________________________
@@ -3554,31 +3842,19 @@ TEST(QueryPlanner, transitivePathWithoutVariables) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithLiterals) {
+  // The empty path matches a fixed value even if it doesn't occur in the
+  // knowledge graph, so the value is simply fed into the transitive path.
+  auto startingPoint = [](std::string_view value) {
+    return h::ValuesClause(absl::StrCat(
+        "VALUES (?internal_property_path_variable_x) { (", value, ") }"));
+  };
   TransitivePathSide left{std::nullopt, 0, 1, 0};
   TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
   h::expect(
       "SELECT * { 1 <a>* ?var }",
       h::transitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct(
-              {0},
-              h::Union(
-                  h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_a",
-                              "?internal_property_path_variable_b", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))),
-                  h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_c",
-                              "?internal_property_path_variable_d",
-                              "?internal_property_path_variable_x", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))))),
+          startingPoint("1"),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
@@ -3588,52 +3864,49 @@ TEST(QueryPlanner, emptyPathWithLiterals) {
       "SELECT * { 1 <a>* 1 }",
       h::transitivePath(
           left2, right2, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct(
-              {0},
-              h::Union(
-                  h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_a",
-                              "?internal_property_path_variable_b", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))),
-                  h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_c",
-                              "?internal_property_path_variable_d",
-                              "?internal_property_path_variable_x", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))))),
+          startingPoint("1"),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
   h::expect(
       R"(PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT * { 1 <a>* "1"^^xsd:integer })",
       h::transitivePath(
           left2, right2, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct(
-              {0},
-              h::Union(
-                  h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_a",
-                              "?internal_property_path_variable_b", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))),
-                  h::Join(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_c",
-                              "?internal_property_path_variable_d",
-                              "?internal_property_path_variable_x", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))))),
+          startingPoint("1"),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithLiteralsAndGraphVariable) {
+  using HS = ad_utility::HashSet<std::string>;
+  auto values =
+      h::ValuesClause("VALUES (?internal_property_path_variable_x) { (1) }");
+  TransitivePathSide left{std::nullopt, 0, 1, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
+  auto scan = h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1", {},
+                                      NamedTag{}, {Variable{"?g"}}, {3});
+  // The value has to be matched in every graph, so it is combined with all the
+  // graphs of the index.
+  h::expect(
+      "SELECT * { GRAPH ?g { 1 <a>* ?var } }",
+      h::transitivePath(left, right, 0, std::numeric_limits<size_t>::max(),
+                        h::CartesianProductJoin(values, h::DistinctGraphs()),
+                        // Sort by ?g
+                        h::Sort(scan)));
+  // If the graphs are restricted by the query, only those have to be matched.
+  h::expect(
+      "SELECT * FROM NAMED <b> FROM NAMED <c> { GRAPH ?g { 1 <a>* ?var } "
+      "}",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::CartesianProductJoin(
+              values, h::ValuesClause("VALUES (?g) { (<b>) (<c>) }")),
+          // Sort by ?g
+          h::Sort(h::IndexScanFromStrings(
+              "?_QLever_internal_variable_qp_0", "<a>",
+              "?_QLever_internal_variable_qp_1", {}, HS{"<b>", "<c>"},
+              {Variable{"?g"}}, {3}))));
 }
 
 // _____________________________________________________________________________
@@ -3651,6 +3924,8 @@ TEST(QueryPlanner, emptyPathWithMismatchingLiterals) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithLiteralsBound) {
+  auto startingPoint =
+      h::ValuesClause("VALUES (?internal_property_path_variable_x) { (1) }");
   TransitivePathSide left{std::nullopt, 0, 1, 0};
   TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
   h::expect(
@@ -3658,28 +3933,7 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
       h::Join(
           h::Sort(h::ValuesClause("VALUES (?var) { (2) }")),
           h::Sort(h::transitivePath(
-              left, right, 0, std::numeric_limits<size_t>::max(),
-              h::Distinct(
-                  {0},
-                  h::Union(
-                      h::Join(
-                          h::IndexScanFromStrings(
-                              "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_a",
-                              "?internal_property_path_variable_b", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))),
-                      h::Join(
-                          h::IndexScanFromStrings(
-                              "?internal_property_path_variable_c",
-                              "?internal_property_path_variable_d",
-                              "?internal_property_path_variable_x", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))))),
+              left, right, 0, std::numeric_limits<size_t>::max(), startingPoint,
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                       "?_QLever_internal_variable_qp_1")))));
 
@@ -3691,27 +3945,7 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
           h::Sort(h::ValuesClause("VALUES (?var) { (2) }")),
           h::Sort(h::transitivePath(
               left2, right2, 0, std::numeric_limits<size_t>::max(),
-              h::Distinct(
-                  {0},
-                  h::Union(
-                      h::Join(
-                          h::IndexScanFromStrings(
-                              "?internal_property_path_variable_x",
-                              "?internal_property_path_variable_a",
-                              "?internal_property_path_variable_b", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))),
-                      h::Join(
-                          h::IndexScanFromStrings(
-                              "?internal_property_path_variable_c",
-                              "?internal_property_path_variable_d",
-                              "?internal_property_path_variable_x", {}, {}, {},
-                              {}, 1),
-                          h::Sort(h::ValuesClause(
-                              "VALUES (?internal_property_path_variable_x) { "
-                              "(1) }"))))),
+              startingPoint,
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                       "?_QLever_internal_variable_qp_1")))));
 }
@@ -3805,17 +4039,8 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
       "SELECT * { ?other <a>* ?var . VALUES ?var { 2 } }",
       h::transitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Join(h::Distinct(
-                      {0},
-                      h::Union(h::IndexScanFromStrings(
-                                   "?var", "?internal_property_path_variable_a",
-                                   "?internal_property_path_variable_b", {}, {},
-                                   {}, {}, 1),
-                               h::IndexScanFromStrings(
-                                   "?internal_property_path_variable_c",
-                                   "?internal_property_path_variable_d", "?var",
-                                   {}, {}, {}, {}, 1))),
-                  h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::EmptyPath(Variable{"?var"}, std::nullopt,
+                       h::ValuesClause("VALUES (?var) { (2) }")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
@@ -3825,17 +4050,8 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
       "SELECT * { ?var <a>* ?other . VALUES ?var { 2 } }",
       h::transitivePath(
           left2, right2, 0, std::numeric_limits<size_t>::max(),
-          h::Join(h::Distinct(
-                      {0},
-                      h::Union(h::IndexScanFromStrings(
-                                   "?var", "?internal_property_path_variable_a",
-                                   "?internal_property_path_variable_b", {}, {},
-                                   {}, {}, 1),
-                               h::IndexScanFromStrings(
-                                   "?internal_property_path_variable_c",
-                                   "?internal_property_path_variable_d", "?var",
-                                   {}, {}, {}, {}, 1))),
-                  h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::EmptyPath(Variable{"?var"}, std::nullopt,
+                       h::ValuesClause("VALUES (?var) { (2) }")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
@@ -3861,7 +4077,10 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                                   "?_QLever_internal_variable_qp_1")),
       qec);
 
-  h::expect(
+  // The dynamic programming planner binds the path to the join of the `VALUES`
+  // clause and the index scan. The `?var` of that join is guaranteed to be part
+  // of the knowledge graph, so no existence check is required.
+  h::expectWithGivenBudgets(
       "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
       h::transitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
@@ -3869,7 +4088,20 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                   h::IndexScanFromStrings("?var", "<c>", "<d>")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")),
-      qec);
+      qec, {16, 64'000'000});
+  // The greedy planner binds the path to the `VALUES` clause directly (which
+  // requires an existence check) and joins the index scan afterwards.
+  h::expectWithGivenBudgets(
+      "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
+      h::Join(
+          h::Sort(h::transitivePath(
+              left, right, 0, std::numeric_limits<size_t>::max(),
+              h::EmptyPath(Variable{"?var"}, std::nullopt,
+                           h::ValuesClause("VALUES (?var) { (1) }")),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1"))),
+          h::IndexScanFromStrings("?var", "<c>", "<d>")),
+      qec, {0, 1, 4});
 }
 
 // _____________________________________________________________________________
@@ -3892,27 +4124,18 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
       qec, {16, 64'000'000});
   h::expectWithGivenBudgets(
       "SELECT * { GRAPH ?g { ?s <a>* ?o } ?s <b> ?s2 . ?g <b> ?g2 }",
-      h::Join(
-          h::Sort(h::transitivePath(
-              left, right1, 0, std::numeric_limits<size_t>::max(),
-              h::Join(
-                  h::Distinct(
-                      {0, 1},
-                      h::Union(h::Sort(h::IndexScanFromStrings(
-                                   "?s", "?internal_property_path_variable_a",
-                                   "?internal_property_path_variable_b", {},
-                                   NamedTag{}, {Variable{"?g"}}, {3}, 2)),
-                               h::Sort(h::IndexScanFromStrings(
-                                   "?internal_property_path_variable_c",
-                                   "?internal_property_path_variable_d", "?s",
-                                   {}, NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
-                  h::IndexScanFromStrings("?s", "<b>", "?s2")),
-              // The sort is because of missing graph permutations.
-              h::Sort(h::IndexScanFromStrings(
-                  "?_QLever_internal_variable_qp_0", "<a>",
-                  "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                  {Variable{"?g"}}, {3})))),
-          h::IndexScanFromStrings("?g", "<b>", "?g2")),
+      h::Join(h::Sort(h::transitivePath(
+                  left, right1, 0, std::numeric_limits<size_t>::max(),
+                  // The graph variable is not bound by the child, so the
+                  // `EmptyPath` has to add it.
+                  h::EmptyPath(Variable{"?s"}, Variable{"?g"},
+                               h::IndexScanFromStrings("?s", "<b>", "?s2")),
+                  // The sort is because of missing graph permutations.
+                  h::Sort(h::IndexScanFromStrings(
+                      "?_QLever_internal_variable_qp_0", "<a>",
+                      "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                      {Variable{"?g"}}, {3})))),
+              h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
   // Double bind is currently not supported
   h::expect("SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
@@ -4078,9 +4301,9 @@ TEST(QueryPlanner, SubqueryColumnStripping) {
 
     // The root should have no stripped variables (it's not created via
     // makeTreeWithStrippedColumns)
-    EXPECT_THAT(qet, h::HasNoStrippedVariables());
-    EXPECT_THAT(qet, h::hasVariables({"?x", "?y"}));
-    EXPECT_EQ(qet.getResultWidth(), doStrip ? 2 : 4);
+    EXPECT_THAT(*qet, h::HasNoStrippedVariables());
+    EXPECT_THAT(*qet, h::hasVariables({"?x", "?y"}));
+    EXPECT_EQ(qet->getResultWidth(), doStrip ? 2 : 4);
   }
 }
 
@@ -4129,7 +4352,7 @@ TEST(QueryPlanner, NamedCachedResult) {
       "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
   qec->pinResultWithName() = {"dummyQuery"};
   auto plan = h::parseAndPlan(queryToPin, qec);
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   query = "SELECT * { SERVICE ql:cached-result-with-name-dummyQuery {}}";
   // We only check the size estimate (which in this case is exact), because
@@ -4192,4 +4415,70 @@ TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
       // the join has to be on top!
       h::Join(::testing::A<const QueryExecutionTree&>(),
               ::testing::A<const QueryExecutionTree&>()));
+}
+
+// Test the information about how each connected component of a query was
+// planned.
+TEST(QueryPlanner, planningInfo) {
+  // The information for the given query.
+  auto planningInfo = [](std::string query) {
+    QueryPlanner qp = makeQueryPlanner();
+    ParsedQuery pq = parseQuery(std::move(query));
+    qp.createExecutionTree(pq);
+    return qp.planningInfo();
+  };
+
+  // A path of three triples is one connected component, with six connected
+  // subgraphs (three single triples, two pairs, and all three).
+  auto info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
+  ASSERT_EQ(info.size(), 1u);
+  EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
+  EXPECT_EQ(info[0].numNodes_, 3u);
+  EXPECT_EQ(info[0].numConnectedSubgraphs_, 6u);
+  EXPECT_EQ(info[0].budget_,
+            getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>());
+  EXPECT_GT(info[0].numCandidatePlans_, 0u);
+
+  // Two connected components, with a budget of one.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(1);
+  info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?a <r> ?b }");
+  ASSERT_EQ(info.size(), 2u);
+  ql::ranges::sort(info, {}, &ConnectedComponentPlanningInfo::numNodes_);
+
+  // The component with a single triple has one connected subgraph and needs no
+  // joins.
+  EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
+  EXPECT_EQ(info[0].numNodes_, 1u);
+  EXPECT_EQ(info[0].numConnectedSubgraphs_, 1u);
+  EXPECT_EQ(info[0].numCandidatePlans_, 0u);
+
+  // The component with two triples has three connected subgraphs, of which
+  // only two are counted (the counting stops at the budget plus one), so it is
+  // planned greedily.
+  EXPECT_EQ(info[1].algorithm_, PlanningAlgorithm::GREEDY);
+  EXPECT_EQ(info[1].numNodes_, 2u);
+  EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
+  EXPECT_EQ(info[1].budget_, 1u);
+  EXPECT_GT(info[1].numCandidatePlans_, 0u);
+}
+
+// Test that the operations and execution trees that the query planner creates
+// are allocated via the memory-limited allocator of the query.
+TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& allocator = qec->getAllocator();
+  const auto memoryLeftBefore = allocator.amountMemoryLeft();
+
+  // While the execution tree of a single index scan lives, the memory limit of
+  // the query accounts for the tree and the scan (and not only for the runtime
+  // information of the scan, which the `Operation` constructor allocates).
+  {
+    auto tree = h::parseAndPlan("SELECT * { ?x <p> ?y }", qec);
+    auto used = memoryLeftBefore - allocator.amountMemoryLeft();
+    EXPECT_GE(used.getBytes(), sizeof(IndexScan) + sizeof(QueryExecutionTree));
+  }
+
+  // When the tree is destroyed, the memory is released again.
+  EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
 }
