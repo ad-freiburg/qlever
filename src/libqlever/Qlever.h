@@ -97,6 +97,9 @@ struct CommonConfig {
   // triples, see `ad_utility::HasWordNormalization`.
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
+  // If not empty, only add the `ql:has-word` triples for literals that are the
+  // object of a triple with one of these predicates.
+  std::vector<std::string> wordTriplePredicates_;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -397,8 +400,10 @@ class Qlever {
   // query planning is stored in the query's runtime information as
   // `timeQueryPlanning`. This information can be accessed via the
   // query execution tree's root operation.
+  //
+  // The query planning and the execution use the cancellation handle of the
+  // `qec` (see `QueryExecutionContext::cancellationHandle`).
   PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle,
                          boost::optional<const ad_utility::Timer&>
                              requestTimer = boost::none) const;
 
@@ -407,13 +412,10 @@ class Qlever {
   // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
   // out of sync. Implemented in terms of the `planQuery` overload above.
   //
-  // For the semantics of `handle` and `requestTimer`, see `planQuery` above.
-  PlannedQuery planQuery(
-      ParsedQueryAndContext parsedQuery,
-      SharedCancellationHandle handle =
-          std::make_shared<ad_utility::CancellationHandle<>>(),
-      boost::optional<const ad_utility::Timer&> requestTimer =
-          boost::none) const;
+  // For the semantics of `requestTimer`, see `planQuery` above.
+  PlannedQuery planQuery(ParsedQueryAndContext parsedQuery,
+                         boost::optional<const ad_utility::Timer&>
+                             requestTimer = boost::none) const;
 
   // Parse the given `query` (despite the name, `query` may also be a SPARQL
   // update operation) and return it together with the
@@ -437,10 +439,15 @@ class Qlever {
   // `IndexBuilderConfig::prefixesForIdEncodedIris_`. If the
   // `EncodedIriManager`s differ, the affected IRIs are silently misinterpreted,
   // so this has to be ensured by the caller.
+  //
+  // The planning and the execution of the query can be cancelled via `handle`,
+  // which is stored in the `QueryExecutionContext`.
   ParsedQueryAndContext parseQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       std::function<void(std::string)> updateCallback = ad_utility::noop,
-      bool pinSubtrees = false, bool pinResult = false) const;
+      bool pinSubtrees = false, bool pinResult = false,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>()) const;
 
   // Bundle an already-parsed query with a fresh `QueryExecutionContext` of this
   // instance, so that it can be planned here. Together with `parseQuery` this
@@ -449,10 +456,14 @@ class Qlever {
   // PRECONDITION: `parsedQuery` must have been parsed with a context whose
   // `EncodedIriManager` is equivalent to this instance's; see the note on
   // reusing a parsed query in `parseQuery` above. This is not checked.
+  //
+  // For the semantics of `handle`, see `parseQuery` above.
   ParsedQueryAndContext bindParsedQuery(
       ParsedQuery parsedQuery,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
-      bool pinSubtrees = false, bool pinResult = false) const;
+      bool pinSubtrees = false, bool pinResult = false,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>()) const;
 
   // Parse and plan the given `query` (see `planQuery` above; despite the
   // name, `query` may also be a SPARQL update operation). This is exactly
@@ -634,13 +645,17 @@ class Qlever {
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
   // consistent state. The `executor` is the one on which the query runs its
-  // parallel work (see `QueryExecutionContext::executor`).
+  // parallel work (see `QueryExecutionContext::executor`), and the query can
+  // be cancelled via `handle` (see
+  // `QueryExecutionContext::cancellationHandle`).
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false,
       QueryExecutionContext::DisableCaching disableCaching =
-          QueryExecutionContext::DisableCaching::FromRuntimeParameter) const;
+          QueryExecutionContext::DisableCaching::FromRuntimeParameter,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>()) const;
 
   // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
   // under a single read lock, so that all code paths handling a single request

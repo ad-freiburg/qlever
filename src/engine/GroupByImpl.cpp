@@ -34,6 +34,7 @@
 #include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "util/Algorithm.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
@@ -346,7 +347,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
   for (const auto& alias : _aliases) {
     subtree = ExistsJoin::addExistsJoinsToSubtree(
         alias._expression, std::move(subtree), getExecutionContext(),
-        cancellationHandle_);
+        cancellationHandle());
   }
 
   // The input of a GROUP BY has to be sorted. If possible, we get optimize out
@@ -589,7 +590,7 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
       idTable,
       getExecutionContext()->getAllocator(),
       localVocab,
-      cancellationHandle_};
+      cancellationHandle()};
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -959,7 +960,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   // do the index scan, but something smarter).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle_, locatedTriplesState(),
+      col0Id.value(), cancellationHandle(), locatedTriplesState(),
       indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
@@ -1015,7 +1016,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   operation->updateRuntimeInformationWhenOptimizedOut();
 
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesState(), operation->getLimitOffset());
+      cancellationHandle(), locatedTriplesState(), operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -1176,6 +1177,9 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   for (size_t i = 0; i < subresult->idTableView().size(); ++i) {
     auto id = subresult->idTableView()(i, columnIndex);
     if (id != currentId) {
+      // The lookup of the cardinality reads the index, so check for
+      // cancellation once per distinct `id`.
+      checkCancellation();
       pushRow();
       currentId = id;
       currentCount = 0;
@@ -1853,14 +1857,22 @@ static constexpr auto makeProcessGroupsVisitor =
 
         auto hashEntryIndex = 0;
 
-        for (const auto& val : generator) {
-          auto vectorOffset = hashEntries[hashEntryIndex];
-          auto& aggregateData = aggregationDataVector.at(vectorOffset);
+        // `addValue` might look up strings in the vocabulary (e.g. for
+        // `GROUP_CONCAT`), so a block of rows can take a while.
+        ad_utility::chunkedForEach(
+            generator,
+            [&hashEntries, &hashEntryIndex, &aggregationDataVector,
+             evaluationContext](const auto& val) {
+              auto vectorOffset = hashEntries[hashEntryIndex];
+              auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
-          aggregateData.addValue(val, evaluationContext);
+              aggregateData.addValue(val, evaluationContext);
 
-          ++hashEntryIndex;
-        }
+              ++hashEntryIndex;
+            },
+            [evaluationContext]() {
+              evaluationContext->cancellationHandle_->throwIfCancelled();
+            });
       };
     };
 
@@ -1894,7 +1906,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // Setup the `EvaluationContext` for this input block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
-        getExecutionContext()->getAllocator(), localVocab, cancellationHandle_);
+        getExecutionContext()->getAllocator(), localVocab,
+        cancellationHandle());
     evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
         _groupByVariables.begin(), _groupByVariables.end()};
     evaluationContext._isPartOfGroupBy = true;

@@ -162,6 +162,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
+  index.getImpl().setWordTriplePredicates(config.wordTriplePredicates_);
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
@@ -220,9 +221,8 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
                           ad_utility::MediaType mediaType) const {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
-  const auto& sharedCancellationHandle = plannedQuery.queryExecutionTree()
-                                             .getRootOperation()
-                                             ->getCancellationHandle();
+  const auto& sharedCancellationHandle =
+      plannedQuery.queryExecutionContext().cancellationHandle();
   std::string result;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
@@ -323,8 +323,8 @@ void Qlever::eraseResultWithName(std::string name) {
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
     ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
-    SharedCancellationHandle handle,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
+  const auto& handle = qec.cancellationHandle();
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
 
@@ -334,8 +334,6 @@ PlannedQuery Qlever::planQuery(
   PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
-  // Propagate the `cancellationHandle` through the `queryExecutionTree`.
-  rootOperation.recursivelySetCancellationHandle(std::move(handle));
 
   auto& queryPlanningInfo = rootOperation.getQueryPlanningInfo();
   if (requestTimer.has_value()) {
@@ -350,24 +348,23 @@ PlannedQuery Qlever::planQuery(
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
+    ParsedQueryAndContext parsedQuery,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
   // NOTE: `qec` is a reference into `parsedQuery`, which is alive for the
   // duration of this call, and the resulting `PlannedQuery` takes its own
   // `shared_ptr` to the context.
   auto& qec = parsedQuery.queryExecutionContext();
-  return planQuery(std::move(parsedQuery.parsedQuery()), qec, std::move(handle),
-                   requestTimer);
+  return planQuery(std::move(parsedQuery.parsedQuery()), qec, requestTimer);
 }
 
 // ___________________________________________________________________________
 ParsedQueryAndContext Qlever::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) const {
+    bool pinResult, SharedCancellationHandle handle) const {
   auto qecPtr = createQueryExecutionContext(
       indexAndViewsSnapshot(), executor_, std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching_);
+      pinSubtrees, pinResult, disableCaching_, std::move(handle));
 
   auto parsedQuery = SparqlParser::parseQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
@@ -379,10 +376,10 @@ ParsedQueryAndContext Qlever::parseQuery(
 // ___________________________________________________________________________
 ParsedQueryAndContext Qlever::bindParsedQuery(
     ParsedQuery parsedQuery, std::function<void(std::string)> updateCallback,
-    bool pinSubtrees, bool pinResult) const {
+    bool pinSubtrees, bool pinResult, SharedCancellationHandle handle) const {
   auto qecPtr = createQueryExecutionContext(
       indexAndViewsSnapshot(), executor_, std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching_);
+      pinSubtrees, pinResult, disableCaching_, std::move(handle));
   return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
 }
 
@@ -395,8 +392,8 @@ PlannedQuery Qlever::parseAndPlanQuery(
     bool pinResult) const {
   return planQuery(
       parseQuery(std::move(query), datasetClauses, std::move(updateCallback),
-                 pinSubtrees, pinResult),
-      std::move(handle), requestTimer);
+                 pinSubtrees, pinResult, std::move(handle)),
+      requestTimer);
 }
 
 // ___________________________________________________________________________
@@ -485,13 +482,13 @@ void Qlever::deleteMaterializedView(std::string name) const {
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
     std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult,
-    QueryExecutionContext::DisableCaching disableCaching) const {
+    bool pinResult, QueryExecutionContext::DisableCaching disableCaching,
+    SharedCancellationHandle handle) const {
   auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
   return std::make_shared<QueryExecutionContext>(
       std::move(index), &cache_, allocator_, &namedResultCache_,
       std::move(viewsManager), std::move(executor), std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching);
+      pinSubtrees, pinResult, disableCaching, false, std::move(handle));
 }
 
 // ___________________________________________________________________________

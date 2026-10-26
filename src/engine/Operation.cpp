@@ -50,32 +50,6 @@ void mergeStats(LocalVocabTracking& stats, const LocalVocab& vocab) {
 }
 }  // namespace
 
-//______________________________________________________________________________
-template <typename F>
-void Operation::forAllDescendants(F f) {
-  static_assert(
-      std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
-  for (auto ptr : getChildren()) {
-    if (ptr) {
-      f(ptr);
-      ptr->forAllDescendants(f);
-    }
-  }
-}
-
-//______________________________________________________________________________
-template <typename F>
-void Operation::forAllDescendants(F f) const {
-  static_assert(
-      std::is_same_v<void, std::invoke_result_t<F, const QueryExecutionTree*>>);
-  for (auto ptr : getChildren()) {
-    if (ptr) {
-      f(ptr);
-      ptr->forAllDescendants(f);
-    }
-  }
-}
-
 // _____________________________________________________________________________
 std::vector<std::string> Operation::collectWarnings() const {
   // TODO<ullingerc> Warnings of the original computation of a result that was
@@ -111,16 +85,6 @@ void Operation::addUnboundVariableWarningOrThrow(std::string warning) const {
   } else {
     addWarning(std::move(warning));
   }
-}
-
-// ________________________________________________________________________
-void Operation::recursivelySetCancellationHandle(
-    SharedCancellationHandle cancellationHandle) {
-  AD_CORRECTNESS_CHECK(cancellationHandle);
-  forAllDescendants([&cancellationHandle](auto child) {
-    child->getRootOperation()->cancellationHandle_ = cancellationHandle;
-  });
-  cancellationHandle_ = std::move(cancellationHandle);
 }
 
 // _____________________________________________________________________________
@@ -478,7 +442,8 @@ void Operation::storeToNamedResultCache(const Result& result) {
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
   auto valueForNamedResultCache = NamedResultCache::Value{
-      std::make_shared<const IdTable>(result.cloneIdTable()),
+      std::make_shared<const IdTable>(
+          result.cloneIdTable(cancellationChecker())),
       getExternallyVisibleVariableColumns(),
       // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
       // migrated to `qlm::vector` throughout the Operation hierarchy.
