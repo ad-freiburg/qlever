@@ -13,7 +13,6 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/any_invocable.h>
 
-#include <atomic>
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
 #include <chrono>
@@ -40,6 +39,7 @@
 #include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
+#include "util/NoCopyNoMove.h"
 #include "util/RegexSet.h"
 #include "util/Timer.h"
 
@@ -71,9 +71,8 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
   // The blocks of the segment that is being cut, and their number of words.
   std::vector<MergedBlock> currentBlocks_;
   size_t currentNumWords_ = 0;
-  // The total time that the tasks have spent building the segments, in
-  // milliseconds.
-  std::atomic<uint64_t> segmentBusyMs_{0};
+  // The total time that the tasks have spent building the segments.
+  ad_utility::timer::ThreadSafeTimer segmentBusyTime_;
 
  public:
   // Construct from the arguments of `buildSegment`, which all have to stay
@@ -118,21 +117,20 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
     return cutSegment();
   }
 
-  // The total time that the tasks have spent building the segments, in
-  // milliseconds.
-  uint64_t segmentBusyMs() const { return segmentBusyMs_; }
+  // The total time that the tasks have spent building the segments.
+  ad_utility::Timer::Duration segmentBusyTime() const {
+    return segmentBusyTime_.value();
+  }
 
  private:
   // Return the task that builds the segment of the `currentBlocks_`, and start
   // the next segment.
   SegmentTask cutSegment() {
     SegmentTask task = [this, blocks = std::move(currentBlocks_)]() mutable {
-      ad_utility::Timer timer{ad_utility::Timer::Started};
-      auto segment = std::make_shared<const Segment>(
+      auto measurement = segmentBusyTime_.startMeasurement();
+      return std::make_shared<const Segment>(
           buildSegment(std::move(blocks), writer_, blankNodeIriRegexes_,
                        numPartialVocabularies_, comparator_));
-      segmentBusyMs_ += timer.msecs().count();
-      return segment;
     };
     currentBlocks_.clear();
     currentNumWords_ = 0;
@@ -153,7 +151,11 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
 //
 // NOTE: All the member functions are called by a single thread, the one that
 // runs `mergeVocabulary`, which must not be a thread of the global executor.
-CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
+//
+// NOTE: The pipeline is neither copyable nor movable, because the tasks and
+// the sink of the `committer_` refer to it.
+CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
+    : public ad_utility::NoCopyNoMove {
  private:
   size_t maxSegmentsInFlight_;
   SegmentCutter<W> cutter_;
@@ -203,11 +205,6 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
     }
   }
 
-  // The pipeline is neither copyable nor movable, because the tasks and the
-  // sink of the `committer_` refer to it.
-  SegmentPipeline(const SegmentPipeline&) = delete;
-  SegmentPipeline& operator=(const SegmentPipeline&) = delete;
-
   // Push the next `block` of merged words. Do nothing if a stage has failed
   // (the exception is rethrown by `finish()`).
   void push(MergedBlock block) {
@@ -238,11 +235,17 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
     }
     VocabularyMetaData metaData = committer_.finish();
     commitTimer_.stop();
+    // The busy times are measured in microseconds, but logged in milliseconds
+    // for readability.
+    auto ms = [](ad_utility::Timer::Duration duration) {
+      return std::chrono::duration_cast<std::chrono::milliseconds>(duration)
+          .count();
+    };
     AD_LOG_INFO << "Time spent by the thread behind the merge: waiting for "
                    "merged blocks "
                 << (totalTimer_.msecs() - commitTimer_.msecs())
                 << ", committing the segments " << commitTimer_.msecs()
-                << "; building the segments " << cutter_.segmentBusyMs()
+                << "; building the segments " << ms(cutter_.segmentBusyTime())
                 << " ms" << std::endl;
     blockWriter_.finish();
     idMapWriters_.finish();
@@ -251,11 +254,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
     AD_LOG_INFO << "Time spent by the stages behind the vocabulary merge: "
                    "preparing "
                 << blockWriter_.numBlocks() << " blocks "
-                << blockWriter_.prepareBusyMs() << " ms, appending them "
-                << blockWriter_.appendBusyMs() << " ms, writing the ID maps "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                       idMapWriters_.busyTime())
-                       .count()
+                << ms(blockWriter_.prepareBusyTime()) << " ms, appending them "
+                << ms(blockWriter_.appendBusyTime())
+                << " ms, writing the ID maps " << ms(idMapWriters_.busyTime())
                 << " ms" << std::endl;
     return metaData;
   }

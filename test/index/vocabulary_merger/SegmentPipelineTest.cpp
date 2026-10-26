@@ -208,5 +208,5 @@ TEST(SegmentCutter, finishWithoutBlocks) {
   SegmentCutter<decltype(lessThan)> cutter{writer, noRegexes, 1, lessThan, 1};
   EXPECT_FALSE(cutter.push(std::move(makeMergedBlocks({{}})[0])).has_value());
   EXPECT_FALSE(cutter.finish().has_value());
-  EXPECT_EQ(cutter.segmentBusyMs(), 0u);
+  EXPECT_EQ(cutter.segmentBusyTime(), ad_utility::Timer::Duration::zero());
 }

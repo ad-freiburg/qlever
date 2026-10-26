@@ -11,7 +11,6 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_ASYNCBLOCKWRITER_H
 
 #include <algorithm>
-#include <atomic>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/strand.hpp>
 #include <cstddef>
@@ -22,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
 #include "util/AsioHelpers.h"
@@ -46,9 +46,9 @@ struct AsyncBlockWriterSharedState {
   // `AsyncBlockWriter::finish()`.
   ad_utility::ExceptionCollector exceptionCollector_;
   // The total time that the tasks have spent preparing and appending the
-  // blocks, in milliseconds.
-  std::atomic<uint64_t> prepareBusyMs_{0};
-  std::atomic<uint64_t> appendBusyMs_{0};
+  // blocks.
+  ad_utility::timer::ThreadSafeTimer prepareBusyTime_;
+  ad_utility::timer::ThreadSafeTimer appendBusyTime_;
 
   // Whether one of the tasks has thrown an exception that has not been
   // rethrown yet.
@@ -129,19 +129,17 @@ class AsyncBlockWriterPerSubVocabulary {
       const size_t index = numBlocks_++;
       pendingBlocks_.push_back(
           PendingBlock{index, false, AppendBlock{}, nullptr, std::move(done)});
-      auto prepare = [this, block = std::move(block)]() {
-        ad_utility::Timer timer{ad_utility::Timer::Started};
-        auto result = blockWriter_.prepare(gatherWords(block));
-        sharedState_.prepareBusyMs_ += timer.msecs().count();
-        return result;
-      };
+      // The preparation itself runs on the global executor (so that different
+      // blocks are prepared in parallel), but its completion handler is bound
+      // to the `strand_`, so storing its result and appending the blocks are
+      // again serialized on the strand.
       ad_utility::runFunctionOnExecutor(
-          ad_utility::globalExecutor(), std::move(prepare),
+          ad_utility::globalExecutor(), makePreparationLambda(std::move(block)),
           boost::asio::bind_executor(
               strand_, [this, index](std::exception_ptr exception,
                                      AppendBlock appendBlock) {
-                blockIsPrepared(index, std::move(exception),
-                                std::move(appendBlock));
+                storePreparedBlock(index, std::move(exception),
+                                   std::move(appendBlock));
               }));
     });
   }
@@ -151,12 +149,22 @@ class AsyncBlockWriterPerSubVocabulary {
   void finish() { queue_.finish(); }
 
  private:
+  // Return the task that gathers and prepares the `block` (see `gatherWords`
+  // and `BlockWriterBase::prepare`) and returns the `AppendBlock`. NOTE: The
+  // return type is explicit, because `push` above uses this function.
+  absl::AnyInvocable<AppendBlock()> makePreparationLambda(BlockPieces block) {
+    return [this, block = std::move(block)]() {
+      auto measurement = sharedState_.prepareBusyTime_.startMeasurement();
+      return blockWriter_.prepare(gatherWords(block));
+    };
+  }
+
   // Store the result of the prepare task of the block with the given `index`
   // (the `appendBlock`, or the `exception` that the task threw), and append
   // all the blocks at the front of the queue that are prepared, in order.
   // PRECONDITION: This runs on the `strand_`.
-  void blockIsPrepared(size_t index, std::exception_ptr exception,
-                       AppendBlock appendBlock) {
+  void storePreparedBlock(size_t index, std::exception_ptr exception,
+                          AppendBlock appendBlock) {
     auto& pending = pendingBlocks_;
     AD_CORRECTNESS_CHECK(!pending.empty() && index >= pending.front().index_ &&
                          index - pending.front().index_ < pending.size());
@@ -164,6 +172,14 @@ class AsyncBlockWriterPerSubVocabulary {
     block.isPrepared_ = true;
     block.exception_ = std::move(exception);
     block.appendBlock_ = std::move(appendBlock);
+    appendPreparedBlocksInOrder();
+  }
+
+  // Append the blocks at the front of the queue that are prepared, in order,
+  // up to the first block that is not prepared yet.
+  // PRECONDITION: This runs on the `strand_`.
+  void appendPreparedBlocksInOrder() {
+    auto& pending = pendingBlocks_;
     while (!pending.empty() && pending.front().isPrepared_) {
       PendingBlock next = std::move(pending.front());
       pending.pop_front();
@@ -175,15 +191,14 @@ class AsyncBlockWriterPerSubVocabulary {
   // skipped), and release its slot in the queue.
   // PRECONDITION: This runs on the `strand_`.
   void appendPendingBlock(PendingBlock block) {
-    if (block.exception_) {
-      sharedState_.exceptionCollector_(std::move(block.exception_));
-    } else if (!sharedState_.hasFailed()) {
-      try {
-        ad_utility::Timer timer{ad_utility::Timer::Started};
-        std::move(block.appendBlock_)();
-        sharedState_.appendBusyMs_ += timer.msecs().count();
-      } catch (...) {
-        sharedState_.exceptionCollector_(std::current_exception());
+    {
+      auto measurement = sharedState_.appendBusyTime_.startMeasurement();
+      auto& exceptionCollector = sharedState_.exceptionCollector_;
+      if (block.exception_) {
+        exceptionCollector(std::move(block.exception_));
+      } else if (!sharedState_.hasFailed()) {
+        exceptionCollector.wrap(
+            [&block]() { std::move(block.appendBlock_)(); })();
       }
     }
     std::move(block.done_)();
@@ -204,14 +219,14 @@ class AsyncBlockWriter {
   // NOTE: Declared after everything that the tasks use, because the
   // destructors of the writers wait for their tasks.
   std::vector<std::unique_ptr<AsyncBlockWriterPerSubVocabulary>>
-      subVocabularies_;
+      subVocabularyWriters_;
 
  public:
   // Construct from the `writer` of the vocabulary, which has to stay alive,
   // and which is not finished by this class.
   explicit AsyncBlockWriter(ParallelWordWriterBase& writer) {
     for (uint8_t sub = 0; sub < writer.numSubVocabularies(); ++sub) {
-      subVocabularies_.push_back(
+      subVocabularyWriters_.push_back(
           std::make_unique<AsyncBlockWriterPerSubVocabulary>(
               writer.blockWriter(sub), sharedState_,
               std::max<size_t>(1, ad_utility::globalExecutorNumThreads())));
@@ -225,7 +240,7 @@ class AsyncBlockWriter {
       return;
     }
     ++numBlocks_;
-    subVocabularies_.at(sub)->push(std::move(block));
+    subVocabularyWriters_.at(sub)->push(std::move(block));
   }
 
   // Whether one of the tasks has thrown an exception that `finish()` has not
@@ -236,17 +251,21 @@ class AsyncBlockWriter {
   // that one of the tasks threw, if any. After this, no more blocks may be
   // pushed. The `writer` is not finished.
   void finish() {
-    for (auto& subVocabulary : subVocabularies_) {
-      subVocabulary->finish();
+    for (auto& subVocabularyWriter : subVocabularyWriters_) {
+      subVocabularyWriter->finish();
     }
     sharedState_.exceptionCollector_.rethrowIfException();
   }
 
   // The number of blocks pushed so far, and the total time that the tasks
-  // have spent preparing and appending them, in milliseconds.
+  // have spent preparing and appending them.
   size_t numBlocks() const { return numBlocks_; }
-  uint64_t prepareBusyMs() const { return sharedState_.prepareBusyMs_; }
-  uint64_t appendBusyMs() const { return sharedState_.appendBusyMs_; }
+  ad_utility::Timer::Duration prepareBusyTime() const {
+    return sharedState_.prepareBusyTime_.value();
+  }
+  ad_utility::Timer::Duration appendBusyTime() const {
+    return sharedState_.appendBusyTime_.value();
+  }
 };
 }  // namespace ad_utility::vocabulary_merger::detail
 
