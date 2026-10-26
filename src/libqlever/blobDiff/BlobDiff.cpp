@@ -66,6 +66,7 @@ std::vector<char> computeBlobDiff(ql::span<const char> base,
   auto payload =
       ZstdWrapper::compressWithReference(base, target, compressionLevel);
   ByteBufferWriteSerializer writer;
+  writer.reserve(headerSize + payload.size());
   auto writeArray = [&writer](const auto& array) {
     writer.serializeBytes(array.data(), array.size());
   };
@@ -82,7 +83,9 @@ std::vector<char> computeBlobDiff(ql::span<const char> base,
 }
 
 // _____________________________________________________________________________
-BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile) {
+BlobDiffHeaderOrError readBlobDiffHeader(
+    ql::span<const char> diffFile,
+    std::optional<ad_utility::MemorySize> maxTargetSize) {
   if (diffFile.size() < headerSize) {
     return makeError(ErrorType::invalidMagicBytes,
                      "The given file is too small to be a blob diff file");
@@ -145,7 +148,8 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile) {
   // bytes decodes to less than `n * ZSTD_BLOCKSIZE_MAX` bytes, no matter how
   // much of the target is copied from the base. NOTE: A bound in terms of the
   // size of the base would be wrong, because highly repetitive data compresses
-  // to almost nothing even without a base.
+  // to almost nothing even without a base. This bound is very loose, which is
+  // why the caller can additionally limit the size via `maxTargetSize`.
   if (header.targetSize_ / ZSTD_BLOCKSIZE_MAX >= header.payloadSize_) {
     return makeError(
         ErrorType::invalidTargetSize,
@@ -153,13 +157,22 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile) {
         " bytes, which is more than a payload of ", header.payloadSize_,
         " bytes can encode (the file is corrupted)");
   }
+  if (maxTargetSize.has_value() &&
+      header.targetSize_ > maxTargetSize.value().getBytes()) {
+    return makeError(ErrorType::invalidTargetSize,
+                     "The blob diff file announces a target of ",
+                     header.targetSize_,
+                     " bytes, which exceeds the maximum target size of ",
+                     maxTargetSize.value().asString());
+  }
   return header;
 }
 
 // _____________________________________________________________________________
-BlobOrError applyBlobDiffToDecompressedBase(ql::span<const char> base,
-                                            ql::span<const char> diffFile) {
-  auto headerOrError = readBlobDiffHeader(diffFile);
+DecompressedBlobOrError applyBlobDiffToDecompressedBase(
+    ql::span<const char> base, ql::span<const char> diffFile,
+    std::optional<ad_utility::MemorySize> maxTargetSize) {
+  auto headerOrError = readBlobDiffHeader(diffFile, maxTargetSize);
   if (auto* error = std::get_if<BlobDiffError>(&headerOrError)) {
     return std::move(*error);
   }
@@ -170,11 +183,13 @@ BlobOrError applyBlobDiffToDecompressedBase(ql::span<const char> base,
     return makeError(
         ErrorType::wrongBase,
         "The blob diff does not belong to the given base blob (the size or the "
-        "checksum of the base does not match). Note that a diff has to be "
-        "applied to exactly the blob of the previous week.");
+        "checksum of the base does not match). A diff can only be applied to "
+        "exactly the blob from which it was computed.");
   }
   auto payload = diffFile.subspan(headerSize);
-  std::vector<char> target(header.targetSize_);
+  // The target is not zero-initialized, because it is completely overwritten
+  // on success, and discarded otherwise.
+  DecompressedBlob target(header.targetSize_);
   auto size = ZstdWrapper::tryToDecompressWithReference(
       base, payload, target.data(), target.size());
   if (auto* error = std::get_if<ZstdWrapper::Error>(&size)) {
@@ -194,19 +209,21 @@ BlobOrError applyBlobDiffToDecompressedBase(ql::span<const char> base,
 }
 
 // _____________________________________________________________________________
-BlobOrError applyBlobDiffToCompressedBase(ql::span<const char> compressedBase,
-                                          ql::span<const char> diffFile) {
+BlobOrError applyBlobDiffToCompressedBase(
+    ql::span<const char> compressedBase, ql::span<const char> diffFile,
+    std::optional<ad_utility::MemorySize> maxTargetSize) {
   auto base = Manager::tryToDecompressBlob(compressedBase, {});
   if (auto* error = std::get_if<Manager::BlobError>(&base)) {
     return makeError(ErrorType::baseNotDecompressible,
                      "The base blob cannot be decompressed: ", error->message_);
   }
   auto target = applyBlobDiffToDecompressedBase(
-      ql::span<const char>{std::get<0>(base)}, diffFile);
-  if (auto* bytes = std::get_if<std::vector<char>>(&target)) {
-    return Manager::compressBlob(ql::span<const char>{*bytes});
+      ql::span<const char>{std::get<0>(base)}, diffFile, maxTargetSize);
+  if (auto* error = std::get_if<BlobDiffError>(&target)) {
+    return std::move(*error);
   }
-  return target;
+  return Manager::compressBlob(
+      ql::span<const char>{std::get<DecompressedBlob>(target)});
 }
 
 // _____________________________________________________________________________

@@ -15,6 +15,7 @@
 #include <gmock/gmock.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,10 +24,12 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "backports/algorithm.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "engine/UpdateMetadata.h"
 #include "index/DeltaTriples.h"
+#include "index/IndexImpl.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
@@ -68,31 +71,34 @@ inline UpdateMetadata applyUpdateToEngine(qlever::Qlever& engine,
       });
 }
 
-// Write the `turtleContents` to a turtle file, build an index from it with the
-// given vocabulary `type`, and return the corresponding `IndexBuilderConfig`.
-// The basename of the index is derived from the name of the currently running
-// test, so that concurrently running tests do not interfere with each other.
-// Updates that were persisted for that basename by a previous run of the test
-// are deleted, so that they are not applied to the new index. The turtle input
-// file is deleted again immediately after the index was built.
+// Write `turtleContents` to a turtle file, build an index from it, and return
+// the corresponding `IndexBuilderConfig`. If a vocabulary `type` is given, it
+// is used for the index, otherwise the default one. The base name of both the
+// turtle file and the index is derived from the name of the currently running
+// test and the optional `suffix`, so that concurrently running tests do not
+// interfere with each other, and a single test can build several distinct
+// indexes. All files of an index with that base name that are left over from
+// a previous run (in particular persisted updates, which would otherwise be
+// applied to the new index) are deleted first. The turtle file is deleted
+// again before this returns; the files of the index itself remain on disk.
 //
-// NOTE: The default vocabulary type is the in-memory, uncompressed one,
-// because `serializeVocabAndNamedCacheToCompressedBlob` currently requires it
-// unless vocabulary entries are excluded (see
-// `Vocabulary::writeAsZeroCopyBlob`).
+// NOTE: An index that cannot be built throws, which `gtest` reports as a
+// failure of the running test. This is deliberately not an `EXPECT_NO_THROW`,
+// which would let the test continue with a nonexistent index.
+//
+// NOTE: `serializeVocabAndNamedCacheToCompressedBlob` currently requires the
+// `InMemoryUncompressed` vocabulary unless vocabulary entries are excluded (see
+// `Vocabulary::writeAsZeroCopyBlob`), so tests of blobs have to pass it as the
+// `type`.
 inline qlever::IndexBuilderConfig buildTestIndex(
     std::string_view turtleContents,
-    ad_utility::VocabularyType type =
-        ad_utility::VocabularyType::InMemoryUncompressed,
-    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(l);
-  std::string basename = gtestCurrentTestName();
-  ad_utility::deleteFile(absl::StrCat(basename, ".update-triples"), false);
+    std::optional<ad_utility::VocabularyType> type = std::nullopt,
+    std::string_view suffix = "") {
+  std::string basename = absl::StrCat(gtestCurrentTestName(), suffix);
+  ql::ranges::for_each(IndexImpl::allIndexFiles(basename),
+                       [](const auto& f) { ad_utility::deleteFile(f); });
   std::string sourceFilename = absl::StrCat(basename, ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(sourceFilename);
-    ofs << turtleContents;
-  }
+  ad_utility::makeOfstream(sourceFilename) << turtleContents;
   absl::Cleanup cleanup = [&sourceFilename] {
     ad_utility::deleteFile(sourceFilename);
   };
@@ -100,9 +106,19 @@ inline qlever::IndexBuilderConfig buildTestIndex(
   config.inputFiles_.push_back(
       {sourceFilename, qlever::Filetype::Turtle, std::nullopt});
   config.baseName_ = std::move(basename);
-  config.vocabType_ = type;
-  EXPECT_NO_THROW(qlever::Qlever::buildIndex(config));
+  if (type.has_value()) {
+    config.vocabType_ = type.value();
+  }
+  qlever::Qlever::buildIndex(config);
   return config;
+}
+
+// Same as `buildTestIndex` above, but return an `EngineConfig` for the index.
+inline qlever::EngineConfig buildTestEngineConfig(
+    std::string_view turtleContents,
+    std::optional<ad_utility::VocabularyType> type = std::nullopt,
+    std::string_view suffix = "") {
+  return qlever::EngineConfig{buildTestIndex(turtleContents, type, suffix)};
 }
 
 // Return the decompressed `compressedBlob` (see

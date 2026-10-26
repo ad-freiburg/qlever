@@ -99,8 +99,15 @@ auto isError(ErrorType type, std::string_view messageSubstring) {
   return VariantWith<BlobDiffError>(blobDiffErrorWith(type, messageSubstring));
 }
 
-// Matcher for the successful result of applying a diff that yields `expected`.
+// Matcher for the successful result of `applyBlobDiffToCompressedBase` that
+// yields `expected`.
 auto isBlob(const Bytes& expected) { return VariantWith<Bytes>(Eq(expected)); }
+
+// Matcher for the successful result of `applyBlobDiffToDecompressedBase` that
+// yields `expected`.
+auto isDecompressedBlob(ql::span<const char> expected) {
+  return VariantWith<DecompressedBlob>(ElementsAreArray(expected));
+}
 
 // Compute the diff of `base` and `target`, check that applying it to `base`
 // yields `target` and that the header is consistent, and return it.
@@ -110,7 +117,7 @@ Bytes diffAndCheck(ql::span<const char> base, ql::span<const char> target,
   auto trace = generateLocationTrace(l);
   auto diff = computeBlobDiff(base, target, compressionLevel);
   EXPECT_THAT(applyBlobDiffToDecompressedBase(base, diff),
-              isBlob(Bytes(target.begin(), target.end())));
+              isDecompressedBlob(target));
   EXPECT_THAT(
       readBlobDiffHeader(diff),
       VariantWith<BlobDiffHeader>(AllOf(
@@ -265,8 +272,37 @@ TEST(BlobDiff, implausibleTargetSizeIsReported) {
 }
 
 // _____________________________________________________________________________
+TEST(BlobDiff, maxTargetSizeIsRespected) {
+  using namespace ad_utility::memory_literals;
+  auto base = randomBytes(10'000, 1);
+  auto target = randomBytes(10'000, 3);
+  auto diff = diffAndCheck(base, target);
+  auto compressedBase = qlever::NamedCachedQueryBlobManager::compressBlob(base);
+
+  // A limit that is at least the size of the target is fine.
+  for (auto limit : {10'000_B, 1_MB}) {
+    EXPECT_THAT(readBlobDiffHeader(diff, limit),
+                VariantWith<BlobDiffHeader>(
+                    AD_FIELD(BlobDiffHeader, targetSize_, Eq(10'000u))));
+    EXPECT_THAT(applyBlobDiffToDecompressedBase(base, diff, limit),
+                isDecompressedBlob(target));
+    EXPECT_THAT(applyBlobDiffToCompressedBase(compressedBase, diff, limit),
+                VariantWith<Bytes>(SizeIs(Gt(0u))));
+  }
+
+  // A smaller limit is reported, also when applying the diff.
+  auto matcher =
+      isError(ErrorType::invalidTargetSize, "exceeds the maximum target size");
+  EXPECT_THAT(readBlobDiffHeader(diff, 9'999_B), matcher);
+  EXPECT_THAT(applyBlobDiffToDecompressedBase(base, diff, 9'999_B), matcher);
+  EXPECT_THAT(applyBlobDiffToCompressedBase(compressedBase, diff, 9'999_B),
+              matcher);
+}
+
+// _____________________________________________________________________________
 TEST(BlobDiff, realBlobsAfterUpdate) {
-  auto config = buildTestIndex(manyTriples(2000));
+  auto config = buildTestIndex(
+      manyTriples(2000), ad_utility::VocabularyType::InMemoryUncompressed);
   Qlever source{EngineConfig{config}};
   auto baseCompressed = pinAndSerialize(source);
   // Insert and delete a few triples, with and without new words.
