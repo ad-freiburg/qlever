@@ -11,6 +11,7 @@
 
 #include "util/ChunkedForLoop.h"
 #include "util/Forward.h"
+#include "util/InputRangeUtils.h"
 
 using ad_utility::chunkedCopy;
 using ad_utility::chunkedFill;
@@ -149,7 +150,8 @@ TEST(ChunkedForLoop, chunkedCopyCopiesCorrectly) {
 
 // Test that `chunkedForEach` visits every element in order and calls the
 // `chunkOperation` after every `chunkSize` elements and at the end, for random
-// access ranges, non-random-access ranges, move-only views and zipped ranges.
+// access ranges, non-random-access ranges, move-only views, zipped ranges and
+// input ranges that are not forward ranges.
 TEST(ChunkedForLoop, chunkedForEach) {
   // Run `chunkedForEach` on the `range` and return the visited elements, with
   // a `-1` for each call of the `chunkOperation`.
@@ -176,6 +178,17 @@ TEST(ChunkedForLoop, chunkedForEach) {
                                            [](int i) { return 2 * i; });
   static_assert(!std::is_copy_constructible_v<decltype(moveOnlyView)>);
   EXPECT_THAT(visit(std::move(moveOnlyView), 2), ElementsAre(2, 4, -1, 6, -1));
+  // An input range that is not a forward range (like the generators of the
+  // hash-map `GROUP BY`), for which `views::chunk` has a separate
+  // implementation.
+  auto makeInputRange = [&input]() {
+    return ad_utility::CachingTransformInputRange(input,
+                                                  [](int i) { return i; });
+  };
+  static_assert(!ql::ranges::forward_range<decltype(makeInputRange())>);
+  EXPECT_THAT(visit(makeInputRange(), 2),
+              ElementsAre(1, 2, -1, 3, 4, -1, 5, -1));
+  EXPECT_THAT(visit(makeInputRange(), 5), ElementsAre(1, 2, 3, 4, 5, -1));
   // A zipped range.
   std::vector<int> visited;
   ad_utility::chunkedForEach(
