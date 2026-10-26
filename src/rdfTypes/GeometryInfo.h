@@ -190,6 +190,22 @@ struct MetricArea {
 // are WKT literals, see the rules at `GEOMETRY_INFO_VERSION`.
 enum class SerializationType : uint16_t { WKT };
 
+// Concept for the `WithSourceCrs` template parameter: the types for which the
+// source CRS can be attached. These are exactly those that are projected back
+// to the source CRS in the result (see `WithSourceCrs`).
+template <typename T>
+CPP_concept WithSourceCrsT = SameAsAny<T, Centroid, BoundingBox>;
+
+// A `Centroid` or `BoundingBox` together with the `SourceCrsType` of the
+// geometry it was computed from. This is needed by functions that return a
+// geometry in the CRS of their input, such as `geof:centroid` or
+// `geof:envelope`.
+CPP_template(typename Info)(
+    requires WithSourceCrsT<Info>) struct WithSourceCrs {
+  Info info_;
+  SourceCrsType crs_;
+};
+
 // Class for internal exception handling of errors from `s2geometry`.
 class InvalidPolygonError : public std::runtime_error {
  public:
@@ -205,9 +221,9 @@ class GeometryInfo;
 // allowed to be requested.
 template <typename T>
 CPP_concept RequestedInfoT =
-    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
-              SourceCrsType, NumGeometries, MetricLength, MetricArea,
-              SerializationType>;
+    SameAsAny<T, GeometryInfo, Centroid, WithSourceCrs<Centroid>, BoundingBox,
+              WithSourceCrs<BoundingBox>, GeometryType, SourceCrsType,
+              NumGeometries, MetricLength, MetricArea, SerializationType>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
@@ -356,11 +372,28 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the centroid.
   static std::optional<Centroid> getCentroid(std::string_view wkt);
 
+  // Extract centroid from geometryTypeAndCentroid_ and convert it to GeoPoint.
+  // Append `SourceCrsType`.
+  WithSourceCrs<Centroid> getCentroidWithCrs() const;
+
+  // Parse an arbitrary WKT literal and compute only the centroid and the
+  // `SourceCrsType`.
+  static std::optional<WithSourceCrs<Centroid>> getCentroidWithCrs(
+      std::string_view wkt);
+
   // Convert the bounding box to GeoPoints.
   BoundingBox getBoundingBox() const;
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static std::optional<BoundingBox> getBoundingBox(std::string_view wkt);
+
+  // Convert the bounding box to GeoPoints and append `SourceCrsType`.
+  WithSourceCrs<BoundingBox> getBoundingBoxWithCrs() const;
+
+  // Parse an arbitrary WKT literal and compute only the bounding box and the
+  // `SourceCrsType`.
+  static std::optional<WithSourceCrs<BoundingBox>> getBoundingBoxWithCrs(
+      std::string_view wkt);
 
   // Extract the metric area.
   MetricArea getMetricArea() const;

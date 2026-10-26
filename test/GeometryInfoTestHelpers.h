@@ -123,6 +123,10 @@ inline void checkRequestedInfoForInstance(
   EXPECT_EQ(gi.getSerializationType(), SerializationType::WKT);
   EXPECT_EQ(gi.getSerializationType(),
             gi.getRequestedInfo<SerializationType>());
+  EXPECT_EQ(gi.getCentroidWithCrs(),
+            gi.getRequestedInfo<WithSourceCrs<Centroid>>());
+  EXPECT_EQ(gi.getBoundingBoxWithCrs(),
+            gi.getRequestedInfo<WithSourceCrs<BoundingBox>>());
 }
 
 // ____________________________________________________________________________
@@ -149,6 +153,10 @@ inline void checkRequestedInfoForWktLiteral(
             GeometryInfo::getRequestedInfo<SourceCrsType>(wkt));
   EXPECT_EQ(gi.getSerializationType(),
             GeometryInfo::getRequestedInfo<SerializationType>(wkt));
+  EXPECT_EQ(gi.getCentroidWithCrs(),
+            GeometryInfo::getRequestedInfo<WithSourceCrs<Centroid>>(wkt));
+  EXPECT_EQ(gi.getBoundingBoxWithCrs(),
+            GeometryInfo::getRequestedInfo<WithSourceCrs<BoundingBox>>(wkt));
 }
 
 // ____________________________________________________________________________
