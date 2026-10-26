@@ -1,5 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2026 Tomas Damek <tomas.damek@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -91,4 +92,24 @@ TEST(ResponseJsonTest, composeError) {
                                          "some error message", requestTimer,
                                          truncatedMetadata),
               testing::Eq(baseJson));
+}
+
+// _____________________________________________________________________________
+TEST(ResponseJsonTest, composeRebuildSuccess) {
+  // The response reports the directory to which the old index was retired, not
+  // its full base name (the base name inside that directory is always the file
+  // name of the current index, which the client knows).
+  qlever::IndexSwapConfig config{"index", "rebuild.tmp/index",
+                                 "previous.2026-01-02/index", "index"};
+  EXPECT_THAT(
+      responseJson::composeRebuildSuccess(config),
+      testing::Eq(json{{"message", "Index successfully rebuilt and swapped in"},
+                       {"previous-index-dir", "previous.2026-01-02"}}));
+
+  // A retired base name without a directory component (i.e. directly in the
+  // working directory) yields an empty directory.
+  EXPECT_EQ(responseJson::composeRebuildSuccess(qlever::IndexSwapConfig{
+                "index", "rebuild.tmp/index", "previousIndex",
+                "index"})["previous-index-dir"],
+            "");
 }

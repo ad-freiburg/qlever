@@ -1,12 +1,16 @@
-//   Copyright 2023, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
+
+#include <vector>
 
 #include "backports/keywords.h"
 #include "util/CancellationHandle.h"
@@ -36,6 +40,29 @@ using WithAndWithoutWatchDog =
     ::testing::Types<CancellationHandle<ENABLED>,
                      CancellationHandle<NO_WATCH_DOG>>;
 TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
+
+// Record the tasks scheduled by the watch dog instead of running them, such
+// that the tests can run its steps one by one via `runNext`.
+struct FakeRunAfter {
+  std::vector<absl::AnyInvocable<void()>> tasks_;
+
+  // Return a `RunAfter` that schedules its tasks on this object.
+  CancellationHandle<>::RunAfter runAfter() {
+    return [this](std::chrono::milliseconds delay,
+                  absl::AnyInvocable<void()> task) {
+      EXPECT_EQ(delay, DESIRED_CANCELLATION_CHECK_INTERVAL);
+      tasks_.push_back(std::move(task));
+    };
+  }
+
+  // Run the oldest scheduled task, which might schedule a new one.
+  void runNext() {
+    ASSERT_FALSE(tasks_.empty());
+    auto task = std::move(tasks_.front());
+    tasks_.erase(tasks_.begin());
+    task();
+  }
+};
 
 // _____________________________________________________________________________
 
@@ -166,112 +193,84 @@ TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
   EXPECT_NO_THROW(CancellationHandle<ENABLED>{});
 }
 
-// _____________________________________________________________________________
-
 namespace ad_utility {
 
+// Test that the watch dog advances the state step by step and that a check
+// resets it.
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
-  CancellationHandle<ENABLED> handle;
+  auto handle = std::make_shared<CancellationHandle<ENABLED>>();
+  FakeRunAfter fake;
 
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  handle.startWatchDog();
+  EXPECT_EQ(handle->cancellationState_, NOT_CANCELLED);
+  CancellationHandle<ENABLED>::registerWatchDog(handle, fake.runAfter());
 
-  // Give thread some time to start
-  std::this_thread::sleep_for(10ms);
-  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
+  // The first step is run immediately.
+  EXPECT_EQ(handle->cancellationState_, WAITING_FOR_CHECK);
+  EXPECT_EQ(fake.tasks_.size(), 1);
 
-  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
-  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
+  fake.runNext();
+  EXPECT_EQ(handle->cancellationState_, CHECK_WINDOW_MISSED);
+  EXPECT_EQ(fake.tasks_.size(), 1);
+
+  fake.runNext();
+  EXPECT_EQ(handle->cancellationState_, CHECK_WINDOW_MISSED);
+  EXPECT_EQ(fake.tasks_.size(), 1);
+
+  // A check resets the state, the next step starts the window again.
+  handle->throwIfCancelled();
+  EXPECT_EQ(handle->cancellationState_, NOT_CANCELLED);
+  fake.runNext();
+  EXPECT_EQ(handle->cancellationState_, WAITING_FOR_CHECK);
+  EXPECT_EQ(fake.tasks_.size(), 1);
 }
 
-// _____________________________________________________________________________
-
+// Test that the watch dog leaves a cancelled handle alone and stops.
 TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
-  CancellationHandle<ENABLED> handle;
-  handle.startWatchDog();
+  for (auto reason : {MANUAL, TIMEOUT}) {
+    auto handle = std::make_shared<CancellationHandle<ENABLED>>();
+    FakeRunAfter fake;
+    CancellationHandle<ENABLED>::registerWatchDog(handle, fake.runAfter());
 
-  // Give thread some time to start
-  std::this_thread::sleep_for(10ms);
-
-  handle.cancellationState_ = MANUAL;
-  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
-  EXPECT_EQ(handle.cancellationState_, MANUAL);
-
-  handle.cancellationState_ = TIMEOUT;
-  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL);
-  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
-}
-
-// _____________________________________________________________________________
-
-TEST(CancellationHandle, ensureDestructorReturnsFastWithActiveWatchDog) {
-  std::chrono::steady_clock::time_point start;
-  {
-    CancellationHandle<ENABLED> handle;
-    handle.startWatchDog();
-    start = std::chrono::steady_clock::now();
+    handle->cancellationState_ = reason;
+    fake.runNext();
+    EXPECT_EQ(handle->cancellationState_, reason);
+    // The watch dog has stopped.
+    EXPECT_TRUE(fake.tasks_.empty());
   }
-  auto duration = std::chrono::steady_clock::now() - start;
-  // Ensure we don't need to wait for the entire interval to finish.
-  EXPECT_LT(duration, DESIRED_CANCELLATION_CHECK_INTERVAL);
 }
 
-// _____________________________________________________________________________
+// Test that the watch dog neither keeps the handle alive nor runs on after the
+// handle is destroyed.
+TEST(CancellationHandle, verifyWatchDogEndsIfHandleIsDestroyed) {
+  auto handle = std::make_shared<CancellationHandle<ENABLED>>();
+  std::weak_ptr<CancellationHandle<ENABLED>> weakHandle = handle;
+  FakeRunAfter fake;
+  CancellationHandle<ENABLED>::registerWatchDog(handle, fake.runAfter());
 
-TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
-  CancellationHandle<ENABLED> handle;
-
-  handle.cancellationState_ = NOT_CANCELLED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = WAITING_FOR_CHECK;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = CHECK_WINDOW_MISSED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = MANUAL;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, MANUAL);
-
-  handle.cancellationState_ = TIMEOUT;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
+  // The watch dog doesn't keep the handle alive.
+  handle.reset();
+  EXPECT_TRUE(weakHandle.expired());
+  fake.runNext();
+  EXPECT_TRUE(fake.tasks_.empty());
 }
 
-// _____________________________________________________________________________
+// Test that the watch dog can be registered only once and only for a live
+// handle.
+TEST(CancellationHandle, verifyWatchDogCanOnlyBeRegisteredOnce) {
+  auto handle = std::make_shared<CancellationHandle<ENABLED>>();
+  FakeRunAfter fake;
+  CancellationHandle<ENABLED>::registerWatchDog(handle, fake.runAfter());
+  EXPECT_THROW(
+      CancellationHandle<ENABLED>::registerWatchDog(handle, fake.runAfter()),
+      ad_utility::Exception);
+  EXPECT_EQ(fake.tasks_.size(), 1);
 
-TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
-  CancellationHandle<NO_WATCH_DOG> handle;
-
-  handle.cancellationState_ = NOT_CANCELLED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = WAITING_FOR_CHECK;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
-
-  handle.cancellationState_ = CHECK_WINDOW_MISSED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
-
-  handle.cancellationState_ = MANUAL;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, MANUAL);
-
-  handle.cancellationState_ = TIMEOUT;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
+  // An expired handle can't be registered.
+  EXPECT_THROW(
+      CancellationHandle<ENABLED>::registerWatchDog(
+          std::weak_ptr<CancellationHandle<ENABLED>>{}, fake.runAfter()),
+      ad_utility::Exception);
+  EXPECT_EQ(fake.tasks_.size(), 1);
 }
 
 // _____________________________________________________________________________
@@ -305,7 +304,8 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
   auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
@@ -320,16 +320,16 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
       AllOf(HasSubstr(expectedLocation),
             HasSubstr(ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                           .toString()),
-            // Check for small miss window
+            // Check for small miss window.
             ContainsRegex("least 5[0-9]ms")));
-  // This test assumes this interval to be 50ms to build the regex
+  // This test assumes this interval to be 50ms to build the regex.
   static_assert(DESIRED_CANCELLATION_CHECK_INTERVAL == 50ms);
 }
 
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
   auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
@@ -337,7 +337,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
-  // The first call should trigger a log
+  // The first call should trigger a log.
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -346,7 +346,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   testStream.str("");
 
   // The second call should not trigger a log because the state has already
-  // been reset
+  // been reset.
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -355,7 +355,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   testStream.str("");
 
-  // WAITING_FOR_CHECK should not trigger a log
+  // WAITING_FOR_CHECK should not trigger a log.
   handle.pleaseWatchDog(WAITING_FOR_CHECK, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -364,7 +364,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
   constexpr auto printSomething = []() { return "something"; };
-  // The first call should trigger a log with more details
+  // The first call should trigger a log with more details.
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, printSomething);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -373,7 +373,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   testStream.str("");
 
-  // The second call should not trigger a log
+  // The second call should not trigger a log.
   handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, printSomething);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -384,7 +384,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   testStream.str("");
 
-  // WAITING_FOR_CHECK should not trigger a log
+  // WAITING_FOR_CHECK should not trigger a log.
   handle.pleaseWatchDog(WAITING_FOR_CHECK, location, printSomething);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
@@ -409,7 +409,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
+  ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 
   auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
@@ -431,22 +431,16 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr(expectedLocation)));
 }
 
-// _____________________________________________________________________________
-
+// Test that nothing is scheduled for a handle that is already cancelled.
 TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled) {
-  CancellationHandle<ENABLED> handle;
-  handle.cancel(MANUAL);
+  auto handle = std::make_shared<CancellationHandle<ENABLED>>();
+  handle->cancel(MANUAL);
 
-  handle.startWatchDog();
-  // Wait for Watchdog to start
-  std::this_thread::sleep_for(5ms);
-
-  handle.cancellationState_ = WAITING_FOR_CHECK;
-
-  // Wait for one watchdog cycle + tolerance
-  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL + 1ms);
-  // If the watchdog were running it would've set this to CHECK_WINDOW_MISSED
-  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
+  FakeRunAfter fake;
+  CancellationHandle<ENABLED>::registerWatchDog(handle, fake.runAfter());
+  // Nothing is scheduled if the handle was cancelled already.
+  EXPECT_TRUE(fake.tasks_.empty());
+  EXPECT_EQ(handle->cancellationState_, MANUAL);
 }
 
 // _____________________________________________________________________________
@@ -458,6 +452,26 @@ TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   EXPECT_NO_THROW(handle.throwIfCancelled());
 }
 
+// Test that `registerWatchDog` is a no-op in the `DISABLED` mode.
+TEST(CancellationHandle, expectDisabledHandleDoesNotRegisterWatchDog) {
+  auto handle = std::make_shared<CancellationHandle<DISABLED>>();
+  FakeRunAfter fake;
+  CancellationHandle<DISABLED>::registerWatchDog(handle, fake.runAfter());
+  EXPECT_TRUE(fake.tasks_.empty());
+}
+
+// Test that `registerWatchDog` is a no-op in the `NO_WATCH_DOG` mode, also when
+// called twice.
+TEST(CancellationHandle, expectNoWatchDogHandleDoesNotRegisterWatchDog) {
+  auto handle = std::make_shared<CancellationHandle<NO_WATCH_DOG>>();
+  FakeRunAfter fake;
+  CancellationHandle<NO_WATCH_DOG>::registerWatchDog(handle, fake.runAfter());
+  EXPECT_TRUE(fake.tasks_.empty());
+  // Registering twice is fine, because nothing is registered.
+  CancellationHandle<NO_WATCH_DOG>::registerWatchDog(handle, fake.runAfter());
+  EXPECT_TRUE(fake.tasks_.empty());
+}
+
 template <typename T>
 QL_CONSTEVAL bool isMemberFunction([[maybe_unused]] T funcPtr) {
   return std::is_member_function_pointer_v<T>;
@@ -466,19 +480,12 @@ QL_CONSTEVAL bool isMemberFunction([[maybe_unused]] T funcPtr) {
 // Make sure member functions still exist when no watch dog functionality
 // is available to make the code simpler. In this case the functions should
 // be no-op.
-static_assert(
-    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::startWatchDog));
-static_assert(
-    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::resetWatchDogState));
-static_assert(isMemberFunction(&CancellationHandle<DISABLED>::startWatchDog));
-static_assert(
-    isMemberFunction(&CancellationHandle<DISABLED>::resetWatchDogState));
 static_assert(isMemberFunction(&CancellationHandle<DISABLED>::cancel));
 static_assert(isMemberFunction(&CancellationHandle<DISABLED>::isCancelled));
 // Ideally we'd add a static assertion for throwIfCancelled here too, but
 // because the function is overloaded, we can't get a function pointer for it.
 
-// Constexpr test cases
+// Constexpr test cases.
 static_assert(trimFileName("") == "");
 static_assert(trimFileName("/") == "");
 static_assert(trimFileName("folder/") == "");

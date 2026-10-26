@@ -93,7 +93,11 @@ inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
           Property(&GeometryInfo::getMetricLength,
                    metricLengthNear(expected.getMetricLength())),
           Property(&GeometryInfo::getMetricArea,
-                   metricAreaNear(expected.getMetricArea())));
+                   metricAreaNear(expected.getMetricArea())),
+          Property(&GeometryInfo::getSourceCrsType,
+                   Eq(expected.getSourceCrsType())),
+          Property(&GeometryInfo::getSerializationType,
+                   Eq(expected.getSerializationType())));
     });
 #define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 
@@ -115,6 +119,10 @@ inline void checkRequestedInfoForInstance(
   EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
                            gi.getRequestedInfo<MetricLength>());
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
+  EXPECT_EQ(gi.getSourceCrsType(), gi.getRequestedInfo<SourceCrsType>());
+  EXPECT_EQ(gi.getSerializationType(), SerializationType::WKT);
+  EXPECT_EQ(gi.getSerializationType(),
+            gi.getRequestedInfo<SerializationType>());
 }
 
 // ____________________________________________________________________________
@@ -137,6 +145,10 @@ inline void checkRequestedInfoForWktLiteral(
                            GeometryInfo::getRequestedInfo<MetricLength>(wkt));
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
                          GeometryInfo::getRequestedInfo<MetricArea>(wkt));
+  EXPECT_EQ(gi.getSourceCrsType(),
+            GeometryInfo::getRequestedInfo<SourceCrsType>(wkt));
+  EXPECT_EQ(gi.getSerializationType(),
+            GeometryInfo::getRequestedInfo<SerializationType>(wkt));
 }
 
 // ____________________________________________________________________________
@@ -206,7 +218,7 @@ inline T getGeometryOfTypeOrThrow(
   using namespace ad_utility::detail;
   auto l = generateLocationTrace(sourceLocation);
   auto parseRes = parseWkt(wkt);
-  if (!parseRes.second.has_value()) {
+  if (!parseRes.parsedWkt_.has_value()) {
     throw std::runtime_error("Could not parse wkt literal");
   }
   return std::visit(
@@ -218,7 +230,7 @@ inline T getGeometryOfTypeOrThrow(
           throw std::runtime_error("Wrong geometry type of parse result");
         }
       },
-      parseRes.second.value());
+      parseRes.parsedWkt_.value());
 }
 
 // ____________________________________________________________________________
@@ -353,7 +365,11 @@ inline Matcher<std::optional<ParsedWkt>> ParsedWktNearForwardDecl::operator()(
 // ____________________________________________________________________________
 inline auto parseResultNear = liftOptionalMatcher<ParseResult>(
     [](ParseResult expected) -> Matcher<ParseResult> {
-      return Pair(Eq(expected.first), parsedWktNear(expected.second));
+      return AllOf(
+          AD_FIELD(ParseResult, parsedWkt_, parsedWktNear(expected.parsedWkt_)),
+          AD_FIELD(ParseResult, wktType_, Eq(expected.wktType_)),
+          AD_FIELD(ParseResult, actualCrs_, Eq(expected.actualCrs_)),
+          AD_FIELD(ParseResult, sourceCrs_, Eq(expected.sourceCrs_)));
     });
 
 // ____________________________________________________________________________

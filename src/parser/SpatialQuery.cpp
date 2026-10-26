@@ -9,7 +9,6 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
-#include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
@@ -20,6 +19,17 @@ namespace detail {
 // CTRE named capture group identifiers for C++17 compatibility
 constexpr ctll::fixed_string distCaptureGroup = "dist";
 constexpr ctll::fixed_string resultsCaptureGroup = "results";
+
+// The error message for an invalid `<distanceUnit>`, built at compile time.
+constexpr std::string_view distanceUnitErrorPrefix =
+    "The parameter `<distanceUnit>` expects the IRI of a unit of length, e.g. "
+    "<";
+constexpr std::string_view distanceUnitErrorOr = "> or <";
+constexpr std::string_view distanceUnitErrorSuffix = ">";
+constexpr std::string_view distanceUnitError =
+    ad_utility::constexprStrCat<distanceUnitErrorPrefix, UNIT_METER_IRI,
+                                distanceUnitErrorOr, UNIT_KILOMETER_IRI,
+                                distanceUnitErrorSuffix>();
 }  // namespace detail
 
 // ____________________________________________________________________________
@@ -35,10 +45,9 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "right") {
     setVariable("right", object, right_);
   } else if (predString == "numNearestNeighbors") {
-    throwIf(!object.isInt(),
-            "The parameter `<numNearestNeighbors>` expects an integer (the "
-            "maximum "
-            "number of nearest neighbors)");
+    throwIf(!object.isInt() || object.getInt() <= 0,
+            "The parameter `<numNearestNeighbors>` expects a positive integer "
+            "(the maximum number of nearest neighbors)");
     maxResults_ = object.getInt();
   } else if (predString == "maxDistance") {
     if (object.isInt()) {
@@ -52,6 +61,12 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     }
   } else if (predString == "bindDistance") {
     setVariable("bindDistance", object, distanceVariable_);
+  } else if (predString == "distanceUnit") {
+    auto unit = object.isIri() ? ad_utility::detail::iriToUnitOfMeasurement(
+                                     object.getIri().getContent())
+                               : UnitOfMeasurement::UNKNOWN;
+    throwIf(!ad_utility::detail::isLengthUnit(unit), detail::distanceUnitError);
+    distanceUnit_ = unit;
   } else if (predString == "joinType") {
     // This case is already covered by `SpatialJoinType::fromString` below,
     // but we want to throw a more precise error if the object isn't even an
@@ -75,8 +90,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "
             "`T`/`F` (or lowercase), or `*`.");
-    auto parsed = parseDe9imFilterString(
-        asStringViewUnsafe(object.getLiteral().getContent()));
+    auto parsed = parseDe9imFilterString(object.getLiteral().getContent());
     throwIf(!parsed.has_value(),
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "
@@ -126,12 +140,13 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     throwIf(!object.isLiteral(),
             "The argument to the `<experimentalRightCacheName>` parameter must "
             "be the name of a pinned cache entry as a string literal.");
-    rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
+    rightCacheName_ = object.getLiteral().getContent();
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
         " in spatial search; supported arguments are: `<left>`, `<right>`, "
         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
+        "`<distanceUnit>`, "
         "`<joinType>`, `<de9imFilter>`, `<payload>`, and `<algorithm>`"));
   }
 }
@@ -165,6 +180,10 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`.");
 
+  throwIf(joinType_ == SpatialJoinType::WITHIN_DIST && !maxDist_.has_value(),
+          "The join type `<within-dist>` requires the `<maxDistance>` "
+          "parameter to be set.");
+
   throwIf(joinType_ == SpatialJoinType::DE9IM && !de9imFilter_.has_value(),
           "The join type `<de9im>` requires the `<de9imFilter>` parameter to "
           "be set.");
@@ -180,6 +199,10 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
   throwIf(!right_.has_value(),
           "Missing parameter `<right>` in spatial search.");
+
+  throwIf(distanceUnit_.has_value() && !distanceVariable_.has_value(),
+          "The parameter `<distanceUnit>` requires the parameter "
+          "`<bindDistance>`.");
 
   throwIf(
       rightCacheName_.has_value() &&
@@ -245,9 +268,18 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     task = MaxDistanceConfig{maxDist_.value()};
   }
 
-  return SpatialJoinConfiguration{
+  SpatialJoinConfiguration config{
       task, left_.value(), right_.value(), distanceVariable_,
-      pv,   algo,          joinType,       rightCacheName_};
+      pv,   algo,          rightCacheName_};
+  if (distanceVariable_.has_value()) {
+    // If no unit is given, `libspatialjoin` defaults to meters and all other
+    // algorithms default to kilometers.
+    config.distanceUnit_ =
+        distanceUnit_.value_or(algo == SpatialJoinAlgorithm::LIBSPATIALJOIN
+                                   ? UnitOfMeasurement::METERS
+                                   : UnitOfMeasurement::KILOMETERS);
+  }
+  return config;
 }
 
 // ____________________________________________________________________________
@@ -290,6 +322,11 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
     maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
+    // A limit of zero also results from a number too large for `from_chars`,
+    // which then leaves the result untouched.
+    throwIf(maxResults_.value() == 0,
+            "The number of nearest neighbors in `<nearest-neighbors:...>` must "
+            "be a positive integer");
   } else {
     AD_THROW(absl::StrCat("Tried to perform spatial join with unknown triple ",
                           input,

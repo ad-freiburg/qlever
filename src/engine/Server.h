@@ -24,7 +24,6 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "libqlever/Qlever.h"
@@ -52,6 +51,11 @@ namespace serverTestHelpers {
 class ServerForTesting;
 }
 
+// Defined in `util/ResourceMonitor.h`, which only `Server.cpp` includes.
+namespace ad_utility {
+class IndexRebuildIdTracker;
+}
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -75,11 +79,13 @@ class Server {
   friend serverTestHelpers::ServerForTesting;
 
  public:
-  explicit Server(unsigned short port, size_t numThreads,
-                  std::string accessToken, const qlever::EngineConfig& config,
-                  bool noAccessCheck = false,
-                  std::shared_ptr<ad_utility::metrics::MetricsReader>
-                      metricsReader = nullptr);
+  explicit Server(
+      unsigned short port, size_t numThreads, std::string accessToken,
+      const qlever::EngineConfig& config, bool noAccessCheck = false,
+      std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
+          nullptr,
+      std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker =
+          nullptr);
 
   virtual ~Server() = default;
 
@@ -131,6 +137,13 @@ class Server {
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
+  // Holds the ID of the currently running index rebuild, which the resource
+  // sampler reads for the `index_rebuild_id` column. The `shared_ptr` is never
+  // null, as the constructor creates a tracker even if the caller passes none.
+  // Note: This member is purely observational. Preventing a second concurrent
+  // index rebuild is the job of the `rebuildInProgress_` data member above.
+  std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker_;
+
   // Deregisters callbacks on destruction. Declared after `qlever_` so that it
   // is destroyed before `qlever_` which the callbacks access.
   std::unique_ptr<ServerMetrics> metrics_;
@@ -143,7 +156,7 @@ class Server {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
   using PlannedQuery = qlever::PlannedQuery;
-  using HttpErrorResponse = ad_utility::httpUtils::ResponseT;
+  using ResponseT = ad_utility::httpUtils::ResponseT;
   using StringBodyRequest =
       boost::beast::http::request<boost::beast::http::string_body>;
 
@@ -158,12 +171,17 @@ class Server {
   // turn requires a type with linkage.
   class MockSend {
    public:
-    Awaitable<void> operator()(auto response) {
+    // Same signature and contract as the corresponding overload of
+    // `HttpMessageSender` (all responses of the `Server` have a
+    // `streamable_body`).
+    Awaitable<void> operator()(ResponseT response,
+                               boost::asio::any_io_executor bodyExecutor) {
+      AD_CONTRACT_CHECK(bodyExecutor);
       response_ = std::move(response);
       co_return;
     }
 
-    ad_utility::httpUtils::ResponseT response_;
+    ResponseT response_;
   };
 
   CPP_template(typename CancelTimeout)(
@@ -189,65 +207,108 @@ class Server {
 
   // Run `qlever().clearDeltaTriples()` on `updateThreadPool_` and return the
   // resulting counts. Not cancellable. Unlike `processVacuumDeltaTriples`
-  // below, this is unconditional and has no timeout, so it neither needs the
-  // request/response nor can it fail partway through.
+  // below, this is unconditional and has no timeout, so it can never fail
+  // partway through.
   Awaitable<DeltaTriplesCount> processClearDeltaTriples();
 
   // Vacuum (remove redundant) delta triples of the currently active index,
   // honoring a user-submitted timeout (see `verifyUserSubmittedQueryTimeout`).
   // Unlike `processClearDeltaTriples` above, this can fail (because of an
-  // invalid timeout), in which case an error response has already been sent to
-  // the client and an empty optional is returned; the caller must stop
-  // processing in that case. Otherwise the resulting vacuum stats are
-  // returned.
-  CPP_template(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<std::optional<json>> processVacuumDeltaTriples(
-          std::optional<std::string_view> userTimeout, bool accessTokenOk,
-          const RequestT& request, ResponseT& send);
+  // invalid timeout), in which case `verifyUserSubmittedQueryTimeout` throws
+  // an `HttpError` that unwinds out of `process()`, all the way up to
+  // `handleHttpRequest`. Otherwise the resulting vacuum stats are returned.
+  Awaitable<json> processVacuumDeltaTriples(
+      std::optional<std::string_view> userTimeout, bool accessTokenOk);
 
-  // Handle a `write-materialized-view` command: extract the view name, query,
-  // and timeout from `parameters`/`operation`, execute the query, and store
-  // its result as a named materialized view. Uses the same convention as
-  // `processVacuumDeltaTriples` above: an empty optional means an error
-  // response has already been sent to the client. On success, the caller is
-  // responsible for resetting the request's operation to `None{}` so that
-  // `process()` doesn't also try to execute it as a regular query.
-  CPP_template(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<std::optional<json>> processWriteMaterializedView(
-          const ParamValueMap& parameters, const SparqlOperation& operation,
-          bool accessTokenOk, const ad_utility::Timer& requestTimer,
-          const RequestT& request, ResponseT& send);
+  // Handle a `write-materialized-view` command: extract the view name and
+  // query from `parameters`/`operation`, execute the query, store its result
+  // as a named materialized view, and return the resulting materialized-view
+  // stats. On success, the caller is responsible for resetting the request's
+  // operation to `None{}` so that `process()` doesn't also try to execute it
+  // as a regular query.
+  Awaitable<json> processWriteMaterializedView(
+      const ParamValueMap& parameters, const SparqlOperation& operation,
+      const ad_utility::Timer& requestTimer);
 
   // Handle a `load-materialized-view` command: extract the view name from
   // `parameters` and load it via `indexAndViews`'s materialized views
-  // manager. The caller is responsible for resetting the request's operation
-  // to `None{}` so that `process()` doesn't also try to execute it as a
-  // regular query. Unlike `processWriteMaterializedView` above, this neither
-  // executes a query nor honors a timeout, so it runs synchronously and
-  // either returns its result or throws -- there's no optional-json/
-  // early-return convention needed here.
+  // manager. Unlike `processWriteMaterializedView` above, this does not
+  // execute a query, so it runs synchronously and either returns its result or
+  // throws.
   json processLoadMaterializedView(const ParamValueMap& parameters,
                                    const SharedIndexAndView& indexAndViews);
 
   // Handle a `delete-materialized-view` command: extract the view name from
   // `parameters`, delete it via a freshly taken index/views snapshot (not the
   // one from the beginning of `process()`, so that a concurrent rebuild
-  // cannot make this operate on a stale manager). The caller is responsible
-  // for resetting the request's operation to `None{}`, like
-  // `processLoadMaterializedView` above.
+  // cannot make this operate on a stale manager).
   json processDeleteMaterializedView(const ParamValueMap& parameters) const;
+
+  // Handle an `unload-materialized-view` command: unload the view named in
+  // `parameters` if loaded, keeping its on-disk files (unlike `delete`). The
+  // response tells whether the view was loaded before.
+  json processUnloadMaterializedView(const ParamValueMap& parameters) const;
+
+  // Handle the `/ping` endpoint: log the alive check (with or without an
+  // accompanying "msg" parameter) and return a fixed confirmation response.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
+      processPing(std::optional<std::string> msg,
+                  const RequestT& request) const;
+
+  // Handle the `/metrics` endpoint: require a valid access token, then
+  // return Prometheus-formatted metrics text if enabled
+  // (`--enable-metrics`), or a 404 response otherwise.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
+      processMetrics(bool accessTokenOk, const RequestT& request) const;
+
+  // Set every runtime parameter that's present in `parameters`, verifying the
+  // access token if there is at least one such runtime parameter. If any
+  // runtime parameter was changed, return the representation of all runtime
+  // parameters, else `nullopt`.
+  std::optional<json> processSetRuntimeParameters(
+      const ParamValueMap& parameters, bool accessTokenOk) const;
 
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
   // Unlike `processVacuumDeltaTriples`/`processWriteMaterializedView` above,
   // this never needs to bypass query processing, so it returns the response
-  // directly instead of following the optional-json convention.
+  // directly.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<ad_utility::httpUtils::ResponseT> processRebuildIndex(
-          const ParamValueMap& parameters, const RequestT& request);
+      Awaitable<ResponseT> processRebuildIndex(const ParamValueMap& parameters,
+                                               const RequestT& request);
+
+  // Result of `processCommands` below.
+  struct ProcessCommandsResult {
+    // The response produced by the matched `cmd=` URL parameter, if any.
+    std::optional<ResponseT> response_;
+
+    // Set to true for commands whose `serverProcessHelpers::CommandMeta::
+    // supportsOperation_` is true (currently only `write-materialized-view`,
+    // which uses the given query as the view-defining query and already
+    // executes it) to tell `process()` not to run the operation again via
+    // `processOperation`.
+    bool queryOperationWasConsumed_ = false;
+  };
+
+  // Handle the `cmd=<name>` URL parameter (see `serverProcessHelpers::
+  // commands` in `Server.cpp` for the full list); throws an `HttpError` if
+  // `cmd` is set but not one of those, or if the matched command's
+  // `CommandMeta::supportsOperation_` is `false` while the request supplies a
+  // "query"/"update"/graph-store `operation` anyway. `write-materialized-
+  // view` is currently the only command with `supportsOperation_` set to
+  // `true`; its `operation` doubles as the view-defining query, and the
+  // returned `ProcessCommandsResult::queryOperationWasConsumed_` is set to
+  // tell `process()` not to also execute it as a regular query.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<ProcessCommandsResult> processCommands(
+          const SharedIndexAndView& indexAndViews,
+          const ParamValueMap& parameters, const SparqlOperation& operation,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          RequestT& request);
 
   // Initialize and register server metrics which are stored in `metrics_`.
   void initializeServerMetrics(
@@ -256,7 +317,7 @@ class Server {
   // Log `message`, record it under `errorType` in the HTTP error metrics,
   // and build the corresponding HTTP error response for `request`.
   CPP_template(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) HttpErrorResponse
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) ResponseT
       reportHttpError(std::string_view message,
                       ad_utility::httpUtils::http::status status,
                       const RequestT& request,
@@ -299,18 +360,30 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> process(RequestT& request, ResponseT&& send);
+      Awaitable<void> process(RequestT& request, SendT&& send);
+
+  // The final step of `process()`: by this point the operation type (which also
+  // can be `no-operation`) is known, so this builds the
+  // query/update/graph-store-protocol/no-operation visitors and hands them,
+  // together with `operation`, to `processOperation`.
+  CPP_template(typename RequestT, typename SendT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processSparqlOperation(
+          SparqlOperation operation, const ParamValueMap& parameters,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
+          SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
+          std::optional<ResponseT> response);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
-  CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
+  CPP_template(typename VisitorT, typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> processOperation(
-          SparqlOperation operation, VisitorT visitor,
-          const ad_utility::Timer& requestTimer, const RequestT& request,
-          ResponseT& send, const std::optional<PlannedQuery>& plannedQuery);
+  Awaitable<void> processOperation(
+      SparqlOperation operation, VisitorT visitor,
+      const ad_utility::Timer& requestTimer, const RequestT& request,
+      SendT& send, const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -321,14 +394,14 @@ class Server {
   FRIEND_TEST(ServerTest, chooseBestFittingMediaType);
 
   // Do the actual execution of a query.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
           const ParamValueMap& params, ParsedQuery&& query,
           const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
+          QueryExecutionContext& qec, const RequestT& request, SendT&& send,
+          std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
@@ -337,13 +410,13 @@ class Server {
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
           MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+          const RequestT& request, SendT&& send,
           std::optional<PlannedQuery>& plannedUpdate);
 
   //  Prepare the execution of an operation.
@@ -361,16 +434,17 @@ class Server {
       std::optional<QueryExecutionContext::PinResultWithName> pinResultWithName,
       bool accessTokenOk, QueryExecutionContext& qec);
 
-  // Plan a parsed query.
+  // Plan a parsed query. The planning and the execution use the cancellation
+  // handle of the `qec`.
   PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle, TimeLimit timeLimit,
                          const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation,
+          const RequestT& request, std::string_view operationString,
+          ad_utility::websocket::QueryOperation operationType,
           std::string_view clientIp = {});
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
@@ -390,6 +464,8 @@ class Server {
   ///
   /// \param request The HTTP request to extract the id from.
   /// \param query A string representation of the query to register an id for.
+  /// \param operationType Whether this is a query or an update. It is written
+  ///        to the `type` field of the `start` event in the query event log.
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
@@ -397,17 +473,22 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
       getQueryId(const RequestT& request, std::string_view query,
+                 ad_utility::websocket::QueryOperation operationType,
                  std::string_view clientIp = {});
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
   /// either because the `cancellationHandle` has been aborted by some other
   /// means or because the task has been completed successfully.
-  auto cancelAfterDeadline(
+  absl::AnyInvocable<void()> cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-      TimeLimit timeLimit)
-      -> QL_CONCEPT_OR_NOTHING(
-          ad_utility::InvocableWithExactReturnType<void>) auto;
+      TimeLimit timeLimit);
+  FRIEND_TEST(ServerTest, cancelAfterDeadline);
+
+  /// Return the `RunAfter` for the watchdog of a single `CancellationHandle`,
+  /// which runs the steps of the watchdog on the `timerExecutor_`.
+  ad_utility::CancellationHandle<>::RunAfter makeWatchDogRunAfter();
+  FRIEND_TEST(ServerTest, makeWatchDogRunAfter);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
@@ -429,24 +510,22 @@ class Server {
   FRIEND_TEST(ServerTest, checkAccessToken);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
-  /// lower than the server default. Return an empty optional and send a 403
-  /// Forbidden HTTP response if the change is not allowed. Return the new
-  /// timeout otherwise.
-  CPP_template(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) boost::asio::
-      awaitable<std::optional<Server::TimeLimit>> verifyUserSubmittedQueryTimeout(
-          std::optional<std::string_view> userTimeout, bool accessTokenOk,
-          const RequestT& request, ResponseT& send) const;
+  /// lower than the server default. Throw an `HttpError` (403 Forbidden) if
+  /// the change is not allowed. For queries and updates, `processOperation`
+  /// catches it and builds the standard JSON error response. On the `cmd=`
+  /// paths it unwinds to `handleHttpRequest`, which builds a plain-text
+  /// response. Return the new timeout otherwise.
+  TimeLimit verifyUserSubmittedQueryTimeout(
+      std::optional<std::string_view> userTimeout, bool accessTokenOk) const;
 
   /// Send response for the streamable media types (tsv, csv, octet-stream,
   /// turtle, sparqlJson, qleverJson).
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> sendStreamableResponse(
-          const RequestT& request, ResponseT& send,
-          ad_utility::MediaType mediaType, const PlannedQuery plannedQuery,
-          const ad_utility::Timer requestTimer,
-          SharedCancellationHandle cancellationHandle) const;
+          const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
+          const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
+          SharedCancellationHandle cancellationHandle);
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
@@ -458,7 +537,7 @@ class Server {
   // directory for the old index; the full resolved configuration is returned.
   // This assumes that the access token has already been checked and no other
   // rebuild is currently in progress.
-  Awaitable<qlever::IndexRebuildConfig> rebuildIndex(
+  Awaitable<qlever::IndexSwapConfig> rebuildIndex(
       std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
 
@@ -467,7 +546,7 @@ class Server {
   // is held for the duration of the rebuild). This is the common
   // implementation behind the two ways of triggering a rebuild: the manual
   // `cmd=rebuild-index` HTTP request and the automatic trigger below.
-  Awaitable<std::optional<qlever::IndexRebuildConfig>>
+  Awaitable<std::optional<qlever::IndexSwapConfig>>
   rebuildIndexUnlessInProgress(
       std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
@@ -498,12 +577,6 @@ class Server {
   }
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return qlever().allocator();
-  }
-  SortPerformanceEstimator& sortPerformanceEstimator() {
-    return qlever().sortPerformanceEstimator();
-  }
-  const SortPerformanceEstimator& sortPerformanceEstimator() const {
-    return qlever().sortPerformanceEstimator();
   }
   NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
   const NamedResultCache& namedResultCache() const {

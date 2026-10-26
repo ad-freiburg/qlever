@@ -18,6 +18,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
@@ -32,7 +33,7 @@ using namespace deltaTriplesTestHelpers;
 using ad_utility::testing::encodedIriManager;
 
 constexpr auto iri = [](std::string_view s) -> TripleComponent {
-  return TripleComponent{TripleComponent::Iri::fromIriref(s)};
+  return TripleComponent{ad_utility::testing::iri(s)};
 };
 
 constexpr auto lit = [](std::string s) -> TripleComponent {
@@ -145,7 +146,13 @@ TEST_F(DeltaTriplesTest, clear) {
 
   EXPECT_THAT(deltaTriples, NumTriples(1, 1, 2, 1, 1));
 
+  // Clearing changes the index of the located triples, so that results that
+  // are cached for the previous index are not reused.
+  const size_t indexBeforeClear =
+      deltaTriples.getLocatedTriplesSharedStateCopy()->index_;
   deltaTriples.clear();
+  EXPECT_GT(deltaTriples.getLocatedTriplesSharedStateCopy()->index_,
+            indexBeforeClear);
 
   EXPECT_THAT(deltaTriples, NumTriples(0, 0, 0, 0, 0));
 }
@@ -437,9 +444,12 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   auto a = iri("<a>");
   auto b = iri("<b>");
   auto lp = iri(LANGUAGE_PREDICATE);
-  auto de = TripleComponent{ad_utility::convertLangtagToEntityUri("de")};
-  auto en = TripleComponent{ad_utility::convertLangtagToEntityUri("en")};
-  auto es = TripleComponent{ad_utility::convertLangtagToEntityUri("es")};
+  auto de =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("de")};
+  auto en =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("en")};
+  auto es =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("es")};
   EXPECT_THAT(deltaTriples,
               TriplesAre({{a, b, TripleComponent{1}},
                           {a, b, lit("\"abc\"")},
@@ -1241,6 +1251,10 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
           .numTriplesForTesting());
 
   EXPECT_THAT(newDeltaTriples, NumTriples(2, 1, 3, 2, 0));
+  // The index of the located triples continues the one of `newSnapshot`, so
+  // that results cached for the old index are never served for the new one.
+  EXPECT_GT(newDeltaTriples.getLocatedTriplesSharedStateCopy()->index_,
+            newSnapshot->index_);
   auto locatedTriples =
       newDeltaTriples.getLocatedTriplesForPermutation(Permutation::SPO);
   std::vector<IdTriple<0>> insertedTriples;

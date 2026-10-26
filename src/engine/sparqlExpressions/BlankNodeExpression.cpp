@@ -99,9 +99,10 @@ class BlankNodeExpression : public SparqlExpression {
   static IdOrLocalVocabEntry makeBlankNode(std::string_view label,
                                            uint64_t index,
                                            const EvaluationContext* context) {
-    return LocalVocabEntry::fromStringRepresentation(
-        absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un", label, "_",
-                     index, ">"),
+    return toIdOrLocalVocabEntry(
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un", label,
+                         "_", index, ">")),
         context->getLocalVocabContext());
   }
 

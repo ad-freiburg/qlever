@@ -34,6 +34,11 @@ struct SpatialQuery : MagicServiceQuery {
   // search results is bound
   std::optional<Variable> distanceVariable_;
 
+  // The unit of the distances bound to `distanceVariable_`. If not given,
+  // `libspatialjoin` defaults to meters and all other algorithms default to
+  // kilometers.
+  std::optional<UnitOfMeasurement> distanceUnit_;
+
   // A list of variables from the right join table that shall be part of the
   // result table. If empty, only the join column - given by `right_` - will
   // be in the result together with the all left columns and (optionally) the
@@ -91,7 +96,7 @@ struct SpatialQuery : MagicServiceQuery {
   // Throw if the current configuration is invalid.
   void validate() const override;
 
-  constexpr std::string_view name() const override { return "spatial join"; }
+  QL_CONSTEXPR std::string_view name() const override { return "spatial join"; }
 
  private:
   // If `throwCondition` is `true`, throw `SpatialSearchException{message}`.

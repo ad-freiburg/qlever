@@ -93,6 +93,33 @@ size_t LibspatialjoinAlgorithm::getNumThreads() {
 }
 
 // ____________________________________________________________________________
+LibspatialjoinAlgorithm::SweeperTempPath
+LibspatialjoinAlgorithm::getSweeperTempPath() const {
+  auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
+
+  std::string dir =
+      getRuntimeParameter<&RuntimeParameters::spatialJoinTmpDir_>();
+  if (dir.empty()) {
+    dir = basePath.parent_path().string();
+    // `parent_path()` returns `""` if the parent path is empty, not `"."`.
+    if (dir.empty()) {
+      dir = ".";
+    }
+  }
+
+  std::string baseName = ql::pathFilename(basePath).string();
+
+  // The prefix added before each spatialjoin file.
+  //
+  // NOTE: If `getOnDiskBase()` ends with `/` or is empty, `baseName` is empty
+  // and the spatialjoin files end up named `.spatialjoin`. We should consider
+  // disallowing empty index base names at the engine boundary.
+  std::string prefix = baseName + ".spatialjoin";
+
+  return {std::move(dir), std::move(prefix)};
+}
+
+// ____________________________________________________________________________
 sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
   using enum SpatialJoinType::Enum;
@@ -135,6 +162,9 @@ sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
   // result pair coming from the left side and the second one from the right
   // side (see #3068).
   cfg.forceTwoSided = true;
+  // This has to be set to a value < 0 to disable the `WITHIN_DIST`
+  // calculation in `libspatialjoin`.
+  cfg.withinDist = -1;
   cfg.writeRelCb = {};
   cfg.logCb = {};
   cfg.statsCb = {};
@@ -202,7 +232,8 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
-  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads};
+  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped,
+          parser.getNumInvalid(), numThreads};
 }
 
 // ____________________________________________________________________________
@@ -215,7 +246,8 @@ Result LibspatialjoinAlgorithm::run() {
   size_t NUM_THREADS = getNumThreads();
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
-  auto joinTypeVal = config_.joinType_.value_or(SpatialJoinType::INTERSECTS);
+  AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
+  auto joinTypeVal = config_.getJoinType().value();
   // Within should be replaced by contains on swapped tables.
   auto swapBack = joinTypeVal == SpatialJoinType::WITHIN;
   if (swapBack) {
@@ -226,18 +258,15 @@ Result LibspatialjoinAlgorithm::run() {
   spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
                                                 NUM_THREADS);
 
-  // Set the distance for the `WITHIN_DIST` join type. This has to be set to
-  // a value < 0 to disable the `WITHIN_DIST` calculation in `libspatialjoin`.
-  double withinDist = -1;
-  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-    withinDist = maxDist_.value_or(0);
-    spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
-  }
-
   // Configure the sweeper.
   sj::SweeperCfg sweeperCfg =
       sweeperConfig(NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
-  sweeperCfg.withinDist = withinDist;
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+    AD_CORRECTNESS_CHECK(maxDist_.has_value());
+    sweeperCfg.withinDist = maxDist_.value();
+    spatialJoin_.value()->runtimeInfo().addDetail("within-dist",
+                                                  sweeperCfg.withinDist);
+  }
   // For the `DE9IM` join type, let `libspatialjoin` compute the full DE-9IM
   // matrix for every candidate pair and only report those matching the
   // user-provided filter pattern.
@@ -246,40 +275,36 @@ Result LibspatialjoinAlgorithm::run() {
     AD_CORRECTNESS_CHECK(de9imFilter.has_value());
     sweeperCfg.computeDE9IM = true;
     sweeperCfg.de9imFilter = ::util::geo::DE9IMFilter(de9imFilter->data());
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "de9im-filter", sweeperCfg.de9imFilter.toString());
   }
-  sweeperCfg.writeRelCb = [&results, &resultDists, joinTypeVal](
-                              size_t t, const char* a, size_t, const char* b,
-                              size_t, const char* pred, size_t) {
-    if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+    sweeperCfg.writeRelCb = [&results, &resultDists](
+                                size_t t, const char* a, size_t, const char* b,
+                                size_t, const char* pred, size_t) {
       results[t].push_back({std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
-    } else if (joinTypeVal == SpatialJoinType::DE9IM) {
-      // `libspatialjoin` only invokes this callback for pairs that already
-      // matched `sweeperCfg.de9imFilter`.
+    };
+  } else if (joinTypeVal == SpatialJoinType::DE9IM) {
+    // `libspatialjoin` only invokes this callback for pairs that already
+    // matched `sweeperCfg.de9imFilter`.
+    sweeperCfg.writeRelCb = [&results](size_t t, const char* a, size_t,
+                                       const char* b, size_t, const char*,
+                                       size_t) {
       results[t].push_back({std::atoi(a), std::atoi(b)});
-    } else if (pred[0] == static_cast<char>(joinTypeVal.value())) {
-      results[t].push_back({std::atoi(a), std::atoi(b)});
-    }
-  };
+    };
+  } else {
+    sweeperCfg.writeRelCb = [&results, joinTypeVal](
+                                size_t t, const char* a, size_t, const char* b,
+                                size_t, const char* pred, size_t) {
+      if (pred[0] == static_cast<char>(joinTypeVal.value())) {
+        results[t].push_back({std::atoi(a), std::atoi(b)});
+      }
+    };
+  }
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
-  auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
-
-  std::string sweeperTmpPath = basePath.parent_path().string();
-
-  // `parent_path()` returns `""` if the parent path is empty, not `"."`.
-  if (sweeperTmpPath.empty()) {
-    sweeperTmpPath = ".";
-  }
-
-  std::string baseName = ql::pathFilename(basePath).string();
-
-  // The prefix added before each spatialjoin file.
-  //
-  // NOTE: If `getOnDiskBase()` ends with `/` or is empty, `baseName` is empty
-  // and the spatialjoin files end up named `.spatialjoin`. We should consider
-  // disallowing empty index base names at the engine boundary.
-  std::string sweeperPrefix = baseName + ".spatialjoin";
+  auto [sweeperTmpPath, sweeperPrefix] = getSweeperTempPath();
 
   sj::Sweeper sweeper(sweeperCfg, sweeperTmpPath, sweeperPrefix);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
@@ -291,7 +316,7 @@ Result LibspatialjoinAlgorithm::run() {
   auto runParser = [&](ParseInput smaller, ParseInput larger,
                        bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
-    auto [boxSmall, countSmall, droppedSmall, threadsSmall] =
+    auto [boxSmall, countSmall, droppedSmall, invalidSmall, threadsSmall] =
         parse(smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
@@ -307,7 +332,7 @@ Result LibspatialjoinAlgorithm::run() {
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
-    auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
+    auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge] =
         parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
               sweeper.getPaddedBoundingBox(boxSmall));
     auto numValidGeomsTotal = sweeper.numElements();
@@ -322,6 +347,10 @@ Result LibspatialjoinAlgorithm::run() {
                                                   numValidGeomsTotal);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", droppedLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
+                                                  invalidSmall + invalidLarge);
+    addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
+                          smallerIsRight ? invalidSmall : invalidLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
@@ -355,7 +384,8 @@ Result LibspatialjoinAlgorithm::run() {
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
   // Collect the results and add them to the result table. For `WITHIN_DIST`,
-  // also add the distance for each pair of objects in the result.
+  // also add the distance for each pair of objects in the result (which
+  // `libspatialjoin` reports in meters).
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
       throwIfCancelled();
@@ -366,7 +396,8 @@ Result LibspatialjoinAlgorithm::run() {
         dist = resultDists[t][i];
       }
       addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
-                          res.second, Id::makeFromDouble(dist), swapBack);
+                          res.second, kilometersToDistanceId(dist / 1000),
+                          swapBack);
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(

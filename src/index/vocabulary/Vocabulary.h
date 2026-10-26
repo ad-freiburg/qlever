@@ -179,6 +179,14 @@ class Vocabulary {
     return prefixRangesLiterals_.contain(index);
   }
 
+  // Return the range `[begin, end)` of the indices of the IRIs. The literals
+  // come before it. The WKT literals of a geo-split vocabulary come after it
+  // (their indices carry a marker bit, see `SplitVocabulary`), as do the
+  // internal language-tagged predicates like `@en@<...>`.
+  std::pair<IndexT, IndexT> getRangeOfIris() const {
+    return prefixRangesIris_.ranges()[0];
+  }
+
   bool shouldBeExternalized(std::string_view word) const;
 
   bool shouldEntityBeExternalized(std::string_view word) const;
@@ -243,12 +251,46 @@ class Vocabulary {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 
+  // The parallel counterpart of `makeWordWriterPtr`, see
+  // `ParallelWordWriterBase` in `index/vocabulary/VocabularyTypes.h`.
+  auto makeParallelWriterPtr(const std::string& filename) const {
+    return vocabulary_.getUnderlyingVocabulary().makeParallelWriterPtr(
+        filename);
+  }
+
+  // Return a reference to the vocabulary that actually holds the words, i.e.
+  // the vocabulary below the wrapping `UnicodeVocabulary`. The latter is
+  // bypassed because its only additional state is a comparator (see
+  // `applyToUnderlyingZeroCopyVocab` below).
+  const UnderlyingVocabulary& getUnderlyingVocabulary() const {
+    return vocabulary_.getUnderlyingVocabulary();
+  }
+
   // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
   // vocabulary and set the type of the vocabulary according to the `type`
   // argument (see the `PolymorphicVocabulary` class for details).
   void resetToType(ad_utility::VocabularyType type) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
+    }
+  }
+
+  // Set the geo cell grid of the geo vocabulary (see `GeoVocabulary`), which
+  // must happen before the vocabulary is opened. No-op unless the underlying
+  // vocabulary might have a grid (see `MaybeProvidesGeoCellGrid`).
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(std::move(grid));
+    }
+  }
+
+  // The geo cell grid of the geo vocabulary, or `std::nullopt` if there is
+  // none.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getGeoCellGrid();
+    } else {
+      return std::nullopt;
     }
   }
 
@@ -263,7 +305,8 @@ class Vocabulary {
   // `resetToType` that the active alternative matches the blob's format); if it
   // is a concrete type that does not support zero-copy, this fails to compile
   // (via a `static_assert`). Note that the wrapping `UnicodeVocabulary` is
-  // bypassed via `getUnderlyingVocabulary()`, so its comparator is left
+  // bypassed by `applyToUnderlyingZeroCopyVocab` (via
+  // `UnicodeVocabulary::getUnderlyingVocabulary()`), so its comparator is left
   // untouched and is not part of the blob. The vocabulary is only valid as long
   // as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(
@@ -275,6 +318,7 @@ class Vocabulary {
           using T = std::decay_t<decltype(vocab)>;
           vocab = T::fromZeroCopyDeserializer(serializer);
         });
+    computePrefixRanges();
   }
 
   // Serialize the currently held vocabulary to `serializer`, in a format that
@@ -296,6 +340,10 @@ class Vocabulary {
   }
 
  private:
+  // Compute `prefixRangesIris_` and `prefixRangesLiterals_` for the currently
+  // held words. Must be called whenever the words are (re)loaded.
+  void computePrefixRanges();
+
   // Apply `function` to the vocabulary that actually holds the words, i.e. to
   // the vocabulary below the wrapping `UnicodeVocabulary` (whose comparator
   // plays no role for a zero-copy blob and is therefore neither written nor

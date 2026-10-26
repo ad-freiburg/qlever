@@ -47,7 +47,8 @@ struct LocatedTriplesState {
   std::optional<LocalVocab::LifetimeExtender> localVocabLifetimeExtender_;
   // A unique index for this snapshot. If one version has been modified later
   // than another, then the version that has been modified last has a higher
-  // index. The index is used in the query cache.
+  // index. The index is used in the query cache and continues across index
+  // rebuilds (see `DeltaTriples::addFromSnapshotDiff`).
   size_t index_;
   // Counts of the external triples. Only set when this is a deep copy, not for
   // references.
@@ -323,6 +324,8 @@ class DeltaTriples {
   // Compute the diff between `oldState` (the snapshot used to start the index
   // rebuild) and `newState` (the current snapshot), remap the IDs using
   // `idMapping`, and add the resulting triples to this `DeltaTriples` instance.
+  // Afterwards, the index of the located triples is larger than that of
+  // `newState`.
   void addFromSnapshotDiff(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
       const qlever::indexRebuilder::IndexRebuildMapping& idMapping,

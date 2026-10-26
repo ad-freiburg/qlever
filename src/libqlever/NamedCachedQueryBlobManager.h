@@ -10,7 +10,10 @@
 #ifndef QLEVER_SRC_LIBQLEVER_NAMEDCACHEDQUERYBLOBMANAGER_H
 #define QLEVER_SRC_LIBQLEVER_NAMEDCACHEDQUERYBLOBMANAGER_H
 
+#include <cstdint>
 #include <optional>
+#include <string>
+#include <variant>
 #include <vector>
 
 #include "backports/memory_resource.h"
@@ -23,6 +26,66 @@ namespace qlever {
 
 class Qlever;
 
+// Options that control how a blob is written by
+// `NamedCachedQueryBlobManager::serialize`.
+struct BlobSerializationConfig {
+  // Regexes for vocabulary entries that are not needed in the blob. Every
+  // vocabulary entry that matches any of these regexes (via `RE2::FullMatch`,
+  // so the regex has to describe the complete entry) is omitted. Note that the
+  // regexes are matched against literals as well as IRIs; to exclude only
+  // IRIs, let the regex start with `<` and end with `>`. The remaining entries
+  // keep their original vocabulary indices, so that the `Id`s in the
+  // serialized `NamedResultCache` stay valid; the exported vocabulary
+  // therefore has holes (see `VocabularyInMemoryBinSearch`) and an `Id` that
+  // refers to an excluded entry resolves to
+  // `placeholderForMissingVocabIndex`. If this is empty, the complete
+  // vocabulary is exported in its original format.
+  std::vector<std::string> excludedEntryRegexes_;
+
+  // If true, then the blob is always written in the new format
+  // (`formatVersionWithSecondaryVocab` with entries format version 2, see
+  // `NamedCachedQueryBlobManager::serialize`), also if the old format could
+  // represent it.
+  //
+  // NOTE: The new format keeps the simplification of a geo index with a
+  // single segment, which the old format drops. The simplification is needed
+  // when the blob later serves as the base of an incremental blob (see
+  // `incremental_` below, which implies this setting).
+  bool alwaysUseNewFormat_ = false;
+
+  // Settings for writing a blob that is a small modification of a previously
+  // written blob (the "base"), such that the two blobs only differ in the
+  // parts of the content that actually changed (for example to be able to
+  // compute a small diff between them).
+  //
+  // NOTE: In such a blob, the words of the secondary vocabulary of the base
+  // keep their `Id`s, and the geo index of an entry is extended from the geo
+  // index of the entry with the same name in the base (reusing its segments,
+  // see `SpatialJoinCachedIndex::forUpdatedTable`) instead of using the geo
+  // index of the entry itself (see `NamedCachedQueryBlobManager::serialize`).
+  // An incremental blob is always written in the new format (see
+  // `alwaysUseNewFormat_`).
+  struct IncrementalBase {
+    // A `Qlever` instance into which the previous blob was loaded, for example
+    // via `Qlever{EngineConfig{}, true}` followed by
+    // `deserializeVocabAndNamedCacheFromCompressedBlob`. It has to outlive
+    // the call to `serialize`.
+    const Qlever* base_ = nullptr;
+
+    // The thresholds for the compaction of an extended geo index: if the
+    // extended index has more than `maxGeoSegments_` segments, or if the
+    // fraction of its dead shapes (shapes of deleted rows) is larger than
+    // `maxDeadShapeRatio_`, then the extended index is discarded and the entry
+    // is written with its own geo index, as it was built when the entry was
+    // pinned (it may itself consist of several segments if the live instance
+    // was loaded from a blob). `maxGeoSegments_` has to be at least 1, and
+    // `maxDeadShapeRatio_` has to be between 0 and 1.
+    size_t maxGeoSegments_ = 8;
+    double maxDeadShapeRatio_ = 0.3;
+  };
+  std::optional<IncrementalBase> incremental_;
+};
+
 // Serialize and deserialize the vocabulary and the `NamedResultCache` of a
 // `Qlever` instance to and from a single, self-contained, ZSTD-compressed blob
 // (see `serialize`/`deserialize`). The functionality is bundled here (rather
@@ -31,9 +94,21 @@ class Qlever;
 // friend of `Qlever` so that it can access its internals.
 class NamedCachedQueryBlobManager {
  public:
-  // Allocator for the decompressed blob buffer (see `decompressBlob`). It is
-  // stacked so that the buffer is 1. default-initialized (no redundant zeroing
-  // of a buffer that is about to be overwritten by the decompression),
+  // The versions of the blob format. The two versions differ in that blobs of
+  // the newer version additionally contain a (possibly empty) secondary
+  // vocabulary and that their named cache entries are written in the newer
+  // entries format (with the segmented geo index, see
+  // `NamedResultCacheSerializer.h`). The older version is only written if the
+  // blob has neither a secondary vocabulary nor an entry with a geo index that
+  // consists of more than one segment, and the new format is not requested by
+  // the `BlobSerializationConfig` (see `serialize`). Both of them can be read
+  // by `tryToDeserialize`.
+  static constexpr uint16_t formatVersionWithoutSecondaryVocab = 1;
+  static constexpr uint16_t formatVersionWithSecondaryVocab = 2;
+
+  // Allocator for the decompressed blob buffer (see `tryToDecompressBlob`). It
+  // is stacked so that the buffer is 1. default-initialized (no redundant
+  // zeroing of a buffer that is about to be overwritten by the decompression),
   // 2. allocated via a caller-provided `pmr` memory resource, and 3. aligned to
   // the maximal possible alignment (required so that the aligned, zero-copy
   // serialization written by `serialize` can be read back without
@@ -42,11 +117,48 @@ class NamedCachedQueryBlobManager {
       char,
       ad_utility::AlignedAllocator<char, ql::pmr::polymorphic_allocator<char>>>;
 
+  // The reasons why a blob is rejected (see `BlobError`). All of these are
+  // detected before the vocabulary or the named result cache of the blob are
+  // read, and before the `Qlever` instance is modified.
+  enum class BlobErrorType {
+    // The blob is not a ZSTD frame written by `compressBlob`, or its compressed
+    // data is corrupted (see `tryToDecompressBlob`).
+    notDecompressible,
+    // The decompressed blob does not start with the expected magic bytes. This
+    // also covers the case that it is too short to hold a complete header.
+    invalidMagicBytes,
+    // The magic bytes are correct, but the format version stored in the blob is
+    // none of the format versions above.
+    invalidVersion,
+    // The header is valid, but the index format version that is stored in the
+    // index metadata of the blob is incompatible with this version of QLever
+    // (see `IndexImpl::checkIndexFormatVersion`).
+    incompatibleIndexFormat
+  };
+
+  // The error that is reported by the non-throwing functions below: the reason
+  // for the rejection, and a descriptive message (which includes the details,
+  // for example the underlying ZSTD error).
+  struct BlobError {
+    BlobErrorType type_;
+    std::string message_;
+  };
+
+  // The result of `tryToDecompressBlob` below: the decompressed blob on
+  // success, and the error otherwise.
+  using DecompressedBlobOrError =
+      std::variant<std::vector<char, BlobAllocator>, BlobError>;
+
+  // The result of `tryToSkipAndVerifyBlobHeader` below: the format version of
+  // the blob (one of the format versions above) on success, and the error
+  // otherwise.
+  using FormatVersionOrError = std::variant<uint16_t, BlobError>;
+
  private:
   // In this buffer, the blob passed to `deserialize` is kept alive (in
   // decompressed form) for the lifetime of this manager (and hence of the
-  // owning `Qlever` instance), because the loaded vocabulary and named cache
-  // entries are zero-copy views directly into it.
+  // owning `Qlever` instance), because the loaded vocabulary, secondary
+  // vocabulary, and named cache entries are zero-copy views directly into it.
   std::optional<std::vector<char, BlobAllocator>>
       deserializedBlobLifetimeExtender_;
 
@@ -57,17 +169,91 @@ class NamedCachedQueryBlobManager {
   // different process, without needing access to the on-disk index). Throw if
   // the vocabulary implementation currently in use does not support zero-copy
   // serialization (see `Vocabulary::writeAsZeroCopyBlob`).
-  std::vector<char> serialize(const Qlever& qlever) const;
+  //
+  // If `config.excludedEntryRegexes_` is not empty, only those vocabulary
+  // entries that match none of the regexes are exported (see
+  // `BlobSerializationConfig` and `buildFilteredVocabulary`). The type of the
+  // exported vocabulary then is one of the `...WithHoles` types, which is
+  // recorded in the blob's metadata JSON (key `"vocabulary-type"`), so that
+  // `deserialize` picks up the correct vocabulary implementation without any
+  // change to the blob format.
+  //
+  // Every named cache entry is written as a canonicalized copy (see
+  // `canonicalizeForSerialization` in `NamedCacheSecondaryVocabRewriter.h`),
+  // the entries of `qlever` stay unchanged. In the copy, the columns without a
+  // variable are dropped, the other columns are ordered by variable name, and
+  // the rows are in canonical order with respect to the `resultSortedOn_` of
+  // the entry (see `CanonicalRowOrder.h`), which is kept. Only an entry that
+  // has to be rewritten or sorted is actually copied (one entry at a time), the
+  // copy of every other entry is a view of its columns.
+  //
+  // NOTE 1: The entries are allowed to contain `Id`s of type `LocalVocabIndex`
+  // (for example because SPARQL UPDATE operations were applied before an entry
+  // was pinned). The words of such `Id`s that are not contained in the
+  // vocabulary are written to a secondary vocabulary in the blob, which also
+  // contains the words of the secondary vocabulary of the index of `qlever` (if
+  // any), and the `Id`s of the copy refer to that secondary vocabulary instead.
+  // The words of the local vocab of an entry are never written (they are not
+  // referenced by any `Id` of the copy), only its blank node blocks.
+  //
+  // NOTE 2: If the secondary vocabulary is empty, no entry has a geo index
+  // with more than one segment or with dead shapes, and neither
+  // `config.alwaysUseNewFormat_` nor `config.incremental_` is set, then the
+  // blob is written with `formatVersionWithoutSecondaryVocab`, else with
+  // `formatVersionWithSecondaryVocab`. A simplification of a geo index alone
+  // deliberately does not trigger the new format (see the NOTE 2 of
+  // `needsNewFormat` in the implementation).
+  //
+  // NOTE 3: If `config.incremental_` is set, then the secondary vocabulary of
+  // the blob starts from a copy of the one of the base (its words keep their
+  // `Id`s), and `qlever` must not have a secondary vocabulary itself (otherwise
+  // an exception is thrown). If the content of `qlever` equals the one of the
+  // base, then the written blob equals the one of the base.
+  //
+  // NOTE 4: If `config.incremental_` is set, then for each entry with a geo
+  // index for which the base has an entry with the same name, a geo index, the
+  // same geometry column, variable-to-column map and sort order, and a table
+  // in canonical order, the geo index of the blob is created from the one of
+  // the base via `SpatialJoinCachedIndex::forUpdatedTable` (reusing its
+  // segments), unless the compaction thresholds of the `IncrementalBase` are
+  // exceeded.
+  std::vector<char> serialize(const Qlever& qlever,
+                              const BlobSerializationConfig& config = {}) const;
 
   // Load a blob previously written by `serialize`: decompress it, store it in
   // the buffer, and then replace `qlever`'s vocabulary and `NamedResultCache`
   // by the contents of the blob using zero-copy deserialization. The buffer is
   // kept alive for the lifetime of this manager and is allocated via the
-  // `allocator` (see `BlobAllocator` above).
+  // `allocator` (see `BlobAllocator` above). If the blob contains a secondary
+  // vocabulary, then it becomes the secondary vocabulary of the index of
+  // `qlever` (see `IndexImpl::setSecondaryVocab`), which must not have one yet
+  // (which is checked, and throws, before `qlever` is modified).
+  //
+  // Return `std::nullopt` on success, and the `BlobError` if the blob cannot be
+  // decompressed, if its header is missing or incompatible, or if its index
+  // format version is incompatible (see `BlobErrorType`). In those cases,
+  // `qlever` is left completely unchanged, so it can be used as if this
+  // function had never been called, and another blob can be loaded afterwards.
+  // The message of the error is also written to the error log.
+  //
+  // NOTE: This function is non-throwing only for the failures that are detected
+  // before the vocabulary or the named result cache of the blob are read (see
+  // `BlobErrorType`). Contents that cannot be read behind a valid header still
+  // throw (in particular a metadata JSON that cannot be parsed), as does a
+  // violation of the preconditions below. If the metadata JSON cannot be read,
+  // `qlever` is also left unchanged, and another blob can be loaded
+  // afterwards.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access `qlever`, e.g. right after construction and before the first query
-  // is answered. Must not be called more than once on the same manager.
+  // is answered. Must not be called more than once on the same manager, except
+  // after a call that left `qlever` unchanged (see above).
+  std::optional<BlobError> tryToDeserialize(
+      Qlever& qlever, ql::span<const char> compressedBlob,
+      ql::pmr::polymorphic_allocator<char> allocator);
+
+  // Same as `tryToDeserialize`, but throw an exception with the message of the
+  // `BlobError` instead of returning it.
   void deserialize(Qlever& qlever, ql::span<const char> compressedBlob,
                    ql::pmr::polymorphic_allocator<char> allocator);
 
@@ -80,22 +266,30 @@ class NamedCachedQueryBlobManager {
 
   // Inverse of `compressBlob`: decompress `compressedBlob` into a freshly
   // allocated buffer that uses `allocator` for its storage (see
-  // `BlobAllocator`). Throw with a descriptive message if `compressedBlob` was
-  // not written by `compressBlob`, or is corrupted.
-  static std::vector<char, BlobAllocator> decompressBlob(
+  // `BlobAllocator`). Return a `notDecompressible` error if `compressedBlob`
+  // was not written by `compressBlob`, or is corrupted. Errors that do not come
+  // from ZSTD (in particular a failed allocation, should the frame header state
+  // an uncompressed size that cannot be allocated) are not reported that way.
+  static DecompressedBlobOrError tryToDecompressBlob(
       ql::span<const char> compressedBlob,
       ql::pmr::polymorphic_allocator<char> allocator);
 
-  // Write the magic header and format version at the start of a blob. Mirrors
-  // `skipAndVerifyBlobHeader` below.
+  // Write the magic header and the `formatVersion` (one of the format versions
+  // above) at the start of a blob. Mirrors `tryToSkipAndVerifyBlobHeader`
+  // below.
   static void writeBlobHeader(
-      ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer);
+      ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer,
+      uint16_t formatVersion);
 
   // Read and verify the magic header and format version at the start of a
-  // decompressed blob, advancing `serializer` past them. Throw if the header is
-  // missing, truncated, or has an incompatible format version. Mirrors
+  // decompressed blob, advancing `serializer` past them. Return the format
+  // version if the header is valid, and the `BlobError` otherwise. Do not throw
+  // for any input, provided that the current position of the `serializer` is
+  // even (as it is at the start of a blob); in particular, a missing or
+  // truncated header is reported as `invalidMagicBytes`. In case of an error,
+  // the position of the `serializer` is unspecified afterwards. Mirrors
   // `writeBlobHeader`.
-  static void skipAndVerifyBlobHeader(
+  static FormatVersionOrError tryToSkipAndVerifyBlobHeader(
       ad_utility::serialization::ByteBufferReadSerializerT<
           true, ql::span<const char>>& serializer);
 };

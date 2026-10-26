@@ -42,7 +42,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
@@ -113,14 +113,14 @@ struct SetOfIdTableColumnElements {
   However, accessing a hash map entry based on index position takes linear time,
   instead of constant.
   */
-  std::vector<std::reference_wrapper<const ValueId>> uniqueElements_{};
+  std::vector<ValueId> uniqueElements_{};
   ad_utility::HashMap<ValueId, size_t> numOccurrences_{};
 
   /*
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const ql::span<const ValueId>& idTableColumnRef) {
+      const ConstIdColumnRef& idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -194,13 +194,12 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
 
   // Create the overlap.
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnSet](auto& id) {
+       &newOverlapMatches, &biggerTableJoinColumnSet](IdRef id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -299,8 +298,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   randomShuffle(smallerTableJoinColumnSet.uniqueElements_.begin(),
                 smallerTableJoinColumnSet.uniqueElements_.end(), seeds.at(1));
   size_t newOverlapMatches{0};
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnSet.uniqueElements_,
       [&randomBiggerTableElement, &wantedNumNewOverlapMatches,
@@ -333,7 +331,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // Overwrite the designated values in the smaller table.
   ql::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto& id) {
+      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](IdRef id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
           id = newValueIterator->second;
@@ -1210,17 +1208,17 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           && isTypeOrGrowthFunction<T6, float>
           && isTypeOrGrowthFunction<T7, float>
           && exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>))
-      // clang-format on
-      ResultTable& makeGrowingBenchmarkTable(
-          BenchmarkResults* results, const std::string& tableDescriptor,
-          std::string parameterName, StopFunction stopFunction,
-          const T1& overlap, const std::optional<size_t>& resultTableNumRows,
-          ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
-          const bool biggerTableSorted, const T2& ratioRows,
-          const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
-          const T5& biggerTableNumColumns,
-          const T6& smallerTableJoinColumnSampleSizeRatio,
-          const T7& biggerTableJoinColumnSampleSizeRatio) const {
+  // clang-format on
+  ResultTable& makeGrowingBenchmarkTable(
+      BenchmarkResults* results, const std::string& tableDescriptor,
+      std::string parameterName, StopFunction stopFunction, const T1& overlap,
+      const std::optional<size_t>& resultTableNumRows,
+      ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
+      const bool biggerTableSorted, const T2& ratioRows,
+      const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
+      const T5& biggerTableNumColumns,
+      const T6& smallerTableJoinColumnSampleSizeRatio,
+      const T7& biggerTableJoinColumnSampleSizeRatio) const {
     constexpr IsGrowthFunction isGrowthFunction;
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =

@@ -56,10 +56,10 @@ CPP_concept ParameterToStringType =
 /// \tparam ToString A function type, that takes a `Type` and produces
 ///         a std::string representation.
 CPP_template(typename Type, typename FromString, typename ToString)(
-    requires ql::concepts::semiregular<Type> CPP_and
-        ParameterFromStringType<FromString, Type>
-            CPP_and ParameterToStringType<ToString, Type>) struct Parameter
-    : public ParameterBase {
+    requires ql::concepts::semiregular<Type> &&
+    ParameterFromStringType<FromString, Type> &&
+    ParameterToStringType<ToString, Type>)
+struct Parameter : public ParameterBase {
  public:
   using value_type = Type;
 
@@ -231,7 +231,9 @@ struct SpaceSeparatedStringsToVector {
 }  // namespace detail::parameterSerializers
 
 namespace detail::parameterShortNames {
-namespace n = detail::parameterSerializers;
+// NOTE: The namespace is fully qualified, as an unqualified `detail` might
+// refer to a nested `ad_utility::detail::detail` namespace (if one exists).
+namespace n = ::ad_utility::detail::parameterSerializers;
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
 using Float = Parameter<float, n::fl, n::toString>;

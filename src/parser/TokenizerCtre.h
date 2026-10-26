@@ -344,9 +344,8 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     template <auto& regex>
     static std::pair<bool, std::string_view> process(
         std::string_view data) noexcept {
-      static constexpr auto ext = grp(regex) + ".*";
-      if (auto m = ctre::match<ext>(data)) {
-        return {true, m.template get<1>().to_view()};
+      if (auto m = ctre::starts_with<regex>(data)) {
+        return {true, m.to_view()};
       } else {
         return {false, std::string_view()};
       }

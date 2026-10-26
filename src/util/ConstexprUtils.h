@@ -18,6 +18,21 @@
 
 namespace ad_utility {
 
+// True iff all the elements of the given `array` are distinct. Note that this
+// needs a quadratic number of comparisons, which is fine for the small
+// compile-time arrays that this is intended for.
+template <typename T, size_t N>
+constexpr bool allDistinct(const std::array<T, N>& array) {
+  for (size_t i = 0; i < N; ++i) {
+    for (size_t j = i + 1; j < N; ++j) {
+      if (array[i] == array[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 // Compute `base ^ exponent` where `^` denotes exponentiation. This is consteval
 // because for all runtime calls, a better optimized algorithm from the standard
 // library should be chosen.
@@ -81,15 +96,15 @@ CPP_concept InvocableWithCase =
 template <auto FirstCase, auto... Cases>
 struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(
-      requires ql::concepts::equality_comparable_with<ValueType,
-                                                      decltype(FirstCase)>
-          CPP_and(ql::concepts::equality_comparable_with<ValueType,
-                                                         decltype(Cases)>&&...)
-              CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
-                  CPP_and(InvocableWithCase<FuncType, Cases,
-                                            Args...>&&...)) constexpr auto
-  operator()(FuncType&& function, const ValueType& value,
-             Args&&... args) const -> decltype(auto) {
+              requires ql::concepts::equality_comparable_with<
+                  ValueType, decltype(FirstCase)> &&
+              (ql::concepts::equality_comparable_with<ValueType,
+                                                      decltype(Cases)> &&
+               ...) &&
+              InvocableWithCase<FuncType, FirstCase, Args...> &&
+              (InvocableWithCase<FuncType, Cases, Args...> && ...))
+  constexpr auto operator()(FuncType&& function, const ValueType& value,
+                            Args&&... args) const -> decltype(auto) {
     if (value == FirstCase) {
       return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
     } else if constexpr (sizeof...(Cases) > 0) {

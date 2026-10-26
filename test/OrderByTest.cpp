@@ -10,11 +10,12 @@
 #include "engine/OrderBy.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
+#include "index/IdTableUtils.h"
+#include "index/LocalVocabEntry.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
-using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
@@ -180,22 +181,288 @@ TEST(OrderBy, computeOrderByThreeColumns) {
               {true, true, true});
 }
 
+// Test the order of different kinds of RDF terms, see `OrderByComparator`.
 TEST(OrderBy, mixedDatatypes) {
   auto I = ad_utility::testing::IntId;
-  auto V = ad_utility::testing::VocabId;
   auto D = ad_utility::testing::DoubleId;
+  auto B = ad_utility::testing::BlankNodeId;
   auto U = Id::makeUndefined();
+  auto* qec = ad_utility::testing::getQec();
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto localIri = LocalVocabEntry::fromStringRepresentation(
+      "<a>", qec->getLocalVocabContext());
+  Id a = Id::makeFromLocalVocabIndex(&localIri);
 
-  VectorTable input{{I(13)}, {I(-7)}, {U}, {I(0)}, {D(12.3)}, {U},
-                    {V(12)}, {V(0)},  {U}, {U},    {D(-2e-4)}};
-  VectorTable expected{{U},    {U},       {U},     {U},    {I(-7)}, {D(-2e-4)},
-                       {I(0)}, {D(12.3)}, {I(13)}, {V(0)}, {V(12)}};
+  VectorTable input{{I(13)},
+                    {getId("<y>")},
+                    {I(-7)},
+                    {U},
+                    {I(0)},
+                    {D(12.3)},
+                    {B(4)},
+                    {U},
+                    {getId("\"zz\"@en")},
+                    {getId("<x>")},
+                    {a},
+                    {U},
+                    {U},
+                    {getId("\"alpha\"")},
+                    {B(1)},
+                    {D(-2e-4)}};
+  VectorTable expected{{U},
+                       {U},
+                       {U},
+                       {U},
+                       {B(1)},
+                       {B(4)},
+                       {a},
+                       {getId("<x>")},
+                       {getId("<y>")},
+                       {I(-7)},
+                       {D(-2e-4)},
+                       {I(0)},
+                       {D(12.3)},
+                       {I(13)},
+                       {getId("\"alpha\"")},
+                       {getId("\"zz\"@en")}};
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {false});
 
   ql::ranges::reverse(expected);
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {true});
+}
+
+// The example from issue #2689: IRIs come before literals, so
+// `VALUES ?x { 3 <x:1> 4 <x:2> } ORDER BY ?x` yields `<x:1> <x:2> 3 4`.
+TEST(OrderBy, irisBeforeNumbers) {
+  auto I = ad_utility::testing::IntId;
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  auto x1 = LocalVocabEntry::fromStringRepresentation("<x:1>", context);
+  auto x2 = LocalVocabEntry::fromStringRepresentation("<x:2>", context);
+  Id iri1 = Id::makeFromLocalVocabIndex(&x1);
+  Id iri2 = Id::makeFromLocalVocabIndex(&x2);
+  VectorTable input{{I(3)}, {iri1}, {I(4)}, {iri2}};
+  VectorTable expected{{iri1}, {iri2}, {I(3)}, {I(4)}};
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {false});
+  ql::ranges::reverse(expected);
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {true});
+}
+
+namespace {
+// The result of an `OrderBy` and whether it took the fast path for sorted
+// numeric input.
+using ResultAndFastPath = std::pair<IdTable, bool>;
+
+// Sort the `input` by the `sortedColumns` in the internal order, and compute
+// an `OrderBy` on the first column (descending iff `isDescending`) on an input
+// that reports being sorted by these columns.
+ResultAndFastPath orderByOnSortedInput(
+    const VectorTable& input, bool isDescending = false,
+    std::vector<ColumnIndex> sortedColumns = {0}) {
+  // Sort the `input` by the `sortedColumns`, and make it the result of a
+  // subtree that reports being sorted by these columns.
+  auto qec = ad_utility::testing::getQec();
+  IdTable table = makeIdTableFromVector(input);
+  IdTableUtils::sort(table, sortedColumns, qec->sortConfig(),
+                     std::make_shared<ad_utility::CancellationHandle<>>());
+  std::vector<std::optional<Variable>> vars;
+  for (size_t i = 0; i < table.numColumns(); ++i) {
+    vars.emplace_back("?"s + std::to_string(i));
+  }
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(table), vars, false, std::move(sortedColumns));
+
+  // Compute the `OrderBy` on that subtree, and check the runtime information
+  // for whether it took the fast path.
+  OrderBy orderBy{qec, std::move(subtree), {{0, isDescending}}};
+  return {orderBy.getResult()->idTableView().clone(),
+          orderBy.runtimeInfo().details_.contains("sorted-numeric-input")};
+}
+}  // namespace
+
+// Test that for different `Id`s with equal values (an `Int` and a `Double`),
+// the next sort column decides, in both directions.
+TEST(OrderBy, equalValuesWithDifferentIds) {
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  VectorTable input{
+      {I(5), I(1)}, {D(5.0), I(0)}, {I(7), I(2)}, {D(3.0), I(3)}, {I(5), I(4)}};
+
+  // Descending by the first column, ascending by the second.
+  VectorTable expected{
+      {I(7), I(2)}, {D(5.0), I(0)}, {I(5), I(1)}, {I(5), I(4)}, {D(3.0), I(3)}};
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {true, false});
+
+  // Ascending by the first column, descending by the second.
+  ql::ranges::reverse(expected);
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {false, true});
+}
+
+// Test that `ORDER BY` compares an `Int` and a `Double` exactly, also above
+// `2^53`, see `compareIntAndDouble`.
+TEST(OrderBy, intsWithManySignificantBitsAndDoubles) {
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  constexpr int64_t twoToThe53 = int64_t{1} << 53;
+  auto d53 = static_cast<double>(twoToThe53);
+  // NOTE: A `Double` `ValueId` has only 49 significant bits, so above `d53` it
+  // can only represent multiples of 32, like `d53 + 64`.
+  VectorTable input{{I(twoToThe53 + 1), I(0)},
+                    {D(d53 + 64), I(1)},
+                    {I(twoToThe53), I(2)},
+                    {D(d53), I(3)},
+                    {I(twoToThe53 - 1), I(4)}};
+
+  // Ascending by both columns.
+  VectorTable expected{{I(twoToThe53 - 1), I(4)},
+                       {I(twoToThe53), I(2)},
+                       {D(d53), I(3)},
+                       {I(twoToThe53 + 1), I(0)},
+                       {D(d53 + 64), I(1)}};
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {false, false});
+
+  // Descending by both columns.
+  ql::ranges::reverse(expected);
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
+              {true, true});
+}
+
+// Test that `ORDER BY` on an integer column that is sorted in the internal
+// order puts the undefined values first and the negative integers before the
+// non-negative ones, without sorting.
+TEST(OrderBy, sortedIntInput) {
+  auto I = ad_utility::testing::IntId;
+  auto U = Id::makeUndefined();
+  auto min = Id::IntegerType::min();
+  auto max = Id::IntegerType::max();
+
+  // Check the order of `Undefined`, the smallest and the largest integers, and
+  // the integers around zero. The second column checks that whole rows are
+  // moved.
+  EXPECT_EQ(orderByOnSortedInput({{I(0), I(1)},
+                                  {I(max), I(2)},
+                                  {I(-1), I(3)},
+                                  {U, I(4)},
+                                  {I(min), I(5)}}),
+            (ResultAndFastPath{makeIdTableFromVector({{U, I(4)},
+                                                      {I(min), I(5)},
+                                                      {I(-1), I(3)},
+                                                      {I(0), I(1)},
+                                                      {I(max), I(2)}}),
+                               true}));
+
+  // Check an input without `Undefined` values (the range for them is then
+  // empty).
+  EXPECT_EQ(
+      orderByOnSortedInput({{I(3)}, {I(-2)}}),
+      (ResultAndFastPath{makeIdTableFromVector({{I(-2)}, {I(3)}}), true}));
+
+  // Check an input with only `Undefined` values.
+  EXPECT_EQ(orderByOnSortedInput({{U}, {U}}),
+            (ResultAndFastPath{makeIdTableFromVector({{U}, {U}}), true}));
+}
+
+// Test that `ORDER BY` on a double column that is sorted in the internal order
+// puts the negative doubles in reverse order before the non-negative ones and
+// all `NaN`s last, in both directions and without sorting.
+TEST(OrderBy, sortedDoubleInput) {
+  auto D = ad_utility::testing::DoubleId;
+  auto U = Id::makeUndefined();
+  auto inf = std::numeric_limits<double>::infinity();
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  // Make an input with `Undefined`, the infinities, doubles around zero, and
+  // two `NaN`s. The `NaN` with the sign bit set (e.g. the result of
+  // `0.0 / 0.0` on x86) is at the very end of the internal order, after the
+  // negative doubles.
+  auto negNan = std::copysign(nan, -1.0);
+  VectorTable input{{D(0.0)},  {D(2.25)},   {D(-inf)}, {D(nan)},
+                    {D(-3.5)}, {D(negNan)}, {U},       {D(inf)}};
+
+  // Check the ascending order.
+  EXPECT_EQ(orderByOnSortedInput(input),
+            (ResultAndFastPath{makeIdTableFromVector({{U},
+                                                      {D(-inf)},
+                                                      {D(-3.5)},
+                                                      {D(0.0)},
+                                                      {D(2.25)},
+                                                      {D(inf)},
+                                                      {D(nan)},
+                                                      {D(negNan)}}),
+                               true}));
+
+  // Check the descending order.
+  EXPECT_EQ(orderByOnSortedInput(input, true),
+            (ResultAndFastPath{makeIdTableFromVector({{D(negNan)},
+                                                      {D(nan)},
+                                                      {D(inf)},
+                                                      {D(2.25)},
+                                                      {D(0.0)},
+                                                      {D(-3.5)},
+                                                      {D(-inf)},
+                                                      {U}}),
+                               true}));
+}
+
+// Test that `ORDER BY` on a sorted input uses the regular sort if the sort
+// column is not all integers or all doubles, or if the input is sorted by
+// another column.
+TEST(OrderBy, sortedInputWithoutFastPath) {
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  auto V = ad_utility::testing::VocabId;
+  auto U = Id::makeUndefined();
+
+  // Check a sort column with integers and doubles.
+  EXPECT_EQ(orderByOnSortedInput({{I(3)}, {D(-2.5)}, {I(-4)}}),
+            (ResultAndFastPath{
+                makeIdTableFromVector({{I(-4)}, {D(-2.5)}, {I(3)}}), false}));
+
+  // Check a sort column with vocabulary entries.
+  EXPECT_EQ(
+      orderByOnSortedInput({{V(4)}, {U}, {V(2)}}),
+      (ResultAndFastPath{makeIdTableFromVector({{U}, {V(2)}, {V(4)}}), false}));
+
+  // Check an input that is sorted by the second column.
+  VectorTable input{{I(3), I(1)}, {I(-2), I(0)}};
+  EXPECT_EQ(orderByOnSortedInput(input, false, {1}),
+            (ResultAndFastPath{
+                makeIdTableFromVector({{I(-2), I(0)}, {I(3), I(1)}}), false}));
+}
+
+// Test that the cost estimate of `ORDER BY` is linear for an input that is
+// sorted by the sort column, and `n log n` otherwise.
+TEST(OrderBy, costEstimateForSortedInput) {
+  // Make an `OrderBy` on an input of eight rows (so `log n` is 3, and the cost
+  // of the input is 8) that reports being sorted by the `sortedColumns`.
+  VectorTable input;
+  for (int64_t i = 0; i < 8; ++i) {
+    input.push_back({i});
+  }
+  auto qec = ad_utility::testing::getQec();
+  auto makeOrderByOnInput = [&](std::vector<ColumnIndex> sortedColumns) {
+    IdTable table = makeIdTableFromVector(input);
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(table),
+        std::vector<std::optional<Variable>>{Variable{"?x"}}, false,
+        std::move(sortedColumns));
+    return OrderBy{qec, std::move(subtree), {{0, false}}};
+  };
+
+  // Check the linear cost for an input that is sorted by the sort column, and
+  // the cost `n log n` otherwise.
+  EXPECT_EQ(makeOrderByOnInput({0}).getCostEstimate(), 8 + 8);
+  EXPECT_EQ(makeOrderByOnInput({}).getCostEstimate(), 8 + 8 * 3);
+
+  // Check an empty input, where `log n` is not defined.
+  EXPECT_EQ(makeOrderBy(IdTable{1, qec->getAllocator()}, {{0, false}})
+                .getCostEstimate(),
+            0);
 }
 
 // _____________________________________________________________________________
@@ -236,27 +503,6 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_EQ(42.0, s.getMultiplicity(0));
     EXPECT_EQ(84.0, s.getMultiplicity(1));
   }
-}
-
-TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
-  VectorTable input;
-  // Make sure the estimator estimates a couple of ms to sort this
-  for (int64_t i = 0; i < 1000; i++) {
-    input.push_back({0, i});
-  }
-  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  OrderBy orderBy = makeOrderBy(std::move(inputTable), {{1, false}, {0, true}});
-  // Safe to do, because we know the underlying estimator is mutable
-  const_cast<SortPerformanceEstimator&>(
-      orderBy.getExecutionContext()->getSortPerformanceEstimator())
-      .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
-
-  orderBy.recursivelySetTimeConstraint(0ms);
-
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::CancellationException);
 }
 
 // _____________________________________________________________________________

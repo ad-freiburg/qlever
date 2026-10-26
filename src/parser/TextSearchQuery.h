@@ -241,7 +241,7 @@ struct TextSearchQuery : MagicServiceQuery {
   void predStringBindScore(const Variable& configVar,
                            const Variable& objectVar);
 
-  constexpr std::string_view name() const override {
+  QL_CONSTEXPR std::string_view name() const override {
     return "full text search";
   }
 };

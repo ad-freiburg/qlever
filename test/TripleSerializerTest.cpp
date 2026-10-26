@@ -199,6 +199,98 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
 }
 
 // _____________________________________________________________________________
+TEST(TripleSerializer, serializeOnlyBlankNodeBlocksFromLocalVocab) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto LV = [&localVocab, qec](std::string_view value) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(value,
+                                              qec->getLocalVocabContext())));
+  };
+  auto bn = [&]() {
+    return Id::makeFromBlankNodeIndex(
+        localVocab.getBlankNodeIndex(qec->getIndex().getBlankNodeManager()));
+  };
+  // Add words (in two different word sets) as well as blank nodes.
+  std::vector<Id> ids{LV("abc"), LV("def"), bn()};
+  localVocab = localVocab.clone();
+  ids.push_back(LV("ghi"));
+  ids.push_back(bn());
+  ASSERT_EQ(localVocab.size(), 3);
+
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::detail::serializeOnlyBlankNodeBlocksFromLocalVocab(writer,
+                                                                 localVocab);
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::move(writer).data()};
+  auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
+      reader, qec->getLocalVocabContext());
+
+  // None of the words was written, so the deserialized local vocab is empty
+  // and the mapping (from written to deserialized `Id`s) is empty as well.
+  EXPECT_EQ(localVocabOut.size(), 0);
+  EXPECT_THAT(localVocabOut.getAllWordsForTesting(), ::testing::IsEmpty());
+  EXPECT_THAT(mapping, ::testing::IsEmpty());
+
+  // The blank node blocks are written and read back unchanged (but with an
+  // empty block prepended, see the `blankNodesRemapper` test above).
+  auto blankNodeBlocksOriginal = localVocab.getOwnedLocalBlankNodeBlocks();
+  auto blankNodeBlocksDeserialized =
+      localVocabOut.getOwnedLocalBlankNodeBlocks();
+  ASSERT_FALSE(blankNodeBlocksOriginal.empty());
+  ASSERT_EQ(blankNodeBlocksDeserialized.size(),
+            blankNodeBlocksOriginal.size() + 1);
+  EXPECT_TRUE(blankNodeBlocksDeserialized.at(0).blockIndices_.empty());
+  for (size_t i = 0; i < blankNodeBlocksOriginal.size(); ++i) {
+    EXPECT_EQ(blankNodeBlocksOriginal[i].uuid_,
+              blankNodeBlocksDeserialized[i + 1].uuid_)
+        << i;
+    EXPECT_EQ(blankNodeBlocksOriginal[i].blockIndices_,
+              blankNodeBlocksDeserialized[i + 1].blockIndices_)
+        << i;
+  }
+}
+
+// Test that an IRI of a serialized local vocab that the deserializing index
+// encodes directly in an `Id` is mapped to that `Id`, not to a local vocab
+// entry.
+TEST(TripleSerializer, encodableIrisAreDeserializedAsEncodedIds) {
+  // Serialize a local vocab from an index that does not encode any IRIs.
+  auto* qecWithoutEncoding = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto LV = [&localVocab, qecWithoutEncoding](std::string_view iri) {
+    return Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+            iri, qecWithoutEncoding->getLocalVocabContext())));
+  };
+  Id encodable = LV("<http://example.org/42>");
+  Id notEncodable = LV("<http://other.org/42>");
+
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::detail::serializeLocalVocab(writer, localVocab);
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::move(writer).data()};
+
+  // Deserialize it for an index that encodes the first IRI directly in an
+  // `Id`, so it must not end up in the deserialized local vocab.
+  ad_utility::testing::TestIndexConfig config;
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qecWithEncoding = ad_utility::testing::getQec(std::move(config));
+  auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
+      reader, qecWithEncoding->getLocalVocabContext());
+
+  EXPECT_EQ(localVocabOut.size(), 1);
+  auto expectedId = qecWithEncoding->getIndex()
+                        .encodedIriManager()
+                        .encode("<http://example.org/42>")
+                        .value();
+  // Compare the bits, as `Id::operator==` also matches a `LocalVocabIndex`.
+  EXPECT_EQ(mapping.at(encodable.getBits()).getBits(), expectedId.getBits());
+  EXPECT_EQ(mapping.at(notEncodable.getBits()).getDatatype(),
+            Datatype::LocalVocabIndex);
+}
+
+// _____________________________________________________________________________
 TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   using namespace ::testing;
   auto* qec = ad_utility::testing::getQec();

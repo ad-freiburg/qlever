@@ -39,6 +39,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 using namespace ad_utility::testing;
 using ::testing::Eq;
 using ::testing::Optional;
@@ -1978,7 +1980,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
 TEST(GroupByOptimizationsRegression,
      computeGroupByObjectWithCountWithNonUniformCol0) {
   // All triples share the same predicate `<p>` but have different objects.
-  // Use a non-default `blocksizePermutations` so that multiple triples land in
+  // Use a non-default `rowsPerBlock` so that multiple triples land in
   // the same block.
   TestIndexConfig config{
       "<s1> <p> <o1> . "
@@ -1986,7 +1988,7 @@ TEST(GroupByOptimizationsRegression,
       "<s3> <p> <o3> . "
       "<s4> <p> <o4> . "
       "<s5> <p> <o5> ."};
-  config.blocksizePermutations = 1_kB;
+  config.rowsPerBlock = 125;
   auto* qec = getQec(std::move(config));
 
   auto scan = makeExecutionTree<IndexScan>(
@@ -2021,9 +2023,9 @@ struct QecWrapper {
         index_,
         &cache_,
         makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{},
         &namedCache_,
-        materializedViewsManager_};
+        materializedViewsManager_,
+        executor()};
   }
 };
 
@@ -2471,7 +2473,7 @@ TEST(GroupBy, AddedHavingRows) {
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
-  auto res = tree.getResult();
+  auto res = tree->getResult();
 
   // The HAVING is implemented as an alias that creates an internal variable
   // which becomes part of the result, but is not selected by the query.
@@ -2482,7 +2484,7 @@ TEST(GroupBy, AddedHavingRows) {
       {Variable{"?x"}, {0, AlwaysDefined}},
       {Variable{"?count"}, {1, PossiblyUndefined}},
       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
-  EXPECT_THAT(tree.getVariableColumns(),
+  EXPECT_THAT(tree->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTableView();
   auto i = IntId;
@@ -2658,9 +2660,9 @@ TEST(GroupBy, knownEmptyResult) {
 namespace {
 class SetOfIntervalsExpression : public SparqlExpression {
  public:
-  ExpressionResult evaluate(EvaluationContext*) const override {
+  ExpressionResult evaluate(EvaluationContext* context) const override {
     using SOI = ad_utility::SetOfIntervals;
-    return SOI{SOI::Vec{}};
+    return SOI{SOI::Vec{}, context->size()};
   }
 
   std::string getCacheKey(const VariableToColumnMap&) const override {
@@ -3260,6 +3262,32 @@ TEST(GroupBy, isDeterministic) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(GroupBy, isDeterministicOfNestedGroupBys) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable x{"?x"};
+  std::shared_ptr<QueryExecutionTree> tree =
+      ad_utility::makeExecutionTree<ValuesForTestingCountingDeterminismChecks>(
+          qec, makeIdTableFromVector({{1}}),
+          std::vector<std::optional<Variable>>{x}, false,
+          std::vector<ColumnIndex>{0});
+  auto leaf = std::dynamic_pointer_cast<
+      const ValuesForTestingCountingDeterminismChecks>(
+      tree->getRootOperation());
+  ASSERT_NE(leaf, nullptr);
+
+  // The leaf of a chain of nested `GROUP BY`s must be visited exactly once.
+  // Previously, `GroupBy::isDeterministicImpl()` recursed into the subtree in
+  // addition to `Operation::isDeterministic()`, which made this exponential in
+  // the nesting depth, see https://github.com/ad-freiburg/qlever/issues/3557.
+  for (size_t i = 0; i < 40; ++i) {
+    tree = ad_utility::makeExecutionTree<GroupBy>(
+        qec, std::vector<Variable>{x}, std::vector<Alias>{}, std::move(tree));
+  }
+  EXPECT_TRUE(tree->getRootOperation()->isDeterministic());
+  EXPECT_EQ(leaf->numDeterminismChecks(), 1);
+}
+
 // Regression tests for https://github.com/ad-freiburg/qlever/issues/2960
 
 // _____________________________________________________________________________
@@ -3435,6 +3463,103 @@ TEST(GroupBy, CoalesceWithAggregatesOfOptionalValues) {
 }
 
 // _____________________________________________________________________________
+// An aggregate that is wrapped inside a `COALESCE` used to make an implicit
+// `GROUP BY` (no `GROUP BY` variables) over an empty input fail, because the
+// `COALESCE` returned an empty vector (the evaluation context has size zero)
+// where `GroupBy` requires a constant.
+TEST(GroupBy, CoalesceWithAggregateOnEmptyImplicitGroup) {
+  auto* qec = getQec();
+  Variable o{"?o"};
+  Id U = Id::makeUndefined();
+
+  // Build `SELECT (COALESCE(makeChildren()...) AS ?c) WHERE { ... }` without a
+  // `GROUP BY` over an input with zero rows.
+  auto makeGroupBy = [qec, &o](const auto& makeChildren, bool inputIsLazy) {
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{1, qec->getAllocator()},
+        std::vector<std::optional<Variable>>{o});
+    // The `GroupBy` always requests a lazy input (all the aggregates below
+    // support that), so the input has to be forced to be materialized for the
+    // materialized code path to be taken.
+    dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
+        .forceFullyMaterialized() = !inputIsLazy;
+    return GroupByImpl{
+        qec,
+        {},
+        {Alias{SparqlExpressionPimpl{makeCoalesceExpression(makeChildren()),
+                                     "coalesce"},
+               Variable{"?c"}}},
+        std::move(subtree)};
+  };
+
+  // Check the value of that `COALESCE` for both the fully materialized code
+  // path (`doGroupBy`) and the lazy code path (`processEmptyImplicitGroup`).
+  auto expectCoalesce = [qec, &makeGroupBy](const auto& makeChildren,
+                                            Id expected,
+                                            ad_utility::source_location l =
+                                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto expectedTable = makeIdTableFromVector({{expected}});
+
+    // The two runs below compute the same subtree, so the cache has to be
+    // cleared in between, else the second run reuses the (materialized)
+    // result of the first one.
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_EQ(makeGroupBy(makeChildren, false)
+                  .computeResultOnlyForTesting(false)
+                  .idTableView(),
+              expectedTable);
+
+    qec->getQueryTreeCache().clearAll();
+    auto groupBy = makeGroupBy(makeChildren, true);
+    auto result = groupBy.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(result.isFullyMaterialized());
+    std::vector<IdTable> tables;
+    for (auto& [idTable, localVocab] : result.idTables()) {
+      tables.push_back(std::move(idTable));
+    }
+    ASSERT_EQ(tables.size(), 1);
+    EXPECT_EQ(tables.at(0), expectedTable);
+  };
+
+  auto sum = [&o]() {
+    return std::make_unique<SumExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto min = [&o]() {
+    return std::make_unique<MinExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto max = [&o]() {
+    return std::make_unique<MaxExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto constant = [](Id id) {
+    return [id]() { return std::make_unique<IdExpression>(id); };
+  };
+  // Turn a set of factories for the individual children into a factory for the
+  // whole vector of children (which has to be created anew for each `GroupBy`).
+  auto children = [](auto... makeChild) {
+    return [makeChild...]() {
+      std::vector<SparqlExpression::Ptr> result;
+      (result.push_back(makeChild()), ...);
+      return result;
+    };
+  };
+
+  // `SUM` of the empty group is `0`, so the first child already binds the
+  // result.
+  expectCoalesce(children(sum, constant(I(1))), I(0));
+  // `MIN` and `MAX` of the empty group are UNDEF, so the fallback is used.
+  expectCoalesce(children(min, constant(I(1))), I(1));
+  expectCoalesce(children(max, constant(I(1))), I(1));
+  // If all the children are unbound, the result is UNDEF.
+  expectCoalesce(children(min, max), U);
+  // A `COALESCE` without any children is always UNDEF.
+  expectCoalesce(children(), U);
+}
+
+// _____________________________________________________________________________
 TEST(GroupBy, BlankNodeInGroupBy) {
   auto* qec = getQec();
   Variable o{"?o"};
@@ -3459,4 +3584,197 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(0, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
+}
+
+// Test that a `GROUP BY` on unbound variables has one group for a non-empty
+// input, but, unlike an implicit `GROUP BY`, none for an empty input.
+TEST(GroupBy, GroupByUnboundVariable) {
+  auto* qec = getQec();
+  Variable x{"?x"};
+  Variable unbound{"?unbound"};
+
+  auto makeSubtree = [qec, &x](IdTable input, bool inputIsLazy) {
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), std::vector<std::optional<Variable>>{x});
+    dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
+        .forceFullyMaterialized() = !inputIsLazy;
+    return subtree;
+  };
+  auto sum = [&x]() {
+    return Alias{SparqlExpressionPimpl{
+                     std::make_unique<SumExpression>(
+                         false, std::make_unique<VariableExpression>(x)),
+                     "SUM(?x)"},
+                 Variable{"?sum"}};
+  };
+  // `COUNT(*)` is computed by `computeCountStar` for an implicit `GROUP BY`.
+  auto countStar = []() {
+    return Alias{
+        SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*)"},
+        Variable{"?count"}};
+  };
+
+  // Compute `GROUP BY ?unbound` (implicit `GROUP BY` if `implicit`) with the
+  // alias `makeAlias()` (none for `nullptr`) on the materialized and the lazy
+  // path, check that both agree, and return the result.
+  auto compute = [&](IdTable input, auto makeAlias, bool implicit,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    std::optional<IdTable> firstResult;
+    for (bool inputIsLazy : {false, true}) {
+      // Clear the cache, else the second run reuses the first one's result.
+      qec->getQueryTreeCache().clearAll();
+      std::vector<Alias> aliases;
+      if constexpr (!std::is_same_v<decltype(makeAlias), std::nullptr_t>) {
+        aliases.push_back(makeAlias());
+      }
+      GroupByImpl groupBy{
+          qec,
+          implicit ? std::vector<Variable>{} : std::vector<Variable>{unbound},
+          std::move(aliases), makeSubtree(input.clone(), inputIsLazy)};
+      EXPECT_TRUE(groupBy.groupByVariables().empty());
+      auto result = groupBy.computeResultOnlyForTesting(inputIsLazy);
+      IdTable table{groupBy.getResultWidth(), qec->getAllocator()};
+      if (result.isFullyMaterialized()) {
+        table = result.idTableView().clone();
+      } else {
+        for (auto& [idTable, localVocab] : result.idTables()) {
+          table.insertAtEnd(idTable);
+        }
+      }
+      if (firstResult.has_value()) {
+        EXPECT_EQ(table, firstResult.value());
+      } else {
+        firstResult = std::move(table);
+      }
+    }
+    return std::move(firstResult).value();
+  };
+
+  auto emptyInput = [qec]() { return IdTable{1, qec->getAllocator()}; };
+  auto nonEmptyInput = []() {
+    return makeIdTableFromVector({{I(1)}, {I(2)}, {I(4)}});
+  };
+
+  // Empty input: no group, but one for the implicit `GROUP BY`.
+  EXPECT_EQ(compute(emptyInput(), sum, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), countStar, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), nullptr, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), sum, true), makeIdTableFromVector({{I(0)}}));
+  EXPECT_EQ(compute(emptyInput(), countStar, true),
+            makeIdTableFromVector({{I(0)}}));
+
+  // Non-empty input: one group in both cases.
+  for (bool implicit : {false, true}) {
+    EXPECT_EQ(compute(nonEmptyInput(), sum, implicit),
+              makeIdTableFromVector({{I(7)}}));
+    EXPECT_EQ(compute(nonEmptyInput(), countStar, implicit),
+              makeIdTableFromVector({{I(3)}}));
+    EXPECT_EQ(compute(nonEmptyInput(), nullptr, implicit).numRows(), 1);
+  }
+
+  // Both cases differ in the cache key, descriptor and `knownEmptyResult()`.
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, emptyInput(), std::vector<std::optional<Variable>>{x});
+  GroupBy groupByUnbound{qec, {unbound}, {sum()}, subtree};
+  GroupBy groupByImplicit{qec, {}, {sum()}, subtree};
+  EXPECT_NE(groupByUnbound.getCacheKey(), groupByImplicit.getCacheKey());
+  EXPECT_EQ(groupByUnbound.getDescriptor(), "GroupBy on unbound variables");
+  EXPECT_EQ(groupByImplicit.getDescriptor(), "GroupBy (implicit)");
+  EXPECT_TRUE(groupByUnbound.knownEmptyResult());
+  EXPECT_FALSE(groupByImplicit.knownEmptyResult());
+
+  auto clone = groupByUnbound.clone();
+  EXPECT_THAT(groupByUnbound, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getCacheKey(), groupByUnbound.getCacheKey());
+  EXPECT_TRUE(clone->knownEmptyResult());
+}
+
+// Test that the hash map optimization is not applied to a `GROUP BY` without
+// `GROUP BY` columns. It used to be applied anyway (if the input is a `Sort`),
+// which crashed for a non-empty input and returned no row for an empty input
+// with an implicit `GROUP BY`.
+TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
+  auto* qec = getQec();
+  Variable x{"?x"};
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+          true);
+
+  auto compute = [&](IdTable input, std::vector<Variable> groupByVariables) {
+    qec->getQueryTreeCache().clearAll();
+    auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), std::vector<std::optional<Variable>>{x});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(
+        qec, std::move(values), std::vector<ColumnIndex>{0});
+    GroupByImpl groupBy{
+        qec,
+        std::move(groupByVariables),
+        {Alias{SparqlExpressionPimpl{
+                   std::make_unique<SumExpression>(
+                       false, std::make_unique<VariableExpression>(x)),
+                   "SUM(?x)"},
+               Variable{"?sum"}}},
+        std::move(sorted)};
+    return groupBy.computeResultOnlyForTesting(false).idTableView().clone();
+  };
+
+  auto emptyInput = [qec]() { return IdTable{1, qec->getAllocator()}; };
+  auto nonEmptyInput = []() { return makeIdTableFromVector({{I(1)}, {I(2)}}); };
+  Variable unbound{"?unbound"};
+
+  EXPECT_EQ(compute(emptyInput(), {}), makeIdTableFromVector({{I(0)}}));
+  EXPECT_EQ(compute(nonEmptyInput(), {}), makeIdTableFromVector({{I(3)}}));
+  EXPECT_EQ(compute(emptyInput(), {unbound}).numRows(), 0);
+  EXPECT_EQ(compute(nonEmptyInput(), {unbound}),
+            makeIdTableFromVector({{I(3)}}));
+}
+
+// Test that an IRI that is computed inside of an aggregate and that can be
+// encoded directly in an `Id` (see `EncodedIriManager`) gets that `Id`, both
+// with and without the hash map optimization.
+TEST(GroupBy, aggregateOfComputedEncodableIri) {
+  TestIndexConfig config{"<http://example.org/1> <p> <o> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& encodedIriManager = qec->getIndex().encodedIriManager();
+  auto encoded = [&](std::string_view iri) {
+    return encodedIriManager.encode(iri).value();
+  };
+
+  std::string query =
+      "SELECT ?g (MIN(IRI(CONCAT(\"http://example.org/\", ?n))) AS ?min) "
+      "(MAX(IRI(CONCAT(\"http://example.org/\", ?n))) AS ?max) "
+      "WHERE { VALUES (?g ?n) { (1 \"5\") (2 \"6\") (2 \"7\") } } GROUP BY ?g";
+  for (bool hashMapEnabled : {true, false}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+            hashMapEnabled);
+    qec->clearCacheUnpinnedOnly();
+    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {});
+    QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+    auto qet = qp.createExecutionTree(parsedQuery);
+    auto result = qet->getResult();
+    // `timeMapLookup` is only reported by the hash map optimization.
+    auto groupBy =
+        std::dynamic_pointer_cast<const GroupBy>(qet->getRootOperation());
+    ASSERT_NE(groupBy, nullptr);
+    EXPECT_EQ(
+        groupBy->getImpl().runtimeInfo().details_.contains("timeMapLookup"),
+        hashMapEnabled);
+    auto e5 = encoded("<http://example.org/5>");
+    auto e6 = encoded("<http://example.org/6>");
+    auto e7 = encoded("<http://example.org/7>");
+    const auto& table = result->idTableView();
+    EXPECT_THAT(table,
+                matchesIdTableFromVector({{I(1), e5, e5}, {I(2), e6, e7}}));
+    // The comparison above also succeeds for a `LocalVocabIndex` of the same
+    // IRIs, so check the datatype explicitly.
+    for (size_t col : {1, 2}) {
+      for (Id id : table.getColumn(col)) {
+        EXPECT_EQ(id.getDatatype(), Datatype::EncodedVal);
+      }
+    }
+  }
 }

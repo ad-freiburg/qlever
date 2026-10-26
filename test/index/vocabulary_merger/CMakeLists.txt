@@ -1,0 +1,15 @@
+addLinkAndDiscoverTest(IdMapTest index)
+
+addLinkAndDiscoverTest(IdMapBatchTest index)
+
+addLinkAndDiscoverTest(WordBatchBuilderTest index)
+
+addLinkAndDiscoverTest(VocabularyWriterTest index)
+
+addLinkAndDiscoverTest(VocabularyMergePipelineTest index)
+
+addLinkAndDiscoverTest(SegmentTest index)
+
+addLinkAndDiscoverTest(SegmentCommitterTest index)
+
+addLinkAndDiscoverTest(IdMapWritersTest index)

@@ -56,7 +56,7 @@ bool Join::knownEmptyResult() { return impl_->knownEmptyResult(); }
 float Join::getMultiplicity(size_t col) { return impl_->getMultiplicity(col); }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Join::getChildren() {
+qlm::vector<QueryExecutionTree*> Join::getChildrenImpl() const {
   return impl_->getChildren();
 }
 
@@ -69,7 +69,7 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
 string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
 
 // _____________________________________________________________________________
-bool Join::isDeterministicImpl() const { return impl_->isDeterministic(); }
+bool Join::isDeterministicImpl() const { return impl_->isDeterministicImpl(); }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Join::cloneImpl() const {

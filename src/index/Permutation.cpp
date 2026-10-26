@@ -41,7 +41,8 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
 void Permutation::loadFromDisk(
     const std::string& onDiskBase, bool loadInternalPermutation,
     Type permutationType,
-    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns) {
+    ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns,
+    bool logRegistration) {
   onDiskBase_ = onDiskBase;
   permutationType_ = permutationType;
   if (loadInternalPermutation) {
@@ -49,7 +50,8 @@ void Permutation::loadFromDisk(
     internalPermutation_ =
         std::make_unique<Permutation>(permutation_, allocator_);
     internalPermutation_->loadFromDisk(
-        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
+        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false,
+        Type::NORMAL, {}, logRegistration);
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
@@ -70,8 +72,10 @@ void Permutation::loadFromDisk(
   // internal permutations always use it.
   bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
   reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
-  AD_LOG_INFO << "Registered " << readableName_
-              << " permutation: " << meta_.statistics() << std::endl;
+  if (logRegistration) {
+    AD_LOG_INFO << "Registered " << readableName_
+                << " permutation: " << meta_.statistics() << std::endl;
+  }
   isLoaded_ = true;
 }
 
@@ -90,6 +94,7 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           ColumnIndicesRef additionalColumns,
                           const CancellationHandle& cancellationHandle,
                           const LocatedTriplesState& locatedTriplesState,
+                          qlever::Executor executor,
                           const LimitOffsetClause& limitOffset) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
@@ -97,7 +102,7 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
   }
   return reader().scan(scanSpecAndBlocks, additionalColumns, cancellationHandle,
                        getLocatedTriplesForPermutation(locatedTriplesState),
-                       limitOffset);
+                       std::move(executor), limitOffset);
 }
 
 // _____________________________________________________________________
@@ -141,6 +146,23 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
       cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
       limitOffset);
 }
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// ____________________________________________________________________________
+cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+Permutation::getDistinctCol0Ids(const ScanSpecification& scanSpec,
+                                bool addGraphColumn,
+                                std::optional<std::vector<Id>> idFilter,
+                                const CancellationHandle& cancellationHandle,
+                                const LocatedTriplesState& locatedTriplesState,
+                                qlever::Executor executor) const {
+  return reader().getDistinctCol0Ids(
+      getScanSpecAndBlocks(scanSpec, locatedTriplesState), addGraphColumn,
+      std::move(idFilter), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState),
+      std::move(executor));
+}
+#endif
 
 // _____________________________________________________________________
 auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
@@ -224,11 +246,11 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
     const LimitOffsetClause& limitOffset) const {
   return lazyScanImpl(reader(), scanSpecAndBlocks, std::move(optBlocks),
                       additionalColumns, cancellationHandle,
-                      locatedTriplesState, limitOffset);
+                      locatedTriplesState, std::move(executor), limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -238,17 +260,18 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
     const LimitOffsetClause& limitOffset) const {
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   if (!optBlocks.has_value()) {
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader.lazyScan(
-      scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
-      std::move(columns), cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+  return reader.lazyScan(scanSpecAndBlocks.scanSpec_,
+                         std::move(optBlocks.value()), std::move(columns),
+                         cancellationHandle,
+                         getLocatedTriplesForPermutation(locatedTriplesState),
+                         std::move(executor), limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -257,16 +280,13 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    std::optional<size_t> numThreadsOverride) const {
+    qlever::Executor executor) const {
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
-  // Applies only to this dedicated reader; query scans use the shared reader
-  // and are unaffected.
-  independentReader->lazyScanNumThreadsOverride_ = numThreadsOverride;
-  auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
-                             std::nullopt, additionalColumns,
-                             cancellationHandle, locatedTriplesState, {});
+  auto blocks = lazyScanImpl(
+      *independentReader, scanSpecAndBlocks, std::nullopt, additionalColumns,
+      cancellationHandle, locatedTriplesState, std::move(executor), {});
   return {std::move(independentReader), std::move(blocks)};
 }
 

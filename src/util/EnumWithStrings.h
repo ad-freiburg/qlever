@@ -14,7 +14,6 @@
 #include <absl/strings/str_join.h>
 
 #include <array>
-#include <boost/program_options.hpp>
 #include <ostream>
 #include <stdexcept>
 #include <string_view>
@@ -158,8 +157,8 @@ CPP_template(typename Derived,
 
   // Hashing
   CPP_template_2(typename H, typename D)(
-      requires ql::concepts::same_as<D, Derived>) friend H
-      AbslHashValue(H h, const D& derived) {
+      requires ql::concepts::same_as<D, Derived>)
+  friend H AbslHashValue(H h, const D& derived) {
     return H::combine(std::move(h), static_cast<Enum>(derived));
   }
 
@@ -167,26 +166,6 @@ CPP_template(typename Derived,
   // equality and other comparisons are handled by the implicit conversion to
   // the underlying enum.
 };
-
-// The following function enables enables support for the `EnumWithStrings`
-// classes within `boost::program_options`. The values are parsed via the
-// `fromString` method.
-CPP_template(typename E)(
-    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag,
-                               E>) void validate(boost::any& v,
-                                                 const std::vector<std::string>&
-                                                     values,
-                                                 E*, int) {
-  // First parse as the command line argument as a string.
-  // Note: `validate` stores the result in `v`.
-  std::string* dummy = nullptr;
-  using namespace boost::program_options;
-  boost::program_options::validate(v, values, dummy, 0);
-
-  // Convert from string to enum.
-  AD_CONTRACT_CHECK(!v.empty());
-  v = E::fromString(boost::any_cast<std::string>(v));
-}
 
 }  // namespace ad_utility
 

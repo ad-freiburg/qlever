@@ -6,15 +6,18 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
 #define QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
 
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+#include "util/AllocateShared.h"
 #include "util/HashSet.h"
 
 // Strongly typed enum for controlling whether stripped variables are explicitly
@@ -27,24 +30,14 @@ enum class HideStrippedColumns { False, True };
 // operations needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* qec);
   QueryExecutionTree(QueryExecutionContext* qec,
-                     std::shared_ptr<Operation> operation)
-      : QueryExecutionTree(qec) {
-    rootOperation_ = std::move(operation);
-    resultWidth_ = rootOperation_->getResultWidth();
-    cacheKey_ = rootOperation_->getCacheKey();
-    if (!readFromCache()) {
-      readFromMaterializedView();
-    }
-  }
+                     std::shared_ptr<Operation> operation);
 
   std::string getCacheKey() const;
 
   const QueryExecutionContext* getQec() const { return qec_; }
 
   const VariableToColumnMap& getVariableColumns() const {
-    AD_CONTRACT_CHECK(rootOperation_);
     return rootOperation_->getExternallyVisibleVariableColumns();
   }
 
@@ -57,8 +50,6 @@ class QueryExecutionTree {
       ColumnIndex colIdx) const;
 
   std::shared_ptr<Operation> getRootOperation() const { return rootOperation_; }
-
-  bool isEmpty() const { return !rootOperation_; }
 
   // Get the column index that the given `variable` will have in the result of
   // this query. Throw if the variable is not part of the `VariableToColumnMap`.
@@ -117,12 +108,24 @@ class QueryExecutionTree {
   getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
+  // Call `Operation::makeTreeWithBindColumn` for the root operation, but only
+  // if all the variables of the `BIND` expression are visible in this tree and
+  // the target is not even a hidden variable of it. The variables that are
+  // hidden in this tree (see `Operation::setSelectedVariablesForSubquery`)
+  // remain hidden in the result, and the `LIMIT`/`OFFSET` of the root is
+  // preserved.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const;
+
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(rootOperation_->getSizeEstimate() /
                                rootOperation_->getMultiplicity(col));
   }
 
-  bool isVariableCovered(Variable variable) const;
+  // Check whether the result of this tree has a column for the given variable.
+  // Note that this says nothing about whether that column might be UNDEF; use
+  // `Operation::isVariableAlwaysDefined` if that distinction matters.
+  bool containsVariable(Variable variable) const;
 
   bool knownEmptyResult();
 
@@ -142,41 +145,20 @@ class QueryExecutionTree {
     return rootOperation_->collectWarnings();
   }
 
-  template <typename F>
-  void forAllDescendants(F f) {
-    static_assert(
-        std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
-    for (auto ptr : rootOperation_->getChildren()) {
-      if (ptr) {
-        f(ptr);
-        ptr->forAllDescendants(f);
-      }
-    }
-  }
-
-  template <typename F>
-  void forAllDescendants(F f) const {
-    static_assert(
-        std::is_same_v<void,
-                       std::invoke_result_t<F, const QueryExecutionTree*>>);
-    for (auto ptr : rootOperation_->getChildren()) {
-      if (ptr) {
-        f(ptr);
-        ptr->forAllDescendants(f);
-      }
-    }
-  }
-
   bool& isRoot() noexcept { return isRoot_; }
   [[nodiscard]] const bool& isRoot() const noexcept { return isRoot_; }
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
   // sorted accordingly, or sorted by another permutation of the same columns,
-  // it is simply returned.
+  // it is simply returned. The second overload is for braced lists like
+  // `{0, 1}`, which do not convert to a `ql::span`.
   static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns);
+      ql::span<const ColumnIndex> sortColumns);
+  static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
+      std::shared_ptr<QueryExecutionTree> qet,
+      std::initializer_list<ColumnIndex> sortColumns);
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
@@ -184,10 +166,15 @@ class QueryExecutionTree {
   // a `Sort` operation has to be created, that `Sort` will not propagate a
   // `LIMIT`/`OFFSET` to its subtree. This is used for explicit `INTERNAL SORT
   // BY` clauses, where the complete sorted result is requested and the
-  // limit-pushdown optimization is undesired.
+  // limit-pushdown optimization is undesired. The second overload is for braced
+  // lists (see above).
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
+      ql::span<const ColumnIndex> sortColumns, bool explicitSort = false);
+  static std::shared_ptr<QueryExecutionTree> createSortedTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      std::initializer_list<ColumnIndex> sortColumns,
+      bool explicitSort = false);
 
   // Create a `QueryExecutionTree` that produces the same set of results as
   // applying a `DISTINCT` on the columns `distinctIndices` to `qet`. In order
@@ -205,7 +192,7 @@ class QueryExecutionTree {
   // duplicates.
   static std::shared_ptr<QueryExecutionTree> createDistinctTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& distinctIndices);
+      ql::span<const ColumnIndex> distinctIndices);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
@@ -334,10 +321,13 @@ class QueryExecutionTree {
     }
   };
 
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `qec_->getAllocator()` (see
+  // `util/AllocateShared.h`).
+  DEFINE_MAKE_SHARED_MEMBER(qec_->getAllocator())
+
   std::shared_ptr<QueryExecutionTree> clone() const {
-    return rootOperation_ ? std::make_shared<QueryExecutionTree>(
-                                qec_, rootOperation_->clone())
-                          : std::make_shared<QueryExecutionTree>(qec_);
+    return makeShared<QueryExecutionTree>(qec_, rootOperation_->clone());
   }
 };
 
@@ -345,11 +335,14 @@ namespace ad_utility {
 // Create a `QueryExecutionTree` with `Operation` at the root.
 // The `Operation` is created using `qec` and `args...` as constructor
 // arguments.
+//
+// NOTE: Both the tree and the operation are allocated with the memory limited
+// allocator of the query, such that they count towards its memory limit.
 template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
     QueryExecutionContext* qec, Args&&... args) {
-  return std::make_shared<QueryExecutionTree>(
-      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
+  return qec->makeShared<QueryExecutionTree>(
+      qec, qec->makeShared<Operation>(qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility
 

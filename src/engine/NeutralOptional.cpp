@@ -12,8 +12,8 @@ NeutralOptional::NeutralOptional(QueryExecutionContext* qec,
     : Operation{qec}, tree_{std::move(tree)} {}
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> NeutralOptional::getChildren() {
-  return {tree_.get()};
+qlm::vector<QueryExecutionTree*> NeutralOptional::getChildrenImpl() const {
+  return {{tree_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -128,8 +128,8 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
               resultSortedOn(),
               {}};
     }
-    return {childResult->cloneIdTable(), childResult->sortedBy(),
-            childResult->getSharedLocalVocab()};
+    return {childResult->cloneIdTable(cancellationChecker()),
+            childResult->sortedBy(), childResult->getSharedLocalVocab()};
   }
   if (singleRowCroppedByLimit()) {
     return {childResult->idTables(), childResult->sortedBy()};
