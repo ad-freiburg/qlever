@@ -283,6 +283,10 @@ class QueryPlanner {
 
   auto allocator() const { return _qec->getAllocator(); }
 
+  SubtreePlanVec singlePlanVec(SubtreePlan plan) const {
+    return SubtreePlanVec{{std::move(plan)}, allocator()};
+  }
+
   // Used to count the number of unique variables created using
   // generateUniqueVarName
   size_t _internalVarCount = 0;
@@ -673,6 +677,10 @@ class QueryPlanner {
     QueryExecutionContext* qec_;
 
     auto allocator() const { return qec_->getAllocator(); }
+
+    SubtreePlanVec singlePlanVec(SubtreePlan plan) const {
+      return SubtreePlanVec{{std::move(plan)}, allocator()};
+    }
 
     // Used to store the set of candidate plans for the already processed parts
     // of the graph pattern. Each row stores different plans for the same graph

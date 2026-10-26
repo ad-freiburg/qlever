@@ -244,13 +244,12 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
-  qlm::vector<qlm::vector<std::pair<size_t, size_t>>> results{
-      qec_->getAllocator()};
-  qlm::vector<qlm::vector<double>> resultDists{qec_->getAllocator()};
-  for (size_t t = 0; t < NUM_THREADS; ++t) {
-    results.emplace_back(qec_->getAllocator());
-    resultDists.emplace_back(qec_->getAllocator());
-  }
+  qlm::vector<qlm::vector<std::pair<size_t, size_t>>> results(
+      NUM_THREADS, qlm::vector<std::pair<size_t, size_t>>{qec_->getAllocator()},
+      qec_->getAllocator());
+  qlm::vector<qlm::vector<double>> resultDists(
+      NUM_THREADS, qlm::vector<double>{qec_->getAllocator()},
+      qec_->getAllocator());
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
   auto joinTypeVal = config_.getJoinType().value();
   // Within should be replaced by contains on swapped tables.

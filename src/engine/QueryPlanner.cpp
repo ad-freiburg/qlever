@@ -91,11 +91,6 @@ SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
   return {qec, qec->makeShared<Operation>(qec, AD_FWD(args)...)};
 }
 
-SubtreePlanVec makeSingletonPlanVec(QueryExecutionContext* qec,
-                                    SubtreePlan plan) {
-  return SubtreePlanVec{{std::move(plan)}, qec->getAllocator()};
-}
-
 // Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
 // inheriting from `Operation`.
 template <typename Op>
@@ -327,8 +322,8 @@ SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
     if (candidatePlans.at(0).empty()) {
       // This happens if either graph pattern is an empty group,
       // or it only consists of a MINUS clause (which then has no effect).
-      auto neutralPlans = makeSingletonPlanVec(
-          _qec, makeSubtreePlan<NeutralElementOperation>(_qec));
+      auto neutralPlans =
+          singlePlanVec(makeSubtreePlan<NeutralElementOperation>(_qec));
       // Neutral element can potentially still get filtered out
       applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
           neutralPlans, optimizer.filtersAndSubst_);
@@ -2322,9 +2317,8 @@ SubtreePlanVec QueryPlanner::createJoinCandidatesAllowEmpty(
     const SubtreePlan& ain, const SubtreePlan& bin,
     const JoinColumns& jcs) const {
   if (jcs.empty()) {
-    return makeSingletonPlanVec(_qec,
-                                makeSubtreePlan<CartesianProductJoin>(
-                                    _qec, std::vector{ain._qet, bin._qet}));
+    return singlePlanVec(makeSubtreePlan<CartesianProductJoin>(
+        _qec, std::vector{ain._qet, bin._qet}));
   }
   return createJoinCandidates(ain, bin, jcs);
 }
@@ -2374,15 +2368,13 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   // further into the query that optional should be resolved by now.
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
   if (b.type == SubtreePlan::MINUS) {
-    return makeSingletonPlanVec(_qec,
-                                makeSubtreePlan<Minus>(_qec, a._qet, b._qet));
+    return singlePlanVec(makeSubtreePlan<Minus>(_qec, a._qet, b._qet));
   }
 
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return makeSingletonPlanVec(
-        _qec, makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet));
+    return singlePlanVec(makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet));
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -3233,8 +3225,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       "patterns");
   auto idx = planner_.findCheapestExecutionTree(nextCandidates);
   candidatePlans_.clear();
-  candidatePlans_.push_back(
-      makeSingletonPlanVec(qec_, std::move(nextCandidates[idx])));
+  candidatePlans_.push_back(singlePlanVec(std::move(nextCandidates[idx])));
 }
 
 // ____________________________________________________________
@@ -3324,13 +3315,11 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     return visitTransitivePath(arg);
   } else if constexpr (std::is_same_v<T, p::Values>) {
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
-    visitGroupOptionalOrMinus(
-        makeSingletonPlanVec(qec_, std::move(valuesPlan)));
+    visitGroupOptionalOrMinus(singlePlanVec(std::move(valuesPlan)));
   } else if constexpr (std::is_same_v<T, p::Service>) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
-    visitGroupOptionalOrMinus(
-        makeSingletonPlanVec(qec_, std::move(servicePlan)));
+    visitGroupOptionalOrMinus(singlePlanVec(std::move(servicePlan)));
 #else
     throw std::runtime_error(
         "SERVICE is not supported in this restricted version of QLever");
@@ -3338,7 +3327,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Load>) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
-    visitGroupOptionalOrMinus(makeSingletonPlanVec(qec_, std::move(loadPlan)));
+    visitGroupOptionalOrMinus(singlePlanVec(std::move(loadPlan)));
 #else
     throw std::runtime_error(
         "LOAD is not supported in this restricted version of QLever");
@@ -3516,8 +3505,8 @@ SubtreePlan QueryPlanner::getMaterializedViewIndexScanPlan(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitMaterializedViewQuery(
     const parsedQuery::MaterializedViewQuery& viewQuery) {
-  candidatePlans_.push_back(makeSingletonPlanVec(
-      qec_, planner_.getMaterializedViewIndexScanPlan(viewQuery)));
+  candidatePlans_.push_back(
+      singlePlanVec(planner_.getMaterializedViewIndexScanPlan(viewQuery)));
 }
 
 // _______________________________________________________________
@@ -3537,8 +3526,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   if (spatialQuery.childGraphPattern_.has_value()) {
     candidatesIn = planner_.optimize(&spatialQuery.childGraphPattern_.value());
   } else {
-    candidatesIn = makeSingletonPlanVec(
-        qec_, makeSubtreePlan<NeutralElementOperation>(qec_));
+    candidatesIn =
+        singlePlanVec(makeSubtreePlan<NeutralElementOperation>(qec_));
   }
   SubtreePlanVec candidatesOut{allocator()};
 
@@ -3587,8 +3576,7 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
     return makeSubtreePlan<Op>(this->qec_, std::move(arg));
   };
   for (auto config : textSearchQuery.toConfigs(qec_)) {
-    candidatePlans_.push_back(
-        makeSingletonPlanVec(qec_, std::visit(visitor, config)));
+    candidatePlans_.push_back(singlePlanVec(std::visit(visitor, config)));
   }
 }
 
@@ -3598,7 +3586,7 @@ void QueryPlanner::GraphPatternPlanner::visitExternalValues(
   auto externalValues =
       qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
-  visitGroupOptionalOrMinus(makeSingletonPlanVec(qec_, std::move(candidate)));
+  visitGroupOptionalOrMinus(singlePlanVec(std::move(candidate)));
 }
 
 // _____________________________________________________________________________
@@ -3607,7 +3595,7 @@ void QueryPlanner::GraphPatternPlanner::visitNamedCachedResult(
   auto candidate =
       makeSubtreePlan(planner_._qec->namedResultCache().getOperation(
           arg.identifier(), planner_._qec));
-  visitGroupOptionalOrMinus(makeSingletonPlanVec(qec_, std::move(candidate)));
+  visitGroupOptionalOrMinus(singlePlanVec(std::move(candidate)));
 }
 
 // _______________________________________________________________
@@ -3621,7 +3609,7 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
   // create a new subtree plan
   SubtreePlan candidate =
       makeSubtreePlan<Union>(planner_._qec, left._qet, right._qet);
-  visitGroupOptionalOrMinus(makeSingletonPlanVec(qec_, std::move(candidate)));
+  visitGroupOptionalOrMinus(singlePlanVec(std::move(candidate)));
 }
 
 // _______________________________________________________________
@@ -3719,7 +3707,7 @@ void QueryPlanner::GraphPatternPlanner::visitDescribe(
   tree->applyLimitOffset(describe.whereClause_.get()._limitOffset);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
-  candidatePlans_.push_back(makeSingletonPlanVec(qec_, std::move(describeOp)));
+  candidatePlans_.push_back(singlePlanVec(std::move(describeOp)));
   planner_.checkCancellation();
 }
 
