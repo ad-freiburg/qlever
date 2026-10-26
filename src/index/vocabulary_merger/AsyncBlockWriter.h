@@ -179,32 +179,39 @@ class AsyncBlockWriterPerSubVocabulary {
   }
 
   // Append the blocks at the front of the queue that are prepared, in order,
-  // up to the first block that is not prepared yet.
+  // up to the first block that is not prepared yet, and then release their
+  // slots in the queue.
   // PRECONDITION: This runs on the `strand_`.
+  //
+  // NOTE: The slots are released only after the loop, because releasing the
+  // slot of the last block lets `finish()` return and the destructor run, so
+  // no member may be touched after that.
   void appendPreparedBlocksInOrder() {
     auto& pending = pendingBlocks_;
+    std::vector<ad_utility::TaskQueueOnExecutor::Done> dones;
     while (!pending.empty() && pending.front().isPrepared_) {
       PendingBlock next = std::move(pending.front());
       pending.pop_front();
-      appendPendingBlock(std::move(next));
+      dones.push_back(appendPendingBlock(std::move(next)));
+    }
+    for (auto& done : dones) {
+      std::move(done)();
     }
   }
 
   // Append the prepared `block`, unless a task has failed (then the block is
-  // skipped), and release its slot in the queue.
+  // skipped), and return the callback that releases its slot in the queue.
   // PRECONDITION: This runs on the `strand_`.
-  void appendPendingBlock(PendingBlock block) {
-    {
-      auto measurement = sharedState_.appendBusyTime_.startMeasurement();
-      auto& exceptionCollector = sharedState_.exceptionCollector_;
-      if (block.exception_) {
-        exceptionCollector(std::move(block.exception_));
-      } else if (!sharedState_.hasFailed()) {
-        exceptionCollector.wrap(
-            [&block]() { std::move(block.appendBlock_)(); })();
-      }
+  ad_utility::TaskQueueOnExecutor::Done appendPendingBlock(PendingBlock block) {
+    auto measurement = sharedState_.appendBusyTime_.startMeasurement();
+    auto& exceptionCollector = sharedState_.exceptionCollector_;
+    if (block.exception_) {
+      exceptionCollector(std::move(block.exception_));
+    } else if (!sharedState_.hasFailed()) {
+      exceptionCollector.wrap(
+          [&block]() { std::move(block.appendBlock_)(); })();
     }
-    std::move(block.done_)();
+    return std::move(block.done_);
   }
 };
 
