@@ -40,6 +40,7 @@
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/NoCopyNoMove.h"
+#include "util/ParseableDuration.h"
 #include "util/RegexSet.h"
 #include "util/Timer.h"
 
@@ -119,8 +120,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
   }
 
   // The total time that the tasks have spent building the segments.
-  ad_utility::Timer::Duration segmentBusyTime() const {
-    return segmentBusyTime_.value();
+  ad_utility::ParseableDuration<std::chrono::milliseconds> segmentBusyTime()
+      const {
+    return segmentBusyTime_.msecs();
   }
 
  private:
@@ -198,7 +200,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   // an exception was thrown before `finish()` committed all the segments, and
   // is required because the tasks use the `cutter_` and the arguments of the
   // constructor. NOTE: A future whose `get()` threw (the segment that failed)
-  // is no longer valid, and its task has completed.
+  // is no longer valid, and its task has completed. NOTE: `wait()` never
+  // rethrows the exception that is stored in a future, so this destructor
+  // can't throw and needs no `noexcept(false)`.
   ~SegmentPipeline() {
     for (auto& segment : segments_) {
       if (segment.valid()) {
@@ -237,29 +241,28 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     }
     VocabularyMetaData metaData = committer_.finish();
     commitTimer_.stop();
-    // The busy times are measured in microseconds, but logged in milliseconds
-    // for readability.
-    auto ms = [](ad_utility::Timer::Duration duration) {
-      return std::chrono::duration_cast<std::chrono::milliseconds>(duration)
-          .count();
-    };
+    using Milliseconds =
+        ad_utility::ParseableDuration<std::chrono::milliseconds>;
     AD_LOG_INFO << "Time spent by the thread behind the merge: waiting for "
                    "merged blocks "
-                << (totalTimer_.msecs() - commitTimer_.msecs())
-                << ", committing the segments " << commitTimer_.msecs()
-                << "; building the segments " << ms(cutter_.segmentBusyTime())
-                << " ms" << std::endl;
+                << Milliseconds{totalTimer_.msecs() - commitTimer_.msecs()}
+                << ", committing the segments "
+                << Milliseconds{commitTimer_.msecs()}
+                << "; building the segments " << cutter_.segmentBusyTime()
+                << std::endl;
     blockWriter_.finish();
     idMapWriters_.finish();
     AD_LOG_INFO << committer_.progressBar().getFinalProgressString()
                 << std::flush;
-    AD_LOG_INFO << "Time spent by the stages behind the vocabulary merge: "
-                   "preparing "
-                << blockWriter_.numBlocks() << " blocks "
-                << ms(blockWriter_.prepareBusyTime()) << " ms, appending them "
-                << ms(blockWriter_.appendBusyTime())
-                << " ms, writing the ID maps " << ms(idMapWriters_.busyTime())
-                << " ms" << std::endl;
+    AD_LOG_INFO
+        << "Time spent by the stages behind the vocabulary merge: "
+           "preparing "
+        << blockWriter_.numBlocks() << " blocks "
+        << blockWriter_.prepareBusyTime() << ", appending them "
+        << blockWriter_.appendBusyTime() << ", writing the ID maps "
+        << Milliseconds{std::chrono::duration_cast<std::chrono::milliseconds>(
+               idMapWriters_.busyTime())}
+        << std::endl;
     return metaData;
   }
 

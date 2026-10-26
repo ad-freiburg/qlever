@@ -10,9 +10,12 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_ASYNCBLOCKWRITER_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_ASYNCBLOCKWRITER_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <algorithm>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/strand.hpp>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -21,7 +24,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/functional/any_invocable.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
 #include "util/AsioHelpers.h"
@@ -29,6 +31,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
+#include "util/ParseableDuration.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
@@ -260,11 +263,13 @@ class AsyncBlockWriter {
   // The number of blocks pushed so far, and the total time that the tasks
   // have spent preparing and appending them.
   size_t numBlocks() const { return numBlocks_; }
-  ad_utility::Timer::Duration prepareBusyTime() const {
-    return sharedState_.prepareBusyTime_.value();
+  ad_utility::ParseableDuration<std::chrono::milliseconds> prepareBusyTime()
+      const {
+    return sharedState_.prepareBusyTime_.msecs();
   }
-  ad_utility::Timer::Duration appendBusyTime() const {
-    return sharedState_.appendBusyTime_.value();
+  ad_utility::ParseableDuration<std::chrono::milliseconds> appendBusyTime()
+      const {
+    return sharedState_.appendBusyTime_.msecs();
   }
 };
 }  // namespace ad_utility::vocabulary_merger::detail

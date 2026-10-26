@@ -16,6 +16,7 @@
 #include <boost/asio/post.hpp>
 #include <condition_variable>
 #include <cstddef>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <string>
@@ -134,7 +135,7 @@ class TaskQueueOnExecutor {
   void push(Task task) {
     pushAsync([task = std::move(task)](Done done) mutable {
       task();
-      std::move(done)();
+      std::invoke(std::move(done));
     });
   }
 
