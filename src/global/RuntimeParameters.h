@@ -16,7 +16,6 @@
 // complete QLever instance.
 struct RuntimeParameters {
   using Bool = ad_utility::detail::parameterShortNames::Bool;
-  using Double = ad_utility::detail::parameterShortNames::Double;
   template <typename DurationTp>
   using Duration =
       ad_utility::detail::parameterShortNames::DurationParameter<DurationTp>;
@@ -45,11 +44,6 @@ struct RuntimeParameters {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
-  // If the time estimate for a sort operation is larger by more than this
-  // factor than the remaining time, then the sort is canceled with a
-  // timeout exception.
-  Double sortEstimateCancellationFactor_{3.0,
-                                         "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
 
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),
@@ -160,6 +154,13 @@ struct RuntimeParameters {
   // false,
   // the result will be `NaN` or `infinity` respectively.
   Bool divisionByZeroIsUndef_{true, "division-by-zero-is-undef"};
+
+  // If set to `true`, an invalid WKT literal that is given inline in the query
+  // (directly or via `VALUES`) as an argument of a GeoSPARQL function is an
+  // error during query parsing. If set to `false`, the function call is an
+  // expression error (the result is undefined), as specified by GeoSPARQL 1.1.
+  Bool throwOnInvalidWkt_{false, "throw-on-invalid-wkt"};
+
   // If set to `true`, the contained `FILTER` expressions in the query
   // try to set and apply a corresponding `PrefilterExpression` (see
   // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`
@@ -179,13 +180,11 @@ struct RuntimeParameters {
   // The default of `3` captures most of the speedup, with quickly diminishing
   // returns for more tasks.
   SizeT patternTrickNumTasksInFlight_{3, "pattern-trick-num-tasks-in-flight"};
-  // The number of threads for the parallel sort of intermediate results
-  // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
-  // as `1`. Only effective when QLever was built with the CMake option
-  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
-  // default of `3` captures most of the speedup, with quickly diminishing
-  // returns for more threads.
-  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
+  // A hint for how many tasks of the in-memory sort of intermediate results
+  // (see `IdTableUtils::sort`) run at the same time. They run on the query's
+  // executor, so `max-num-threads-per-query` still bounds the threads. Must be
+  // strictly positive; `1` means that the sort runs sequentially.
+  SizeT sortNumTasksInFlight_{3, "sort-num-tasks-in-flight"};
   // The maximum size of the `prefilterBox` for
   // `LibspatialjoinAlgorithm::parse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};

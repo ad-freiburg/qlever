@@ -39,10 +39,14 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
   using RightType = std::decay_t<Right>;
 
   Function function;
+  using ValueGetters = std::tuple<LeftValueGetter, RightValueGetter>;
 
   // Constant–constant operands don't benefit from upfront classification.
   if constexpr (isConstantResult<LeftType> && isConstantResult<RightType>) {
     context->cancellationHandle_->throwIfCancelled();
+    if (hasNonNumericOperand<Function, ValueGetters>(left, right)) {
+      return Id::makeUndefined();
+    }
     return function(LeftValueGetter{}(AD_FWD(left), context),
                     RightValueGetter{}(AD_FWD(right), context));
 
@@ -50,18 +54,26 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
-    // Use the homogeneous numeric fast path when both operands and value
-    // getters support it.
+    // Check for datatypes rejected by the numeric getters unless classification
+    // proves that every value is accepted (including booleans). Only functions
+    // with an `UNDEF` opt-in use this check; see `hasNonNumericOperand`.
+    bool checkForValuesRejectedByGetter = true;
+    // Use the shared numeric/date fast paths when both operands and value
+    // getters support typed execution.
     if constexpr (supportsNumericFastPath<LeftValueGetter> &&
                   supportsNumericFastPath<RightValueGetter> &&
                   supportsNumericFastPathOperand<Left>() &&
                   supportsNumericFastPathOperand<Right>()) {
+      constexpr bool includeDates = supportsDateOperands<ValueGetters>;
       const auto classifications =
-          classifyNumericOperands(context, left, right);
+          classifyNumericOperands<includeDates>(context, left, right);
+      checkForValuesRejectedByGetter =
+          classifications[0].containsValueRejectedByGetter_ ||
+          classifications[1].containsValueRejectedByGetter_;
 
       if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications);
           homogeneousTypes.has_value()) {
-        return dispatchNumericTypes(
+        return dispatchNumericTypes<includeDates>(
             homogeneousTypes.value(),
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
@@ -76,7 +88,7 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
 
       if (auto majorityTypes = getMajorityNumericTypes(classifications);
           majorityTypes.has_value()) {
-        return dispatchNumericTypes(
+        return dispatchNumericTypes<includeDates>(
             majorityTypes.value(),
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
@@ -99,7 +111,16 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
 
     ad_utility::chunkedForLoop<1000>(
         0, context->size(),
-        [&](size_t i) { result.push_back(function(getLeft(i), getRight(i))); },
+        [&left, &right, &result, &function, &getLeft, &getRight,
+         checkForValuesRejectedByGetter](size_t i) {
+          if (checkForValuesRejectedByGetter &&
+              hasNonNumericOperand<Function, ValueGetters>(
+                  getValueAt(left, i), getValueAt(right, i))) {
+            result.push_back(Id::makeUndefined());
+            return;
+          }
+          result.push_back(function(getLeft(i), getRight(i)));
+        },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
     return result;

@@ -199,7 +199,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnSet](auto&& id) {
+       &newOverlapMatches, &biggerTableJoinColumnSet](IdRef id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -331,7 +331,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // Overwrite the designated values in the smaller table.
   ql::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto&& id) {
+      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](IdRef id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
           id = newValueIterator->second;
@@ -1208,17 +1208,17 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           && isTypeOrGrowthFunction<T6, float>
           && isTypeOrGrowthFunction<T7, float>
           && exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>))
-      // clang-format on
-      ResultTable& makeGrowingBenchmarkTable(
-          BenchmarkResults* results, const std::string& tableDescriptor,
-          std::string parameterName, StopFunction stopFunction,
-          const T1& overlap, const std::optional<size_t>& resultTableNumRows,
-          ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
-          const bool biggerTableSorted, const T2& ratioRows,
-          const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
-          const T5& biggerTableNumColumns,
-          const T6& smallerTableJoinColumnSampleSizeRatio,
-          const T7& biggerTableJoinColumnSampleSizeRatio) const {
+  // clang-format on
+  ResultTable& makeGrowingBenchmarkTable(
+      BenchmarkResults* results, const std::string& tableDescriptor,
+      std::string parameterName, StopFunction stopFunction, const T1& overlap,
+      const std::optional<size_t>& resultTableNumRows,
+      ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
+      const bool biggerTableSorted, const T2& ratioRows,
+      const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
+      const T5& biggerTableNumColumns,
+      const T6& smallerTableJoinColumnSampleSizeRatio,
+      const T7& biggerTableJoinColumnSampleSizeRatio) const {
     constexpr IsGrowthFunction isGrowthFunction;
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =

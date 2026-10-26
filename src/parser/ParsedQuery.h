@@ -161,7 +161,7 @@ class ParsedQuery {
       const std::vector<Variable>& variables);
 
   // Return all the warnings that have been added via `addWarning()` or
-  // `addWarningOrThrow`.
+  // `addUnboundVariableWarningOrThrow`.
   const std::vector<std::string>& warnings() const { return warnings_; }
 
   // Add a warning to the query. The warning becomes part of the return value of
@@ -172,8 +172,8 @@ class ParsedQuery {
 
   // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a
-  // warning.
-  void addWarningOrThrow(std::string warning);
+  // warning. Only use this for warnings about unbound variables.
+  void addUnboundVariableWarningOrThrow(std::string warning);
 
   // Returns all variables that are visible in the Query Body.
   const std::vector<Variable>& getVisibleVariables() const;
@@ -219,8 +219,8 @@ class ParsedQuery {
 
   // If the `variable` is neither visible in the query body nor contained in the
   // `additionalVisibleVariables`, add a warning or throw an exception (see
-  // `addWarningOrThrow`) that uses the `locationDescription` inside the
-  // message.
+  // `addUnboundVariableWarningOrThrow`) that uses the `locationDescription`
+  // inside the message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
@@ -241,15 +241,25 @@ class ParsedQuery {
   void addGroupByClause(std::vector<GroupKey> groupKeys,
                         InternalVariableGenerator internalVariableGenerator);
 
-  // Add the `havingClause` to the query. The argument `isGroupBy` denotes
-  // whether the query performs a GROUP BY. If it is set to false, then an
-  // exception is thrown (HAVING without GROUP BY is not allowed). The function
-  // also throws if one of the variables that is used in the `havingClause` is
-  // neither grouped nor aggregate by the expression it is contained in. Uses
-  // `internalVariableGenerator` to generate distinct internal variables as
-  // required.
-  void addHavingClause(std::vector<SparqlFilter> havingClause, bool isGroupBy,
-                       InternalVariableGenerator internalVariableGenerator);
+  // Add the `havingClause` to the query. With an explicit or implicit
+  // `GROUP BY` (`isGroupBy`), each expression becomes an internal alias (using
+  // `internalVariableGenerator`). Without, see `addHavingClauseWithoutGroupBy`.
+  // Variables that are not visible yield a warning (or an exception, see
+  // `addUnboundVariableWarningOrThrow`). `postQueryValues` is only used for the
+  // warnings.
+  void addHavingClause(
+      std::vector<SparqlFilter> havingClause, bool isGroupBy,
+      InternalVariableGenerator internalVariableGenerator,
+      const std::optional<parsedQuery::Values>& postQueryValues);
+
+  // Helper for `addHavingClause` without (explicit or implicit) `GROUP BY`:
+  // each `HAVING` becomes a `FILTER` on the `WHERE` clause, with a warning to
+  // use `FILTER` instead. The `SELECT` aliases and the variables of the
+  // `postQueryValues` are bound only after `HAVING`, so the warning for an
+  // unbound variable explains this.
+  void addHavingClauseWithoutGroupBy(
+      std::vector<SparqlFilter> havingClauses,
+      const std::optional<parsedQuery::Values>& postQueryValues);
 
   // Add the `orderClause` to the query. Throw an exception if the `orderClause`
   // is not valid. This might happen if it uses variables that are not visible
@@ -294,7 +304,8 @@ class ParsedQuery {
 
   // Return true if this query performs a GROUP BY, either explicitly (a
   // `GROUP BY` clause is present) or implicitly (no `GROUP BY` clause, but an
-  // aggregating expression is used in the `SELECT` clause).
+  // aggregate in the `SELECT`, `HAVING`, or `ORDER BY` clause, all of which
+  // become aliases).
   [[nodiscard]] bool isAggregatingQuery() const;
 
   // Return false if two evaluations of this query may differ (e.g. `RAND()`).

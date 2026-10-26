@@ -11,8 +11,9 @@ on:
   pull_request:
     branches: [ master ]
     # Also run when a label is applied, so that applying the `run-ci` or
-    # `run-full-ci` label triggers the checks, see `README.md`.
-    types: [ opened, synchronize, reopened, labeled ]
+    # `run-full-ci` label triggers the checks. There is no need for `opened`,
+    # see `README.md`.
+    types: [ synchronize, reopened, labeled ]
   merge_group:
 
 concurrency:
@@ -141,7 +142,6 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
           -DCMAKE_BUILD_TYPE=Release
           -DLOGLEVEL=INFO
-          -DUSE_PARALLEL=false
           -D_NO_TIMING_TESTS=ON
           -DRUN_EXPENSIVE_TESTS=false
           -D_NO_BENCHMARK=ON

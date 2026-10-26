@@ -23,7 +23,7 @@ Bind::Bind(QueryExecutionContext* qec,
     : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
-      cancellationHandle_);
+      cancellationHandle());
 }
 
 // BIND adds exactly one new column
@@ -182,7 +182,7 @@ IdTable Bind::computeExpressionBind(
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       idTable.asStaticView<0>(), getExecutionContext()->getAllocator(),
-      *localVocab, cancellationHandle_, deadline_);
+      *localVocab, cancellationHandle());
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);

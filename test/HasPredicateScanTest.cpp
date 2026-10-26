@@ -421,7 +421,6 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
     return QueryExecutionContext{index,
                                  &queryResultCache,
                                  makeAllocator(),
-                                 SortPerformanceEstimator{},
                                  &namedResultCache,
                                  std::make_shared<MaterializedViewsManager>(),
                                  executor()};

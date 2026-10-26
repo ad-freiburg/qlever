@@ -21,11 +21,13 @@
 #include <range/v3/algorithm/fold_left.hpp>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/Executor.h"
+#include "util/Math.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 #include "util/jthread.h"
@@ -133,7 +135,7 @@ CPP_template(typename ChunkFunction)(
   if (numTasks == 0) {
     numTasks = std::max(1u, std::thread::hardware_concurrency());
   }
-  size_t numChunks = (numElements + chunkSize - 1) / chunkSize;
+  size_t numChunks = ceilDiv(numElements, chunkSize);
   // Tasks beyond the number of chunks would have nothing to do.
   numTasks = std::min(numTasks, numChunks);
   // The index of the next chunk that has not been handed out yet. Taking the
@@ -231,16 +233,23 @@ void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
 // right away, wait for the helpers that are still running a task, and return
 // the first exception that any task has thrown (or `nullptr`).
 //
-// NOTE: The function is `noexcept`, because returning early (with an
+// NOTE 1: The function is `noexcept`, because returning early (with an
 // exception) while a helper is still running would leave that helper with a
 // dangling reference to the `runTask` of the caller.
+//
+// NOTE 2: The exception is moved out of the `state` (instead of copied), such
+// that the caller holds the only reference to it. Otherwise, a helper that is
+// the last owner of the `state` might destroy the exception after the caller
+// has read it. That would be correct (the reference count of the exception is
+// atomic), but ThreadSanitizer reports it as a data race, because it can't see
+// that synchronization (it happens in the uninstrumented `libstdc++`).
 inline std::exception_ptr closeAndWaitForHelpers(
     RunIndexedTasksState& state) noexcept {
   std::unique_lock lock{state.mutex_};
   state.isClosed_ = true;
   state.helperFinished_.wait(
       lock, [&state]() { return state.numActiveHelpers_ == 0; });
-  return state.firstException_;
+  return std::exchange(state.firstException_, nullptr);
 }
 }  // namespace detail
 

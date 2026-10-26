@@ -279,6 +279,9 @@ Result BoundingBoxAlgorithm::run() {
              bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value> >
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
+  // Rows skipped because their value is not a supported geometry.
+  size_t numSkippedSmaller = 0;
+  size_t numSkippedOther = 0;
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     throwIfCancelled();
 
@@ -286,9 +289,7 @@ Result BoundingBoxAlgorithm::run() {
     std::optional<RtreeEntry> entry =
         getRtreeEntry(smallerResult, i, smallerResJoinCol);
     if (!entry) {
-      // nothing to do. When parsing a point or an area fails, a warning
-      // message gets printed at another place and the point/area just gets
-      // skipped
+      ++numSkippedSmaller;
       continue;
     }
     rtree.insert(std::pair(entry.value().boundingBox_.value(),
@@ -303,9 +304,7 @@ Result BoundingBoxAlgorithm::run() {
     std::optional<RtreeEntry> entry =
         getRtreeEntry(otherResult, i, otherResJoinCol);
     if (!entry) {
-      // nothing to do. When parsing a point or an area fails, a warning
-      // message gets printed at another place and the point/area just gets
-      // skipped
+      ++numSkippedOther;
       continue;
     }
     std::vector<Box> queryBox = getQueryBox(entry);
@@ -331,14 +330,18 @@ Result BoundingBoxAlgorithm::run() {
         // as midpoints, the additional runtime can be saved in that case
         if (useMidpointForAreas_) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                              rowRight, distance);
+                              rowRight,
+                              kilometersToDistanceId(distance.getDouble()));
         } else if (pairs.insert(AddedPair{rowLeft, rowRight}).second) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                              rowRight, distance);
+                              rowRight,
+                              kilometersToDistanceId(distance.getDouble()));
         }
       }
     });
   }
+  addSkippedRowsWarning(leftResSmaller ? numSkippedSmaller : numSkippedOther,
+                        leftResSmaller ? numSkippedOther : numSkippedSmaller);
   auto resTable =
       Result(std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
              Result::getMergedLocalVocab(*resultLeft, *resultRight));

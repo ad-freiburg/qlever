@@ -426,7 +426,7 @@ void OptionalJoin::optionalJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_, keepJoinColumns_);
+      cancellationHandle(), keepJoinColumns_);
   auto rowAdderOnIterators = [&]() {
     auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
                    beginRight = joinColumnsRight.begin()](const auto& itLeft,
@@ -504,7 +504,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols);
+    IdTableUtils::sort(*result, cols, sortConfig(), cancellationHandle());
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
@@ -670,7 +670,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto lazyResult =
       std::move(nestedLoopJoin)
           .computeOptionalJoin(!requestLaziness, getResultWidth(),
-                               cancellationHandle_, _right->getResultWidth(),
+                               cancellationHandle(), _right->getResultWidth(),
                                keepJoinColumns_);
   return requestLaziness
              ? Result{std::move(lazyResult), resultSortedOn()}

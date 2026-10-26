@@ -1425,6 +1425,20 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
+      if constexpr (mode == FilterMode::KeepUnfiltered) {
+        if (!filterAndSubst.filter_.expression_.getExistsExpressions()
+                 .empty()) {
+          // Speculatively applying a filter that contains `EXISTS` to every
+          // candidate subplan multiplies the DP row (the unfiltered plans are
+          // kept alongside) and wraps each candidate in the `ExistsJoin`s for
+          // the filter's argument, which together make planning exponential
+          // in the number of `FILTER (NOT) EXISTS` clauses in a group. Leave
+          // such filters to the final `ReplaceUnfiltered*` passes, which
+          // apply them exactly once per surviving plan.
+          continue;
+        }
+      }
+
       // In `SeedSubstitutesOnly` mode there are no joining rounds afterwards
       // that could complete a partial `SpatialJoin`. Therefore only enforced
       // substitutes may be applied there, because they are complete as soon as
@@ -2517,6 +2531,31 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
+
+// Return the `child` of `unionOperation`, with the variables that the
+// `unionOperation` hides (because it is the root of a subquery) also hidden.
+// Otherwise a join with the child would also join on (or duplicate) these
+// variables.
+std::shared_ptr<QueryExecutionTree> childWithHiddenVariablesHidden(
+    const Union& unionOperation,
+    const std::shared_ptr<QueryExecutionTree>& child) {
+  const auto& visibleInUnion =
+      unionOperation.getExternallyVisibleVariableColumns();
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(
+      child->getVariableColumns() | ql::views::keys |
+          ql::views::filter([&visibleInUnion](const Variable& var) {
+            return visibleInUnion.contains(var);
+          }),
+      std::back_inserter(visibleVariables));
+  if (visibleVariables.size() == child->getVariableColumns().size()) {
+    return child;
+  }
+  // The child might be shared with other plans, so we must not modify it.
+  auto result = child->clone();
+  result->getRootOperation()->setSelectedVariablesForSubquery(visibleVariables);
+  return result;
+}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2571,10 +2610,14 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
         mapColumnsInUnion(flipped, *unionOperation, jcs);
 
     auto joinedLeft = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->leftChild()), other,
-        leftMapping);
+        cloneWithNewTree(thisPlan,
+                         childWithHiddenVariablesHidden(
+                             *unionOperation, unionOperation->leftChild())),
+        other, leftMapping);
     auto joinedRight = findJoinCandidates(
-        cloneWithNewTree(thisPlan, unionOperation->rightChild()),
+        cloneWithNewTree(thisPlan,
+                         childWithHiddenVariablesHidden(
+                             *unionOperation, unionOperation->rightChild())),
         cloneWithNewTree(other, other._qet->clone()), rightMapping);
 
     for (const auto& leftPlan : joinedLeft) {
@@ -3379,20 +3422,19 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
-    if (getRuntimeParameter<
-            &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
-      // Consider pushing down the `BIND` into the subtree.
-      auto pushedDownPlan = a._qet->makeTreeWithBindColumn(v);
-      if (pushedDownPlan.has_value()) {
-        // We can replace this `BIND` with a plan that contains an additional
-        // scan column with equivalent values, for example from a materialized
-        // view.
-        auto plan = a;
-        plan._qet = pushedDownPlan.value();
-        plan.containsBindSubstitute_ = true;
-        candidatePlans_.back().push_back(std::move(plan));
-        continue;
-      }
+    // Consider pushing down the `BIND` into the subtree. Each operation that
+    // can provide the `BIND` column itself checks whether it is allowed to do
+    // so (e.g. an `IndexScan` of a materialized view checks
+    // `disableMaterializedViewRewriting`).
+    auto pushedDownPlan = a._qet->makeTreeWithBindColumn(v);
+    if (pushedDownPlan.has_value()) {
+      // We can replace this `BIND` with a plan that contains an additional
+      // column with equivalent values, for example from a materialized view.
+      auto plan = a;
+      plan._qet = pushedDownPlan.value();
+      plan.containsBindSubstitute_ = true;
+      candidatePlans_.back().push_back(std::move(plan));
+      continue;
     }
 
     // Add the query plan for the BIND.
@@ -3482,6 +3524,13 @@ void QueryPlanner::GraphPatternPlanner::visitMaterializedViewQuery(
 void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     parsedQuery::SpatialQuery& spatialQuery) {
   auto config = spatialQuery.toSpatialJoinConfiguration();
+  if (config.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
+    planner_.warnings_.push_back(
+        "The spatial search algorithm `<boundingBox>` is deprecated and will "
+        "be removed in a future version of QLever. Please use "
+        "`<libspatialjoin>` or `<s2>` instead. For more information, please "
+        "see the QLever Docs (https://docs.qlever.dev/geosparql/).");
+  }
 
   // If there is no child graph pattern, we need to construct a neutral element
   SubtreePlanVec candidatesIn{allocator()};
