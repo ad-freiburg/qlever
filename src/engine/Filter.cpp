@@ -32,7 +32,7 @@ Filter::Filter(QueryExecutionContext* qec,
       _expression{std::move(expression)} {
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
-      cancellationHandle_);
+      cancellationHandle());
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
@@ -145,10 +145,9 @@ IdTable Filter::filterIdTable(qlm::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(int WIDTH,
-                 typename Table)(requires IdTableLike<Table>) void Filter::
-    computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      qlm::vector<ColumnIndex> sortedBy) const {
+CPP_template_def(int WIDTH, typename Table)(requires IdTableLike<Table>)
+void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
+                               qlm::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
@@ -157,7 +156,7 @@ CPP_template_def(int WIDTH,
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
-      cancellationHandle_, deadline_);
+      cancellationHandle());
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.
@@ -193,7 +192,8 @@ CPP_template_def(int WIDTH,
         // The binary filter contains all elements of the input, and we have
         // no previous results, so we can simply copy or move the complete
         // table.
-        dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+        dynamicResultTable =
+            AD_FWD(inputTable).moveOrClone(cancellationChecker());
         return;
       }
       checkCancellation();

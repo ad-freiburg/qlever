@@ -228,7 +228,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_);
+      cancellationHandle());
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
                  beginRight = rightJoinColumns.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -247,7 +247,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
            ql::ranges::any_of(left.getColumn(leftCol), Id::isUndefinedL);
   });
 
-  auto checkCancellationLambda = [this] { checkCancellation(); };
+  auto checkCancellationLambda = cancellationChecker();
 
   const size_t numOutOfOrder = [&]() {
     if (isCheap) {
@@ -276,7 +276,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols, sortConfig());
+    IdTableUtils::sort(*result, cols, sortConfig(), cancellationHandle());
   }
 
   // The result that `zipperJoinWithUndef` produces has a different order of

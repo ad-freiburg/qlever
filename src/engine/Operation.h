@@ -67,13 +67,6 @@ class Operation {
   // `makeShared`), and data members are initialized in declaration order.
   QueryExecutionContext* _executionContext;
 
-  // Pointer to the cancellation handle of this operation.
-  SharedCancellationHandle cancellationHandle_ =
-      makeShared<SharedCancellationHandle::element_type>();
-
-  std::chrono::steady_clock::time_point deadline_ =
-      std::chrono::steady_clock::time_point::max();
-
  private:
   // Return the given `executionContext`, or throw if it is `nullptr` (see the
   // constructor below).
@@ -288,8 +281,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
-  const SharedCancellationHandle& getCancellationHandle() const {
-    return cancellationHandle_;
+  // The cancellation handle of the query, which is stored in the
+  // `QueryExecutionContext`.
+  const SharedCancellationHandle& cancellationHandle() const {
+    return _executionContext->cancellationHandle();
   }
 
  private:
@@ -379,21 +374,6 @@ class Operation {
   std::shared_ptr<const Result> getResult(
       bool isRoot = false,
       ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
-
-  // Use the same cancellation handle for all children of an operation (= query
-  // plan rooted at that operation). As soon as one child is aborted, the whole
-  // operation is aborted out.
-  void recursivelySetCancellationHandle(
-      SharedCancellationHandle cancellationHandle);
-
-  template <typename Rep, typename Period>
-  void recursivelySetTimeConstraint(
-      std::chrono::duration<Rep, Period> duration) {
-    recursivelySetTimeConstraint(std::chrono::steady_clock::now() + duration);
-  }
-
-  void recursivelySetTimeConstraint(
-      std::chrono::steady_clock::time_point deadline);
 
   // Optimization for lazy operations where the very nature of the operation
   // makes it unlikely to ever fit in cache when completely materialized.
@@ -631,11 +611,17 @@ class Operation {
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
-    cancellationHandle_->throwIfCancelled(location,
-                                          [this]() { return getDescriptor(); });
+    cancellationHandle()->throwIfCancelled(
+        location, [this]() { return getDescriptor(); });
   }
 
-  std::chrono::milliseconds remainingTime() const;
+  // Return a function that calls `checkCancellation` (with the location of the
+  // caller of this function), e.g. as the `chunkOperation` of
+  // `ad_utility::chunkedForLoop`.
+  auto cancellationChecker(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
+    return [this, location]() { checkCancellation(location); };
+  }
 
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different
@@ -775,14 +761,6 @@ class Operation {
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.
   virtual VariableToColumnMap computeVariableToColumnMap() const = 0;
-
-  // Recursively call a function on all children.
-  template <typename F>
-  void forAllDescendants(F f);
-
-  // Recursively call a function on all children.
-  template <typename F>
-  void forAllDescendants(F f) const;
 
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren);

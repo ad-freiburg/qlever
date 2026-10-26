@@ -961,11 +961,9 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
-    static constexpr size_t dummyTimeLimit = 1000 * 60 * 60;  // 1 hour
-    std::chrono::milliseconds timeLimit{dummyTimeLimit};
     server.qlever().writeMaterializedView(
         "testViewFromServer", std::move(query.query_), query.datasetClauses_,
-        std::move(cancellationHandle), timeLimit, requestTimer);
+        std::move(cancellationHandle), requestTimer);
   }
 
   // Test the preloading of materialized views on server start.

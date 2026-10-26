@@ -43,10 +43,14 @@ inline auto getUniqueElements = [](const EvaluationContext* context,
   // all be filtered out, because they are already contained in the hash map.
   // We mitigate this issue by using the `filter` from range-v3 +
   // `ForceInputView`, which disallows multiple calls to `begin`.
+  //
+  // NOTE: The consumers of this range check for cancellation, but they never
+  // see the duplicates that are skipped here, so we have to check here, too.
   return ad_utility::ForceInputView(
       std::move(operandGenerator) |
       ::ranges::views::filter(
-          [set = std::move(uniqueHashSet)](auto& operand) mutable {
+          [set = std::move(uniqueHashSet), context](auto& operand) mutable {
+            context->cancellationHandle_->throwIfCancelled();
             return set.insert(operand).second;
           }));
 };
