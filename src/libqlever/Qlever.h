@@ -103,6 +103,7 @@ struct CommonConfig {
   // `normalizationRegexes_` are removed from the literals before.
   bool addNormalizedTriples_ = false;
   std::vector<std::string> normalizationRegexes_;
+
   // If not empty, only add the `ql:has-word` and `ql:normalized` triples for
   // literals that are the object of a triple with one of these predicates.
   std::vector<std::string> wordTriplePredicates_;

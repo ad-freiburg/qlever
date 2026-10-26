@@ -162,6 +162,7 @@ class IndexImpl {
   // The regexes whose matches are removed from a literal before it is
   // normalized, see `normalizeLiteralContent`.
   std::vector<std::shared_ptr<const re2::RE2>> normalizationRegexes_;
+
   // If not empty, the `ql:has-word` and `ql:normalized` triples are only added
   // for literals that are the object of a triple with one of these predicates
   // (IRIs in angle brackets).
@@ -486,6 +487,7 @@ class IndexImpl {
   // with a single space. For example, with the regex `\(.*?\)`, the content
   // "Café (Paris), Olé!" becomes "cafe ole".
   std::string normalizeLiteralContent(std::string_view content) const;
+
   // Set the `wordTriplePredicates_`. Throw if one of them is not an IRI in
   // angle brackets.
   void setWordTriplePredicates(const std::vector<std::string>& predicates);
