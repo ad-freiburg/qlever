@@ -515,9 +515,9 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // `_groupByVariables` is already reduced to the variables of the subtree).
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       _subtree, varsRequiredFromSubtree.get());
-  auto impl = std::make_unique<GroupByImpl>{
+  auto impl = std::unique_ptr<GroupByImpl>(
       new GroupByImpl{_executionContext, isImplicitGroupBy_, _groupByVariables,
-                      std::move(keptAliases), std::move(subtree)}};
+                      std::move(keptAliases), std::move(subtree)});
 
   // The new `GroupBy` also exports the grouped variables and alias targets
   // that the parent did not request. The helper adds a `StripColumns` operation
