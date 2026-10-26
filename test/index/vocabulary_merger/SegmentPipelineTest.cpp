@@ -249,6 +249,7 @@ TEST(SegmentPipeline, exceptionOfSegmentInPush) {
   // the first segment, and the `push` of the third block posts the second
   // segment and then waits for the first one (two segments are in flight), so
   // the second segment may still be being built when the exception is thrown.
+  //
   // NOTE: If the first segment has already failed when the second block is
   // pushed, then that `push` already rethrows the exception.
   auto blocks =

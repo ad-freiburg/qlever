@@ -154,11 +154,11 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
 //    are being built or waiting to be committed at the same time; a `push`
 //    that would exceed this commits the oldest segment first.
 //
-// NOTE: All the member functions are called by a single thread (the one that
-// receives the merged blocks), which must not be a thread of the global
+// NOTE 1: All the member functions are called by a single thread (the one
+// that receives the merged blocks), which must not be a thread of the global
 // executor.
 //
-// NOTE: The pipeline is neither copyable nor movable, because the tasks and
+// NOTE 2: The pipeline is neither copyable nor movable, because the tasks and
 // the sink of the `committer_` refer to it.
 CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     : public ad_utility::NoCopyNoMove {
@@ -201,10 +201,13 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   // Wait for the tasks that are still building segments. This only happens if
   // an exception was thrown before `finish()` committed all the segments, and
   // is required because the tasks use the `cutter_` and the arguments of the
-  // constructor. NOTE: A future whose `get()` threw (the segment that failed)
-  // is no longer valid, and its task has completed. NOTE: `wait()` never
-  // rethrows the exception that is stored in a future, so this destructor
-  // can't throw and needs no `noexcept(false)`.
+  // constructor.
+  //
+  // NOTE 1: A future whose `get()` threw (the segment that failed) is no
+  // longer valid, and its task has completed.
+  //
+  // NOTE 2: `wait()` never rethrows the exception that is stored in a future,
+  // so this destructor can't throw and needs no `noexcept(false)`.
   ~SegmentPipeline() {
     for (auto& segment : segments_) {
       if (segment.valid()) {

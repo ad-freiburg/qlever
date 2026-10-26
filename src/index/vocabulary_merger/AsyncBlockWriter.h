@@ -74,11 +74,11 @@ struct AsyncBlockWriterSharedState {
 // appended and removed. A `TaskQueueOnExecutor` bounds the number of pending
 // blocks (its `pushAsync` keeps a block in flight until it is appended).
 //
-// NOTE: This is written without coroutines, because the vocabulary merge is
+// NOTE 1: This is written without coroutines, because the vocabulary merge is
 // also compiled in the reduced C++17 build.
 //
-// NOTE: All the member functions are called by a single thread, which must not
-// be a thread of the global executor (see `TaskQueueOnExecutor`).
+// NOTE 2: All the member functions are called by a single thread, which must
+// not be a thread of the global executor (see `TaskQueueOnExecutor`).
 class AsyncBlockWriterPerSubVocabulary {
  private:
   // A block that is being prepared or waiting to be appended. Only touched on
@@ -105,9 +105,10 @@ class AsyncBlockWriterPerSubVocabulary {
   // The pending blocks in the order of their indices. Only touched on the
   // `strand_`.
   std::deque<PendingBlock> pendingBlocks_;
-  // The queue whose tasks register the blocks on the `strand_`. NOTE: Declared
-  // last, because its destructor waits for the blocks to be appended, which
-  // uses the members declared above.
+  // The queue whose tasks register the blocks on the `strand_`.
+  //
+  // NOTE: Declared last, because its destructor waits for the blocks to be
+  // appended, which uses the members declared above.
   ad_utility::TaskQueueOnExecutor queue_;
 
  public:
@@ -153,8 +154,10 @@ class AsyncBlockWriterPerSubVocabulary {
 
  private:
   // Return the task that gathers and prepares the `block` (see `gatherWords`
-  // and `BlockWriterBase::prepare`) and returns the `AppendBlock`. NOTE: The
-  // return type is explicit, because `push` above uses this function.
+  // and `BlockWriterBase::prepare`) and returns the `AppendBlock`.
+  //
+  // NOTE: The return type is explicit, because `push` above uses this
+  // function.
   absl::AnyInvocable<AppendBlock()> makePreparationLambda(BlockPieces block) {
     return [this, block = std::move(block)]() {
       auto measurement = sharedState_.prepareBusyTime_.startMeasurement();
