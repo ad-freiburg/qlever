@@ -77,6 +77,8 @@ class TaskQueueOnExecutor {
   // The callback that an asynchronous task (see `pushAsync`) has to call
   // exactly once when it has completed.
   using Done = absl::AnyInvocable<void() &&>;
+  // An asynchronous task (see `pushAsync`), which is invoked with the `Done`
+  // callback and keeps its slot in the queue until it has called it.
   using AsyncTask = absl::AnyInvocable<void(Done)>;
 
  private:
@@ -139,11 +141,17 @@ class TaskQueueOnExecutor {
   // Add an asynchronous task to the queue. This is like `push`, but the task
   // is invoked with a `done` callback, and it stays in flight until it calls
   // that callback (exactly once, from any thread), not only until it returns.
+  //
   // This lets a task start an asynchronous operation (for example a
-  // `boost::asio::post` or an operation on another queue) without occupying a
-  // thread of the executor while waiting for its completion. Everything else
-  // (the blocking, the bound, the termination if the task throws or cannot be
-  // scheduled) is as for `push`.
+  // `boost::asio::post` or an operation on another queue) and return
+  // immediately, so that it does not occupy a thread of the executor while
+  // waiting for the completion of that operation. The properties of the queue
+  // are nevertheless kept: the slot of the task counts against
+  // `maxNumTasksInFlight()` until `done` is called, so `pushAsync` blocks the
+  // pusher just like `push` does, and at most `maxNumTasksInFlight()` tasks
+  // (including those that have returned but not called `done` yet) are in
+  // flight at any time. Everything else (the termination if the task throws or
+  // cannot be scheduled) is as for `push`.
   //
   // IMPORTANT: A task that never calls `done` keeps its slot forever, so
   // `finish()` and the destructor then never return.

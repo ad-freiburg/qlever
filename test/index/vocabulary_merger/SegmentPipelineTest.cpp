@@ -131,3 +131,82 @@ TEST(SegmentPipeline, exceptionOfSegmentIsPropagated) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       pipeline.finish(), ::testing::HasSubstr("vocabulary order violated"));
 }
+
+// _____________________________________________________________________________
+// Test that an exception from the building of a segment is rethrown by the
+// `push` that waits for that segment, and that the pipeline can then be
+// destroyed while the next segment may still be being built (its destructor
+// waits for that task, which uses the pipeline).
+TEST(SegmentPipeline, exceptionOfSegmentInPush) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP() << "The order check is only done with expensive checks";
+  }
+  const std::string basename = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 1);
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  SegmentPipeline<decltype(lessThan)> pipeline{
+      writer,
+      partialVocabularyIdMapFilenames(basename, 1),
+      1,
+      noRegexes,
+      lessThan,
+      /*maxSegmentsInFlight=*/2,
+      /*numWordsPerSegment=*/1};
+  // The first block violates the order. The `push` of the second block posts
+  // the first segment, and the `push` of the third block posts the second
+  // segment and then waits for the first one (two segments are in flight), so
+  // the second segment may still be being built when the exception is thrown.
+  auto blocks =
+      makeMergedBlocks({{{"\"b\"", true, 0, 0}, {"\"a\"", true, 0, 1}},
+                        {{"\"c\"", true, 0, 2}},
+                        {{"\"d\"", true, 0, 3}}});
+  pipeline.push(std::move(blocks[0]));
+  pipeline.push(std::move(blocks[1]));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      pipeline.push(std::move(blocks[2])),
+      ::testing::HasSubstr("vocabulary order violated"));
+}
+
+// _____________________________________________________________________________
+// Test that the `SegmentCutter` cuts the blocks into segments of at least the
+// given number of words, but never between two blocks that share a word, that
+// it ignores empty blocks, and that `finish()` returns the task for the
+// remaining blocks.
+TEST(SegmentCutter, cutSegments) {
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  auto blocks =
+      makeMergedBlocks({{{"\"a\"", true, 0, 0}, {"\"b\"", true, 0, 1}},
+                        {{"\"b\"", false, 1, 0}, {"\"c\"", true, 0, 2}},
+                        {{"\"d\"", true, 0, 3}},
+                        {},
+                        {{"\"e\"", true, 0, 4}, {"\"f\"", true, 0, 5}}});
+  SegmentCutter<decltype(lessThan)> cutter{writer, noRegexes, 2, lessThan,
+                                           /*numWordsPerSegment=*/2};
+  EXPECT_FALSE(cutter.push(std::move(blocks[0])).has_value());
+  // Enough words for a segment, but `"b"` must not span two segments.
+  EXPECT_FALSE(cutter.push(std::move(blocks[1])).has_value());
+  auto first = cutter.push(std::move(blocks[2]));
+  ASSERT_TRUE(first.has_value());
+  EXPECT_FALSE(cutter.push(std::move(blocks[3])).has_value());
+  EXPECT_FALSE(cutter.push(std::move(blocks[4])).has_value());
+  auto last = cutter.finish();
+  ASSERT_TRUE(last.has_value());
+
+  // The words `"a"`, `"b"`, `"c"`, and the words `"d"`, `"e"`, `"f"`.
+  EXPECT_EQ((*first)()->numDistinctWords(), 3u);
+  EXPECT_EQ((*last)()->numDistinctWords(), 3u);
+}
+
+// _____________________________________________________________________________
+// Test that `finish()` returns no task if there are no remaining blocks.
+TEST(SegmentCutter, finishWithoutBlocks) {
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  SegmentCutter<decltype(lessThan)> cutter{writer, noRegexes, 1, lessThan, 1};
+  EXPECT_FALSE(cutter.push(std::move(makeMergedBlocks({{}})[0])).has_value());
+  EXPECT_FALSE(cutter.finish().has_value());
+  EXPECT_EQ(cutter.segmentBusyMs(), 0u);
+}

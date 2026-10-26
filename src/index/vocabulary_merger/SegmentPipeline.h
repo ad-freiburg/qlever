@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_SEGMENTPIPELINE_H
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 
 #include <atomic>
 #include <boost/asio/post.hpp>
@@ -21,6 +22,7 @@
 #include <deque>
 #include <future>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -46,14 +48,103 @@
 // part of the public interface of that header.
 namespace ad_utility::vocabulary_merger::detail {
 
+// Cut the blocks of merged words, which arrive in the order of the vocabulary,
+// into segments (see `Segment`) of at least `numWordsPerSegment` words. A cut
+// between two blocks is only allowed if the last word of the one differs from
+// the first word of the other, so that no word spans two segments. For each
+// segment, the cutter returns the task that builds it (see `buildSegment`),
+// which the caller can run on any thread.
+//
+// NOTE: The tasks refer to this object, so it has to stay alive until all of
+// them have completed.
+CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
+ public:
+  // The task that builds a segment.
+  using SegmentTask = absl::AnyInvocable<std::shared_ptr<const Segment>()>;
+
+ private:
+  const ParallelWordWriterBase& writer_;
+  const ad_utility::RegexSet& blankNodeIriRegexes_;
+  size_t numPartialVocabularies_;
+  const W& comparator_;
+  size_t numWordsPerSegment_;
+  // The blocks of the segment that is being cut, and their number of words.
+  std::vector<MergedBlock> currentBlocks_;
+  size_t currentNumWords_ = 0;
+  // The total time that the tasks have spent building the segments, in
+  // milliseconds.
+  std::atomic<uint64_t> segmentBusyMs_{0};
+
+ public:
+  // Construct from the arguments of `buildSegment`, which all have to stay
+  // alive until all the tasks have completed, and the minimal number of words
+  // per segment.
+  SegmentCutter(const ParallelWordWriterBase& writer,
+                const ad_utility::RegexSet& blankNodeIriRegexes,
+                size_t numPartialVocabularies, const W& comparator,
+                size_t numWordsPerSegment)
+      : writer_{writer},
+        blankNodeIriRegexes_{blankNodeIriRegexes},
+        numPartialVocabularies_{numPartialVocabularies},
+        comparator_{comparator},
+        numWordsPerSegment_{numWordsPerSegment} {}
+
+  // Add the next `block` of merged words. If this completes a segment (which
+  // then consists of the blocks before the `block`), return the task that
+  // builds it.
+  std::optional<SegmentTask> push(MergedBlock block) {
+    if (block.empty()) {
+      return std::nullopt;
+    }
+    std::optional<SegmentTask> task;
+    bool canCutHere = currentNumWords_ >= numWordsPerSegment_ &&
+                      currentBlocks_.back().back().iriOrLiteral() !=
+                          block.front().iriOrLiteral();
+    if (canCutHere) {
+      task = cutSegment();
+    }
+    currentNumWords_ += block.size();
+    currentBlocks_.push_back(std::move(block));
+    return task;
+  }
+
+  // Return the task that builds the last segment, which consists of the
+  // remaining blocks, or `std::nullopt` if there are none. After this, no more
+  // blocks may be pushed.
+  std::optional<SegmentTask> finish() {
+    if (currentBlocks_.empty()) {
+      return std::nullopt;
+    }
+    return cutSegment();
+  }
+
+  // The total time that the tasks have spent building the segments, in
+  // milliseconds.
+  uint64_t segmentBusyMs() const { return segmentBusyMs_; }
+
+ private:
+  // Return the task that builds the segment of the `currentBlocks_`, and start
+  // the next segment.
+  SegmentTask cutSegment() {
+    SegmentTask task = [this, blocks = std::move(currentBlocks_)]() mutable {
+      ad_utility::Timer timer{ad_utility::Timer::Started};
+      auto segment = std::make_shared<const Segment>(
+          buildSegment(std::move(blocks), writer_, blankNodeIriRegexes_,
+                       numPartialVocabularies_, comparator_));
+      segmentBusyMs_ += timer.msecs().count();
+      return segment;
+    };
+    currentBlocks_.clear();
+    currentNumWords_ = 0;
+    return task;
+  }
+};
+
 // Turn the blocks of merged words, which arrive in the order of the vocabulary,
 // into the merged vocabulary and the partial ID maps:
 //
-// 1. The blocks are cut into segments (see `Segment`) of at least
-//    `numWordsPerSegment` words, each of which is built by a task on the global
-//    thread pool (see `buildSegment`). A cut between two blocks is only
-//    allowed if the last word of the one differs from the first word of the
-//    other, so that no word spans two segments.
+// 1. The blocks are cut into segments by a `SegmentCutter` (see above), and
+//    each segment is built by a task on the global thread pool.
 // 2. The finished segments are committed in order (see `SegmentCommitter`),
 //    which hands their blocks of words to the `AsyncBlockWriter` and their ID
 //    map entries to the `IdMapWriters`. At most `maxSegmentsInFlight` segments
@@ -64,26 +155,17 @@ namespace ad_utility::vocabulary_merger::detail {
 // runs `mergeVocabulary`, which must not be a thread of the global executor.
 CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
  private:
-  ParallelWordWriterBase& writer_;
-  const ad_utility::RegexSet& blankNodeIriRegexes_;
-  size_t numPartialVocabularies_;
-  const W& comparator_;
   size_t maxSegmentsInFlight_;
-  size_t numWordsPerSegment_;
+  SegmentCutter<W> cutter_;
   IdMapWriters idMapWriters_;
   AsyncBlockWriter blockWriter_;
   SegmentCommitter committer_;
   // The segments that are being built or waiting to be committed, in order.
   std::deque<std::future<std::shared_ptr<const Segment>>> segments_;
-  // The blocks of the segment that is being cut, and their number of words.
-  std::vector<MergedBlock> currentBlocks_;
-  size_t currentNumWords_ = 0;
-  // The time since the construction, the time spent inside `push` and
-  // `finish` (the rest is spent waiting for merged blocks), and the total time
-  // that the tasks have spent building the segments.
+  // The time since the construction, and the time spent inside `push` and
+  // `finish` (the rest is spent waiting for merged blocks).
   ad_utility::Timer totalTimer_{ad_utility::Timer::Started};
   ad_utility::Timer commitTimer_{ad_utility::Timer::Stopped};
-  std::atomic<uint64_t> segmentBusyMs_{0};
 
  public:
   // Construct from the `writer` of the vocabulary (which has to stay alive,
@@ -96,12 +178,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
                   const ad_utility::RegexSet& blankNodeIriRegexes,
                   const W& comparator, size_t maxSegmentsInFlight,
                   size_t numWordsPerSegment = VOCAB_MERGER_SEGMENT_NUM_WORDS)
-      : writer_{writer},
-        blankNodeIriRegexes_{blankNodeIriRegexes},
-        numPartialVocabularies_{numPartialVocabularies},
-        comparator_{comparator},
-        maxSegmentsInFlight_{maxSegmentsInFlight},
-        numWordsPerSegment_{numWordsPerSegment},
+      : maxSegmentsInFlight_{maxSegmentsInFlight},
+        cutter_{writer, blankNodeIriRegexes, numPartialVocabularies, comparator,
+                numWordsPerSegment},
         idMapWriters_{std::move(idMapFilenames),
                       VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS},
         blockWriter_{writer},
@@ -111,6 +190,24 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
     AD_CONTRACT_CHECK(maxSegmentsInFlight_ > 0);
   }
 
+  // Wait for the tasks that are still building segments. This only happens if
+  // an exception was thrown before `finish()` committed all the segments, and
+  // is required because the tasks use the `cutter_` and the arguments of the
+  // constructor. NOTE: A future whose `get()` threw (the segment that failed)
+  // is no longer valid, and its task has completed.
+  ~SegmentPipeline() {
+    for (auto& segment : segments_) {
+      if (segment.valid()) {
+        segment.wait();
+      }
+    }
+  }
+
+  // The pipeline is neither copyable nor movable, because the tasks and the
+  // sink of the `committer_` refer to it.
+  SegmentPipeline(const SegmentPipeline&) = delete;
+  SegmentPipeline& operator=(const SegmentPipeline&) = delete;
+
   // Push the next `block` of merged words. Do nothing if a stage has failed
   // (the exception is rethrown by `finish()`).
   void push(MergedBlock block) {
@@ -119,16 +216,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
     if (hasFailed()) {
       return;
     }
-    if (!block.empty()) {
-      bool canCutHere = currentNumWords_ >= numWordsPerSegment_ &&
-                        currentBlocks_.back().back().iriOrLiteral() !=
-                            block.front().iriOrLiteral();
-      if (canCutHere) {
-        postSegment();
-      }
-      currentNumWords_ += block.size();
-      currentBlocks_.push_back(std::move(block));
-    }
+    postSegment(cutter_.push(std::move(block)));
     commitFinishedSegments(segments_.size() >= maxSegmentsInFlight_);
   }
 
@@ -144,7 +232,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
   // this, no more blocks may be pushed.
   VocabularyMetaData finish() {
     commitTimer_.cont();
-    postSegment();
+    postSegment(cutter_.finish());
     while (!segments_.empty()) {
       commitFinishedSegments(true);
     }
@@ -154,8 +242,8 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
                    "merged blocks "
                 << (totalTimer_.msecs() - commitTimer_.msecs())
                 << ", committing the segments " << commitTimer_.msecs()
-                << "; building the segments " << segmentBusyMs_ << " ms"
-                << std::endl;
+                << "; building the segments " << cutter_.segmentBusyMs()
+                << " ms" << std::endl;
     blockWriter_.finish();
     idMapWriters_.finish();
     AD_LOG_INFO << committer_.progressBar().getFinalProgressString()
@@ -173,25 +261,15 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
   }
 
  private:
-  // Post the task that builds the segment of the `currentBlocks_` and start
-  // the next segment. Do nothing if there are no blocks.
-  void postSegment() {
-    if (currentBlocks_.empty()) {
+  // Post the `task` that builds a segment (if any) onto the global thread
+  // pool.
+  void postSegment(std::optional<typename SegmentCutter<W>::SegmentTask> task) {
+    if (!task.has_value()) {
       return;
     }
-    segments_.push_back(boost::asio::post(
-        ad_utility::globalExecutor(),
-        boost::asio::use_future(
-            [this, blocks = std::move(currentBlocks_)]() mutable {
-              ad_utility::Timer timer{ad_utility::Timer::Started};
-              auto segment = std::make_shared<const Segment>(
-                  buildSegment(std::move(blocks), writer_, blankNodeIriRegexes_,
-                               numPartialVocabularies_, comparator_));
-              segmentBusyMs_ += timer.msecs().count();
-              return segment;
-            })));
-    currentBlocks_.clear();
-    currentNumWords_ = 0;
+    segments_.push_back(
+        boost::asio::post(ad_utility::globalExecutor(),
+                          boost::asio::use_future(std::move(task.value()))));
   }
 
   // Commit the segments that are done, in order, and at least one segment if
