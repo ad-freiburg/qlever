@@ -595,11 +595,9 @@ void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
 
 // _____________________________________________________________________________
 std::vector<size_t> Operation::getCostEstimatesChargedForChildren() {
-  std::vector<size_t> costs;
-  for (auto* child : getChildren()) {
-    costs.push_back(child->getCostEstimate());
-  }
-  return costs;
+  return ::ranges::to_vector(
+      getChildren() |
+      ql::views::transform(&QueryExecutionTree::getCostEstimate));
 }
 
 // __________________________________________________________________
