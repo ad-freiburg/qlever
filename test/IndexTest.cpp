@@ -769,6 +769,19 @@ TEST(IndexTest, processTriple) {
 }
 
 // _____________________________________________________________________________
+// Test the names of the normalizations in the option of `qlever-index`.
+TEST(IndexTest, hasWordNormalizationNames) {
+  using ad_utility::HasWordNormalization;
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase"),
+            HasWordNormalization::Lowercase);
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase-no-accents"),
+            HasWordNormalization::LowercaseNoAccents);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HasWordNormalization::fromString("uppercase"),
+      ::testing::HasSubstr("is not a valid has-word normalization"));
+}
+
+// _____________________________________________________________________________
 // The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
 // therefore have to start with `<`) and must be valid regular expressions;
 // otherwise the setter throws. Valid regexes are compiled and stored.
