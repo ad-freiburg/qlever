@@ -152,7 +152,7 @@ class AllocatorWithLimit {
     tracker_.release(MemorySize::bytes(n * sizeof(T)));
   }
 
-  // Return the number of bytes, that this allocator and all of its copies
+  // Return the number of bytes that this allocator and all of its copies
   // currently have available.
   [[nodiscard]] MemorySize amountMemoryLeft() const {
     return tracker_.amountMemoryLeft();

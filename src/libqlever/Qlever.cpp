@@ -55,16 +55,20 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   // `memory-for-queries`, and apply later changes of the parameter to the
   // allocator as the difference to the current limit. Registering triggers
   // the action once, which is a no-op because the difference is zero.
+  //
+  // NOTE: The action holds a copy of the allocator, which shares the limit
+  // with `allocator_` and keeps it alive, so the action never dangles, also
+  // not after this instance is destroyed.
   auto memoryLimit = config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES);
   auto runtimeParameters = globalRuntimeParameters.wlock();
   runtimeParameters->memoryForQueries_.set(memoryLimit);
   runtimeParameters->memoryForQueries_.setOnUpdateAction(
-      [this,
+      [allocator = allocator_,
        currentLimit = memoryLimit](ad_utility::MemorySize newLimit) mutable {
         if (newLimit >= currentLimit) {
-          allocator_.increaseMemoryLimit(newLimit - currentLimit);
+          allocator.increaseMemoryLimit(newLimit - currentLimit);
         } else {
-          allocator_.decreaseMemoryLimit(currentLimit - newLimit);
+          allocator.decreaseMemoryLimit(currentLimit - newLimit);
         }
         currentLimit = newLimit;
       });
@@ -92,8 +96,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 
   // The memory limit of a caller-provided allocator is unknown, so only the
   // other constructor binds the runtime parameter `memory-for-queries` to the
-  // allocator. Clear any update action left behind by a previous instance, so
-  // that setting the parameter cannot fire into a destroyed instance.
+  // allocator. Clear the action of a previous instance, so that the parameter
+  // is bound to nothing.
   globalRuntimeParameters.wlock()->memoryForQueries_.clearOnUpdateAction();
 
   // If `skipLoading` is set, we do not touch the on-disk index at all; the

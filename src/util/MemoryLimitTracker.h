@@ -51,12 +51,11 @@ class AllocationExceedsLimitException : public std::exception {
 };
 
 // Class to keep track of the amount of memory that is left for allocation. When
-// not enough memory is left, an AllocationExceedsLimitException is thrown. Note
-// that need a separate class for this because there can be many Allocation
-// objects at the same time, which share one object of this class via a
-// `std::shared_ptr`. All operations are lock-free atomic operations on the
-// single counter `free_`. The memory limit itself is not stored, it can only be
-// changed relative to its current value.
+// not enough memory is left, an `AllocationExceedsLimitException` is thrown.
+// Many allocators share one object of this class via a `std::shared_ptr`, so
+// all operations are lock-free atomic operations on the single counter
+// `free_`. The memory limit itself is not stored, it can only be changed
+// relative to its current value.
 class AllocationMemoryLeft {
   // Remaining free memory in bytes.
   std::atomic<size_t> free_;
