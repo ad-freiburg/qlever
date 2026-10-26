@@ -218,40 +218,13 @@ float JoinImpl::getMultiplicity(size_t col) {
   return multiplicities_.at(col);
 }
 
-// _____________________________________________________________________________
-size_t JoinImpl::getCostEstimate() {
-  // An index scan that the join reads only partially is charged only for the
-  // rows that it reads, both here and as the cost of its subtree.
-  auto numRowsRead = [this](auto& child, auto& sibling,
-                            ColumnIndex siblingJoinCol) {
-    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
-                                                siblingJoinCol)
-        .value_or(child->getSizeEstimate());
-  };
-  size_t costJoin = numRowsRead(left_, right_, rightJoinCol_) +
-                    numRowsRead(right_, left_, leftJoinCol_);
-
-  auto costOfSubtrees = getCostEstimatesChargedForChildren();
-  return getSizeEstimateBeforeLimit() + costJoin + costOfSubtrees.at(0) +
-         costOfSubtrees.at(1);
-}
-
-// _____________________________________________________________________________
-std::vector<size_t> JoinImpl::getCostEstimatesChargedForChildren() {
-  auto costOfSubtree = [this](auto& child, auto& sibling,
-                              ColumnIndex siblingJoinCol) {
-    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
-                                                siblingJoinCol)
-        .value_or(child->getCostEstimate());
-  };
-  return {costOfSubtree(left_, right_, rightJoinCol_),
-          costOfSubtree(right_, left_, leftJoinCol_)};
-}
-
-// _____________________________________________________________________________
-std::optional<size_t> JoinImpl::getNumRowsReadOfPartialScanIfPresent(
+namespace {
+// If `child` is an index scan that the join reads only partially, filtered by
+// the join column of `sibling`, return an upper bound for the number of rows
+// that it reads. Otherwise return `std::nullopt`.
+std::optional<size_t> getNumRowsReadOfPartialScanIfPresent(
     QueryExecutionTree& child, QueryExecutionTree& sibling,
-    ColumnIndex siblingJoinCol) const {
+    ColumnIndex siblingJoinCol) {
   // `computeResult` materializes every small child (also a scan), and reads a
   // scan that is not small lazily, filtered by the join column of a
   // materialized sibling (see `IndexScan::lazyScanForJoinOfColumnWithScan`).
@@ -273,19 +246,51 @@ std::optional<size_t> JoinImpl::getNumRowsReadOfPartialScanIfPresent(
   // The scan reads all blocks if the sibling has UNDEF values in the join
   // column or if the scan has a LIMIT or OFFSET (see `IndexScan::getLazyScan`).
   bool siblingMightBeUndef =
-      static_cast<bool>(sibling.getVariableAndInfoByColumnIndex(siblingJoinCol)
-                            .second.mightContainUndef_);
+      sibling.getVariableAndInfoByColumnIndex(siblingJoinCol)
+          .second.mightContainUndef_ ==
+      ColumnIndexAndTypeInfo::PossiblyUndefined;
   if (siblingMightBeUndef || !scan->getLimitOffset().isUnconstrained()) {
     return std::nullopt;
   }
   // At least one block, a sibling that is estimated to be empty does not make
   // the scan free.
   double blocks = static_cast<double>(std::max<size_t>(siblingSize, 1)) *
-                  static_cast<double>(getIndex().rowsPerBlock());
+                  static_cast<double>(scan->getIndex().rowsPerBlock());
   if (blocks >= static_cast<double>(size)) {
     return std::nullopt;
   }
   return static_cast<size_t>(blocks);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+size_t JoinImpl::getCostEstimate() {
+  // An index scan that the join reads only partially is charged only for the
+  // rows that it reads, both here and as the cost of its subtree.
+  auto numRowsRead = [](auto& child, auto& sibling,
+                        ColumnIndex siblingJoinCol) {
+    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
+                                                siblingJoinCol)
+        .value_or(child->getSizeEstimate());
+  };
+  size_t costJoin = numRowsRead(left_, right_, rightJoinCol_) +
+                    numRowsRead(right_, left_, leftJoinCol_);
+
+  auto costOfSubtrees = getCostEstimatesChargedForChildren();
+  return getSizeEstimateBeforeLimit() + costJoin + costOfSubtrees.at(0) +
+         costOfSubtrees.at(1);
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> JoinImpl::getCostEstimatesChargedForChildren() {
+  auto costOfSubtree = [](auto& child, auto& sibling,
+                          ColumnIndex siblingJoinCol) {
+    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
+                                                siblingJoinCol)
+        .value_or(child->getCostEstimate());
+  };
+  return {costOfSubtree(left_, right_, rightJoinCol_),
+          costOfSubtree(right_, left_, leftJoinCol_)};
 }
 
 // _____________________________________________________________________________
