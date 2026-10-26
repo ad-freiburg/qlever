@@ -515,7 +515,7 @@ class QueryPlanner {
       const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getPatternTrickRow(
-      const parsedQuery::SelectClause& selectClause,
+      const std::vector<Alias>& aliases,
       const vector<vector<SubtreePlan>>& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
@@ -752,17 +752,26 @@ class QueryPlanner {
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    // For the meaning of `isGraphVariableInScopeOnBothSidesOfMinus` see
+    // `visitGroupOptionalOrMinus`.
     template <typename Variables>
-    bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
-                                          const Variables& variables);
+    bool handleUnconnectedMinusOrOptional(
+        std::vector<SubtreePlan>& candidates, const Variables& variables,
+        bool isGraphVariableInScopeOnBothSidesOfMinus);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
     // braces. This leads to all of those clauses currently being an
     // optimization border (The braces are planned individually).
     // The distinction between "normal" groups, OPTIONALs and MINUS clauses
-    // is made via the type member of the `SubtreePlan`s.
-    void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
+    // is made via the type member of the `SubtreePlan`s. For a MINUS clause
+    // inside a `GRAPH ?g {...}` clause,
+    // `isGraphVariableInScopeOnBothSidesOfMinus` has to be true iff `?g` is in
+    // scope in the MINUS clause and in the patterns before it. For all other
+    // clauses it is ignored.
+    void visitGroupOptionalOrMinus(
+        std::vector<SubtreePlan>&& candidates,
+        bool isGraphVariableInScopeOnBothSidesOfMinus = false);
 
     // Helper function for `graphPatternOperationVisitor`. For a
     // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in

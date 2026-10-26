@@ -24,10 +24,12 @@ EvaluationContext::EvaluationContext(
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
       _inputTable{std::move(inputTable)},
+      _columnsByWhichResultIsSorted{allocator},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
-      deadline_{deadline} {
+      deadline_{deadline},
+      orderByComparator_{qec.getLocalVocabContext()} {
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 

@@ -3133,7 +3133,8 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
 }
 
 // Test that inside a `GRAPH ?g` clause the graph variable connects an OPTIONAL
-// to the preceding patterns that bind it, but not a MINUS.
+// to the preceding patterns that bind it, but a MINUS only if `?g` is in scope
+// on both sides.
 TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
   auto scan = [](std::string s, std::string p, std::string o) {
     return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},
@@ -3145,6 +3146,30 @@ TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
   h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?a <q> ?y } } }",
             h::Minus(h::Sort(scan("?a", "<p>", "?b")),
                      h::Sort(scan("?a", "<q>", "?y"))));
+  // The implicit graph column of the index scans doesn't connect a MINUS, also
+  // not if the preceding pattern is a nested group (see
+  // https://github.com/ad-freiburg/qlever/issues/3678).
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  // The graph variable only connects a MINUS if it is in scope on both sides.
+  auto anyTree = ::testing::A<const QueryExecutionTree&>();
+  auto isMinus = h::Minus(anyTree, anyTree);
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b MINUS { ?x <q> ?y } } }",
+            ::testing::Not(isMinus));
+  h::expect("SELECT * { GRAPH ?g { { ?g <p> ?b } MINUS { ?x <q> ?y } } }",
+            ::testing::Not(isMinus));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?g <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b MINUS { ?g <q> ?y } } }", isMinus);
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?g { <g1> } ?a <p> ?b "
+      "MINUS { ?x <q> ?y VALUES ?g { <g1> } } } }",
+      isMinus);
+  // The variables of a nested MINUS are not in scope.
+  h::expect(
+      "SELECT * { GRAPH ?g { ?g <p> ?b "
+      "MINUS { ?x <q> ?y MINUS { ?g <r> ?x } } } }",
+      ::testing::Not(isMinus));
   // The graph variable connects an OPTIONAL, no matter whether the preceding
   // pattern is a triple or a nested group.
   auto optionalJoin = h::OptionalJoin(h::Sort(scan("?a", "<p>", "?b")),
@@ -3369,6 +3394,59 @@ TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
                   LimitOffsetClause{1},
                   h::Union(h::IndexScanFromStrings("?s", "<label>", "?o"),
                            h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
+}
+
+// Test that a join that is pushed into the children of a `UNION` at the root
+// of a subquery does not join on the variables that the subquery hides.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3688.
+TEST(QueryPlanner, distributiveJoinInUnionKeepsHiddenVariablesHidden) {
+  // With `strip-columns` disabled, the `UNION` (the root of the subquery) only
+  // hides `?z`, which is still visible in its children. The join that is pushed
+  // into the children must not join on this `?z`.
+  auto cleanupDistributive =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  auto cleanupStrip =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+  auto qec = ad_utility::testing::getQec("<a> <b> <c> . <a> <b> <d> .");
+
+  // Plan `SELECT * { { SELECT ?x ?q { <left> UNION <right> } } ?x ?q ?z }` and
+  // check that every candidate plan yields `expectedSize` rows.
+  auto test = [&qec](std::string_view left, std::string_view right,
+                     size_t expectedSize,
+                     ad_utility::source_location sourceLocation =
+                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(sourceLocation);
+    QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+    auto query = parseQuery(absl::StrCat("SELECT * { { SELECT ?x ?q { ", left,
+                                         " UNION ", right, " } } ?x ?q ?z }"));
+    auto plans = qp.createExecutionTrees(query);
+
+    // Make sure that the plan with the join pushed into the `UNION` is among
+    // the candidates, so that this test actually tests something.
+    EXPECT_TRUE(ql::ranges::any_of(plans, [](const auto& plan) {
+      return std::dynamic_pointer_cast<Union>(plan._qet->getRootOperation()) !=
+             nullptr;
+    }));
+    for (const auto& plan : plans) {
+      qec->clearCacheUnpinnedOnly();
+      EXPECT_THAT(*plan._qet, h::hasVariables({"?x", "?q", "?z"}));
+      EXPECT_EQ(plan._qet->getResult()->idTableView().size(), expectedSize);
+    }
+  };
+
+  // The hidden `?z` only appears in the left or the right branch. The subquery
+  // yields `(<a>, <b>)` twice and the empty solution once, each of which is
+  // compatible with both triples.
+  test("{ ?x ?q ?z }", "{ }", 6);
+  test("{ }", "{ ?x ?q ?z }", 6);
+  // The hidden `?z` appears in both branches. The subquery yields `(<a>, <b>)`
+  // four times, each of which is compatible with both triples.
+  test("{ ?x ?q ?z }", "{ ?x ?q ?z }", 8);
+  // Same, but `?z` is bound to different columns in the two branches. The right
+  // branch yields `(<c>, <b>)` and `(<d>, <b>)`, which are compatible with
+  // neither triple.
+  test("{ ?x ?q ?z }", "{ ?z ?q ?x }", 4);
 }
 
 // _____________________________________________________________________________

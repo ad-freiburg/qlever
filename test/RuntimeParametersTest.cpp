@@ -97,6 +97,20 @@ TEST(RuntimeParameters, permutationWriterNumBlocksInFlightIsStrictlyPositive) {
   EXPECT_EQ(params.permutationWriterNumBlocksInFlight_.get(), 1u);
 }
 
+// Test the default of `sort-num-tasks-in-flight` and that the value `0` is
+// rejected (unlike for other parameters, `0` does not mean "no limit").
+TEST(RuntimeParameters, sortNumTasksInFlightIsStrictlyPositive) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.sortNumTasksInFlight_.get(), 3u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("sort-num-tasks-in-flight=0"),
+      AllOf(HasSubstr("sort-num-tasks-in-flight"),
+            HasSubstr("strictly positive")),
+      std::runtime_error);
+  EXPECT_NO_THROW(params.setFromAssignment("sort-num-tasks-in-flight=1"));
+  EXPECT_EQ(params.sortNumTasksInFlight_.get(), 1u);
+}
+
 // Test that `getKeys` and `toMap` (the building blocks of
 // `--set-runtime-parameter help`) are consistent with each other.
 TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
