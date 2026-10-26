@@ -1957,68 +1957,74 @@ TEST(SpatialJoin, DistanceUnit) {
 // _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinDistanceToLineWithTwoPoints) {
   // A park (osmway:363652135), a river segment with only two points
-  // (osmway:99301673) and a point. The river is about 79.6 m from the park and
-  // 61.7 m from the point, the park is about 153 m from the point. Regression
-  // test for a bug in `libspatialjoin`, where the distance to a line with only
-  // two points depended on the maximum distance of the join.
-  std::string kg;
-  addArea(kg, "1", "\"Park\"",
-          makeAreaLiteral(
-              "6.3305417 49.8352638,6.3305759 49.8351064,6.3306248 "
-              "49.8349473,6.3306194 49.834736,6.3307182 49.8347638,6.3310016 "
-              "49.8347692,6.3309713 49.8350595,6.3309811 49.8352149,6.3311407 "
-              "49.8353851,6.3314076 49.8355507,6.3314859 49.8357485,6.3311146 "
-              "49.8356751,6.3308972 49.8356149,6.3308273 49.8355311,6.3308582 "
-              "49.8352786,6.3306543 49.835244,6.3306409 49.8352863,6.3306022 "
-              "49.8352776,6.3305417 49.8352638"));
-  addArea(kg, "2", "\"River\"",
-          makeLineLiteral("6.329887 49.8359132,6.3298461 49.8362461"));
-  addPoint(kg, "3", "\"Point\"", makePointLiteral("6.32982", "49.8368"));
+  // (osmway:99301673) and a point. Regression test for a bug in
+  // `libspatialjoin`, where the distance to a line with only two points
+  // depended on the maximum distance of the join.
+  std::string kg = absl::StrCat(
+      "<park> <asWKT> ",
+      makeAreaLiteral(
+          "6.3305417 49.8352638,6.3305759 49.8351064,6.3306248 "
+          "49.8349473,6.3306194 49.834736,6.3307182 49.8347638,6.3310016 "
+          "49.8347692,6.3309713 49.8350595,6.3309811 49.8352149,6.3311407 "
+          "49.8353851,6.3314076 49.8355507,6.3314859 49.8357485,6.3311146 "
+          "49.8356751,6.3308972 49.8356149,6.3308273 49.8355311,6.3308582 "
+          "49.8352786,6.3306543 49.835244,6.3306409 49.8352863,6.3306022 "
+          "49.8352776,6.3305417 49.8352638"),
+      " .\n<river> <asWKT> ",
+      makeLineLiteral("6.329887 49.8359132,6.3298461 49.8362461"),
+      " .\n<point> <asWKT> ", makePointLiteral("6.32982", "49.8368"), " .\n");
   auto qec = buildQec(kg);
   Variable distVar{"?dist"};
 
-  // Return the sorted distances (in meters) of all result rows that are not a
-  // geometry with itself.
+  // Return the distance (in meters) for each pair of different geometries in
+  // the result, keyed by "<a> <b>" with `a < b`.
   auto run = [&](double maxDist) {
     SpatialJoinConfiguration config{
         LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, maxDist,
                              std::nullopt},
-        Variable{"?geo1"},
-        Variable{"?geo2"},
+        Variable{"?obj1"},
+        Variable{"?obj2"},
         distVar,
         PayloadVariables::all(),
         SpatialJoinAlgorithm::LIBSPATIALJOIN};
     config.distanceUnit_ = UnitOfMeasurement::METERS;
     auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
         qec, std::move(config),
-        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"}),
-        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"}));
+        buildIndexScan(qec, {"?s1", std::string{"<asWKT>"}, "?obj1"}),
+        buildIndexScan(qec, {"?s2", std::string{"<asWKT>"}, "?obj2"}));
     auto result = spatialJoinTree->getResult();
-    auto col = spatialJoinTree->getVariableColumn(distVar);
-    std::vector<double> dists;
+    auto toString = [&](Id id) {
+      return ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
+          .value()
+          .first;
+    };
+    auto col1 = spatialJoinTree->getVariableColumn(Variable{"?s1"});
+    auto col2 = spatialJoinTree->getVariableColumn(Variable{"?s2"});
+    auto colDist = spatialJoinTree->getVariableColumn(distVar);
+    std::map<std::string, double> dists;
     for (const auto& row : result->idTableView()) {
-      if (row[col].getDouble() > 0) {
-        dists.push_back(row[col].getDouble());
+      auto a = toString(row[col1]);
+      auto b = toString(row[col2]);
+      if (a < b) {
+        dists[absl::StrCat(a, " ", b)] = row[colDist].getDouble();
       }
     }
-    ql::ranges::sort(dists);
     return dists;
   };
 
-  using ::testing::ElementsAre;
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
   // `libspatialjoin` approximates the distances with a precision of about half
   // a meter.
-  auto near = [](double expected) {
-    return ::testing::DoubleNear(expected, 0.5);
-  };
+  auto pointRiver = Pair("<point> <river>", ::testing::DoubleNear(61.7, 0.5));
+  auto parkRiver = Pair("<park> <river>", ::testing::DoubleNear(79.6, 0.5));
+  auto parkPoint = Pair("<park> <point>", ::testing::DoubleNear(153, 0.5));
   EXPECT_THAT(run(50), ::testing::IsEmpty());
-  EXPECT_THAT(run(79), ElementsAre(near(61.7), near(61.7)));
-  for (double maxDist : {100.0, 150.0}) {
-    EXPECT_THAT(run(maxDist),
-                ElementsAre(near(61.7), near(61.7), near(79.6), near(79.6)));
-  }
-  EXPECT_THAT(run(1000), ElementsAre(near(61.7), near(61.7), near(79.6),
-                                     near(79.6), near(153), near(153)));
+  EXPECT_THAT(run(79), UnorderedElementsAre(pointRiver));
+  EXPECT_THAT(run(100), UnorderedElementsAre(pointRiver, parkRiver));
+  EXPECT_THAT(run(150), UnorderedElementsAre(pointRiver, parkRiver));
+  EXPECT_THAT(run(1000),
+              UnorderedElementsAre(pointRiver, parkRiver, parkPoint));
 }
 
 // _____________________________________________________________________________
