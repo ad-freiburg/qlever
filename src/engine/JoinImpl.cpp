@@ -34,6 +34,7 @@
 #include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/Math.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;
@@ -252,14 +253,15 @@ std::optional<size_t> getNumRowsReadOfPartialScanIfPresent(
   if (siblingMightBeUndef || !scan->getLimitOffset().isUnconstrained()) {
     return std::nullopt;
   }
-  // At least one block, a sibling that is estimated to be empty does not make
-  // the scan free.
-  double blocks = static_cast<double>(std::max<size_t>(siblingSize, 1)) *
-                  static_cast<double>(scan->getIndex().rowsPerBlock());
-  if (blocks >= static_cast<double>(size)) {
+  // At most one block per row of the sibling, but at least one block (a
+  // sibling that is estimated to be empty does not make the scan free). The
+  // comparison in blocks ensures that the multiplication cannot overflow.
+  size_t rowsPerBlock = scan->getIndex().rowsPerBlock();
+  size_t maxNumBlocksRead = std::max<size_t>(siblingSize, 1);
+  if (maxNumBlocksRead >= ad_utility::ceilDiv(size, rowsPerBlock)) {
     return std::nullopt;
   }
-  return static_cast<size_t>(blocks);
+  return maxNumBlocksRead * rowsPerBlock;
 }
 }  // namespace
 
