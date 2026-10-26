@@ -1144,6 +1144,12 @@ class CompressedExternalIdTableSorter
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
+  // The parameters and the options of a merge phase, see `prepareMergePhase`.
+  struct MergePhaseSetup {
+    compressedExternalIdTable::MergePhaseParameters parameters_;
+    parallelBlockMerge::MergeOptions options_;
+  };
+
   [[no_unique_address]] Comparator comparator_{};
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
@@ -1298,17 +1304,10 @@ class CompressedExternalIdTableSorter
   CPP_template(size_t N = NumStaticCols)(requires(N == NumStaticCols || N == 0))
       ad_utility::InputRangeTypeErased<IdTableStatic<N>> getSortedBlocks(
           std::optional<size_t> blocksize = std::nullopt) {
-    // If we move the result out, there must only be a single merge phase.
-    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
-    AD_CONTRACT_CHECK(!mergeIsActive_.load());
-    mergeIsActive_.store(true);
-
+    beginMerge();
     using namespace ad_utility;
-    return InputRangeTypeErased{
-        CallbackOnEndView{sortedBlocks<N>(blocksize), [&, this]() noexcept {
-                            this->isFirstIteration_ = false;
-                            mergeIsActive_.store(false);
-                          }}};
+    return InputRangeTypeErased{CallbackOnEndView{
+        sortedBlocks<N>(blocksize), [this]() noexcept { endMerge(); }}};
   }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -1333,11 +1332,14 @@ class CompressedExternalIdTableSorter
   template <size_t N = NumStaticCols, typename SinkFactory>
   std::future<void> mergeToSink(SinkFactory makeSink) {
     static_assert(N == NumStaticCols || N == 0);
-    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
-    AD_CONTRACT_CHECK(!mergeIsActive_.exchange(true));
-    auto finished = [this]() noexcept {
-      this->isFirstIteration_ = false;
-      mergeIsActive_.store(false);
+    beginMerge();
+    // Return a deferred future that waits for `future` and then ends the merge.
+    auto thenEndMerge = [this](auto future) {
+      return std::async(std::launch::deferred,
+                        [future = std::move(future), this]() mutable {
+                          future.get();
+                          endMerge();
+                        });
     };
     if (!this->transformAndPushLastBlock()) {
       // There is only a single (already sorted) block, so there is nothing to
@@ -1349,40 +1351,20 @@ class CompressedExternalIdTableSorter
       // once its consumer (which typically runs after this function has
       // returned) has processed the chunk.
       auto sink = makeSink(1);
-      auto& block = this->currentBlock_;
-      if (!block.empty()) {
-        IdTableStatic<N> output = this->moveResultOnMerge_
-                                      ? std::move(block).template toStatic<N>()
-                                      : block.clone().template toStatic<N>();
-        sink->asyncPush(0, std::move(output), boost::asio::use_future).get();
+      if (!this->currentBlock_.empty()) {
+        sink->asyncPush(0, takeSingleBlock<N>(), boost::asio::use_future).get();
       }
-      return std::async(
-          std::launch::deferred,
-          [chunkFinished = sink->asyncFinishChunk(0, boost::asio::use_future),
-           finished]() mutable {
-            chunkFinished.get();
-            finished();
-          });
+      return thenEndMerge(sink->asyncFinishChunk(0, boost::asio::use_future));
     }
-    const auto config = makeMergePhaseConfig(std::nullopt);
-    const auto parameters =
-        compressedExternalIdTable::computeMergePhaseParameters(config);
-    warnIfParallelismIsReduced(parameters);
-    auto options =
-        compressedExternalIdTable::makeMergeOptions(config, parameters);
+    auto setup = prepareMergePhase(std::nullopt);
     auto state = parallelBlockMerge::parallelBlockMergeToSink<true>(
         mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
-        this->comparator_, std::move(makeSink), std::move(options),
-        std::make_shared<ad_utility::CancellationHandle<>>());
+        this->comparator_, std::move(makeSink), std::move(setup.options_),
+        neverCancelledHandle());
     // NOTE: The completion future becomes ready once the state of the merge
     // (which owns the input) has been destroyed, see
     // `ParallelMergeState::asyncWaitForCompletion`.
-    return std::async(
-        std::launch::deferred,
-        [completion = state->asyncWaitForCompletion(), finished]() mutable {
-          completion.get();
-          finished();
-        });
+    return thenEndMerge(state->asyncWaitForCompletion());
   }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
@@ -1487,16 +1469,8 @@ class CompressedExternalIdTableSorter
         using namespace ad_utility;
         return block.empty()
                    ? InputRangeTypeErased{ql::views::empty<IdTableStatic<N>>}
-                   : InputRangeTypeErased{
-                         lazySingleValueRange([this]() -> IdTableStatic<N> {
-                           if (this->moveResultOnMerge_) {
-                             return std::move(this->currentBlock_)
-                                 .template toStatic<N>();
-                           } else {
-                             return this->currentBlock_.clone()
-                                 .template toStatic<N>();
-                           }
-                         })};
+                   : InputRangeTypeErased{lazySingleValueRange(
+                         [this]() { return takeSingleBlock<N>(); })};
       }
       auto chunked =
           chunkedIotaView(size_t{0}, block.numRows(), blocksizeOutput) |
@@ -1512,32 +1486,68 @@ class CompressedExternalIdTableSorter
 
     // Merge the presorted runs (which live compressed in the `writer_`) in
     // parallel, see `util/parallelBlockMerge/ParallelBlockMerge.h`.
-    const auto config = makeMergePhaseConfig(blocksize);
-    const auto parameters =
-        compressedExternalIdTable::computeMergePhaseParameters(config);
-    warnIfParallelismIsReduced(parameters);
-    return mergeRuns<N>(config, parameters);
+    return mergeRuns<N>(prepareMergePhase(blocksize));
   }
 
   // Merge the presorted runs and yield the result as blocks with `N` statically
   // known columns.
   template <size_t N>
   ad_utility::InputRangeTypeErased<IdTableStatic<N>> mergeRuns(
-      const compressedExternalIdTable::MergePhaseConfig& config,
-      const compressedExternalIdTable::MergePhaseParameters& parameters) {
-    auto options =
-        compressedExternalIdTable::makeMergeOptions(config, parameters);
+      MergePhaseSetup setup) {
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
-            this->comparator_, makeBlockStorageFactory<N>(parameters),
-            std::move(options),
-            // NOTE: The sorter has no cancellation handle of its own, and the
-            // merge requires one that is not `nullptr`, so this is a fresh
-            // handle that is never cancelled.
-            std::make_shared<ad_utility::CancellationHandle<>>());
+            this->comparator_, makeBlockStorageFactory<N>(setup.parameters_),
+            std::move(setup.options_), neverCancelledHandle());
     return ad_utility::InputRangeTypeErased{
         checkedMergeResult<N>(std::move(merged))};
+  }
+
+  // Check that a merge phase may start now and mark it as active. This is the
+  // common start of `getSortedBlocks` and `mergeToSink`, the merge phase must
+  // be ended via `endMerge`.
+  void beginMerge() {
+    // If we move the result out, there must only be a single merge phase.
+    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.exchange(true));
+  }
+
+  // End the merge phase that was started by `beginMerge`.
+  void endMerge() noexcept {
+    this->isFirstIteration_ = false;
+    mergeIsActive_.store(false);
+  }
+
+  // Return the single (already sorted) block that was not written to the
+  // `writer_` because there was nothing to merge. Move it out if
+  // `moveResultOnMerge_` is set, otherwise return a copy.
+  template <size_t N>
+  IdTableStatic<N> takeSingleBlock() {
+    if (this->moveResultOnMerge_) {
+      return std::move(this->currentBlock_).template toStatic<N>();
+    }
+    return this->currentBlock_.clone().template toStatic<N>();
+  }
+
+  // Compute the parameters and the options of a merge phase that yields blocks
+  // of size `blocksize` (determined automatically if `nullopt`), and warn if
+  // the memory limit reduces its parallelism.
+  MergePhaseSetup prepareMergePhase(std::optional<size_t> blocksize) {
+    const auto config = makeMergePhaseConfig(blocksize);
+    auto parameters =
+        compressedExternalIdTable::computeMergePhaseParameters(config);
+    warnIfParallelismIsReduced(parameters);
+    auto options =
+        compressedExternalIdTable::makeMergeOptions(config, parameters);
+    return {std::move(parameters), std::move(options)};
+  }
+
+  // NOTE: The sorter has no cancellation handle of its own, and the merge
+  // requires one that is not `nullptr`, so return a fresh handle that is never
+  // cancelled.
+  static std::shared_ptr<ad_utility::CancellationHandle<>>
+  neverCancelledHandle() {
+    return std::make_shared<ad_utility::CancellationHandle<>>();
   }
 
   // The factory for the intermediate storage of the output blocks of the merge
