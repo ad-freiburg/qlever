@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <new>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -145,32 +146,39 @@ TYPED_TEST(AllocatorBackendTest, ClearOnAllocationHook) {
 // The memory limit can be changed after construction: increasing always
 // succeeds, decreasing only as long as the difference is currently free.
 // A rejected decrease changes nothing.
-TYPED_TEST(AllocatorBackendTest, SetMemoryLimit) {
+TYPED_TEST(AllocatorBackendTest, ChangeMemoryLimit) {
   static_assert(sizeof(int) == 4);
   auto alloc = TypeParam::makeLimited(20_B);
-  EXPECT_EQ(alloc.memoryLimit(), 20_B);
 
   int* p = alloc.allocate(3);  // 12 bytes consumed
   EXPECT_EQ(alloc.amountMemoryLeft(), 8_B);
 
-  alloc.setMemoryLimit(40_B);
-  EXPECT_EQ(alloc.memoryLimit(), 40_B);
+  // Increase the limit to 40 bytes.
+  alloc.increaseMemoryLimit(20_B);
   EXPECT_EQ(alloc.amountMemoryLeft(), 28_B);
 
-  // 16 bytes are enough for the 12 bytes currently allocated.
-  alloc.setMemoryLimit(16_B);
-  EXPECT_EQ(alloc.memoryLimit(), 16_B);
+  // Decreasing the limit to 16 bytes works, because only 12 bytes are
+  // allocated.
+  alloc.decreaseMemoryLimit(24_B);
   EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
 
-  // 8 bytes are not.
+  // Decreasing it to 8 bytes does not.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      alloc.setMemoryLimit(8_B),
-      ::testing::HasSubstr("only 4 B of the current limit of 16 B are unused"));
-  EXPECT_EQ(alloc.memoryLimit(), 16_B);
+      alloc.decreaseMemoryLimit(8_B),
+      ::testing::HasSubstr("Cannot reduce the memory limit by 8 B, because "
+                           "only 4 B are currently unused"));
   EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
 
   alloc.deallocate(p, 3);
   EXPECT_EQ(alloc.amountMemoryLeft(), 16_B);
+}
+
+// Increasing the memory limit beyond the maximal `MemorySize` throws and
+// changes nothing.
+TYPED_TEST(AllocatorBackendTest, IncreaseMemoryLimitOverflow) {
+  auto alloc = TypeParam::makeLimited(ad_utility::MemorySize::max());
+  EXPECT_THROW(alloc.increaseMemoryLimit(1_B), std::overflow_error);
+  EXPECT_EQ(alloc.amountMemoryLeft(), ad_utility::MemorySize::max());
 }
 
 // .as<char>() yields an allocator sharing the same budget: consuming bytes

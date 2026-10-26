@@ -88,14 +88,14 @@ class AllocatorWithLimit {
   [[no_unique_address]] std::allocator<T> allocator_;
 
  public:
-  /// obtain an AllocationMemoryLeftThreadsafe by calls to
-  /// makeAllocationMemoryLeftThreadsafeObject()
+  // Obtain an AllocationMemoryLeftThreadsafe by calls to
+  // makeAllocationMemoryLeftThreadsafeObject().
   explicit AllocatorWithLimit(
       detail::AllocationMemoryLeftThreadsafe ml,
       ClearOnAllocation clearOnAllocation = ad_utility::noop)
       : tracker_{std::move(ml), std::move(clearOnAllocation)} {}
 
-  /// Obtain an AllocatorWithLimit<OtherType> that refers to the same limit.
+  // Obtain an AllocatorWithLimit<OtherType> that refers to the same limit.
   template <typename U>
   AllocatorWithLimit<U> as() const {
     return AllocatorWithLimit<U>(*this);
@@ -152,23 +152,20 @@ class AllocatorWithLimit {
     tracker_.release(MemorySize::bytes(n * sizeof(T)));
   }
 
-  /// Return the number of bytes, that this allocator and all of its copies
-  /// currently have available
+  // Return the number of bytes, that this allocator and all of its copies
+  // currently have available.
   [[nodiscard]] MemorySize amountMemoryLeft() const {
     return tracker_.amountMemoryLeft();
   }
 
-  /// Return the memory limit that this allocator and all of its copies share.
-  [[nodiscard]] MemorySize memoryLimit() const {
-    return tracker_.memoryLimit();
-  }
+  // Increase the memory limit that this allocator and all of its copies share
+  // by `n`.
+  void increaseMemoryLimit(MemorySize n) { tracker_.increaseMemoryLimit(n); }
 
-  /// Change the shared memory limit to `newLimit`. Increasing always succeeds.
-  /// Decreasing requires the difference to be currently unallocated, otherwise
-  /// an exception is thrown and nothing is changed.
-  void setMemoryLimit(MemorySize newLimit) {
-    tracker_.setMemoryLimit(newLimit);
-  }
+  // Decrease the memory limit that this allocator and all of its copies share
+  // by `n`. This requires `n` to be currently unallocated, otherwise an
+  // exception is thrown and nothing is changed.
+  void decreaseMemoryLimit(MemorySize n) { tracker_.decreaseMemoryLimit(n); }
 
   template <typename V>
   bool operator==(const AllocatorWithLimit<V>& v) const {

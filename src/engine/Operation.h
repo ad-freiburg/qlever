@@ -24,6 +24,7 @@
 #include "util/ContainersWithAllocator.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
+#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies

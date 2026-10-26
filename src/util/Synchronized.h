@@ -11,7 +11,6 @@
 #include <condition_variable>
 #include <shared_mutex>
 
-#include "backports/atomic_flag.h"
 #include "backports/keywords.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -43,22 +42,6 @@ struct AllowsSharedLocking<
     M, std::void_t<AllowsLocking<M>, decltype(std::declval<M&>().lock_shared()),
                    decltype(std::declval<M&>().unlock_shared())>>
     : std::true_type {};
-
-/// A very simple spin lock, stolen from cppreference. A spin lock is simply a
-/// lock that actively waits (as long as is necessary) for the lock to be
-/// released before locking it. In particular, this is OK when using it for
-/// serializing simple and fast concurrent accesses to an object.
-class SpinLock {
- private:
-  ql::atomic_flag lock_{false};
-
- public:
-  void lock() {
-    while (lock_.test_and_set(std::memory_order_acquire)) {
-    }  // spin
-  }
-  void unlock() { lock_.clear(std::memory_order_release); }
-};
 
 // forward declaration
 template <class S, bool b, bool c>

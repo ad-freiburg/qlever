@@ -446,11 +446,12 @@ TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   // Constructing the engine has synced the parameter to the configured limit.
   EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
             50_MB);
-  EXPECT_EQ(engine.allocator().memoryLimit(), 50_MB);
+  auto initialMemoryLeft = engine.allocator().amountMemoryLeft();
+  EXPECT_LE(initialMemoryLeft, 50_MB);
 
   // Increasing the limit always works.
   setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(100_MB);
-  EXPECT_EQ(engine.allocator().memoryLimit(), 100_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft + 50_MB);
 
   // Decreasing works as long as the freed part is currently unused, i.e. not
   // below the 32 MB allocated here (plus what the engine itself has
@@ -462,11 +463,12 @@ TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   // The rejected decrease left both the parameter and the limit unchanged.
   EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
             100_MB);
-  EXPECT_EQ(engine.allocator().memoryLimit(), 100_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(),
+            initialMemoryLeft + 50_MB - 32_MB);
 
   engine.allocator().deallocate(chunk, 4'000'000);
   setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB);
-  EXPECT_EQ(engine.allocator().memoryLimit(), 20_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft - 30_MB);
 }
 
 // _____________________________________________________________________________

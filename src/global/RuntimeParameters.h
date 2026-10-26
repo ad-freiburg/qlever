@@ -11,6 +11,7 @@
 #include "global/Constants.h"
 #include "util/Log.h"
 #include "util/Parameters.h"
+#include "util/Synchronized.h"
 
 // A set of parameters that can be accessed with a runtime and a compile time
 // interface. They are currently managed using a synchronized singleton for the

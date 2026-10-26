@@ -13,13 +13,14 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 
 #include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Synchronized.h"
 #include "util/TransparentFunctors.h"
 
 // This header contains the memory-limit bookkeeping used by both
@@ -53,75 +54,63 @@ class AllocationExceedsLimitException : public std::exception {
 // Class to keep track of the amount of memory that is left for allocation. When
 // not enough memory is left, an AllocationExceedsLimitException is thrown. Note
 // that need a separate class for this because there can be many Allocation
-// objects at the same time (hence the wrapper class and the synchronization
-// below).
+// objects at the same time (hence the wrapper class below). All operations are
+// lock-free atomic operations on the single counter `free_`. The memory limit
+// itself is not stored, it can only be changed relative to its current value.
 class AllocationMemoryLeft {
-  // Remaining free memory.
-  MemorySize free_;
-  // The total pool size (the memory limit). Invariant: `free_ <= total_`,
-  // and `total_ - free_` is the amount currently allocated.
-  MemorySize total_;
+  // Remaining free memory in bytes.
+  std::atomic<size_t> free_;
 
  public:
   // Constructor from the initial amount of free memory.
-  explicit AllocationMemoryLeft(MemorySize n) : free_(n), total_(n) {}
+  explicit AllocationMemoryLeft(MemorySize n) : free_(n.getBytes()) {}
 
   // Called before memory is allocated.
-  bool decrease_if_enough_left_or_return_false(MemorySize n) noexcept {
-    if (n <= free_) {
-      free_ -= n;
-      return true;
-    } else {
-      return false;
-    }
+  bool decreaseIfEnoughLeftOrReturnFalse(MemorySize n) noexcept {
+    size_t current = free_.load();
+    do {
+      if (current < n.getBytes()) {
+        return false;
+      }
+    } while (!free_.compare_exchange_weak(current, current - n.getBytes()));
+    return true;
   }
 
   // Called before memory is allocated.
-  void decrease_if_enough_left_or_throw(MemorySize n) {
-    if (!decrease_if_enough_left_or_return_false(n)) {
-      throw AllocationExceedsLimitException{n, free_};
+  void decreaseIfEnoughLeftOrThrow(MemorySize n) {
+    if (!decreaseIfEnoughLeftOrReturnFalse(n)) {
+      throw AllocationExceedsLimitException{n, amountMemoryLeft()};
     }
   }
 
-  // Called after memory is deallocated.
-  void increase(MemorySize n) { free_ += n; }
+  // Called after memory is deallocated, or when the memory limit is increased.
+  // Throws `std::overflow_error` if the free memory would overflow, in which
+  // case nothing is changed.
+  void increase(MemorySize n) {
+    size_t current = free_.load();
+    while (!free_.compare_exchange_weak(
+        current, (MemorySize::bytes(current) + n).getBytes())) {
+    }
+  }
 
   // Returns the amount of memory still available.
-  [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
-
-  // Returns the total pool size (the memory limit).
-  [[nodiscard]] MemorySize total() const { return total_; }
-
-  // Change the total pool size (the memory limit) to `newTotal`. Increasing
-  // always succeeds and adds the difference to the free memory. Decreasing
-  // requires the difference to be currently free, otherwise an exception is
-  // thrown and nothing is changed.
-  void setTotal(MemorySize newTotal) {
-    if (newTotal >= total_) {
-      free_ += newTotal - total_;
-    } else if (!decrease_if_enough_left_or_return_false(total_ - newTotal)) {
-      throw std::runtime_error{absl::StrCat(
-          "Cannot reduce the memory limit to ", newTotal.asString(),
-          ", because only ", free_.asString(), " of the current limit of ",
-          total_.asString(), " are unused")};
-    }
-    total_ = newTotal;
+  [[nodiscard]] MemorySize amountMemoryLeft() const {
+    return MemorySize::bytes(free_.load());
   }
 };
 
-// Threadsafe Wrapper around `AllocationMemoryLeft`.
+// Threadsafe wrapper around `AllocationMemoryLeft`.
 // Copies of objects of this class will refer to the same `AllocationMemoryLeft`
-// object. Concurrent access is handled via `ad_utility::Synchronized`.
+// object, which is threadsafe on its own.
 class AllocationMemoryLeftThreadsafe {
  public:
   // Deleted because the shared counter must always be provided explicitly.
   AllocationMemoryLeftThreadsafe() = delete;
 
-  // Type of the shared, synchronized memory counter.
-  using T =
-      std::shared_ptr<ad_utility::Synchronized<AllocationMemoryLeft, SpinLock>>;
+  // Type of the shared memory counter.
+  using T = std::shared_ptr<AllocationMemoryLeft>;
 
-  // Constructor from an existing shared, synchronized memory counter.
+  // Constructor from an existing shared memory counter.
   explicit AllocationMemoryLeftThreadsafe(T ptr) : ptr_{std::move(ptr)} {}
 
   // Copying a shared_ptr never throws in practice (its refcount increment is
@@ -138,10 +127,10 @@ class AllocationMemoryLeftThreadsafe {
   AllocationMemoryLeftThreadsafe& operator=(
       AllocationMemoryLeftThreadsafe&&) noexcept = default;
 
-  // Returns the shared, synchronized memory counter.
+  // Returns the shared memory counter.
   T& ptr() { return ptr_; }
 
-  // Returns the shared, synchronized memory counter.
+  // Returns the shared memory counter.
   const T& ptr() const { return ptr_; }
 
   // Compares whether two wrappers refer to the same shared memory counter.
@@ -149,7 +138,7 @@ class AllocationMemoryLeftThreadsafe {
                                               ptr_)
 
  private:
-  // Shared synchronized memory counter.
+  // Shared memory counter.
   T ptr_;
 };
 }  // namespace detail
@@ -157,8 +146,8 @@ class AllocationMemoryLeftThreadsafe {
 // Constructs a shared allocation state with `n` bytes initially available.
 inline detail::AllocationMemoryLeftThreadsafe
 makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
-  return detail::AllocationMemoryLeftThreadsafe{std::make_shared<
-      ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(n)};
+  return detail::AllocationMemoryLeftThreadsafe{
+      std::make_shared<detail::AllocationMemoryLeft>(n)};
 }
 
 /*
@@ -243,33 +232,34 @@ class MemoryLimitTracker {
   // Reserve `n` bytes or throw AllocationExceedsLimitException, running the
   // clearOnAllocation hook first if the budget is momentarily exceeded.
   void reserveOrThrow(MemorySize n) {
-    const bool ok = sharedMemoryLeft_.ptr()
-                        ->wlock()
-                        ->decrease_if_enough_left_or_return_false(n);
-    if (!ok) {
+    if (!sharedMemoryLeft_.ptr()->decreaseIfEnoughLeftOrReturnFalse(n)) {
       AD_CORRECTNESS_CHECK(clearOnAllocation_);
       (*clearOnAllocation_)(n);
-      sharedMemoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(n);
+      sharedMemoryLeft_.ptr()->decreaseIfEnoughLeftOrThrow(n);
     }
   }
 
   // Releases `n` bytes back to the shared memory counter.
-  void release(MemorySize n) { sharedMemoryLeft_.ptr()->wlock()->increase(n); }
+  void release(MemorySize n) { sharedMemoryLeft_.ptr()->increase(n); }
 
   // Returns the amount of memory still available.
   [[nodiscard]] MemorySize amountMemoryLeft() const {
-    return sharedMemoryLeft_.ptr()->wlock()->amountMemoryLeft();
+    return sharedMemoryLeft_.ptr()->amountMemoryLeft();
   }
 
-  // Returns the memory limit (the total pool size).
-  [[nodiscard]] MemorySize memoryLimit() const {
-    return sharedMemoryLeft_.ptr()->wlock()->total();
+  // Increase the memory limit by `n`.
+  void increaseMemoryLimit(MemorySize n) {
+    sharedMemoryLeft_.ptr()->increase(n);
   }
 
-  // Change the memory limit to `newLimit`, see `AllocationMemoryLeft::setTotal`
-  // for the semantics.
-  void setMemoryLimit(MemorySize newLimit) {
-    sharedMemoryLeft_.ptr()->wlock()->setTotal(newLimit);
+  // Decrease the memory limit by `n`. This requires `n` to be currently free,
+  // otherwise an exception is thrown and nothing is changed.
+  void decreaseMemoryLimit(MemorySize n) {
+    if (!sharedMemoryLeft_.ptr()->decreaseIfEnoughLeftOrReturnFalse(n)) {
+      throw std::runtime_error{absl::StrCat(
+          "Cannot reduce the memory limit by ", n.asString(), ", because only ",
+          amountMemoryLeft().asString(), " are currently unused")};
+    }
   }
 
   // Compares whether two trackers share the same memory counter.
