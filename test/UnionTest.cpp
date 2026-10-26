@@ -913,7 +913,6 @@ TEST(Union, sortedUnionImplRequiresCancellationHandle) {
       ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
-// _____________________________________________________________________________
 // The non-lazy merge of a sorted union checks for cancellation after every
 // `Union::chunkSize` merged rows.
 TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
