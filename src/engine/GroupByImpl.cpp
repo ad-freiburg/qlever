@@ -874,6 +874,10 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   // reflect delta triples from SPARQL updates. Fall back to the general
   // computation when there are any delta triples.
 
+  // Note: Use the `LocatedTriplesState` of the `IndexScan`, not the one of this
+  // operation (which is the one of the main index from the
+  // `QueryExecutionContext`). They differ if the scan is on a materialized
+  // view, which has its own block metadata and located triples.
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
           indexScan->locatedTriplesState());
@@ -957,6 +961,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
 
   // Compute the result and update the runtime information (we don't actually
   // do the index scan, but something smarter).
+  // Note: Use the `LocatedTriplesState` of the `IndexScan` (see
+  // `computeGroupByForSingleIndexScan` for details).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
@@ -1014,6 +1020,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   const auto& operation = _subtree->getRootOperation();
   operation->updateRuntimeInformationWhenOptimizedOut();
 
+  // Note: Use the `LocatedTriplesState` of the `IndexScan` (see
+  // `computeGroupByForSingleIndexScan` for details).
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
       cancellationHandle(), operation->locatedTriplesState(),
       operation->getLimitOffset());
