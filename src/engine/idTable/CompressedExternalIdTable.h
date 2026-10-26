@@ -1347,8 +1347,9 @@ class CompressedExternalIdTableSorter
   //
   // Return a future that becomes ready once the merge has completed and has
   // released this sorter again. Clear or destroy the sorter only once the
-  // future is ready. Exceptions of the merge are reported to the sink and not
-  // via the future.
+  // future is ready. Exceptions of the merge itself are reported to the sink
+  // and not via the future (an exception of the sink while the single block
+  // below is pushed or finished does reach the caller, see there).
   //
   // NOTE: Like `getSortedBlocks`, this may only be called once if
   // `moveResultOnMerge()` is set (which is the default).
@@ -1535,8 +1536,8 @@ class CompressedExternalIdTableSorter
   }
 
   // Check that a merge phase may start now and mark it as active. This is the
-  // common start of `getSortedBlocks` and `mergeToSink`, the merge phase must
-  // be ended via `endMerge`.
+  // common start of `getSortedBlocks` and `mergeToSink`, and the merge phase
+  // must be ended via `endMerge`.
   void beginMerge() {
     // If we move the result out, there must only be a single merge phase.
     AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);

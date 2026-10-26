@@ -1798,12 +1798,9 @@ TEST(CompressedExternalIdTable, asyncPushBlock) {
   testAsyncPushBlock(tables, 100'000, 20);
 }
 
-// ___________________________________________________________________________
-// The output of the sorter as the input of an external merge
-// (`finishAndGetRunsInput`) and as the input of a merge into a sink
+// The tests below cover the output of the sorter as the input of an external
+// merge (`finishAndGetRunsInput`) and as the input of a merge into a sink
 // (`mergeToSink`).
-// ___________________________________________________________________________
-
 namespace {
 template <size_t NumStaticCols = NUM_COLS>
 using OspSorter =
@@ -1837,7 +1834,7 @@ CopyableIdTable<NUM_COLS> concatenateBlocks(Blocks&& blocks) {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the getters that a caller needs to configure a merge of the runs.
 TEST(CompressedExternalIdTable, numColumnsAndInputBlockSizePerColumn) {
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
@@ -1849,7 +1846,9 @@ TEST(CompressedExternalIdTable, numColumnsAndInputBlockSizePerColumn) {
   EXPECT_EQ(sorter.inputBlockSizePerColumn(), 3_kB);
 }
 
-// _____________________________________________________________________________
+// Test `finishAndGetRunsInput` for many runs, a single run (which it has to
+// write to disk first, because the sorter keeps it in memory), and no run at
+// all.
 TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
   using namespace ad_utility::parallelBlockMerge;
   std::string filename = gtestCurrentTestName() + ".dat";
@@ -2013,7 +2012,8 @@ constexpr std::array mergeToSinkCases{MergeToSinkCase{20'000, 100},
                                       MergeToSinkCase{0, 10'000}};
 }  // namespace
 
-// _____________________________________________________________________________
+// Test `mergeToSink` for many runs (merged in several chunks), a single block
+// (pushed as the only chunk without a merge) and no rows at all.
 TEST(CompressedExternalIdTable, mergeToSink) {
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
@@ -2049,7 +2049,9 @@ TEST(CompressedExternalIdTable, mergeToSink) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the future of `mergeToSink` becomes ready only once the sink has
+// finished its chunks, and that the result can be merged several times without
+// `moveResultOnMerge()`.
 TEST(CompressedExternalIdTable, mergeToSinkWaitsForTheSink) {
   using namespace std::chrono_literals;
   std::string filename = gtestCurrentTestName() + ".dat";
@@ -2077,11 +2079,10 @@ TEST(CompressedExternalIdTable, mergeToSinkWaitsForTheSink) {
                                            gate.get_future().share());
         return sink;
       });
-      // The returned future is deferred, so it is waited for in another thread.
-      auto waiter = std::async(std::launch::async, [&merged] { merged.get(); });
-      EXPECT_EQ(waiter.wait_for(50ms), std::future_status::timeout);
+      // The future is not ready while the gate is closed.
+      EXPECT_EQ(merged.wait_for(50ms), std::future_status::timeout);
       gate.set_value();
-      waiter.get();
+      merged.get();
       ASSERT_NE(sink, nullptr);
       expectSinkResult(sink->inner_, expected);
     }
