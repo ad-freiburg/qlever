@@ -1644,6 +1644,8 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
       std::string_view content = lit.getContent();
       // Remove the accents before tokenizing: combining marks are not
       // alphanumeric, so they would otherwise split words.
+      // Owns the content if the accents are removed, so that `content` stays
+      // valid during the tokenization.
       std::string contentWithoutAccents;
       if (hasWordNormalization_ ==
           ad_utility::HasWordNormalization::LowercaseNoAccents) {
