@@ -65,8 +65,9 @@ CPP_concept ValueAsNumericId =
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
 // point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
-CPP_template(bool NanOrInfToUndef = false,
-             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+CPP_template(bool NanOrInfToUndef = false, typename T)(
+    requires ValueAsNumericId<T>)
+Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
   } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {

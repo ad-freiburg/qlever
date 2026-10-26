@@ -69,10 +69,10 @@ bool ConfigManager::HashMapEntry::holdsSubManager() const {
 
 // ____________________________________________________________________________
 CPP_template_def(typename ReturnType, typename InstanceType)(
-    requires SimilarToAnyTypeIn<ReturnType, ConfigManager::HashMapEntry::Data>
-        CPP_and_def std::is_object_v<ReturnType>
-            CPP_and_def ad_utility::SimilarTo<ConfigManager::HashMapEntry,
-                                              InstanceType>)
+    requires SimilarToAnyTypeIn<ReturnType,
+                                ConfigManager::HashMapEntry::Data> &&
+    std::is_object_v<ReturnType> &&
+    ad_utility::SimilarTo<ConfigManager::HashMapEntry, InstanceType>)
 std::optional<ReturnType*> ConfigManager::HashMapEntry::
     getConfigOptionOrSubManager(InstanceType& instance) {
   using DecayReturnType = std::decay_t<ReturnType>;
@@ -263,10 +263,9 @@ auto ConfigManager::allHashMapEntries(HashMapType& hashMap,
 
 // ____________________________________________________________________________
 CPP_template_def(typename ConfigOptions, typename ReturnReference)(
-    requires SameAsAny<ReturnReference, ConfigOption&, const ConfigOption&>
-        CPP_and_def SimilarTo<
-            ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
-            ConfigOptions>)
+    requires SameAsAny<ReturnReference, ConfigOption&, const ConfigOption&> &&
+    SimilarTo<ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
+              ConfigOptions>)
 std::vector<std::pair<std::string, ReturnReference>> ConfigManager::
     configurationOptionsImpl(ConfigOptions& configurationOptions) {
   return ad_utility::transform(

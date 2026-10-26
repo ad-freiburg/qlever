@@ -653,9 +653,9 @@ using std::make_unique;
 using std::move;
 using Expr = SparqlExpression::Ptr;
 
-CPP_template(typename T,
-             typename... C)(requires(concepts::same_as<Expr, C>&&...)) Expr
-    make(C&... children) {
+CPP_template(typename T, typename... C)(
+    requires(concepts::same_as<Expr, C>&&...))
+Expr make(C&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
