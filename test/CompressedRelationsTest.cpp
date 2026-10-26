@@ -21,6 +21,7 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/CompressedRelationReader.h"
 #include "index/CompressedRelationWriter.h"
+#include "index/DistinctCol0Ids.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/GlobalExecutor.h"
@@ -450,8 +451,9 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
     auto scanAndCheck = [&]() {
       ScanSpecification scanSpec{V(inputs[i].col0_), V(lastCol1Id),
                                  std::nullopt};
-      auto size = reader.getResultSizeOfScan(
-          ScanSpecAndBlocks{scanSpec, blocks}, locatedTriples);
+      auto size =
+          reader.getResultSizeOfScan(ScanSpecAndBlocks{scanSpec, blocks},
+                                     locatedTriples, cancellationHandle);
       IdTable tableWidthOne = reader.scan(
           ScanSpecAndBlocks{scanSpec, blocks}, Permutation::ColumnIndicesRef{},
           cancellationHandle, locatedTriples, executor());
@@ -1566,6 +1568,24 @@ TEST(CompressedRelationReader, getDistinctCol0IdsChecksItsPreconditions) {
 }
 
 // _____________________________________________________________________________
+TEST(CompressedRelationReader, blockSelectorRequiresCancellationHandle) {
+  using GF = ScanSpecification::GraphFilter;
+  CompressedRelationReader::FilterDuplicatesAndGraphs filter{GF::All(), 0,
+                                                             false};
+  std::optional<std::vector<Id>> idFilter;
+  auto makeSelector = [&](CompressedRelationReader::CancellationHandle handle) {
+    auto allocator = ad_utility::testing::makeAllocator();
+    distinctCol0Ids::BlockSelector selector(
+        filter, false, idFilter, emptyLocatedTriples, handle, allocator);
+  };
+  EXPECT_NO_THROW(
+      makeSelector(std::make_shared<ad_utility::CancellationHandle<>>()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeSelector(nullptr),
+      ::testing::HasSubstr("cancellationHandle_ != nullptr"));
+}
+
+// _____________________________________________________________________________
 TEST(CompressedRelationReader, getResultSizeImpl) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");
@@ -1597,7 +1617,8 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     EXPECT_THAT(actual_lower, testing::Eq(lower));
     EXPECT_THAT(actual_upper, testing::Eq(upper));
     auto actual_exact = reader.getResultSizeOfScan(
-        ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
+        ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb,
+        std::make_shared<ad_utility::CancellationHandle<>>());
     EXPECT_THAT(actual_exact, testing::Eq(exact));
   };
   // The Scans request all triples of the one and only block.

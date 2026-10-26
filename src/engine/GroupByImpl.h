@@ -431,8 +431,11 @@ class GroupByImpl : public Operation {
       return aggregationData_.at(aggregationDataIndex);
     }
 
-    // Get the values of the grouped column in ascending order.
-    [[nodiscard]] ArrayOrVector<std::vector<Id>> getSortedGroupColumns() const;
+    // Get the values of the grouped column in ascending order. The sort runs
+    // according to `sortConfig` and can be cancelled via `cancellationHandle`.
+    [[nodiscard]] ArrayOrVector<std::vector<Id>> getSortedGroupColumns(
+        const SortConfig& sortConfig,
+        const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
     // Returns the number of groups.
     [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }

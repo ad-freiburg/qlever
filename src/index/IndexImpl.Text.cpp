@@ -17,6 +17,7 @@
 #include "backports/algorithm.h"
 #include "global/FileSuffixConstants.h"
 #include "index/FTSAlgorithms.h"
+#include "index/IdTableUtils.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/TransparentFunctors.h"
@@ -68,11 +69,13 @@ IdTable IndexImpl::mergeTextBlockResults(
         reader,
     const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    TextScanMode textScanMode) const {
+    TextScanMode textScanMode, const SortConfig& sortConfig,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   AD_CONTRACT_CHECK(tbmds.size() > 0);
   // Collect all blocks as IdTables
   std::vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
+    cancellationHandle->throwIfCancelled();
     IdTable partialResult{allocator};
     partialResult =
         reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
@@ -95,17 +98,21 @@ IdTable IndexImpl::mergeTextBlockResults(
                                    return acc + partialResult.numRows();
                                  }));
   for (const auto& partialResult : partialResults) {
+    cancellationHandle->throwIfCancelled();
     result.insertAtEnd(partialResult);
   }
-  auto toSort = std::move(result).toStatic<3>();
   // Sort the table
-  ql::ranges::sort(toSort, [](const auto& a, const auto& b) {
-    return ql::ranges::lexicographical_compare(
-        std::begin(a), std::end(a), std::begin(b), std::end(b),
-        [](const Id& x, const Id& y) {
-          return x.compareWithoutLocalVocab(y) < 0;
-        });
-  });
+  IdTableUtils::sort<3>(
+      &result,
+      [](const auto& a, const auto& b) {
+        return ql::ranges::lexicographical_compare(
+            std::begin(a), std::end(a), std::begin(b), std::end(b),
+            [](const Id& x, const Id& y) {
+              return x.compareWithoutLocalVocab(y) < 0;
+            });
+      },
+      sortConfig, cancellationHandle);
+  auto toSort = std::move(result).toStatic<3>();
   // If not entitySearch don't filter duplicates
   if (textScanMode == TextScanMode::WordScan) {
     return std::move(toSort).toDynamic<>();
@@ -140,7 +147,9 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 // _____________________________________________________________________________
 IdTable IndexImpl::getWordPostingsForTerm(
     const std::string& term,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const SortConfig& sortConfig,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   AD_LOG_DEBUG << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
@@ -150,7 +159,8 @@ IdTable IndexImpl::getWordPostingsForTerm(
   }
 
   IdTable result = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
-                                         allocator, TextScanMode::WordScan);
+                                         allocator, TextScanMode::WordScan,
+                                         sortConfig, cancellationHandle);
 
   AD_LOG_DEBUG << "Word postings for term: " << term
                << ": cids: " << result.getColumn(0).size() << '\n';
@@ -160,11 +170,14 @@ IdTable IndexImpl::getWordPostingsForTerm(
 // _____________________________________________________________________________
 IdTable IndexImpl::getEntityMentionsForWord(
     const std::string& term,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const SortConfig& sortConfig,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
   AD_CORRECTNESS_CHECK(!tbmds.empty());
   return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl, tbmds,
-                               allocator, TextScanMode::EntityScan);
+                               allocator, TextScanMode::EntityScan, sortConfig,
+                               cancellationHandle);
 }
 
 // _____________________________________________________________________________

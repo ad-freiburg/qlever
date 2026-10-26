@@ -2018,11 +2018,12 @@ std::vector<float> IndexImpl::getMultiplicities(
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const LocatedTriplesState& locatedTriplesState,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   const auto& perm = getPermutation(permutation);
   return perm.getResultSizeOfScan(
       perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      locatedTriplesState);
+      locatedTriplesState, cancellationHandle);
 }
 
 // _____________________________________________________________________________

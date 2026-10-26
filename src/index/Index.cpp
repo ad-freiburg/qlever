@@ -105,15 +105,21 @@ size_t Index::getSizeOfTextBlocksSum(const std::string& word,
 // ____________________________________________________________________________
 IdTable Index::getWordPostingsForTerm(
     const std::string& term,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  return pimpl_->getWordPostingsForTerm(term, allocator);
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const SortConfig& sortConfig,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+  return pimpl_->getWordPostingsForTerm(term, allocator, sortConfig,
+                                        cancellationHandle);
 }
 
 // ____________________________________________________________________________
 IdTable Index::getEntityMentionsForWord(
     const std::string& term,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  return pimpl_->getEntityMentionsForWord(term, allocator);
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const SortConfig& sortConfig,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+  return pimpl_->getEntityMentionsForWord(term, allocator, sortConfig,
+                                          cancellationHandle);
 }
 
 // ____________________________________________________________________________
@@ -277,9 +283,10 @@ std::vector<float> Index::getMultiplicities(
 size_t Index::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const LocatedTriplesState& locatedTriplesState,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation,
-                                     locatedTriplesState);
+                                     locatedTriplesState, cancellationHandle);
 }
 
 // ____________________________________________________________________________
