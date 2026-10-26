@@ -27,10 +27,10 @@ namespace ad_utility {
 // Abstract base class for a parameter that can be written and read as a
 // `std::string`.
 struct ParameterBase {
-  /// Set the parameter by converting the string to the actual parameter.
+  // Set the parameter by converting the string to the actual parameter.
   virtual void setFromString(const std::string& stringInput) = 0;
 
-  /// Get a representation of the parameter as a `std::string`.
+  // Get a representation of the parameter as a `std::string`.
   [[nodiscard]] virtual std::string toString() const = 0;
 
   virtual ~ParameterBase() = default;
@@ -47,15 +47,11 @@ CPP_concept ParameterToStringType =
     ql::concepts::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
-/// Abstraction for a parameter that stores a value of the given `Type`.
-/// The value can be accessed via a typesafe interface, but also via a
-/// type-erased interface the that reads/writes the value to/from a
-/// `std::string`.
-/// \tparam Type The type of the parameter value
-/// \tparam FromString A function type, that takes a const string&
-///         (representation of a `Type`) and converts it to `Type`.
-/// \tparam ToString A function type, that takes a `Type` and produces
-///         a std::string representation.
+// Abstraction for a parameter that stores a value of the given `Type`. The
+// value can be accessed via a typesafe interface, but also via a type-erased
+// interface that reads/writes the value to/from a `std::string`. `FromString`
+// converts such a string to a `Type`, `ToString` produces the string
+// representation of a `Type`.
 CPP_template(typename Type, typename FromString, typename ToString)(
     requires ql::concepts::semiregular<Type> &&
     ParameterFromStringType<FromString, Type> &&
@@ -75,27 +71,27 @@ struct Parameter : public ParameterBase {
   std::optional<ParameterConstraint> parameterConstraint_ = std::nullopt;
 
  public:
-  /// Construction is only allowed using an initial parameter value
+  // Construction is only allowed using an initial parameter value
   Parameter() = delete;
   explicit Parameter(Type initialValue, std::string name)
       : value_{std::move(initialValue)}, name_{std::move(name)} {}
 
-  /// Copying is disabled, but moving is ok
+  // Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;
   Parameter& operator=(const Parameter& rhs) = delete;
 
   Parameter(Parameter&&) noexcept = default;
   Parameter& operator=(Parameter&&) noexcept = default;
 
-  /// Set the value by using the `FromString` conversion.
+  // Set the value by using the `FromString` conversion.
   void setFromString(const std::string& stringInput) override {
     set(FromString{}(stringInput));
   }
 
-  /// Set the value. If the `onUpdateAction` throws (e.g. because the new
-  /// value cannot be applied), the old value is restored before the exception
-  /// is propagated, so that the parameter always reflects the state that was
-  /// actually applied.
+  // Set the value. If the `onUpdateAction` throws (e.g. because the new
+  // value cannot be applied), the old value is restored before the exception
+  // is propagated, so that the parameter always reflects the state that was
+  // actually applied.
   void set(Type newValue) {
     if (parameterConstraint_.has_value()) {
       std::invoke(parameterConstraint_.value(), newValue, name_);
@@ -109,20 +105,20 @@ struct Parameter : public ParameterBase {
 
   const Type& get() const { return value_; }
 
-  /// Specify the onUpdateAction and directly trigger it.
-  /// Note that this useful when the initial value of the parameter
-  /// is known before the `onUpdateAction`.
+  // Specify the onUpdateAction and directly trigger it.
+  // Note that this useful when the initial value of the parameter
+  // is known before the `onUpdateAction`.
   void setOnUpdateAction(OnUpdateAction onUpdateAction) {
     onUpdateAction_ = std::move(onUpdateAction);
     triggerOnUpdateAction();
   }
 
-  /// Remove a previously set `onUpdateAction` (if any) without triggering it.
+  // Remove a previously set `onUpdateAction` (if any) without triggering it.
   void clearOnUpdateAction() { onUpdateAction_ = std::nullopt; }
 
-  /// Set an constraint that will be executed every time the value changes
-  /// and once initially when setting it. It is intended to throw an exception
-  /// if the value is invalid.
+  // Set a constraint that will be executed every time the value changes
+  // and once initially when setting it. It is intended to throw an exception
+  // if the value is invalid.
   void setParameterConstraint(ParameterConstraint&& parameterConstraint) {
     std::invoke(parameterConstraint, value_, name_);
     parameterConstraint_ = std::move(parameterConstraint);
@@ -233,8 +229,8 @@ namespace detail::parameterShortNames {
 // NOTE: The namespace is fully qualified, as an unqualified `detail` might
 // refer to a nested `ad_utility::detail::detail` namespace (if one exists).
 namespace n = ::ad_utility::detail::parameterSerializers;
-/// Partial template specialization for Parameters with common types (numeric
-/// types and strings)
+// Partial template specialization for Parameters with common types (numeric
+// types and strings)
 using Float = Parameter<float, n::fl, n::toString>;
 using Double = Parameter<double, n::dbl, n::toString>;
 

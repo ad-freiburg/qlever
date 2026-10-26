@@ -22,8 +22,8 @@ namespace ad_utility {
 // An empty tag-type
 struct ConstructWithMutex {};
 
-/// Does type M have a lock() and unlock() member function (behaves like a
-/// mutex)
+// Does type M have a lock() and unlock() member function (behaves like a
+// mutex)
 template <typename M, typename = void>
 struct AllowsLocking : std::false_type {};
 
@@ -32,8 +32,8 @@ struct AllowsLocking<M, std::void_t<decltype(std::declval<M&>().lock()),
                                     decltype(std::declval<M&>().unlock())>>
     : std::true_type {};
 
-/// Does type M have lock(), unlock(), lock_shared() and unlock_shared() member
-/// functions (behaves like a shared_mutex)
+// Does type M have lock(), unlock(), lock_shared() and unlock_shared() member
+// functions (behaves like a shared_mutex)
 template <typename M, typename = void>
 struct AllowsSharedLocking : std::false_type {};
 
@@ -64,17 +64,17 @@ class Synchronized {
  public:
   using value_type = std::remove_reference_t<T>;
 
-  /// is this a shared_mutex?
+  // is this a shared_mutex?
   constexpr static bool isShared = AllowsSharedLocking<Mutex>::value;
 
  public:
-  /// Copying will copy the data, but not request ordering index or the mutex.
+  // Copying will copy the data, but not request ordering index or the mutex.
   Synchronized(const Synchronized& rhs) : data_{*rhs.wlock()} {}
   Synchronized& operator=(const Synchronized& rhs) {
     *wlock() = *rhs.wlock();
     return *this;
   }
-  /// default Movable
+  // default Movable
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
 
@@ -82,8 +82,8 @@ class Synchronized {
       requires ql::concepts::default_initializable<T>) = default;
   ~Synchronized() = default;
 
-  /// Constructor that is not copy or move, tries to instantiate the underlying
-  /// type via perfect forwarding (this includes the default constructor)
+  // Constructor that is not copy or move, tries to instantiate the underlying
+  // type via perfect forwarding (this includes the default constructor)
   CPP_template(typename Arg, typename... Args)(requires CPP_NOT(
       ql::concepts::same_as<ql::remove_cvref_t<Arg>, Synchronized>))
       QL_EXPLICIT(sizeof...(Args) == 0) Synchronized(Arg&& arg, Args&&... args)
@@ -106,17 +106,17 @@ class Synchronized {
     return f(data_);
   }
 
-  /// const overload of `withWriteLock`
+  // const overload of `withWriteLock`
   template <typename F>
   auto withWriteLock(F f) const {
     std::lock_guard l(mutex());
     return f(data_);
   }
 
-  /// Similar to `withWriteLock`, but additionally guarantees that the request
-  /// with requestNumber 0 is performed first, then comes requestNumber 1 etc.
-  /// If a request number in the range [0...k] is missing, then the program will
-  /// deadlock. See `/src/index/Index.cpp` for an example.
+  // Similar to `withWriteLock`, but additionally guarantees that the request
+  // with requestNumber 0 is performed first, then comes requestNumber 1 etc.
+  // If a request number in the range [0...k] is missing, then the program will
+  // deadlock. See `/src/index/Index.cpp` for an example.
   template <typename F>
   auto withWriteLockAndOrdered(F f, size_t requestNumber) {
     std::unique_lock l(m_);
@@ -225,7 +225,7 @@ class Synchronized {
   friend class LockPtr;  // The LockPtr implementation requires private access
 };
 
-/// handle to a locked Synchronized class
+// handle to a locked Synchronized class
 template <class S, bool isSharedLock, bool isConst>
 class LockPtr {
   using value_type = typename S::value_type;
@@ -261,24 +261,24 @@ class LockPtr {
     }
   }
 
-  /// Access to underlying data. Non const access is only allowed for exclusive
-  /// locks that are not const.
+  // Access to underlying data. Non const access is only allowed for exclusive
+  // locks that are not const.
   template <bool isConstLocal = isConst>
   std::enable_if_t<!isConstLocal, value_type&> operator*() {
     return s().data_;
   }
 
-  /// Access to underlying data.
+  // Access to underlying data.
   const value_type& operator*() const { return s().data_; }
 
-  /// Access to underlying data. Non const access is only allowed for exclusive
-  /// locks that are not const.
+  // Access to underlying data. Non const access is only allowed for exclusive
+  // locks that are not const.
   template <bool isConstLocal = isConst>
   std::enable_if_t<!isConstLocal, value_type*> operator->() {
     return &s().data_;
   }
 
-  /// Access to underlying data.
+  // Access to underlying data.
   const value_type* operator->() const { return &s().data_; }
 
   LockPtr(const LockPtr&) = delete;
