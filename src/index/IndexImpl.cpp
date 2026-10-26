@@ -1642,7 +1642,6 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // count their term frequencies.
     if (addHasWordTriples_) {
       std::string_view content = lit.getContent();
-      const auto& localeManager = vocab_.getLocaleManager();
       // Remove the accents before tokenizing: combining marks are not
       // alphanumeric, so they would otherwise split words.
       std::string contentWithoutAccents;
@@ -1651,7 +1650,8 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
         contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
         content = contentWithoutAccents;
       }
-      for (auto&& word : tokenizeAndNormalizeText(content, localeManager)) {
+      for (auto&& word :
+           tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
         ++result.wordFrequencies_[std::move(word)];
       }
     }
