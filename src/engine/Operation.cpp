@@ -595,9 +595,11 @@ void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
 
 // _____________________________________________________________________________
 std::vector<size_t> Operation::getCostEstimatesChargedForChildren() {
+  // Not piped as a temporary: libc++ would then wrap it in an `owning_view`,
+  // which requires the (deleted) default constructor of the allocator.
+  auto children = getChildren();
   return ::ranges::to_vector(
-      getChildren() |
-      ql::views::transform(&QueryExecutionTree::getCostEstimate));
+      children | ql::views::transform(&QueryExecutionTree::getCostEstimate));
 }
 
 // __________________________________________________________________
