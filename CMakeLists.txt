@@ -325,14 +325,10 @@ FetchContent_Declare(
 #################################
 # libspatialjoin
 ################################
-# TODO<ullingerc> Temporarily points to a helper branch with the fixes from
-# ad-freiburg/util and ad-freiburg/spatialjoin pull requests (distances to lines
-# with two points, lines in collections). Switch back to
-# `ad-freiburg/spatialjoin` once they are merged.
 FetchContent_Declare(
         spatialjoin
-        GIT_REPOSITORY https://github.com/ullingerc/spatialjoin
-        GIT_TAG e336aca9e3633931ad30c7cf6c24303067087880
+        GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
+        GIT_TAG 1177c1bee6203908b39c4e2dda4765aec5f59dee
         SYSTEM
         EXCLUDE_FROM_ALL
 )
