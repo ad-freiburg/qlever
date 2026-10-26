@@ -876,7 +876,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
 
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
-          locatedTriplesState());
+          indexScan->locatedTriplesState());
   bool hasLocatedTriples = !locTriples.isEmpty();
   bool isMaterializedView = indexScan->permutation().permutationType() ==
                             Permutation::Type::MATERIALIZED_VIEW;
@@ -959,7 +959,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   // do the index scan, but something smarter).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle(), locatedTriplesState(),
+      col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
       indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
@@ -1015,7 +1015,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   operation->updateRuntimeInformationWhenOptimizedOut();
 
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle(), locatedTriplesState(), operation->getLimitOffset());
+      cancellationHandle(), operation->locatedTriplesState(),
+      operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
