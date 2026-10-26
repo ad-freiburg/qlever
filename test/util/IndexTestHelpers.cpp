@@ -431,8 +431,8 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{}, namedCache_.get(),
-            materializedViewsManager_, singleThreadExecutor());
+            namedCache_.get(), materializedViewsManager_,
+            singleThreadExecutor());
   };
 
   static ad_utility::HashMap<std::pair<TestIndexConfig, std::string>, Context>

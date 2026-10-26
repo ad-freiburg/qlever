@@ -527,6 +527,13 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
+  // Adding a node takes time linear in the number of nodes so far, so reject
+  // too many nodes before adding them all.
+  auto countNode = [&numNodesInTripleGraph]() {
+    if (++numNodesInTripleGraph > 64) {
+      AD_THROW("At most 64 triples allowed at the moment.");
+    }
+  };
   ad_utility::HashMap<Variable, std::string> optTermForCvar;
   ad_utility::HashMap<Variable, vector<std::string>> potentialTermsForCvar;
   vector<const SparqlTriple*> entityTriples;
@@ -546,18 +553,18 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
               "contains-word is not allowed inside GRAPH clauses or in queries "
               "with FROM/FROM NAMED clauses.");
         }
+        countNode();
         addNodeToTripleGraph(
             TripleGraph::Node{tg._nodeStorage.size(), t.s_.getVariable(), s, t},
             tg);
-        numNodesInTripleGraph++;
       }
     } else if (t.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
+      countNode();
       addNodeToTripleGraph(
           TripleGraph::Node{tg._nodeStorage.size(), t, activeGraphVariable_},
           tg);
-      numNodesInTripleGraph++;
     }
   }
   for (const auto& [cvar, terms] : potentialTermsForCvar) {
@@ -572,13 +579,10 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
           "statement always also needs corresponding ql:contains-word "
           "statement.");
     }
+    countNode();
     addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), currentVar,
                                            optTermForCvar[currentVar], *t),
                          tg);
-    numNodesInTripleGraph++;
-  }
-  if (numNodesInTripleGraph > 64) {
-    AD_THROW("At most 64 triples allowed at the moment.");
   }
   return tg;
 }
@@ -1416,6 +1420,20 @@ void QueryPlanner::applyFiltersIfPossible(
       checkCancellation();
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
+      }
+
+      if constexpr (mode == FilterMode::KeepUnfiltered) {
+        if (!filterAndSubst.filter_.expression_.getExistsExpressions()
+                 .empty()) {
+          // Speculatively applying a filter that contains `EXISTS` to every
+          // candidate subplan multiplies the DP row (the unfiltered plans are
+          // kept alongside) and wraps each candidate in the `ExistsJoin`s for
+          // the filter's argument, which together make planning exponential
+          // in the number of `FILTER (NOT) EXISTS` clauses in a group. Leave
+          // such filters to the final `ReplaceUnfiltered*` passes, which
+          // apply them exactly once per surviving plan.
+          continue;
+        }
       }
 
       // In `SeedSubstitutesOnly` mode there are no joining rounds afterwards
@@ -3494,6 +3512,13 @@ void QueryPlanner::GraphPatternPlanner::visitMaterializedViewQuery(
 void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     parsedQuery::SpatialQuery& spatialQuery) {
   auto config = spatialQuery.toSpatialJoinConfiguration();
+  if (config.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
+    planner_.warnings_.push_back(
+        "The spatial search algorithm `<boundingBox>` is deprecated and will "
+        "be removed in a future version of QLever. Please use "
+        "`<libspatialjoin>` or `<s2>` instead. For more information, please "
+        "see the QLever Docs (https://docs.qlever.dev/geosparql/).");
+  }
 
   // If there is no child graph pattern, we need to construct a neutral element
   std::vector<SubtreePlan> candidatesIn;

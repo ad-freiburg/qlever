@@ -12,6 +12,7 @@
 #include "engine/PermutationSelector.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
+#include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 // Assert that the `type` is a valid value for the `ScanType` enum.
@@ -326,17 +327,20 @@ void HasPredicateScan::computeFreeS(
   // does a lazy scan on the specified predicate and then simply performs a
   // DISTINCT on the result.
   for (const auto& block : hasPattern) {
-    auto patternColumn = block.getColumn(1);
-    auto subjects = block.getColumn(0);
-    for (size_t i : ad_utility::integerRange(block.numRows())) {
-      const auto& pattern = patterns[patternColumn[i].getInt()];
-      for (const auto& predicate : pattern) {
-        if (predicate == objectId) {
-          result.push_back({subjects[i]});
-          break;
-        }
-      }
-    }
+    // A single `block` is the complete input if the pattern scan was read from
+    // the cache, so check for cancellation within the block.
+    ad_utility::chunkedForEach(
+        ::ranges::views::zip(block.getColumn(0), block.getColumn(1)),
+        [&patterns, &result, objectId](const auto& subjectAndPattern) {
+          const auto& [subject, patternId] = subjectAndPattern;
+          for (const auto& predicate : patterns[patternId.getInt()]) {
+            if (predicate == objectId) {
+              result.push_back({subject});
+              break;
+            }
+          }
+        },
+        cancellationChecker());
   }
   *resultTable = std::move(result).toDynamic();
 }
@@ -367,14 +371,16 @@ void HasPredicateScan::computeFullScan(
   IdTableStatic<2> result = std::move(*resultTable).toStatic<2>();
   result.reserve(resultSize);
   for (const auto& block : hasPattern) {
-    auto patternColumn = block.getColumn(1);
-    auto subjects = block.getColumn(0);
-    for (size_t i : ad_utility::integerRange(block.numRows())) {
-      const auto& pattern = patterns[patternColumn[i].getInt()];
-      for (const auto& predicate : pattern) {
-        result.push_back({subjects[i], predicate});
-      }
-    }
+    // See `computeFreeS` for why we check for cancellation within the block.
+    ad_utility::chunkedForEach(
+        ::ranges::views::zip(block.getColumn(0), block.getColumn(1)),
+        [&patterns, &result](const auto& subjectAndPattern) {
+          const auto& [subject, patternId] = subjectAndPattern;
+          for (const auto& predicate : patterns[patternId.getInt()]) {
+            result.push_back({subject, predicate});
+          }
+        },
+        cancellationChecker());
   }
   *resultTable = std::move(result).toDynamic();
 }
@@ -386,13 +392,15 @@ Result HasPredicateScan::computeSubqueryS(
   auto subresult = subtree().getResult();
   auto patternCol = subtreeColIdx();
   auto result = std::move(*dynResult).toStatic<WIDTH>();
-  for (const auto& row : subresult->idTableView().asStaticView<WIDTH>()) {
-    const auto& pattern = patterns[row[patternCol].getInt()];
-    for (auto predicate : pattern) {
-      result.push_back(row);
-      result.back()[patternCol] = predicate;
-    }
-  }
+  ad_utility::chunkedForEach(
+      subresult->idTableView().asStaticView<WIDTH>(),
+      [&patterns, &result, patternCol](const auto& row) {
+        for (auto predicate : patterns[row[patternCol].getInt()]) {
+          result.push_back(row);
+          result.back()[patternCol] = predicate;
+        }
+      },
+      cancellationChecker());
   return {std::move(result).toDynamic(), resultSortedOn(),
           subresult->getSharedLocalVocab()};
 }

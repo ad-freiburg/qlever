@@ -29,7 +29,9 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MergeBlock.h"
 #include "index/vocabulary_merger/QueueWord.h"
+#include "index/vocabulary_merger/Segment.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "util/RegexSet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
 
@@ -134,6 +136,25 @@ makeMergedBlocks(const std::vector<std::vector<WordOccurrence>>& occurrences) {
     }
   }
   return blocks;
+}
+
+// Build the segment (see `index/vocabulary_merger/Segment.h`) of a single
+// block with the given `words`, all from the partial vocabulary `partial` with
+// the local indices `0, 1, ...` and all external, for a vocabulary with
+// `numPartialVocabularies` partial vocabularies that is written by the
+// `writer`. The words have to be sorted according to `lessThan`.
+inline std::shared_ptr<const ad_utility::vocabulary_merger::detail::Segment>
+makeSegment(const std::vector<std::string>& words, uint32_t partial,
+            size_t numPartialVocabularies, ParallelWordWriterBase& writer) {
+  using namespace ad_utility::vocabulary_merger::detail;
+  std::vector<MergedBlock> blocks;
+  blocks.emplace_back(testBufferPools());
+  for (size_t i = 0; i < words.size(); ++i) {
+    pushWord(blocks[0], words[i], true, partial, i);
+  }
+  return std::make_shared<const Segment>(
+      buildSegment(std::move(blocks), writer, ad_utility::RegexSet{},
+                   numPartialVocabularies, lessThan));
 }
 
 // The number and filenames of a set of partial vocabularies, as created by

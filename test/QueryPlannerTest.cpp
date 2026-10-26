@@ -2857,6 +2857,27 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
 }
 
+// Test that a group with many `FILTER (NOT) EXISTS` clauses is planned
+// quickly. These filters used to be applied speculatively in every round of
+// the dynamic programming, which made planning time and memory exponential in
+// their number (about four times per clause).
+TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
+  std::string query = R"(
+  SELECT ?v WHERE {
+    ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .
+    FILTER NOT EXISTS { ?v <q0> ?x0 . FILTER (?x0 != ?w1) }
+    FILTER NOT EXISTS { ?v <q1> ?x1 . FILTER (?x1 != ?w1) }
+    FILTER NOT EXISTS { ?v <q2> ?x2 . FILTER (?x2 != ?w1) }
+    FILTER NOT EXISTS { ?v <q3> ?x3 . FILTER (?x3 != ?w1) }
+    FILTER NOT EXISTS { ?v <q4> ?x4 . FILTER (?x4 != ?w1) }
+    FILTER NOT EXISTS { ?v <q5> ?x5 . FILTER (?x5 != ?w1) }
+    FILTER NOT EXISTS { ?v <q6> ?x6 . FILTER (?x6 != ?w1) }
+    FILTER NOT EXISTS { ?v <q7> ?x7 . FILTER (?x7 != ?w1) }
+  })";
+  EXPECT_NO_THROW(
+      h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
+}
+
 // ____________________________________________________________________________
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");

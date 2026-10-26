@@ -127,8 +127,7 @@ TEST(SparqlExpressionParser, First) {
       table.asStaticView<0>(),
       alloc,
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   auto result = resultAsExpression->evaluate(&input);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
   ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);

@@ -15,6 +15,7 @@
 #include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <future>
+#include <tuple>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
@@ -274,6 +275,62 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       (idTableFromRowGenerator<0>(generator(), NUM_COLS)),
       ::testing::ContainsRegex("Insufficient memory"));
+}
+
+// Test that the sorter can be cancelled via its cancellation handle, both
+// while the rows are pushed (the sorts of the blocks) and in the merge phase.
+TEST(CompressedExternalIdTable, sorterIsCancellable) {
+  auto test = [](bool cancelBeforePushing) {
+    // A sorter whose 1 KB memory limit makes the 1000 rows blocks of 15 rows.
+    std::string filename = gtestCurrentTestName();
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename,
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        handle};
+    CopyableIdTable<0> randomTable =
+        createRandomlyFilledIdTable(1000, NUM_COLS);
+
+    // Push all rows and consume the sorted result, cancelling before the merge
+    // phase unless the handle was already cancelled before pushing.
+    auto pushAndSort = [&]() {
+      for (const auto& row : randomTable) {
+        sorter.push(row);
+      }
+      if (!cancelBeforePushing) {
+        handle->cancel(ad_utility::CancellationState::MANUAL);
+      }
+      std::ignore = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
+    };
+
+    // Either way, the cancellation surfaces as a `CancellationException`.
+    if (cancelBeforePushing) {
+      handle->cancel(ad_utility::CancellationState::MANUAL);
+    }
+    EXPECT_THROW(pushAndSort(), ad_utility::CancellationException);
+  };
+  test(true);
+  test(false);
+}
+
+// Test that the cancellation handle of the sorter must not be `nullptr`.
+TEST(CompressedExternalIdTable, sorterRequiresCancellationHandle) {
+  auto makeSorter = []() {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        gtestCurrentTestName(),
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        nullptr};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeSorter(), ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
 // Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.
