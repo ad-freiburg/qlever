@@ -207,7 +207,6 @@ class OperationTestFixture : public testing::Test {
       index,
       &cache,
       makeAllocator(),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
@@ -292,14 +291,88 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
       operation.precomputedResultBecauseSiblingOfService().has_value());
 }
 
-// _____________________________________________________________________________
+// Test that the warnings of an operation are part of the `warnings` detail of
+// its runtime information, both when the result is computed and when it is
+// read from the cache.
+TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
+  // An operation that adds a warning during its computation.
+  struct WarningOperation : ValuesForTesting {
+    using ValuesForTesting::ValuesForTesting;
+    Result computeResult(bool requestLaziness) override {
+      addWarning("during computation");
+      return ValuesForTesting::computeResult(requestLaziness);
+    }
+  };
+  auto warningsOfUpdate = [this](size_t i) {
+    return nlohmann::json::parse(jsonHistory.at(i))["details"]["warnings"];
+  };
 
+  // Computed: A warning from before the computation (e.g. from the query
+  // planning) is part of all updates, the one from the computation is part of
+  // the final update.
+  {
+    WarningOperation op{&qec, makeIdTableFromVector({{1}}), {Variable{"?x"}}};
+    op.addWarning("before computation");
+    op.getResult(true);
+    ASSERT_FALSE(jsonHistory.empty());
+    EXPECT_EQ(warningsOfUpdate(0),
+              nlohmann::json(std::vector{"before computation"}));
+    EXPECT_EQ(warningsOfUpdate(jsonHistory.size() - 1),
+              nlohmann::json(
+                  std::vector{"before computation", "during computation"}));
+    EXPECT_THAT(op.collectWarnings(),
+                ElementsAre("before computation", "during computation"));
+  }
+
+  // Read from the cache: The warnings of the original computation are kept in
+  // the runtime information, in addition to the new one.
+  jsonHistory.clear();
+  {
+    WarningOperation op{&qec, makeIdTableFromVector({{1}}), {Variable{"?x"}}};
+    // Already part of the cached warnings, so it must not be duplicated.
+    op.addWarning("before computation");
+    op.addWarning("other");
+    op.getResult(true);
+    EXPECT_NE(op.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(warningsOfUpdate(jsonHistory.size() - 1),
+              nlohmann::json(std::vector{"before computation",
+                                         "during computation", "other"}));
+    // TODO<ullingerc> `collectWarnings` (used for the `warnings` of the
+    // result) should also include the warnings of the original computation.
+    EXPECT_THAT(op.collectWarnings(),
+                ElementsAre("before computation", "other"));
+  }
+}
+
+// Test that an operation and its child use the cancellation handle of their
+// context, and that cancelling the handle aborts the running computation.
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
-  auto qec = getQec();
+  // Use a separate context, such that the handle of the context that is shared
+  // between the tests (see `getQec`) is not cancelled.
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "verifyExceptionIsThrownOnCancellation", TestIndexConfig{}));
+  QueryResultCache cache;
+  NamedResultCache namedCache;
   auto handle = std::make_shared<CancellationHandle<>>();
+  QueryExecutionContext qec{index,
+                            &cache,
+                            makeAllocator(),
+                            &namedCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            executor(),
+                            ad_utility::noop,
+                            false,
+                            false,
+                            QueryExecutionContext::DisableCaching::False,
+                            false,
+                            handle};
   ShallowParentOperation operation =
-      ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetCancellationHandle(handle);
+      ShallowParentOperation::of<StallForeverOperation>(&qec);
+  // All operations use the handle of the context.
+  EXPECT_EQ(operation.cancellationHandle(), handle);
+  EXPECT_EQ(
+      operation.getChildren().at(0)->getRootOperation()->cancellationHandle(),
+      handle);
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
@@ -308,26 +381,6 @@ TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(operation.computeResult(false),
                                         ::testing::HasSubstr("timed out"),
                                         ad_utility::CancellationException);
-}
-
-// _____________________________________________________________________________
-
-TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
-  constexpr auto timeout = 5ms;
-  auto qec = getQec();
-  ShallowParentOperation operation =
-      ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetTimeConstraint(timeout);
-
-  auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
-      operation.getChildren().at(0)->getRootOperation());
-
-  EXPECT_GT(operation.publicRemainingTime(), 0ms);
-  EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
-  std::this_thread::sleep_for(timeout);
-  // Verify time is up for parent and child
-  EXPECT_EQ(operation.publicRemainingTime(), 0ms);
-  EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }
 
 // ________________________________________________
@@ -469,6 +522,60 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   EXPECT_EQ(childRti.totalTime_, 41ms);
   EXPECT_EQ(childRti.originalTotalTime_, 41ms);
   EXPECT_EQ(childRti.originalOperationTime_, 41ms);
+
+  // The total time of an optimized out child is updated from its children,
+  // which might have been computed after the child was optimized out.
+  auto grandchild = std::make_shared<RuntimeInformation>();
+  grandchild->totalTime_ = 5ms;
+  auto optimizedOutChild = std::make_shared<RuntimeInformation>();
+  optimizedOutChild->status_ = Status::optimizedOut;
+  optimizedOutChild->children_ = {grandchild};
+  rti.children_ = {optimizedOutChild};
+  rti.totalTime_ = 0ms;
+  valuesForTesting.externalLimitApplied_ = false;
+  valuesForTesting.updateRuntimeStats(false, 1, 1, 7ms);
+
+  EXPECT_EQ(optimizedOutChild->totalTime_, 5ms);
+  EXPECT_EQ(rti.totalTime_, 7ms);
+  EXPECT_EQ(rti.originalOperationTime_, 2ms);
+}
+
+// Test that the success and the failure update of the runtime information
+// refresh the total time of an optimized out child from its children.
+TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
+  auto qec = getQec();
+  Sort sort{qec,
+            ad_utility::makeExecutionTree<ValuesForTesting>(
+                qec, makeIdTableFromVector({{1}}),
+                std::vector<std::optional<Variable>>{Variable{"?x"}}),
+            {0}};
+  // The child of the `Sort` was optimized out, but its own child is only
+  // computed afterwards.
+  auto& childRti = sort.getChildren().at(0)->getRootOperation()->runtimeInfo();
+  childRti.status_ = Status::optimizedOut;
+  auto grandchild = std::make_shared<RuntimeInformation>();
+  childRti.children_ = {grandchild};
+
+  grandchild->totalTime_ = 5ms;
+  sort.updateRuntimeInformationOnSuccess(1, CacheStatus::computed, 7ms,
+                                         std::nullopt);
+  EXPECT_EQ(childRti.totalTime_, 5ms);
+  EXPECT_EQ(sort.runtimeInfo().getOperationTime(), 2ms);
+
+  grandchild->totalTime_ = 6ms;
+  sort.updateRuntimeInformationOnFailure(7ms);
+  EXPECT_EQ(childRti.totalTime_, 6ms);
+  EXPECT_EQ(sort.runtimeInfo().getOperationTime(), 1ms);
+
+  // The runtime information of a result read from the cache is final and its
+  // children are left untouched.
+  grandchild->totalTime_ = 8ms;
+  RuntimeInformation cached;
+  cached.children_ = {
+      sort.getChildren().at(0)->getRootOperation()->getRuntimeInfoPointer()};
+  sort.updateRuntimeInformationOnSuccess(1, CacheStatus::cachedNotPinned, 7ms,
+                                         std::move(cached));
+  EXPECT_EQ(childRti.totalTime_, 6ms);
 }
 
 // _____________________________________________________________________________
@@ -538,7 +645,6 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
@@ -569,7 +675,6 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
@@ -607,7 +712,6 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
@@ -684,7 +788,6 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),

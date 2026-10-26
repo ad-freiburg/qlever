@@ -129,7 +129,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
            auto begOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
            row[numDefinedColumns - 1] =
-               Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
+               row[numDefinedColumns - 1].incremented();
            auto endOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
            resultMightBeUnsorted = true;

@@ -17,8 +17,8 @@
 namespace columnBasedIdTable::splitLayout {
 
 // A random-access iterator over a `BasicIdColumnView<IsConst>`. Dereferencing
-// yields a `BasicIdRef<IsConst>` proxy computed from the current pointer
-// pair.
+// yields the restricted proxy reference `BasicIdRef<IsConst>::Base` computed
+// from the current pointer pair.
 //
 // NOTE: deliberately does NOT use the generic
 // `ad_utility::IteratorForAccessOperator` (pointer-back-to-container +
@@ -32,13 +32,18 @@ template <bool IsConst>
 class BasicIdColumnIterator {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
-  using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+      std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
+  using DatatypePointer =
+      std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
 
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
   using value_type = Id;
+  // `reference` is the full `BasicIdRef`, which code has to request explicitly
+  // to write via a variable. Dereferencing yields `reference_restricted`, so
+  // that `auto x = *it; x = id;` does not compile (see `IdRef.h`).
   using reference = BasicIdRef<IsConst>;
+  using reference_restricted = typename BasicIdRef<IsConst>::Base;
   using pointer = void;
 
  private:
@@ -62,8 +67,8 @@ class BasicIdColumnIterator {
       const BasicIdColumnIterator<false>& other)  // NOSONAR, intended
       : payload_{other.payload_}, datatype_{other.datatype_} {}
 
-  reference operator*() const { return {payload_, datatype_}; }
-  reference operator[](difference_type n) const {
+  reference_restricted operator*() const { return {payload_, datatype_}; }
+  reference_restricted operator[](difference_type n) const {
     return {payload_ + n, datatype_ + n};
   }
 

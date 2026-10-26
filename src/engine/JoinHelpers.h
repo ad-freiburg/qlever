@@ -199,7 +199,7 @@ inline auto getRowAdderForJoin(
     AddCombinedRowToIdTable::BlockwiseCallback yieldTable) {
   return AddCombinedRowToIdTable{numJoinColumns,
                                  IdTable{op.getResultWidth(), op.allocator()},
-                                 op.getCancellationHandle(),
+                                 op.cancellationHandle(),
                                  keepJoinColumns,
                                  CHUNK_SIZE,
                                  std::move(yieldTable)};

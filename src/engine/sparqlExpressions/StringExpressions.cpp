@@ -33,7 +33,7 @@ struct ToLiteral {
                               descriptor = std::nullopt) const {
     return LiteralOrIri{
         ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+            normalizedContent, descriptor)};
   }
 };
 static constexpr ToLiteral toLiteral{};
@@ -108,23 +108,23 @@ struct LiftStringFunction {
 // consideration within the `IriOrUriValueGetter`, hence automatically
 // ignores values like `1`, `true`, `Date` etc.
 
-const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
-  AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(litOrIri));
-  const auto& baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
+const Iri& extractIri(const IdOrLiteralOrIri& litOrIri) {
+  AD_CORRECTNESS_CHECK(std::holds_alternative<LiteralOrIri>(litOrIri));
+  const auto& baseIriOrUri = std::get<LiteralOrIri>(litOrIri);
   AD_CORRECTNESS_CHECK(baseIriOrUri.isIri());
   return baseIriOrUri.getIri();
 }
 
 struct ApplyBaseIfPresent {
   IdOrLiteralOrIri operator()(
-      IdOrLocalVocabEntry iri,
+      IdOrLiteralOrIri iri,
       const std::optional<qlever::util::ParsedUri>& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
       return std::get<Id>(iri);
     }
     if (!base.has_value()) {
-      return std::get<LocalVocabEntry>(std::move(iri));
+      return std::get<LiteralOrIri>(std::move(iri));
     }
     return LiteralOrIri{extractIri(iri).resolveAgainstBase(base.value())};
   }
@@ -151,8 +151,7 @@ struct UpperOrLowerCaseImpl {
       return Id::makeUndefined();
     }
     auto& literal = input.value();
-    auto newContent =
-        std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
+    auto newContent = std::invoke(toLowerOrToUpper, literal.getContent());
     literal.replaceContent(newContent);
     return LiteralOrIri(std::move(literal));
   }
@@ -230,7 +229,7 @@ class SubstrImpl {
     if (lengthInt < 0) {
       lengthInt = 0;
     }
-    const auto& str = asStringViewUnsafe(s.value().getContent());
+    const auto& str = s.value().getContent();
     auto substr = ad_utility::getUTF8Substring(str, startInt, lengthInt);
 
     s.value().setSubstr(substr.data() - str.data(), substr.size());
@@ -322,7 +321,7 @@ struct StrAfterOrBeforeImpl {
          literal.getLanguageTag() != patternLit.getLanguageTag())) {
       return Id::makeUndefined();
     }
-    const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
+    const auto& pattern = optPattern.value().getContent();
     //  Required by the SPARQL standard.
     if (pattern.empty()) {
       if (isStrAfter) {
@@ -333,7 +332,7 @@ struct StrAfterOrBeforeImpl {
       }
     }
     auto literalContent = literal.getContent();
-    auto pos = asStringViewUnsafe(literalContent).find(pattern);
+    auto pos = literalContent.find(pattern);
     if (pos >= literalContent.size()) {
       return toLiteral("");
     }
@@ -387,7 +386,7 @@ struct ReplaceImpl {
     if (!s.has_value() || !pattern || !replacement.has_value()) {
       return Id::makeUndefined();
     }
-    std::string in(asStringViewUnsafe(s.value().getContent()));
+    std::string in(s.value().getContent());
     const auto& pat = *pattern;
     // Check for invalid regexes.
     if (!pat.ok()) {
@@ -435,7 +434,7 @@ class ConcatExpression : public detail::VariadicExpression {
     auto valueGetter =
         sparqlExpression::detail::LiteralValueGetterWithoutStrFunction{};
     std::variant<std::optional<Literal>, LiteralVec> result =
-        Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""));
+        Literal::literalWithNormalizedContent("");
     bool isFirstLiteral = true;
 
     auto moveLiteralToResult =
@@ -604,8 +603,7 @@ struct StrIriDtTag {
     }
     // Try to encode literals with suitable datatype directly as a `ValueId`.
     try {
-      std::string_view content =
-          asStringViewUnsafe(literal.value().getContent());
+      std::string_view content = literal.value().getContent();
       // We do not need to encode numeric IRIs because the behavior of the
       // regular one is also valid.
       EncodedIriManager ev;

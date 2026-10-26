@@ -502,8 +502,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
       table.asStaticView<0>(),
       alloc,
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   AD_CONTRACT_CHECK(rightValue.size() == 5);
   context._beginIndex = 0;
   context._endIndex = 5;
@@ -808,30 +807,37 @@ TEST(RelationalExpression, VariableAndVariable) {
 
 // `rightValue` must be a constant. Sort the `IdTable` of the `TestContext`
 // `ctx` by the variable `leftValue` and then check that the expression
-// `leftValue Comparator rightValue`, when evaluated on this sortest `IdTable`
-// yields the `expected` result. The type of `expected`, `SetOfIntervals`
-// indicates that the expression was evaluated using binary search on the sorted
-// table.
-template <Comparison Comp, typename T>
+// `leftValue Comparator rightValue`, when evaluated on this sorted `IdTable`
+// yields the `expected` result. If the type of `expected` is `SetOfIntervals`,
+// this indicates that the expression was evaluated using binary search on the
+// sorted table. If it is `std::vector<Id>`, the result contains UNDEF values,
+// which a `SetOfIntervals` cannot represent, so the expression must have been
+// evaluated row by row.
+template <Comparison Comp, typename T,
+          typename Expected = ad_utility::SetOfIntervals>
 void testSortedVariableAndConstant(
-    Variable leftValue, T rightValue, ad_utility::SetOfIntervals expected,
+    Variable leftValue, T rightValue, Expected expected,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(
       l, "test between sorted variable and constant was called here");
+  auto matcher = [&]() {
+    if constexpr (std::is_same_v<Expected, ad_utility::SetOfIntervals>) {
+      return ::testing::VariantWith<ad_utility::SetOfIntervals>(
+          ::testing::Eq(expected));
+    } else {
+      static_assert(std::is_same_v<Expected, std::vector<Id>>);
+      return ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+          ::testing::ElementsAreArray(expected));
+    }
+  }();
   TestContext ctx = TestContext::sortedBy(leftValue);
   auto expression = makeExpression<Comp>(leftValue, liftToValueId(rightValue));
-  auto resultAsVariant = expression.evaluate(&ctx.context);
-  EXPECT_THAT(resultAsVariant,
-              ::testing::VariantWith<ad_utility::SetOfIntervals>(
-                  ::testing::Eq(expected)));
+  EXPECT_THAT(expression.evaluate(&ctx.context), matcher);
 
   if constexpr (Comp == EQ) {
     auto expression =
         makeInExpression(leftValue, liftToValueId(std::move(rightValue)));
-    auto resultAsVariant = expression.evaluate(&ctx.context);
-    EXPECT_THAT(resultAsVariant,
-                ::testing::VariantWith<ad_utility::SetOfIntervals>(
-                    ::testing::Eq(expected)));
+    EXPECT_THAT(expression.evaluate(&ctx.context), matcher);
   }
 }
 
@@ -855,9 +861,12 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<LT>(ints, int64_t{-1}, {{}, 3});
   testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}, 3});
   testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}, 3});
-  // ints and strings are always incompatible.
+  // ints and strings are always incompatible, so the result is UNDEF, which
+  // can't be represented by a `SetOfIntervals`.
+  auto U = Id::makeUndefined();
+  auto B = ad_utility::testing::BoolId;
   testSortedVariableAndConstant<NE>(ints, IdOrLocalVocabEntry{lve("a string")},
-                                    {{}, 3});
+                                    std::vector{U, U, U});
 
   testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}, 3});
   testSortedVariableAndConstant<EQ>(doubles, 2.8, {{{1, 2}}, 3});
@@ -875,20 +884,154 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
                                     {{{0, 2}}, 3});
   testSortedVariableAndConstant<NE>(
       vocab, IdOrLocalVocabEntry{lve("\"älpha\"")}, {{{0, 1}, {2, 3}}, 3});
-  testSortedVariableAndConstant<LE>(vocab, inf, {{}, 3});
 
-  // Note: vocab entries and numeric values are not compatible, so every
-  // comparison returns false.
-  testSortedVariableAndConstant<NE>(vocab, 3.2, {{}, 3});
+  // Vocab entries and numeric values are not compatible, so every comparison
+  // returns UNDEF.
+  testSortedVariableAndConstant<LE>(vocab, inf, std::vector{U, U, U});
+  testSortedVariableAndConstant<NE>(vocab, 3.2, std::vector{U, U, U});
 
-  // Note: only *numeric* values that are not equal to 1.0 are considered here.
-  testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}, 3});
-  testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}, 3});
+  // The comparison of the IRI in `?mixed` with a numeric value and of the
+  // numeric values with an IRI is UNDEF.
+  testSortedVariableAndConstant<NE>(mixed, 1.0,
+                                    std::vector{B(false), B(true), U});
+  testSortedVariableAndConstant<GT>(mixed, -inf,
+                                    std::vector{B(true), B(true), U});
   testSortedVariableAndConstant<LE>(
       mixed,
       IdOrLocalVocabEntry{
           LocalVocabEntry::fromIriref("<z>", qec->getLocalVocabContext())},
-      {{{2, 3}}, 3});
+      std::vector{U, U, B(true)});
+}
+
+// Test that rows for which a comparison with a sorted variable is UNDEF stay
+// UNDEF when the result is negated and do not become `true` (regression test
+// for issue #3716).
+TEST(RelationalExpression, NegatedComparisonWithSortedVariableAndUndef) {
+  auto U = Id::makeUndefined();
+  auto B = ad_utility::testing::BoolId;
+  auto evaluateNegated = [](const Variable& var, Id constant) {
+    TestContext ctx = TestContext::sortedBy(var);
+    auto expression =
+        makeUnaryNegateExpression(std::make_unique<GreaterThanExpression>(
+            std::array<SparqlExpression::Ptr, 2>{
+                std::make_unique<VariableExpression>(var),
+                std::make_unique<IdExpression>(constant)}));
+    return expression->evaluate(&ctx.context);
+  };
+  // The sorted `?mixed` column is `1, -0.1, <x>`.
+  EXPECT_THAT(evaluateNegated(Variable{"?mixed"}, IntId(0)),
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                  ::testing::ElementsAre(B(false), B(true), U)));
+  // The sorted `?everything` column starts with UNDEF, the other entries are
+  // strings, which are incompatible with numeric values.
+  EXPECT_THAT(evaluateNegated(Variable{"?everything"}, IntId(0)),
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                  ::testing::ElementsAre(U, U, U)));
+}
+
+// Test that for encoded IRIs only `EQ` and `NE` are evaluated using binary
+// search (they are ordered by their encoding, which differs from their semantic
+// order, see issue #2448).
+TEST(RelationalExpression, EncodedValsWithSortedVariable) {
+  auto E = [](uint64_t i) { return Id::makeFromEncodedVal(i); };
+  TestContext ctx;
+  ctx.table.clear();
+  ctx.table.setNumColumns(1);
+  for (auto i : {1, 2, 3}) {
+    ctx.table.push_back({E(i)});
+  }
+  ctx.context._inputTable = ctx.table.asStaticView<0>();
+  ctx.context._beginIndex = 0;
+  ctx.context._endIndex = ctx.table.size();
+  Variable var{"?encoded"};
+  ctx.varToColMap.clear();
+  ctx.varToColMap[var] = makeAlwaysDefinedColumn(0);
+  ctx.context._columnsByWhichResultIsSorted = {0};
+
+  using ad_utility::SetOfIntervals;
+  EXPECT_THAT(makeExpression<EQ>(var, E(2)).evaluate(&ctx.context),
+              ::testing::VariantWith<SetOfIntervals>(
+                  ::testing::Eq(SetOfIntervals{{{1, 2}}, 3})));
+  EXPECT_THAT(makeExpression<NE>(var, E(2)).evaluate(&ctx.context),
+              ::testing::VariantWith<SetOfIntervals>(
+                  ::testing::Eq(SetOfIntervals{{{0, 1}, {2, 3}}, 3})));
+  auto B = ad_utility::testing::BoolId;
+  EXPECT_THAT(makeExpression<LT>(var, E(2)).evaluate(&ctx.context),
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                  ::testing::ElementsAre(B(true), B(false), B(false))));
+}
+
+// Test comparisons with a `SetOfIntervals` (the result of, for example, a
+// comparison that was evaluated using binary search on a sorted input).
+TEST(RelationalExpression, SetOfIntervals) {
+  auto T = Id::makeFromBool(true);
+  auto F = Id::makeFromBool(false);
+  using S = ad_utility::SetOfIntervals;
+  // The `TestContext` has three rows. `set` is `true, true, false`, `other` is
+  // `false, true, true`.
+  S set{{{0, 2}}, 3};
+  S other{{{1, 3}}, 3};
+
+  // Comparisons with a boolean constant or another `SetOfIntervals` are
+  // computed on the intervals and again yield a `SetOfIntervals`.
+  auto expectSet = [](auto expression, S expected,
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    EXPECT_THAT(expression.evaluate(&testContext().context),
+                ::testing::VariantWith<S>(::testing::Eq(expected)));
+  };
+  expectSet(makeExpression<EQ>(set, T), set);
+  expectSet(makeExpression<EQ>(T, set), set);
+  expectSet(makeExpression<EQ>(set, F), S{{{2, 3}}, 3});
+  expectSet(makeExpression<NE>(set, F), set);
+  expectSet(makeExpression<LT>(set, T), S{{{2, 3}}, 3});
+  expectSet(makeExpression<GT>(T, set), S{{{2, 3}}, 3});
+  expectSet(makeExpression<GE>(set, F), S{{{0, 3}}, 3});
+  expectSet(makeExpression<LT>(set, F), S{{}, 3});
+  expectSet(makeExpression<EQ>(set, other), S{{{1, 2}}, 3});
+  expectSet(makeExpression<NE>(set, other), S{{{0, 1}, {2, 3}}, 3});
+  expectSet(makeExpression<LT>(set, other), S{{{2, 3}}, 3});
+  expectSet(makeExpression<GE>(set, other), S{{{0, 2}}, 3});
+  expectSet(makeInExpression(set, T), set);
+  // An `IN` with several elements combines the results with an `OR`, which
+  // for type-erased expressions (`CHEAPER_COMPILATION`) always returns a
+  // materialized vector instead of a `SetOfIntervals`.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+  auto expectIds = [](auto expression, std::vector<Id> expected) {
+    EXPECT_THAT(expression.evaluate(&testContext().context),
+                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                    ::testing::ElementsAreArray(expected)));
+  };
+  expectIds(makeInExpression(set, F, T), {T, T, T});
+#else
+  expectSet(makeInExpression(set, F, T), S{{{0, 3}}, 3});
+#endif
+
+  // Other comparisons are evaluated row by row.
+  testWithExplicitIdResult<GT>(
+      set, VectorWithMemoryLimit<Id>({T, F, F}, makeAllocator()), {F, T, F});
+  testWithExplicitIdResult<NE>(
+      VectorWithMemoryLimit<Id>({T, F, F}, makeAllocator()), set, {F, T, F});
+  testWithExplicitIdResult<LE>(
+      set, VectorWithMemoryLimit<Id>({F, F, T}, makeAllocator()), {F, F, T});
+  // A constant that is not a boolean is incompatible with the booleans.
+  auto U = Id::makeUndefined();
+  testWithExplicitIdResult<NE>(IntId(1), set, {U, U, U});
+  testWithExplicitIdResult<LT>(IntId(0), set, {U, U, U});
+
+  // The `SetOfIntervals` is computed by a nested comparison on a sorted input.
+  // Sorted by `?ints`, the column is `0, 1, -1`.
+  TestContext ctx = TestContext::sortedBy(Variable{"?ints"});
+  auto inner = std::make_unique<relational::RelationalExpression<GE>>(
+      std::array<SparqlExpression::Ptr, 2>{
+          std::make_unique<VariableExpression>(Variable{"?ints"}),
+          std::make_unique<IdExpression>(IntId(0))});
+  EXPECT_THAT(inner->evaluate(&ctx.context),
+              ::testing::VariantWith<S>(::testing::Eq(set)));
+  auto outer = relational::RelationalExpression<EQ>(
+      {std::move(inner), std::make_unique<IdExpression>(T)});
+  EXPECT_THAT(outer.evaluate(&ctx.context),
+              ::testing::VariantWith<S>(::testing::Eq(set)));
 }
 
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {

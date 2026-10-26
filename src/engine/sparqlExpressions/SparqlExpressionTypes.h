@@ -12,11 +12,14 @@
 #include <vector>
 
 #include "backports/keywords.h"
+#include "engine/OrderByComparator.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -34,7 +37,7 @@ using ad_utility::VectorWithMemoryLimit;
 // `ExpressionResult`. `IdOrLiteralOrIri` is the lighter type that expression
 // helpers can return without needing vocab position bounds; it gets promoted
 // to `IdOrLocalVocabEntry` via `promoteToLocalVocabEntry` at the boundary.
-using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using IdOrLocalVocabEntry = ::IdOrLocalVocabEntry;
 using IdOrLiteralOrIri =
     std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 // Printing for GTest.
@@ -117,7 +120,7 @@ struct EvaluationContext {
 
   /// The input is sorted on these columns. This information can be used to
   /// perform efficient relational operations like `equal` or `less than`
-  std::vector<ColumnIndex> _columnsByWhichResultIsSorted;
+  qlm::vector<ColumnIndex> _columnsByWhichResultIsSorted;
 
   /// Let the expression evaluation also respect the memory limit.
   ad_utility::AllocatorWithLimit<Id> _allocator;
@@ -147,12 +150,9 @@ struct EvaluationContext {
 
   ad_utility::SharedCancellationHandle cancellationHandle_;
 
-  // A point in time at which the evaluation of the expression is to be
-  // cancelled because of a timeout. This is used by mechanisms that can't use
-  // the `cancellationHandle_` directly, like the sorting in a `COUNT DISTINCT
-  // *` expression.
-  using TimePoint = std::chrono::steady_clock::time_point;
-  TimePoint deadline_;
+  // The order of `ORDER BY`, which `MIN` and `MAX` use. It is constructed once
+  // here, because its construction is too expensive for each comparison.
+  OrderByComparator orderByComparator_;
 
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
@@ -160,22 +160,18 @@ struct EvaluationContext {
                     IdTableView<0> inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle,
-                    TimePoint deadline);
+                    ad_utility::SharedCancellationHandle cancellationHandle);
 
-  /// Overload that accepts a materialized `IdTable` and converts it to a view.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnMap& variableToColumnMap,
-                    const IdTable& inputTable,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle,
-                    TimePoint deadline)
-      : EvaluationContext(qec, variableToColumnMap,
-                          inputTable.asStaticView<0>(), allocator, localVocab,
-                          std::move(cancellationHandle), deadline) {}
+  // The `Id`s of `variable` in the rows `[_beginIndex, _endIndex)` if the input
+  // is sorted by `variable`, `std::nullopt` otherwise.
+  std::optional<ql::span<const Id>> getSortedColumnOrNullopt(
+      const Variable& variable) const;
 
-  bool isResultSortedBy(const Variable& variable);
+  // Like `getSortedColumnOrNullopt`, but also `std::nullopt` if the column
+  // contains UNDEF.
+  std::optional<ql::span<const Id>> getSortedAlwaysDefinedColumnOrNullopt(
+      const Variable& variable) const;
+
   // The size (in number of elements) that this evaluation context refers to.
   [[nodiscard]] size_t size() const;
 
@@ -206,6 +202,8 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
+            // NOTE: `el` cannot be an IRI that has to be encoded as an `Id`,
+            // see `toIdOrLocalVocabEntry`.
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
           } else {
@@ -391,8 +389,8 @@ using PromoteToLocalVocabEntry =
                        T>;
 
 // Helper function to upgrade the variant type from `IdOrLiteralOrIri` to
-// `IdOrLocalVocabEntry` by wrapping the `LiteralOrIri` in a `LocalVocabEntry`.
-// For other types, the functor just returns the input as is.
+// `IdOrLocalVocabEntry` using `toIdOrLocalVocabEntry`. For other types, the
+// functor just returns the input as is.
 template <typename T>
 decltype(auto) promoteToLocalVocabEntry(T&& value,
                                         const LocalVocabContext& context) {
@@ -401,7 +399,7 @@ decltype(auto) promoteToLocalVocabEntry(T&& value,
         ad_utility::OverloadCallOperator{
             [](Id id) -> IdOrLocalVocabEntry { return id; },
             [&context](auto&& literalOrIri) -> IdOrLocalVocabEntry {
-              return {LocalVocabEntry{AD_FWD(literalOrIri), context}};
+              return toIdOrLocalVocabEntry(AD_FWD(literalOrIri), context);
             }},
         AD_FWD(value));
   } else {

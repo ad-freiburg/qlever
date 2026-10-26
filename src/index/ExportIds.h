@@ -155,9 +155,7 @@ std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
   }
   if constexpr (removeQuotesAndAngleBrackets) {
     // TODO<joka921> Can we get rid of the string copying here?
-    return std::pair{
-        escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
-        nullptr};
+    return std::pair{escapeFunction(std::string{word.getContent()}), nullptr};
   }
   // TODO<ms2144>: we unconditionally always materialize a string here, which
   // is wasteful and should be mitigated in the future.

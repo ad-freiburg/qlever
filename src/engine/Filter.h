@@ -59,6 +59,11 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;
 
@@ -79,12 +84,12 @@ class Filter : public Operation {
   // Perform the actual filter operation of the data provided.
   CPP_template(int WIDTH, typename Table)(requires IdTableLike<Table>)
   void computeFilterImpl(IdTable& dynamicResultTable, Table&& input,
-                         std::vector<ColumnIndex> sortedBy) const;
+                         qlm::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable.
   CPP_template(typename Table)(requires IdTableLike<Table>)
   IdTable
-      filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
+      filterIdTable(qlm::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_FILTER_H

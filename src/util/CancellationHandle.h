@@ -1,30 +1,33 @@
-//   Copyright 2023, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef QLEVER_CANCELLATIONHANDLE_H
 #define QLEVER_CANCELLATIONHANDLE_H
 
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
 #include <atomic>
-#include <condition_variable>
+#include <chrono>
 #include <exception>
-#include <mutex>
+#include <memory>
 
 #include "backports/type_traits.h"
 #include "global/Constants.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/NoCopyNoMove.h"
 #include "util/ParseableDuration.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
-#include "util/jthread.h"
 
 namespace ad_utility {
-/// Enum to represent possible states of cancellation
+// Enum to represent possible states of cancellation.
 enum class CancellationState {
   NOT_CANCELLED,
   WAITING_FOR_CHECK,
@@ -35,11 +38,11 @@ enum class CancellationState {
 
 namespace detail {
 
-/// Helper enum that selects which features to compile inside the
-/// `CancellationHandle` class.
+// Helper enum that selects which features to compile inside the
+// `CancellationHandle` class.
 enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
-/// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
+// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
 constexpr CancellationMode CANCELLATION_MODE = []() {
   using enum CancellationMode;
 #ifndef QUERY_CANCELLATION_MODE
@@ -49,9 +52,9 @@ constexpr CancellationMode CANCELLATION_MODE = []() {
 #endif
 }();
 
-/// Helper function that safely checks if the passed `cancellationState`
-/// represents one of the cancelled states with a single comparison for
-/// efficiency.
+// Helper function that safely checks if the passed `cancellationState`
+// represents one of the cancelled states with a single comparison for
+// efficiency.
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
   using enum CancellationState;
@@ -62,23 +65,14 @@ AD_ALWAYS_INLINE constexpr bool isCancelled(
   return cancellationState > CHECK_WINDOW_MISSED;
 }
 
-/// Helper struct to allow to conditionally compile fields into a class.
+// Helper struct to allow to conditionally compile fields into a class.
 struct Empty {
-  // Ignore potential assignment
+  // Ignore potential assignment.
   template <typename... Args>
   explicit Empty(const Args&...) {}
 };
 
-/// Helper struct that imitates functionality similar to `std::stop_token`,
-/// until it has broader compiler support.
-struct PseudoStopToken {
-  std::condition_variable conditionVariable_;
-  std::mutex mutex_;
-  bool running_;
-  explicit PseudoStopToken(bool running) : running_{running} {}
-};
-
-/// Helper function to print a warning if `executionStage` is not empty.
+// Helper function to print a warning if `executionStage` is not empty.
 inline std::string printAdditionalDetails(std::string_view executionStage) {
   if (executionStage.empty()) {
     return ".";
@@ -89,7 +83,7 @@ inline std::string printAdditionalDetails(std::string_view executionStage) {
 constexpr auto printNothing = []() constexpr { return ""; };
 }  // namespace detail
 
-/// An exception signalling an cancellation
+// An exception signalling a cancellation.
 class CancellationException : public std::exception {
   std::string message_;
   // Always `TIMEOUT` or `MANUAL`.
@@ -113,7 +107,7 @@ class CancellationException : public std::exception {
   // Cancellation reason, always `TIMEOUT` or `MANUAL`.
   CancellationState state() const noexcept { return state_; }
 
-  /// Set optional operation information, if not already set.
+  // Set optional operation information, if not already set.
   void setOperation(std::string_view operation) {
     constexpr std::string_view operationPrefix = " Last operation: ";
     // Don't set operation twice.
@@ -124,7 +118,7 @@ class CancellationException : public std::exception {
   }
 };
 
-/// Trim everything but the filename of a given file path.
+// Trim everything but the filename of a given file path.
 constexpr std::string_view trimFileName(std::string_view fileName) {
   // Safe to do, because unsigned overflow is not UB and in case of
   // npos this will overflow back to zero.
@@ -132,13 +126,27 @@ constexpr std::string_view trimFileName(std::string_view fileName) {
   return fileName.substr(fileName.rfind('/') + 1);
 }
 
-// Ensure no locks are used
+// Ensure no locks are used.
 static_assert(std::atomic<CancellationState>::is_always_lock_free);
 
-/// Thread safe wrapper around an atomic variable, providing efficient
-/// checks for cancellation across threads.
+// Thread safe wrapper around an atomic variable, providing efficient
+// checks for cancellation across threads.
 template <detail::CancellationMode Mode = detail::CANCELLATION_MODE>
-class CancellationHandle {
+class CancellationHandle : public NoCopy {
+ public:
+  // Wait asynchronously (in the background, without blocking the caller) for
+  // `delay`, then run `task` once. The watchdog uses this to implement an
+  // asynchronous background loop that checks the cancellation state
+  // repeatedly: every call but the first is made from inside the previous
+  // `task`, so the calls never overlap.
+  //
+  // NOTE: An implementation must return immediately and must never run `task`
+  // synchronously inside the call. Otherwise the watchdog loop turns into an
+  // infinite recursion that never returns control to the caller.
+  using RunAfter = absl::AnyInvocable<void(std::chrono::milliseconds delay,
+                                           absl::AnyInvocable<void()> task)>;
+
+ private:
   using steady_clock = std::chrono::steady_clock;
   static constexpr bool WatchDogEnabled =
       Mode == detail::CancellationMode::ENABLED;
@@ -151,19 +159,19 @@ class CancellationHandle {
 
   template <typename T>
   using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
-  // TODO<Clang18> Use std::jthread and its builtin stop_token.
-  [[no_unique_address]] WatchDogOnly<detail::PseudoStopToken> watchDogState_{
+  // True iff `registerWatchDog` has been called for this handle.
+  [[no_unique_address]] WatchDogOnly<std::atomic<bool>> watchDogRegistered_{
       false};
-  [[no_unique_address]] WatchDogOnly<ad_utility::JThread> watchDogThread_;
   [[no_unique_address]] WatchDogOnly<std::atomic<steady_clock::time_point>>
       startTimeoutWindow_{steady_clock::now()};
   static_assert(std::atomic<steady_clock::time_point>::is_always_lock_free);
 
-  /// Make sure internal state is set back to
-  /// `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
-  /// in the console that would otherwise be triggered by the watchdog.
-  /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
-  /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
+  // Make sure internal state is set back to
+  // `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
+  // in the console that would otherwise be triggered by the watchdog.
+  //
+  // NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
+  // or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   CPP_template(typename StateFunc)(
       requires WatchDogEnabled &&
       ad_utility::InvocableWithConvertibleReturnType<StateFunc,
@@ -206,27 +214,31 @@ class CancellationHandle {
              state != CancellationState::NOT_CANCELLED);
   }
 
-  /// Internal function that starts the watch dog. It will set this
-  /// `CancellationHandle` instance into a state that will log a warning in the
-  /// console if `throwIfCancelled` is not called frequently enough.
-  CPP_member auto startWatchDogInternal()
-      -> CPP_ret(void)(requires WatchDogEnabled);
+  // One step of the watch dog: Advance the state from `NOT_CANCELLED` to
+  // `WAITING_FOR_CHECK` or from there to `CHECK_WINDOW_MISSED`. Return false
+  // iff this handle has been cancelled.
+  CPP_member auto advanceWatchDogState()
+      -> CPP_ret(bool)(requires WatchDogEnabled);
 
-  /// Helper function that sets the internal state atomically given that it has
-  /// not been cancelled yet. Otherwise no-op.
-  /// CPP_member auto
+  // Run a step of the watch dog of `handle` and schedule the next one via
+  // `runAfter`, unless the handle is gone or has been cancelled.
+  static void runWatchDogStep(std::weak_ptr<CancellationHandle> handle,
+                              std::shared_ptr<RunAfter> runAfter);
+
+  // Helper function that sets the internal state atomically given that it has
+  // not been cancelled yet. Otherwise no-op.
   CPP_member auto setStatePreservingCancel(CancellationState newState)
       -> CPP_ret(void)(requires CancellationEnabled);
 
  public:
-  /// Sets the cancellation flag so the next call to throwIfCancelled will
-  /// throw. No-op if this instance is already in a cancelled state.
+  // Sets the cancellation flag so the next call to throwIfCancelled will
+  // throw. No-op if this instance is already in a cancelled state.
   void cancel(CancellationState reason);
 
-  /// Throw an `CancellationException` when this handle has been cancelled. Do
-  /// nothing otherwise. If `WatchDogEnabled` is true, this will log a warning
-  /// if this check is not called frequently enough. It will contain the
-  /// filename and line of the caller of this method.
+  // Throw an `CancellationException` when this handle has been cancelled. Do
+  // nothing otherwise. If the watch dog is registered, this will log a
+  // warning if this check is not called frequently enough. It will contain the
+  // filename and line of the caller of this method.
   CPP_template(typename Func = decltype(detail::printNothing))(
       requires ad_utility::InvocableWithConvertibleReturnType<Func,
                                                               std::string_view>)
@@ -249,11 +261,12 @@ class CancellationHandle {
     }
   }
 
-  /// Return true if this cancellation handle has been cancelled, false
-  /// otherwise. Note: Make sure to not use this value to set any other atomic
-  /// value with relaxed memory ordering, as this may lead to out-of-thin-air
-  /// values. If the watchdog is enabled, this will please it and print
-  /// a warning with the filename and line of the caller.
+  // Return true if this cancellation handle has been cancelled, false
+  // otherwise. If the watchdog is enabled, this will please it and print
+  // a warning with the filename and line of the caller.
+  //
+  // NOTE: Make sure to not use this value to set any other atomic value with
+  // relaxed memory ordering, as this may lead to out-of-thin-air values.
   AD_ALWAYS_INLINE bool isCancelled([[maybe_unused]] ad_utility::source_location
                                         location = AD_CURRENT_SOURCE_LOC()) {
     if constexpr (CancellationEnabled) {
@@ -270,29 +283,16 @@ class CancellationHandle {
     }
   }
 
-  /// Start the watch dog. Must only be called once per `CancellationHandle`
-  /// instance. This allows the constructor to be used to cheaply
-  /// default-initialize an instance of this class (as dummy non-null pointer
-  /// for example).
-  void startWatchDog();
-
-  /// If this `CancellationHandle` is not cancelled, reset the internal
-  /// `cancellationState_` to `CancellationState::NOT_CANCELED`.
-  /// Useful to ignore expected gaps in the execution flow, but typically
-  /// indicates that there's code that cannot be interrupted, so use with care!
-  void resetWatchDogState();
-
-  // Explicit move-semantics
-  CancellationHandle() = default;
-  CancellationHandle(const CancellationHandle&) = delete;
-  CancellationHandle& operator=(const CancellationHandle&) = delete;
-  ~CancellationHandle();
+  // Start the watch dog of `handle`, which makes `throwIfCancelled` log a
+  // warning if it isn't called frequently enough. The first step runs
+  // immediately, the following ones every `DESIRED_CANCELLATION_CHECK_INTERVAL`
+  // via `runAfter`. The watch dog only holds a `weak_ptr` to the handle and
+  // stops once the handle is destroyed or cancelled. Must only be called once
+  // per handle. No-op if the watch dog is disabled.
+  static void registerWatchDog(std::weak_ptr<CancellationHandle> handle,
+                               RunAfter runAfter);
 
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesChangeState);
-  FRIEND_TEST(CancellationHandle,
-              verifyResetWatchDogStateDoesProperlyResetState);
-  FRIEND_TEST(CancellationHandle,
-              verifyResetWatchDogStateIsNoOpWithoutWatchDog);
   FRIEND_TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog);
   FRIEND_TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState);
   FRIEND_TEST(CancellationHandle,

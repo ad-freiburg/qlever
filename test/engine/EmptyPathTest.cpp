@@ -20,6 +20,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/DeltaTriples.h"
+#include "util/Tie.h"
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -139,7 +140,8 @@ TEST(EmptyPath, allEntitiesWithTheirGraphs) {
   // The result is sorted by the entity and then by the graph.
   EXPECT_TRUE(
       ql::ranges::is_sorted(result, [](const auto& row1, const auto& row2) {
-        return std::tie(row1[0], row1[1]) < std::tie(row2[0], row2[1]);
+        return ad_utility::tie(row1[0], row1[1]) <
+               ad_utility::tie(row2[0], row2[1]);
       }));
 }
 
@@ -563,7 +565,6 @@ TEST(EmptyPath, deletedTriplesAreRespected) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
                             executor()};
@@ -792,7 +793,6 @@ TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
                             executor()};

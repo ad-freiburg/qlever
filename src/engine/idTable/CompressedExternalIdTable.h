@@ -16,6 +16,7 @@
 #include <boost/asio/use_future.hpp>
 #include <cstdint>
 #include <future>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -36,6 +37,7 @@
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/ParallelExecutor.h"
 #include "util/TransparentFunctors.h"
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
@@ -81,6 +83,10 @@ class CompressedExternalIdTableWriter {
 
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
+  // The offset at which the next block is written. The blocks are written
+  // with the positioned `File::write`, so a thread only has to reserve its
+  // range here, see `compressAndWriteBlockOfColumn`.
+  std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
                                                                       "w+"};
   // For a single column, the concatenation of the blocks for that column of all
@@ -143,8 +149,46 @@ class CompressedExternalIdTableWriter {
     return blockSizeUncompressed_;
   }
 
-  // Store an `idTable`.
+  // Store an `idTable`. The blocks of all its columns are compressed and
+  // written in parallel, see `compressAndWriteBlockOfColumn`.
   void writeIdTable(const IdTable& table) {
+    const BlockLayout layout = prepareWrite(table);
+    // Compress and write the (block, column) pairs of the `table` as tasks on
+    // the global thread pool, in the order of the blocks (and within a block,
+    // in the order of the columns).
+    //
+    // NOTE: The unit of parallelism is a single column of a single block. The
+    // columns of a table are typically few, while its blocks are many, so the
+    // tasks are small enough to keep all the threads of the pool busy until the
+    // very end of the table. Starting the tasks in the order of the blocks
+    // makes the parts that are later read together (see `readBlockSequential`)
+    // tend to end up close to each other in the file.
+    ad_utility::runIndexedTasksOnExecutor(
+        ad_utility::globalExecutor(), ad_utility::globalExecutorNumThreads(),
+        layout.numBlocks_ * numColumns(),
+        [this, &table, &layout](size_t taskIdx) {
+          compressAndWriteBlockOfColumn(table, taskIdx / numColumns(),
+                                        taskIdx % numColumns(), layout);
+        });
+  }
+
+ private:
+  // Where the blocks of the table that is currently being written live in the
+  // `blocksPerColumn_`, how many of them there are, and how many rows each of
+  // them has (the last one may have fewer).
+  struct BlockLayout {
+    size_t firstBlockIdx_;
+    size_t numBlocks_;
+    size_t blockSize_;
+  };
+
+  // Check that the `table` can be written, make room for the metadata of its
+  // blocks, and store the first and the last row of each of its blocks.
+  //
+  // NOTE: The first and the last row of a block have to be stored here and not
+  // inside the per-column tasks of `writeIdTable`, because each of those tasks
+  // only sees a single column.
+  BlockLayout prepareWrite(const IdTable& table) {
     if (numActiveGenerators_ != 0) {
       AD_THROW(
           "Trying to call `writeIdTable` on an "
@@ -152,50 +196,61 @@ class CompressedExternalIdTableWriter {
           "over");
     }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
+    size_t blockSize =
+        blockSizeUncompressed_.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
     AD_CONTRACT_CHECK(blockSize > 0);
-    startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
-    // The `[lower, upper)` row ranges of the blocks into which the `table` is
-    // split. It is defined once and used by both loops below, such that the
-    // first and last rows that are stored always match the stored blocks.
-    auto blockRanges = chunkedIotaView(size_t{0}, table.numRows(), blockSize);
+    size_t firstBlockIdx = blocksPerColumn_.at(0).size();
+    startOfSingleIdTables_.push_back(firstBlockIdx);
     // Store the first and the last row of each block, which a merge of the runs
     // needs to split them into disjoint ranges, see
-    // `firstAndLastRowPerBlock_`. This cannot be done inside the per-column
-    // tasks below, because each of those only sees a single column.
-    for (auto [lower, upper] : blockRanges) {
+    // `firstAndLastRowPerBlock_`.
+    size_t numBlocks = 0;
+    for (auto [lower, upper] :
+         chunkedIotaView(size_t{0}, table.numRows(), blockSize)) {
       firstAndLastRowPerBlock_.emplace_back(table[lower], table[upper - 1]);
+      ++numBlocks;
     }
-    // The columns are compressed and stored in parallel.
-    // TODO<joka921> Use parallelism per block instead of per column (more
-    // fine-grained) but only once we have a reasonable abstraction for
-    // parallelism.
-    std::vector<std::future<void>> compressColumnFutures;
-    for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumnFutures.push_back(
-          std::async(std::launch::async, [this, i, blockRanges, &table]() {
-            auto& blockMetadata = blocksPerColumn_.at(i);
-            decltype(auto) column = table.getColumn(i);
-            for (auto [lower, upper] : blockRanges) {
-              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
-              auto compressed = ZstdWrapper::compress(
-                  column.data() + lower, thisBlockSizeUncompressed);
-              size_t offset = 0;
-              file_.withWriteLock(
-                  [&offset, &compressed](ad_utility::File& file) {
-                    offset = file.tell();
-                    file.write(compressed.data(), compressed.size());
-                  });
-              blockMetadata.push_back(
-                  {compressed.size(), thisBlockSizeUncompressed, offset});
-            }
-          }));
+    // Make room for the metadata of the new blocks. The tasks of
+    // `writeIdTable` then only *assign* to those elements (each task to an
+    // element of its own), so that no synchronization is needed for the
+    // metadata.
+    for (auto& blockMetadata : blocksPerColumn_) {
+      blockMetadata.resize(firstBlockIdx + numBlocks);
     }
-    for (auto& fut : compressColumnFutures) {
-      fut.get();
-    }
+    return {firstBlockIdx, numBlocks, blockSize};
   }
 
+  // Compress the part of the `columnIdx`-th column of the `table` that belongs
+  // to the block with index `blockIdx` (counted relative to the `table`), write
+  // it to the file, and store the resulting metadata. This function may be
+  // called concurrently for arbitrary combinations of `blockIdx` and
+  // `columnIdx`.
+  //
+  // NOTE: The concurrent calls need no synchronization among each other: each
+  // call first reserves a range of the file of its own (via the `nextOffset_`)
+  // and then writes to it with the positioned `File::write`, which only needs
+  // a shared lock, and the metadata of each block is stored in an element of
+  // its own, which `prepareWrite` has allocated beforehand.
+  void compressAndWriteBlockOfColumn(const IdTable& table, size_t blockIdx,
+                                     size_t columnIdx,
+                                     const BlockLayout& layout) {
+    decltype(auto) column = table.getColumn(columnIdx);
+    size_t lower = blockIdx * layout.blockSize_;
+    size_t upper = std::min(lower + layout.blockSize_, column.size());
+    AD_CORRECTNESS_CHECK(lower < upper);
+    static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
+    auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
+    auto compressed =
+        ZstdWrapper::compress(column.data() + lower, uncompressedSize);
+    auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
+    // NOTE: This throws if not all the bytes could be written.
+    file_.rlock()->write(compressed.data(), compressed.size(), offset);
+    blocksPerColumn_.at(columnIdx).at(layout.firstBlockIdx_ + blockIdx) =
+        CompressedBlockMetadata{compressed.size(), uncompressedSize,
+                                static_cast<size_t>(offset)};
+  }
+
+ public:
   // Return a vector of generators where the `i-th` generator generates the
   // `i-th` IdTable that was stored. The IdTables are yielded in (smaller)
   // blocks which are `IdTables` themselves.
@@ -271,6 +326,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
+    nextOffset_.store(0);
     ql::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
     startOfSingleIdTables_.clear();
     firstAndLastRowPerBlock_.clear();
@@ -286,7 +342,8 @@ class CompressedExternalIdTableWriter {
 
   // The number of rows in the block with the given global index.
   size_t numRowsInBlock(size_t blockIdx) const {
-    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
+    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ /
+           BYTES_PER_ID_COLUMN_ENTRY;
   }
 
   // The index (in the `ColumnMetadata` of a single column) of the first block
@@ -509,7 +566,7 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   // the input concept of `parallelBlockMerge`.
   template <typename R>
   MemorySize memorySizeOfElement([[maybe_unused]] const R& row) const {
-    return MemorySize::bytes(writer().numColumns() * sizeof(Id));
+    return MemorySize::bytes(writer().numColumns() * BYTES_PER_ID_COLUMN_ENTRY);
   }
 
  private:
@@ -558,7 +615,7 @@ namespace compressedExternalIdTable {
 // being sorted and written to disk in the background, and one that is used to
 // collect rows in the calls to `push`.
 inline size_t blockMemoryPerRow(size_t numColumns) {
-  return numColumns * sizeof(Id) * 2;
+  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2;
 }
 
 // The number of rows per block that a `CompressedExternalIdTableBase` with
@@ -839,8 +896,8 @@ class CompressedExternalIdTableBase {
   }
 
   // Asynchronously compress the `block` and write it to the underlying
-  // `writer_`. Before compressing, apply the transformation that is specified
-  // by the `Impl` via the `transformBlock` function.
+  // `writer_`. Before compressing, apply the `blockTransformation_` (e.g. the
+  // `BlockSorter` of the `CompressedExternalIdTableSorter`).
   //
   // Return the block of the *previous* such task (empty, but with its memory
   // still allocated), or `std::nullopt` if there was no previous task. Reusing
@@ -1057,28 +1114,34 @@ inline std::atomic<bool>
 // left to run the sort and the process deadlocks. So before `asyncPushBlock` is
 // used with the global executor, either the sink must not block on the pool,
 // or the sort has to become non-blocking (see `blockIndirectSortAsync`).
+//
+// The sort can be cancelled via the `cancellationHandle`.
 template <typename Range, typename Comparator>
-void sortBlockRange(Range& block, const Comparator& comparator) {
+void sortBlockRange(
+    Range& block, const Comparator& comparator,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
   ad_utility::blockSort::blockIndirectSort(
       ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
       static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
-      ad_utility::globalExecutor());
+      ad_utility::globalExecutor(), cancellationHandle);
 }
 
 // The implementation of sorting a single block, see `sortBlockRange` above.
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
+  ad_utility::SharedCancellationHandle cancellationHandle_;
   template <typename T>
   void operator()(T& block) {
-    sortBlockRange(block, comparator_);
+    sortBlockRange(block, comparator_, cancellationHandle_);
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
 // in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
 // it.
 template <typename Comparator>
-BlockSorter(Comparator) -> BlockSorter<Comparator>;
+BlockSorter(Comparator,
+            ad_utility::SharedCancellationHandle) -> BlockSorter<Comparator>;
 
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
@@ -1089,6 +1152,9 @@ class CompressedExternalIdTableSorter
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
   [[no_unique_address]] Comparator comparator_{};
+  // Checked by the sorts of the blocks and by the merge phase, see the
+  // constructor.
+  ad_utility::SharedCancellationHandle cancellationHandle_;
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
 
@@ -1131,19 +1197,30 @@ class CompressedExternalIdTableSorter
       compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
 
  public:
-  // Constructor.
+  // Constructor. The sorter can be cancelled via the `cancellationHandle`,
+  // which must not be `nullptr` (the default is a handle that is never
+  // cancelled): the sorts of the blocks and the merge phase check it regularly
+  // and throw a `CancellationException`.
+  //
+  // NOTE: The sort of a block runs in the background, so its exception is
+  // rethrown by a later `push` or `pushBlock` (when the next block is written)
+  // or by `getSortedBlocks`.
   CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      Comparator comparator = {})
+      Comparator comparator = {},
+      ad_utility::SharedCancellationHandle cancellationHandle =
+          std::make_shared<ad_utility::CancellationHandle<>>())
       : Base{std::move(filename),
              numCols,
              memory,
              std::move(allocator),
              blocksizeCompression,
-             BlockSorter{comparator}},
-        comparator_{comparator} {
+             BlockSorter{comparator, cancellationHandle}},
+        comparator_{comparator},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
     this->setAsyncPushExecutor(mergeExecutor_);
   }
 
@@ -1153,10 +1230,13 @@ class CompressedExternalIdTableSorter
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      Comparator comp = {})(requires(NumStaticCols > 0))
-      : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
-                                        memory, std::move(allocator),
-                                        blocksizeCompression, comp) {}
+      Comparator comp = {},
+      ad_utility::SharedCancellationHandle cancellationHandle =
+          std::make_shared<ad_utility::CancellationHandle<>>())(
+      requires(NumStaticCols > 0))
+      : CompressedExternalIdTableSorter(
+            std::move(filename), NumStaticCols, memory, std::move(allocator),
+            blocksizeCompression, comp, std::move(cancellationHandle)) {}
 
   // Explicitly inherit the `push` function, such that we can use it unqualified
   // within this class.
@@ -1364,11 +1444,7 @@ class CompressedExternalIdTableSorter
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
             this->comparator_, makeBlockStorageFactory<N>(parameters),
-            std::move(options),
-            // NOTE: The sorter has no cancellation handle of its own, and the
-            // merge requires one that is not `nullptr`, so this is a fresh
-            // handle that is never cancelled.
-            std::make_shared<ad_utility::CancellationHandle<>>());
+            std::move(options), cancellationHandle_);
     return ad_utility::InputRangeTypeErased{
         checkedMergeResult<N>(std::move(merged))};
   }
@@ -1424,16 +1500,6 @@ class CompressedExternalIdTableSorter
                 << this->memory_.asString()
                 << ". Increasing the memory limit will speed up the merge."
                 << std::endl;
-  }
-
-  // _____________________________________________________________
-  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockRange(block, comparator_);
-  }
-
-  // A function with this name is needed by the mixin base class.
-  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
-    sortBlockInPlace(block);
   }
 };
 }  // namespace ad_utility

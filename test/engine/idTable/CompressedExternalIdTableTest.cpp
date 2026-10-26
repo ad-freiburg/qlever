@@ -12,6 +12,7 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <tuple>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
@@ -272,6 +273,62 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
       ::testing::ContainsRegex("Insufficient memory"));
 }
 
+// Test that the sorter can be cancelled via its cancellation handle, both
+// while the rows are pushed (the sorts of the blocks) and in the merge phase.
+TEST(CompressedExternalIdTable, sorterIsCancellable) {
+  auto test = [](bool cancelBeforePushing) {
+    // A sorter whose 1 KB memory limit makes the 1000 rows blocks of 15 rows.
+    std::string filename = gtestCurrentTestName();
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename,
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        handle};
+    CopyableIdTable<0> randomTable =
+        createRandomlyFilledIdTable(1000, NUM_COLS);
+
+    // Push all rows and consume the sorted result, cancelling before the merge
+    // phase unless the handle was already cancelled before pushing.
+    auto pushAndSort = [&]() {
+      for (const auto& row : randomTable) {
+        sorter.push(row);
+      }
+      if (!cancelBeforePushing) {
+        handle->cancel(ad_utility::CancellationState::MANUAL);
+      }
+      std::ignore = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
+    };
+
+    // Either way, the cancellation surfaces as a `CancellationException`.
+    if (cancelBeforePushing) {
+      handle->cancel(ad_utility::CancellationState::MANUAL);
+    }
+    EXPECT_THROW(pushAndSort(), ad_utility::CancellationException);
+  };
+  test(true);
+  test(false);
+}
+
+// Test that the cancellation handle of the sorter must not be `nullptr`.
+TEST(CompressedExternalIdTable, sorterRequiresCancellationHandle) {
+  auto makeSorter = []() {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        gtestCurrentTestName(),
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        nullptr};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeSorter(), ::testing::HasSubstr("cancellationHandle_ != nullptr"));
+}
+
 // Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.
 TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   // Create `CompressedExternalIdTable` with a block size of exactly 10 rows.
@@ -513,7 +570,7 @@ namespace {
 // The number of rows per block that results from the given uncompressed block
 // size. The blocks are formed per column, hence the size of a single `Id`.
 size_t rowsPerBlockFor(ad_utility::MemorySize blockSize) {
-  return blockSize.getBytes() / sizeof(Id);
+  return blockSize.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
 }
 
 // Write all the `tables` to the `writer` and then flush it, such that the
@@ -647,6 +704,31 @@ TEST(CompressedExternalIdTable, concurrentBlockReads) {
 
   // After all readers are gone, the writer can be written to again.
   EXPECT_NO_THROW(writer.writeIdTable(tables.at(0)));
+}
+
+// Test that `writeIdTable` with a tiny block size and several columns (so that
+// it compresses and writes thousands of (block, column) pairs in parallel)
+// stores exactly the blocks of a sequential write, also after a `clear()`,
+// which starts writing at the beginning of the file again.
+TEST(CompressedExternalIdTable, writerWithManyBlocksAndColumns) {
+  constexpr size_t numColumns = 5;
+  std::vector<CopyableIdTable<0>> tables;
+  for (size_t numRows : {1001, 2, 1, 777}) {
+    tables.emplace_back(createRandomlyFilledIdTable(numRows, numColumns));
+  }
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, numColumns, ad_utility::testing::makeAllocator(), blockSize};
+  for (size_t i = 0; i < 2; ++i) {
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    writer.clear();
+  }
 }
 
 // _____________________________________________________________________________

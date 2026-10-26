@@ -1470,6 +1470,15 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
                          "</literal></binding>\n  </result>", xmlTrailer));
 }
 
+// Test that a SELECT query can be exported in QLever's binary format.
+TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
+  // The format itself is tested in `engine/BinaryExportTest.cpp`.
+  auto result = runQueryStreamableResult(
+      "<s> <p> <o> .", "SELECT ?o WHERE { <s> <p> ?o }",
+      ad_utility::MediaType::binaryQleverExport);
+  EXPECT_THAT(result, HasSubstr("QLEVER.EXPORT"));
+}
+
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
@@ -2110,11 +2119,13 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   EXPECT_EQ(json["resultsize"], 4);
   auto& timingInformation = json["time"];
   EXPECT_GE(toChrono(timingInformation["total"].get<std::string_view>()), 1ms);
-  // Ensure result is not returned in microseconds and subsequently interpreted
-  // in milliseconds
+#ifndef _QLEVER_NO_TIMING_TESTS
+  // Ensure that the result is not returned in microseconds and subsequently
+  // interpreted in milliseconds.
   EXPECT_LT(
       toChrono(timingInformation["computeResult"].get<std::string_view>()),
       100ms);
+#endif
   EXPECT_GE(
       toChrono(timingInformation["total"].get<std::string_view>()),
       toChrono(timingInformation["computeResult"].get<std::string_view>()));

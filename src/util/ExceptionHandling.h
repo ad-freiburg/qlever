@@ -164,7 +164,7 @@ class ThrowInDestructorIfSafe {
 //   pool.join();
 //   collector.rethrowIfException();
 class ExceptionCollector {
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::exception_ptr firstException_;
   ThrowInDestructorIfSafe throwIfSafe_;
 
@@ -224,6 +224,13 @@ class ExceptionCollector {
         (*this)(std::current_exception());
       }
     };
+  }
+
+  // Return true iff an exception has been captured and not yet rethrown.
+  // Thread-safe.
+  bool hasException() const {
+    std::lock_guard lock{mutex_};
+    return firstException_ != nullptr;
   }
 
   // Rethrow the first captured exception, if any. After this call the exception

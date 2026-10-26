@@ -296,6 +296,41 @@ struct TestNaryExpressionVec {
   }
 };
 
+struct TestTernaryAddImpl {
+  template <typename A, typename B, typename C>
+  auto operator()(A a, B b, C c) const {
+    if constexpr (ql::concepts::same_as<std::decay_t<A>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<B>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<C>, int64_t>) {
+      return a + b + c;
+    } else {
+      return static_cast<double>(a) + static_cast<double>(b) +
+             static_cast<double>(c);
+    }
+  }
+};
+
+using TestTernaryAdd =
+    sparqlExpression::detail::MakeNumericExpression<TestTernaryAddImpl>;
+
+using TestTernaryAddOperation = sparqlExpression::detail::Operation<
+    3, sparqlExpression::detail::FV<
+           TestTernaryAdd, sparqlExpression::detail::NumericValueGetter>>;
+
+class TestTernaryAddExpression
+    : public sparqlExpression::detail::NaryExpression<TestTernaryAddOperation> {
+ public:
+  using sparqlExpression::detail::NaryExpression<
+      TestTernaryAddOperation>::NaryExpression;
+};
+
+auto makeTestTernaryAddExpression = [](SparqlExpression::Ptr a,
+                                       SparqlExpression::Ptr b,
+                                       SparqlExpression::Ptr c) {
+  return std::make_unique<TestTernaryAddExpression>(std::move(a), std::move(b),
+                                                    std::move(c));
+};
+
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
 auto testPlus = testBinaryExpressionCommutative<&makeAddExpression>;
@@ -478,6 +513,33 @@ TEST(SparqlExpression, multiplyExpressionWithVariable) {
                           sparqlExpressionResultMatcher(expected)));
 }
 
+// Test that `canUseNumericFastPath` accepts exactly the combinations of
+// numeric value getters with `ValueId` vectors or constants (also outside a
+// constant-expression context, because coverage tools don't track compile-time
+// uses).
+TEST(SparqlExpression, canUseNumericFastPath) {
+  using sparqlExpression::detail::canUseNumericFastPath;
+  using sparqlExpression::detail::NumericOrDateValueGetter;
+  using sparqlExpression::detail::NumericValueGetter;
+  using sparqlExpression::detail::StringValueGetter;
+
+  // Numeric value getters on `ValueId` vectors and constants.
+  EXPECT_TRUE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                     std::tuple<ValueId>>()));
+  EXPECT_TRUE((canUseNumericFastPath<
+               std::tuple<NumericValueGetter, NumericOrDateValueGetter>,
+               std::tuple<V<ValueId>, ValueId>>()));
+
+  // A non-numeric value getter or an operand that is not a `ValueId`.
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<StringValueGetter>,
+                                      std::tuple<ValueId>>()));
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                      std::tuple<IdOrLocalVocabEntry>>()));
+  EXPECT_FALSE(
+      (canUseNumericFastPath<std::tuple<NumericValueGetter, NumericValueGetter>,
+                             std::tuple<ValueId, V<IdOrLocalVocabEntry>>>()));
+}
+
 // _____________________________________________________________________________
 TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
   V<Id> ints{{I(1), I(-2), I(3)}, alloc};
@@ -509,8 +571,9 @@ TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
 TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
   // Integers are the majority, so the speculative path is taken with `Int`
   // as the expected datatype. The other rows must reach the generic fallback
-  // of the slow path: a `Bool` counts as `0` or `1` there, an `UNDEF`, a
-  // vocabulary entry, and (for `+`) a date all yield `UNDEF`.
+  // of the slow path or the direct UNDEF shortcut: a `Bool` counts as `0` or
+  // `1` there, an `UNDEF`, a vocabulary entry, and (for `+`) a date all yield
+  // `UNDEF`.
   V<Id> mostlyInts{{I(1), I(2), I(3), I(4), I(5), D(0.5), B(true), U, Voc(4),
                     Dat(DateYearOrDuration::parseXsdDate, "2000-01-01")},
                    alloc};
@@ -533,7 +596,309 @@ TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
   testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
 }
 
-// _____________________________________________________________________________________
+// Test the numeric fast paths of `NaryExpression` on a ternary addition: the
+// homogeneous path, the speculative majority-type path with its per-row
+// fallback, and the generic fallback.
+TEST(SparqlExpression, naryNumericFastPaths) {
+  // Homogeneous integer operands.
+  {
+    V<Id> left{{I(1), I(2), I(3), I(4)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), I(113), I(114)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // Homogeneous operands with different numeric types.
+  {
+    V<Id> left{{I(1), I(2), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{D(0.5), D(1.5), D(2.5)}, alloc};
+
+    V<Id> expected{{D(11.5), D(13.5), D(15.5)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // An operand with an integer majority: the single double row is computed by
+  // the per-row fallback of the speculative path.
+  {
+    V<Id> left{{I(1), I(2), D(3.0), I(4), I(5)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), D(113.0), I(114), I(115)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // No majority type, hence the generic fallback.
+  {
+    V<Id> left{{I(1), D(2.0), I(3), D(4.0)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), D(112.0), I(113), D(114.0)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // A boolean row is computed by the per-row fallback, which treats `true` as
+  // the number 1.
+  {
+    V<Id> left{{I(1), B(true), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(111), I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // A row with an unsupported datatype is computed by the per-row fallback and
+  // yields `UNDEF`.
+  {
+    V<Id> left{{I(1), Voc(4), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), U, I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+}
+
+// Test that the direct `UNDEF` shortcut for non-numeric operands yields the
+// same results as the value getters in the generic loop (no numeric majority)
+// and for constant operands.
+TEST(SparqlExpression, numericNonNumericFallback) {
+  // An input without a numeric majority: an `Int`, a `Double`, two `Bool`s
+  // (which count as integers), an `UNDEF`, a vocabulary entry, and a date.
+  const auto date = Dat(DateYearOrDuration::parseXsdDate, "2000-01-01");
+  V<Id> input{{I(2), D(2.5), B(true), B(false), U, Voc(4), date}, alloc};
+  V<Id> allUndef{{U, U, U, U, U, U, U}, alloc};
+
+  // Vector with a numeric constant, for a binary, a unary and a ternary
+  // function: the last three rows are `UNDEF`.
+  testMultiply(V<Id>{{I(4), D(5.0), I(2), I(0), U, U, U}, alloc}, input, I(2));
+  testNaryExpression(makeAbsExpression,
+                     V<Id>{{I(2), D(2.5), I(1), I(0), U, U, U}, alloc}, input);
+  testNaryExpression(makeTestTernaryAddExpression,
+                     V<Id>{{D(3.5), D(4.0), D(2.5), D(1.5), U, U, U}, alloc},
+                     input, I(1), D(0.5));
+
+  // A non-numeric constant (a literal that is not an `Id`, or a vocabulary
+  // entry) makes every row `UNDEF`.
+  testMultiply(allUndef.clone(), input,
+               IdOrLocalVocabEntry{lit("not numeric")});
+  testNaryExpression(makeTestTernaryAddExpression, allUndef.clone(), input,
+                     IdOrLocalVocabEntry{lit("not numeric")}, I(1));
+  testMultiply(allUndef.clone(), input, Voc(4));
+  testNaryExpression(makeTestTernaryAddExpression, allUndef.clone(), input,
+                     Voc(4), I(1));
+
+  // Only constants, at least one of them non-numeric.
+  testMultiply(U, Voc(4), IdOrLocalVocabEntry{lit("not numeric")});
+  testMultiply(U, Voc(4), I(2));
+  testNaryExpression(makeAbsExpression, U, Voc(4));
+  testNaryExpression(makeTestTernaryAddExpression, U, I(1), Voc(4), D(0.5));
+}
+
+// Test that the generic evaluation loop of `NaryExpression` checks for
+// cancellation (`STR` on an `Id` vector takes that loop).
+TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
+  TestContext outerContext;
+  auto& context = outerContext.context;
+  V<Id> input{{I(1), I(2), I(3)}, alloc};
+  context._endIndex = input.size();
+  auto expression = makeStrExpression(std::make_unique<SingleUseExpression>(
+      ExpressionResult{std::move(input)}));
+
+  context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(expression->evaluate(&context),
+               ad_utility::CancellationException);
+}
+
+// Test typed date execution and compare subtype combinations with the
+// constant (generic getter) path. Datatype::Date is a storage tag, not an RDF
+// datatype: date/dateTime, durations, invalid dates and large years retain the
+// original arithmetic semantics.
+TEST(SparqlExpression, homogeneousDateArithmetic) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // `Date` + duration is directional in the current implementation.
+  auto testPlus = std::bind_front(testNaryExpression, &makeAddExpression);
+  auto date = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDate, value);
+  };
+  auto datetime = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDatetime, value);
+  };
+  auto duration = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDayTimeDuration, value);
+  };
+  const Id day = duration("P1D");
+  const Id zero = duration("PT0S");
+  const Id first = date("2020-01-01");
+  const Id second = date("2020-01-02");
+  testMinus(day, second, first);
+  testMinus(V<Id>{{day, day}, alloc}, V<Id>{{second, second}, alloc}, first);
+  testMinus(V<Id>{{day, day}, alloc}, second, V<Id>{{first, first}, alloc});
+  testMinus(V<Id>{{day, zero}, alloc}, V<Id>{{second, first}, alloc},
+            V<Id>{{first, first}, alloc});
+  testMinus(V<Id>{{day, zero}, alloc},
+            V<Id>{{datetime("2020-01-02T00:00:00Z"),
+                   datetime("2020-01-01T01:00:00+01:00")},
+                  alloc},
+            datetime("2020-01-01T00:00:00Z"));
+  // Existing date +/- duration arithmetic returns a dateTime at midnight.
+  const Id firstMidnight = datetime("2020-01-01T00:00:00");
+  const Id secondMidnight = datetime("2020-01-02T00:00:00");
+  testPlus(V<Id>{{secondMidnight, secondMidnight}, alloc},
+           V<Id>{{first, first}, alloc}, day);
+  testMinus(V<Id>{{firstMidnight, firstMidnight}, alloc},
+            V<Id>{{second, second}, alloc}, day);
+  testMinus(V<Id>{{zero, zero}, alloc}, V<Id>{{day, day}, alloc}, day);
+  testPlus(V<Id>{{duration("P2D"), duration("P2D")}, alloc},
+           V<Id>{{day, day}, alloc}, day);
+
+  const std::vector<Id> values{first,
+                               second,
+                               datetime("2020-01-01T12:00:00Z"),
+                               datetime("2020-01-01T13:00:00+01:00"),
+                               datetime("2020-01-01T12:00:00"),
+                               date("2020-02-30"),
+                               date("12000-01-01"),
+                               day,
+                               duration("-PT1S"),
+                               duration("P1048575D")};
+  for (Id left : values) {
+    for (Id right : values) {
+      auto difference = left.getDate() - right.getDate();
+      auto sum = left.getDate() + right.getDate();
+      Id expectedMinus = difference ? Id::makeFromDate(*difference) : U;
+      Id expectedPlus = sum ? Id::makeFromDate(*sum) : U;
+      testMinus(expectedMinus, left, right);
+      testPlus(expectedPlus, left, right);
+      testMinus(V<Id>{{expectedMinus, expectedMinus}, alloc},
+                V<Id>{{left, left}, alloc}, right);
+      testPlus(V<Id>{{expectedPlus, expectedPlus}, alloc},
+               V<Id>{{left, left}, alloc}, right);
+    }
+  }
+  // Sharing the storage tag does not erase subtype distinctions.
+  testMinus(V<Id>{{day, U}, alloc}, V<Id>{{second, day}, alloc}, first);
+  testPlus(V<Id>{{secondMidnight, duration("P2D")}, alloc},
+           V<Id>{{first, day}, alloc}, day);
+  testMinus(V<Id>{{U, U}, alloc}, V<Id>{{first, second}, alloc},
+            IdOrLocalVocabEntry{lit("not a date")});
+  // A `Date` first row must not incorrectly classify the rest of the column.
+  testMinus(V<Id>{{day, U, U, U, U}, alloc},
+            V<Id>{{second, I(2), B(true), U, Voc(4)}, alloc}, first);
+  testMinus(V<Id>{{U, day}, alloc}, V<Id>{{I(2), second}, alloc}, first);
+#endif
+}
+
+// The generic overload fails if N-ary dispatch applies the variant getter.
+struct TestTypedDateFunction {
+  Id operator()(DateYearOrDuration, DateYearOrDuration) const { return I(7); }
+  Id operator()(sparqlExpression::detail::NumericOrDateValue,
+                sparqlExpression::detail::NumericOrDateValue) const {
+    ADD_FAILURE() << "Generic date variant dispatch was used";
+    return U;
+  }
+};
+
+// Test that N-ary date expressions use the typed overload of the function, not
+// the generic variant overload.
+TEST(SparqlExpression, homogeneousDateNaryDispatch) {
+  using Op = sparqlExpression::detail::Operation<
+      2, sparqlExpression::detail::FV<
+             TestTypedDateFunction,
+             sparqlExpression::detail::NumericOrDateValueGetter>>;
+  auto factory = [](SparqlExpression::Ptr left, SparqlExpression::Ptr right) {
+    return std::make_unique<
+        sparqlExpression::detail::NaryExpressionStronglyTyped<Op>>(
+        std::move(left), std::move(right));
+  };
+  Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
+  V<Id> dates{{date, date}, alloc};
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, date);
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, date, dates);
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, dates);
+}
+
+// Test that homogeneous and speculative date execution share the same typed
+// getter.
+TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
+  namespace hn = sparqlExpression::detail::homogeneousNumeric;
+  struct TypedOnly {
+    Id operator()(DateYearOrDuration, DateYearOrDuration) const { return I(7); }
+  };
+  TestContext outerContext;
+  auto& context = outerContext.context;
+  context._endIndex = 2;
+  const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
+  V<Id> dates{{date, date}, alloc};
+  ConstIdColumnRef column{dates.data(), dates.size()};
+  auto result =
+      hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
+                                              DateYearOrDuration>(
+          std::tie(column, date), &context);
+  EXPECT_EQ((std::get<V<Id>>(result)), (V<Id>{{I(7), I(7)}, alloc}));
+  EXPECT_EQ(hn::getPrimitiveNumericValue<DateYearOrDuration>(date),
+            date.getDate());
+  EXPECT_EQ(hn::datatypeForNumericType<DateYearOrDuration>(), Datatype::Date);
+  EXPECT_EQ(hn::numericTypeToIndex<true>(hn::NumericType::Date), 2);
+  EXPECT_ANY_THROW(hn::numericTypeToIndex(hn::NumericType::Date));
+  V<Id> empty{alloc};
+  context._endIndex = 0;
+  EXPECT_EQ(hn::classifyNumericOperand<true>(empty, &context).majorityType_,
+            hn::NumericType::Other);
+  context._endIndex = 2;
+  context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(
+      (hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
+                                               DateYearOrDuration>(
+          std::tie(dates, date), &context)),
+      ad_utility::CancellationException);
+}
+
+// Test the speculative date path for columns with a date majority and
+// undefined, numeric or boolean outliers.
+TEST(SparqlExpression, speculativeDateArithmetic) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  const Id start = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01Z");
+  const Id end =
+      Dat(DateYearOrDuration::parseXsdDatetime, "2020-01-02T01:00:00+01:00");
+  const Id day = Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P1D");
+  const Id zero = Dat(DateYearOrDuration::parseXsdDayTimeDuration, "PT0S");
+  // Each operand has a date majority; undefined/numeric rows take the shared
+  // speculative slow path without changing dateTime/date subtraction semantics.
+  V<Id> left{{end, end, U, I(8), end, end, end}, alloc};
+  V<Id> right{{start, start, start, I(3), U, start, start}, alloc};
+  testMinus(V<Id>{{day, day, U, I(5), U, day, day}, alloc}, left, right);
+  testMinus(V<Id>{{day, day, U, U, day, day, day}, alloc}, left, start);
+  testMinus(V<Id>{{zero, zero, U, U, zero, zero, zero}, alloc}, end, left);
+  // Date-aware undefined rejection also applies without any supported
+  // majority.
+  testMinus(V<Id>{{U, U, U, U}, alloc}, V<Id>{{U, Voc(4), B(true), end}, alloc},
+            V<Id>{{end, end, end, U}, alloc});
+  testMinus(U, U, end);
+  testMinus(U, end, Voc(4));
+  // Booleans still convert to integers in a date-aware expression.
+  testMinus(V<Id>{{day, day, I(0)}, alloc}, V<Id>{{end, end, B(true)}, alloc},
+            V<Id>{{start, start, B(true)}, alloc});
+#endif
+}
+
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
   // `DivideExpression`.
@@ -1389,28 +1754,104 @@ TEST(SparqlExpression, isSomethingFunctions) {
       iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank, localLiteral,
       I(42),         D(1),         F,      geo, date,    U};
   testUnaryExpression<makeIsIriExpression>(
-      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, F});
+      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, U});
   testUnaryExpression<makeIsBlankExpression>(
-      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, F});
+      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, U});
   testUnaryExpression<makeIsLiteralExpression>(
-      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, U});
   testUnaryExpression<makeIsNumericExpression>(
-      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, U});
   testUnaryExpression<makeBoundExpression>(
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 
   // `ql:isEncodedIri` is only true for ids of datatype `EncodedVal`, not for
-  // regular vocabulary IRIs, string IRIs, literals, or unbound values.
+  // regular vocabulary IRIs, string IRIs, or literals, and UNDEF for an unbound
+  // argument.
   auto checkIsEncodedIri = testUnaryExpression<&makeIsEncodedIriExpression>;
   checkIsEncodedIri(Id::makeFromEncodedVal(0), T);
   checkIsEncodedIri(iri, F);
   checkIsEncodedIri(literal, F);
-  checkIsEncodedIri(U, F);
+  checkIsEncodedIri(U, U);
   checkIsEncodedIri(IdOrLocalVocabEntry{iriref("<i>")}, F);
 
   auto expression = makeBoundExpression(
       std::make_unique<IdExpression>(ValueId::makeUndefined()));
   EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+}
+
+// Test that `isBlank`, `isNumeric`, `ql:isGeoPoint` and `BOUND` are evaluated
+// with binary search (result `SetOfIntervals`) if the input is sorted by their
+// argument, and row by row otherwise.
+TEST(SparqlExpression, isSomethingFunctionsOnSortedInput) {
+  using SetOfIntervals = ad_utility::SetOfIntervals;
+  Variable var{"?x"};
+  TestContext testContext;
+  auto& ctx = testContext.context;
+  // In sorted order: UNDEF, bool, int, doubles, strings, date, point, blanks.
+  std::vector<Id> ids{
+      U,
+      Id::makeFromBool(false),
+      I(42),
+      D(1),
+      D(-2),
+      testContext.x,
+      testContext.notInVocabA,
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-06-13")),
+      Id::makeFromGeoPoint(GeoPoint{0, 0}),
+      testContext.blank,
+      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12))};
+  ql::ranges::sort(ids);
+  testContext.table = IdTable{1, ctx._allocator};
+  for (Id id : ids) {
+    testContext.table.push_back({id});
+  }
+  ctx._inputTable = testContext.table.asStaticView<0>();
+  ctx._endIndex = ids.size();
+  testContext.varToColMap.clear();
+  testContext.varToColMap[var] = makePossiblyUndefinedColumn(0);
+  ctx._columnsByWhichResultIsSorted = {0};
+
+  auto evaluate = [&](auto makeExpression) {
+    return makeExpression(std::make_unique<VariableExpression>(var))
+        ->evaluate(&ctx);
+  };
+  auto test = [&](auto makeExpression, SetOfIntervals expected,
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    EXPECT_THAT(evaluate(makeExpression),
+                ::testing::VariantWith<SetOfIntervals>(expected));
+  };
+  using Vec = VectorWithMemoryLimit<Id>;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  // `BOUND` is false for UNDEF, the other functions are UNDEF, which a
+  // `SetOfIntervals` can't represent, so the result is computed row by row.
+  test(&makeBoundExpression, {{{1, 11}}, 11});
+  EXPECT_THAT(evaluate(&makeIsBlankExpression),
+              ::testing::VariantWith<Vec>(
+                  ::testing::ElementsAre(U, F, F, F, F, F, F, F, F, T, T)));
+
+  // Only evaluate on a subrange of the input without UNDEF.
+  ctx._beginIndex = 1;
+  test(&makeIsBlankExpression, {{{8, 10}}, 10});
+  test(&makeIsNumericExpression, {{{1, 4}}, 10});
+  test(&makeIsGeoPointExpression, {{{7, 8}}, 10});
+  test(&makeBoundExpression, {{{0, 10}}, 10});
+  ctx._endIndex = 8;
+  test(&makeIsBlankExpression, {{}, 7});
+  ctx._endIndex = 1;
+  test(&makeIsBlankExpression, {{}, 0});
+
+  // Without the sortedness or for a grouped variable, the result is computed
+  // row by row.
+  ctx._endIndex = ids.size();
+  auto rowByRow = ::testing::VariantWith<Vec>(
+      ::testing::ElementsAre(F, F, F, F, F, F, F, F, T, T));
+  ctx._groupedVariables.insert(var);
+  EXPECT_THAT(evaluate(&makeIsBlankExpression), rowByRow);
+  ctx._groupedVariables.clear();
+  ctx._columnsByWhichResultIsSorted.clear();
+  EXPECT_THAT(evaluate(&makeIsBlankExpression), rowByRow);
 }
 
 // ____________________________________________________________________________
@@ -1681,6 +2122,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkEnvelopeLL = testUnaryExpression<&makeEnvelopeLowerLeftExpression>;
   auto checkEnvelopeUR = testUnaryExpression<&makeEnvelopeUpperRightExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
+  auto checkCrsType = testUnaryExpression<&makeCrsTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1705,6 +2147,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
+  checkIsGeoPoint(U, U);
   checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);
@@ -1739,6 +2182,22 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              geoLit("BLABLIBLU(1 1, 2 2)")},
       IdOrLocalVocabEntryVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
                              sfGeoType("Polygon"), U});
+
+  auto crsType = [](std::string_view type) {
+    return lit(type, "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+  };
+  checkCrsType(
+      IdOrLocalVocabEntryVec{U, D(0.0), v,
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "3857> LINESTRING(2 2, 4 4)"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> POLYGON((2 4, 4 4, 4 2, 2 2))"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "3035> LINESTRING(2 2, 4 4)")},
+      IdOrLocalVocabEntryVec{
+          U, U, crsType("http://www.opengis.net/def/crs/OGC/1.3/CRS84"),
+          crsType("http://www.opengis.net/def/crs/EPSG/0/3857"),
+          crsType("http://www.opengis.net/def/crs/EPSG/0/4326"), U});
 
   // Bounding coordinate expressions
   using enum ad_utility::BoundingCoordinate;

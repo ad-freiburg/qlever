@@ -97,6 +97,21 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {_left, _right}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Minus::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Minus>(_executionContext, std::move(children.at(0)),
+                                 std::move(children.at(1)));
+}
+
+// _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
   // This is an upper bound on the multiplicity as an arbitrary number
   // of rows might be deleted in this operation.
@@ -339,7 +354,7 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
        permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         ad_utility::MinusRowHandler rowAdder{
             _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
-            cancellationHandle_, std::move(yieldTable)};
+            cancellationHandle(), std::move(yieldTable)};
         auto leftRange = qlever::joinHelpers::resultToView(*left, permutation);
         auto rightRange = qlever::joinHelpers::resultToView(
             *right, {_matchedColumns.at(0).at(1)});

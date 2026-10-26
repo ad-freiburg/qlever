@@ -86,17 +86,21 @@ struct MergeState {
 // blocks into the output blocks.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
             requires InputConcept<Input>)
-class ChunkMerger : public ad_utility::InputRangeFromGet<typename Input::Block>,
+class ChunkMerger : public ad_utility::InputRangeFromGet<OutputBlockT<Input>>,
                     public ad_utility::NoCopyNoMove {
  public:
   using Block = typename Input::Block;
+  using OutputBlock = OutputBlockT<Input>;
   using Element = typename Input::Element;
   using State = MergeState<Input, Comparator>;
 
  private:
   // The lazy cursor over that part of a single run that lies in the range of
   // the chunk. The current element is `*it_`, and the cursor is exhausted if
-  // `it_ == end_` and there is no further block to read.
+  // it has no `block_` (or `it_ == end_`) and there is no further block to
+  // read. The `block_` is empty until the first block is read, and again
+  // after the cursor is exhausted (so that `Block` need not be default
+  // constructible, and so that no dead block is kept alive).
   //
   // NOTE: `it_` and `end_` are iterators into `block_`, so a `Cursor` must not
   // be relocated once it has been set up. This is guaranteed because
@@ -108,19 +112,17 @@ class ChunkMerger : public ad_utility::InputRangeFromGet<typename Input::Block>,
     size_t runIdx_;
     size_t nextBlockIdx_;
     size_t endBlockIdx_;
-    Block block_;
-    Iterator it_;
-    Iterator end_;
+    std::optional<Block> block_;
+    Iterator it_{};
+    Iterator end_{};
 
-    // NOTE: The `block` is only passed in because `Block` need not be default
-    // constructible; it is always the result of `makeEmptyBlock()`.
-    Cursor(size_t runIdx, size_t firstBlockIdx, size_t endBlockIdx, Block block)
+    Cursor(size_t runIdx, size_t firstBlockIdx, size_t endBlockIdx)
         : runIdx_{runIdx},
           nextBlockIdx_{firstBlockIdx},
-          endBlockIdx_{endBlockIdx},
-          block_{std::move(block)},
-          it_{ql::ranges::begin(block_)},
-          end_{it_} {}
+          endBlockIdx_{endBlockIdx} {}
+
+    // Whether the cursor currently points to an element of its `block_`.
+    bool hasElement() const { return block_.has_value() && it_ != end_; }
   };
 
   std::shared_ptr<const State> state_;
@@ -147,7 +149,7 @@ class ChunkMerger : public ad_utility::InputRangeFromGet<typename Input::Block>,
   // chunk). The returned block is never empty, because an `OutputBlockSize` is
   // never satisfied by an empty block. This is the only function that performs
   // I/O and it must not be called concurrently for the same `ChunkMerger`.
-  std::optional<Block> get() override {
+  std::optional<OutputBlock> get() override {
     initializeIfNecessary();
     if (heap_.empty()) {
       return std::nullopt;
@@ -211,7 +213,7 @@ class ChunkMerger : public ad_utility::InputRangeFromGet<typename Input::Block>,
         continue;
       }
       cursors_.emplace_back(runIdx, blockRange.firstBlockIdx_,
-                            blockRange.endBlockIdx_, input.makeEmptyBlock());
+                            blockRange.endBlockIdx_);
     }
     heap_.reserve(cursors_.size());
     for (auto& cursor : cursors_) {
@@ -231,34 +233,36 @@ class ChunkMerger : public ad_utility::InputRangeFromGet<typename Input::Block>,
   // because a first block that is trimmed away completely is directly followed
   // by the second one.
   bool readNextBlockIfNecessary(Cursor& cursor, bool isFirstBlock = false) {
+    using Iterator = typename Cursor::Iterator;
     const Input& input = state_->input_;
     const Comparator& comparator = state_->comparator_;
-    while (cursor.it_ == cursor.end_) {
+    while (!cursor.hasElement()) {
       if (cursor.nextBlockIdx_ == cursor.endBlockIdx_) {
         // The cursor is exhausted. Release its last block right away instead
         // of keeping it alive until the whole chunk is merged, so that a chunk
         // whose runs finish early does not hold one dead block per such run.
         // The iterators are reset as well, so that they never dangle.
-        cursor.block_ = input.makeEmptyBlock();
-        cursor.it_ = ql::ranges::begin(cursor.block_);
-        cursor.end_ = cursor.it_;
+        cursor.it_ = Iterator{};
+        cursor.end_ = Iterator{};
+        cursor.block_.reset();
         return false;
       }
       size_t blockIdx = cursor.nextBlockIdx_;
       ++cursor.nextBlockIdx_;
       cursor.block_ = input.getBlock(cursor.runIdx_, blockIdx);
-      cursor.it_ = ql::ranges::begin(cursor.block_);
-      cursor.end_ = cursor.it_ + ql::ranges::size(cursor.block_);
+      Block& block = cursor.block_.value();
+      cursor.it_ = ql::ranges::begin(block);
+      cursor.end_ = cursor.it_ + ql::ranges::size(block);
       // Only the very first block of the chunk can contain elements that are
       // smaller than `lo_`, and only the very last one can contain elements
       // that are not smaller than `hi_`.
       if (std::exchange(isFirstBlock, false) && boundary().lo_.has_value()) {
-        cursor.it_ = ql::ranges::lower_bound(
-            cursor.block_, boundary().lo_.value(), comparator);
+        cursor.it_ =
+            ql::ranges::lower_bound(block, boundary().lo_.value(), comparator);
       }
       if (blockIdx + 1 == cursor.endBlockIdx_ && boundary().hi_.has_value()) {
-        cursor.end_ = ql::ranges::lower_bound(
-            cursor.block_, boundary().hi_.value(), comparator);
+        cursor.end_ =
+            ql::ranges::lower_bound(block, boundary().hi_.value(), comparator);
       }
       AD_CORRECTNESS_CHECK(cursor.it_ <= cursor.end_);
     }

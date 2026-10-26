@@ -197,7 +197,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnSet](auto&& id) {
+       &newOverlapMatches, &biggerTableJoinColumnSet](IdRef id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -329,7 +329,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // Overwrite the designated values in the smaller table.
   ql::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto&& id) {
+      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](IdRef id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
           id = newValueIterator->second;

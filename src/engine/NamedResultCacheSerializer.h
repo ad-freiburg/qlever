@@ -12,6 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheFormatVersion.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/Serializer/SerializeString.h"
@@ -24,12 +25,6 @@ namespace namedResultCacheSerializer::detail {
 // serialized `NamedResultCache`. Used by `readFromSerializer` to give a clear
 // error message when the input is not a serialized `NamedResultCache`.
 constexpr uint8_t magicByte = 0xC3;
-
-// The version of the (de)serialization format implemented below. Increment
-// this whenever the format changes in a way that is incompatible with
-// previously serialized data, s.t. `readFromSerializer` can detect and reject
-// data that was written by an incompatible version of QLever.
-constexpr uint16_t formatVersion = 1;
 }  // namespace namedResultCacheSerializer::detail
 
 namespace namedResultCacheSerializer {
@@ -38,18 +33,30 @@ using Value = NamedResultCache::Value;
 
 // Write the `entries` (as returned by `getAllEntriesSortedByKey`) to the
 // `serializer`, in exactly the format that `readFromSerializer` reads. Each
-// value is written via `writeEntry(serializer, value)`, which has to write a
-// `NamedResultCache::Value`, but may write a modified version of it (see
-// `writeValue` below).
+// value is written via `writeEntry(serializer, key, value)`, in the format
+// version `entriesVersion` (one of `legacyFormatVersion` and
+// `formatVersion`).
+//
+// NOTE 1: The `writeEntry` has to write a `NamedResultCache::Value`, but may
+// write a modified version of it (see `writeValue` below). The `key` is passed
+// so that a caller can look up information about the entry (for example its
+// counterpart in a previously written blob).
+//
+// NOTE 2: The `writeEntry` has to write the values in the same
+// `entriesVersion`, and the legacy version can only represent geo indices
+// with a single segment.
 CPP_template(typename Serializer, typename WriteEntry)(
     requires ad_utility::serialization::WriteSerializer<Serializer> &&
-    ql::concepts::invocable<const WriteEntry&, Serializer&, const Value&>)
+    ql::concepts::invocable<const WriteEntry&, Serializer&, const std::string&,
+                            const Value&>)
 void writeEntries(Serializer& serializer, const Entries& entries,
-                  const WriteEntry& writeEntry) {
+                  const WriteEntry& writeEntry, uint16_t entriesVersion) {
+  AD_CONTRACT_CHECK(entriesVersion == formatVersion ||
+                    entriesVersion == legacyFormatVersion);
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
   serializer << detail::magicByte;
-  serializer << detail::formatVersion;
+  serializer << entriesVersion;
 
   // Serialize the number of entries.
   serializer << entries.size();
@@ -57,8 +64,94 @@ void writeEntries(Serializer& serializer, const Entries& entries,
   // Serialize each entry.
   for (const auto& [key, value] : entries) {
     serializer << key;
-    writeEntry(serializer, *value);
+    writeEntry(serializer, key, *value);
   }
+}
+}  // namespace namedResultCacheSerializer
+
+namespace namedResultCacheSerializer {
+// Read a `NamedResultCache::Value` that was written in the format of the given
+// `entriesVersion` (one of `legacyFormatVersion` and
+// `formatVersion`) from the `serializer` into `arg`. The
+// `allocatorForSerialization_` and `contextForSerialization_` of `arg` have to
+// be set. This is the read counterpart of `writeValue` below, and also what the
+// generic serialization of a `NamedResultCache::Value` below does (for the
+// current version).
+CPP_template(typename Serializer)(
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void readValue(Serializer& serializer, NamedResultCache::Value& arg,
+               uint16_t entriesVersion) {
+  using namespace ad_utility::serialization;
+  // Deserialize the LocalVocab and get the ID mapping.
+  AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
+  auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
+      serializer, *arg.contextForSerialization_);
+
+  // Deserialize the IdTable with ID mapping applied.
+  size_t numRows, numColumns;
+  serializer >> numRows;
+  serializer >> numColumns;
+
+  AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
+  ExplicitIdTableOperation::IdTableOrView resultTable;
+  if constexpr (ZeroCopyReadSerializer<Serializer>) {
+    // Zero-copy path: build a non-owning `IdTableView<0>` directly from
+    // spans into the serializer's buffer, without copying the column data.
+    // Since the writing side (see above) rejects any entry that contains a
+    // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
+    // the columns, so skipping `deserializeIds`'s remapping step here is
+    // safe. We still defensively re-check the invariant.
+    IdTableView<0>::ViewSpans columns;
+    columns.reserve(numColumns);
+    for (size_t i = 0; i < numColumns; ++i) {
+      auto column = zeroCopyDeserializeToSpan<Id>(serializer);
+      AD_CORRECTNESS_CHECK(column.size() == numRows);
+      AD_CORRECTNESS_CHECK(
+          ql::ranges::find(column, Datatype::LocalVocabIndex,
+                           Id::getDatatypeL) == column.end(),
+          "Named result cache entries that contain local vocab entries "
+          "currently cannot be deserialized.");
+      columns.push_back(column);
+    }
+    resultTable =
+        IdTableView<0>::fromColumns(std::move(columns), numColumns, numRows,
+                                    arg.allocatorForSerialization_.value());
+  } else {
+    IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
+    idTable.resize(numRows);
+    for (auto&& col : idTable.getColumns()) {
+      ad_utility::detail::deserializeIds(serializer, mapping, col);
+    }
+    resultTable = std::make_shared<const IdTable>(std::move(idTable));
+  }
+
+  // Deserialize the `VariableToColumnMap`, see `serializeDeterministically`
+  // in `VariableToColumnMap.h`.
+  VariableToColumnMap varToColMap;
+  serializeDeterministically(serializer, varToColMap);
+
+  // Deserialize `resultSortedOn`.
+  std::vector<ColumnIndex> resultSortedOn;
+  serializer >> resultSortedOn;
+
+  // Deserialize `cacheKey`.
+  std::string cacheKey;
+  serializer >> cacheKey;
+
+  // Deserialize `cachedGeoIndex`.
+  bool hasGeoIndex;
+  serializer >> hasGeoIndex;
+  std::optional<SpatialJoinCachedIndex> cachedGeoIndex;
+  if (hasGeoIndex) {
+    cachedGeoIndex.emplace(SpatialJoinCachedIndex::readFromSerializer(
+        serializer, numRows, entriesVersion));
+  }
+
+  // Construct the `Value`.
+  arg = NamedResultCache::Value{
+      std::move(resultTable),    std::move(varToColMap),
+      std::move(resultSortedOn), std::move(localVocab),
+      std::move(cacheKey),       std::move(cachedGeoIndex)};
 }
 }  // namespace namedResultCacheSerializer
 
@@ -68,7 +161,9 @@ CPP_template_def(typename Serializer)(
 void NamedResultCache::writeToSerializer(Serializer& serializer) const {
   namedResultCacheSerializer::writeEntries(
       serializer, getAllEntriesSortedByKey(),
-      [](Serializer& s, const Value& value) { s << value; });
+      [](Serializer& s, [[maybe_unused]] const std::string& key,
+         const Value& value) { s << value; },
+      namedResultCacheSerializer::formatVersion);
 }
 
 // _____________________________________________________________________________
@@ -91,12 +186,14 @@ void NamedResultCache::readFromSerializer(Serializer& serializer,
   }
   uint16_t readFormatVersion;
   serializer >> readFormatVersion;
-  if (readFormatVersion != namedResultCacheSerializer::detail::formatVersion) {
+  if (readFormatVersion != namedResultCacheSerializer::formatVersion &&
+      readFormatVersion != namedResultCacheSerializer::legacyFormatVersion) {
     AD_THROW(absl::StrCat(
         "The serialized `NamedResultCache` has format version ",
         readFormatVersion,
-        ", but this version of QLever only supports format version ",
-        namedResultCacheSerializer::detail::formatVersion,
+        ", but this version of QLever only supports the format versions ",
+        namedResultCacheSerializer::legacyFormatVersion, " and ",
+        namedResultCacheSerializer::formatVersion,
         ". The named result cache was probably written by an incompatible "
         "version of QLever"));
   }
@@ -115,7 +212,7 @@ void NamedResultCache::readFromSerializer(Serializer& serializer,
     Value value;
     value.allocatorForSerialization_ = allocator;
     value.contextForSerialization_ = &context;
-    serializer >> value;
+    namedResultCacheSerializer::readValue(serializer, value, readFormatVersion);
 
     // Use the store method to maintain consistency.
     store(key, std::move(value));
@@ -135,13 +232,16 @@ namespace namedResultCacheSerializer {
 // and in the number of rows, which is checked. If `writeLocalVocabWords` is
 // `false`, the words of the local vocab of the `value` are not written (only
 // its blank node blocks, see `serializeOnlyBlankNodeBlocksFromLocalVocab`),
-// because such a caller has stored them elsewhere.
+// because such a caller has stored them elsewhere. The geo index (if any) is
+// written in the format of the given `entriesVersion`, which has to be the one
+// given to `writeEntries`. In the legacy version, the geo index must have a
+// single segment.
 CPP_template(typename Serializer, typename Columns)(
     requires ad_utility::serialization::WriteSerializer<Serializer>)
 void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
                 const Columns& columns,
                 const std::vector<ColumnIndex>& resultSortedOn,
-                bool writeLocalVocabWords) {
+                bool writeLocalVocabWords, uint16_t entriesVersion) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);
@@ -208,7 +308,7 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
   bool hasGeoIndex = value.cachedGeoIndex_.has_value();
   serializer << hasGeoIndex;
   if (hasGeoIndex) {
-    serializer << value.cachedGeoIndex_.value();
+    value.cachedGeoIndex_.value().writeToSerializer(serializer, entriesVersion);
   }
 }
 }  // namespace namedResultCacheSerializer
@@ -227,78 +327,11 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     const auto& resultView = ExplicitIdTableOperation::viewOf(arg.result_);
     namedResultCacheSerializer::writeValue(
         serializer, arg, resultView.getColumns(), arg.resultSortedOn_,
-        /*writeLocalVocabWords=*/true);
+        /*writeLocalVocabWords=*/true,
+        namedResultCacheSerializer::formatVersion);
   } else {
-    // Deserialize the LocalVocab and get the ID mapping.
-    AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
-    auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
-        serializer, *arg.contextForSerialization_);
-
-    // Deserialize the IdTable with ID mapping applied.
-    size_t numRows, numColumns;
-    serializer >> numRows;
-    serializer >> numColumns;
-
-    AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
-    ExplicitIdTableOperation::IdTableOrView resultTable;
-    if constexpr (ZeroCopyReadSerializer<S>) {
-      // Zero-copy path: build a non-owning `IdTableView<0>` directly from
-      // spans into the serializer's buffer, without copying the column data.
-      // Since the writing side (see above) rejects any entry that contains a
-      // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
-      // the columns, so skipping `deserializeIds`'s remapping step here is
-      // safe. We still defensively re-check the invariant.
-      IdTableView<0>::ViewSpans columns;
-      columns.reserve(numColumns);
-      for (size_t i = 0; i < numColumns; ++i) {
-        auto column = zeroCopyDeserializeToSpan<Id>(serializer);
-        AD_CORRECTNESS_CHECK(column.size() == numRows);
-        AD_CORRECTNESS_CHECK(
-            ql::ranges::find(column, Datatype::LocalVocabIndex,
-                             Id::getDatatypeL) == column.end(),
-            "Named result cache entries that contain local vocab entries "
-            "currently cannot be deserialized.");
-        columns.push_back(column);
-      }
-      resultTable =
-          IdTableView<0>::fromColumns(std::move(columns), numColumns, numRows,
-                                      arg.allocatorForSerialization_.value());
-    } else {
-      IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
-      idTable.resize(numRows);
-      for (auto&& col : idTable.getColumns()) {
-        ad_utility::detail::deserializeIds(serializer, mapping, col);
-      }
-      resultTable = std::make_shared<const IdTable>(std::move(idTable));
-    }
-
-    // Deserialize the `VariableToColumnMap`, see `serializeDeterministically`
-    // in `VariableToColumnMap.h`.
-    VariableToColumnMap varToColMap;
-    serializeDeterministically(serializer, varToColMap);
-
-    // Deserialize `resultSortedOn`.
-    std::vector<ColumnIndex> resultSortedOn;
-    serializer >> resultSortedOn;
-
-    // Deserialize `cacheKey`.
-    std::string cacheKey;
-    serializer >> cacheKey;
-
-    // Deserialize `cachedGeoIndex`.
-    bool hasGeoIndex;
-    serializer >> hasGeoIndex;
-    std::optional<SpatialJoinCachedIndex> cachedGeoIndex;
-    if (hasGeoIndex) {
-      cachedGeoIndex.emplace(SpatialJoinCachedIndex::TagForSerialization{});
-      serializer >> cachedGeoIndex.value();
-    }
-
-    // Construct the `Value`.
-    arg = NamedResultCache::Value{
-        std::move(resultTable),    std::move(varToColMap),
-        std::move(resultSortedOn), std::move(localVocab),
-        std::move(cacheKey),       std::move(cachedGeoIndex)};
+    namedResultCacheSerializer::readValue(
+        serializer, arg, namedResultCacheSerializer::formatVersion);
   }
 }
 
