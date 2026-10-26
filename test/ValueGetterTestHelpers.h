@@ -48,8 +48,7 @@ struct TestContextWithGivenTTl {
       table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
 
