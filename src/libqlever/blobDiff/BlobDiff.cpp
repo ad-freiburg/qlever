@@ -11,7 +11,6 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
-#include <zstd.h>
 
 #include <cstring>
 
@@ -83,9 +82,8 @@ std::vector<char> computeBlobDiff(ql::span<const char> base,
 }
 
 // _____________________________________________________________________________
-BlobDiffHeaderOrError readBlobDiffHeader(
-    ql::span<const char> diffFile,
-    std::optional<ad_utility::MemorySize> maxTargetSize) {
+BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile,
+                                         ad_utility::MemorySize maxTargetSize) {
   if (diffFile.size() < headerSize) {
     return makeError(ErrorType::invalidMagicBytes,
                      "The given file is too small to be a blob diff file");
@@ -143,27 +141,15 @@ BlobDiffHeaderOrError readBlobDiffHeader(
         std::get<size_t>(frameSize), " bytes (the file is corrupted)");
   }
   // Second, both sizes might be corrupted consistently, so check that the size
-  // is plausible. Every block of a ZSTD frame has a header of at least 3 bytes
-  // and decodes to at most `ZSTD_BLOCKSIZE_MAX` bytes, so a payload of `n`
-  // bytes decodes to less than `n * ZSTD_BLOCKSIZE_MAX` bytes, no matter how
-  // much of the target is copied from the base. NOTE: A bound in terms of the
-  // size of the base would be wrong, because highly repetitive data compresses
-  // to almost nothing even without a base. This bound is very loose, which is
-  // why the caller can additionally limit the size via `maxTargetSize`.
-  if (header.targetSize_ / ZSTD_BLOCKSIZE_MAX >= header.payloadSize_) {
-    return makeError(
-        ErrorType::invalidTargetSize,
-        "The blob diff file announces a target of ", header.targetSize_,
-        " bytes, which is more than a payload of ", header.payloadSize_,
-        " bytes can encode (the file is corrupted)");
-  }
-  if (maxTargetSize.has_value() &&
-      header.targetSize_ > maxTargetSize.value().getBytes()) {
+  // does not exceed the limit of the caller. NOTE: There is no useful bound in
+  // terms of the size of the payload or of the base, because highly repetitive
+  // data compresses to almost nothing even without a base.
+  if (header.targetSize_ > maxTargetSize.getBytes()) {
     return makeError(ErrorType::invalidTargetSize,
                      "The blob diff file announces a target of ",
                      header.targetSize_,
                      " bytes, which exceeds the maximum target size of ",
-                     maxTargetSize.value().asString());
+                     maxTargetSize.asString());
   }
   return header;
 }
@@ -171,7 +157,7 @@ BlobDiffHeaderOrError readBlobDiffHeader(
 // _____________________________________________________________________________
 DecompressedBlobOrError applyBlobDiffToDecompressedBase(
     ql::span<const char> base, ql::span<const char> diffFile,
-    std::optional<ad_utility::MemorySize> maxTargetSize) {
+    ad_utility::MemorySize maxTargetSize) {
   auto headerOrError = readBlobDiffHeader(diffFile, maxTargetSize);
   if (auto* error = std::get_if<BlobDiffError>(&headerOrError)) {
     return std::move(*error);
@@ -211,7 +197,7 @@ DecompressedBlobOrError applyBlobDiffToDecompressedBase(
 // _____________________________________________________________________________
 BlobOrError applyBlobDiffToCompressedBase(
     ql::span<const char> compressedBase, ql::span<const char> diffFile,
-    std::optional<ad_utility::MemorySize> maxTargetSize) {
+    ad_utility::MemorySize maxTargetSize) {
   auto base = Manager::tryToDecompressBlob(compressedBase, {});
   if (auto* error = std::get_if<Manager::BlobError>(&base)) {
     return makeError(ErrorType::baseNotDecompressible,
@@ -228,7 +214,10 @@ BlobOrError applyBlobDiffToCompressedBase(
 
 // _____________________________________________________________________________
 std::string describeBlobDiff(ql::span<const char> diffFile) {
-  auto headerOrError = readBlobDiffHeader(diffFile);
+  // Only the header is described, nothing is allocated, so any target size is
+  // fine.
+  auto headerOrError =
+      readBlobDiffHeader(diffFile, ad_utility::MemorySize::max());
   if (auto* error = std::get_if<BlobDiffError>(&headerOrError)) {
     throw std::runtime_error{error->message_};
   }

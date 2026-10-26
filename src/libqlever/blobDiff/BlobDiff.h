@@ -12,7 +12,6 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -91,11 +90,10 @@ enum class BlobDiffErrorType {
   // trailing bytes).
   invalidPayloadSize,
   // The size of the target that is stored in the header is not plausible: it
-  // differs from the size that is stored in the ZSTD frame of the payload, it
-  // is larger than any ZSTD frame of the size of the payload can encode, or it
-  // exceeds the `maxTargetSize` that was given by the caller. This is detected
-  // before the target is allocated, so a corrupted size cannot lead to a huge
-  // allocation.
+  // differs from the size that is stored in the ZSTD frame of the payload, or
+  // it exceeds the `maxTargetSize` that was given by the caller. This is
+  // detected before the target is allocated, so a corrupted size cannot lead to
+  // a huge allocation.
   invalidTargetSize,
   // The compressed base blob cannot be decompressed (see
   // `applyBlobDiffToCompressedBase`).
@@ -133,16 +131,11 @@ using DecompressedBlobOrError = std::variant<DecompressedBlob, BlobDiffError>;
 using BlobOrError = std::variant<std::vector<char>, BlobDiffError>;
 
 // Parse and validate the header of `diffFile` (see `BlobDiffErrorType` for the
-// checks). If `maxTargetSize` is given, a diff whose decompressed target is
-// larger is rejected. NOTE: Without a `maxTargetSize`, the size of the target
-// is only checked against the theoretical maximum of what a ZSTD frame of the
-// size of the payload can encode, which is very loose (a payload of 1 MB can
-// encode about 128 GB), so callers that know a sensible upper bound should
-// pass it. On success, the `targetSize_` of the header can be allocated
+// checks). A diff whose decompressed target is larger than `maxTargetSize` is
+// rejected. On success, the `targetSize_` of the header can be allocated
 // without exceeding that bound. Do not throw for any input.
-BlobDiffHeaderOrError readBlobDiffHeader(
-    ql::span<const char> diffFile,
-    std::optional<ad_utility::MemorySize> maxTargetSize = std::nullopt);
+BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile,
+                                         ad_utility::MemorySize maxTargetSize);
 
 // Apply `diffFile` to the decompressed blob `base` and return the decompressed
 // target blob. Report an error if the header of `diffFile` is invalid (see
@@ -153,7 +146,7 @@ BlobDiffHeaderOrError readBlobDiffHeader(
 // input, except if the target cannot be allocated.
 DecompressedBlobOrError applyBlobDiffToDecompressedBase(
     ql::span<const char> base, ql::span<const char> diffFile,
-    std::optional<ad_utility::MemorySize> maxTargetSize = std::nullopt);
+    ad_utility::MemorySize maxTargetSize);
 
 // Apply `diffFile` to the compressed blob `compressedBase` and return the
 // compressed target blob (a standard blob that can be loaded by
@@ -162,9 +155,9 @@ DecompressedBlobOrError applyBlobDiffToDecompressedBase(
 // `applyBlobDiffToDecompressedBase`. The `maxTargetSize` limits the size of the
 // decompressed target (see `readBlobDiffHeader`). Do not throw for any input,
 // except if the decompressed base or the target cannot be allocated.
-BlobOrError applyBlobDiffToCompressedBase(
-    ql::span<const char> compressedBase, ql::span<const char> diffFile,
-    std::optional<ad_utility::MemorySize> maxTargetSize = std::nullopt);
+BlobOrError applyBlobDiffToCompressedBase(ql::span<const char> compressedBase,
+                                          ql::span<const char> diffFile,
+                                          ad_utility::MemorySize maxTargetSize);
 
 // Return a human-readable description of `diffFile` (the sizes of base, target
 // and payload). Throw if the header cannot be parsed.
