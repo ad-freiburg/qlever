@@ -23,11 +23,11 @@
 #include "./util/GTestHelpers.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
-#include "index/ChunkwisePermutationWriter.h"
 #include "index/CompressedRelationReader.h"
 #include "index/CompressedRelationWriter.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/LocatedTriples.h"
+#include "index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h"
 #include "util/GlobalExecutor.h"
 
 // NOTE: The chunkwise writer needs the parallel merge, which only exists in the

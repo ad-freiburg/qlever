@@ -976,11 +976,12 @@ class IndexImpl {
   // The sorted input of a pair of permutations that is written directly from
   // the chunks of the parallel merge of the `sorter_` (instead of from a
   // sequential range of sorted blocks), see
-  // `index/ChunkwisePermutationWriter.h`. The `perTripleCallbacks` of such an
-  // input have to be `chunkwisePermutationWriter::ConcurrentBlockCallback`s,
-  // which are invoked concurrently and in an arbitrary order of the blocks.
-  // With `removeDuplicates_` set, consecutive duplicate rows are removed first
-  // (like `ad_utility::uniqueBlockView` does for a sequential input).
+  // `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`. The
+  // `perTripleCallbacks` of such an input have to be
+  // `chunkwisePermutationWriter::ConcurrentBlockCallback`s, which are invoked
+  // concurrently and in an arbitrary order of the blocks. With
+  // `removeDuplicates_` set, consecutive duplicate rows are removed first (like
+  // `ad_utility::uniqueBlockView` does for a sequential input).
   template <typename Sorter>
   struct ChunkwiseInput {
     Sorter& sorter_;
@@ -1031,8 +1032,9 @@ class IndexImpl {
 
   // The variants of the three functions above that write the permutations
   // directly from the chunks of the parallel merge of the `sortedTriples`
-  // sorter (see `ChunkwiseInput` and `index/ChunkwisePermutationWriter.h`),
-  // and that feed the `nextSorter` (if any) concurrently. They cannot be used
+  // sorter (see `ChunkwiseInput` and
+  // `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`), and that
+  // feed the `nextSorter` (if any) concurrently. They cannot be used
   // for the SPO and SOP permutations if the patterns are built, because the
   // pattern creation needs the triples in order. The `removeDuplicates` flag
   // is for the first pair of permutations, whose input may contain duplicate

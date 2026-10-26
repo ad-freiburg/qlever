@@ -45,8 +45,9 @@
 using SmallRelationsBuffer = IdTable;
 
 // The writer that is fed directly by the chunks of a parallel merge (see
-// `index/ChunkwisePermutationWriter.h`), which needs access to the
-// thread-safe internals of the `CompressedRelationWriter` below.
+// `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`), which
+// needs access to the thread-safe internals of the `CompressedRelationWriter`
+// below.
 namespace chunkwisePermutationWriter {
 class ChunkwisePermutationWriter;
 class ChunkWriter;
