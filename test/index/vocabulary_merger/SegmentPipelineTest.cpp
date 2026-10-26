@@ -182,6 +182,21 @@ TEST(SegmentPipeline, zeroSegmentsInFlightIsRejected) {
       ::testing::HasSubstr("maxSegmentsInFlight_ > 0"));
 }
 
+// Test that a pipeline with segments of zero words is rejected (the cutter
+// would call `back()` on its empty vector of blocks).
+TEST(SegmentPipeline, zeroWordsPerSegmentIsRejected) {
+  const std::string basename = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 1);
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SegmentPipeline<decltype(lessThan)>{
+          writer, partialVocabularyIdMapFilenames(basename, 1), 1, noRegexes,
+          lessThan, /*maxSegmentsInFlight=*/1, /*numWordsPerSegment=*/0}),
+      ::testing::HasSubstr("numWordsPerSegment_ > 0"));
+}
+
 // Test that an exception from the building of a segment (here: a violated
 // order, which the expensive checks detect) is rethrown on the thread that
 // pushes the blocks.

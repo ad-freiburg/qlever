@@ -79,7 +79,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
  public:
   // Construct from the arguments of `buildSegment`, which all have to stay
   // alive until all the tasks have completed, and the minimal number of words
-  // per segment.
+  // per segment, which has to be at least one.
   SegmentCutter(const ParallelWordWriterBase& writer,
                 const ad_utility::RegexSet& blankNodeIriRegexes,
                 size_t numPartialVocabularies, const W& comparator,
@@ -88,7 +88,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
         blankNodeIriRegexes_{blankNodeIriRegexes},
         numPartialVocabularies_{numPartialVocabularies},
         comparator_{comparator},
-        numWordsPerSegment_{numWordsPerSegment} {}
+        numWordsPerSegment_{numWordsPerSegment} {
+    AD_CONTRACT_CHECK(numWordsPerSegment_ > 0);
+  }
 
   // Add the next `block` of merged words. If this completes a segment (which
   // then consists of the blocks before the `block`), return the task that
