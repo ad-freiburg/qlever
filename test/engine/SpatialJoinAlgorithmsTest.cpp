@@ -1954,12 +1954,17 @@ TEST(SpatialJoin, DistanceUnit) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the distance reported by a `libspatialjoin` `within-dist` join to
+// a line with only two points does not depend on the maximum distance of the
+// join (regression test for ad-freiburg/spatialjoin#34).
 TEST(SpatialJoin, LibspatialJoinDistanceToLineWithTwoPoints) {
-  // A park (osmway:363652135), a river segment with only two points
-  // (osmway:99301673) and a point. Regression test for a bug in
-  // `libspatialjoin`, where the distance to a line with only two points
-  // depended on the maximum distance of the join.
+  using ::testing::DoubleNear;
+  using ::testing::IsEmpty;
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // A park (`osmway:363652135`), a river segment with only two points
+  // (`osmway:99301673`) and a point.
   std::string kg = absl::StrCat(
       "<park> <asWKT> ",
       makeAreaLiteral(
@@ -2012,14 +2017,12 @@ TEST(SpatialJoin, LibspatialJoinDistanceToLineWithTwoPoints) {
     return dists;
   };
 
-  using ::testing::Pair;
-  using ::testing::UnorderedElementsAre;
   // `libspatialjoin` approximates the distances with a precision of about half
   // a meter.
-  auto pointRiver = Pair("<point> <river>", ::testing::DoubleNear(61.7, 0.5));
-  auto parkRiver = Pair("<park> <river>", ::testing::DoubleNear(79.6, 0.5));
-  auto parkPoint = Pair("<park> <point>", ::testing::DoubleNear(153, 0.5));
-  EXPECT_THAT(run(50), ::testing::IsEmpty());
+  auto pointRiver = Pair("<point> <river>", DoubleNear(61.7, 0.5));
+  auto parkRiver = Pair("<park> <river>", DoubleNear(79.6, 0.5));
+  auto parkPoint = Pair("<park> <point>", DoubleNear(153, 0.5));
+  EXPECT_THAT(run(50), IsEmpty());
   EXPECT_THAT(run(79), UnorderedElementsAre(pointRiver));
   EXPECT_THAT(run(100), UnorderedElementsAre(pointRiver, parkRiver));
   EXPECT_THAT(run(150), UnorderedElementsAre(pointRiver, parkRiver));
