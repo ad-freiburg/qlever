@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_UTIL_PARAMETERS_H
 #define QLEVER_SRC_UTIL_PARAMETERS_H
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 
@@ -100,12 +101,10 @@ struct Parameter : public ParameterBase {
       std::invoke(parameterConstraint_.value(), newValue, name_);
     }
     Type oldValue = std::exchange(value_, std::move(newValue));
-    try {
-      triggerOnUpdateAction();
-    } catch (...) {
-      value_ = std::move(oldValue);
-      throw;
-    }
+    absl::Cleanup restoreOldValue{
+        [this, &oldValue] { value_ = std::move(oldValue); }};
+    triggerOnUpdateAction();
+    std::move(restoreOldValue).Cancel();
   }
 
   const Type& get() const { return value_; }

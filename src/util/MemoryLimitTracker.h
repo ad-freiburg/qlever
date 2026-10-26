@@ -18,7 +18,6 @@
 #include <memory>
 #include <stdexcept>
 
-#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/TransparentFunctors.h"
@@ -54,9 +53,10 @@ class AllocationExceedsLimitException : public std::exception {
 // Class to keep track of the amount of memory that is left for allocation. When
 // not enough memory is left, an AllocationExceedsLimitException is thrown. Note
 // that need a separate class for this because there can be many Allocation
-// objects at the same time (hence the wrapper class below). All operations are
-// lock-free atomic operations on the single counter `free_`. The memory limit
-// itself is not stored, it can only be changed relative to its current value.
+// objects at the same time, which share one object of this class via a
+// `std::shared_ptr`. All operations are lock-free atomic operations on the
+// single counter `free_`. The memory limit itself is not stored, it can only be
+// changed relative to its current value.
 class AllocationMemoryLeft {
   // Remaining free memory in bytes.
   std::atomic<size_t> free_;
@@ -98,56 +98,12 @@ class AllocationMemoryLeft {
     return MemorySize::bytes(free_.load());
   }
 };
-
-// Threadsafe wrapper around `AllocationMemoryLeft`.
-// Copies of objects of this class will refer to the same `AllocationMemoryLeft`
-// object, which is threadsafe on its own.
-class AllocationMemoryLeftThreadsafe {
- public:
-  // Deleted because the shared counter must always be provided explicitly.
-  AllocationMemoryLeftThreadsafe() = delete;
-
-  // Type of the shared memory counter.
-  using T = std::shared_ptr<AllocationMemoryLeft>;
-
-  // Constructor from an existing shared memory counter.
-  explicit AllocationMemoryLeftThreadsafe(T ptr) : ptr_{std::move(ptr)} {}
-
-  // Copying a shared_ptr never throws in practice (its refcount increment is
-  // an atomic operation that cannot fail). Declare copy ops noexcept explicitly
-  // so that downstream static_asserts and noexcept move constructors relying on
-  // these operations compile correctly.
-  AllocationMemoryLeftThreadsafe(
-      const AllocationMemoryLeftThreadsafe&) noexcept = default;
-  AllocationMemoryLeftThreadsafe& operator=(
-      const AllocationMemoryLeftThreadsafe&) noexcept = default;
-
-  AllocationMemoryLeftThreadsafe(AllocationMemoryLeftThreadsafe&&) noexcept =
-      default;
-  AllocationMemoryLeftThreadsafe& operator=(
-      AllocationMemoryLeftThreadsafe&&) noexcept = default;
-
-  // Returns the shared memory counter.
-  T& ptr() { return ptr_; }
-
-  // Returns the shared memory counter.
-  const T& ptr() const { return ptr_; }
-
-  // Compares whether two wrappers refer to the same shared memory counter.
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllocationMemoryLeftThreadsafe,
-                                              ptr_)
-
- private:
-  // Shared memory counter.
-  T ptr_;
-};
 }  // namespace detail
 
 // Constructs a shared allocation state with `n` bytes initially available.
-inline detail::AllocationMemoryLeftThreadsafe
-makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
-  return detail::AllocationMemoryLeftThreadsafe{
-      std::make_shared<detail::AllocationMemoryLeft>(n)};
+inline std::shared_ptr<detail::AllocationMemoryLeft>
+makeSharedAllocationMemoryLeft(MemorySize n) {
+  return std::make_shared<detail::AllocationMemoryLeft>(n);
 }
 
 /*
@@ -171,13 +127,13 @@ class MemoryLimitTracker {
   // from `clearOnAllocation_`: The counter stores the actual budget, while the
   // hook is only called on a failed reservation attempt to possibly free memory
   // elsewhere before retrying the same counter.
-  // Copying a shared_ptr-backed wrapper never throws; assert this so that the
-  // noexcept move operations below can copy this member unconditionally.
-  AllocationMemoryLeftThreadsafe sharedMemoryLeft_;
+  // Copying a shared_ptr never throws; assert this so that the noexcept move
+  // operations below can copy this member unconditionally.
+  std::shared_ptr<AllocationMemoryLeft> sharedMemoryLeft_;
+  static_assert(std::is_nothrow_copy_constructible_v<
+                std::shared_ptr<AllocationMemoryLeft>>);
   static_assert(
-      std::is_nothrow_copy_constructible_v<AllocationMemoryLeftThreadsafe>);
-  static_assert(
-      std::is_nothrow_copy_assignable_v<AllocationMemoryLeftThreadsafe>);
+      std::is_nothrow_copy_assignable_v<std::shared_ptr<AllocationMemoryLeft>>);
 
   // The clear-on-allocation hook, held behind a `shared_ptr` following the SAME
   // principle as `sharedMemoryLeft_`: the hook is shared (never deep-copied),
@@ -193,16 +149,18 @@ class MemoryLimitTracker {
  public:
   // Constructor from a shared memory counter and an optional clear hook.
   explicit MemoryLimitTracker(
-      AllocationMemoryLeftThreadsafe memoryLeft,
+      std::shared_ptr<AllocationMemoryLeft> memoryLeft,
       ClearOnAllocation clearOnAllocation = ad_utility::noop)
       : sharedMemoryLeft_{std::move(memoryLeft)},
         clearOnAllocation_{std::make_shared<const ClearOnAllocation>(
-            std::move(clearOnAllocation))} {}
+            std::move(clearOnAllocation))} {
+    AD_CONTRACT_CHECK(sharedMemoryLeft_);
+  }
 
   // Constructor from an initial memory limit and an optional clear hook.
   explicit MemoryLimitTracker(
       MemorySize limit, ClearOnAllocation clearOnAllocation = ad_utility::noop)
-      : MemoryLimitTracker{makeAllocationMemoryLeftThreadsafeObject(limit),
+      : MemoryLimitTracker{makeSharedAllocationMemoryLeft(limit),
                            std::move(clearOnAllocation)} {}
 
   // Both members are shared_ptr-backed, so copying is nothrow and shares the
@@ -232,30 +190,28 @@ class MemoryLimitTracker {
   // Reserve `n` bytes or throw AllocationExceedsLimitException, running the
   // clearOnAllocation hook first if the budget is momentarily exceeded.
   void reserveOrThrow(MemorySize n) {
-    if (!sharedMemoryLeft_.ptr()->decreaseIfEnoughLeftOrReturnFalse(n)) {
+    if (!sharedMemoryLeft_->decreaseIfEnoughLeftOrReturnFalse(n)) {
       AD_CORRECTNESS_CHECK(clearOnAllocation_);
       (*clearOnAllocation_)(n);
-      sharedMemoryLeft_.ptr()->decreaseIfEnoughLeftOrThrow(n);
+      sharedMemoryLeft_->decreaseIfEnoughLeftOrThrow(n);
     }
   }
 
   // Releases `n` bytes back to the shared memory counter.
-  void release(MemorySize n) { sharedMemoryLeft_.ptr()->increase(n); }
+  void release(MemorySize n) { sharedMemoryLeft_->increase(n); }
 
   // Returns the amount of memory still available.
   [[nodiscard]] MemorySize amountMemoryLeft() const {
-    return sharedMemoryLeft_.ptr()->amountMemoryLeft();
+    return sharedMemoryLeft_->amountMemoryLeft();
   }
 
   // Increase the memory limit by `n`.
-  void increaseMemoryLimit(MemorySize n) {
-    sharedMemoryLeft_.ptr()->increase(n);
-  }
+  void increaseMemoryLimit(MemorySize n) { sharedMemoryLeft_->increase(n); }
 
   // Decrease the memory limit by `n`. This requires `n` to be currently free,
   // otherwise an exception is thrown and nothing is changed.
   void decreaseMemoryLimit(MemorySize n) {
-    if (!sharedMemoryLeft_.ptr()->decreaseIfEnoughLeftOrReturnFalse(n)) {
+    if (!sharedMemoryLeft_->decreaseIfEnoughLeftOrReturnFalse(n)) {
       throw std::runtime_error{absl::StrCat(
           "Cannot reduce the memory limit by ", n.asString(), ", because only ",
           amountMemoryLeft().asString(), " are currently unused")};

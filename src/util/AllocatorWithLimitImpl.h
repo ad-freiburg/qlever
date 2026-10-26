@@ -29,7 +29,7 @@
 //
 // The shared helper types (`detail::AllocationMemoryLeft`,
 // `detail::MemoryLimitTracker`, `ClearOnAllocation`,
-// `makeAllocationMemoryLeftThreadsafeObject`, ...) live in
+// `makeSharedAllocationMemoryLeft`, ...) live in
 // `util/MemoryLimitTracker.h` because they are part of the public API used
 // across the code base.
 
@@ -45,12 +45,12 @@ namespace ad_utility::allocatorImpl {
  *
  * Memory allocated by copies of an Allocator will also count towards the limit
  * To use it, construct a first allocator by calling
- * AllocatorWithLimit{makeAllocationMemoryLeftThreadsafeObject(limit)} and then
+ * AllocatorWithLimit{makeSharedAllocationMemoryLeft(limit)} and then
  * pass copies of this allocator to your containers. You can also Create
  * Allocators for different types respecting the same total memory pool size,
  * e.g.
  *
- * auto memoryLeft = makeAllocationMemoryLeftThreadsafeObject(limitInBytes);
+ * auto memoryLeft = makeSharedAllocationMemoryLeft(limitInBytes);
  * auto allocInt = AllocatorWithLimit<int>{memoryLeft};
  * auto limitedIntVec = std::vector<int, AllocatorWithLimit<int>>{allocInt};
  * auto allocString = AllocatorWithLimit<string>{memoryLeft};
@@ -88,10 +88,10 @@ class AllocatorWithLimit {
   [[no_unique_address]] std::allocator<T> allocator_;
 
  public:
-  // Obtain an AllocationMemoryLeftThreadsafe by calls to
-  // makeAllocationMemoryLeftThreadsafeObject().
+  // Obtain a shared `AllocationMemoryLeft` by calls to
+  // `makeSharedAllocationMemoryLeft()`.
   explicit AllocatorWithLimit(
-      detail::AllocationMemoryLeftThreadsafe ml,
+      std::shared_ptr<detail::AllocationMemoryLeft> ml,
       ClearOnAllocation clearOnAllocation = ad_utility::noop)
       : tracker_{std::move(ml), std::move(clearOnAllocation)} {}
 
@@ -182,7 +182,7 @@ class AllocatorWithLimit {
   static AllocatorWithLimit makeLimited(
       MemorySize limit,
       ClearOnAllocation clearOnAllocation = ad_utility::noop) {
-    return AllocatorWithLimit{makeAllocationMemoryLeftThreadsafeObject(limit),
+    return AllocatorWithLimit{makeSharedAllocationMemoryLeft(limit),
                               std::move(clearOnAllocation)};
   }
 };
