@@ -80,7 +80,7 @@ class WordBatchBuilder {
   // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
   // costly.
   CPP_template(typename W, typename F)(
-      requires WordComparator<W> CPP_and WordBatchCallback<
+      requires WordComparator<W>&& WordBatchCallback<
           F>) void addMergedWords(std::vector<QueueWord> buffer,
                                   const W& comparator, const F& batchCallback);
 
@@ -107,12 +107,11 @@ class WordBatchBuilder {
 };
 
 // _____________________________________________________________________________
-CPP_template_def(typename W,
-                 typename F)(requires WordComparator<W> CPP_and_def
-                                 WordBatchCallback<F>) void WordBatchBuilder::
-    addMergedWords(std::vector<QueueWord> buffer,
-                   [[maybe_unused]] const W& comparator,
-                   const F& batchCallback) {
+CPP_template_def(typename W, typename F)(requires WordComparator<W> &&
+                                           WordBatchCallback<F>)
+void WordBatchBuilder::addMergedWords(std::vector<QueueWord> buffer,
+                                      [[maybe_unused]] const W& comparator,
+                                      const F& batchCallback) {
   // NOTE: The buffer is deliberately not consumed, but kept alive as part of
   // the batch, such that the merged words neither have to be moved nor
   // destroyed by the merging thread.
@@ -122,10 +121,9 @@ CPP_template_def(typename W,
   // Iterate (avoid duplicates).
   for (const auto& top : words) {
     if (!hasPendingWord_ || top.iriOrLiteral() != pendingWord_) {
-      AD_EXPENSIVE_CHECK(
-          !hasPendingWord_ || comparator(pendingWord_, top.iriOrLiteral()),
-          "Total vocabulary order violated for ", pendingWord_, " and ",
-          top.iriOrLiteral());
+      if (hasPendingWord_) {
+        checkVocabularyOrder(comparator, pendingWord_, top.iriOrLiteral());
+      }
       // A word that differs from the `pendingWord_` was merged, so no further
       // occurrence of the latter can arrive and it can be committed.
       commitPendingWord();
@@ -159,9 +157,8 @@ CPP_template_def(typename W,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename F)(
-    requires WordBatchCallback<
-        F>) void WordBatchBuilder::finish(const F& batchCallback) {
+CPP_template_def(typename F)(requires WordBatchCallback<F>)
+void WordBatchBuilder::finish(const F& batchCallback) {
   // No further words can arrive, so the word that is held back can now be
   // committed.
   commitPendingWord();
@@ -169,9 +166,8 @@ CPP_template_def(typename F)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename F)(
-    requires WordBatchCallback<
-        F>) void WordBatchBuilder::flush(const F& batchCallback) {
+CPP_template_def(typename F)(requires WordBatchCallback<F>)
+void WordBatchBuilder::flush(const F& batchCallback) {
   if (currentBatch_.empty()) {
     return;
   }

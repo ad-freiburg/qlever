@@ -132,7 +132,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
     return testing::ResultOf(
         absl::StrCat(".map_.at(", std::to_string(blockIndex), ")"),
         [blockIndex](const LocatedTriplesPerBlock& ltpb) {
-          return ltpb.map_.at(blockIndex).getSortedView();
+          return ltpb.map_.at(blockIndex)->getSortedView();
         },
         testing::ElementsAreArray(expectedLTs));
   };
@@ -149,7 +149,9 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
               return locatedTriplesInBlock(blockIndex, expectedLTs);
             });
         // The macro does not work with templated types.
-        using HashMapType = ad_utility::HashMap<size_t, LocatedTriples>;
+        using HashMapType =
+            ad_utility::HashMap<size_t,
+                                ad_utility::CopyOnWritePtr<LocatedTriples>>;
         return testing::AllOf(
             AD_FIELD(LocatedTriplesPerBlock, map_,
                      AD_PROPERTY(HashMapType, size,
@@ -245,6 +247,40 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
               numTriplesBlockwise(
                   {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}}));
   EXPECT_THAT(locatedTriplesPerBlock, locatedTriplesAre({}));
+}
+
+// Test that a copy of a `LocatedTriplesPerBlock` shares its blocks with the
+// original and is not affected by later modifications of the original.
+TEST_F(LocatedTriplesTest, copyOnWrite) {
+  // Located triples in the blocks 2 and 5, and a copy of them.
+  using LT = LocatedTriple;
+  LT lt1{2, IT(10, 1, 0), true};
+  LT lt2{5, IT(20, 4, 0), true};
+  LT lt3{5, IT(21, 5, 0), false};
+  auto original = makeLocatedTriplesPerBlock({lt1, lt2, lt3});
+  auto copy = original;
+
+  // The copy shares both blocks with the original.
+  EXPECT_TRUE(original.map_.at(2).isShared());
+  EXPECT_TRUE(original.map_.at(5).isShared());
+
+  // Adding a triple to block 2 clones that block, block 5 stays shared.
+  LT lt4{2, IT(11, 2, 0), false};
+  original.add(std::vector{lt4});
+  original.consolidateAllBlocks();
+  EXPECT_FALSE(original.map_.at(2).isShared());
+  EXPECT_TRUE(original.map_.at(5).isShared());
+  EXPECT_THAT(original.map_.at(2)->getSortedView(),
+              testing::ElementsAre(lt1, lt4));
+  EXPECT_THAT(copy.map_.at(2)->getSortedView(), testing::ElementsAre(lt1));
+
+  // Erasing all triples of block 5 removes the block from the original only.
+  original.erase(5, lt2);
+  original.erase(5, lt3);
+  original.consolidateAllBlocks();
+  EXPECT_FALSE(original.containsTriples(5));
+  EXPECT_THAT(copy.map_.at(5)->getSortedView(), testing::ElementsAre(lt2, lt3));
+  EXPECT_EQ(copy.numTriplesForTesting(), 3u);
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into

@@ -7,8 +7,10 @@
 
 #include <cmath>
 #include <sstream>
+#include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/OrderByComparator.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -120,7 +122,7 @@ struct RowRange {
 // from the semantic order as follows (see `valueIdComparators::compareByBits`):
 // ints are `[0 .. max, min .. -1]`, doubles are `[0.0 .. +inf, NaN, -0.0 ..
 // -inf, -NaN]`, where the sign bit of a `NaN` may be set as well. `ORDER BY`
-// puts all `NaN`s after all other doubles (see `makeComparatorForNans`) and
+// puts all `NaN`s after all other doubles (see `OrderByComparator`) and
 // `Undefined` before everything else.
 std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     ConstIdColumnRef column) {
@@ -137,7 +139,7 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   // first, because their datatype bits are all zero). If there is no such row,
   // return the whole column as a single range (it is then already in the order
   // of `ORDER BY`).
-  size_t firstDefined = partitionPoint(0, column.size(), &Id::isUndefined);
+  size_t firstDefined = partitionPoint(0, column.size(), Id::isUndefinedL);
   if (firstDefined == column.size()) {
     return std::vector<RowRange>{{0, column.size(), false}};
   }
@@ -186,7 +188,7 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   //
   // NOTE: The SPARQL standard does not say where `NaN`s go. Putting them last
   // is how the regular comparator of `ORDER BY` does it (see
-  // `makeComparatorForNans`).
+  // `OrderByComparator`).
   ranges.push_back({firstNegative, firstNegativeNan, true});
   ranges.push_back({firstDefined, firstPositiveNan, false});
   ranges.push_back({firstPositiveNan, firstNegative, false});
@@ -262,13 +264,8 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
             subRes->getSharedLocalVocab()};
   }
 
-  // TODO<joka921> proper timeout for sorting operations
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      subTable.numRows(), subTable.numColumns(), deadline_,
-      "Sort for COUNT(DISTINCT *)");
-
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->cloneIdTable();
+  IdTable idTable = subRes->cloneIdTable(cancellationChecker());
 
   size_t width = idTable.numColumns();
 
@@ -280,31 +277,35 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // by it, it might be more efficient to first sort by the ID values and then
   // "repair" the order in linear time, like `computeResultForSortedInput` does
   // for an input that is already sorted, or even to return lazy generators
-  // that yield the repaired order.
+  // that yield the repaired order. Besides the numbers, such a repair would
+  // also have to move the IRIs of the vocabulary before its literals, which
+  // come first in the internal order (see `OrderByComparator`).
   //
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
   //
   // TODO<joka921> If we know, that all the sort columns contain only datatypes
-  // for which the `internal` order is also the `semantic` order, or if a column
-  // only contains a single datatype, then we can use more efficient
-  // implementations here. So far, this is only done for a single sort column
-  // with an input that is already sorted and contains only ints or only
-  // doubles, see `computeResultForSortedInput`.
+  // for which the `internal` order is also the `semantic` order, then we can
+  // use more efficient implementations here. Note that a single datatype is
+  // not enough: e.g. for `VocabIndex`, the internal order puts all literals
+  // before all IRIs, but `ORDER BY` puts the IRIs first. So far, this is only
+  // done for a single sort column with an input that is already sorted and
+  // contains only ints or only doubles, see `computeResultForSortedInput`.
   //
-  // Return true iff `rowA` comes before `rowB` in the sort order specified by
-  // `sortIndices_`.
-  auto comparison = [this](const auto& row1, const auto& row2) -> bool {
+  OrderByComparator orderByComparator{
+      getExecutionContext()->getLocalVocabContext()};
+
+  // Return true iff `row1` comes before `row2` in the sort order specified by
+  // `sortIndices_`: the first column whose values differ decides, in the
+  // direction of that column. Equal values of different `Id`s (e.g. `5` and
+  // `5.0`) let the next column decide.
+  auto comparison = [this, orderByComparator](const auto& row1,
+                                              const auto& row2) -> bool {
     for (auto& [column, isDescending] : sortIndices_) {
-      if (row1[column] == row2[column]) {
-        continue;
+      int result = orderByComparator.compare(row1[column], row2[column]);
+      if (result != 0) {
+        return isDescending ? result > 0 : result < 0;
       }
-      bool isLessThan =
-          toBoolNotUndef(valueIdComparators::compareIds<
-                         valueIdComparators::ComparisonForIncompatibleTypes::
-                             CompareByType>(
-              row1[column], row2[column], valueIdComparators::Comparison::LT));
-      return isLessThan != isDescending;
     }
     return false;
   };
@@ -312,12 +313,11 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  ad_utility::callFixedSizeVi(width, [&idTable, &comparison](auto I) {
-    IdTableUtils::sort<I>(&idTable, comparison);
-  });
-  // We can't check during sort, so reset status here
-  cancellationHandle_->resetWatchDogState();
-  checkCancellation();
+  ad_utility::callFixedSizeVi(
+      width, [this, &idTable, &comparison](auto numColumns) {
+        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig(),
+                                       cancellationHandle());
+      });
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }

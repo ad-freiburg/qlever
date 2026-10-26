@@ -25,8 +25,6 @@
 #include <atomic>
 #include <bit>
 #include <boost/asio/awaitable.hpp>
-#include <boost/sort/block_indirect_sort/blk_detail/block.hpp>
-#include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -38,9 +36,11 @@
 #include "backports/asio.h"
 #include "backports/iterator.h"
 #include "util/Exception.h"
+#include "util/Math.h"
 #include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 #include "util/Views.h"
+#include "util/blockSort/BoostSortHeaders.h"
 #include "util/blockSort/TaskGroup.h"
 
 namespace ad_utility::blockSort::detail {
@@ -172,8 +172,8 @@ constexpr size_t BLOCKS_PER_TASK = 64;
 // rounds up, so that the last part is the smallest (like the last chunk of
 // `ad_utility::chunkedIotaView`) instead of the largest.
 constexpr size_t partSize(size_t numBlocks) {
-  size_t numParts = (numBlocks + BLOCKS_PER_TASK - 1) / BLOCKS_PER_TASK;
-  return (numBlocks + numParts - 1) / numParts;
+  size_t numParts = ad_utility::ceilDiv(numBlocks, BLOCKS_PER_TASK);
+  return ad_utility::ceilDiv(numBlocks, numParts);
 }
 
 // The tuning parameters of a sort. The public interface derives them from the
@@ -189,7 +189,7 @@ struct SortParams {
 
 // The state shared by the tasks of a single sort, similar to
 // `boost::sort::blk_detail::backbone`.
-template <typename Compare>
+template <typename Compare, typename CheckCancellation>
 class SortState {
  public:
   // The maximal number of elements that a single task sorts on its own (with
@@ -203,15 +203,21 @@ class SortState {
   ql::any_io_executor executor_;
   // Set as soon as any task of this sort has failed, see `TaskGroup`.
   std::atomic<bool> stopped_{false};
+  // Throws if the sort has been cancelled (e.g. a `CancellationException`), or
+  // does nothing (`ad_utility::Noop`) if the sort can't be cancelled. Every
+  // task calls it when it starts, so it is called concurrently.
+  [[no_unique_address]] CheckCancellation checkCancellation_;
 
   // A sort by `cmp` on `executor` whose tasks sort at most `maxElementsPerTask`
-  // elements on their own. `maxElementsPerTask` must be at least 16, because
-  // the pivot selection needs nine distinct samples.
+  // elements on their own, and call `checkCancellation` when they start.
+  // `maxElementsPerTask` must be at least 16, because the pivot selection needs
+  // nine distinct samples.
   SortState(Compare cmp, size_t maxElementsPerTask,
-            ql::any_io_executor executor)
+            ql::any_io_executor executor, CheckCancellation checkCancellation)
       : maxElementsPerTask_{maxElementsPerTask},
         cmp_{std::move(cmp)},
-        executor_{std::move(executor)} {
+        executor_{std::move(executor)},
+        checkCancellation_{std::move(checkCancellation)} {
     AD_CONTRACT_CHECK(maxElementsPerTask_ >= 16);
   }
 
@@ -235,8 +241,8 @@ class SortState {
 // the rest of Boost's `backbone` without its work stack. The input is divided
 // into `numBlocks_` blocks of `blockSize_` elements; only the last one (the
 // *tail*) may be shorter.
-template <typename Iterator, typename Compare>
-class BlockSortState : public SortState<Compare> {
+template <typename Iterator, typename Compare, typename CheckCancellation>
+class BlockSortState : public SortState<Compare, CheckCancellation> {
  public:
   using Value = ql::iter_value_t<Iterator>;
   using IteratorRange = bsc::range<Iterator>;
@@ -261,13 +267,16 @@ class BlockSortState : public SortState<Compare> {
   // Sort `[begin, end)`. The range must not be empty, which `sortOnExecutor`
   // makes sure of.
   BlockSortState(Iterator begin, Iterator end, Compare cmp, SortParams params,
-                 ql::any_io_executor executor)
-      : SortState<Compare>{std::move(cmp), params.maxElementsPerTask,
-                           std::move(executor)},
+                 ql::any_io_executor executor,
+                 CheckCancellation checkCancellation)
+      : SortState<Compare, CheckCancellation>{std::move(cmp),
+                                              params.maxElementsPerTask,
+                                              std::move(executor),
+                                              std::move(checkCancellation)},
         globalRange_{begin, end},
         blockSize_{params.blockSize},
         numElements_{static_cast<size_t>(end - begin)},
-        numBlocks_{(numElements_ + blockSize_ - 1) / blockSize_},
+        numBlocks_{ad_utility::ceilDiv(numElements_, blockSize_)},
         index_{::ranges::to<std::vector<bsd::block_pos>>(
             ad_utility::integerRange(numBlocks_))},
         tailRange_{numElements_ % blockSize_ == 0

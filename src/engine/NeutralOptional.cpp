@@ -128,8 +128,8 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
               resultSortedOn(),
               {}};
     }
-    return {childResult->cloneIdTable(), childResult->sortedBy(),
-            childResult->getSharedLocalVocab()};
+    return {childResult->cloneIdTable(cancellationChecker()),
+            childResult->sortedBy(), childResult->getSharedLocalVocab()};
   }
   if (singleRowCroppedByLimit()) {
     return {childResult->idTables(), childResult->sortedBy()};

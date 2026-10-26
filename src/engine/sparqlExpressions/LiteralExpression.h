@@ -56,8 +56,9 @@ class LiteralExpression : public SparqlExpression {
       std::optional<Id> id = toValueId(tc, context->_qec.getIndex());
       IdOrLocalVocabEntry result =
           id.has_value() ? IdOrLocalVocabEntry{id.value()}
-                         : IdOrLocalVocabEntry{LocalVocabEntry{
-                               s, context->getLocalVocabContext()}};
+                         : toIdOrLocalVocabEntry(
+                               ad_utility::triple_component::LiteralOrIri{s},
+                               context->getLocalVocabContext());
       auto ptrForCache = std::make_unique<IdOrLocalVocabEntry>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
@@ -209,7 +210,7 @@ class LiteralExpression : public SparqlExpression {
           "A non-grouped variable outside of an aggregate should have been "
           "rejected by the parser");
       const auto& table = context->_inputTable;
-      auto constantValue = table.at(context->_beginIndex, column.value());
+      Id constantValue = table.at(context->_beginIndex, column.value());
       AD_EXPENSIVE_CHECK((
           std::all_of(table.begin() + context->_beginIndex,
                       table.begin() + context->_endIndex, [&](const auto& row) {
@@ -290,11 +291,8 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
     // `LocalVocabEntry` would instead yield a `LocalVocabIndex`, for which the
     // prefiltering only searches the range of the vocabulary `Id`s (see
     // `getRangesForIndexTypes`), which contains no encoded IRIs.
-    if (auto id =
-            context.encodeAsId(iriExpr->value().toStringRepresentation())) {
-      return id.value();
-    }
-    return LocalVocabEntry{iriExpr->value(), context};
+    return toIdOrLocalVocabEntry(
+        ad_utility::triple_component::LiteralOrIri{iriExpr->value()}, context);
   } else {
     return std::nullopt;
   }

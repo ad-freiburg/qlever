@@ -49,6 +49,16 @@ inline ad_utility::MemorySize& RDF_PARSER_MAX_TOTAL_BUFFER_SIZE() {
 // ________________________________________________________________
 constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
+// The size of the blocks into which the words of a partial vocabulary are
+// grouped on disk (see `index/vocabulary_merger/PartialVocabularyFile.h`).
+//
+// NOTE: Each chunk of the parallel vocabulary merge (see
+// `PartialVocabularyRunsInput` in that header) reads about one block per
+// partial vocabulary beyond the ones it really needs, and holds one decoded
+// block per partial vocabulary in memory, so this should be small. But a block
+// is also the unit of a single `pread`, so it should not be tiny.
+constexpr inline ad_utility::MemorySize PARTIAL_VOCAB_BLOCK_SIZE =
+    ad_utility::MemorySize::kilobytes(32);
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 
@@ -75,10 +85,9 @@ constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 
 // The number of index mappings (which is the same as the number of merged
 // words) that are collected in a single batch of the vocabulary merging (see
-// `index/vocabulary_merger/WordBatch.h`). A single buffer of merged words (as
-// delivered by `parallelMultiwayMerge`, see `VocabularyMergerImpl.h`) only
-// contains a rather small number of words, which would be much too
-// fine-grained for a task queue.
+// `index/vocabulary_merger/WordBatch.h`). This is also the number of words in
+// an output block of the parallel merge of the partial vocabularies (see
+// `vocabularyMergeOptions` in `VocabularyMergerImpl.h`).
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
 
 // The maximal total size of the words in a single batch of the vocabulary
@@ -88,6 +97,78 @@ constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
     ad_utility::MemorySize::megabytes(10);
 
+// The size of the buffers for the bytes of the blocks of the partial
+// vocabulary files, the first of the two pools of the vocabulary merging (see
+// `BufferPools` in `index/vocabulary_merger/MergeBlock.h`).
+//
+// NOTE: A block of a file ends after the word that makes it at least
+// `PARTIAL_VOCAB_BLOCK_SIZE` large (see `PartialVocabularyWriter`), so it is a
+// bit larger than that. A buffer with a quarter of slack holds every block
+// whose last word is at most a quarter of the block size. A block with a
+// longer last word gets a larger buffer, which the pool replaces when it is
+// given back.
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_FILE_BLOCK_BUFFER_SIZE =
+    ad_utility::MemorySize::bytes(PARTIAL_VOCAB_BLOCK_SIZE.getBytes() * 5 / 4);
+
+// The size of the buffers that a block of merged words copies its words into,
+// the second of the two pools: an eighth of the maximal memory size of a block.
+//
+// NOTE: A block of merged words ends at `VOCAB_MERGER_WORD_BATCH_SIZE` words or
+// at `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` of merged words, whichever comes
+// first, and most blocks end at the number of words and hold much less than
+// the memory size. A single buffer of the full memory size per block would
+// therefore mostly be empty, and the memory limit of the merge, which sums the
+// sizes of the words, doesn't see that unused capacity. Buffers of an eighth
+// of the memory size bound the unused capacity of a block to one partly filled
+// buffer (a block has at most eight of them, plus a buffer of its own for each
+// word that is longer than this).
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE =
+    ad_utility::MemorySize::bytes(
+        VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() / 8);
+
+// The amount of input (the serialized words of the partial vocabularies,
+// counted with their repetitions in different partial vocabularies) that a
+// chunk of the parallel merge of the partial vocabularies (see
+// `mergeVocabulary` in `index/VocabularyMerger.h`) merges. A chunk keeps its
+// whole output in memory until the pipeline behind the merge takes it, see
+// `vocabularyMergeOptions`.
+//
+// NOTE: The chunks are cut by bytes and not by words, because the cost of
+// comparing two words grows with their length, so that all chunks cost about
+// the same to merge.
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_INPUT_PER_CHUNK =
+    ad_utility::MemorySize::megabytes(128);
+
+// The number of chunks of that merge that may be in flight per thread of the
+// pool (bounded further by the memory), see `vocabularyMergeOptions` in
+// `VocabularyMergerImpl.h` for why this is more than one.
+constexpr inline size_t VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD = 4;
+
+// The number of output blocks that a chunk of that merge may buffer before it
+// suspends (the thread behind the merge takes the chunks in order), chosen
+// such that the whole output of a chunk fits (only the blocks that exist take
+// memory). A chunk with more blocks than this doesn't fail, it only suspends
+// until its first blocks have been taken.
+//
+// NOTE: A block ends at `VOCAB_MERGER_WORD_BATCH_SIZE` words or at
+// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` of merged words, whichever comes first.
+// The serialized form of a word (see `PartialVocabularyWriter`) takes at least
+// 17 bytes (the length, the external flag and the index), so the number of
+// words cuts a chunk of `VOCAB_MERGER_INPUT_PER_CHUNK` of input into at most
+// `VOCAB_MERGER_INPUT_PER_CHUNK / (17 * VOCAB_MERGER_WORD_BATCH_SIZE)` blocks
+// (about 75 for the current values), and a merged word takes less than three
+// times its serialized size (a `MergedWord` of 32 bytes and an `Occurrence` of
+// 16 bytes next to the word, see `MergedBlock::memorySizeOfAppended`), so the
+// memory cuts it into fewer than `3 * VOCAB_MERGER_INPUT_PER_CHUNK /
+// VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` blocks (about 39). The factor `8` is a
+// round number close to the sum of the two (it is unrelated to the eight
+// buffers of a block, see `VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE`); a chunk
+// with more blocks only suspends, see above.
+constexpr inline size_t VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK =
+    8 * VOCAB_MERGER_INPUT_PER_CHUNK.getBytes() /
+        VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() +
+    2;
+
 // The maximal number of batches that may be waiting in each of the queues of
 // the merging pipeline of the vocabulary merger (see the comment above
 // `mergeVocabulary` in `index/VocabularyMerger.h`). NOTE: A batch keeps all
@@ -96,6 +177,12 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
 // be full at the same time, so the additional memory footprint of the merging
 // is a multiple of this number of batches.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
+
+// The maximal number of segments that may be waiting in the queue of each
+// group of the ID map writers of the vocabulary merger (see
+// `index/vocabulary_merger/IdMapWriters.h`). A queued segment holds its ID map
+// entries (about 16 bytes per merged word) in memory.
+constexpr inline size_t VOCAB_MERGER_ID_MAP_QUEUE_SIZE = 16;
 
 // The default number of rows of a block of the permutations (and of the other
 // sorted lists of an index). If chosen too large, then we lose performance for

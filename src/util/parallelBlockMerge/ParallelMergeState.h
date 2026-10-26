@@ -134,13 +134,14 @@ inline void logIgnoredException(std::exception_ptr exception,
 // file that the input reads from — therefore has to wait for
 // `asyncWaitForCompletion`, see `ParallelMergeRange`.
 template <bool moveElements, typename Input, typename Comparator, typename Sink>
-requires InputConcept<Input> && SinkConcept<Sink, typename Input::Block>
+requires InputConcept<Input> && SinkConcept<Sink, OutputBlockT<Input>>
 class ParallelMergeState
     : public std::enable_shared_from_this<
           ParallelMergeState<moveElements, Input, Comparator, Sink>>,
       public ad_utility::NoCopyNoMove {
  public:
-  using Block = typename Input::Block;
+  // The blocks that the merge yields and that the `Sink` receives.
+  using Block = OutputBlockT<Input>;
   // The merger of a single chunk, and the state that the mergers of all chunks
   // share (see `ChunkMerger`). The latter is the single owner of the input, the
   // comparator, the options, the cancellation handle, and the chunk boundaries
@@ -329,8 +330,14 @@ class ParallelMergeState
       // soon as the permit was *acquired* and not when the chunk is done. It
       // therefore needs the permit as an explicit RAII handle that it can hand
       // to the chunk.
-      auto [errorCode, permit] =
+      //
+      // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+      // structured binding in a coroutine is not always destroyed at the end
+      // of its scope, for example when it is initialized by a `co_await` or
+      // lives across one (gcc.gnu.org bug 124584).
+      auto errorCodeAndPermit =
           co_await semaphore_.asyncAcquire(net::as_tuple(net::use_awaitable));
+      auto& [errorCode, permit] = errorCodeAndPermit;
       // The two conditions below cover the two ways in which a merge ends
       // early, and this loop is the only waiter on the `semaphore_`, so
       // whichever of them happens is seen right here:

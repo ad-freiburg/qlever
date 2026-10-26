@@ -24,7 +24,6 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/JoinHelpers.h"
-#include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -68,11 +67,12 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
   if (t1->getCacheKey() > t2->getCacheKey()) {
     swapChildren();
   }
-  // If one of the inputs is a SCAN and the other one is not, always make the
-  // SCAN the right child (which also gives a deterministic order of the
-  // subtrees). This simplifies several branches in the `computeResult` method.
-  if (std::dynamic_pointer_cast<IndexScan>(t1->getRootOperation()) &&
-      !std::dynamic_pointer_cast<IndexScan>(t2->getRootOperation())) {
+  // If one of the inputs is a SCAN (that supports prefiltered joins) and the
+  // other one is not, always make the SCAN the right child (which also gives a
+  // deterministic order of the subtrees). This simplifies several branches in
+  // the `computeResult` method.
+  if (IndexScan::getIfSupportsPrefilteredJoin(*t1) &&
+      !IndexScan::getIfSupportsPrefilteredJoin(*t2)) {
     swapChildren();
   }
   left_ = std::move(t1);
@@ -143,10 +143,9 @@ Result JoinImpl::computeResult(bool requestLaziness) {
   auto rightResIfCached = getCachedOrSmallResult(*right_);
   checkCancellation();
 
-  auto leftIndexScan =
-      std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation());
-  if (leftIndexScan &&
-      std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation())) {
+  auto leftIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*left_);
+  auto rightIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*right_);
+  if (leftIndexScan && rightIndexScan) {
     if (rightResIfCached && !leftResIfCached) {
       AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       return computeResultForIndexScanAndIdTable<true>(
@@ -167,8 +166,6 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 
   // Note: If only one of the children is a scan, then we have made sure in the
   // constructor that it is the right child.
-  auto rightIndexScan =
-      std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation());
   if (rightIndexScan && !rightResIfCached) {
     if (leftRes->isFullyMaterialized()) {
       return computeResultForIndexScanAndIdTable<false>(
@@ -367,7 +364,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
+      1, aPermuted, bPermuted, std::move(*result), cancellationHandle(),
       keepJoinColumn_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
@@ -385,7 +382,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
   std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
 
-  auto cancellationCallback = [this]() { checkCancellation(); };
+  auto cancellationCallback = cancellationChecker();
 
   // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
@@ -778,7 +775,7 @@ ad_utility::AddCombinedRowToIdTable JoinImpl::makeRowAdder(
   return ad_utility::AddCombinedRowToIdTable{
       1,
       IdTable{getResultWidth(), allocator()},
-      cancellationHandle_,
+      cancellationHandle(),
       keepJoinColumn_,
       CHUNK_SIZE,
       std::move(callback)};
@@ -829,15 +826,19 @@ JoinImpl::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, {left_, right_},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
-        auto& left = newChildren.at(0);
-        auto& right = newChildren.at(1);
-        auto leftCol = left->getVariableColumn(joinVar_);
-        auto rightCol = right->getVariableColumn(joinVar_);
-        return ad_utility::makeExecutionTree<Join>(
-            getExecutionContext(), std::move(left), std::move(right), leftCol,
-            rightCol);
-      });
+  return pushDownBindToAnyChild(bind, {left_, right_});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> JoinImpl::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  auto& left = children.at(0);
+  auto& right = children.at(1);
+  auto leftCol = left->getVariableColumn(joinVar_);
+  auto rightCol = right->getVariableColumn(joinVar_);
+  // NOTE: This deliberately creates a `Join`, as `JoinImpl` is only used as
+  // the implementation of `Join`.
+  return std::make_unique<Join>(_executionContext, std::move(left),
+                                std::move(right), leftCol, rightCol,
+                                keepJoinColumn_);
 }

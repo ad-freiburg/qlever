@@ -18,7 +18,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
@@ -77,6 +77,39 @@ auto testAggregateWithVariable =
       auto res = std::get<U>(resAsVariant);
       EXPECT_EQ(res, expectedResult);
     };
+
+// Same as `testAggregate` above, but the input is the `constant`, evaluated on
+// the first `numRows` rows of the `TestContext`.
+template <typename AggregateExpressionT>
+void testAggregateWithConstant(Id constant, size_t numRows, Id expectedResult,
+                               bool distinct = false,
+                               source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  auto child = std::make_unique<SingleUseExpression>(constant);
+  TestContext testContext;
+  testContext.context._endIndex = numRows;
+  AggregateExpressionT aggregate{distinct, std::move(child)};
+  auto resAsVariant = aggregate.evaluate(&testContext.context);
+  EXPECT_EQ(std::get<Id>(resAsVariant), expectedResult);
+}
+
+// Test that aggregates of a constant aggregate one copy of the constant per
+// row (see https://github.com/ad-freiburg/qlever/issues/3572).
+TEST(AggregateExpression, constantInput) {
+  testAggregateWithConstant<CountExpression>(I(5), 3, I(3));
+  testAggregateWithConstant<CountExpression>(I(5), 3, I(1), true);
+  testAggregateWithConstant<CountExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<SumExpression>(I(5), 3, I(15));
+  testAggregateWithConstant<SumExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<AvgExpression>(I(5), 3, D(5));
+  testAggregateWithConstant<AvgExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<MinExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<MinExpression>(I(5), 0, U);
+  testAggregateWithConstant<MaxExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<MaxExpression>(I(5), 0, U);
+  testAggregateWithConstant<SampleExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<SampleExpression>(I(5), 0, U);
+}
 
 // Test `CountExpression`.
 TEST(AggregateExpression, count) {
@@ -178,8 +211,8 @@ TEST(AggregateExpression, min) {
   // compared correctly, that UNDEF is smaller than any other value, and that
   // the result for an empty input is UNDEF.
   testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
-  testMinId({V(7), V(2), V(4)}, V(2));
-  testMinId({V(7), U, V(2), V(4)}, U);
+  testMinId({t.Beta, alpha, t.zz}, alpha);
+  testMinId({t.Beta, U, alpha, t.zz}, U);
   testMinId({I(3), alpha, alx, (I(-1))}, I(-1));
   testMinId({I(3), alpha, alx, (I(-1)), U}, U);
   testMinId({alpha, alx, aalx}, aalx);
@@ -205,11 +238,31 @@ TEST(AggregateExpression, max) {
   // compared correctly, that UNDEF is smaller than any other value, and that
   // the result for an empty input is UNDEF.
   testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
-  testMaxId({V(7), U, V(2), V(4)}, V(7));
+  testMaxId({beta, U, alpha, t.zz}, t.zz);
   testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
   testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
   testMaxId({U, U, U}, U);
   testMaxId({}, U);
+}
+
+// Test `MIN` and `MAX` on different kinds of RDF terms, see
+// `OrderByComparator`.
+TEST(AggregateExpression, minAndMaxForDifferentKindsOfTerms) {
+  auto testMinId = testAggregate<MinExpression, Id>;
+  auto testMaxId = testAggregate<MaxExpression, Id>;
+  auto t = TestContext{};
+  LocalVocabEntry iriEntry = LocalVocabEntry::fromStringRepresentation(
+      "<x:1>", t.qec->getLocalVocabContext());
+  Id iri = Id::makeFromLocalVocabIndex(&iriEntry);
+  Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3));
+  Id alpha = t.alpha;
+
+  testMinId({I(3), iri, alpha}, iri);
+  testMinId({I(3), iri, blankNode, alpha}, blankNode);
+  testMinId({I(3), iri, blankNode, U}, U);
+  testMaxId({iri, I(3), blankNode}, I(3));
+  testMaxId({iri, blankNode}, iri);
+  testMaxId({iri, alpha, I(3)}, alpha);
 }
 
 // _____________________________________________________________________________
@@ -274,7 +327,7 @@ TEST(AggregateExpression, CountStar) {
   t.table.push_back(t.table[0]);
 
   auto setToUndef = [](IdTable::row_reference row) {
-    for (Id& id : row) {
+    for (IdRef id : row) {
       id = Id::makeUndefined();
     }
   };
