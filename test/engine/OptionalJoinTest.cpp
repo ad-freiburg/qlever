@@ -1498,3 +1498,19 @@ TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
       makeJoin(nullptr),
       ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
+
+// Test that the probe loop of the index nested loop join checks the
+// cancellation handle: with a cancelled handle, `computeLeftExistance` throws
+// instead of finishing the loop.
+TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
+  auto makeResult = []() {
+    return std::make_shared<const Result>(makeIdTableFromVector({{1}, {2}}),
+                                          std::vector<ColumnIndex>{0},
+                                          LocalVocab{});
+  };
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
+      JoinColumns{{0, 0}}, makeResult(), makeResult(), handle);
+  EXPECT_THROW(join.computeLeftExistance(), ad_utility::CancellationException);
+}

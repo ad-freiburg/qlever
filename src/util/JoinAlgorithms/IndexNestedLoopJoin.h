@@ -253,8 +253,8 @@ class IndexNestedLoopJoin {
   }
 
  private:
-  // Checks with entries in `rightTable` match entries in `leftTable`, and
-  // writes for the matching row indices on the left the value `true` into
+  // Check which entries in `rightTable` match entries in `leftTable`, and
+  // write for the matching row indices on the left the value `true` into
   // `matchTracker`. The `rightTable` might be a large, fully materialized
   // table, so the `cancellationHandle` is checked regularly.
   template <typename T, int JOIN_COLUMNS>
