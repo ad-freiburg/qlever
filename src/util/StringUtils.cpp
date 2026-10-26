@@ -242,10 +242,8 @@ template std::string utf8ToUpper<false>(std::string_view, const char*);
 // ____________________________________________________________________________
 template <bool useICU>
 std::string removeAccentsUtf8(std::string_view s) {
-  bool isAscii =
-      ql::ranges::all_of(s, [](unsigned char c) { return c < 0x80; });
   if constexpr (useICU) {
-    if (!isAscii) {
+    if (!ql::ranges::all_of(s, [](unsigned char c) { return c < 0x80; })) {
       QLEVER_UNICODE_ONLY("removeAccentsUtf8", {
         auto raise = [](UErrorCode err) {
           if (U_FAILURE(err)) {
