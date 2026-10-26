@@ -33,6 +33,9 @@ namespace foldedValueId {
 class ValueId {
  public:
   using T = uint64_t;
+  using PayloadType = uint64_t;
+  using DatatypeType = uint8_t;
+
   static constexpr T numDatatypeBits = 4;
   static constexpr T numDataBits = 64 - numDatatypeBits;
 
@@ -246,8 +249,8 @@ class ValueId {
   }
 
   // Get the datatype bits.
-  [[nodiscard]] constexpr uint8_t getDatatypeBits() const noexcept {
-    return static_cast<uint8_t>(_bits >> numDataBits);
+  [[nodiscard]] constexpr DatatypeType getDatatypeBits() const noexcept {
+    return static_cast<DatatypeType>(_bits >> numDataBits);
   }
 
   // Get the payload bits.
@@ -457,6 +460,10 @@ class ValueId {
   constexpr static ValueId max() noexcept {
     return {std::numeric_limits<T>::max()};
   }
+
+  // Return the smallest `Id` that is greater than this one. The overflow of
+  // the payload carries into the datatype, as the bits form one integer.
+  [[nodiscard]] constexpr ValueId incremented() const { return _bits + 1; }
 
   // Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
   // and `ad_utility::HashMap`

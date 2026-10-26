@@ -12,13 +12,10 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_IDMAPWRITERS_H
 
 #include <algorithm>
-#include <atomic>
 #include <boost/asio/strand.hpp>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -28,6 +25,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
+#include "util/Math.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
@@ -47,8 +45,9 @@ namespace ad_utility::vocabulary_merger::detail {
 // synchronization.
 //
 // NOTE: All the member functions are called by a single thread, the one that
-// commits the segments (see `SegmentPipeline`), which must not be a thread of
-// the global executor (see `TaskQueueOnExecutor`).
+// commits the segments of the merged vocabulary in order (the caller of this
+// class, which a follow-up PR adds), which must not be a thread of the global
+// executor (see `TaskQueueOnExecutor`).
 class IdMapWriters {
  private:
   std::vector<IdMapWriter> idMapWriters_;
@@ -57,13 +56,18 @@ class IdMapWriters {
   // The first exception that a task threw, if any. The remaining segments are
   // then skipped and the exception is rethrown by `finish()`.
   ad_utility::ExceptionCollector exceptionCollector_;
+  // The total time that the tasks have spent writing.
+  ad_utility::timer::ThreadSafeTimer busyTime_;
   // The queue of the tasks of each group, see above. The queues are bounded,
   // so a segment whose entries cannot be written yet blocks the thread that
-  // commits the segments. NOTE: Declared after everything that the tasks use,
-  // because the destructor of a queue waits for its tasks.
+  // commits the segments. The queues are held by `std::unique_ptr` because a
+  // `TaskQueueOnExecutor` (which holds a mutex and a condition variable) can be
+  // neither copied nor moved, which a `std::vector` of the queues themselves
+  // would require.
+  //
+  // NOTE: Declared last, because the destructor of a queue waits for its
+  // tasks, which use the members declared above.
   std::vector<std::unique_ptr<ad_utility::TaskQueueOnExecutor>> queues_;
-  // The total time that the tasks have spent writing, in milliseconds.
-  std::atomic<uint64_t> busyMs_{0};
 
  public:
   // Create the ID map of each of the partial vocabularies, in the files
@@ -73,10 +77,11 @@ class IdMapWriters {
                size_t numGroups)
       : idMapWriters_{::ranges::to_vector(
             ql::views::transform(idMapFilenames, makeIdMapWriter))},
-        groupSize_{
-            ceilDiv(idMapWriters_.size(),
-                    std::clamp<size_t>(numGroups, 1, idMapWriters_.size()))} {
-    for (size_t i = 0; i < ceilDiv(idMapWriters_.size(), groupSize_); ++i) {
+        groupSize_{ad_utility::ceilDiv(
+            idMapWriters_.size(),
+            std::clamp<size_t>(numGroups, 1, idMapWriters_.size()))} {
+    for (size_t i = 0;
+         i < ad_utility::ceilDiv(idMapWriters_.size(), groupSize_); ++i) {
       queues_.push_back(std::make_unique<ad_utility::TaskQueueOnExecutor>(
           boost::asio::make_strand(ad_utility::globalExecutor()),
           VOCAB_MERGER_ID_MAP_QUEUE_SIZE, "Writing the ID maps"));
@@ -101,20 +106,25 @@ class IdMapWriters {
         ::ranges::views::zip(idMapWriters_, segment->idMapEntries_),
         groupSize_);
     for (auto&& [groupIndex, group] : ::ranges::views::enumerate(groups)) {
+      // The task runs after `write` has returned, so it captures by value.
+      // Each task needs its own copies (not moves), but they are cheap: the
+      // `group` is a view (a few iterators into `idMapWriters_` and the
+      // `idMapEntries_` of the `segment`), the `segment` is a `shared_ptr`
+      // (which keeps the entries that the `group` points to alive), and the
+      // `converter` is a small array of counts.
       queues_[groupIndex]->push(
           exceptionCollector_.wrap([this, group, segment, converter]() mutable {
             // Skip the remaining segments once a task has failed.
             if (hasFailed()) {
               return;
             }
-            ad_utility::Timer timer{ad_utility::Timer::Started};
+            auto measurement = busyTime_.startMeasurement();
             for (auto&& [writer, entries] : group) {
               for (const SegmentIdMapEntry& entry : entries) {
                 writer.push(IdMapEntry{VocabIndex::make(entry.localIndex_),
                                        converter.globalIdOf(entry.id_)});
               }
             }
-            busyMs_ += timer.msecs().count();
           }));
     }
   }
@@ -136,16 +146,8 @@ class IdMapWriters {
     exceptionCollector_.rethrowIfException();
   }
 
-  // The total time that the tasks have spent writing, in milliseconds.
-  uint64_t busyMs() const { return busyMs_; }
-
- private:
-  // Return `numerator / denominator`, rounded up. The `denominator` must be
-  // positive.
-  static size_t ceilDiv(size_t numerator, size_t denominator) {
-    AD_CONTRACT_CHECK(denominator > 0);
-    return (numerator + denominator - 1) / denominator;
-  }
+  // The total time that the tasks have spent writing.
+  ad_utility::Timer::Duration busyTime() const { return busyTime_.value(); }
 };
 }  // namespace ad_utility::vocabulary_merger::detail
 

@@ -14,11 +14,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/Segment.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
@@ -26,10 +26,9 @@
 #include "util/Log.h"
 #include "util/ProgressBar.h"
 
-// The stage of the vocabulary merger that commits the segments in the order
-// of the vocabulary (see the comment above `mergeVocabulary` in
-// `index/VocabularyMerger.h`). This is not part of the public interface of
-// that header.
+// The stage of the vocabulary merger that commits the segments (see
+// `index/vocabulary_merger/Segment.h`) in the order of the vocabulary. This is
+// not part of the public interface of `index/VocabularyMerger.h`.
 namespace ad_utility::vocabulary_merger::detail {
 
 // A range of the words of one sub-vocabulary of a segment (see `Segment`) that
@@ -40,6 +39,10 @@ struct SegmentPiece {
   uint8_t sub_;
   size_t firstWord_;
   size_t numWords_;
+
+  // Return the words of the sub-vocabulary of the segment that this piece
+  // belongs to.
+  const WordBlock& words() const { return segment_->wordBlocks_[sub_]; }
 };
 
 // The pieces of consecutive segments that together form one block of a
@@ -55,19 +58,17 @@ struct BlockPieces {
 // Gather the words of the `block` into one `WordBlock` (see
 // `index/vocabulary/VocabularyTypes.h`), which also carries their precomputed
 // payload. This is per-word work, which the `SegmentCommitter` leaves to its
-// sink (see `AsyncBlockWriter`).
+// sink.
 inline WordBlock gatherWords(const BlockPieces& block) {
   WordBlock result;
   result.firstPosition_ = block.firstPosition_;
   result.isExternal_.reserve(block.numWords_);
   if (!block.pieces_.empty()) {
-    result.payloadSize_ = block.pieces_.front()
-                              .segment_->wordBlocks_[block.pieces_.front().sub_]
-                              .payloadSize_;
+    result.payloadSize_ = block.pieces_.front().words().payloadSize_;
     result.payload_.reserve(block.numWords_ * result.payloadSize_);
   }
   for (const SegmentPiece& piece : block.pieces_) {
-    const WordBlock& words = piece.segment_->wordBlocks_[piece.sub_];
+    const WordBlock& words = piece.words();
     for (size_t i = piece.firstWord_; i < piece.firstWord_ + piece.numWords_;
          ++i) {
       result.push(words.word(i), words.isExternal_[i], words.payload(i));
@@ -86,13 +87,13 @@ inline WordBlock gatherWords(const BlockPieces& block) {
 //
 // This class does no per-word work (see `gatherWords`) and nothing
 // asynchronous; the writing of the blocks and of the ID map entries is the job
-// of the caller (see `SegmentPipeline`, which hands the blocks to an
-// `AsyncBlockWriter` and the entries to the `IdMapWriters`).
+// of the caller, which hands the blocks to the writer of the vocabulary and the
+// ID map entries to the writers of the partial ID maps.
 class SegmentCommitter {
  public:
   // The sink for the blocks of a sub-vocabulary, called with the index of the
   // sub-vocabulary and the block, in the order of the blocks.
-  using BlockSink = std::function<void(uint8_t sub, BlockPieces block)>;
+  using BlockSink = absl::AnyInvocable<void(uint8_t sub, BlockPieces block)>;
 
  private:
   // The block size of each sub-vocabulary.
@@ -117,13 +118,14 @@ class SegmentCommitter {
     }
   }
 
+  // The number of sub-vocabularies of the vocabulary that is written.
   uint8_t numSubVocabularies() const {
     return static_cast<uint8_t>(blockSizes_.size());
   }
 
   // Commit the next `segment`. Return the converter that turns the
-  // segment-local IDs of this segment into the global ones (for writing its ID
-  // map entries, see `IdMapWriters`).
+  // segment-local IDs of this segment into the global ones (the caller needs
+  // it for writing the ID map entries of the segment).
   IdConverterForSegment commit(const std::shared_ptr<const Segment>& segment) {
     AD_CONTRACT_CHECK(segment->wordBlocks_.size() == numSubVocabularies());
     const IdConverterForSegment converter = std::exchange(

@@ -27,6 +27,7 @@
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/Executor.h"
+#include "util/Math.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 #include "util/jthread.h"
@@ -134,7 +135,7 @@ CPP_template(typename ChunkFunction)(
   if (numTasks == 0) {
     numTasks = std::max(1u, std::thread::hardware_concurrency());
   }
-  size_t numChunks = (numElements + chunkSize - 1) / chunkSize;
+  size_t numChunks = ceilDiv(numElements, chunkSize);
   // Tasks beyond the number of chunks would have nothing to do.
   numTasks = std::min(numTasks, numChunks);
   // The index of the next chunk that has not been handed out yet. Taking the

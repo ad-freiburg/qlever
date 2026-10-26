@@ -183,6 +183,7 @@ constexpr inline size_t VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK =
     8 * VOCAB_MERGER_INPUT_PER_CHUNK.getBytes() /
         VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() +
     2;
+
 // The maximal number of segments that may be waiting in the queue of each
 // group of the ID map writers of the vocabulary merger (see
 // `index/vocabulary_merger/IdMapWriters.h`). A queued segment holds its ID map

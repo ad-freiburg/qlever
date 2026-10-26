@@ -165,7 +165,10 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline {
                 << blockWriter_.numBlocks() << " blocks "
                 << blockWriter_.prepareBusyMs() << " ms, appending them "
                 << blockWriter_.appendBusyMs() << " ms, writing the ID maps "
-                << idMapWriters_.busyMs() << " ms" << std::endl;
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                       idMapWriters_.busyTime())
+                       .count()
+                << " ms" << std::endl;
     return metaData;
   }
 

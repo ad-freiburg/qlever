@@ -50,32 +50,6 @@ void mergeStats(LocalVocabTracking& stats, const LocalVocab& vocab) {
 }
 }  // namespace
 
-//______________________________________________________________________________
-template <typename F>
-void Operation::forAllDescendants(F f) {
-  static_assert(
-      std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
-  for (auto ptr : getChildren()) {
-    if (ptr) {
-      f(ptr);
-      ptr->forAllDescendants(f);
-    }
-  }
-}
-
-//______________________________________________________________________________
-template <typename F>
-void Operation::forAllDescendants(F f) const {
-  static_assert(
-      std::is_same_v<void, std::invoke_result_t<F, const QueryExecutionTree*>>);
-  for (auto ptr : getChildren()) {
-    if (ptr) {
-      f(ptr);
-      ptr->forAllDescendants(f);
-    }
-  }
-}
-
 // _____________________________________________________________________________
 std::vector<std::string> Operation::collectWarnings() const {
   // TODO<ullingerc> Warnings of the original computation of a result that was
@@ -111,26 +85,6 @@ void Operation::addUnboundVariableWarningOrThrow(std::string warning) const {
   } else {
     addWarning(std::move(warning));
   }
-}
-
-// ________________________________________________________________________
-void Operation::recursivelySetCancellationHandle(
-    SharedCancellationHandle cancellationHandle) {
-  AD_CORRECTNESS_CHECK(cancellationHandle);
-  forAllDescendants([&cancellationHandle](auto child) {
-    child->getRootOperation()->cancellationHandle_ = cancellationHandle;
-  });
-  cancellationHandle_ = std::move(cancellationHandle);
-}
-
-// ________________________________________________________________________
-
-void Operation::recursivelySetTimeConstraint(
-    std::chrono::steady_clock::time_point deadline) {
-  deadline_ = deadline;
-  forAllDescendants([deadline](auto child) {
-    child->getRootOperation()->deadline_ = deadline;
-  });
 }
 
 // _____________________________________________________________________________
@@ -462,13 +416,6 @@ std::shared_ptr<const Result> Operation::getResult(
     throw ad_utility::AbortException(
         "Unexpected exception that is not a subclass of std::exception");
   }
-}
-
-// ______________________________________________________________________
-std::chrono::milliseconds Operation::remainingTime() const {
-  auto interval = deadline_ - std::chrono::steady_clock::now();
-  return std::max(
-      0ms, std::chrono::duration_cast<std::chrono::milliseconds>(interval));
 }
 
 // _____________________________________________________________________________

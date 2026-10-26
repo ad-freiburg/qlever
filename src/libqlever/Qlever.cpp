@@ -57,8 +57,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                Allocator<Id> allocator, qlever::Executor executor)
     : allocator_{std::move(allocator)},
       executor_{std::move(executor)},
-      indexAndViews_{std::make_shared<IndexAndViews>(
-          Index{allocator_}, MaterializedViewsManager{})},
+      indexAndViews_{std::allocate_shared<IndexAndViews>(
+          allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -101,18 +101,6 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   }
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
-
-  // Estimate the cost of sorting operations (needed for query planning), unless
-  // the user disabled this (potentially expensive) step. The samples are sorted
-  // like the sorts of the queries themselves (see `IdTableUtils::sort` and
-  // `QueryExecutionContext::makeSortConfig`).
-  if (config.computeSortPerformanceEstimators_) {
-    sortPerformanceEstimator_.computeEstimatesExpensively(
-        allocator_,
-        index.numTriples().normalAndInternal_() *
-            PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100,
-        QueryExecutionContext::makeSortConfig(executor_));
-  }
 
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
@@ -231,9 +219,8 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
                           ad_utility::MediaType mediaType) const {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
-  const auto& sharedCancellationHandle = plannedQuery.queryExecutionTree()
-                                             .getRootOperation()
-                                             ->getCancellationHandle();
+  const auto& sharedCancellationHandle =
+      plannedQuery.queryExecutionContext().cancellationHandle();
   std::string result;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
@@ -334,8 +321,8 @@ void Qlever::eraseResultWithName(std::string name) {
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
     ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
+  const auto& handle = qec.cancellationHandle();
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
 
@@ -345,12 +332,6 @@ PlannedQuery Qlever::planQuery(
   PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
-  // Propagate the `cancellationHandle` and the `timeLimit` through the
-  // `queryExecutionTree`.
-  rootOperation.recursivelySetCancellationHandle(std::move(handle));
-  if (timeLimit.has_value()) {
-    rootOperation.recursivelySetTimeConstraint(timeLimit.value());
-  }
 
   auto& queryPlanningInfo = rootOperation.getQueryPlanningInfo();
   if (requestTimer.has_value()) {
@@ -365,25 +346,23 @@ PlannedQuery Qlever::planQuery(
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
-    std::optional<TimeLimit> timeLimit,
+    ParsedQueryAndContext parsedQuery,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
   // NOTE: `qec` is a reference into `parsedQuery`, which is alive for the
   // duration of this call, and the resulting `PlannedQuery` takes its own
   // `shared_ptr` to the context.
   auto& qec = parsedQuery.queryExecutionContext();
-  return planQuery(std::move(parsedQuery.parsedQuery()), qec, std::move(handle),
-                   timeLimit, requestTimer);
+  return planQuery(std::move(parsedQuery.parsedQuery()), qec, requestTimer);
 }
 
 // ___________________________________________________________________________
 ParsedQueryAndContext Qlever::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) const {
+    bool pinResult, SharedCancellationHandle handle) const {
   auto qecPtr = createQueryExecutionContext(
       indexAndViewsSnapshot(), executor_, std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching_);
+      pinSubtrees, pinResult, disableCaching_, std::move(handle));
 
   auto parsedQuery = SparqlParser::parseQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
@@ -395,24 +374,24 @@ ParsedQueryAndContext Qlever::parseQuery(
 // ___________________________________________________________________________
 ParsedQueryAndContext Qlever::bindParsedQuery(
     ParsedQuery parsedQuery, std::function<void(std::string)> updateCallback,
-    bool pinSubtrees, bool pinResult) const {
+    bool pinSubtrees, bool pinResult, SharedCancellationHandle handle) const {
   auto qecPtr = createQueryExecutionContext(
       indexAndViewsSnapshot(), executor_, std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching_);
+      pinSubtrees, pinResult, disableCaching_, std::move(handle));
   return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
 }
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::parseAndPlanQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
-    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
+    SharedCancellationHandle handle,
     boost::optional<const ad_utility::Timer&> requestTimer,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
   return planQuery(
       parseQuery(std::move(query), datasetClauses, std::move(updateCallback),
-                 pinSubtrees, pinResult),
-      std::move(handle), timeLimit, requestTimer);
+                 pinSubtrees, pinResult, std::move(handle)),
+      requestTimer);
 }
 
 // ___________________________________________________________________________
@@ -462,11 +441,9 @@ void Qlever::writeMaterializedView(
     std::string name, std::string query,
     const std::vector<DatasetClause>& datasetClauses,
     SharedCancellationHandle cancellationHandle,
-    std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
-  auto plan =
-      parseAndPlanQuery(std::move(query), datasetClauses,
-                        std::move(cancellationHandle), timeLimit, requestTimer);
+  auto plan = parseAndPlanQuery(std::move(query), datasetClauses,
+                                std::move(cancellationHandle), requestTimer);
   const auto& viewsManager =
       plan.queryExecutionContext().materializedViewsManager();
   auto memoryLimit =
@@ -503,13 +480,13 @@ void Qlever::deleteMaterializedView(std::string name) const {
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
     std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult,
-    QueryExecutionContext::DisableCaching disableCaching) const {
+    bool pinResult, QueryExecutionContext::DisableCaching disableCaching,
+    SharedCancellationHandle handle) const {
   auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
   return std::make_shared<QueryExecutionContext>(
-      std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, std::move(viewsManager), std::move(executor),
-      std::move(updateCallback), pinSubtrees, pinResult, disableCaching);
+      std::move(index), &cache_, allocator_, &namedResultCache_,
+      std::move(viewsManager), std::move(executor), std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching, false, std::move(handle));
 }
 
 // ___________________________________________________________________________
@@ -659,13 +636,18 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
   auto mapping =
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
                          ownedBlocks, handle, executor_, logFileName);
-  auto indexAndViews = std::make_shared<IndexAndViews>(
-      Index{allocator()}, MaterializedViewsManager{});
+  auto indexAndViews = std::allocate_shared<IndexAndViews>(
+      allocator(), Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
   newIndex.usePatterns() = index.usePatterns();
   newIndex.loadAllPermutations() = index.loadAllPermutations();
   newIndex.createFromOnDiskIndex(indexBaseName,
                                  index.deltaTriplesManager().persists());
+  // The rebuilt index has to encode exactly the same IRIs directly in an `Id`,
+  // otherwise the `Id`s and `LocalVocabEntry`s of the old index cannot be
+  // carried over (see `LocalVocabEntry::reanchoredTo`).
+  AD_CORRECTNESS_CHECK(index.getImpl().encodedIriManager() ==
+                       newIndex.getImpl().encodedIriManager());
   newManager.setOnDiskBase(indexBaseName);
   return {std::move(currentSnapshot), std::move(mapping),
           std::move(indexAndViews)};
@@ -704,13 +686,11 @@ void Qlever::swapInRebuiltIndex(
   // repaired manually before the next restart.
   moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
-  // Clear the query cache, including pinned entries: cached results were
-  // computed against the old index, so their `VocabIndex` ids are in the old
-  // vocabulary's coordinates and their `LocalVocabEntry`s are anchored to the
-  // old index. The cache key alone does not protect against serving them: it
-  // only contains the query string and the delta triples version counter,
-  // and the counter of the new index starts over and can collide with a
-  // pre-swap value.
+  // Clear the query cache, including pinned entries, to free the memory of
+  // the results that were computed against the old index. They can never be
+  // hit again, because `addFromSnapshotDiff` above continued the snapshot
+  // index of the old index in the new one. This also holds for the results
+  // that queries still running on the old index insert after this point.
   cache_.clearAll();
 }
 #endif
