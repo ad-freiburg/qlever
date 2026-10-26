@@ -135,6 +135,10 @@ inline void chunkedFill(R&& outputRange, const T& value,
 // Call `action` for each element of the `range`, like a range-based `for` loop,
 // and call `chunkOperation` (e.g. a cancellation check) after every
 // `chunkSize` elements, and once at the end if the `range` is not empty.
+//
+// NOTE: For a forward range that is not random access (e.g. an
+// `unordered_set`), `views::chunk` advances the iterator a second time per
+// chunk to find the end of the chunk, so such a range is traversed twice.
 CPP_template(typename R, typename Action, typename ChunkOpT)(
     requires ql::ranges::input_range<R> CPP_and
         ql::concepts::invocable<ChunkOpT>)
