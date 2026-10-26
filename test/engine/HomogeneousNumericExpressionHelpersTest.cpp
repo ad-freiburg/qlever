@@ -109,8 +109,7 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
       table_.asStaticView<0>(),
       qec_->getAllocator(),
       localVocab_,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
 
   HomogeneousNumericExpressionHelpersTest() {
     table_.setNumColumns(1);
