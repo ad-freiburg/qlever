@@ -413,6 +413,8 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
       [&distinctEstimators](IdTableStatic<0>& block) -> IdTableStatic<0> {
     for (size_t col = 1; col <= distinctEstimators.size(); ++col) {
       for (Id id : block.getColumn(col)) {
+        // Hash the bits, because they are not a single 64-bit integer for every
+        // `Id` layout.
         distinctEstimators[col - 1].add(std::hash<Id::T>{}(id.getBits()));
       }
     }
