@@ -50,8 +50,15 @@ namespace {
 using Manager = NamedCachedQueryBlobManager;
 using ErrorType = Manager::BlobErrorType;
 using ad_utility::VocabularyType;
-using ad_utility::testing::buildTestIndex;
 using ad_utility::testing::decompressOrFail;
+
+// Build an index via `ad_utility::testing::buildTestIndex` with the
+// `InMemoryUncompressed` vocabulary, which the serialization of blobs currently
+// requires (see the comment there).
+const auto buildTestIndex = [](std::string_view turtleContents) {
+  return ad_utility::testing::buildTestIndex(
+      turtleContents, VocabularyType::InMemoryUncompressed);
+};
 
 // A `ql::pmr::memory_resource` that counts the allocations routed through it,
 // used to verify that a caller-provided allocator is actually used for the
@@ -583,8 +590,7 @@ TEST(NamedCachedQueryBlobManager, decompressBlobRejectsTruncatedInput) {
 TEST(NamedCachedQueryBlobManager, combinedBlob) {
   IndexBuilderConfig sourceConfig = buildTestIndex(
       "<combinedBlobSubject> <combinedBlobPredicate> "
-      "\"combined blob literal\".",
-      VocabularyType::InMemoryUncompressed);
+      "\"combined blob literal\".");
 
   const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
@@ -645,8 +651,7 @@ TEST(NamedCachedQueryBlobManager, combinedBlob) {
 TEST(NamedCachedQueryBlobManager, blobUsesProvidedAllocator) {
   IndexBuilderConfig sourceConfig = buildTestIndex(
       "<allocatorBlobSubject> <allocatorBlobPredicate> "
-      "\"allocator blob literal\".",
-      VocabularyType::InMemoryUncompressed);
+      "\"allocator blob literal\".");
 
   const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
@@ -765,8 +770,7 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeReportsFailureDetails) {
 // and that a second valid blob is then rejected.
 TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
   IndexBuilderConfig sourceConfig =
-      buildTestIndex("<retrySubject> <retryPredicate> \"retry literal\".",
-                     VocabularyType::InMemoryUncompressed);
+      buildTestIndex("<retrySubject> <retryPredicate> \"retry literal\".");
 
   const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
@@ -829,15 +833,12 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
   // Four rail segments (linestrings) that are pinned as a cached s2 geometry
   // index. The query point used below lies within 1 km of all four segments
   // (see `SpatialJoinCachedIndexTest`).
-  IndexBuilderConfig sourceConfig = buildTestIndex(
-      absl::StrCat(
-          freiburgSegmentsS1S2,
-          "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
-          "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-          "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
-          "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
-          ".\n"),
-      VocabularyType::InMemoryUncompressed);
+  IndexBuilderConfig sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+      "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
+      "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
 
   const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
@@ -893,7 +894,8 @@ class BlobFilterTest
 // strings, the excluded ones to `placeholderForMissingVocabIndex`.
 TEST_P(BlobFilterTest, blobWithExcludedVocabularyEntries) {
   const auto& [sourceType, expectedBlobType] = GetParam();
-  auto sourceConfig = buildTestIndex(filterTestData, sourceType);
+  auto sourceConfig =
+      ad_utility::testing::buildTestIndex(filterTestData, sourceType);
   auto [compressedBlob, droppedSubjectIndex, droppedObjectIndex,
         keptSubjectIndex] = serializeFilterTestBlob(sourceConfig);
 
@@ -941,8 +943,7 @@ INSTANTIATE_TEST_SUITE_P(
 // the unfiltered blob, and that an empty list of regexes produces a blob in the
 // original format (i.e. with the original vocabulary type).
 TEST(NamedCachedQueryBlobManager, blobWithRegexesThatMatchNothing) {
-  auto sourceConfig =
-      buildTestIndex(filterTestData, VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(filterTestData);
 
   std::vector<char> unfilteredBlob;
   std::vector<char> filteredBlob;
@@ -980,8 +981,8 @@ TEST(NamedCachedQueryBlobManager, blobWithRegexesThatMatchNothing) {
 // descriptive message if the source vocabulary is a geo-split vocabulary (whose
 // marker-encoded indices cannot be represented by a vocabulary with holes).
 TEST(NamedCachedQueryBlobManager, blobWithExcludedEntriesRejectsGeoSplitVocab) {
-  auto sourceConfig =
-      buildTestIndex(filterTestData, VocabularyType::OnDiskCompressedGeoSplit);
+  auto sourceConfig = ad_utility::testing::buildTestIndex(
+      filterTestData, VocabularyType::OnDiskCompressedGeoSplit);
 
   Qlever source{EngineConfig{sourceConfig}};
   source.queryAndPinResultWithName(std::string{filterPinName},
@@ -997,8 +998,7 @@ TEST(NamedCachedQueryBlobManager, blobWithExcludedEntriesRejectsGeoSplitVocab) {
 // (inserted by a SPARQL UPDATE), which are written to the secondary vocabulary
 // of the blob.
 TEST(NamedCachedQueryBlobManager, blobWithNewWords) {
-  auto sourceConfig =
-      buildTestIndex(newWordsTestData, VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(newWordsTestData);
   auto compressedBlob = serializeNewWordsTestBlob(sourceConfig);
   expectBlobFormatVersion(compressedBlob,
                           Manager::formatVersionWithSecondaryVocab);
@@ -1034,8 +1034,7 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWords) {
 // a blob with a secondary vocabulary: the words of that secondary vocabulary
 // keep their `Id`s, and the new words form one additional segment.
 TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
-  auto sourceConfig =
-      buildTestIndex(newWordsTestData, VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(newWordsTestData);
   auto firstBlob = serializeNewWordsTestBlob(sourceConfig);
 
   Qlever intermediate{EngineConfig{}, /*skipLoading=*/true};
@@ -1071,8 +1070,7 @@ TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
 TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
   // Two rail segments in Freiburg, and a new one in Berlin (inserted below),
   // whose subject `<a>` sorts before `<s1>` and `<s2>`.
-  IndexBuilderConfig sourceConfig = buildTestIndex(
-      freiburgSegmentsS1S2, VocabularyType::InMemoryUncompressed);
+  IndexBuilderConfig sourceConfig = buildTestIndex(freiburgSegmentsS1S2);
 
   const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
@@ -1337,8 +1335,7 @@ struct AfterFirstUpdate {
 // first update, where the entry "geoPin" is pinned with the `geoPinOptions`.
 AfterFirstUpdate setUpAfterFirstUpdate(
     const GeoPinOptions& geoPinOptions = {}) {
-  auto source = makeIncrementalSource(buildTestIndex(
-      incrementalTestData(), VocabularyType::InMemoryUncompressed));
+  auto source = makeIncrementalSource(buildTestIndex(incrementalTestData()));
   ad_utility::testing::applyUpdateToEngine(*source, firstUpdate());
   pinIncrementalResults(*source, geoPinOptions);
   auto baseBlob = source->serializeVocabAndNamedCacheToCompressedBlob();
@@ -1384,8 +1381,7 @@ TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
       absl::StrCat(freiburgSegmentsS1S2,
                    "<s3> <asWKT> \"LINESTRING Z(7.8 48.0 268.7, 7.81 "
                    "48.01 268.9)\"",
-                   wktSuffix, " .\n"),
-      VocabularyType::InMemoryUncompressed);
+                   wktSuffix, " .\n"));
   Qlever source{EngineConfig{sourceConfig}};
   pinGeoResult(source);
   // Two shapes for `<s1>` and `<s2>`, and a third one for `<s3>`.
@@ -1511,8 +1507,7 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobKeepsSecondaryVocabIds) {
 // Test that an entry without a counterpart in the base is written with a fresh
 // geo index.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutMatchingBaseEntry) {
-  auto sourceConfig = buildTestIndex(incrementalTestData(),
-                                     VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(incrementalTestData());
   auto source = makeIncrementalSource(sourceConfig);
   source->queryAndPinResultWithName("stable",
                                     "SELECT ?s ?p WHERE { ?s ?p <fixed> }");
@@ -1667,15 +1662,12 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithNonCanonicalBase) {
 // result (its rows then stay in canonical order, because no `Id` has to be
 // rewritten).
 TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
-  auto source = makeIncrementalSource(
-      buildTestIndex(absl::StrCat(freiburgSegmentsS1S2,
-                                  "<s3> <asWKT> \"LINESTRING(7.8427369 "
-                                  "47.9995806,7.8411672 47.9975175)\"",
-                                  wktSuffix, " .\n",
-                                  "<s4> <asWKT> \"LINESTRING(7.8422376 "
-                                  "47.9990144,7.8411016 47.9975307)\"",
-                                  wktSuffix, " .\n"),
-                     VocabularyType::InMemoryUncompressed));
+  auto source = makeIncrementalSource(buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 47.9975175)\"",
+      wktSuffix, " .\n",
+      "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 47.9975307)\"",
+      wktSuffix, " .\n")));
   pinGeoResult(*source);
   auto base = roundTrip(*source);
   ASSERT_THAT(geoIndexOf(*base), hasStats(1, 4, 4, 4));
@@ -1705,8 +1697,7 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobOfEntryInCanonicalOrder) {
 // Test that a geo index without any shapes (the pinned query has an empty
 // result) can be extended, and is not compacted.
 TEST(NamedCachedQueryBlobManager, incrementalBlobWithEmptyGeoIndex) {
-  auto source = makeIncrementalSource(
-      buildTestIndex("<m> <p> <o> .", VocabularyType::InMemoryUncompressed));
+  auto source = makeIncrementalSource(buildTestIndex("<m> <p> <o> ."));
   pinGeoResult(*source);
   ASSERT_THAT(geoIndexOf(*source), hasStats(1, 0, 0, 0));
   auto base = roundTrip(*source);
@@ -1725,8 +1716,7 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithEmptyGeoIndex) {
 // Test that a base can only be used if the instance that is serialized has no
 // secondary vocabulary, and that the base must not be null.
 TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsSecondaryVocab) {
-  auto sourceConfig =
-      buildTestIndex(newWordsTestData, VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(newWordsTestData);
   auto loaded = loadBlob(serializeNewWordsTestBlob(sourceConfig));
   ASSERT_NE(secondaryVocabOf(*loaded), nullptr);
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1744,8 +1734,7 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsSecondaryVocab) {
 // Test that the compaction thresholds of an incremental blob are rejected if
 // they are not in a valid range.
 TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsInvalidThresholds) {
-  auto source = makeIncrementalSource(
-      buildTestIndex("<m> <p> <o> .", VocabularyType::InMemoryUncompressed));
+  auto source = makeIncrementalSource(buildTestIndex("<m> <p> <o> ."));
   auto base = roundTrip(*source);
   auto expectThrows = [&](size_t maxGeoSegments, double maxDeadShapeRatio,
                           std::string_view message,
@@ -1775,17 +1764,14 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsInvalidThresholds) {
 // `SpatialJoinCachedIndex::forUpdatedTable`), both directly and after a round
 // trip through a blob, which then requires the new blob format.
 TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
-  IndexBuilderConfig sourceConfig = buildTestIndex(
-      absl::StrCat(
-          freiburgSegmentsS1S2,
-          "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
-          "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-          "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
-          "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-          "<s5> <asWKT> \"LINESTRING(8.8422376 48.9990144,8.8411016 "
-          "48.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
-          ".\n"),
-      VocabularyType::InMemoryUncompressed);
+  IndexBuilderConfig sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+      "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
+      "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s5> <asWKT> \"LINESTRING(8.8422376 48.9990144,8.8411016 "
+      "48.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
   Qlever source{EngineConfig{sourceConfig}};
   pinGeoResult(source);
   ASSERT_THAT(geoIndexOf(source), hasStats(1, 5, 5, 5));
@@ -1822,12 +1808,10 @@ TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
 // `SpatialJoinCachedIndex::forUpdatedTable` when rows are deleted) requires the
 // new blob format, because older versions of QLever would fail on a dead shape.
 TEST(NamedCachedQueryBlobManager, blobWithDeadShapesInSingleSegment) {
-  auto sourceConfig = buildTestIndex(
-      absl::StrCat(freiburgSegmentsS1S2,
-                   "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
-                   "47.9975175)\"^^<http://www.opengis.net/ont/"
-                   "geosparql#wktLiteral> .\n"),
-      VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+      "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
   Qlever source{EngineConfig{sourceConfig}};
   pinGeoResult(source);
   source.queryAndPinResultWithName(
@@ -1872,8 +1856,7 @@ TEST(NamedCachedQueryBlobManager, blobWithDeadShapesInSingleSegment) {
 // `NamedCachedQueryBlobManager.cpp`), and that with more than one segment the
 // new format is used, which keeps the simplification.
 TEST(NamedCachedQueryBlobManager, blobWithSimplifiedSpatialIndex) {
-  auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2},
-                                     VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2});
   Qlever source{EngineConfig{sourceConfig}};
   pinGeoResult(source, 2.5);
   ASSERT_THAT(geoIndexOf(source),
@@ -1908,8 +1891,7 @@ TEST(NamedCachedQueryBlobManager, blobWithSimplifiedSpatialIndex) {
 // keeps the simplification of the geo index, which the old format drops (see
 // `blobWithSimplifiedSpatialIndex` above).
 TEST(NamedCachedQueryBlobManager, blobWithAlwaysUseNewFormat) {
-  auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2},
-                                     VocabularyType::InMemoryUncompressed);
+  auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2});
   Qlever source{EngineConfig{sourceConfig}};
   pinGeoResult(source, 2.5);
   auto isSingleSimplifiedSegment =
@@ -1936,8 +1918,7 @@ TEST(NamedCachedQueryBlobManager, blobWithAlwaysUseNewFormat) {
 // entries of the source stay unchanged.
 TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
   auto sourceConfig =
-      buildTestIndex("<m> <p> <b> . <m> <p> <a> . <n> <p> <a> .",
-                     VocabularyType::InMemoryUncompressed);
+      buildTestIndex("<m> <p> <b> . <m> <p> <a> . <n> <p> <a> .");
   Qlever source{EngineConfig{sourceConfig}};
   // The result of the `VALUES` clause is not sorted, and contains a duplicate
   // row.
