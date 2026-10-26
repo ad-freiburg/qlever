@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <functional>
 #include <range/v3/view/chunk.hpp>
-#include <range/v3/view/ref.hpp>
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
@@ -143,10 +142,7 @@ inline void chunkedForEach(
     R&& range, Action action, ChunkOpT chunkOperation,
     std::size_t chunkSize = CANCELLATION_CHECK_CHUNK_SIZE) {
   AD_CONTRACT_CHECK(chunkSize != 0);
-  // NOTE: `views::ref` is required, because `views::chunk` doesn't accept
-  // move-only views (e.g. a `transform_view` of an `owning_view`) by value.
-  for (auto&& chunk :
-       ::ranges::views::chunk(::ranges::views::ref(range), chunkSize)) {
+  for (auto&& chunk : ::ranges::views::chunk(AD_FWD(range), chunkSize)) {
     for (auto&& element : chunk) {
       std::invoke(action, AD_FWD(element));
     }

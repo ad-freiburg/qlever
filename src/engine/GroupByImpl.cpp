@@ -1860,7 +1860,7 @@ static constexpr auto makeProcessGroupsVisitor =
         // `addValue` might look up strings in the vocabulary (e.g. for
         // `GROUP_CONCAT`), so a block of rows can take a while.
         ad_utility::chunkedForEach(
-            generator,
+            std::move(generator),
             [&hashEntries, &hashEntryIndex, &aggregationDataVector,
              evaluationContext](const auto& val) {
               auto vectorOffset = hashEntries[hashEntryIndex];
