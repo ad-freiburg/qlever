@@ -175,7 +175,7 @@ TEST(ChunkedForLoop, chunkedForEach) {
   auto moveOnlyView = ql::views::transform(std::vector<int>{1, 2, 3},
                                            [](int i) { return 2 * i; });
   static_assert(!std::is_copy_constructible_v<decltype(moveOnlyView)>);
-  EXPECT_THAT(visit(moveOnlyView, 2), ElementsAre(2, 4, -1, 6, -1));
+  EXPECT_THAT(visit(std::move(moveOnlyView), 2), ElementsAre(2, 4, -1, 6, -1));
   // A zipped range.
   std::vector<int> visited;
   ad_utility::chunkedForEach(
