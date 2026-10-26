@@ -349,10 +349,10 @@ OrderBy::makeTreeWithStrippedColumns(
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
   std::vector<std::pair<Variable, bool>> sortVars;
-  for (const auto& sortIndex : sortIndices_) {
+  for (const auto& [columnIndex, sortOrder] : sortIndices_) {
     const auto& sortVariable =
-        subtree_->getVariableAndInfoByColumnIndex(sortIndex.first).first;
-    sortVars.push_back(std::pair{sortVariable, sortIndex.second});
+        subtree_->getVariableAndInfoByColumnIndex(columnIndex).first;
+    sortVars.push_back(std::pair{sortVariable, sortOrder});
     varsRequiredFromSubtree.add(sortVariable);
   }
 
@@ -361,9 +361,9 @@ OrderBy::makeTreeWithStrippedColumns(
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree.get());
   std::vector<std::pair<ColumnIndex, bool>> newSortIndices;
-  for (const auto& var : sortVars) {
-    newSortIndices.push_back(
-        std::pair{subtree->getVariableColumn(var.first), var.second});
+  for (const auto& [sortVariable, sortOrder] : sortVars) {
+    newSortIndices.emplace_back(subtree->getVariableColumn(sortVariable),
+                                sortOrder);
   }
 
   // The new `OrderBy` also exports sorting variables that the parent did
