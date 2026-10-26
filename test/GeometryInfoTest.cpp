@@ -418,15 +418,15 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
 
   // Syntactically valid literals without a geometry: `EMPTY`, an unsupported
   // CRS, coordinates out of range.
-  for (auto lit :
-       {litLineStringEmpty, litUnsupportedCrsIri, litCoordOutOfRange}) {
+  for (auto lit : {litLineStringEmpty, litPointEmpty, litUnsupportedCrsIri,
+                   litCoordOutOfRange}) {
     EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
     EXPECT_EQ(GeometryInfo::fromWktLiteral(lit), std::nullopt) << lit;
   }
 
-  // Malformed literals. `POINT EMPTY` is rejected by the strict mode.
+  // Malformed literals.
   for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
-                   litInvalidCoord, litInvalidCrsIri, litPointEmpty}) {
+                   litInvalidCoord, litInvalidCrsIri}) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
   }
 
@@ -1078,6 +1078,29 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
           GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
           GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
       Optional(Eq(0.0)));
+
+  // A small square and a line that passes it at a distance of about 111 m,
+  // but whose vertices are more than 1 km away. The distance must be the same
+  // if the line is a member of a collection or of a multi-line with many
+  // members. Regression test for a bug in `pb_util`, where such lines were
+  // reduced to their vertices.
+  {
+    auto wkt = [](std::string_view content) {
+      return GeoPointOrWkt{
+          absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX)};
+    };
+    auto square = wkt("POLYGON((0 0,0.001 0,0.001 0.001,0 0.001,0 0))");
+    std::string line = "(-0.01 0.002,0.01 0.002)";
+    std::vector<std::string> lines(17, line);
+    for (const auto& other :
+         {wkt(absl::StrCat("LINESTRING", line)),
+          wkt(absl::StrCat("GEOMETRYCOLLECTION(LINESTRING", line, ")")),
+          wkt(absl::StrCat("MULTILINESTRING(", absl::StrJoin(lines, ","),
+                           ")"))}) {
+      EXPECT_THAT(computeMetricDistance(square, other),
+                  Optional(DoubleNear(111.32, 0.01)));
+    }
+  }
 
   // Test invalid case.
   EXPECT_EQ(computeMetricDistance(
