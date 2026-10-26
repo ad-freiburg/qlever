@@ -220,54 +220,72 @@ float JoinImpl::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t JoinImpl::getCostEstimate() {
-  // The join reads both inputs once. An index scan child whose sibling is
-  // small is read lazily, though: the sibling is materialized (see
-  // `lazyIndexScanMaxSizeMaterialization_`), the join hands its join column to
-  // the scan, and the scan reads only the blocks that contain one of those
-  // values (see `IndexScan::lazyScanForJoinOfColumnWithScan`), that is, at
-  // most one block per row of the sibling. The rows beyond that are results of
-  // the join and are charged as such. So such a scan costs at most `rows of
-  // the sibling * rows per block` (at least one block, a sibling that is
-  // estimated to be empty does not make the scan free), and never more than
-  // its size.
-  //
-  // NOTE: This also holds when the small sibling is an index scan itself,
-  // because `computeResult` materializes every small child, also a scan, and
-  // then joins the other scan with the materialized result. Only two scans
-  // that are both not small are joined via `computeResultForTwoIndexScans`,
-  // which prefilters by block ranges only. That is not bounded this way, so
-  // such scans are charged their full size.
-  // TODO<joka921> once the `getCostEstimate` functions are `const`,
-  // the argument can also be `const auto`
-  auto readCost = [this](auto& child, auto& sibling) -> size_t {
-    size_t size = child->getSizeEstimate();
-    auto isScan = [](auto& tree) {
-      return std::dynamic_pointer_cast<IndexScan>(tree->getRootOperation()) !=
-             nullptr;
-    };
-    size_t siblingSize = sibling->getSizeEstimate();
-    if (!isScan(child) ||
-        siblingSize >=
-            getRuntimeParameter<
-                &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>()) {
-      return size;
-    }
-    double blocks = static_cast<double>(std::max<size_t>(siblingSize, 1)) *
-                    static_cast<double>(getIndex().rowsPerBlock());
-    return static_cast<size_t>(std::min(static_cast<double>(size), blocks));
+  // An index scan that the join reads only partially is charged only for the
+  // rows that it reads, both here and as the cost of its subtree.
+  auto numRowsRead = [this](auto& child, auto& sibling,
+                            ColumnIndex siblingJoinCol) {
+    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
+                                                siblingJoinCol)
+        .value_or(child->getSizeEstimate());
   };
-  // The cost of a scan is reading it, bounded as above; other children report
-  // their own cost.
-  auto costOfSubtree = [&readCost](auto& subtree, auto& sibling) {
-    if (std::dynamic_pointer_cast<IndexScan>(subtree->getRootOperation())) {
-      return readCost(subtree, sibling);
-    }
-    return subtree->getCostEstimate();
-  };
+  size_t costJoin = numRowsRead(left_, right_, rightJoinCol_) +
+                    numRowsRead(right_, left_, leftJoinCol_);
 
-  size_t costJoin = readCost(left_, right_) + readCost(right_, left_);
-  return getSizeEstimateBeforeLimit() + costJoin +
-         costOfSubtree(left_, right_) + costOfSubtree(right_, left_);
+  auto costOfSubtrees = getCostEstimatesChargedForChildren();
+  return getSizeEstimateBeforeLimit() + costJoin + costOfSubtrees.at(0) +
+         costOfSubtrees.at(1);
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> JoinImpl::getCostEstimatesChargedForChildren() {
+  auto costOfSubtree = [this](auto& child, auto& sibling,
+                              ColumnIndex siblingJoinCol) {
+    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
+                                                siblingJoinCol)
+        .value_or(child->getCostEstimate());
+  };
+  return {costOfSubtree(left_, right_, rightJoinCol_),
+          costOfSubtree(right_, left_, leftJoinCol_)};
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> JoinImpl::getNumRowsReadOfPartialScanIfPresent(
+    QueryExecutionTree& child, QueryExecutionTree& sibling,
+    ColumnIndex siblingJoinCol) const {
+  // `computeResult` materializes every small child (also a scan), and reads a
+  // scan that is not small lazily, filtered by the join column of a
+  // materialized sibling (see `IndexScan::lazyScanForJoinOfColumnWithScan`).
+  // That reads only the blocks that contain one of the values of the sibling,
+  // so at most one block per row of the sibling. Two scans that are both not
+  // small are joined via `computeResultForTwoIndexScans`, which prefilters by
+  // block ranges only and is not bounded this way.
+  auto scan = IndexScan::getIfSupportsPrefilteredJoin(child);
+  if (!scan) {
+    return std::nullopt;
+  }
+  size_t threshold = getRuntimeParameter<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>();
+  size_t siblingSize = sibling.getSizeEstimate();
+  size_t size = child.getSizeEstimate();
+  if (siblingSize >= threshold || size < threshold) {
+    return std::nullopt;
+  }
+  // The scan reads all blocks if the sibling has UNDEF values in the join
+  // column or if the scan has a LIMIT or OFFSET (see `IndexScan::getLazyScan`).
+  bool siblingMightBeUndef =
+      static_cast<bool>(sibling.getVariableAndInfoByColumnIndex(siblingJoinCol)
+                            .second.mightContainUndef_);
+  if (siblingMightBeUndef || !scan->getLimitOffset().isUnconstrained()) {
+    return std::nullopt;
+  }
+  // At least one block, a sibling that is estimated to be empty does not make
+  // the scan free.
+  double blocks = static_cast<double>(std::max<size_t>(siblingSize, 1)) *
+                  static_cast<double>(getIndex().rowsPerBlock());
+  if (blocks >= static_cast<double>(size)) {
+    return std::nullopt;
+  }
+  return static_cast<size_t>(blocks);
 }
 
 // _____________________________________________________________________________

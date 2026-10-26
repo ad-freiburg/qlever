@@ -64,6 +64,8 @@ class JoinImpl : public Operation {
 
   size_t getCostEstimate() override;
 
+  std::vector<size_t> getCostEstimatesChargedForChildren() override;
+
   bool knownEmptyResult() override {
     return left_->knownEmptyResult() || right_->knownEmptyResult();
   }
@@ -191,6 +193,13 @@ class JoinImpl : public Operation {
   static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
                            const IdTable& dynB, ColumnIndex jc2,
                            IdTable* dynRes);
+
+  // If `child` is an index scan that the join reads only partially, filtered
+  // by the join column of `sibling`, return an upper bound for the number of
+  // rows that it reads. Otherwise return `std::nullopt`.
+  std::optional<size_t> getNumRowsReadOfPartialScanIfPresent(
+      QueryExecutionTree& child, QueryExecutionTree& sibling,
+      ColumnIndex siblingJoinCol) const;
 
   // Commonly used code for the various known-to-be-empty cases.
   Result createEmptyResult() const;

@@ -21,6 +21,7 @@
 #include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
+#include "util/Views.h"
 
 using namespace std::chrono_literals;
 
@@ -592,6 +593,15 @@ void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
   onLimitOffsetChanged(limitOffsetClause);
 }
 
+// _____________________________________________________________________________
+std::vector<size_t> Operation::getCostEstimatesChargedForChildren() {
+  std::vector<size_t> costs;
+  for (auto* child : getChildren()) {
+    costs.push_back(child->getCostEstimate());
+  }
+  return costs;
+}
+
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
     std::shared_ptr<const RuntimeInformation> root) {
@@ -601,11 +611,27 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->numCols_ = numCols;
   _runtimeInfo->descriptor_ = getDescriptor();
 
-  for (const auto& child : getChildren()) {
+  auto chargedCosts = getCostEstimatesChargedForChildren();
+  auto children = getChildren();
+  AD_CORRECTNESS_CHECK(chargedCosts.size() == children.size());
+  for (const auto& [child, chargedCost] :
+       ::ranges::views::zip(children, chargedCosts)) {
     AD_CONTRACT_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates(root);
-    _runtimeInfo->children_.push_back(
-        child->getRootOperation()->getRuntimeInfoPointer());
+    auto childInfo = child->getRootOperation()->getRuntimeInfoPointer();
+    // Show the cost that this operation charges for the child, so that the
+    // operation costs in the runtime information add up to the total cost.
+    // NOTE: Only the runtime information of the root is created anew for each
+    // computation, that of the children is updated in place. So if the same
+    // operations are computed again (as in some tests) and the cost of a child
+    // is no longer overwritten, the "standalone-cost-estimate" detail from the
+    // previous computation remains.
+    if (chargedCost != childInfo->costEstimate_) {
+      childInfo->addDetail("standalone-cost-estimate",
+                           childInfo->costEstimate_);
+      childInfo->costEstimate_ = chargedCost;
+    }
+    _runtimeInfo->children_.push_back(std::move(childInfo));
   }
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
