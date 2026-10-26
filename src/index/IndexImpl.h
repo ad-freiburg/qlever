@@ -150,6 +150,7 @@ class IndexImpl {
   // triples.
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
+
   // If not empty, the `ql:has-word` triples are only added for literals that
   // are the object of a triple with one of these predicates (IRIs in angle
   // brackets).
@@ -460,6 +461,7 @@ class IndexImpl {
   void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
     hasWordNormalization_ = normalization;
   }
+
   // Set the `wordTriplePredicates_`. Throw if one of them is not an IRI in
   // angle brackets.
   void setWordTriplePredicates(const std::vector<std::string>& predicates);

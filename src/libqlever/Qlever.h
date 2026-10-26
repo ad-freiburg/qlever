@@ -97,6 +97,7 @@ struct CommonConfig {
   // triples, see `ad_utility::HasWordNormalization`.
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
+
   // If not empty, only add the `ql:has-word` triples for literals that are the
   // object of a triple with one of these predicates.
   std::vector<std::string> wordTriplePredicates_;
