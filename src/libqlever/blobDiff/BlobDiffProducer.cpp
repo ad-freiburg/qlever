@@ -29,6 +29,7 @@
 #include "util/CryptographicHashUtils.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/json.h"
 
 namespace qlever {
 

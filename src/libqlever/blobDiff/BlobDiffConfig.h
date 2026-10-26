@@ -13,33 +13,35 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/blobDiff/BlobDiff.h"
-#include "util/json.h"
 
 namespace qlever {
 
 // The configuration of the weekly blob diff workflow (see `BlobDiffProducer`).
-// It is read from a JSON file of the following form (all keys of `index`,
+// It is read from a YAML file of the following form (all keys of `index`,
 // `blob`, and `geoCompaction` are optional, unknown keys are rejected):
 //
-// {
-//   "index": {
-//     "vocabularyType": "in-memory-compressed",
-//     "numThreads": 4,
-//     "blankNodeIriRegexes": [],
-//     "prefixesForIdEncodedIris": [],
-//     "settingsFile": ""
-//   },
-//   "blob": { "excludedEntryRegexes": [], "diffCompressionLevel": 19 },
-//   "geoCompaction": { "maxSegments": 8, "maxDeadShapeRatio": 0.3 },
-//   "namedQueries": [
-//     { "name": "streets", "query": "SELECT ...",
-//       "geoIndexVar": "?wkt", "simplificationMeters": 1.0 }
-//   ]
-// }
+// index:
+//   vocabularyType: in-memory-compressed
+//   numThreads: 4
+//   blankNodeIriRegexes: []
+//   prefixesForIdEncodedIris: []
+//   settingsFile: ""
+// blob:
+//   excludedEntryRegexes: []
+//   diffCompressionLevel: 19
+// geoCompaction:
+//   maxSegments: 8
+//   maxDeadShapeRatio: 0.3
+// namedQueries:
+//   - name: streets
+//     query: SELECT ...
+//     geoIndexVar: "?wkt"
+//     simplificationMeters: 1.0
 struct BlobDiffConfig {
   // A query whose result is pinned in the named result cache (and thereby
   // becomes part of the blob), optionally with a geo index.
@@ -78,17 +80,17 @@ struct BlobDiffConfig {
 
   std::vector<NamedQuery> namedQueries_;
 
-  // Parse and validate a config. Throw with a descriptive message if the JSON
-  // is malformed, contains unknown keys, has duplicate query names, a geo
-  // variable that does not start with `?`, a simplification that is not
-  // positive, or an on-disk vocabulary type.
-  static BlobDiffConfig fromJson(const nlohmann::json& json);
+  // Parse and validate a config from its YAML representation. Throw with a
+  // descriptive message if the YAML is malformed, contains unknown keys, has
+  // duplicate query names, a geo variable that does not start with `?`, a
+  // simplification that is not positive, or an on-disk vocabulary type.
+  static BlobDiffConfig fromYaml(std::string_view yaml);
 
-  // Read the file `path` and call `fromJson` on its content.
+  // Read the file `path` and call `fromYaml` on its content.
   static BlobDiffConfig fromFile(const std::string& path);
 
-  // Return the config as JSON (the inverse of `fromJson`).
-  nlohmann::json toJson() const;
+  // Return the config as YAML (the inverse of `fromYaml`).
+  std::string toYaml() const;
 
   // Return a hex string that identifies all settings that influence the
   // content of the index and of the blob (everything except the geo

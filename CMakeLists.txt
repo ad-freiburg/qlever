@@ -288,6 +288,24 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 
+################################
+# YAML-CPP
+################################
+# Used for the config of the blob diff workflow (see `BlobDiffConfig`). Only the
+# library is needed, not the tools, the tests, or the install targets.
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_INSTALL OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_FORMAT_SOURCE OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+        yaml-cpp
+        URL https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.9.0.tar.gz
+        URL_HASH SHA256=25cb043240f828a8c51beb830569634bc7ac603978e0f69d6b63558dadefd49a
+        SYSTEM
+        EXCLUDE_FROM_ALL
+)
+
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
@@ -782,7 +800,7 @@ if (EMSCRIPTEN)
     # and profiled with source information in the browser dev tools.
     add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:-g>")
 endif ()
-FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
+FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json yaml-cpp antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
 # The library `pb_util_geo` of `spatialjoin` uses the JSON writer of
 # `pb_util_json`, but does not link against it. With `BUILD_SHARED_LIBS`, the

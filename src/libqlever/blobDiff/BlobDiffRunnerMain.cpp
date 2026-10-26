@@ -62,7 +62,7 @@ int runInit(int argc, char** argv) {
   std::string configFile, turtle, stateDir, blobOut;
   po::options_description options{"init options"};
   options.add_options()("config", po::value(&configFile)->required(),
-                        "The JSON config.")(
+                        "The YAML config.")(
       "turtle", po::value(&turtle)->required(), "The Turtle file of week 0.")(
       "state-dir", po::value(&stateDir)->required(),
       "The (empty) state directory.")("blob-out", po::value(&blobOut),
@@ -82,7 +82,7 @@ int runDiff(int argc, char** argv) {
   std::string configFile, turtle, stateDir, diffOut, blobOut;
   po::options_description options{"diff options"};
   options.add_options()("config", po::value(&configFile)->required(),
-                        "The JSON config.")(
+                        "The YAML config.")(
       "state-dir", po::value(&stateDir)->required(), "The state directory.")(
       "turtle", po::value(&turtle)->required(),
       "The Turtle file of the new week.")(

@@ -3,7 +3,7 @@ add_library(qlever Qlever.cpp NamedCachedQueryBlobManager.cpp
         blobDiff/BlobDiff.cpp blobDiff/BlobDiffConfig.cpp
         blobDiff/BlobDiffQueries.cpp blobDiff/TurtleDelta.cpp
         blobDiff/BlobDiffProducer.cpp)
-qlever_target_link_libraries(qlever sparqlParser engine qlever_util index)
+qlever_target_link_libraries(qlever sparqlParser engine qlever_util index yaml-cpp::yaml-cpp)
 
 if (EMSCRIPTEN)
     # Build the WASM module (`qlever.mjs` + `qlever.wasm` + `qlever.d.ts"`)

@@ -31,6 +31,7 @@
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
+#include "util/json.h"
 
 using namespace qlever;
 using namespace testing;
@@ -52,7 +53,7 @@ std::string snapshotFile(size_t week) {
 
 // The config that is used by all the tests.
 BlobDiffConfig snapshotConfig() {
-  return BlobDiffConfig::fromFile(dataFile("snapshot-config.json"));
+  return BlobDiffConfig::fromFile(dataFile("snapshot-config.yaml"));
 }
 
 // The same config, but without any automatic compaction of the geo indices, so
@@ -421,10 +422,13 @@ TEST(BlobDiffProducer, stepWithoutChangesGivesTinyDiff) {
 // inserted nor deleted (its `Id` is the same), whereas a change of the value or
 // of the type is.
 TEST(BlobDiffProducer, lexicalChangeOfLiteralIsNoDelta) {
-  auto config = BlobDiffConfig::fromJson(nlohmann::json::parse(R"({
-    "index": {"numThreads": 2},
-    "namedQueries": [{"name": "all", "query": "SELECT ?s ?o WHERE { ?s <p> ?o }"}]
-  })"));
+  auto config = BlobDiffConfig::fromYaml(R"(
+index:
+  numThreads: 2
+namedQueries:
+  - name: all
+    query: SELECT ?s ?o WHERE { ?s <p> ?o }
+)");
   std::string stateDir = freshDirectory();
   std::string base = gtestCurrentTestName();
   std::vector<std::string> files;
