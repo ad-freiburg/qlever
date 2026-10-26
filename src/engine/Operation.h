@@ -615,6 +615,14 @@ class Operation {
         location, [this]() { return getDescriptor(); });
   }
 
+  // Return a function that calls `checkCancellation` (with the location of the
+  // caller of this function), e.g. as the `chunkOperation` of
+  // `ad_utility::chunkedForLoop`.
+  auto cancellationChecker(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
+    return [this, location]() { checkCancellation(location); };
+  }
+
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different
   // in case of a subquery.

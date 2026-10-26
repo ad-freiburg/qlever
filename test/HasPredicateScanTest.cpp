@@ -502,4 +502,20 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
   runTestUnordered(patternTrick, {{p3, Int(1)}, {p2, Int(1)}, {p, Int(2)}});
   EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
             RuntimeInformation::Status::lazilyMaterializedCompleted);
+
+  // An entry with a pattern index that is neither `NoPattern` nor a valid
+  // pattern index is illegal.
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.insertInternalTriplesForTesting(
+        cancellationHandle,
+        {IdTriple<0>{std::array{zPrivate, hasPattern, Id::makeFromInt(273),
+                                graphOfHasPattern.value()}}});
+  });
+  queryResultCache.clearAll();
+  auto qecIllegal = makeQec();
+  auto illegalScan = HasPredicateScan::makePatternScan(
+      &qecIllegal, TripleComponent{V{"?x"}}, V{"?predicate"});
+  auto illegalPatternTrick = CountAvailablePredicates(
+      &qecIllegal, illegalScan, 0, V{"?predicate"}, V{"?count"});
+  EXPECT_ANY_THROW(illegalPatternTrick.computeResultOnlyForTesting());
 }

@@ -5,11 +5,20 @@
 #ifndef QLEVER_CHUNKEDFORLOOP_H
 #define QLEVER_CHUNKEDFORLOOP_H
 
+#include <algorithm>
 #include <cstdint>
+#include <functional>
 
 #include "backports/algorithm.h"
+#include "util/Exception.h"
 
 namespace ad_utility {
+
+// The number of elements between two cancellation checks in loops over large
+// inputs that don't check after every element (e.g. via `chunkedForLoop`).
+// Small enough for loops that need a vocabulary lookup per element, and large
+// enough to make the checks negligible for cheap elements.
+constexpr inline std::size_t CANCELLATION_CHECK_CHUNK_SIZE = 10'000;
 
 namespace detail {
 
@@ -119,6 +128,28 @@ inline void chunkedFill(R&& outputRange, const T& value,
   }
   ql::ranges::fill(begin, end, value);
   chunkOperation();
+}
+
+// Call `action` for each element of the `range`, like a range-based `for` loop,
+// and call `chunkOperation` (e.g. a cancellation check) after every
+// `chunkSize` elements, and once at the end if the `range` is not empty.
+CPP_template(typename R, typename Action, typename ChunkOpT)(
+    requires ql::ranges::input_range<R> CPP_and
+        ql::concepts::invocable<ChunkOpT>)
+inline void chunkedForEach(
+    R&& range, Action action, ChunkOpT chunkOperation,
+    std::size_t chunkSize = CANCELLATION_CHECK_CHUNK_SIZE) {
+  AD_CONTRACT_CHECK(chunkSize != 0);
+  // NOTE: We don't use `::ranges::views::chunk`, because it doesn't accept all
+  // `std::ranges` (e.g. move-only views, or the `IdTable` rows with libc++).
+  auto it = ql::ranges::begin(range);
+  auto end = ql::ranges::end(range);
+  while (it != end) {
+    for (std::size_t i = 0; i < chunkSize && it != end; ++i, ++it) {
+      std::invoke(action, *it);
+    }
+    std::invoke(chunkOperation);
+  }
 }
 }  // namespace ad_utility
 

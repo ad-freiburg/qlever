@@ -177,7 +177,7 @@ IdTable Minus::copyMatchingRows(
         ql::views::transform(nonMatchingIndices,
                              [&inputCol](size_t row) { return inputCol[row]; }),
         outputCol.begin(), qlever::joinHelpers::CHUNK_SIZE,
-        [this]() { checkCancellation(); });
+        cancellationChecker());
   }
 
   return result;
@@ -238,7 +238,7 @@ IdTable Minus::computeMinus(
             joinColumnsLeft, joinColumnsRight,
             ql::ranges::lexicographical_compare, handleCompatibleRow,
             std::move(findUndefLeft), std::move(findUndefRight), {},
-            [this]() { checkCancellation(); });
+            cancellationChecker());
       },
       makeUndefRangesChecker(true, left), makeUndefRangesChecker(false, right));
 
