@@ -135,7 +135,7 @@ constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
 // The number of groups into which the partial ID maps are split for writing
 // (the maps of a group are written by one task per segment, on a strand of
 // the global thread pool), see `index/vocabulary_merger/IdMapWriters.h`.
-constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS = 8;
+constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_GROUPS = 8;
 
 // The amount of input (the serialized words of the partial vocabularies,
 // counted with their repetitions in different partial vocabularies) that a

@@ -190,7 +190,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
         cutter_{writer, blankNodeIriRegexes, numPartialVocabularies, comparator,
                 numWordsPerSegment},
         idMapWriters_{std::move(idMapFilenames),
-                      VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS},
+                      VOCAB_MERGER_NUM_ID_MAP_WRITER_GROUPS},
         blockWriter_{writer},
         committer_{writer, [this](uint8_t sub, BlockPieces block) {
                      blockWriter_.push(sub, std::move(block));
