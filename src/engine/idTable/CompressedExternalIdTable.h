@@ -1346,9 +1346,9 @@ class CompressedExternalIdTableSorter
   // a sequential consumer needs.
   //
   // Return a future that becomes ready once the merge has completed and has
-  // released this sorter again (only then it may be cleared or destroyed). The
-  // future is deferred, so the caller has to `get()` or `wait()` for it.
-  // Exceptions of the merge are reported to the sink and not via the future.
+  // released this sorter again. Clear or destroy the sorter only once the
+  // future is ready. Exceptions of the merge are reported to the sink and not
+  // via the future.
   //
   // NOTE: Like `getSortedBlocks`, this may only be called once if
   // `moveResultOnMerge()` is set (which is the default).
@@ -1356,14 +1356,6 @@ class CompressedExternalIdTableSorter
   std::future<void> mergeToSink(SinkFactory makeSink) {
     static_assert(N == NumStaticCols || N == 0);
     beginMerge();
-    // Return a deferred future that waits for `future` and then ends the merge.
-    auto thenEndMerge = [this](auto future) {
-      return std::async(std::launch::deferred,
-                        [future = std::move(future), this]() mutable {
-                          future.get();
-                          endMerge();
-                        });
-    };
     if (!this->transformAndPushLastBlock()) {
       // There is only a single (already sorted) block, so there is nothing to
       // merge: push that block to a sink that expects a single chunk, and
@@ -1377,17 +1369,27 @@ class CompressedExternalIdTableSorter
       if (!this->currentBlock_.empty()) {
         sink->asyncPush(0, takeSingleBlock<N>(), boost::asio::use_future).get();
       }
-      return thenEndMerge(sink->asyncFinishChunk(0, boost::asio::use_future));
+      // NOTE: The merge is ended also if the sink fails to finish the chunk,
+      // whose exception is then rethrown by the returned future.
+      return sink->asyncFinishChunk(
+          0, boost::asio::use_future(
+                 [this](std::exception_ptr exception, [[maybe_unused]] bool) {
+                   endMerge();
+                   if (exception) {
+                     std::rethrow_exception(exception);
+                   }
+                 }));
     }
     auto setup = prepareMergePhase(std::nullopt);
     auto state = parallelBlockMerge::parallelBlockMergeToSink<true>(
         mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
         this->comparator_, std::move(makeSink), std::move(setup.options_),
         cancellationHandle_);
-    // NOTE: The completion future becomes ready once the state of the merge
-    // (which owns the input) has been destroyed, see
+    // NOTE: The completion handler runs once the state of the merge (which
+    // owns the input) has been destroyed, see
     // `ParallelMergeState::asyncWaitForCompletion`.
-    return thenEndMerge(state->asyncWaitForCompletion());
+    return state->asyncWaitForCompletion(
+        boost::asio::use_future([this]() { endMerge(); }));
   }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
