@@ -264,17 +264,25 @@ std::optional<size_t> getNumRowsReadOfPartialScanIfPresent(
 }  // namespace
 
 // _____________________________________________________________________________
+std::vector<size_t> JoinImpl::getNumRowsReadOfChildrenOr(
+    absl::FunctionRef<size_t(QueryExecutionTree&)> fallback) {
+  auto numRowsRead = [fallback](QueryExecutionTree& child,
+                                QueryExecutionTree& sibling,
+                                ColumnIndex siblingJoinCol) {
+    return getNumRowsReadOfPartialScanIfPresent(child, sibling, siblingJoinCol)
+        .value_or(fallback(child));
+  };
+  return {numRowsRead(*left_, *right_, rightJoinCol_),
+          numRowsRead(*right_, *left_, leftJoinCol_)};
+}
+
+// _____________________________________________________________________________
 size_t JoinImpl::getCostEstimate() {
   // An index scan that the join reads only partially is charged only for the
   // rows that it reads, both here and as the cost of its subtree.
-  auto numRowsRead = [](auto& child, auto& sibling,
-                        ColumnIndex siblingJoinCol) {
-    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
-                                                siblingJoinCol)
-        .value_or(child->getSizeEstimate());
-  };
-  size_t costJoin = numRowsRead(left_, right_, rightJoinCol_) +
-                    numRowsRead(right_, left_, leftJoinCol_);
+  auto numRowsRead =
+      getNumRowsReadOfChildrenOr(&QueryExecutionTree::getSizeEstimate);
+  size_t costJoin = numRowsRead.at(0) + numRowsRead.at(1);
 
   auto costOfSubtrees = getCostEstimatesChargedForChildren();
   return getSizeEstimateBeforeLimit() + costJoin + costOfSubtrees.at(0) +
@@ -283,14 +291,7 @@ size_t JoinImpl::getCostEstimate() {
 
 // _____________________________________________________________________________
 std::vector<size_t> JoinImpl::getCostEstimatesChargedForChildren() {
-  auto costOfSubtree = [](auto& child, auto& sibling,
-                          ColumnIndex siblingJoinCol) {
-    return getNumRowsReadOfPartialScanIfPresent(*child, *sibling,
-                                                siblingJoinCol)
-        .value_or(child->getCostEstimate());
-  };
-  return {costOfSubtree(left_, right_, rightJoinCol_),
-          costOfSubtree(right_, left_, leftJoinCol_)};
+  return getNumRowsReadOfChildrenOr(&QueryExecutionTree::getCostEstimate);
 }
 
 // _____________________________________________________________________________
