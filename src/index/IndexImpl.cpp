@@ -1643,6 +1643,8 @@ std::vector<std::string> IndexImpl::getHasWordWords(
     std::string_view text) const {
   // Remove the accents before tokenizing: combining marks are not
   // alphanumeric, so they would otherwise split words.
+  // Owns the text if the accents are removed, so that `text` stays valid
+  // during the tokenization.
   std::string textWithoutAccents;
   if (hasWordNormalization_ ==
       ad_utility::HasWordNormalization::LowercaseNoAccents) {
