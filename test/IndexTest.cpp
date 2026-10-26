@@ -828,16 +828,16 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
 // it after the index has been loaded.
 TEST(IndexTest, hasWordNormalizationIsStored) {
   auto getWords = [](ad_utility::HasWordNormalization normalization) {
-    TestIndexConfig config{"<a> <b> \"Caf\xc3\xa9\" ."};
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
     config.addHasWordTriples = true;
     config.hasWordNormalization = normalization;
     return getQec(std::move(config))
         ->getIndex()
         .getImpl()
-        .getHasWordWords("Caf\xc3\xa9 CAFE\xcc\x81s!");
+        .getHasWordWords("Café CAFE\xcc\x81s!");
   };
   EXPECT_THAT(getWords(ad_utility::HasWordNormalization::Lowercase),
-              ::testing::ElementsAre("caf\xc3\xa9", "cafe", "s"));
+              ::testing::ElementsAre("café", "cafe", "s"));
   EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
               ::testing::ElementsAre("cafe", "cafes"));
 }
