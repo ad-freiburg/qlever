@@ -454,7 +454,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // fresh clone), so the pushdown may modify them in place, see
   // `applyLimitOffsetToChild`.
   void applyLimitOffset(const LimitOffsetClause& limitOffsetClause,
-                        bool childrenAreExclusivelyOwned = false);
+                        bool childrenAreExclusivelyOwned);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.

@@ -264,7 +264,7 @@ class QueryExecutionTree {
   // result of this operation. For `childrenAreExclusivelyOwned` see
   // `Operation::applyLimitOffset`.
   void applyLimitOffset(const LimitOffsetClause& limitOffsetClause,
-                        bool childrenAreExclusivelyOwned = false) {
+                        bool childrenAreExclusivelyOwned) {
     getRootOperation()->applyLimitOffset(limitOffsetClause,
                                          childrenAreExclusivelyOwned);
     updateCacheKeyAndSizeEstimate();

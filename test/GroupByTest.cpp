@@ -1626,7 +1626,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // The join cannot have a `LIMIT` or `OFFSET` for this optimization.
     auto join =
         makeExecutionTree<Join>(qec, xyzScanSortedByX, xyzScanSortedByX, 0, 0);
-    join->applyLimitOffset({1});
+    join->applyLimitOffset({1}, false);
     GroupByImpl joinHasLimitAndOffset{qec, variablesOnlyX, aliasesCountX,
                                       std::move(join)};
     EXPECT_EQ(std::nullopt,
@@ -1755,21 +1755,21 @@ TEST_F(GroupByOptimizations,
   // LIMIT OR OFFSET should prevent this optimization.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({3});
+    clone->applyLimitOffset({3}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({std::nullopt, 1});
+    clone->applyLimitOffset({std::nullopt, 1}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({3, 1});
+    clone->applyLimitOffset({3, 1}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
@@ -1777,7 +1777,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({1, 2});
+    clone->applyLimitOffset({1, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1786,7 +1786,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({100, 2});
+    clone->applyLimitOffset({100, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The 15 elements should be reduced by 2.
@@ -1794,7 +1794,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -1804,7 +1804,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({1, 2});
+    clone->applyLimitOffset({1, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1813,7 +1813,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({100, 2});
+    clone->applyLimitOffset({100, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1822,7 +1822,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -1946,7 +1946,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   auto getId = makeGetId(qec->getIndex());
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({1, 3});
+    clone->applyLimitOffset({1, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable({{getId("<x>"), I(1)}}));
@@ -1955,7 +1955,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // Group by object.
   {
     auto clone = yxScan->clone();
-    clone->applyLimitOffset({2, 2});
+    clone->applyLimitOffset({2, 2}, false);
     GroupByImpl groupBy{qec, variablesOnlyY, aliasesCountY, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable(
@@ -1965,7 +1965,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // LIMIT 0 edge case
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({0, 1});
+    clone->applyLimitOffset({0, 1}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(), optionalHasTable({}));
   }
@@ -2297,7 +2297,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   auto V = VocabId;
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({8, 3});
+    clone->applyLimitOffset({8, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2306,7 +2306,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({0, 1});
+    clone->applyLimitOffset({0, 1}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2314,7 +2314,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({8, 3});
+    clone->applyLimitOffset({8, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountNotExisting,
                         std::move(clone)};
 
