@@ -136,8 +136,8 @@ class IdMapWriters {
               return;
             }
             auto measurement = busyTime_.startMeasurement();
-            for (auto&& [writer, entries] : group) {
-              for (const SegmentIdMapEntry& entry : entries) {
+            for (auto&& [writer, entriesOfMap] : group) {
+              for (const SegmentIdMapEntry& entry : entriesOfMap) {
                 writer.push(IdMapEntry{VocabIndex::make(entry.localIndex_),
                                        converter.globalIdOf(entry.id_)});
               }
