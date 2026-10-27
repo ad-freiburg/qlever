@@ -12,8 +12,6 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
-#include <cstring>
-
 #include "backports/algorithm.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -27,6 +25,8 @@ namespace qlever::blobDiff {
 
 namespace {
 using Manager = NamedCachedQueryBlobManager;
+// The decompressed base as returned by `Manager::tryToDecompressBlob`.
+using DecompressedBase = std::vector<char, Manager::BlobAllocator>;
 using ad_utility::serialization::ByteBufferReadSerializerT;
 using ad_utility::serialization::ByteBufferWriteSerializer;
 using ErrorType = BlobDiffErrorType;
@@ -226,7 +226,8 @@ BlobOrError applyBlobDiffToCompressedBase(
                      "The base blob cannot be decompressed: ", error->message_);
   }
   auto target = applyBlobDiffToDecompressedBase(
-      ql::span<const char>{std::get<0>(base)}, diffFile, maxTargetSize);
+      ql::span<const char>{std::get<DecompressedBase>(base)}, diffFile,
+      maxTargetSize);
   if (auto* error = std::get_if<BlobDiffError>(&target)) {
     return std::move(*error);
   }
