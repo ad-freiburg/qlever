@@ -14,8 +14,12 @@
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
+#include "engine/OptionalJoin.h"
 #include "engine/Sort.h"
+#include "engine/Union.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
@@ -74,7 +78,7 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
     NeutralElementOperation n{getQec()};
     EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
     l._limit = 20;
-    n.applyLimitOffset(l);
+    n.applyLimitOffset(l, false);
     EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
     EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
   }
@@ -82,7 +86,7 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
   {
     NeutralElementOperation n{getQec()};
     l._offset = 34;
-    n.applyLimitOffset(l);
+    n.applyLimitOffset(l, false);
     EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
   }
 }
@@ -91,17 +95,113 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
 TEST(OperationTest, limitAndOffsetAreStacked) {
   NeutralElementOperation n{getQec()};
 
-  n.applyLimitOffset({std::nullopt, 1});
+  n.applyLimitOffset({std::nullopt, 1}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(std::nullopt, 1));
 
-  n.applyLimitOffset({20, 2});
+  n.applyLimitOffset({20, 2}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
 
-  n.applyLimitOffset({std::nullopt, 4});
+  n.applyLimitOffset({std::nullopt, 4}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(16, 7));
 
-  n.applyLimitOffset({6, 7});
+  n.applyLimitOffset({6, 7}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
+}
+
+// Test that the operations which push a `LIMIT` into a child clone the child
+// only if it may be shared, and modify it in place if it is exclusively owned
+// (see `Operation::applyLimitOffsetToChild`).
+TEST(OperationTest, limitPushdownClonesOnlySharedChildren) {
+  auto* qec = getQec();
+  // A child that is sorted on its only column `?a`, so that none of the
+  // operations below wraps it in a `Sort`.
+  auto makeChild = [qec]() {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1}, {2}, {3}}),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+        std::vector<ColumnIndex>{0});
+  };
+  // A child with a grandchild, to check that the pushdown also continues in
+  // place below the first clone.
+  auto makeNestedChild = [qec, &makeChild]() {
+    return ad_utility::makeExecutionTree<NeutralOptional>(qec, makeChild());
+  };
+  auto getLimitOffset = [](const QueryExecutionTree* tree) {
+    return tree->getRootOperation()->getLimitOffset();
+  };
+  auto getGrandchild = [](const QueryExecutionTree* child) {
+    return child->getRootOperation()->getChildren().at(0);
+  };
+  // `makeOperation` gets the children into which the operation pushes the
+  // `LIMIT`.
+  auto testPushdown = [&makeNestedChild, &getLimitOffset, &getGrandchild](
+                          auto makeOperation, size_t numPushedChildren = 1,
+                          ad_utility::source_location loc =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    std::vector<std::shared_ptr<QueryExecutionTree>> children;
+    for (size_t i = 0; i < numPushedChildren; ++i) {
+      children.push_back(makeNestedChild());
+    }
+    auto operation = makeOperation(children);
+
+    // Children that may be shared are cloned (deeply) before the pushdown and
+    // stay unchanged themselves.
+    operation->applyLimitOffset({2}, false);
+    std::vector<QueryExecutionTree*> clones;
+    for (size_t i = 0; i < numPushedChildren; ++i) {
+      auto* child = children.at(i).get();
+      auto* clone = operation->getChildren().at(i);
+      EXPECT_NE(clone, child);
+      EXPECT_NE(getGrandchild(clone), getGrandchild(child));
+      EXPECT_TRUE(getLimitOffset(child).isUnconstrained());
+      EXPECT_TRUE(getLimitOffset(getGrandchild(child)).isUnconstrained());
+      EXPECT_EQ(getLimitOffset(clone), LimitOffsetClause(2));
+      EXPECT_EQ(getLimitOffset(getGrandchild(clone)), LimitOffsetClause(2));
+      clones.push_back(clone);
+    }
+
+    // Exclusively owned children are modified in place, and so are their
+    // children.
+    std::vector<QueryExecutionTree*> grandchildren;
+    ql::ranges::transform(clones, std::back_inserter(grandchildren),
+                          getGrandchild);
+    operation->applyLimitOffset({1}, true);
+    for (size_t i = 0; i < numPushedChildren; ++i) {
+      auto* clone = operation->getChildren().at(i);
+      EXPECT_EQ(clone, clones.at(i));
+      EXPECT_EQ(getGrandchild(clone), grandchildren.at(i));
+      EXPECT_EQ(getLimitOffset(clone), LimitOffsetClause(1));
+      EXPECT_EQ(getLimitOffset(getGrandchild(clone)), LimitOffsetClause(1));
+    }
+  };
+
+  testPushdown([qec](auto children) {
+    return std::make_unique<Sort>(qec, std::move(children.at(0)),
+                                  std::vector<ColumnIndex>{0});
+  });
+  testPushdown([qec](auto children) {
+    using namespace sparqlExpression;
+    return std::make_unique<Bind>(
+        qec, std::move(children.at(0)),
+        parsedQuery::Bind{SparqlExpressionPimpl{std::make_unique<IdExpression>(
+                                                    Id::makeFromInt(42)),
+                                                "42 AS ?b"},
+                          Variable{"?b"}});
+  });
+  testPushdown([qec](auto children) {
+    return std::make_unique<NeutralOptional>(qec, std::move(children.at(0)));
+  });
+  testPushdown([qec, &makeChild](auto children) {
+    return std::make_unique<OptionalJoin>(qec, std::move(children.at(0)),
+                                          makeChild());
+  });
+  testPushdown(
+      [qec](auto children) {
+        return std::make_unique<Union>(qec, std::move(children.at(0)),
+                                       std::move(children.at(1)));
+      },
+      2);
 }
 
 // ________________________________________________
@@ -433,7 +533,7 @@ TEST(OperationTest, estimatesForCachedResults) {
 // ________________________________________________
 TEST(Operation, createRuntimInfoFromEstimates) {
   NeutralElementOperation operation{getQec()};
-  operation.applyLimitOffset({12, 3});
+  operation.applyLimitOffset({12, 3}, false);
   operation.createRuntimeInfoFromEstimates(nullptr);
   EXPECT_EQ(operation.runtimeInfo().details_["limit"], 12);
   EXPECT_EQ(operation.runtimeInfo().details_["offset"], 3);
@@ -833,7 +933,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
   auto& valuesForTesting = *valuesForTestingPtr;
 
-  valuesForTesting.applyLimitOffset({._limit = 1, ._offset = 1});
+  valuesForTesting.applyLimitOffset({._limit = 1, ._offset = 1}, false);
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
@@ -1185,12 +1285,12 @@ TEST(Operation, isDistinctByRecognizesLimitOne) {
 
   // A limit greater than one doesn't help, as the result may still contain
   // duplicates.
-  values->applyLimitOffset(LimitOffsetClause{._limit = 2});
+  values->applyLimitOffset(LimitOffsetClause{._limit = 2}, false);
   EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
 
   // With `LIMIT 1` the result has at most one row, so it is trivially distinct
   // wrt any set of columns.
-  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1}, false);
   EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{0}));
   EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{}));
 }
