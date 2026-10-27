@@ -392,15 +392,32 @@ class Operation : public std::enable_shared_from_this<Operation> {
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child has to
-  // repair the child afterwards, see the caution note on `applyLimitOffset`.
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
+  // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child should
+  // do so via `applyLimitOffsetToChild`, passing on
+  // `childrenAreExclusivelyOwned` (see `applyLimitOffset`), and has to repair
+  // the child afterwards, see the caution note on `applyLimitOffset`.
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&, bool) {
     // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
     // after the computation of the result. Make sure to also override
     // `handlesLimitOffset()` if this function is overridden, otherwise the
     // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
+ protected:
+  // Push `limitOffset` into `child`, for the overrides of
+  // `onLimitOffsetChanged`. The child is cloned first unless it is exclusively
+  // owned, and the pushdown then continues in place.
+  //
+  // NOTE: A child may be shared with other trees (e.g. other candidate plans of
+  // the query planner), hence the clone. The clone is a deep copy, so from
+  // there on the whole subtree is exclusively owned and needs no further
+  // clones. Cloning at every level made the pushdown quadratic in the depth of
+  // the tree, see #3474.
+  static void applyLimitOffsetToChild(
+      std::shared_ptr<QueryExecutionTree>& child,
+      const LimitOffsetClause& limitOffset, bool childIsExclusivelyOwned);
+
+ private:
   // This function is called when the operation's result is requested to be
   // cached and pinned to a name.
   void storeToNamedResultCache(const Result& result);
@@ -433,7 +450,13 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Repairing is only possible while the plan is still being assembled. Calling
   // this during result computation is therefore safe only for operations that
   // neither require nor report a sort order (see `CartesianProductJoin`).
-  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause);
+  //
+  // If `childrenAreExclusivelyOwned` is true, the children of this operation
+  // are not shared with any other tree (because this operation is part of a
+  // fresh clone), so the pushdown may modify them in place, see
+  // `applyLimitOffsetToChild`.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause,
+                        bool childrenAreExclusivelyOwned);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.

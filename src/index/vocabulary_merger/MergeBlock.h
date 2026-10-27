@@ -83,8 +83,8 @@ struct InputWord {
   // string, its external flag and its local index. The word is not copied, but
   // points into the buffer of the `serializer`, which therefore has to outlive
   // the returned `InputWord` (and must not move its buffer).
-  CPP_template(typename S)(
-      requires serialization::SpanReadSerializer<S>) static InputWord
+  CPP_template(typename S)(requires serialization::SpanReadSerializer<S>)
+  static InputWord
       fromZeroCopyDeserializer(S& serializer, uint32_t partialFileId) {
     InputWord word;
     word.word_ = serialization::zeroCopyDeserializeToStringView(serializer);

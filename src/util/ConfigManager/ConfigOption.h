@@ -94,8 +94,8 @@ class ConfigOption {
 
   // Returns, if this configuration option holds values of the given type.
   CPP_template(typename Type)(
-      requires ad_utility::SameAsAnyTypeIn<
-          Type, AvailableTypes>) constexpr bool holdsType() const {
+      requires ad_utility::SameAsAnyTypeIn<Type, AvailableTypes>)
+  constexpr bool holdsType() const {
     return std::holds_alternative<Data<Type>>(data_);
   }
 
@@ -104,8 +104,9 @@ class ConfigOption {
   exception, should the given value have a different type, than what the
   configuration option was set to.
   */
-  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
-                           T, AvailableTypes>) void setValue(const T& value) {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
+  void setValue(const T& value) {
     // Only set the variable, that our internal pointer points to, if the given
     // value is of the right type.
     if (auto* data = std::get_if<Data<T>>(&data_); data != nullptr) {
@@ -131,8 +132,8 @@ class ConfigOption {
   exception.
   */
   CPP_template(typename T)(
-      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>) T
-      getDefaultValue() const {
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
+  T getDefaultValue() const {
     if (hasDefaultValue() && std::holds_alternative<Data<T>>(data_)) {
       return std::get<Data<T>>(data_).defaultValue_.value();
     } else if (!hasDefaultValue()) {
@@ -161,8 +162,8 @@ class ConfigOption {
   to. If `T` is the wrong type, then it will throw an exception.
   */
   CPP_template(typename T)(
-      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>) T
-      getValue() const {
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
+  T getValue() const {
     if (wasSet() && std::holds_alternative<Data<T>>(data_)) {
       return *(std::get<Data<T>>(data_).variablePointer_);
     } else if (!wasSet()) {
@@ -218,10 +219,9 @@ class ConfigOption {
   for no default value and a non empty for a default value.
   */
   CPP_template(typename T)(
-      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
-      ConfigOption(std::string_view identifier, std::string_view description,
-                   T* variablePointer,
-                   std::optional<T> defaultValue = std::nullopt)
+              requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
+  ConfigOption(std::string_view identifier, std::string_view description,
+               T* variablePointer, std::optional<T> defaultValue = std::nullopt)
       : data_{Data<T>{std::move(defaultValue), variablePointer}},
         identifier_{identifier},
         description_{description} {
@@ -244,9 +244,9 @@ class ConfigOption {
   /*
   @brief Return the string representation/name of the type.
   */
-  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
-                           T, AvailableTypes>) static std::string
-      availableTypesToString() {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
+  static std::string availableTypesToString() {
     return availableTypesToString(T{});
   }
 
