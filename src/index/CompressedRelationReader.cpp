@@ -89,17 +89,26 @@ auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
   return [this](Id graph) { return graphFilter_.isGraphAllowed(graph); };
 }
 
-// _____________________________________________________________________________
-bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
-  if (graphFilter_.areAllGraphsAllowed()) {
+// Return true iff the block may contain triples from graphs that the
+// `graphFilter` does not allow, as far as its metadata tells.
+static bool blockMayContainDisallowedGraphs(
+    const ScanSpecification::GraphFilter& graphFilter,
+    const CompressedBlockMetadata& metadata) {
+  if (graphFilter.areAllGraphsAllowed()) {
     return false;
   }
   if (!metadata.graphInfo_.has_value()) {
     return true;
   }
-  const auto& graphInfo = metadata.graphInfo_.value();
-  return !ql::ranges::all_of(graphInfo, isGraphAllowedLambda());
+  return !ql::ranges::all_of(
+      metadata.graphInfo_.value(),
+      [&graphFilter](Id graph) { return graphFilter.isGraphAllowed(graph); });
+}
+
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::
+    blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
+  return blockMayContainDisallowedGraphs(graphFilter_, metadata);
 }
 
 // _____________________________________________________________________________
@@ -447,8 +456,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     } else {
       // If the first and last triple of the block match, then we know that
       // the whole block belongs to the result.
-      bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
-                        isTripleInSpecification(scanSpec, block.lastTriple_);
+      bool isComplete = isBlockCompletelyInScan(scanSpec, block);
       size_t divisor =
           isComplete
               ? 1
@@ -603,6 +611,26 @@ bool CompressedRelationReader::columnValuesAreKnownFromMetadata(
   // of delta triples has `numRows_ == 0` and is thus handled correctly, too.
   return locatedTriples.numTriples(block.blockIndex_).numDeleted_ <
          block.numRows_;
+}
+
+// ____________________________________________________________________________
+bool CompressedRelationReader::isBlockCompletelyInScan(
+    const ScanSpecification& scanSpec, const CompressedBlockMetadata& block) {
+  return isTripleInSpecification(scanSpec, block.firstTriple_) &&
+         isTripleInSpecification(scanSpec, block.lastTriple_);
+}
+
+// ____________________________________________________________________________
+size_t CompressedRelationReader::getNumRowsLowerBound(
+    const ScanSpecification& scanSpec, const CompressedBlockMetadata& block,
+    const LocatedTriplesPerBlock& locatedTriples) {
+  if (!isBlockCompletelyInScan(scanSpec, block) ||
+      block.containsDuplicatesWithDifferentGraphs_ ||
+      blockMayContainDisallowedGraphs(scanSpec.graphFilter(), block)) {
+    return 0;
+  }
+  size_t numDeleted = locatedTriples.numTriples(block.blockIndex_).numDeleted_;
+  return block.numRows_ - std::min(block.numRows_, numDeleted);
 }
 
 // ____________________________________________________________________________

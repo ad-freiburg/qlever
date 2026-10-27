@@ -339,6 +339,26 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   return variableToColumnMap;
 }
 
+// Return the ranges of the blocks with the given `indices` (sorted and
+// unique) into the `blocks`, merging adjacent blocks into a single range.
+static BlockMetadataRanges getRangesOfSelectedBlocks(
+    const std::vector<BlockMetadataIt>& blocks,
+    const std::vector<size_t>& indices) {
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(indices) &&
+                    ql::ranges::adjacent_find(indices) == indices.end());
+  BlockMetadataRanges ranges;
+  for (size_t index : indices) {
+    AD_CONTRACT_CHECK(index < blocks.size());
+    auto it = blocks[index];
+    if (!ranges.empty() && ranges.back().end() == it) {
+      ranges.back() = BlockMetadataRange{ranges.back().begin(), it + 1};
+    } else {
+      ranges.emplace_back(it, it + 1);
+    }
+  }
+  return ranges;
+}
+
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeCopyWithSelectedBlocks(const BlockSelector& selectBlocks) const {
@@ -361,94 +381,33 @@ IndexScan::makeCopyWithSelectedBlocks(const BlockSelector& selectBlocks) const {
   if (!metadataAndBlocks.has_value()) {
     return std::nullopt;
   }
+
+  // Describe each block by its metadata for the sorted variable, and remember
+  // its iterator, so that the selection can be turned back into ranges.
   const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
-  using PermutedTriple = CompressedBlockMetadata::PermutedTriple;
-  auto getColumn = [](const PermutedTriple& triple, size_t i) {
-    AD_CORRECTNESS_CHECK(i < 3);
-    return i == 0 ? triple.col0Id_ : i == 1 ? triple.col1Id_ : triple.col2Id_;
-  };
-  // A triple belongs to the scanned relation iff its fixed columns (those
-  // before the first variable) match the scan specification.
-  auto isInScan = [&](const PermutedTriple& triple) {
-    for (size_t i = 0; i < colIdx; ++i) {
-      const auto& fixed = i == 0   ? scanSpec.col0Id()
-                          : i == 1 ? scanSpec.col1Id()
-                                   : scanSpec.col2Id();
-      AD_CORRECTNESS_CHECK(fixed.has_value());
-      if (getColumn(triple, i) != fixed.value()) {
-        return false;
-      }
-    }
-    return true;
-  };
   const auto& locatedTriples =
       permutation().getLocatedTriplesForPermutation(locatedTriplesState());
-  // Return true iff the filtering of the scan by graph and by duplicates from
-  // different graphs (see
-  // `CompressedRelationReader::FilterDuplicatesAndGraphs`) removes no row of
-  // the block, as far as the metadata tells.
-  const auto& graphFilter = scanSpec.graphFilter();
-  auto keepsAllRows = [&graphFilter](const CompressedBlockMetadata& block) {
-    if (block.containsDuplicatesWithDifferentGraphs_) {
-      return false;
-    }
-    if (graphFilter.areAllGraphsAllowed()) {
-      return true;
-    }
-    return block.graphInfo_.has_value() &&
-           ql::ranges::all_of(block.graphInfo_.value(), [&](Id graph) {
-             return graphFilter.isGraphAllowed(graph);
-           });
-  };
-
-  // Flatten the block ranges, and remember the iterator of each block so that
-  // the selection can be turned back into ranges.
   const auto& bounds = metadataAndBlocks.value().firstAndLastTriple_;
   BlocksOfSortedVariable blocksOfSortedVariable{
-      getColumn(bounds.firstTriple_, colIdx),
-      getColumn(bounds.lastTriple_, colIdx),
-      {}};
-  auto& blocks = blocksOfSortedVariable.blocks_;
+      bounds.firstTriple_.getId(colIdx), bounds.lastTriple_.getId(colIdx), {}};
   std::vector<BlockMetadataIt> iterators;
   for (const auto& range : scanSpecAndBlocks_.blockMetadata_) {
     for (auto it = range.begin(); it != range.end(); ++it) {
-      const CompressedBlockMetadata& block = *it;
-      // Each delta triple can delete at most one row of the block, so this is
-      // a lower bound on the number of rows that the block contributes. If the
-      // graph filter or the removal of duplicates may remove rows, there is
-      // no such bound, so use zero.
-      size_t numDeleted =
-          locatedTriples.numTriples(block.blockIndex_).numDeleted_;
-      size_t numRowsLowerBound =
-          keepsAllRows(block)
-              ? block.numRows_ - std::min(block.numRows_, numDeleted)
-              : 0;
-      blocks.push_back(
-          {getColumn(block.firstTriple_, colIdx),
-           getColumn(block.lastTriple_, colIdx), numRowsLowerBound,
-           isInScan(block.firstTriple_) && isInScan(block.lastTriple_)});
+      blocksOfSortedVariable.blocks_.push_back(
+          {it->firstTriple_.getId(colIdx), it->lastTriple_.getId(colIdx),
+           CompressedRelationReader::getNumRowsLowerBound(scanSpec, *it,
+                                                          locatedTriples),
+           CompressedRelationReader::isBlockCompletelyInScan(scanSpec, *it)});
       iterators.push_back(it);
     }
   }
+
   auto selected = selectBlocks(blocksOfSortedVariable);
   if (!selected.has_value()) {
     return std::nullopt;
   }
-  AD_CONTRACT_CHECK(ql::ranges::is_sorted(selected.value()) &&
-                    ql::ranges::adjacent_find(selected.value()) ==
-                        selected.value().end());
-  BlockMetadataRanges ranges;
-  for (size_t index : selected.value()) {
-    AD_CONTRACT_CHECK(index < iterators.size());
-    auto it = iterators[index];
-    if (!ranges.empty() && ranges.back().end() == it) {
-      ranges.back() = BlockMetadataRange{ranges.back().begin(), it + 1};
-    } else {
-      ranges.emplace_back(it, it + 1);
-    }
-  }
   return makeCopyWithPrefilteredScanSpecAndBlocks(
-      {scanSpecAndBlocks_.scanSpec_, std::move(ranges)});
+      {scanSpec, getRangesOfSelectedBlocks(iterators, selected.value())});
 }
 
 //______________________________________________________________________________

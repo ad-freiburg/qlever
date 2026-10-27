@@ -239,34 +239,29 @@ std::vector<std::pair<size_t, bool>> getRunsInOrderByOrder(Datatype type,
   return runs;
 }
 
-// For an `ORDER BY` on the sorted variable of an `IndexScan` whose first
-// `numRows` rows (in the order given by `isDescending`) are needed: select the
-// blocks that can contain these rows, if the scan result consists of a single
-// numeric datatype according to the block metadata. Return `std::nullopt` if
-// this is not the case, or if all blocks are needed anyway.
-//
-// The rows of the scan are sorted by the bits of the `Id`, so they form the
-// runs described above, and `ORDER BY` traverses these runs in the order and
-// direction given by `getRunsInOrderByOrder`. A block that lies completely
-// inside one run is "pure", and the first `numRows` rows are found by taking
-// pure blocks run by run from the end where the traversal starts, until they
-// alone contain enough rows. All other blocks (those at the border of the
-// relation, and those which straddle two runs) are always kept, so that a
-// block with rows of a run is never lost. Since the datatype bits are the most
-// significant bits of an `Id`, a single datatype in the first and the last row
-// of the scan means a single datatype in all rows.
-std::optional<std::vector<size_t>> selectBlocksForSortedNumericLimit(
-    const IndexScan::BlocksOfSortedVariable& blocks, size_t numRows,
-    bool isDescending) {
+// If the scan consists of rows of a single numeric datatype, return that
+// datatype, otherwise `std::nullopt`. Since the datatype bits are the most
+// significant bits of an `Id`, it suffices to check the first and the last row.
+std::optional<Datatype> getSingleNumericDatatype(
+    const IndexScan::BlocksOfSortedVariable& blocks) {
   auto firstRun = getRun(blocks.firstIdOfScan_);
   auto lastRun = getRun(blocks.lastIdOfScan_);
   if (!firstRun.has_value() || !lastRun.has_value() ||
       firstRun->first != lastRun->first) {
     return std::nullopt;
   }
-  Datatype type = firstRun->first;
-  // The run of each pure block, `nullopt` for all other blocks.
-  std::vector<std::optional<size_t>> pureRun(blocks.blocks_.size());
+  return firstRun->first;
+}
+
+// Return the run of each "pure" block, and `std::nullopt` for all other
+// blocks. A block is pure if all its rows belong to the scan and lie in a
+// single run. Then its position in the order of `ORDER BY` is known from its
+// metadata. For a block at the border of the relation, the `first_` and
+// `last_` may belong to another relation, and a block that straddles two runs
+// has rows at two places in that order.
+std::vector<std::optional<size_t>> getRunOfEachPureBlock(
+    const IndexScan::BlocksOfSortedVariable& blocks, Datatype type) {
+  std::vector<std::optional<size_t>> runOfEachPureBlock(blocks.blocks_.size());
   for (size_t i = 0; i < blocks.blocks_.size(); ++i) {
     const auto& block = blocks.blocks_[i];
     if (!block.completelyInsideScan_) {
@@ -274,26 +269,32 @@ std::optional<std::vector<size_t>> selectBlocksForSortedNumericLimit(
     }
     auto runOfFirst = getRun(block.first_);
     auto runOfLast = getRun(block.last_);
-    // The datatype has been checked above via the bounds of the scan, this
-    // only guards against inconsistent metadata.
+    // The datatype has been checked via the bounds of the scan, this only
+    // guards against inconsistent metadata.
     AD_CORRECTNESS_CHECK(runOfFirst.has_value() && runOfLast.has_value() &&
                          runOfFirst->first == type &&
                          runOfLast->first == type &&
                          runOfFirst->second <= runOfLast->second);
     if (runOfFirst->second == runOfLast->second) {
-      pureRun[i] = runOfFirst->second;
+      runOfEachPureBlock[i] = runOfFirst->second;
     }
   }
-  std::vector<bool> keep(blocks.blocks_.size(), false);
-  for (size_t i = 0; i < keep.size(); ++i) {
-    keep[i] = !pureRun[i].has_value();
-  }
-  size_t numRowsKept = 0;
-  bool enough = false;
+  return runOfEachPureBlock;
+}
+
+// Return the pure blocks that `ORDER BY` traverses first, run by run (see
+// `getRunsInOrderByOrder`), until they alone guarantee `numRows` rows. Return
+// `std::nullopt` if all pure blocks together do not guarantee that many rows.
+std::optional<std::vector<size_t>> getFirstPureBlocks(
+    const IndexScan::BlocksOfSortedVariable& blocks,
+    const std::vector<std::optional<size_t>>& runOfEachPureBlock, Datatype type,
+    size_t numRows, bool isDescending) {
+  std::vector<size_t> result;
+  size_t numRowsGuaranteed = 0;
   for (auto [run, backwards] : getRunsInOrderByOrder(type, isDescending)) {
     std::vector<size_t> pureBlocksOfRun;
-    for (size_t i = 0; i < pureRun.size(); ++i) {
-      if (pureRun[i] == run) {
+    for (size_t i = 0; i < runOfEachPureBlock.size(); ++i) {
+      if (runOfEachPureBlock[i] == run) {
         pureBlocksOfRun.push_back(i);
       }
     }
@@ -301,19 +302,47 @@ std::optional<std::vector<size_t>> selectBlocksForSortedNumericLimit(
       ql::ranges::reverse(pureBlocksOfRun);
     }
     for (size_t i : pureBlocksOfRun) {
-      keep[i] = true;
-      numRowsKept += blocks.blocks_[i].numRowsLowerBound_;
-      if (numRowsKept >= numRows) {
-        enough = true;
-        break;
+      result.push_back(i);
+      numRowsGuaranteed += blocks.blocks_[i].numRowsLowerBound_;
+      if (numRowsGuaranteed >= numRows) {
+        return result;
       }
     }
-    if (enough) {
-      break;
-    }
   }
-  if (!enough) {
+  return std::nullopt;
+}
+
+// For an `ORDER BY` on the sorted variable of an `IndexScan` whose first
+// `numRows` rows (in the order given by `isDescending`) are needed: select the
+// blocks that can contain these rows, if the scan consists of a single numeric
+// datatype. Return `std::nullopt` if this is not the case, or if all blocks
+// are needed anyway.
+//
+// The rows of the scan are sorted by the bits of the `Id`, so they form the
+// runs described above, which `ORDER BY` traverses in the order and direction
+// given by `getRunsInOrderByOrder`. The selected blocks are the pure blocks
+// that are traversed first (see `getFirstPureBlocks`), and all blocks that are
+// not pure, because their position in that order is unknown.
+std::optional<std::vector<size_t>> selectBlocksForSortedNumericLimit(
+    const IndexScan::BlocksOfSortedVariable& blocks, size_t numRows,
+    bool isDescending) {
+  auto type = getSingleNumericDatatype(blocks);
+  if (!type.has_value()) {
     return std::nullopt;
+  }
+  auto runOfEachPureBlock = getRunOfEachPureBlock(blocks, type.value());
+  auto firstPureBlocks = getFirstPureBlocks(
+      blocks, runOfEachPureBlock, type.value(), numRows, isDescending);
+  if (!firstPureBlocks.has_value()) {
+    return std::nullopt;
+  }
+
+  std::vector<bool> keep(blocks.blocks_.size(), false);
+  for (size_t i = 0; i < keep.size(); ++i) {
+    keep[i] = !runOfEachPureBlock[i].has_value();
+  }
+  for (size_t i : firstPureBlocks.value()) {
+    keep[i] = true;
   }
   std::vector<size_t> selected;
   for (size_t i = 0; i < keep.size(); ++i) {
@@ -493,7 +522,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // If this operation was promised to handle the `LIMIT`/`OFFSET` itself (see
   // `handlesLimitOffset`), but the fast path did not apply, apply it here.
   if (handlesLimitOffset() == LimitOffsetHandling::FULL) {
-    result.applyLimitOffset(getLimitOffset(), [](auto, const auto&) {});
+    result.applyLimitOffset(getLimitOffset(), ad_utility::noop);
   }
   return result;
 }
@@ -505,9 +534,7 @@ LimitOffsetHandling OrderBy::handlesLimitOffset() const {
 }
 
 // _____________________________________________________________________________
-void OrderBy::onLimitOffsetChanged(
-    [[maybe_unused]] const LimitOffsetClause&,
-    [[maybe_unused]] bool childrenAreExclusivelyOwned) {
+void OrderBy::onLimitOffsetChanged(const LimitOffsetClause&, bool) {
   // The complete `LIMIT`/`OFFSET` of this operation (all calls merged).
   const auto& limitOffset = getLimitOffset();
   if (handlesLimitOffset() != LimitOffsetHandling::FULL ||
@@ -523,7 +550,8 @@ void OrderBy::onLimitOffsetChanged(
   bool isDescending = sortIndices_.front().second;
   std::optional<std::pair<size_t, size_t>> numBlocksAfterAndBefore;
   auto restrictedScan = scan->makeCopyWithSelectedBlocks(
-      [&](const IndexScan::BlocksOfSortedVariable& blocks) {
+      [numRows, isDescending, &numBlocksAfterAndBefore](
+          const IndexScan::BlocksOfSortedVariable& blocks) {
         auto selected =
             selectBlocksForSortedNumericLimit(blocks, numRows, isDescending);
         if (selected.has_value()) {

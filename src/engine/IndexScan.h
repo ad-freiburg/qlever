@@ -105,9 +105,8 @@ class IndexScan final : public Operation {
   // The metadata of the blocks of this scan, as passed to the block selector
   // of `makeCopyWithSelectedBlocks` below. For each block: the first and the
   // last value of the first sorted variable in the block, the number of rows
-  // of the block that are guaranteed to be in the result of the scan (a lower
-  // bound, which accounts for deleted triples, and is zero if the scan may
-  // filter rows of the block by graph or as duplicates), and whether the block
+  // of the block that are guaranteed to be in the result of the scan (see
+  // `CompressedRelationReader::getNumRowsLowerBound`), and whether the block
   // is completely inside the scanned relation. A block at the border of the
   // relation also holds triples of other relations, so its `first_` or `last_`
   // may belong to another relation and its rows only partially to this scan.
