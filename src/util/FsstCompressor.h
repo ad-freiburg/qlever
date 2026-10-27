@@ -72,8 +72,8 @@ class FsstDecoder {
   }
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
-      requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
-      allowTrivialSerialization(T, U&&) {
+      requires ql::concepts::same_as<T, FsstDecoder>)
+  friend std::true_type allowTrivialSerialization(T, U&&) {
     return {};
   }
 };

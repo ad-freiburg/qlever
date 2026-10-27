@@ -66,8 +66,9 @@ struct BlockRange {
 // contain elements in the range of the `boundary`. This only looks at the
 // (I/O-free) metadata of the blocks, so a returned block may still turn out to
 // contain no matching element at all.
-CPP_template(typename Input,
-             typename Comparator)(requires InputConcept<Input>) BlockRange
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+BlockRange
     blockRangeForRun(const Input& input, const Comparator& comparator,
                      const ChunkBoundary<typename Input::Element>& boundary,
                      size_t runIdx) {
@@ -169,9 +170,10 @@ std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
 // not required) guarantee that the comparator considers all elements of such a
 // chunk equivalent. This only pays off for the parallel merge, so it is
 // deferred until then.
-CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
-        const Input& input, const Comparator& comparator, size_t numChunks) {
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
+    const Input& input, const Comparator& comparator, size_t numChunks) {
   using Element = typename Input::Element;
   // A single chunk needs no boundaries at all, and in that case even the scan
   // of the block metadata can be skipped.
@@ -201,10 +203,11 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
 // the ramp-up is over after a small fraction of the input.
 //
 // NOTE: A `firstChunkSize` of `0` is exactly the overload above.
-CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
-        const Input& input, const Comparator& comparator, size_t numChunks,
-        size_t firstChunkSize) {
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
+    const Input& input, const Comparator& comparator, size_t numChunks,
+    size_t firstChunkSize) {
   using Element = typename Input::Element;
   if (firstChunkSize == 0) {
     return computeChunkBoundaries(input, comparator, numChunks);

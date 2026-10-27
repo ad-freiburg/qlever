@@ -97,8 +97,8 @@ class alignas(16) BasicLiteralOrIri {
   }
 
   CPP_template(typename H, typename L)(
-      requires ql::concepts::same_as<L, BasicLiteralOrIri>) friend H
-      AbslHashValue(H h, const L& literalOrIri) {
+      requires ql::concepts::same_as<L, BasicLiteralOrIri>)
+  friend H AbslHashValue(H h, const L& literalOrIri) {
     return H::combine(std::move(h), literalOrIri.data_);
   }
 
