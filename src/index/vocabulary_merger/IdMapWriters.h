@@ -25,6 +25,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/Segment.h"
+#include "util/CompilerWarnings.h"
 #include "util/ExceptionHandling.h"
 #include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
@@ -101,6 +102,15 @@ class IdMapWriters {
   // of that segment. The `entries` are kept alive until they are written (and
   // nothing else of the segment, so that the words of the segment can be
   // released independently). Do nothing if a task has failed.
+  //
+  // NOTE: GCC 13 reports false `-Warray-bounds` and `-Wstringop-overflow`
+  // positives in the construction of the error message of the
+  // `AD_CONTRACT_CHECK` in `File::write`, when it is inlined into the task
+  // below (via `IdMapWriter::push`). These are middle-end warnings, so they are
+  // only suppressed by a region around the function into which they are
+  // inlined.
+  DISABLE_ARRAY_BOUNDS_WARNINGS
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   void write(std::shared_ptr<const SegmentIdMapEntries> entries,
              IdConverterForSegment converter) {
     AD_CONTRACT_CHECK(entries->size() == numPartialVocabularies());
@@ -135,6 +145,8 @@ class IdMapWriters {
           }));
     }
   }
+  GCC_REENABLE_WARNINGS
+  GCC_REENABLE_WARNINGS
 
   // Whether one of the tasks has thrown an exception that `finish()` has not
   // rethrown yet. The caller should then stop writing segments.
