@@ -59,7 +59,8 @@ namespace ad_utility::vocabulary_merger::detail {
 //
 // NOTE: The tasks refer to this object, so it has to stay alive until all of
 // them have completed.
-CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
+CPP_template(typename W)(requires WordComparator<W>)
+class SegmentCutter {
  public:
   // The task that builds a segment.
   using SegmentTask = absl::AnyInvocable<std::shared_ptr<const Segment>()>;
@@ -160,8 +161,8 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
 //
 // NOTE 2: The pipeline is neither copyable nor movable, because the tasks and
 // the sink of the `committer_` refer to it.
-CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
-    : public ad_utility::NoCopyNoMove {
+CPP_template(typename W)(requires WordComparator<W>)
+class SegmentPipeline : public ad_utility::NoCopyNoMove {
  private:
   size_t maxSegmentsInFlight_;
   SegmentCutter<W> cutter_;

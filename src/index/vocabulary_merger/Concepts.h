@@ -36,10 +36,10 @@ CPP_concept WordComparator =
 // the `comparator`, and throw otherwise. This is the check that the stages of
 // the merger run on consecutive distinct words; it is only performed if the
 // expensive checks are enabled (see `AD_EXPENSIVE_CHECK`).
-CPP_template(typename W)(requires WordComparator<W>) void checkVocabularyOrder(
-    [[maybe_unused]] const W& comparator,
-    [[maybe_unused]] std::string_view previous,
-    [[maybe_unused]] std::string_view next) {
+CPP_template(typename W)(requires WordComparator<W>)
+void checkVocabularyOrder([[maybe_unused]] const W& comparator,
+                          [[maybe_unused]] std::string_view previous,
+                          [[maybe_unused]] std::string_view next) {
   AD_EXPENSIVE_CHECK(comparator(previous, next),
                      "Total vocabulary order violated for ", previous, " and ",
                      next);

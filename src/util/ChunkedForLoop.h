@@ -140,8 +140,7 @@ inline void chunkedFill(R&& outputRange, const T& value,
 // `unordered_set`), `views::chunk` advances the iterator a second time per
 // chunk to find the end of the chunk, so such a range is traversed twice.
 CPP_template(typename R, typename Action, typename ChunkOpT)(
-    requires ql::ranges::input_range<R> CPP_and
-        ql::concepts::invocable<ChunkOpT>)
+    requires ql::ranges::input_range<R> && ql::concepts::invocable<ChunkOpT>)
 inline void chunkedForEach(
     R&& range, Action action, ChunkOpT chunkOperation,
     std::size_t chunkSize = CANCELLATION_CHECK_CHUNK_SIZE) {

@@ -96,9 +96,8 @@ class TripleComponent {
 
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
-  CPP_template(typename T)(requires std::is_assignable_v<Variant, T&&>)
-      TripleComponent&
-      operator=(T&& value) {
+  CPP_template(typename T)(requires std::is_assignable_v<Variant, T &&>)
+  TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
     checkThatStringIsValid();
     return *this;
@@ -117,8 +116,8 @@ class TripleComponent {
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
   CPP_template(typename T)(
-      requires ad_utility::SameAsAnyTypeIn<T, Variant>) bool
-  operator==(const T& other) const {
+      requires ad_utility::SameAsAnyTypeIn<T, Variant>)
+  bool operator==(const T& other) const {
     auto ptr = std::get_if<T>(&_variant);
     return ptr && *ptr == other;
   }

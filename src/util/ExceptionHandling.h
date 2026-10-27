@@ -28,10 +28,9 @@ struct CallStdTerminate {
 // has to perform actions that might throw, but when handling these exceptions
 // is not important.
 CPP_template(typename F)(
-    requires ql::concepts::invocable<ql::remove_cvref_t<
-        F>>) void ignoreExceptionIfThrows(F&& f,
-                                          std::string_view additionalNote =
-                                              "") noexcept {
+    requires ql::concepts::invocable<ql::remove_cvref_t<F>>)
+void ignoreExceptionIfThrows(F&& f,
+                             std::string_view additionalNote = "") noexcept {
   if constexpr (std::is_nothrow_invocable_v<ql::remove_cvref_t<F>>) {
     std::invoke(AD_FWD(f));
     return;
