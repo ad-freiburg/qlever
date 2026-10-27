@@ -50,8 +50,8 @@ class NonNegative {
 };
 
 CPP_template(typename Stream, typename NN)(
-    requires ad_utility::SimilarTo<NN, NonNegative>) Stream&
-operator<<(Stream& stream, NN&& nonNegative) {
+    requires ad_utility::SimilarTo<NN, NonNegative>)
+Stream& operator<<(Stream& stream, NN&& nonNegative) {
   return stream << static_cast<size_t>(nonNegative);
 }
 

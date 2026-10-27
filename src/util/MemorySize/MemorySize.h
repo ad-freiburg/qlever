@@ -283,11 +283,12 @@ multiplied/divied with.
 `double.` Note, that the rounding and casting to `size_t` for floating point
 return types will be automatically done, and can be ignored by `func`.
  */
-CPP_template(typename T, typename Func)(requires Arithmetic<T> CPP_and(
-    ql::concepts::invocable<Func, const double, const double> ||
-    ql::concepts::invocable<Func, const size_t, const size_t>))      //
-    constexpr MemorySize magicImplForDivAndMul(const MemorySize& m,  //
-                                               const T c, Func func) {
+CPP_template(typename T, typename Func)(
+    requires Arithmetic<T> &&
+    (ql::concepts::invocable<Func, const double, const double> ||
+     ql::concepts::invocable<Func, const size_t, const size_t>))
+constexpr MemorySize magicImplForDivAndMul(const MemorySize& m,  //
+                                           const T c, Func func) {
   // In order for the results to be as precise as possible, we cast to highest
   // precision data type variant of `T`.
   using PrecisionType =

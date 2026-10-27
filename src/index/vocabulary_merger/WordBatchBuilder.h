@@ -79,10 +79,10 @@ class WordBatchBuilder {
   // This order is only checked if the expensive checks are enabled (see
   // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
   // costly.
-  CPP_template(typename W, typename F)(
-      requires WordComparator<W>&& WordBatchCallback<
-          F>) void addMergedWords(std::vector<QueueWord> buffer,
-                                  const W& comparator, const F& batchCallback);
+  CPP_template(typename W, typename F)(requires WordComparator<W> &&
+                                             WordBatchCallback<F>)
+  void addMergedWords(std::vector<QueueWord> buffer, const W& comparator,
+                      const F& batchCallback);
 
   // Signal that no more words will be added, and hand the remaining words
   // (including the word that is still held back, see the class comment) to the

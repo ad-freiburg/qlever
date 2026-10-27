@@ -588,9 +588,11 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
       qec->getLocalVocabContext()});
-  ValuesForTesting valuesForTesting{
-      qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
-      false, std::vector<ColumnIndex>{}, std::move(localVocab)};
+  auto valuesForTestingPtr = std::make_shared<ValuesForTesting>(
+      qec, std::move(idTablesVector),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+      false, std::vector<ColumnIndex>{}, std::move(localVocab));
+  auto& valuesForTesting = *valuesForTestingPtr;
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   EXPECT_THROW(
@@ -649,7 +651,8 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
       materializedViewsManager,
       executor(),
       [&](std::string) { signaledUpdate = true; }};
-  AlwaysFailOperation operation{&context};
+  auto operationPtr = std::make_shared<AlwaysFailOperation>(&context);
+  auto& operation = *operationPtr;
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -679,12 +682,13 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       materializedViewsManager,
       executor(),
       [&](std::string) { signaledUpdate = true; }};
-  CustomGeneratorOperation operation{&context, []() -> Result::Generator {
-                                       throw CancellationException{
-                                           CancellationState::MANUAL,
-                                           "Operation was cancelled"};
-                                       co_return;
-                                     }()};
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
+      &context, []() -> Result::Generator {
+        throw CancellationException{CancellationState::MANUAL,
+                                    "Operation was cancelled"};
+        co_return;
+      }());
+  auto& operation = *operationPtr;
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -716,7 +720,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       materializedViewsManager,
       executor(),
       [&](std::string) { ++updateCallCounter; }};
-  CustomGeneratorOperation operation{
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       &context, [](const IdTable& idTable) -> Result::Generator {
         std::this_thread::sleep_for(50ms);
         co_yield {idTable.clone(), LocalVocab{}};
@@ -729,7 +733,8 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
         // last one
         std::this_thread::sleep_for(30ms);
         co_yield {idTable.clone(), LocalVocab{}};
-      }(idTable)};
+      }(idTable));
+  auto& operation = *operationPtr;
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
@@ -751,13 +756,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 // _____________________________________________________________________________
 TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
   auto idTable = makeIdTableFromVector({{}});
-  CustomGeneratorOperation operation{
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       getQec(), [](const IdTable& idTable) -> Result::Generator {
         co_yield {idTable.clone(), LocalVocab{}};
         // Work that is done after the last chunk, e.g. a filter that discards
         // the remaining input, has to be accounted for, too.
         std::this_thread::sleep_for(5ms);
-      }(idTable)};
+      }(idTable));
+  auto& operation = *operationPtr;
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
@@ -792,11 +798,12 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       materializedViewsManager,
       executor(),
       [&](std::string) { ++updateCallCounter; }};
-  CustomGeneratorOperation operation{
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       &context, [](const IdTable& idTable) -> Result::Generator {
         co_yield {idTable.clone(), LocalVocab{}};
         co_yield {idTable.clone(), LocalVocab{}};
-      }(idTable)};
+      }(idTable));
+  auto& operation = *operationPtr;
 
   {
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -821,8 +828,10 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   std::vector<IdTable> idTablesVector{};
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
-  ValuesForTesting valuesForTesting{
-      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+  auto valuesForTestingPtr = std::make_shared<ValuesForTesting>(
+      qec, std::move(idTablesVector),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+  auto& valuesForTesting = *valuesForTestingPtr;
 
   valuesForTesting.applyLimitOffset({._limit = 1, ._offset = 1});
 

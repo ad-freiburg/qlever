@@ -38,6 +38,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/ParallelExecutor.h"
+#include "util/Synchronized.h"
 #include "util/TransparentFunctors.h"
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
