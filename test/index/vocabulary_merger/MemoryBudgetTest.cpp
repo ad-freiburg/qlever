@@ -19,11 +19,8 @@
 using ad_utility::MemorySize;
 using ad_utility::vocabulary_merger::detail::MemoryBudget;
 
-namespace {
-auto bytes(size_t n) { return MemorySize::bytes(n); }
-}  // namespace
+static MemorySize bytes(size_t n) { return MemorySize::bytes(n); }
 
-// _____________________________________________________________________________
 // Test that reservations account for their memory until they are destroyed or
 // released, that they can grow and be moved, and that the peak is tracked.
 TEST(MemoryBudget, reserveGrowAndRelease) {
@@ -58,7 +55,6 @@ TEST(MemoryBudget, reserveGrowAndRelease) {
   EXPECT_EQ(budget.peak(), bytes(115));
 }
 
-// _____________________________________________________________________________
 // Test that `waitUntilFits` returns immediately if the memory fits (always if
 // nothing is reserved), and returns `false` as soon as waiting is pointless.
 TEST(MemoryBudget, waitUntilFitsWithoutWaiting) {
@@ -76,7 +72,6 @@ TEST(MemoryBudget, waitUntilFitsWithoutWaiting) {
   EXPECT_EQ(numCalls, 1u);
 }
 
-// _____________________________________________________________________________
 // Test that `waitUntilFits` waits until another thread releases memory.
 TEST(MemoryBudget, waitUntilFitsWaitsForRelease) {
   MemoryBudget budget{bytes(100)};
@@ -92,7 +87,6 @@ TEST(MemoryBudget, waitUntilFitsWaitsForRelease) {
   releaser.join();
 }
 
-// _____________________________________________________________________________
 // Test that the `stopWaiting` predicate is polled while waiting, also without
 // any release.
 TEST(MemoryBudget, waitUntilFitsPollsThePredicate) {

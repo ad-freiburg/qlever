@@ -396,11 +396,11 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
   // The memory that this block occupies: its buffers, its words, and their
   // occurrences (by capacity, which is what is actually allocated).
   MemorySize memorySize() const {
-    return MemorySize::bytes(::ranges::accumulate(
-        *buffers_,
-        words().capacity() * sizeof(MergedWord) +
-            occurrences_.capacity() * sizeof(Occurrence),
-        std::plus<>{}, [](const Buffer& buffer) { return buffer.capacity(); }));
+    return MemorySize::bytes(
+        ::ranges::accumulate(*buffers_,
+                             words().capacity() * sizeof(MergedWord) +
+                                 occurrences_.capacity() * sizeof(Occurrence),
+                             std::plus<>{}, &Buffer::capacity));
   }
 
   // Release the words, their occurrences and the buffers (which go back to

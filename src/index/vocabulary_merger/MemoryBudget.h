@@ -20,6 +20,7 @@
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/UniqueCleanup.h"
 
 // The memory budget of the stages behind the merge of the partial vocabularies
 // (see `index/vocabulary_merger/SegmentPipeline.h`). This is not part of the
@@ -33,16 +34,19 @@ namespace ad_utility::vocabulary_merger::detail {
 // `std::shared_ptr`, so that the bytes are returned by whichever stage drops
 // the data last).
 //
-// A reservation itself never blocks and may exceed the limit: the data often
-// exists already when its size is known (for example the output of a task).
-// Instead, the single thread that feeds new data into the stages calls
-// `waitUntilFits` before it does so, which blocks while the budget is
+// A reservation itself never waits for memory and may exceed the limit: the
+// data often exists already when its size is known (for example the output of
+// a task). Instead, the single thread that feeds new data into the stages
+// calls `waitUntilFits` before it does so, which blocks while the budget is
 // exhausted, so that the memory stays close to the limit.
+//
+// The functions that acquire the `mutex_` only do short and trivial work while
+// they hold it, so apart from `waitUntilFits` none of them blocks for long.
 //
 // NOTE: The budget must outlive all of its reservations.
 class MemoryBudget : public ad_utility::NoCopyNoMove {
  private:
-  size_t limit_;
+  const size_t limit_;
   mutable std::mutex mutex_;
   std::condition_variable memoryWasReleased_;
   size_t used_ = 0;
@@ -54,49 +58,45 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
   // holds no memory.
   class Reservation {
    private:
-    MemoryBudget* budget_ = nullptr;
-    size_t numBytes_ = 0;
+    // The budget and the reserved bytes, which the `Release` returns to the
+    // budget when the reservation is destroyed, released, or overwritten by a
+    // move assignment.
+    struct State {
+      MemoryBudget* budget_;
+      size_t numBytes_;
+    };
+    struct Release {
+      void operator()(State&& state) const {
+        state.budget_->subtract(state.numBytes_);
+      }
+    };
+    ad_utility::unique_cleanup::UniqueCleanup<State, Release> state_;
 
    public:
     Reservation(MemoryBudget& budget, size_t numBytes)
-        : budget_{&budget}, numBytes_{numBytes} {}
-    Reservation(Reservation&& other) noexcept
-        : budget_{std::exchange(other.budget_, nullptr)},
-          numBytes_{std::exchange(other.numBytes_, 0)} {}
-    Reservation& operator=(Reservation&& other) noexcept {
-      if (this != &other) {
-        release();
-        budget_ = std::exchange(other.budget_, nullptr);
-        numBytes_ = std::exchange(other.numBytes_, 0);
-      }
-      return *this;
-    }
-    ~Reservation() { release(); }
+        : state_{State{&budget, numBytes}, Release{}} {}
 
-    // Reserve `numBytes` more (never blocks). The reservation must belong to
-    // a budget.
+    // Reserve `numBytes` more (never waits for memory). The reservation must
+    // not be empty.
     void grow(size_t numBytes) {
-      AD_CONTRACT_CHECK(budget_ != nullptr);
-      budget_->add(numBytes);
-      numBytes_ += numBytes;
+      AD_CONTRACT_CHECK(state_.isActive());
+      state_->budget_->add(numBytes);
+      state_->numBytes_ += numBytes;
     }
 
     // The number of bytes that this reservation holds.
-    size_t numBytes() const { return numBytes_; }
+    size_t numBytes() const {
+      return state_.isActive() ? state_->numBytes_ : 0;
+    }
 
     // Return the bytes to the budget. Afterwards, the reservation is empty.
-    void release() {
-      if (budget_ != nullptr) {
-        budget_->subtract(std::exchange(numBytes_, 0));
-        budget_ = nullptr;
-      }
-    }
+    void release() { std::move(state_).runNowIfActive(); }
   };
 
   // Construct a budget of `limit` bytes.
   explicit MemoryBudget(MemorySize limit) : limit_{limit.getBytes()} {}
 
-  // Reserve `size` (never blocks, see above).
+  // Reserve `size` (never waits for memory, see above).
   Reservation reserve(MemorySize size) {
     add(size.getBytes());
     return Reservation{*this, size.getBytes()};
@@ -123,7 +123,7 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
   }
 
   // The limit, the currently reserved memory, and the maximum of the latter
-  // so far.
+  // so far. The `limit()` needs no lock, because the `limit_` never changes.
   MemorySize limit() const { return MemorySize::bytes(limit_); }
   MemorySize used() const {
     std::lock_guard lock{mutex_};
@@ -138,6 +138,7 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
   // Whether `numBytes` more fit. NOTE: If nothing is reserved, everything
   // fits, so that a single reservation that is larger than the limit cannot
   // block forever.
+  // PRECONDITION: The `mutex_` is held.
   bool fits(size_t numBytes) const {
     return used_ == 0 || used_ + numBytes <= limit_;
   }

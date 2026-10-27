@@ -325,7 +325,6 @@ TEST(SegmentCutter, finishWithoutBlocks) {
   EXPECT_EQ(cutter.segmentBusyTime(), std::chrono::milliseconds::zero());
 }
 
-// _____________________________________________________________________________
 // Test that the `SegmentCutter` also cuts after the given memory of blocks,
 // but still never between two blocks that share a word.
 TEST(SegmentCutter, cutSegmentsByMemory) {
@@ -353,7 +352,6 @@ TEST(SegmentCutter, cutSegmentsByMemory) {
   EXPECT_EQ((*last)().numDistinctWords(), 1u);
 }
 
-// _____________________________________________________________________________
 // Test that the pipeline produces the same result with a memory limit that is
 // far too small for any block: every `push` then waits for the previous
 // segments to be written (or exceeds the limit if nothing is left to wait

@@ -176,7 +176,11 @@ class AsyncBlockWriterPerSubVocabulary {
       // The pieces keep (parts of) their segments alive, which are no longer
       // needed once the words are gathered.
       block = BlockPieces{};
-      auto reservation =
+      // With the pieces, the reservations of their segments may be gone, so
+      // the gathered `words` are accounted for here, until `prepare` has
+      // consumed them (this keeps `prepare` independent of the budget). The
+      // reservation is released when this lambda returns.
+      auto reservedWhilePreparing =
           sharedState_.memoryBudget_.reserve(memorySizeOf(words));
       return blockWriter_.prepare(std::move(words));
     };
