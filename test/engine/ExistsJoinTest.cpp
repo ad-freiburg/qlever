@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/ColumnStrippingTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -13,8 +14,8 @@
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
-
 using namespace ad_utility::testing;
 
 namespace {
@@ -1003,4 +1004,84 @@ TEST(ExistsJoin, resultSortedOn) {
   EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 1}), ElementsAre(0, 1));
   // Sort would be added if it's not already sorted enough.
   EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 1, 2}), ElementsAre(0, 1, 2));
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables of the left subtree and the variable, that
+// `ExistsJoin` adds to the table, erases `ExistsJoin` from the
+// `QueryExecutionTree` if the parent does not request the result of
+// `ExistsJoin`, and adds a `StripColumns` for the variables of the left subtree
+// that the parent did not request.
+TEST(ExistsJoin, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  using V = Variable;
+  auto B = [](bool b) { return Id::makeFromBool(b); };
+  auto qec = ad_utility::testing::getQec();
+  // A left subtree with the variables `?a` and `?b`.
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 5}, {2, 3}, {3, 7}}),
+      std::vector<std::optional<Variable>>{V{"?a"}, V{"?b"}});
+  // A right subtree with the variables `?a` and `?c`.
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 10}, {1, 11}, {3, 12}}),
+      std::vector<std::optional<Variable>>{V{"?a"}, V{"?c"}});
+  auto strip = [&](std::set<V> requestedVariables) {
+    ExistsJoin existsJoin(qec, left, right, V{"?exists"});
+    auto tree = existsJoin.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `?a`, `?b` and `?exists` requested: the
+  // result has `?a`, `?b` and `?exists`, nothing is stripped.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?exists"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<ExistsJoin>(
+                    {V{"?a"}, V{"?b"}, V{"?exists"}},
+                    matchesIdTableFromVector(
+                        {{1, 5, B(true)}, {2, 3, B(false)}, {3, 7, B(true)}})));
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree =
+        strip({V{"?a"}, V{"?b"}, V{"?exists"}, V{"?notValid"}, V{"?c"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<ExistsJoin>(
+                    {V{"?a"}, V{"?b"}, V{"?exists"}},
+                    matchesIdTableFromVector(
+                        {{1, 5, B(true)}, {2, 3, B(false)}, {3, 7, B(true)}})));
+  }
+
+  // `?b` and `?exists` requested: the `ExistsJoin`
+  // keeps `?a`, `?b` and `?exists`, a `StripColumns` on top removes `?a`.
+  {
+    auto tree = strip({V{"?b"}, V{"?exists"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?b"}, V{"?exists"}},
+                    matchesIdTableFromVector(
+                        {{5, B(true)}, {3, B(false)}, {7, B(true)}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<ExistsJoin>(
+                    {V{"?a"}, V{"?b"}, V{"?exists"}},
+                    matchesIdTableFromVector(
+                        {{1, 5, B(true)}, {2, 3, B(false)}, {3, 7, B(true)}})));
+  }
+
+  // `?a` requested: `ExistsJoin` is erased from
+  // the `QueryExecutionTree` and the left subtree is returned.
+  {
+    auto tree = strip({V{"?a"}});
+    auto existsJoinPtr =
+        std::dynamic_pointer_cast<ExistsJoin>(tree->getRootOperation());
+    EXPECT_EQ(existsJoinPtr, nullptr);
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"})));
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{1, 5}, {2, 3}, {3, 7}}));
+  }
 }
