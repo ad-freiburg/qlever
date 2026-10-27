@@ -9,6 +9,7 @@
 #include <sstream>
 
 #include "backports/algorithm.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
@@ -286,4 +287,29 @@ Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
   return pushDownBindToAnyChild(bind, {_subtree});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and all variables that
+  // the `Filter` operation filters on.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  std::vector<const Variable*> variablesForFiltering =
+      _expression.containedVariables();
+  for (auto filterVar : variablesForFiltering) {
+    varsRequiredFromSubtree.add(*filterVar);
+  }
+
+  // Strip the subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      _subtree, varsRequiredFromSubtree.get());
+
+  // The new `Filter` also exports the filtered variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      _expression);
 }
