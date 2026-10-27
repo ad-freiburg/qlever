@@ -208,8 +208,8 @@ class AsyncResourcePool {
   // Construct a pool of `numResources` resources, each of which is a copy of
   // the `prototype`.
   CPP_template_2(typename T = ResourceType)(
-      requires(!std::is_void_v<T>)
-          CPP_and_2 ql::concepts::copy_constructible<StoredTypeOf<T>>)
+      requires(!std::is_void_v<T>) &&
+      ql::concepts::copy_constructible<StoredTypeOf<T>>)
   AsyncResourcePool(net::any_io_executor executor, size_t numResources,
                     const StoredTypeOf<T>& prototype)
       : AsyncResourcePool{std::move(executor),

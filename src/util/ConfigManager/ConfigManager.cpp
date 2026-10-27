@@ -112,14 +112,14 @@ std::optional<const ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
 
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor)(
-    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
-        ql::concepts::invocable<Visitor, ConfigManager&>)
+    requires ql::concepts::invocable<Visitor, ConfigOption&> &&
+    ql::concepts::invocable<Visitor, ConfigManager&>)
 decltype(auto) ConfigManager::HashMapEntry::visit(Visitor&& vis) {
   return visitImpl(AD_FWD(vis), data_);
 }
 CPP_template_def(typename Visitor)(
-    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
-        ql::concepts::invocable<Visitor, ConfigManager&>)
+    requires ql::concepts::invocable<Visitor, ConfigOption&> &&
+    ql::concepts::invocable<Visitor, ConfigManager&>)
 decltype(auto) ConfigManager::HashMapEntry::visit(Visitor&& vis) const {
   return visitImpl(AD_FWD(vis), data_);
 }
@@ -158,9 +158,9 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor)(
     requires ad_utility::InvocableWithExactReturnType<
-        Visitor, void, std::string_view, ConfigManager&>
-        CPP_and_def ad_utility::InvocableWithExactReturnType<
-            Visitor, void, std::string_view, ConfigOption&>)
+        Visitor, void, std::string_view, ConfigManager&> &&
+    ad_utility::InvocableWithExactReturnType<Visitor, void, std::string_view,
+                                             ConfigOption&>)
 void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
                                         std::string_view pathPrefix) const {
   // For less code duplication.
