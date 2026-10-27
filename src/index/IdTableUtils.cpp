@@ -11,9 +11,10 @@
 
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
-void IdTableUtils::sort(IdTable& idTable,
-                        const std::vector<ColumnIndex>& sortCols,
-                        const SortConfig& sortConfig) {
+void IdTableUtils::sort(
+    IdTable& idTable, const std::vector<ColumnIndex>& sortCols,
+    const SortConfig& sortConfig,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
   size_t width = idTable.numColumns();
 
   // Instantiate specialized comparison lambdas for one and two sort columns
@@ -26,8 +27,10 @@ void IdTableUtils::sort(IdTable& idTable,
   // column-based structure of the `IdTable` into account.
   if (sortCols.size() == 1) {
     ad_utility::callFixedSizeVi(
-        width, [&idTable, col = sortCols[0], &sortConfig](auto numColumns) {
-          IdTableUtils::sort<numColumns>(&idTable, col, sortConfig);
+        width, [&idTable, col = sortCols[0], &sortConfig,
+                &cancellationHandle](auto numColumns) {
+          IdTableUtils::sort<numColumns>(&idTable, col, sortConfig,
+                                         cancellationHandle);
         });
   } else if (sortCols.size() == 2) {
     auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
@@ -39,9 +42,10 @@ void IdTableUtils::sort(IdTable& idTable,
       }
     };
     ad_utility::callFixedSizeVi(
-        idTable.numColumns(),
-        [&idTable, comparison, &sortConfig](auto numColumns) {
-          IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig);
+        idTable.numColumns(), [&idTable, comparison, &sortConfig,
+                               &cancellationHandle](auto numColumns) {
+          IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig,
+                                         cancellationHandle);
         });
   } else {
     auto comparison = [&sortCols](const auto& row1, const auto& row2) {
@@ -53,9 +57,10 @@ void IdTableUtils::sort(IdTable& idTable,
       return false;
     };
     ad_utility::callFixedSizeVi(
-        idTable.numColumns(),
-        [&idTable, comparison, &sortConfig](auto numColumns) {
-          IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig);
+        idTable.numColumns(), [&idTable, comparison, &sortConfig,
+                               &cancellationHandle](auto numColumns) {
+          IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig,
+                                         cancellationHandle);
         });
   }
 }

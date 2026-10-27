@@ -15,6 +15,7 @@
 #include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <future>
+#include <tuple>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
@@ -274,6 +275,62 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       (idTableFromRowGenerator<0>(generator(), NUM_COLS)),
       ::testing::ContainsRegex("Insufficient memory"));
+}
+
+// Test that the sorter can be cancelled via its cancellation handle, both
+// while the rows are pushed (the sorts of the blocks) and in the merge phase.
+TEST(CompressedExternalIdTable, sorterIsCancellable) {
+  auto test = [](bool cancelBeforePushing) {
+    // A sorter whose 1 KB memory limit makes the 1000 rows blocks of 15 rows.
+    std::string filename = gtestCurrentTestName();
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename,
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        handle};
+    CopyableIdTable<0> randomTable =
+        createRandomlyFilledIdTable(1000, NUM_COLS);
+
+    // Push all rows and consume the sorted result, cancelling before the merge
+    // phase unless the handle was already cancelled before pushing.
+    auto pushAndSort = [&]() {
+      for (const auto& row : randomTable) {
+        sorter.push(row);
+      }
+      if (!cancelBeforePushing) {
+        handle->cancel(ad_utility::CancellationState::MANUAL);
+      }
+      std::ignore = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
+    };
+
+    // Either way, the cancellation surfaces as a `CancellationException`.
+    if (cancelBeforePushing) {
+      handle->cancel(ad_utility::CancellationState::MANUAL);
+    }
+    EXPECT_THROW(pushAndSort(), ad_utility::CancellationException);
+  };
+  test(true);
+  test(false);
+}
+
+// Test that the cancellation handle of the sorter must not be `nullptr`.
+TEST(CompressedExternalIdTable, sorterRequiresCancellationHandle) {
+  auto makeSorter = []() {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        gtestCurrentTestName(),
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        nullptr};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeSorter(), ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
 // Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.
@@ -1741,12 +1798,9 @@ TEST(CompressedExternalIdTable, asyncPushBlock) {
   testAsyncPushBlock(tables, 100'000, 20);
 }
 
-// ___________________________________________________________________________
-// The output of the sorter as the input of an external merge
-// (`finishAndGetRunsInput`) and as the input of a merge into a sink
+// The tests below cover the output of the sorter as the input of an external
+// merge (`finishAndGetRunsInput`) and as the input of a merge into a sink
 // (`mergeToSink`).
-// ___________________________________________________________________________
-
 namespace {
 template <size_t NumStaticCols = NUM_COLS>
 using OspSorter =
@@ -1780,7 +1834,7 @@ CopyableIdTable<NUM_COLS> concatenateBlocks(Blocks&& blocks) {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the getters that a caller needs to configure a merge of the runs.
 TEST(CompressedExternalIdTable, numColumnsAndInputBlockSizePerColumn) {
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
@@ -1792,7 +1846,9 @@ TEST(CompressedExternalIdTable, numColumnsAndInputBlockSizePerColumn) {
   EXPECT_EQ(sorter.inputBlockSizePerColumn(), 3_kB);
 }
 
-// _____________________________________________________________________________
+// Test `finishAndGetRunsInput` for many runs, a single run (which it has to
+// write to disk first, because the sorter keeps it in memory), and no run at
+// all.
 TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
   using namespace ad_utility::parallelBlockMerge;
   std::string filename = gtestCurrentTestName() + ".dat";
@@ -1800,13 +1856,16 @@ TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
     ad_utility::deleteFile(filename, false);
   };
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
-  // Many runs, a single run (which `finishAndGetRunsInput` has to write to
-  // disk first, because the sorter keeps it in memory), and no run at all.
-  for (size_t numRows : {5'000u, 100u, 0u}) {
-    OspSorter<> sorter{
+  // A sorter whose blocks hold 100 rows for the input of 5'000 rows, and all
+  // the rows otherwise.
+  auto makeSorter = [&filename](size_t numRows) {
+    return OspSorter<>{
         filename, NUM_COLS,
         memoryForBlocksize(numRows == 5'000 ? 100 : 10'000, NUM_COLS),
         ad_utility::testing::makeAllocator(), 5_kB};
+  };
+  for (size_t numRows : {5'000u, 100u, 0u}) {
+    auto sorter = makeSorter(numRows);
     auto expected = pushRandomRows(sorter, numRows);
     {
       auto input = sorter.finishAndGetRunsInput();
@@ -1828,12 +1887,22 @@ TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
     EXPECT_THAT(concatenateBlocks(sorter.getSortedBlocks()),
                 ::testing::ElementsAreArray(expected2));
   }
+
+  // Without `moveResultOnMerge()` the sorter can still merge its runs itself
+  // afterwards, also the single run that `finishAndGetRunsInput` wrote to disk.
+  for (size_t numRows : {5'000u, 100u}) {
+    auto sorter = makeSorter(numRows);
+    sorter.moveResultOnMerge() = false;
+    auto expected = pushRandomRows(sorter, numRows);
+    { auto input = sorter.finishAndGetRunsInput(); }
+    EXPECT_THAT(concatenateBlocks(sorter.getSortedBlocks()),
+                ::testing::ElementsAreArray(expected))
+        << numRows;
+  }
 }
 
-// ___________________________________________________________________________
 // `mergeToSink` uses the parallel merge, which is not available in the C++17
 // backports mode.
-// ___________________________________________________________________________
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 namespace {
 using parallelBlockMergeTestHelpers::CollectingBlockSink;
@@ -1909,6 +1978,58 @@ class GatedSink : public ad_utility::NoCopyNoMove {
 static_assert(
     ad_utility::parallelBlockMerge::SinkConcept<GatedSink, SorterBlock>);
 
+// A `CollectingSink` whose `asyncFinishChunk` fails with a
+// `std::runtime_error`, to check that `mergeToSink` reports a sink that fails
+// to finish its chunk.
+class FailingSink : public ad_utility::NoCopyNoMove {
+ public:
+  CollectingSink inner_;
+
+ private:
+  ql::any_io_executor executor_;
+
+ public:
+  FailingSink(ql::any_io_executor executor, size_t numChunks)
+      : inner_{executor, numChunks}, executor_{std::move(executor)} {}
+
+  // ________________________________________________________________________
+  bool stopRequested() const noexcept { return inner_.stopRequested(); }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncPush(size_t chunkIndex, SorterBlock block,
+                 CompletionToken&& completionToken) {
+    return inner_.asyncPush(chunkIndex, std::move(block),
+                            AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncFinishChunk([[maybe_unused]] size_t chunkIndex,
+                        CompletionToken&& completionToken) {
+    return ad_utility::runFunctionOnExecutor(
+        executor_,
+        []() -> bool { throw std::runtime_error{"finishChunk failed"}; },
+        AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncPushException(std::exception_ptr exception,
+                          CompletionToken&& completionToken) {
+    return inner_.asyncPushException(std::move(exception),
+                                     AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncStop(CompletionToken&& completionToken) {
+    return inner_.asyncStop(AD_FWD(completionToken));
+  }
+};
+static_assert(
+    ad_utility::parallelBlockMerge::SinkConcept<FailingSink, SorterBlock>);
+
 // Check that the `sink` received every chunk exactly once and that the
 // concatenation of its chunks is the `expected` table.
 void expectSinkResult(const CollectingSink& sink,
@@ -1943,7 +2064,8 @@ constexpr std::array mergeToSinkCases{MergeToSinkCase{20'000, 100},
                                       MergeToSinkCase{0, 10'000}};
 }  // namespace
 
-// _____________________________________________________________________________
+// Test `mergeToSink` for many runs (merged in several chunks), a single block
+// (pushed as the only chunk without a merge) and no rows at all.
 TEST(CompressedExternalIdTable, mergeToSink) {
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
@@ -1979,7 +2101,9 @@ TEST(CompressedExternalIdTable, mergeToSink) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the future of `mergeToSink` becomes ready only once the sink has
+// finished its chunks, and that the result can be merged several times without
+// `moveResultOnMerge()`.
 TEST(CompressedExternalIdTable, mergeToSinkWaitsForTheSink) {
   using namespace std::chrono_literals;
   std::string filename = gtestCurrentTestName() + ".dat";
@@ -2007,11 +2131,10 @@ TEST(CompressedExternalIdTable, mergeToSinkWaitsForTheSink) {
                                            gate.get_future().share());
         return sink;
       });
-      // The returned future is deferred, so it is waited for in another thread.
-      auto waiter = std::async(std::launch::async, [&merged] { merged.get(); });
-      EXPECT_EQ(waiter.wait_for(50ms), std::future_status::timeout);
+      // The future is not ready while the gate is closed.
+      EXPECT_EQ(merged.wait_for(50ms), std::future_status::timeout);
       gate.set_value();
-      waiter.get();
+      merged.get();
       ASSERT_NE(sink, nullptr);
       expectSinkResult(sink->inner_, expected);
     }
@@ -2020,6 +2143,40 @@ TEST(CompressedExternalIdTable, mergeToSinkWaitsForTheSink) {
     auto expected2 = pushRandomRows(sorter, 300);
     EXPECT_THAT(concatenateBlocks(sorter.getSortedBlocks()),
                 ::testing::ElementsAreArray(expected2));
+  }
+}
+
+// Test that the future of `mergeToSink` rethrows the exception of a sink that
+// fails to finish the single chunk of a result that needs no merge, and that
+// the merge is ended on this path, so that the result can be merged again.
+TEST(CompressedExternalIdTable, mergeToSinkRethrowsSinkFailure) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  constexpr size_t numThreads = 4;
+  net::thread_pool pool{numThreads};
+  // The cases with a single block (one chunk without a merge) and no rows.
+  for (auto [numRows, blockSize] : mergeToSinkCases) {
+    if (numRows > blockSize) {
+      continue;
+    }
+    OspSorter<> sorter{filename, NUM_COLS,
+                       memoryForBlocksize(blockSize, NUM_COLS),
+                       ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(pool.get_executor(), numThreads);
+    sorter.moveResultOnMerge() = false;
+    auto expected = pushRandomRows(sorter, numRows);
+    auto merged = sorter.mergeToSink([](size_t numChunks) {
+      return std::make_shared<FailingSink>(sharedTestExecutor(), numChunks);
+    });
+    EXPECT_THROW(merged.get(), std::runtime_error);
+    // The failed merge has been ended, so the result can be merged again.
+    std::shared_ptr<CollectingSink> sink;
+    sorter.mergeToSink(collectingSinkFactory(sharedTestExecutor(), sink)).get();
+    ASSERT_NE(sink, nullptr);
+    expectSinkResult(*sink, expected);
   }
 }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

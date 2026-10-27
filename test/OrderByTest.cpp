@@ -16,7 +16,6 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
-using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
@@ -267,7 +266,8 @@ ResultAndFastPath orderByOnSortedInput(
   // subtree that reports being sorted by these columns.
   auto qec = ad_utility::testing::getQec();
   IdTable table = makeIdTableFromVector(input);
-  IdTableUtils::sort(table, sortedColumns, qec->sortConfig());
+  IdTableUtils::sort(table, sortedColumns, qec->sortConfig(),
+                     std::make_shared<ad_utility::CancellationHandle<>>());
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < table.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
@@ -503,28 +503,6 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_EQ(42.0, s.getMultiplicity(0));
     EXPECT_EQ(84.0, s.getMultiplicity(1));
   }
-}
-
-TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
-  VectorTable input;
-  // Make sure the estimator estimates a couple of ms to sort this
-  for (int64_t i = 0; i < 1000; i++) {
-    input.push_back({0, i});
-  }
-  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  OrderBy orderBy = makeOrderBy(std::move(inputTable), {{1, false}, {0, true}});
-  // Safe to do, because we know the underlying estimator is mutable
-  const_cast<SortPerformanceEstimator&>(
-      orderBy.getExecutionContext()->getSortPerformanceEstimator())
-      .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
-          orderBy.sortConfig());
-
-  orderBy.recursivelySetTimeConstraint(0ms);
-
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::CancellationException);
 }
 
 // _____________________________________________________________________________

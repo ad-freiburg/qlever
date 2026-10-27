@@ -414,7 +414,7 @@ class SparqlQleverVisitor {
   // services do not need `args`. For them this can be left out.
   CPP_variadic_template(typename T, typename... Args)(
       requires std::is_constructible_v<T, Args...>)
-      parsedQuery::GraphPatternOperation
+  parsedQuery::GraphPatternOperation
       visitMagicServiceQuery(Parser::ServiceGraphPatternContext* ctx,
                              Args&&... args);
 

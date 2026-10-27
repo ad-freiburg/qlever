@@ -83,8 +83,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager, executor());
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         expectExecuteUpdateHelper(update, qec, *index);
         index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -105,8 +105,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager, executor());
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };

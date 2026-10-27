@@ -961,11 +961,9 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
-    static constexpr size_t dummyTimeLimit = 1000 * 60 * 60;  // 1 hour
-    std::chrono::milliseconds timeLimit{dummyTimeLimit};
     server.qlever().writeMaterializedView(
         "testViewFromServer", std::move(query.query_), query.datasetClauses_,
-        std::move(cancellationHandle), timeLimit, requestTimer);
+        std::move(cancellationHandle), requestTimer);
   }
 
   // Test the preloading of materialized views on server start.
@@ -3043,6 +3041,26 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
 
   EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?o)"), expectCount(4));
   EXPECT_THAT(queryOnView("COUNT(DISTINCT ?o)"), expectCount(1));
+
+  // Test that the optimizations for a `GROUP BY` on a full scan and on a scan
+  // with a fixed first column read the blocks of the materialized view and not
+  // those of the main index.
+  EXPECT_THAT(getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT (COUNT(?p) AS ?c) WHERE {
+      SERVICE view:groupByTestView { [ view:column-s ?s ; view:column-p ?p ] }
+    } GROUP BY ?s
+  )"),
+              expectCount(1));
+  EXPECT_THAT(getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT (COUNT(?o) AS ?c) WHERE {
+      SERVICE view:groupByTestView {
+        [ view:column-s <s1> ; view:column-p ?p ; view:column-o ?o ]
+      }
+    } GROUP BY ?p
+  )"),
+              expectCount(1));
 
   // Test the optimization of a join with an `IndexScan` on a materialized view.
   EXPECT_THAT(

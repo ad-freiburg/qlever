@@ -4,6 +4,9 @@
 
 #include "engine/LazyGroupBy.h"
 
+#include "util/ChunkedForLoop.h"
+#include "util/views/ChunkedIotaView.h"
+
 using groupBy::detail::VectorOfAggregationData;
 
 // _____________________________________________________________________________
@@ -70,6 +73,19 @@ void LazyGroupBy::commitRow(
 
 // _____________________________________________________________________________
 void LazyGroupBy::processBlock(
+    sparqlExpression::EvaluationContext& evaluationContext, size_t beginIndex,
+    size_t endIndex) {
+  // A block can be large, and `addValue` might look up strings in the
+  // vocabulary (e.g. for `GROUP_CONCAT`), so check for cancellation per chunk.
+  for (auto [chunkBegin, chunkEnd] : ad_utility::chunkedIotaView(
+           beginIndex, endIndex, ad_utility::CANCELLATION_CHECK_CHUNK_SIZE)) {
+    evaluationContext.cancellationHandle_->throwIfCancelled();
+    processChunk(evaluationContext, chunkBegin, chunkEnd);
+  }
+}
+
+// _____________________________________________________________________________
+void LazyGroupBy::processChunk(
     sparqlExpression::EvaluationContext& evaluationContext, size_t beginIndex,
     size_t endIndex) {
   size_t blockSize = endIndex - beginIndex;

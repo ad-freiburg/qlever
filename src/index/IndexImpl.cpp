@@ -1713,6 +1713,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                    geoCellGridScheme);
     vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
         static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
   }
 
   // Initialize BlankNodeManager
@@ -2181,13 +2188,13 @@ void IndexImpl::setPsoAndPosStatistics(size_t numPredicates, size_t numTriples,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Sorter, typename... NextSorter)(requires(
-    sizeof...(NextSorter) <=
-    1)) void IndexImpl::createPSOAndPOSChunkwise(size_t numColumns,
-                                                 Sorter& sortedTriples,
-                                                 bool removeDuplicates,
-                                                 bool doWriteConfiguration,
-                                                 NextSorter&... nextSorter) {
+CPP_template_def(typename Sorter, typename... NextSorter)(
+    requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOSChunkwise(size_t numColumns,
+                                         Sorter& sortedTriples,
+                                         bool removeDuplicates,
+                                         bool doWriteConfiguration,
+                                         NextSorter&... nextSorter) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // There is no chunkwise writer in this mode (see
   // `chunkwisePermutationWriter::createPermutationPair`), so the sorted
@@ -2240,12 +2247,12 @@ CPP_template_def(typename Sorter, typename... NextSorter)(requires(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Sorter, typename... NextSorter)(requires(
-    sizeof...(NextSorter) <=
-    1)) void IndexImpl::createSPOAndSOPChunkwise(size_t numColumns,
-                                                 Sorter& sortedTriples,
-                                                 bool removeDuplicates,
-                                                 NextSorter&... nextSorter) {
+CPP_template_def(typename Sorter, typename... NextSorter)(
+    requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createSPOAndSOPChunkwise(size_t numColumns,
+                                         Sorter& sortedTriples,
+                                         bool removeDuplicates,
+                                         NextSorter&... nextSorter) {
   // The patterns need the triples in order, see `createSPOAndSOP`.
   AD_CONTRACT_CHECK(!usePatterns_);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -2268,12 +2275,12 @@ CPP_template_def(typename Sorter, typename... NextSorter)(requires(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Sorter, typename... NextSorter)(requires(
-    sizeof...(NextSorter) <=
-    1)) void IndexImpl::createOSPAndOPSChunkwise(size_t numColumns,
-                                                 Sorter& sortedTriples,
-                                                 bool removeDuplicates,
-                                                 NextSorter&... nextSorter) {
+CPP_template_def(typename Sorter, typename... NextSorter)(
+    requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createOSPAndOPSChunkwise(size_t numColumns,
+                                         Sorter& sortedTriples,
+                                         bool removeDuplicates,
+                                         NextSorter&... nextSorter) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // There is no chunkwise writer in this mode (see
   // `chunkwisePermutationWriter::createPermutationPair`), so the sorted
