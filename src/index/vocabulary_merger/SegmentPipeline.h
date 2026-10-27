@@ -20,7 +20,6 @@
 #include <cstdint>
 #include <deque>
 #include <future>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -90,8 +89,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
   SegmentCutter(const ParallelWordWriterBase& writer,
                 const ad_utility::RegexSet& blankNodeIriRegexes,
                 size_t numPartialVocabularies, const W& comparator,
-                size_t numWordsPerSegment,
-                size_t numBytesPerSegment = std::numeric_limits<size_t>::max())
+                size_t numWordsPerSegment, size_t numBytesPerSegment)
       : writer_{writer},
         blankNodeIriRegexes_{blankNodeIriRegexes},
         numPartialVocabularies_{numPartialVocabularies},
@@ -190,15 +188,6 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     std::future<Segment> segment_;
     Reservation reservation_;
   };
-  // Data that is shared by several stages, together with the reservation of
-  // its memory, which is released after the data has been destroyed (the
-  // members are destroyed in reverse order), see `makeShared`.
-  template <typename T>
-  struct WithReservation {
-    Reservation reservation_;
-    T value_;
-  };
-
   // NOTE: The budget is declared first, because all the other members (and
   // the tasks that they wait for in their destructors) hold reservations.
   MemoryBudget memoryBudget_;
@@ -228,8 +217,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
                   size_t numPartialVocabularies,
                   const ad_utility::RegexSet& blankNodeIriRegexes,
                   const W& comparator, size_t maxSegmentsInFlight,
-                  ad_utility::MemorySize memoryLimit,
-                  size_t numWordsPerSegment = VOCAB_MERGER_SEGMENT_NUM_WORDS)
+                  MemorySize memoryLimit, size_t numWordsPerSegment)
       : memoryBudget_{memoryLimit},
         maxSegmentsInFlight_{maxSegmentsInFlight},
         cutter_{writer,
@@ -240,13 +228,13 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
                 numBytesPerSegment(memoryLimit, maxSegmentsInFlight)},
         idMapWriters_{std::move(idMapFilenames),
                       VOCAB_MERGER_NUM_ID_MAP_WRITER_GROUPS},
-        blockWriter_{writer, &memoryBudget_},
+        blockWriter_{writer, memoryBudget_},
         committer_{writer,
                    [this](uint8_t sub, BlockPieces block) {
                      blockWriter_.push(sub, std::move(block));
                    }},
         currentSegmentReservation_{
-            memoryBudget_.reserve(ad_utility::MemorySize::bytes(0))} {
+            memoryBudget_.reserve(MemorySize::bytes(0))} {
     AD_CONTRACT_CHECK(maxSegmentsInFlight_ > 0);
   }
 
@@ -257,7 +245,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   // memory of its blocks again) stay until they are written, so a quarter of
   // the share of each segment of the budget. The minimum avoids tiny segments
   // (with a tiny budget, `push` then waits until the segments are written).
-  static size_t numBytesPerSegment(ad_utility::MemorySize memoryLimit,
+  static size_t numBytesPerSegment(MemorySize memoryLimit,
                                    size_t maxSegmentsInFlight) {
     return std::max(
         memoryLimit.getBytes() / (4 * std::max<size_t>(maxSegmentsInFlight, 1)),
@@ -355,9 +343,8 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     segments_.push_back(InFlightSegment{
         boost::asio::post(ad_utility::globalExecutor(),
                           boost::asio::use_future(std::move(task.value()))),
-        std::exchange(
-            currentSegmentReservation_,
-            memoryBudget_.reserve(ad_utility::MemorySize::bytes(0)))});
+        std::exchange(currentSegmentReservation_,
+                      memoryBudget_.reserve(MemorySize::bytes(0)))});
   }
 
   // Block until `numBytes` more fit into the memory budget. While segments are
@@ -368,7 +355,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   // (the blocks of the current segment and the open blocks of the
   // `committer_`), and the budget is exceeded.
   void waitForMemory(size_t numBytes) {
-    const auto size = ad_utility::MemorySize::bytes(numBytes);
+    const auto size = MemorySize::bytes(numBytes);
     while (!memoryBudget_.waitUntilFits(size, [this]() {
       return !segments_.empty() || (blockWriter_.numPendingBlocks() == 0 &&
                                     idMapWriters_.numPendingTasks() == 0);
@@ -383,9 +370,16 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   // Return a `shared_ptr` to the `value`, whose memory `size` is accounted
   // for in the budget until the last copy of the pointer is gone.
   template <typename T>
-  std::shared_ptr<const T> makeShared(T value, ad_utility::MemorySize size) {
-    auto holder = std::make_shared<WithReservation<T>>(
-        WithReservation<T>{memoryBudget_.reserve(size), std::move(value)});
+  std::shared_ptr<const T> makeShared(T value, MemorySize size) {
+    // The `value` together with the reservation of its memory, which is
+    // released after the `value` has been destroyed (the members are destroyed
+    // in reverse order).
+    struct WithReservation {
+      Reservation reservation_;
+      T value_;
+    };
+    auto holder = std::make_shared<WithReservation>(
+        WithReservation{memoryBudget_.reserve(size), std::move(value)});
     return {holder, &holder->value_};
   }
 
@@ -405,7 +399,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
       segments_.pop_front();
       waitForOne = false;
       // The ID map entries and the words are held (and released) separately.
-      auto entriesSize = memorySizeOf(segment.idMapEntries_);
+      auto entriesSize = segment.idMapEntries_.memorySize();
       auto entries = makeShared(std::move(segment.idMapEntries_), entriesSize);
       auto wordsSize = segment.memorySizeOfWords();
       auto words = makeShared(std::move(segment), wordsSize);

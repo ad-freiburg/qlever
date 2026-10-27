@@ -58,8 +58,11 @@ struct AsyncBlockWriterSharedState {
   // yet.
   std::atomic<size_t> numPendingBlocks_ = 0;
   // The budget that the gathered words of a block are accounted for in while
-  // the block is prepared, if any (see `MemoryBudget`).
-  MemoryBudget* memoryBudget_ = nullptr;
+  // the block is prepared (see `MemoryBudget`).
+  MemoryBudget& memoryBudget_;
+
+  explicit AsyncBlockWriterSharedState(MemoryBudget& memoryBudget)
+      : memoryBudget_{memoryBudget} {}
 
   // Whether one of the tasks has thrown an exception that has not been
   // rethrown yet.
@@ -173,10 +176,8 @@ class AsyncBlockWriterPerSubVocabulary {
       // The pieces keep (parts of) their segments alive, which are no longer
       // needed once the words are gathered.
       block = BlockPieces{};
-      MemoryBudget::Reservation reservation;
-      if (sharedState_.memoryBudget_ != nullptr) {
-        reservation = sharedState_.memoryBudget_->reserve(memorySizeOf(words));
-      }
+      auto reservation =
+          sharedState_.memoryBudget_.reserve(memorySizeOf(words));
       return blockWriter_.prepare(std::move(words));
     };
   }
@@ -253,12 +254,11 @@ class AsyncBlockWriter {
 
  public:
   // Construct from the `writer` of the vocabulary, which has to stay alive,
-  // and which is not finished by this class. If a `memoryBudget` is given
-  // (which has to stay alive as well), the gathered words of each block are
-  // accounted for in it while the block is prepared.
-  explicit AsyncBlockWriter(ParallelWordWriterBase& writer,
-                            MemoryBudget* memoryBudget = nullptr) {
-    sharedState_.memoryBudget_ = memoryBudget;
+  // and which is not finished by this class. The gathered words of each block
+  // are accounted for in the `memoryBudget` (which has to stay alive as well)
+  // while the block is prepared.
+  AsyncBlockWriter(ParallelWordWriterBase& writer, MemoryBudget& memoryBudget)
+      : sharedState_{memoryBudget} {
     for (uint8_t sub = 0; sub < writer.numSubVocabularies(); ++sub) {
       subVocabularyWriters_.push_back(
           std::make_unique<AsyncBlockWriterPerSubVocabulary>(

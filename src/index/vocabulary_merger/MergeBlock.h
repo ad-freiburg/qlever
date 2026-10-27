@@ -14,11 +14,13 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -393,13 +395,12 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
 
   // The memory that this block occupies: its buffers, its words, and their
   // occurrences (by capacity, which is what is actually allocated).
-  ad_utility::MemorySize memorySize() const {
-    size_t numBytes = words().capacity() * sizeof(MergedWord) +
-                      occurrences_.capacity() * sizeof(Occurrence);
-    for (const Buffer& buffer : *buffers_) {
-      numBytes += buffer.capacity();
-    }
-    return ad_utility::MemorySize::bytes(numBytes);
+  MemorySize memorySize() const {
+    return MemorySize::bytes(::ranges::accumulate(
+        *buffers_,
+        words().capacity() * sizeof(MergedWord) +
+            occurrences_.capacity() * sizeof(Occurrence),
+        std::plus<>{}, [](const Buffer& buffer) { return buffer.capacity(); }));
   }
 
   // Release the words, their occurrences and the buffers (which go back to

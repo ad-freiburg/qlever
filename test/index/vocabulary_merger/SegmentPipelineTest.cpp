@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -182,7 +183,8 @@ TEST(SegmentPipeline, zeroSegmentsInFlightIsRejected) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       (SegmentPipeline<decltype(lessThan)>{
           writer, partialVocabularyIdMapFilenames(basename, 1), 1, noRegexes,
-          lessThan, /*maxSegmentsInFlight=*/0, oneGigabyte}),
+          lessThan, /*maxSegmentsInFlight=*/0, oneGigabyte,
+          /*numWordsPerSegment=*/1}),
       ::testing::HasSubstr("maxSegmentsInFlight_ > 0"));
 }
 
@@ -285,8 +287,13 @@ TEST(SegmentCutter, cutSegments) {
                         {{"\"d\"", true, 0, 3}},
                         {},
                         {{"\"e\"", true, 0, 4}, {"\"f\"", true, 0, 5}}});
-  SegmentCutter<decltype(lessThan)> cutter{writer, noRegexes, 2, lessThan,
-                                           /*numWordsPerSegment=*/2};
+  SegmentCutter<decltype(lessThan)> cutter{
+      writer,
+      noRegexes,
+      2,
+      lessThan,
+      /*numWordsPerSegment=*/2,
+      /*numBytesPerSegment=*/std::numeric_limits<size_t>::max()};
   EXPECT_FALSE(cutter.push(std::move(blocks[0])).has_value());
   // Enough words for a segment, but `"b"` must not span two segments.
   EXPECT_FALSE(cutter.push(std::move(blocks[1])).has_value());
@@ -306,7 +313,13 @@ TEST(SegmentCutter, cutSegments) {
 TEST(SegmentCutter, finishWithoutBlocks) {
   size_t numWords = 0;
   auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
-  SegmentCutter<decltype(lessThan)> cutter{writer, noRegexes, 1, lessThan, 1};
+  SegmentCutter<decltype(lessThan)> cutter{
+      writer,
+      noRegexes,
+      1,
+      lessThan,
+      /*numWordsPerSegment=*/1,
+      /*numBytesPerSegment=*/std::numeric_limits<size_t>::max()};
   EXPECT_FALSE(cutter.push(std::move(makeMergedBlocks({{}})[0])).has_value());
   EXPECT_FALSE(cutter.finish().has_value());
   EXPECT_EQ(cutter.segmentBusyTime(), std::chrono::milliseconds::zero());

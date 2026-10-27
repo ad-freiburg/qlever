@@ -50,15 +50,14 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
   size_t peak_ = 0;
 
  public:
-  // The RAII handle of reserved memory, see above. A default-constructed or
-  // moved-from reservation holds no memory.
+  // The RAII handle of reserved memory, see above. A moved-from reservation
+  // holds no memory.
   class Reservation {
    private:
     MemoryBudget* budget_ = nullptr;
     size_t numBytes_ = 0;
 
    public:
-    Reservation() = default;
     Reservation(MemoryBudget& budget, size_t numBytes)
         : budget_{&budget}, numBytes_{numBytes} {}
     Reservation(Reservation&& other) noexcept
@@ -95,11 +94,10 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
   };
 
   // Construct a budget of `limit` bytes.
-  explicit MemoryBudget(ad_utility::MemorySize limit)
-      : limit_{limit.getBytes()} {}
+  explicit MemoryBudget(MemorySize limit) : limit_{limit.getBytes()} {}
 
   // Reserve `size` (never blocks, see above).
-  Reservation reserve(ad_utility::MemorySize size) {
+  Reservation reserve(MemorySize size) {
     add(size.getBytes());
     return Reservation{*this, size.getBytes()};
   }
@@ -112,7 +110,7 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
   // every `pollInterval`, because it may become true without any release.
   template <typename F>
   bool waitUntilFits(
-      ad_utility::MemorySize size, F stopWaiting,
+      MemorySize size, F stopWaiting,
       std::chrono::milliseconds pollInterval = std::chrono::milliseconds{10}) {
     std::unique_lock lock{mutex_};
     while (!fits(size.getBytes())) {
@@ -126,16 +124,14 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
 
   // The limit, the currently reserved memory, and the maximum of the latter
   // so far.
-  ad_utility::MemorySize limit() const {
-    return ad_utility::MemorySize::bytes(limit_);
-  }
-  ad_utility::MemorySize used() const {
+  MemorySize limit() const { return MemorySize::bytes(limit_); }
+  MemorySize used() const {
     std::lock_guard lock{mutex_};
-    return ad_utility::MemorySize::bytes(used_);
+    return MemorySize::bytes(used_);
   }
-  ad_utility::MemorySize peak() const {
+  MemorySize peak() const {
     std::lock_guard lock{mutex_};
-    return ad_utility::MemorySize::bytes(peak_);
+    return MemorySize::bytes(peak_);
   }
 
  private:

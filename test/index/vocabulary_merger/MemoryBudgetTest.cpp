@@ -43,6 +43,10 @@ TEST(MemoryBudget, reserveGrowAndRelease) {
     MemoryBudget::Reservation c = std::move(b);
     EXPECT_EQ(c.numBytes(), 85u);
     EXPECT_EQ(budget.used(), bytes(115));
+    // The moved-from reservation holds nothing and cannot grow.
+    // NOLINTNEXTLINE(bugprone-use-after-move)
+    EXPECT_EQ(b.numBytes(), 0u);
+    EXPECT_ANY_THROW(b.grow(1));
     c.release();
     EXPECT_EQ(c.numBytes(), 0u);
     EXPECT_EQ(budget.used(), bytes(30));
@@ -52,10 +56,6 @@ TEST(MemoryBudget, reserveGrowAndRelease) {
   }
   EXPECT_EQ(budget.used(), bytes(0));
   EXPECT_EQ(budget.peak(), bytes(115));
-  // A default-constructed reservation holds nothing and cannot grow.
-  MemoryBudget::Reservation empty;
-  EXPECT_EQ(empty.numBytes(), 0u);
-  EXPECT_ANY_THROW(empty.grow(1));
 }
 
 // _____________________________________________________________________________
