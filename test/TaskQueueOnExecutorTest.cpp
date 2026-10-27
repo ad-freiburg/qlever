@@ -180,7 +180,8 @@ TEST(TaskQueueOnExecutor, submitPropagatesValuesAndExceptions) {
   queue.finish();
 }
 
-// _____________________________________________________________________________
+// Test that a task pushed with `pushAsync` keeps its slot in the queue until
+// it calls its `done` callback, also after it has returned.
 TEST(TaskQueueOnExecutor, pushAsyncKeepsTheTaskInFlightUntilDone) {
   net::thread_pool pool{2};
   TaskQueueOnExecutor queue{pool.get_executor(), 1, "pushAsync"};

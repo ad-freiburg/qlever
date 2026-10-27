@@ -263,11 +263,9 @@ CPP_concept IsJson = SameAsAny<T, nlohmann::json, nlohmann::ordered_json>;
 
 // Create a HttpResponse from a json object with status 200 OK and mime type
 // "application/json".
-CPP_template(typename Json, typename Request)(
-    requires IsJson<Json>) auto createJsonResponse(const Json& j,
-                                                   const Request& request,
-                                                   http::status status =
-                                                       http::status::ok) {
+CPP_template(typename Json, typename Request)(requires IsJson<Json>)
+auto createJsonResponse(const Json& j, const Request& request,
+                        http::status status = http::status::ok) {
   // Argument `4` leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request, status);
 }

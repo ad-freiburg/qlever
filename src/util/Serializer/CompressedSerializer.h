@@ -71,9 +71,10 @@ CPP_template(typename CompressionFunction)(
 // that transforms (compresses) each block before it is passed to the next
 // layer.
 CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
-    requires WriteSerializer<UnderlyingSerializer> CPP_and ql::concepts::
-        invocable<CompressionFunction, ql::span<const char>,
-                  UninitializedBuffer&>) class CompressedWriteSerializer
+    requires WriteSerializer<UnderlyingSerializer> &&
+    ql::concepts::invocable<CompressionFunction, ql::span<const char>,
+                            UninitializedBuffer&>)
+class CompressedWriteSerializer
     : public BufferedWriteSerializer<
           UnderlyingSerializer,
           CompressingBlockProcessor<CompressionFunction>> {
@@ -104,9 +105,10 @@ CPP_template(typename UnderlyingSerializer, typename CompressionFunction)(
 // decompresses them, and provides the decompressed data to the caller.
 // This is the counterpart to `CompressedWriteSerializer` above.
 CPP_template(typename UnderlyingSerializer, typename DecompressionFunction)(
-    requires ReadSerializer<UnderlyingSerializer> CPP_and ql::concepts::
-        invocable<DecompressionFunction, ql::span<const char>,
-                  ql::span<char>>) class CompressedReadSerializer {
+    requires ReadSerializer<UnderlyingSerializer> &&
+    ql::concepts::invocable<DecompressionFunction, ql::span<const char>,
+                            ql::span<char>>)
+class CompressedReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
 

@@ -459,7 +459,7 @@ void OptionalJoin::optionalJoin(
   };
 
   const size_t numOutOfOrder = [&]() {
-    auto checkCancellationLambda = [this] { checkCancellation(); };
+    auto checkCancellationLambda = cancellationChecker();
     if (implementation == Implementation::OnlyUndefInLastJoinColumnOfLeft) {
       ad_utility::specialOptionalJoin(joinColumns.size(), joinColumnsLeft,
                                       joinColumnsRight, rowAdderOnIterators,

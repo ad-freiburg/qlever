@@ -10,10 +10,12 @@
 #include <regex>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/Join.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -1342,4 +1344,43 @@ TEST_F(ServiceTest, redirectsIntegration) {
                         boost::beast::http::status::ok, matchers)};
     EXPECT_NO_THROW(service.computeResultOnlyForTesting());
   }
+}
+
+// Test that the unconsumed lazy result of a `Service` sibling, which is
+// destroyed together with the sibling, does not call back into the already
+// destroyed sibling (this used to crash).
+TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
+  // A `Service` whose request fails, joined with a sibling whose lazy result is
+  // precomputed, exceeds `serviceMaxValueRows_` and is therefore handed back to
+  // the sibling, where the `Join` never consumes it.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          false},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }", "service failed",
+          boost::beast::http::status::internal_server_error, "text/plain"));
+  auto sibling = std::make_shared<ValuesForTesting>(
+      testQec, makeIdTableFromVector({{1, 2}, {3, 4}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}});
+  auto join = std::make_shared<Join>(
+      testQec, std::make_shared<QueryExecutionTree>(testQec, service),
+      std::make_shared<QueryExecutionTree>(testQec, sibling), 0, 0, true,
+      false);
+
+  // The `Service` is the left child, so it is computed (and fails) before the
+  // sibling's precomputed result is consumed.
+  EXPECT_ANY_THROW(join->computeResult(true));
+
+  // Destroying the sibling destroys its unconsumed lazy result, whose cleanup
+  // callback must not touch the operation anymore.
+  join.reset();
+  sibling.reset();
 }

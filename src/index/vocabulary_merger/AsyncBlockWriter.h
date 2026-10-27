@@ -10,10 +10,13 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_ASYNCBLOCKWRITER_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_ASYNCBLOCKWRITER_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <algorithm>
 #include <atomic>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/strand.hpp>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -22,7 +25,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/functional/any_invocable.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MemoryBudget.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
@@ -31,6 +33,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
+#include "util/ParseableDuration.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
@@ -79,11 +82,11 @@ struct AsyncBlockWriterSharedState {
 // appended and removed. A `TaskQueueOnExecutor` bounds the number of pending
 // blocks (its `pushAsync` keeps a block in flight until it is appended).
 //
-// NOTE: This is written without coroutines, because the vocabulary merge is
+// NOTE 1: This is written without coroutines, because the vocabulary merge is
 // also compiled in the reduced C++17 build.
 //
-// NOTE: All the member functions are called by a single thread, which must not
-// be a thread of the global executor (see `TaskQueueOnExecutor`).
+// NOTE 2: All the member functions are called by a single thread, which must
+// not be a thread of the global executor (see `TaskQueueOnExecutor`).
 class AsyncBlockWriterPerSubVocabulary {
  private:
   // A block that is being prepared or waiting to be appended. Only touched on
@@ -110,9 +113,10 @@ class AsyncBlockWriterPerSubVocabulary {
   // The pending blocks in the order of their indices. Only touched on the
   // `strand_`.
   std::deque<PendingBlock> pendingBlocks_;
-  // The queue whose tasks register the blocks on the `strand_`. NOTE: Declared
-  // last, because its destructor waits for the blocks to be appended, which
-  // uses the members declared above.
+  // The queue whose tasks register the blocks on the `strand_`.
+  //
+  // NOTE: Declared last, because its destructor waits for the blocks to be
+  // appended, which uses the members declared above.
   ad_utility::TaskQueueOnExecutor queue_;
 
  public:
@@ -158,8 +162,10 @@ class AsyncBlockWriterPerSubVocabulary {
 
  private:
   // Return the task that gathers and prepares the `block` (see `gatherWords`
-  // and `BlockWriterBase::prepare`) and returns the `AppendBlock`. NOTE: The
-  // return type is explicit, because `push` above uses this function.
+  // and `BlockWriterBase::prepare`) and returns the `AppendBlock`.
+  //
+  // NOTE: The return type is explicit, because `push` above uses this
+  // function.
   absl::AnyInvocable<AppendBlock()> makePreparationLambda(BlockPieces block) {
     return [this, block = std::move(block)]() mutable {
       auto measurement = sharedState_.prepareBusyTime_.startMeasurement();
@@ -192,33 +198,40 @@ class AsyncBlockWriterPerSubVocabulary {
   }
 
   // Append the blocks at the front of the queue that are prepared, in order,
-  // up to the first block that is not prepared yet.
+  // up to the first block that is not prepared yet, and then release their
+  // slots in the queue.
   // PRECONDITION: This runs on the `strand_`.
+  //
+  // NOTE: The slots are released only after the loop, because releasing the
+  // slot of the last block lets `finish()` return and the destructor run, so
+  // no member may be touched after that.
   void appendPreparedBlocksInOrder() {
     auto& pending = pendingBlocks_;
+    std::vector<ad_utility::TaskQueueOnExecutor::Done> dones;
     while (!pending.empty() && pending.front().isPrepared_) {
       PendingBlock next = std::move(pending.front());
       pending.pop_front();
-      appendPendingBlock(std::move(next));
+      dones.push_back(appendPendingBlock(std::move(next)));
+    }
+    for (auto& done : dones) {
+      std::move(done)();
     }
   }
 
   // Append the prepared `block`, unless a task has failed (then the block is
-  // skipped), and release its slot in the queue.
+  // skipped), and return the callback that releases its slot in the queue.
   // PRECONDITION: This runs on the `strand_`.
-  void appendPendingBlock(PendingBlock block) {
-    {
-      auto measurement = sharedState_.appendBusyTime_.startMeasurement();
-      auto& exceptionCollector = sharedState_.exceptionCollector_;
-      if (block.exception_) {
-        exceptionCollector(std::move(block.exception_));
-      } else if (!sharedState_.hasFailed()) {
-        exceptionCollector.wrap(
-            [&block]() { std::move(block.appendBlock_)(); })();
-      }
+  ad_utility::TaskQueueOnExecutor::Done appendPendingBlock(PendingBlock block) {
+    auto measurement = sharedState_.appendBusyTime_.startMeasurement();
+    auto& exceptionCollector = sharedState_.exceptionCollector_;
+    if (block.exception_) {
+      exceptionCollector(std::move(block.exception_));
+    } else if (!sharedState_.hasFailed()) {
+      exceptionCollector.wrap(
+          [&block]() { std::move(block.appendBlock_)(); })();
     }
     --sharedState_.numPendingBlocks_;
-    std::move(block.done_)();
+    return std::move(block.done_);
   }
 };
 
@@ -286,11 +299,13 @@ class AsyncBlockWriter {
   // The number of blocks pushed so far, and the total time that the tasks
   // have spent preparing and appending them.
   size_t numBlocks() const { return numBlocks_; }
-  ad_utility::Timer::Duration prepareBusyTime() const {
-    return sharedState_.prepareBusyTime_.value();
+  ad_utility::ParseableDuration<std::chrono::milliseconds> prepareBusyTime()
+      const {
+    return sharedState_.prepareBusyTime_.msecs();
   }
-  ad_utility::Timer::Duration appendBusyTime() const {
-    return sharedState_.appendBusyTime_.value();
+  ad_utility::ParseableDuration<std::chrono::milliseconds> appendBusyTime()
+      const {
+    return sharedState_.appendBusyTime_.msecs();
   }
 };
 }  // namespace ad_utility::vocabulary_merger::detail

@@ -34,6 +34,7 @@
 #include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "util/Algorithm.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
@@ -873,10 +874,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   // The statistics used below are precomputed at index build time and do not
   // reflect delta triples from SPARQL updates. Fall back to the general
   // computation when there are any delta triples.
-
+  //
+  // NOTE: Use the `LocatedTriplesState` of the `IndexScan`, not the one of this
+  // operation (which is the one of the main index from the
+  // `QueryExecutionContext`). They differ if the scan is on a materialized
+  // view, which has its own block metadata and located triples.
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
-          locatedTriplesState());
+          indexScan->locatedTriplesState());
   bool hasLocatedTriples = !locTriples.isEmpty();
   bool isMaterializedView = indexScan->permutation().permutationType() ==
                             Permutation::Type::MATERIALIZED_VIEW;
@@ -957,9 +962,12 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
 
   // Compute the result and update the runtime information (we don't actually
   // do the index scan, but something smarter).
+  //
+  // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
+  // `computeGroupByForSingleIndexScan` for details).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle(), locatedTriplesState(),
+      col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
       indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
@@ -1014,8 +1022,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   const auto& operation = _subtree->getRootOperation();
   operation->updateRuntimeInformationWhenOptimizedOut();
 
+  // Compute the distinct values of the first column and their counts directly
+  // from the blocks of the permutation.
+  //
+  // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
+  // `computeGroupByForSingleIndexScan` for details).
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle(), locatedTriplesState(), operation->getLimitOffset());
+      cancellationHandle(), operation->locatedTriplesState(),
+      operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -1856,14 +1870,22 @@ static constexpr auto makeProcessGroupsVisitor =
 
         auto hashEntryIndex = 0;
 
-        for (const auto& val : generator) {
-          auto vectorOffset = hashEntries[hashEntryIndex];
-          auto& aggregateData = aggregationDataVector.at(vectorOffset);
+        // `addValue` might look up strings in the vocabulary (e.g. for
+        // `GROUP_CONCAT`), so a block of rows can take a while.
+        ad_utility::chunkedForEach(
+            std::move(generator),
+            [&hashEntries, &hashEntryIndex, &aggregationDataVector,
+             evaluationContext](const auto& val) {
+              auto vectorOffset = hashEntries[hashEntryIndex];
+              auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
-          aggregateData.addValue(val, evaluationContext);
+              aggregateData.addValue(val, evaluationContext);
 
-          ++hashEntryIndex;
-        }
+              ++hashEntryIndex;
+            },
+            [evaluationContext]() {
+              evaluationContext->cancellationHandle_->throwIfCancelled();
+            });
       };
     };
 

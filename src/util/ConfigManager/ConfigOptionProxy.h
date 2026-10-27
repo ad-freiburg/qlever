@@ -29,9 +29,9 @@ access to the referenced config option.
 to. Must be `ConfigOption`, or `const ConfigOption`.
 */
 CPP_template(typename T, typename ConfigOptionType)(
-    requires SupportedConfigOptionType<T> CPP_and ad_utility::SameAsAny<
-        ConfigOptionType, ConfigOption,
-        const ConfigOption>) class ConfigOptionProxyImplementation {
+    requires SupportedConfigOptionType<T> &&
+    ad_utility::SameAsAny<ConfigOptionType, ConfigOption, const ConfigOption>)
+class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 
  public:

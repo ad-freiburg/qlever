@@ -343,7 +343,7 @@ class Server {
   // code paths.
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> handleHttpRequest(RequestT request, SendT& send);
+  Awaitable<void> handleHttpRequest(RequestT request, SendT& send);
 
   // Build the `WebSocketHandler` passed to `HttpServer` in `run()`. Call once
   // at server startup with the server's `io_context` executor; set up the
@@ -362,7 +362,7 @@ class Server {
   ///             `HttpServer.h` for documentation).
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> process(RequestT& request, SendT&& send);
+  Awaitable<void> process(RequestT& request, SendT&& send);
 
   // The final step of `process()`: by this point the operation type (which also
   // can be `no-operation`) is known, so this builds the
@@ -370,11 +370,13 @@ class Server {
   // together with `operation`, to `processOperation`.
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> processSparqlOperation(
-          SparqlOperation operation, const ParamValueMap& parameters,
-          bool accessTokenOk, const ad_utility::Timer& requestTimer,
-          SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
-          std::optional<ResponseT> response);
+  Awaitable<void> processSparqlOperation(SparqlOperation operation,
+                                         const ParamValueMap& parameters,
+                                         bool accessTokenOk,
+                                         const ad_utility::Timer& requestTimer,
+                                         SharedIndexAndView indexAndViews,
+                                         RequestT& request, SendT&& send,
+                                         std::optional<ResponseT> response);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
@@ -396,12 +398,12 @@ class Server {
   // Do the actual execution of a query.
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> processQuery(
-          const ParamValueMap& params, ParsedQuery&& query,
-          const ad_utility::Timer& requestTimer,
-          ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, SendT&& send,
-          std::optional<PlannedQuery>& plannedQuery);
+  Awaitable<void> processQuery(
+      const ParamValueMap& params, ParsedQuery&& query,
+      const ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      QueryExecutionContext& qec, const RequestT& request, SendT&& send,
+      std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
@@ -412,12 +414,12 @@ class Server {
   // Do the actual execution of an update.
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> processUpdate(
-          MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
-          const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
-          ad_utility::SharedCancellationHandle cancellationHandle,
-          const RequestT& request, SendT&& send,
-          std::optional<PlannedQuery>& plannedUpdate);
+  Awaitable<void> processUpdate(
+      MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
+      const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      const RequestT& request, SendT&& send,
+      std::optional<PlannedQuery>& plannedUpdate);
 
   //  Prepare the execution of an operation.
   auto prepareOperation(std::string_view operationName,
@@ -450,9 +452,9 @@ class Server {
   /// its completion, wrapping the result.
   CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(
       requires ql::concepts::invocable<Function>)
-      Awaitable<T> computeInNewThread(
-          boost::asio::static_thread_pool& threadPool, Function function,
-          SharedCancellationHandle handle);
+  Awaitable<T> computeInNewThread(boost::asio::static_thread_pool& threadPool,
+                                  Function function,
+                                  SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new
@@ -522,10 +524,10 @@ class Server {
   /// turtle, sparqlJson, qleverJson).
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> sendStreamableResponse(
-          const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
-          const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-          SharedCancellationHandle cancellationHandle);
+  Awaitable<void> sendStreamableResponse(
+      const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
+      const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
+      SharedCancellationHandle cancellationHandle);
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 

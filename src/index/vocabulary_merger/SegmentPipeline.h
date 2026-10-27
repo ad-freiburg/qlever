@@ -42,6 +42,7 @@
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/NoCopyNoMove.h"
+#include "util/ParseableDuration.h"
 #include "util/RegexSet.h"
 #include "util/Timer.h"
 
@@ -83,7 +84,8 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
  public:
   // Construct from the arguments of `buildSegment`, which all have to stay
   // alive until all the tasks have completed, and the minimal number of words
-  // and of bytes per segment (see above).
+  // and of bytes per segment (see above). The number of words has to be at
+  // least one.
   SegmentCutter(const ParallelWordWriterBase& writer,
                 const ad_utility::RegexSet& blankNodeIriRegexes,
                 size_t numPartialVocabularies, const W& comparator,
@@ -94,7 +96,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
         numPartialVocabularies_{numPartialVocabularies},
         comparator_{comparator},
         numWordsPerSegment_{numWordsPerSegment},
-        numBytesPerSegment_{numBytesPerSegment} {}
+        numBytesPerSegment_{numBytesPerSegment} {
+    AD_CONTRACT_CHECK(numWordsPerSegment_ > 0);
+  }
 
   // Add the next `block` of merged words. If this completes a segment (which
   // then consists of the blocks before the `block`), return the task that
@@ -129,8 +133,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
   }
 
   // The total time that the tasks have spent building the segments.
-  ad_utility::Timer::Duration segmentBusyTime() const {
-    return segmentBusyTime_.value();
+  ad_utility::ParseableDuration<std::chrono::milliseconds> segmentBusyTime()
+      const {
+    return segmentBusyTime_.msecs();
   }
 
  private:
@@ -168,10 +173,10 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
 // entries of a committed segment are held separately, so that each is released
 // as soon as its writer is done with it.
 //
-// NOTE: All the member functions are called by a single thread, the one that
+// NOTE 1: All the member functions are called by a single thread, the one that
 // runs `mergeVocabulary`, which must not be a thread of the global executor.
 //
-// NOTE: The pipeline is neither copyable nor movable, because the tasks and
+// NOTE 2: The pipeline is neither copyable nor movable, because the tasks and
 // the sink of the `committer_` refer to it.
 CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     : public ad_utility::NoCopyNoMove {
@@ -232,7 +237,7 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
                 numWordsPerSegment,
                 numBytesPerSegment(memoryLimit, maxSegmentsInFlight)},
         idMapWriters_{std::move(idMapFilenames),
-                      VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS},
+                      VOCAB_MERGER_NUM_ID_MAP_WRITER_GROUPS},
         blockWriter_{writer, &memoryBudget_},
         committer_{writer,
                    [this](uint8_t sub, BlockPieces block) {
@@ -260,8 +265,13 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   // Wait for the tasks that are still building segments. This only happens if
   // an exception was thrown before `finish()` committed all the segments, and
   // is required because the tasks use the `cutter_` and the arguments of the
-  // constructor. NOTE: A future whose `get()` threw (the segment that failed)
-  // is no longer valid, and its task has completed.
+  // constructor.
+  //
+  // NOTE 1: A future whose `get()` threw (the segment that failed) is no
+  // longer valid, and its task has completed.
+  //
+  // NOTE 2: `wait()` never rethrows the exception that is stored in a future,
+  // so this destructor can't throw and needs no `noexcept(false)`.
   ~SegmentPipeline() {
     for (auto& segment : segments_) {
       if (segment.segment_.valid()) {
@@ -306,31 +316,30 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     }
     VocabularyMetaData metaData = committer_.finish();
     commitTimer_.stop();
-    // The busy times are measured in microseconds, but logged in milliseconds
-    // for readability.
-    auto ms = [](ad_utility::Timer::Duration duration) {
-      return std::chrono::duration_cast<std::chrono::milliseconds>(duration)
-          .count();
-    };
+    using Milliseconds =
+        ad_utility::ParseableDuration<std::chrono::milliseconds>;
     AD_LOG_INFO << "Time spent by the thread behind the merge: waiting for "
                    "merged blocks "
-                << (totalTimer_.msecs() - commitTimer_.msecs())
-                << ", committing the segments " << commitTimer_.msecs()
-                << "; building the segments " << ms(cutter_.segmentBusyTime())
-                << " ms" << std::endl;
+                << Milliseconds{totalTimer_.msecs() - commitTimer_.msecs()}
+                << ", committing the segments "
+                << Milliseconds{commitTimer_.msecs()}
+                << "; building the segments " << cutter_.segmentBusyTime()
+                << std::endl;
     blockWriter_.finish();
     idMapWriters_.finish();
     AD_LOG_INFO << committer_.progressBar().getFinalProgressString()
                 << std::flush;
-    AD_LOG_INFO << "Time spent by the stages behind the vocabulary merge: "
-                   "preparing "
-                << blockWriter_.numBlocks() << " blocks "
-                << ms(blockWriter_.prepareBusyTime()) << " ms, appending them "
-                << ms(blockWriter_.appendBusyTime())
-                << " ms, writing the ID maps " << ms(idMapWriters_.busyTime())
-                << " ms; peak memory of the data behind the merge "
-                << memoryBudget_.peak().asString() << " (limit "
-                << memoryBudget_.limit().asString() << ")" << std::endl;
+    AD_LOG_INFO
+        << "Time spent by the stages behind the vocabulary merge: "
+           "preparing "
+        << blockWriter_.numBlocks() << " blocks "
+        << blockWriter_.prepareBusyTime() << ", appending them "
+        << blockWriter_.appendBusyTime() << ", writing the ID maps "
+        << Milliseconds{std::chrono::duration_cast<std::chrono::milliseconds>(
+               idMapWriters_.busyTime())}
+        << "; peak memory of the data behind the merge "
+        << memoryBudget_.peak().asString() << " (limit "
+        << memoryBudget_.limit().asString() << ")" << std::endl;
     return metaData;
   }
 
