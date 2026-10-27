@@ -52,6 +52,21 @@ constexpr inline size_t VOCABULARY_SCAN_MAX_WORDS_PER_BATCH = 10'000;
 constexpr inline ad_utility::MemorySize
     VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH = 10_MB;
 
+// Read-ahead parameters for `VocabularyOnDisk::operator[]`: if the lookups of a
+// thread are (nearly) sequential, the following words are read together with
+// the requested word and kept in memory (one window per thread).
+// A lookup is sequential if it is after the previous lookup of the same thread
+// in the same vocabulary, and at most this many words after it.
+constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_GAP = 64;
+// The window starts with a single word and is doubled with every sequential
+// lookup that is not in the window, up to this many words (8 bytes of offset
+// per word).
+constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_WORDS = 4096;
+// The maximum number of bytes of word data in the window. A window that
+// doesn't fit at least two words is not kept.
+constexpr inline ad_utility::MemorySize VOCABULARY_READ_AHEAD_MAX_WORD_DATA =
+    1_MB;
+
 constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_URL =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/";

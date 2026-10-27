@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 
 #include "global/Constants.h"
 #include "util/ExceptionHandling.h"
@@ -26,16 +27,27 @@ OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
   // Read the offset of the word at index `i` and the offset of the next word
   // (which marks the end of the word at index `i`) in a single `pread`.
   std::array<Offset, 2> offsets{};
-  // Assert no unexpected padding.
-  static_assert(sizeof(offsets) == sizeof(Offset) * 2);
-  offsetsFile_.read(offsets.data(), sizeof(offsets),
-                    static_cast<off_t>(i * sizeof(Offset)));
+  readOffsets(i, offsets);
   return {offsets[0], offsets[1] - offsets[0]};
 }
 
 // _____________________________________________________________________________
-std::string VocabularyOnDisk::operator[](uint64_t idx) const {
-  AD_CONTRACT_CHECK(idx < size());
+void VocabularyOnDisk::readOffsets(uint64_t first,
+                                   ql::span<Offset> offsets) const {
+  offsetsFile_.read(offsets.data(), offsets.size() * sizeof(Offset),
+                    static_cast<off_t>(first * sizeof(Offset)));
+}
+
+// _____________________________________________________________________________
+void VocabularyOnDisk::readWordData(
+    ql::span<const Offset> offsets,
+    ad_utility::UninitializedVector<char>& data) const {
+  data.resize(offsets.back() - offsets.front());
+  file_.read(data.data(), data.size(), static_cast<off_t>(offsets.front()));
+}
+
+// _____________________________________________________________________________
+std::string VocabularyOnDisk::readWord(uint64_t idx) const {
   auto offsetAndSize = getOffsetAndSize(idx);
   std::string result(offsetAndSize.size_, '\0');
   file_.read(result.data(), offsetAndSize.size_,
@@ -46,22 +58,22 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
 namespace {
 // Given the `offsets` of a chunk of words and a starting position `first`
 // within that chunk, return how many words starting at `first` can be read into
-// a single data buffer without their combined size exceeding
-// `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH`, but always at least one word, even
-// if that single word is larger than the limit (a word must not be split).
-size_t numWordsWithinLimit(ql::span<const uint64_t> offsets, size_t first) {
+// a single data buffer without their combined size exceeding the `limit`, but
+// always at least one word, even if that single word is larger than the limit
+// (a word must not be split).
+size_t numWordsWithinLimit(
+    ql::span<const uint64_t> offsets, size_t first,
+    ad_utility::MemorySize limit = VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH) {
   // Common case: all remaining words of the chunk fit. Checking this first
   // (i.e. looking at the end right away) avoids a search in the expected case
   // where a whole batch of words comfortably fits within the limit.
-  if (offsets.back() - offsets[first] <=
-      VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH.getBytes()) {
+  if (offsets.back() - offsets[first] <= limit.getBytes()) {
     return offsets.size() - 1 - first;
   }
   // Otherwise binary-search for the largest prefix that fits. `offsets` is
   // ascending, so the number of words that fit is the number of offsets in
   // `[first, total]` that are `<= offsets[first] + limit`, minus one.
-  uint64_t threshold =
-      offsets[first] + VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH.getBytes();
+  uint64_t threshold = offsets[first] + limit.getBytes();
   auto begin = offsets.begin() + first;
   auto it = std::upper_bound(begin, offsets.end(), threshold);
   size_t numFit = static_cast<size_t>(it - begin) - 1;
@@ -105,18 +117,97 @@ auto mapOffsetsToStringViews(ql::span<const uint64_t> offsets,
                                    end - begin};
          });
 }
+
+// The read-ahead state of `VocabularyOnDisk::operator[]` for a single thread.
+struct ReadAheadState {
+  // The `id_` of the vocabulary of the previous lookup (0 for none).
+  uint64_t vocabId_ = 0;
+  // The index of the previous lookup.
+  uint64_t lastIdx_ = 0;
+  // The size of the previous window (see `VOCABULARY_READ_AHEAD_MAX_WORDS`).
+  size_t windowSize_ = 1;
+  // The words `first_, first_ + 1, ...` of the vocabulary `vocabId_`: their
+  // offsets (plus the offset after the last word) and their data. Empty if the
+  // previous window was a single word, which is not kept.
+  uint64_t first_ = 0;
+  ad_utility::UninitializedVector<uint64_t> offsets_;
+  ad_utility::UninitializedVector<char> data_;
+
+  // Return true iff the word `idx` of the vocabulary `vocabId` is kept.
+  bool contains(uint64_t vocabId, uint64_t idx) const {
+    return vocabId == vocabId_ && idx >= first_ &&
+           idx - first_ + 1 < offsets_.size();
+  }
+
+  // Return the size of the window for a lookup of the word `idx` of the
+  // vocabulary `vocabId` that is not kept: the previous window doubled if the
+  // lookup is sequential (see `VOCABULARY_READ_AHEAD_MAX_GAP`), else 1.
+  size_t nextWindowSize(uint64_t vocabId, uint64_t idx) const {
+    bool isSequential = vocabId == vocabId_ && idx > lastIdx_ &&
+                        idx - lastIdx_ <= VOCABULARY_READ_AHEAD_MAX_GAP;
+    return isSequential
+               ? std::min(2 * windowSize_, VOCABULARY_READ_AHEAD_MAX_WORDS)
+               : 1;
+  }
+
+  // Return the word `idx`, which must be kept.
+  std::string word(uint64_t idx) const {
+    size_t i = idx - first_;
+    return std::string(data_.data() + (offsets_[i] - offsets_.front()),
+                       offsets_[i + 1] - offsets_[i]);
+  }
+};
 }  // namespace
+
+// _____________________________________________________________________________
+std::string VocabularyOnDisk::operator[](uint64_t idx) const {
+  AD_CONTRACT_CHECK(idx < size());
+  thread_local ReadAheadState state;
+  bool isKept = state.contains(id_, idx);
+  if (!isKept) {
+    size_t windowSize = state.nextWindowSize(id_, idx);
+    // Invalidate the state first, so that it stays consistent if one of the
+    // reads throws.
+    state.vocabId_ = 0;
+    state.offsets_.clear();
+    size_t numWords = std::min<size_t>(windowSize, size() - idx);
+    isKept =
+        numWords > 1 && readWindow(idx, numWords, state.offsets_, state.data_);
+    state.vocabId_ = id_;
+    state.first_ = idx;
+    state.windowSize_ = windowSize;
+  }
+  state.lastIdx_ = idx;
+  return isKept ? state.word(idx) : readWord(idx);
+}
+
+// _____________________________________________________________________________
+bool VocabularyOnDisk::readWindow(
+    uint64_t first, size_t numWords,
+    ad_utility::UninitializedVector<Offset>& offsets,
+    ad_utility::UninitializedVector<char>& data) const {
+  offsets.resize(numWords + 1);
+  readOffsets(first, offsets);
+  numWords =
+      numWordsWithinLimit(offsets, 0, VOCABULARY_READ_AHEAD_MAX_WORD_DATA);
+  if (numWords < 2) {
+    offsets.clear();
+    return false;
+  }
+  offsets.resize(numWords + 1);
+  readWordData(offsets, data);
+  return true;
+}
 
 // _____________________________________________________________________________
 auto VocabularyOnDisk::chunkToWords(ql::span<const uint64_t> offsets) const {
   return ad_utility::allView(ad_utility::CachingTransformInputRange{
              chunkOffsets(offsets),
-             [this, data = std::string{}](
+             [this, data = ad_utility::UninitializedVector<char>{}](
                  ql::span<const uint64_t> subOffsets) mutable {
-               data.resize(subOffsets.back() - subOffsets.front());
-               file_.read(data.data(), data.size(),
-                          static_cast<off_t>(subOffsets.front()));
-               return mapOffsetsToStringViews(subOffsets, data);
+               readWordData(subOffsets, data);
+               return mapOffsetsToStringViews(
+                   subOffsets, std::string_view{data.data(), data.size()});
              }}) |
          ql::views::join;
 }
@@ -134,10 +225,9 @@ auto VocabularyOnDisk::readOffsetsInBatches() const {
           size_t chunkStart) mutable {
         size_t numWords = std::min<size_t>(VOCABULARY_SCAN_MAX_WORDS_PER_BATCH,
                                            size() - chunkStart);
-        size_t numWordsPlusOne = numWords + 1;
-        offsetsFile_.read(buffer.data(), numWordsPlusOne * sizeof(uint64_t),
-                          static_cast<off_t>(chunkStart * sizeof(uint64_t)));
-        return ql::span<const uint64_t>{buffer.data(), numWordsPlusOne};
+        ql::span<uint64_t> offsets{buffer.data(), numWords + 1};
+        readOffsets(chunkStart, offsets);
+        return ql::span<const uint64_t>{offsets};
       }};
 }
 
@@ -309,6 +399,8 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 
 // _____________________________________________________________________________
 void VocabularyOnDisk::open(const std::string& filename) {
+  static std::atomic<uint64_t> nextId = 1;
+  id_ = nextId++;
   file_.open(filename, "r");
   offsetsFile_.open(filename + offsetSuffix_, "r");
 

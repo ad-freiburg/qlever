@@ -12,14 +12,19 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <optional>
+#include <random>
+
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
+#include "global/Constants.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MmapVector.h"
+#include "util/jthread.h"
 
 namespace {
 using namespace vocabulary_test;
@@ -111,6 +116,37 @@ VocabularyOnDiskHandle createVocabularyFromWords(
     const std::vector<std::string>& words) {
   return VocabularyOnDiskHandle{absl::StrCat(gtestCurrentTestName(), ".dat"),
                                 words};
+}
+
+// Words of different lengths that are distinct for each `prefix`.
+std::vector<std::string> makeWords(size_t numWords,
+                                   std::string_view prefix = "word") {
+  std::vector<std::string> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.push_back(absl::StrCat(prefix, i, std::string(i % 13, 'x')));
+  }
+  return words;
+}
+
+// Look up the `indices` one by one via `operator[]` and expect the
+// corresponding `words`.
+void expectLookupsYieldWords(
+    const VocabularyOnDisk& vocabulary, const std::vector<std::string>& words,
+    const std::vector<size_t>& indices,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  for (size_t idx : indices) {
+    ASSERT_EQ(vocabulary[idx], words.at(idx)) << "at index " << idx;
+  }
+}
+
+// The indices `first, first + stride, ...` that are smaller than `end`.
+std::vector<size_t> stridedIndices(size_t first, size_t end, size_t stride) {
+  std::vector<size_t> indices;
+  for (size_t idx = first; idx < end; idx += stride) {
+    indices.push_back(idx);
+  }
+  return indices;
 }
 
 auto createVocabulary() {
@@ -332,4 +368,104 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
     for ([[maybe_unused]] auto& r : streamed) {
     }
   });
+}
+
+// The read-ahead of `operator[]` must not change the results, no matter in
+// which order the words are looked up.
+TEST(VocabularyOnDisk, AccessOperatorReadAhead) {
+  // More words than the maximal window, so that the window is limited.
+  auto words = makeWords(3 * VOCABULARY_READ_AHEAD_MAX_WORDS + 17);
+  auto vocab = createVocabularyFromWords(words);
+  size_t numWords = words.size();
+  // Sequential, also with gaps that are within, at, and beyond the maximal gap
+  // for a read-ahead.
+  for (size_t stride :
+       {size_t{1}, size_t{2}, size_t{10}, VOCABULARY_READ_AHEAD_MAX_GAP,
+        VOCABULARY_READ_AHEAD_MAX_GAP + 1, size_t{1000}}) {
+    expectLookupsYieldWords(*vocab, words, stridedIndices(0, numWords, stride));
+  }
+  // The same word repeatedly, also after a window has been read.
+  expectLookupsYieldWords(*vocab, words, {5, 5, 6, 7, 7, 7, 4, 4});
+  // Backwards.
+  auto backwards = stridedIndices(0, numWords, 1);
+  ql::ranges::reverse(backwards);
+  expectLookupsYieldWords(*vocab, words, backwards);
+  // Random order.
+  auto shuffled = stridedIndices(0, numWords, 1);
+  std::shuffle(shuffled.begin(), shuffled.end(), std::mt19937{42});
+  expectLookupsYieldWords(*vocab, words, shuffled);
+  // Sequential up to the last word (the window is limited by the end of the
+  // vocabulary), then jumping back.
+  expectLookupsYieldWords(*vocab, words,
+                          stridedIndices(numWords - 100, numWords, 1));
+  expectLookupsYieldWords(*vocab, words, stridedIndices(0, 100, 1));
+  EXPECT_ANY_THROW((*vocab)[numWords]);
+}
+
+// The read-ahead of a thread is kept for one vocabulary at a time, so
+// alternating between two vocabularies must not mix up their words.
+TEST(VocabularyOnDisk, AccessOperatorReadAheadAlternatingVocabularies) {
+  auto wordsA = makeWords(1000, "a");
+  auto wordsB = makeWords(1000, "b");
+  VocabularyOnDiskHandle vocabA{absl::StrCat(gtestCurrentTestName(), "A"),
+                                wordsA};
+  VocabularyOnDiskHandle vocabB{absl::StrCat(gtestCurrentTestName(), "B"),
+                                wordsB};
+  // Alternate after single lookups, and after runs of sequential lookups.
+  for (size_t runLength : {1, 50}) {
+    for (size_t first = 0; first + runLength <= 1000; first += runLength) {
+      auto indices = stridedIndices(first, first + runLength, 1);
+      expectLookupsYieldWords(*vocabA, wordsA, indices);
+      expectLookupsYieldWords(*vocabB, wordsB, indices);
+    }
+  }
+}
+
+// A vocabulary that is opened at the address of a previous vocabulary must
+// not get the words of the previous vocabulary from the read-ahead.
+TEST(VocabularyOnDisk, AccessOperatorReadAheadReusedAddress) {
+  auto wordsA = makeWords(1000, "a");
+  auto wordsB = makeWords(1000, "b");
+  VocabularyCreator creatorA{absl::StrCat(gtestCurrentTestName(), "A")};
+  VocabularyCreator creatorB{absl::StrCat(gtestCurrentTestName(), "B")};
+  std::optional<VocabularyOnDisk> vocab;
+  vocab.emplace(creatorA.createVocabulary(wordsA));
+  const VocabularyOnDisk* address = &vocab.value();
+  expectLookupsYieldWords(*vocab, wordsA, stridedIndices(0, 500, 1));
+  vocab.reset();
+  vocab.emplace(creatorB.createVocabulary(wordsB));
+  ASSERT_EQ(&vocab.value(), address);
+  expectLookupsYieldWords(*vocab, wordsB, stridedIndices(400, 1000, 1));
+}
+
+// Words that are too large for the read-ahead (see
+// `VOCABULARY_READ_AHEAD_MAX_WORD_DATA`) are read individually, also when they
+// are next to small words.
+TEST(VocabularyOnDisk, AccessOperatorReadAheadLargeWords) {
+  size_t maxBytes = VOCABULARY_READ_AHEAD_MAX_WORD_DATA.getBytes();
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 40; ++i) {
+    // Every fifth word is larger than the limit, the following one fills half
+    // of the limit, the others are small.
+    size_t numBytes = i % 5 == 0 ? maxBytes + 1 : i % 5 == 1 ? maxBytes / 2 : 3;
+    words.push_back(std::string(numBytes, static_cast<char>('a' + i % 26)));
+  }
+  auto vocab = createVocabularyFromWords(words);
+  expectLookupsYieldWords(*vocab, words, stridedIndices(0, words.size(), 1));
+  expectLookupsYieldWords(*vocab, words, stridedIndices(1, words.size(), 3));
+}
+
+// The read-ahead is kept per thread, so concurrent sequential lookups on the
+// same vocabulary must not interfere with each other.
+TEST(VocabularyOnDisk, AccessOperatorReadAheadConcurrentThreads) {
+  auto words = makeWords(20'000);
+  auto vocab = createVocabularyFromWords(words);
+  const VocabularyOnDisk& vocabulary = *vocab;
+  std::vector<ad_utility::JThread> threads;
+  for (size_t i = 0; i < 4; ++i) {
+    threads.emplace_back([&vocabulary, &words, i]() {
+      expectLookupsYieldWords(vocabulary, words,
+                              stridedIndices(i, words.size(), i + 1));
+    });
+  }
 }
