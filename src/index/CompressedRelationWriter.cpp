@@ -137,17 +137,23 @@ IdTable CompressedRelationWriter::takeBlockBuffer() {
 CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
   AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ != 0);
-  CompressedRelationMetadata md;
-  auto offset = std::numeric_limits<size_t>::max();
-  auto multiplicityCol1 =
-      computeMultiplicity(currentRelationPreviousSize_, numDistinctC1);
-  md = CompressedRelationMetadata{currentCol0Id_, currentRelationPreviousSize_,
-                                  multiplicityCol1, multiplicityCol1, offset};
+  auto md = makeLargeRelationMetadata(
+      currentCol0Id_, currentRelationPreviousSize_, numDistinctC1);
   currentRelationPreviousSize_ = 0;
   // The following is used in `addBlockForLargeRelation` to assert that
   // `finishLargeRelation` was called before a new relation was started.
   currentCol0Id_ = Id::makeUndefined();
   return md;
+}
+
+// _____________________________________________________________________________
+CompressedRelationMetadata CompressedRelationWriter::makeLargeRelationMetadata(
+    Id col0Id, size_t numRows, size_t numDistinctCol1) {
+  AD_CORRECTNESS_CHECK(numRows != 0);
+  auto offset = std::numeric_limits<size_t>::max();
+  auto multiplicityCol1 = computeMultiplicity(numRows, numDistinctCol1);
+  return CompressedRelationMetadata{col0Id, numRows, multiplicityCol1,
+                                    multiplicityCol1, offset};
 }
 
 // _____________________________________________________________________________
@@ -208,57 +214,18 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 
   // Buffer used to ensure the invariant that equal triples (when disregarding
   // the graph) stay in the same block.
-  std::optional<IdTable> bufferedBlock;
+  TripleAlignedBlockBuffer<IdTable> alignedBlocks;
 
   for (auto& [block, countOfBlock] : blocksAndCounts) {
     distinctCol1Counter.addCountOfBlock(countOfBlock);
-
-    if (!bufferedBlock.has_value()) {
-      // First non-empty block - initialize buffer.
-      bufferedBlock = std::move(block);
-      continue;
+    if (auto completeBlock = alignedBlocks.push(std::move(block))) {
+      writeLargeRelationBlockInSlices(col0Id, std::move(completeBlock).value());
     }
-
-    const auto& lastRowFromPrevious = bufferedBlock.value().back();
-
-    // Find how many rows from current block have the same first three columns
-    // as the last row in the buffered block
-    const size_t upperBoundEqualTriples =
-        ql::ranges::find_if(
-            block,
-            [&lastRowFromPrevious](const auto& row) {
-              return pickFirstThreeColumnsOfIdsWithoutLocalVocab(
-                         lastRowFromPrevious) !=
-                     pickFirstThreeColumnsOfIdsWithoutLocalVocab(row);
-            }) -
-        block.begin();
-
-    // If we found rows to merge, add them to the buffered block
-    if (upperBoundEqualTriples > 0) {
-      bufferedBlock->insertAtEnd(block, 0, upperBoundEqualTriples);
-
-      // Remove the merged rows from the current block
-      block.erase(block.begin(), block.begin() + upperBoundEqualTriples);
-    }
-
-    // If the `block` is empty after moving the duplicate triples into the
-    // buffer, continue without writing a block, because the next block might
-    // again contain the `lastRowFromPrevious`
-    if (block.empty()) {
-      continue;
-    }
-
-    // At this point we know that the `block` contains at least a single triple
-    // larger than `lastRowFromPrevious`, so we can safely write the
-    // `bufferedBlock`.
-    writeLargeRelationBlockInSlices(col0Id, std::move(*bufferedBlock));
-    bufferedBlock = std::move(block);
   }
 
   // Write the remaining triples from the buffer.
-  if (bufferedBlock.has_value()) {
-    AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
-    writeLargeRelationBlockInSlices(col0Id, std::move(bufferedBlock.value()));
+  if (auto lastBlock = alignedBlocks.finish()) {
+    writeLargeRelationBlockInSlices(col0Id, std::move(lastBlock).value());
   }
 
   return finishLargeRelation(distinctCol1Counter.getAndReset());
@@ -278,20 +245,12 @@ void CompressedRelationWriter::writeLargeRelationBlockInSlices(Id col0Id,
   // lives until the last of them has been written.
   auto owner = std::make_shared<const IdTable>(std::move(block));
   auto view = owner->asStaticView<0>();
-  size_t begin = 0;
-  while (begin < numRows) {
-    size_t end = std::min(begin + blocksize(), numRows);
-    // Never split rows whose first three columns are equal across two
-    // blocks, exactly like the boundaries between the input blocks above.
-    while (end < numRows &&
-           pickFirstThreeColumnsOfIdsWithoutLocalVocab(view[end]) ==
-               pickFirstThreeColumnsOfIdsWithoutLocalVocab(view[end - 1])) {
-      ++end;
-    }
+  // Never split rows whose first three columns are equal across two blocks,
+  // exactly like the boundaries between the input blocks above.
+  forEachSliceOfLargeBlock(view, blocksize(), [&](size_t begin, size_t end) {
     addBlockForLargeRelation(
         col0Id, BlockToWrite{view.subView(begin, end - begin), owner});
-    begin = end;
-  }
+  });
 }
 
 // _____________________________________________________________________________

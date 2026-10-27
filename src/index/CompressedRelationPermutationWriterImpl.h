@@ -466,8 +466,8 @@ struct CompressedRelationWriter::PermutationWriter {
       return;
     }
     ++numDistinctCol0_;
-    if (numBlocksCurrentRel_ > 0 || static_cast<double>(relation_.numRows()) >
-                                        0.8 * static_cast<double>(blocksize_)) {
+    if (numBlocksCurrentRel_ > 0 || !compressedRelationHelpers::isSmallRelation(
+                                        relation_.numRows(), blocksize_)) {
       // The relation is large;
       addBlockForLargeRelation();
       // All the remaining work of this function uses `writer1_`, `writer2_`,
@@ -528,44 +528,8 @@ struct CompressedRelationWriter::PermutationWriter {
         << "s" << std::endl;
   }
 
-  // Return the index of the first element `e` in `range[begin, end)` for which
-  // `projection(e) != value`, or `end` if there is no such element. This is
-  // the implementation of `findFirstTripleChange` below.
-  template <typename Range, typename Value, typename Projection>
-  static size_t findFirstDifferent(const Range& range, size_t begin, size_t end,
-                                   const Value& value,
-                                   const Projection& projection) {
-    auto it = ql::ranges::find_if(
-        range.begin() + begin, range.begin() + end,
-        [&value](const auto& projected) { return projected != value; },
-        projection);
-    return static_cast<size_t>(it - range.begin());
-  }
-
-  // Return the index of the first row in `rows[begin, end)` whose first three
-  // columns differ from the `lastTriple`, or `end` if there is no such row.
-  // This is the first position at which a new block for a large relation may
-  // be started, because equal triples (when disregarding the graph and the
-  // payload columns) have to stay in the same block.
-  //
-  // Note: The rows are compared row-wise (and on the bits of the `Id`s, which
-  // is much cheaper, see `pickFirstThreeColumnsOfIdsWithoutLocalVocab`).
-  // Scanning each of the three columns separately and taking the minimum of
-  // the resulting offsets would use the cache more efficiently, but it would
-  // also be slower if one of the columns is (almost) constant. This function
-  // is only called once a complete block of a large relation has been found,
-  // and it then typically finds a differing row immediately, so it is not a
-  // bottleneck (unless in a very degenerate case) and we keep the simpler
-  // implementation.
-  template <typename Rows, typename Triple>
-  static size_t findFirstTripleChange(const Rows& rows, size_t begin,
-                                      size_t end, const Triple& lastTriple) {
-    return findFirstDifferent(
-        rows, begin, end, lastTriple,
-        compressedRelationHelpers::pickFirstThreeColumnsOfIdsWithoutLocalVocab);
-  }
-
-  // The special case of `findFirstTripleChange` above where the rows are
+  // The special case of `compressedRelationHelpers::findFirstTripleChange`
+  // where the rows are
   // compared to the last triple that is currently buffered in `relation_`,
   // which therefore must not be empty.
   template <typename Rows>
@@ -574,7 +538,7 @@ struct CompressedRelationWriter::PermutationWriter {
     using compressedRelationHelpers::
         pickFirstThreeColumnsOfIdsWithoutLocalVocab;
     AD_CORRECTNESS_CHECK(!relation_.empty());
-    return findFirstTripleChange(
+    return compressedRelationHelpers::findFirstTripleChange(
         rows, begin, end,
         pickFirstThreeColumnsOfIdsWithoutLocalVocab(relation_.back()));
   }
@@ -585,7 +549,8 @@ struct CompressedRelationWriter::PermutationWriter {
   // as possible, which is much faster than appending them one by one, because
   // the `IdTable`s are stored column-based. A new block for a large relation
   // is started whenever the buffer has reached the `blocksize_` and the first
-  // three columns change (see `findFirstTripleChange` above).
+  // three columns change (see
+  // `compressedRelationHelpers::findFirstTripleChange`).
   //
   // Note: This function is always called for the rows of a large relation, but
   // also for the rows of a small relation that spans several input blocks,
@@ -613,10 +578,10 @@ struct CompressedRelationWriter::PermutationWriter {
           if (!relation_.empty() || end - begin < blocksize_) {
             return std::nullopt;
           }
-          size_t blockEnd =
-              findFirstTripleChange(permutedCols, begin + blocksize_, end,
-                                    pickFirstThreeColumnsOfIdsWithoutLocalVocab(
-                                        permutedCols[begin + blocksize_ - 1]));
+          size_t blockEnd = compressedRelationHelpers::findFirstTripleChange(
+              permutedCols, begin + blocksize_, end,
+              pickFirstThreeColumnsOfIdsWithoutLocalVocab(
+                  permutedCols[begin + blocksize_ - 1]));
           if (blockEnd == end) {
             return std::nullopt;
           }
@@ -671,35 +636,7 @@ struct CompressedRelationWriter::PermutationWriter {
                                size_t numRowsOfBlock) const {
     return relation_.empty() && numBlocksCurrentRel_ == 0 &&
            end < numRowsOfBlock &&
-           static_cast<double>(end - begin) <=
-               0.8 * static_cast<double>(blocksize_);
-  }
-
-  // Return the end of the run of rows of the input block that starts at row
-  // `begin` and consists of all rows that have the same `col0` ID as that row.
-  // Such a run is exactly the part of one relation that is contained in the
-  // current input block. The end is found by an exponential ("galloping")
-  // search over the sorted `col0` column, see
-  // `ad_utility::gallopingPartitionPoint`.
-  //
-  // NOTE: A linear scan would be slow for the long run of a large relation
-  // (which may span the complete input block), and a binary search would be
-  // slow for the short runs of the many small relations. The galloping search
-  // finds a short run with a handful of comparisons and a long run with a
-  // logarithmic number of them. The comparison is performed on the bits of the
-  // `Id`s, which is much cheaper, see `bitsOfIdWithoutLocalVocab`.
-  template <typename Col0>
-  static size_t findEndOfRun(const Col0& col0, size_t begin) {
-    using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
-    const auto col0Bits = bitsOfIdWithoutLocalVocab(col0[begin]);
-    auto belongsToRun = [col0Bits](Id id) {
-      return bitsOfIdWithoutLocalVocab(id) == col0Bits;
-    };
-    // Note: The row `begin` is guaranteed to belong to the run, so the search
-    // starts after it.
-    auto it = ad_utility::gallopingPartitionPoint(col0.begin() + begin + 1,
-                                                  col0.end(), belongsToRun);
-    return static_cast<size_t>(it - col0.begin());
+           compressedRelationHelpers::isSmallRelation(end - begin, blocksize_);
   }
 
   // Write the maximal batch of consecutive complete small relations that
@@ -750,7 +687,7 @@ struct CompressedRelationWriter::PermutationWriter {
     Id lastCol0Id = col0[begin];
     for (;;) {
       AD_CORRECTNESS_CHECK(end < numRowsOfBlock);
-      size_t nextEnd = findEndOfRun(col0, end);
+      size_t nextEnd = compressedRelationHelpers::findEndOfRun(col0, end);
       if (!isCompleteSmallRelation(end, nextEnd, numRowsOfBlock) ||
           nextEnd - begin > capacity) {
         break;
@@ -846,7 +783,8 @@ struct CompressedRelationWriter::PermutationWriter {
           finishRelation();
           col0IdCurrentRelation_ = col0Id;
         }
-        size_t runEnd = findEndOfRun(firstCol, runBegin);
+        size_t runEnd =
+            compressedRelationHelpers::findEndOfRun(firstCol, runBegin);
         // If the complete relation is already known here, and it is small,
         // then we can write it without buffering it in `relation_` first,
         // together with as many of the directly following relations as

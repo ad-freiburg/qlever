@@ -268,6 +268,11 @@ class CompressedRelationWriter {
   static float computeMultiplicity(size_t numElements,
                                    size_t numDistinctElements);
 
+  // Create the metadata of a large relation with the given `col0Id`, which has
+  // `numRows` rows and `numDistinctCol1` distinct IDs in its column 1.
+  static CompressedRelationMetadata makeLargeRelationMetadata(
+      Id col0Id, size_t numRows, size_t numDistinctCol1);
+
   // Return the blocksize (in number of triples) of this writer. Note that the
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
