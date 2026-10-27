@@ -50,7 +50,7 @@ NARY_EXPRESSION(
 
 NARY_EXPRESSION(
     TransformExpression, 2,
-    FV<ad_utility::WktTransform, GeoPointOrWktValueGetter, StringValueGetter>);
+    FV<ad_utility::WktTransform, GeoPointOrWktValueGetter, IriValueGetter>);
 
 NARY_EXPRESSION(
     SimplifyGeometryExpression, 2,

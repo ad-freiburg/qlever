@@ -282,7 +282,7 @@ class WktTransform {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& wkt,
-      const std::optional<std::string>& iri) const {
+      const std::optional<Iri>& iri) const {
     using namespace triple_component;
     if (!wkt.has_value() || !iri.has_value()) {
       return ValueId::makeUndefined();
