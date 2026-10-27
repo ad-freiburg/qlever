@@ -261,17 +261,6 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_NEAR(g.getMetricArea().area(), 5, 0.0001);
   ASSERT_EQ(g.getSourceCrsType().value(),
             SourceCrsType{util::geo::CRSType::WGS84});
-  auto centroidWithCrs = g.getCentroidWithCrs();
-  ASSERT_NEAR(centroidWithCrs.info_.centroid().getLat(), 1.5, 0.0001);
-  ASSERT_NEAR(centroidWithCrs.info_.centroid().getLng(), 1.5, 0.0001);
-  ASSERT_EQ(centroidWithCrs.crs_, SourceCrsType{util::geo::CRSType::WGS84});
-  auto boundingBoxWithCrs = g.getBoundingBoxWithCrs();
-  auto [lowerLeft2, upperRight2] = boundingBoxWithCrs.info_.pair();
-  ASSERT_NEAR(lowerLeft2.getLat(), 1, 0.0001);
-  ASSERT_NEAR(lowerLeft2.getLng(), 1, 0.0001);
-  ASSERT_NEAR(upperRight2.getLat(), 2, 0.0001);
-  ASSERT_NEAR(upperRight2.getLng(), 2, 0.0001);
-  ASSERT_EQ(boundingBoxWithCrs.crs_, SourceCrsType{util::geo::CRSType::WGS84});
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(

@@ -229,29 +229,6 @@ std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
-WithSourceCrs<Centroid> GeometryInfo::getCentroidWithCrs() const {
-  return WithSourceCrs<Centroid>{
-      Centroid{GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
-                                               bitMaskCentroid)},
-      sourceCrs_};
-}
-
-// ____________________________________________________________________________
-std::optional<WithSourceCrs<Centroid>> GeometryInfo::getCentroidWithCrs(
-    std::string_view wkt) {
-  auto parseResult = detail::parseWkt(wkt);
-  if (!parseResult.parsedWkt_.has_value()) {
-    return std::nullopt;
-  }
-  auto centroid = detail::centroidAsGeoPoint(parseResult.parsedWkt_.value());
-  if (!centroid.has_value()) {
-    return std::nullopt;
-  }
-  return WithSourceCrs<Centroid>{centroid.value(),
-                                 SourceCrsType{parseResult.sourceCrs_}};
-}
-
-// ____________________________________________________________________________
 BoundingBox GeometryInfo::getBoundingBox() const {
   return {GeoPoint::fromBitRepresentation(boundingBox_.lowerLeftEncoded_),
           GeoPoint::fromBitRepresentation(boundingBox_.upperRightEncoded_)};
@@ -264,30 +241,6 @@ std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
     return std::nullopt;
   }
   return detail::boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
-}
-
-// ____________________________________________________________________________
-WithSourceCrs<BoundingBox> GeometryInfo::getBoundingBoxWithCrs() const {
-  return WithSourceCrs<BoundingBox>{
-      BoundingBox{
-          GeoPoint::fromBitRepresentation(boundingBox_.lowerLeftEncoded_),
-          GeoPoint::fromBitRepresentation(boundingBox_.upperRightEncoded_)},
-      sourceCrs_};
-}
-
-// ____________________________________________________________________________
-std::optional<WithSourceCrs<BoundingBox>> GeometryInfo::getBoundingBoxWithCrs(
-    std::string_view wkt) {
-  auto parseResult = detail::parseWkt(wkt);
-  if (!parseResult.parsedWkt_.has_value()) {
-    return std::nullopt;
-  }
-  auto bBox = detail::boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
-  if (!bBox.has_value()) {
-    return std::nullopt;
-  }
-  return WithSourceCrs<BoundingBox>{bBox.value(),
-                                    SourceCrsType{parseResult.sourceCrs_}};
 }
 
 // ____________________________________________________________________________
@@ -422,10 +375,12 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return getSerializationType();
   } else if constexpr (std::is_same_v<RequestedInfo, WithSourceCrs<Centroid>>) {
-    return getCentroidWithCrs();
+    return WithSourceCrs<Centroid>{
+        getCentroid(), detail::sourceCrsOrUnsupported(getSourceCrsType())};
   } else if constexpr (std::is_same_v<RequestedInfo,
                                       WithSourceCrs<BoundingBox>>) {
-    return getBoundingBoxWithCrs();
+    return WithSourceCrs<BoundingBox>{
+        getBoundingBox(), detail::sourceCrsOrUnsupported(getSourceCrsType())};
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -479,10 +434,10 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return GeometryInfo::getSerializationType(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, WithSourceCrs<Centroid>>) {
-    return GeometryInfo::getCentroidWithCrs(wkt);
+    return detail::getWithSourceCrs<Centroid>(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo,
                                       WithSourceCrs<BoundingBox>>) {
-    return GeometryInfo::getBoundingBoxWithCrs(wkt);
+    return detail::getWithSourceCrs<BoundingBox>(wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
