@@ -11,12 +11,9 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
-<<<<<<< HEAD
 #include "engine/StripColumns.h"
-    =======
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
-    >>>>>>> upstream/master
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
