@@ -681,7 +681,7 @@ TEST(SparqlParser, DataBlock) {
   auto expectLiteral = [&](std::string_view literal, TripleComponent expected,
                            ad_utility::source_location l =
                                AD_CURRENT_SOURCE_LOC()) {
-    auto t = generateLocationTrace(l);
+    auto trace = generateLocationTrace(l);
     expectDataBlock(absl::StrCat("?a { ", literal, " }"),
                     m::Values({Var{"?a"}}, {{std::move(expected)}}));
   };
