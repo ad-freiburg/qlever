@@ -840,10 +840,6 @@ class QueryPlanner {
       ReplacementPlans& applicableReplacementPlans,
       SubtreePlanVec& connectedComponent);
 
-  /// if this Planner is not associated with a queryExecutionContext we are only
-  /// in the unit test mode
-  bool isInTestMode() const { return _qec == nullptr; }
-
   /// Helper function to check if the assigned `cancellationHandle_` has
   /// been cancelled yet and throw an exception if this is the case.
   void checkCancellation(
