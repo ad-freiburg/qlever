@@ -20,6 +20,7 @@
 #include "util/CryptographicHashUtils.h"
 #include "util/Exception.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/TransparentFunctors.h"
 
 namespace qlever::blobDiff {
@@ -46,6 +47,15 @@ template <typename... Parts>
 BlobDiffError makeError(BlobDiffErrorType type, const Parts&... messageParts) {
   return BlobDiffError{type, absl::StrCat(messageParts...)};
 }
+
+// Create the `BlobDiffError` for a diff that does not belong to the given base.
+BlobDiffError wrongBaseError() {
+  return makeError(
+      ErrorType::wrongBase,
+      "The blob diff does not belong to the given base blob (the size or the "
+      "checksum of the base does not match). A diff can only be applied to "
+      "exactly the blob from which it was computed.");
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -66,15 +76,12 @@ std::vector<char> computeBlobDiff(ql::span<const char> base,
       ZstdWrapper::compressWithReference(base, target, compressionLevel);
   ByteBufferWriteSerializer writer;
   writer.reserve(headerSize + payload.size());
-  auto writeArray = [&writer](const auto& array) {
-    writer.serializeBytes(array.data(), array.size());
-  };
-  writeArray(diffFileMagic);
+  writer << diffFileMagic;
   writer << diffFileVersion;
   writer << static_cast<uint64_t>(base.size());
-  writeArray(blobChecksum(base));
+  writer << blobChecksum(base);
   writer << static_cast<uint64_t>(target.size());
-  writeArray(blobChecksum(target));
+  writer << blobChecksum(target);
   writer << static_cast<uint64_t>(payload.size());
   AD_CORRECTNESS_CHECK(writer.getCurrentPosition() == headerSize);
   writer.serializeBytes(payload.data(), payload.size());
@@ -89,11 +96,8 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile,
                      "The given file is too small to be a blob diff file");
   }
   ByteBufferReadSerializerT<false, ql::span<const char>> reader{diffFile};
-  auto readArray = [&reader](auto& array) {
-    reader.serializeBytes(array.data(), array.size());
-  };
   std::array<char, 8> magic{};
-  readArray(magic);
+  reader >> magic;
   if (magic != diffFileMagic) {
     return makeError(ErrorType::invalidMagicBytes,
                      "The given file is not a blob diff file");
@@ -108,9 +112,9 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile,
   }
   BlobDiffHeader header;
   reader >> header.baseSize_;
-  readArray(header.baseChecksum_);
+  reader >> header.baseChecksum_;
   reader >> header.targetSize_;
-  readArray(header.targetChecksum_);
+  reader >> header.targetChecksum_;
   reader >> header.payloadSize_;
   AD_CORRECTNESS_CHECK(reader.getCurrentPosition() == headerSize);
   if (header.payloadSize_ != diffFile.size() - headerSize) {
@@ -166,11 +170,7 @@ DecompressedBlobOrError applyBlobDiffToDecompressedBase(
   // The size is checked first, because it is much cheaper than the checksum.
   if (header.baseSize_ != base.size() ||
       header.baseChecksum_ != blobChecksum(base)) {
-    return makeError(
-        ErrorType::wrongBase,
-        "The blob diff does not belong to the given base blob (the size or the "
-        "checksum of the base does not match). A diff can only be applied to "
-        "exactly the blob from which it was computed.");
+    return wrongBaseError();
   }
   auto payload = diffFile.subspan(headerSize);
   // The target is not zero-initialized, because it is completely overwritten
@@ -198,6 +198,26 @@ DecompressedBlobOrError applyBlobDiffToDecompressedBase(
 BlobOrError applyBlobDiffToCompressedBase(
     ql::span<const char> compressedBase, ql::span<const char> diffFile,
     ad_utility::MemorySize maxTargetSize) {
+  // Run the cheap checks before the (possibly large) base is decompressed:
+  // First validate the header of the diff, then compare the size of the
+  // decompressed base, which is stored in the header of its ZSTD frame, with
+  // the size that the diff expects. The checksum of the base is only checked
+  // after the decompression (in `applyBlobDiffToDecompressedBase`, which also
+  // parses the header again, which is cheap).
+  auto headerOrError = readBlobDiffHeader(diffFile, maxTargetSize);
+  if (auto* error = std::get_if<BlobDiffError>(&headerOrError)) {
+    return std::move(*error);
+  }
+  auto baseSize = ZstdWrapper::tryToGetUncompressedSize(compressedBase.data(),
+                                                        compressedBase.size());
+  if (auto* error = std::get_if<ZstdWrapper::Error>(&baseSize)) {
+    return makeError(ErrorType::baseNotDecompressible,
+                     "The base blob cannot be decompressed: ", error->message_);
+  }
+  if (std::get<size_t>(baseSize) !=
+      std::get<BlobDiffHeader>(headerOrError).baseSize_) {
+    return wrongBaseError();
+  }
   auto base = Manager::tryToDecompressBlob(compressedBase, {});
   if (auto* error = std::get_if<Manager::BlobError>(&base)) {
     return makeError(ErrorType::baseNotDecompressible,

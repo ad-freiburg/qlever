@@ -358,3 +358,27 @@ TEST(BlobDiff, realBlobsAfterUpdate) {
       applyBlobDiffToCompressedBase(baseCompressed, garbage, maxTargetSize),
       isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
 }
+
+// _____________________________________________________________________________
+TEST(BlobDiff, compressedBaseIsCheckedAfterTheDiff) {
+  using Manager = qlever::NamedCachedQueryBlobManager;
+  auto base = randomBytes(10'000, 1);
+  auto target = randomBytes(10'000, 3);
+  auto diff = diffAndCheck(base, target);
+  Bytes garbage(100, 'x');
+
+  // The diff is validated before the base, so an invalid diff is reported even
+  // if the base is garbage as well.
+  EXPECT_THAT(applyBlobDiffToCompressedBase(garbage, garbage, maxTargetSize),
+              isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
+
+  // A base of the wrong size is detected (from the header of its ZSTD frame),
+  // and a base of the right size, but with the wrong content, by its checksum.
+  for (const auto& wrongBase :
+       {randomBytes(9'999, 1), randomBytes(10'000, 2)}) {
+    EXPECT_THAT(
+        applyBlobDiffToCompressedBase(Manager::compressBlob(wrongBase), diff,
+                                      maxTargetSize),
+        isError(ErrorType::wrongBase, "does not belong to the given base"));
+  }
+}
