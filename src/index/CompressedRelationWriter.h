@@ -147,7 +147,7 @@ class CompressedRelationWriter {
   // elsewhere. The latter allows writing a block of a large relation directly
   // from the input block in which its rows reside, without copying them into
   // an intermediate buffer first, see
-  // `PermutationWriter::addRowsOfCurrentRelation`.
+  // `RelationBlockCutter::addRowsOfCurrentRelation`.
   using BlockToWrite = ad_utility::IdTableOrSharedIdTableView;
 
   // The `PermutationWriter` can be used to write single or pair permutations.
@@ -342,7 +342,7 @@ class CompressedRelationWriter {
   // relations of the batch were added one by one, provided that the caller has
   // limited the batch to the number of rows reported by
   // `SmallRelationsBlockBuilder::capacityForBatch` (see
-  // `PermutationWriter::writeCompleteSmallRelations`).
+  // `RelationBlockCutter::writeCompleteSmallRelations`).
   //
   // Note: In contrast to `finishLargeRelation` this function computes no
   // `CompressedRelationMetadata`, because no metadata is persisted for small

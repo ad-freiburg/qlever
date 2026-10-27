@@ -59,7 +59,7 @@ class SmallRelationsBlockBuilder {
   // may push it even beyond that capacity. Second, a block of a large relation
   // grows beyond the `blocksize` whenever equal triples (when disregarding
   // the graph and the payload columns) would otherwise be split across two
-  // blocks, see `PermutationWriter::addRowsOfCurrentRelation`.
+  // blocks, see `RelationBlockCutter::addRowsOfCurrentRelation`.
   //
   // NOTE: there are some unit tests that rely on the factor `3 / 2` above.
   size_t capacity() const { return capacity_; }

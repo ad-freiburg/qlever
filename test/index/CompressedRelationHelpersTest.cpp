@@ -7,14 +7,17 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "index/CompressedRelationHelpersImpl.h"
+#include "index/RelationBlockCutter.h"
 #include "index/SmallRelationsBlockBuilder.h"
 
 using namespace compressedRelationHelpers;
@@ -217,4 +220,150 @@ TEST(SmallRelationsBlockBuilder, buildBlocks) {
   EXPECT_ANY_THROW(smallBuilder.takeBlock(relations.clone()));
   EXPECT_ANY_THROW(
       smallBuilder.takeBlock(IdTable{2, relations.getAllocator()}));
+}
+
+namespace {
+// A `RelationBlockCutter` that records all the calls of its hooks as strings,
+// such that the cutting can be checked. With `allowShortcuts == false`, the
+// two optional hooks forbid writing blocks directly from the input and
+// writing complete small relations without buffering them.
+class RecordingCutter : public RelationBlockCutter<RecordingCutter> {
+ public:
+  using Base = RelationBlockCutter<RecordingCutter>;
+  friend Base;
+  std::vector<std::string> events_;
+  size_t numTriples_ = 0;
+  bool allowShortcuts_;
+  SmallRelationsBlockBuilder builder_;
+
+  RecordingCutter(size_t blocksize, bool allowShortcuts)
+      : Base{blocksize, IdTable{3, ad_utility::makeUnlimitedAllocator<Id>()}},
+        allowShortcuts_{allowShortcuts},
+        builder_{IdTable{3, ad_utility::makeUnlimitedAllocator<Id>()},
+                 blocksize} {}
+
+  // Process the given `rows`, see `RelationBlockCutter::addInputBlock`.
+  void add(const IdTable& rows) {
+    addInputBlock(
+        std::make_shared<const IdTableStatic<0>>(rows.clone().toStatic<0>()), 0,
+        {0, 1, 2});
+  }
+
+  // Finish the last relation, as a permutation writer does at the end.
+  void finish() { finishRelation(); }
+
+ private:
+  static std::string col0(Id id) {
+    return std::to_string(id.getVocabIndex().get());
+  }
+
+  void addBlockForLargeRelation() {
+    if (relation_.empty()) {
+      return;
+    }
+    events_.push_back(absl::StrCat("buffered ", relation_.numRows()));
+    ++numBlocksCurrentRel_;
+    relation_.clear();
+  }
+
+  void addBlockOfLargeRelationWithoutCopying(IdTableView<0> block) {
+    AD_CORRECTNESS_CHECK(inputBlock_ != nullptr);
+    events_.push_back(absl::StrCat("direct ", block.numRows()));
+    ++numBlocksCurrentRel_;
+  }
+
+  void finishRelation() {
+    if (!col0IdCurrentRelation_.has_value()) {
+      events_.push_back("finish none");
+      return;
+    }
+    events_.push_back(absl::StrCat(
+        "finish ", col0(col0IdCurrentRelation_.value()),
+        currentRelationIsLarge() ? " large " : " small ", relation_.numRows()));
+    relation_.clear();
+    numBlocksCurrentRel_ = 0;
+  }
+
+  template <typename PermutedCols>
+  void addCompleteSmallRelations(Id firstCol0Id, Id lastCol0Id,
+                                 const PermutedCols& permutedCols, size_t begin,
+                                 size_t end, size_t numRelations) {
+    events_.push_back(absl::StrCat("small ", col0(firstCol0Id), "-",
+                                   col0(lastCol0Id), " ", end - begin, " ",
+                                   numRelations));
+    if (!builder_.fits(end - begin)) {
+      builder_.takeBlock(IdTable{3, ad_utility::makeUnlimitedAllocator<Id>()});
+    }
+    builder_.add(firstCol0Id, lastCol0Id, permutedCols, begin, end);
+  }
+
+  const SmallRelationsBlockBuilder& smallRelationsBlockBuilder() const {
+    return builder_;
+  }
+
+  bool mayWriteDirectly() const { return allowShortcuts_; }
+  bool mayWriteCompleteSmallRelations() const { return allowShortcuts_; }
+  void increaseTripleCounter(size_t numTriples) { numTriples_ += numTriples; }
+};
+
+// The input for the tests of the `RelationBlockCutter`: two small relations
+// (1 and 2), a large relation (3) with 9 distinct triples, and two more small
+// relations (4 and 5), the last of which reaches the end of the block.
+IdTable cutterInput() {
+  VectorTable rows{{1, 0, 0}, {1, 1, 0}, {2, 0, 0}};
+  for (int64_t i = 0; i < 9; ++i) {
+    rows.push_back({3, i, 0});
+  }
+  rows.push_back({4, 0, 0});
+  rows.push_back({5, 0, 0});
+  return makeIdTableFromVector(rows);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(RelationBlockCutter, withShortcuts) {
+  RecordingCutter cutter{4, true};
+  cutter.add(cutterInput());
+  cutter.finish();
+  // The complete small relations 1 and 2 are written as one batch, the large
+  // relation is written directly from the input as far as possible, and the
+  // relation 5 is buffered, because it may continue in the next input block.
+  EXPECT_THAT(
+      cutter.events_,
+      ::testing::ElementsAre("small 1-2 3 2", "finish none", "direct 4",
+                             "direct 4", "finish 3 large 1", "small 4-4 1 1",
+                             "finish none", "finish 5 small 1"));
+  EXPECT_EQ(cutter.numTriples_, 14);
+}
+
+// _____________________________________________________________________________
+TEST(RelationBlockCutter, withoutShortcuts) {
+  RecordingCutter cutter{4, false};
+  cutter.add(cutterInput());
+  cutter.finish();
+  // Everything goes through the `relation_` buffer.
+  EXPECT_THAT(
+      cutter.events_,
+      ::testing::ElementsAre("finish 1 small 2", "finish 2 small 1",
+                             "buffered 4", "buffered 4", "finish 3 large 1",
+                             "finish 4 small 1", "finish 5 small 1"));
+  EXPECT_EQ(cutter.numTriples_, 14);
+}
+
+// _____________________________________________________________________________
+TEST(RelationBlockCutter, relationContinuesInNextBlock) {
+  // The large relation 1 spans two input blocks, and its equal triples
+  // (which differ only in the last column) at the boundary of the input
+  // blocks end up in the same block.
+  RecordingCutter cutter{2, true};
+  cutter.add(makeIdTableFromVector({{1, 0, 0}, {1, 1, 0}, {1, 2, 0}}));
+  cutter.add(makeIdTableFromVector({{1, 2, 1}, {1, 3, 0}, {2, 0, 0}}));
+  cutter.finish();
+  // In the first block, the rows `{1, 0, 0}` and `{1, 1, 0}` can be written
+  // directly, but `{1, 2, 0}` has to be buffered. In the second block, the
+  // buffer is full, but `{1, 2, 1}` continues its last triple.
+  EXPECT_THAT(cutter.events_,
+              ::testing::ElementsAre("direct 2", "buffered 2",
+                                     "finish 1 large 1", "finish 2 small 1"));
+  EXPECT_EQ(cutter.numTriples_, 6);
 }
