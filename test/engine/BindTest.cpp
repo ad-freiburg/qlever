@@ -11,16 +11,16 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
-#include "engine/StripColumns.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 
-    using namespace sparqlExpression;
+using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
 using V = Variable;
 
