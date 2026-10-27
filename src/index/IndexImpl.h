@@ -1040,24 +1040,21 @@ class IndexImpl {
   // is for the first pair of permutations, whose input may contain duplicate
   // triples.
   CPP_template(typename Sorter, typename... NextSorter)(
-      requires(sizeof...(NextSorter) <=
-               1)) void createPSOAndPOSChunkwise(size_t numColumns,
-                                                 Sorter& sortedTriples,
-                                                 bool removeDuplicates,
-                                                 bool doWriteConfiguration,
-                                                 NextSorter&... nextSorter);
+      requires(sizeof...(NextSorter) <= 1))
+  void createPSOAndPOSChunkwise(size_t numColumns, Sorter& sortedTriples,
+                                bool removeDuplicates,
+                                bool doWriteConfiguration,
+                                NextSorter&... nextSorter);
   CPP_template(typename Sorter, typename... NextSorter)(
-      requires(sizeof...(NextSorter) <=
-               1)) void createSPOAndSOPChunkwise(size_t numColumns,
-                                                 Sorter& sortedTriples,
-                                                 bool removeDuplicates,
-                                                 NextSorter&... nextSorter);
+      requires(sizeof...(NextSorter) <= 1))
+  void createSPOAndSOPChunkwise(size_t numColumns, Sorter& sortedTriples,
+                                bool removeDuplicates,
+                                NextSorter&... nextSorter);
   CPP_template(typename Sorter, typename... NextSorter)(
-      requires(sizeof...(NextSorter) <=
-               1)) void createOSPAndOPSChunkwise(size_t numColumns,
-                                                 Sorter& sortedTriples,
-                                                 bool removeDuplicates,
-                                                 NextSorter&... nextSorter);
+      requires(sizeof...(NextSorter) <= 1))
+  void createOSPAndOPSChunkwise(size_t numColumns, Sorter& sortedTriples,
+                                bool removeDuplicates,
+                                NextSorter&... nextSorter);
 
   // Store the statistics of the PSO and POS permutations in the configuration
   // (and write it if `doWriteConfiguration` is set), see `createPSOAndPOSImpl`.
