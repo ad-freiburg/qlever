@@ -37,8 +37,8 @@ constexpr uint16_t formatVersion = 1;
 
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>) T
-    readValue(Serializer& serializer) {
+    requires serialization::ReadSerializer<Serializer>)
+T readValue(Serializer& serializer) {
   T value;
   serializer >> value;
   return value;
@@ -149,8 +149,8 @@ CPP_template(typename Serializer)(
 // Serialize a range of Ids to the output stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id before writing it.
 CPP_template(typename Range, typename Serializer)(
-    requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
-                                                         Range&& range) {
+    requires ql::ranges::range<Range>)
+void serializeIds(Serializer& serializer, Range&& range) {
   if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
   } else {

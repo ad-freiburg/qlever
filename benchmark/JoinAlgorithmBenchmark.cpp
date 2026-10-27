@@ -67,10 +67,8 @@ namespace ad_benchmark {
 `Target`
 */
 CPP_template(typename Target, typename Source)(
-    requires ql::concepts::convertible_to<
-        Source,
-        Target>) static constexpr bool isValuePreservingCast(const Source&
-                                                                 source) {
+    requires ql::concepts::convertible_to<Source, Target>)
+static constexpr bool isValuePreservingCast(const Source& source) {
   return static_cast<Source>(static_cast<Target>(source)) == source;
 }
 

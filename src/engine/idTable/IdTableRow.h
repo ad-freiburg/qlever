@@ -250,8 +250,8 @@ class RowReferenceImpl {
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
     // value or by reference).
-    CPP_template(typename AType, typename BType)(
-        requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
+    CPP_template(typename AType, typename BType)(requires(!isConst))
+    static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
         ql::ranges::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
