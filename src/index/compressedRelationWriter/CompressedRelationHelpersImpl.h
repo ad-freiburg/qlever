@@ -19,7 +19,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/numeric.h"
-#include "index/CompressedRelationWriter.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/ExceptionHandling.h"
 

@@ -11,16 +11,16 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "index/CompressedRelationWriter.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 
 #include <algorithm>
 #include <cmath>
 #include <functional>
 
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/GraphComputation.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/views/AsyncTransformView.h"
 

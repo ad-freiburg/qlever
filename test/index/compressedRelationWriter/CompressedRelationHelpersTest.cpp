@@ -14,11 +14,11 @@
 #include <utility>
 #include <vector>
 
-#include "../util/IdTableHelpers.h"
-#include "../util/IdTestHelpers.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/RelationBlockCutter.h"
-#include "index/SmallRelationsBlockBuilder.h"
+#include "../../util/IdTableHelpers.h"
+#include "../../util/IdTestHelpers.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/RelationBlockCutter.h"
+#include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 
 using namespace compressedRelationHelpers;
 

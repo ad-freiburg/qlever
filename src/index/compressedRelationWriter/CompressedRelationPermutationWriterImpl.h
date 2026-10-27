@@ -20,9 +20,9 @@
 #include <utility>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/CompressedRelationWriter.h"
-#include "index/RelationBlockCutter.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
+#include "index/compressedRelationWriter/RelationBlockCutter.h"
 #include "util/Algorithm.h"
 #include "util/ProgressBar.h"
 #include "util/TaskQueueOnExecutor.h"

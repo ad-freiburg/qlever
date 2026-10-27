@@ -18,8 +18,8 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/SmallRelationsBlockBuilder.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/Exception.h"
 
 // The part of writing a permutation that cuts the sorted input blocks into the

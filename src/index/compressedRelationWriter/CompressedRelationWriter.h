@@ -30,7 +30,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
-#include "index/SmallRelationsBlockBuilder.h"
+#include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Executor.h"
 #include "util/File.h"
