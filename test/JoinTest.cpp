@@ -1251,15 +1251,16 @@ TEST(JoinTest, costEstimateOfJoinWithIndexScan) {
   auto many = makeValuesForSingleVariable(qec, "?s", ten);
   expectCost(many, scan, 10, 10);
 
-  // A small sibling with one row per block of the scan: the bound is not
-  // smaller than the scan, so the scan is charged its size.
+  // A small sibling with more rows than the scan has blocks: the bound would
+  // exceed the scan, so the scan is charged its size.
   {
     auto cleanupLarger = setRuntimeParameterForTest<
         &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(10);
-    size_t numBlocks = ad_utility::ceilDiv(10, rowsPerBlock);
-    auto onePerBlock = makeValuesForSingleVariable(
-        qec, "?s", std::vector(ten.begin(), ten.begin() + numBlocks));
-    expectCost(onePerBlock, scan, 10, 10);
+    size_t numSiblingRows = ad_utility::ceilDiv(10, rowsPerBlock) + 1;
+    ASSERT_LT(numSiblingRows, 10u);
+    auto moreThanBlocks = makeValuesForSingleVariable(
+        qec, "?s", std::vector(ten.begin(), ten.begin() + numSiblingRows));
+    expectCost(moreThanBlocks, scan, 10, 10);
   }
 
   // A sibling with UNDEF in the join column: the scan reads all blocks.
