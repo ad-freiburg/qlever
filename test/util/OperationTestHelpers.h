@@ -45,11 +45,6 @@ class StallForeverOperation : public Operation {
     throw std::runtime_error{"Loop was not interrupted for 100ms, aborting"};
   }
 
-  // Provide public view of remainingTime for tests
-  std::chrono::milliseconds publicRemainingTime() const {
-    return remainingTime();
-  }
-
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   // _____________________________________________________________________________
@@ -92,11 +87,6 @@ class ShallowParentOperation : public Operation {
     auto childResult = child_->getResult();
     return {childResult->cloneIdTable(), resultSortedOn(),
             childResult->getSharedLocalVocab()};
-  }
-
-  // Provide public view of remainingTime for tests
-  std::chrono::milliseconds publicRemainingTime() const {
-    return remainingTime();
   }
 
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

@@ -97,14 +97,6 @@ CPP_member_def auto CancellationHandle<Mode>::setStatePreservingCancel(
   }
 }
 
-// _____________________________________________________________________________
-template <CancellationMode Mode>
-void CancellationHandle<Mode>::resetWatchDogState() {
-  if constexpr (WatchDogEnabled) {
-    setStatePreservingCancel(CancellationState::NOT_CANCELLED);
-  }
-}
-
 // Make sure to compile correctly.
 template class CancellationHandle<CancellationMode::ENABLED>;
 template class CancellationHandle<CancellationMode::NO_WATCH_DOG>;

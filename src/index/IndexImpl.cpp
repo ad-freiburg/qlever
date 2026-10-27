@@ -425,15 +425,25 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files, size_t numThreads) {
+  // The settings file (read by `prepareIndexBuild`) may set
+  // `useParallelParser_`, so it must be read before the file specifications
+  // are updated.
+  prepareIndexBuild();
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
-                  numThreads);
+  createFromFilesAfterPreparation(
+      ad_utility::InputRangeTypeErased{std::move(files)}, numThreads);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
+  prepareIndexBuild();
+  createFromFilesAfterPreparation(std::move(files), numThreads);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::prepareIndexBuild() {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -460,7 +470,12 @@ void IndexImpl::createFromFiles(
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
+}
 
+// _____________________________________________________________________________
+void IndexImpl::createFromFilesAfterPreparation(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
 
@@ -1600,6 +1615,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                    geoCellGridScheme);
     vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
         static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
   }
 
   // Initialize BlankNodeManager
@@ -1758,7 +1780,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count("parallel-parsing")) {
     useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
   }
-  if (useParallelParser_) {
+  if (useParallelParser_.value_or(false)) {
     AD_LOG_INFO << WARNING_PARALLEL_PARSING << std::endl;
   }
 
@@ -1837,7 +1859,8 @@ void IndexImpl::writePartialVocabulary(
         vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlag(
-              a.first, a.second.isExternal(), b.first, b.second.isExternal());
+              a.word_, a.indexAndFlag_.isExternal(), b.word_,
+              b.indexAndFlag_.isExternal());
         });
   }
   auto mapping = [&]() {
@@ -1851,7 +1874,8 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
     vec.erase(std::unique(vec.begin(), vec.end(),
                           [](const auto& a, const auto& b) {
-                            return a.second.id() == b.second.id();
+                            return a.indexAndFlag_.index() ==
+                                   b.indexAndFlag_.index();
                           }),
               vec.end());
   }

@@ -1,6 +1,12 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
 #define QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H
@@ -367,9 +373,8 @@ enum class AnyGeometryMember : uint8_t {
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
 CPP_template(typename Visitor, typename T)(
-    requires SimilarTo<
-        T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
-                                                       T&& geom) {
+    requires SimilarTo<T, DAnyGeometry>)
+inline auto visitAnyGeometry(Visitor visitor, T&& geom) {
   using enum AnyGeometryMember;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
@@ -848,8 +853,8 @@ struct MetricDistanceVisitor {
   }
 
   // Delegate the actual distance computation to `pb_util`.
-  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
-  operator()(const T& a, const U& b) const {
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>)
+  double operator()(const T& a, const U& b) const {
     return webMercMeterDist<T, U>(a, b);
   }
 
@@ -859,8 +864,8 @@ struct MetricDistanceVisitor {
     if (!a.parsedWkt_.has_value() || !b.parsedWkt_.has_value()) {
       return std::nullopt;
     }
-    AD_CORRECTNESS_CHECK(a.actualCrs_ == WEB_MERCATOR);
-    AD_CORRECTNESS_CHECK(b.actualCrs_ == WEB_MERCATOR);
+    AD_CORRECTNESS_CHECK(a.actualCrs_ == CRSType::WEB_MERCATOR);
+    AD_CORRECTNESS_CHECK(b.actualCrs_ == CRSType::WEB_MERCATOR);
     return MetricDistanceVisitor{}(a.parsedWkt_.value(), b.parsedWkt_.value());
   }
 

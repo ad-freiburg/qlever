@@ -11,7 +11,9 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/OrderByComparator.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -123,7 +125,7 @@ struct RowRange {
 // from the semantic order as follows (see `valueIdComparators::compareByBits`):
 // ints are `[0 .. max, min .. -1]`, doubles are `[0.0 .. +inf, NaN, -0.0 ..
 // -inf, -NaN]`, where the sign bit of a `NaN` may be set as well. `ORDER BY`
-// puts all `NaN`s after all other doubles (see `makeComparatorForNans`) and
+// puts all `NaN`s after all other doubles (see `OrderByComparator`) and
 // `Undefined` before everything else.
 std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     ConstIdColumnRef column) {
@@ -189,7 +191,7 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   //
   // NOTE: The SPARQL standard does not say where `NaN`s go. Putting them last
   // is how the regular comparator of `ORDER BY` does it (see
-  // `makeComparatorForNans`).
+  // `OrderByComparator`).
   ranges.push_back({firstNegative, firstNegativeNan, true});
   ranges.push_back({firstDefined, firstPositiveNan, false});
   ranges.push_back({firstPositiveNan, firstNegative, false});
@@ -431,13 +433,8 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // sorting a subset of the rows would give a wrong result.
   AD_CORRECTNESS_CHECK(!numBlocksAfterAndBeforeLimit_.has_value());
 
-  // TODO<joka921> proper timeout for sorting operations
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      subTable.numRows(), subTable.numColumns(), deadline_,
-      "Sort for COUNT(DISTINCT *)");
-
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->cloneIdTable();
+  IdTable idTable = subRes->cloneIdTable(cancellationChecker());
 
   size_t width = idTable.numColumns();
 
@@ -449,53 +446,34 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // by it, it might be more efficient to first sort by the ID values and then
   // "repair" the order in linear time, like `computeResultForSortedInput` does
   // for an input that is already sorted, or even to return lazy generators
-  // that yield the repaired order.
+  // that yield the repaired order. Besides the numbers, such a repair would
+  // also have to move the IRIs of the vocabulary before its literals, which
+  // come first in the internal order (see `OrderByComparator`).
   //
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
   //
   // TODO<joka921> If we know, that all the sort columns contain only datatypes
-  // for which the `internal` order is also the `semantic` order, or if a column
-  // only contains a single datatype, then we can use more efficient
-  // implementations here. So far, this is only done for a single sort column
-  // with an input that is already sorted and contains only ints or only
-  // doubles, see `computeResultForSortedInput`.
+  // for which the `internal` order is also the `semantic` order, then we can
+  // use more efficient implementations here. Note that a single datatype is
+  // not enough: e.g. for `VocabIndex`, the internal order puts all literals
+  // before all IRIs, but `ORDER BY` puts the IRIs first. So far, this is only
+  // done for a single sort column with an input that is already sorted and
+  // contains only ints or only doubles, see `computeResultForSortedInput`.
   //
-  // Return true iff the value `a` is less than the value `b` (in the order of
-  // `ORDER BY`).
-  auto isLessThan = [](Id a, Id b) {
-    return toBoolNotUndef(
-        valueIdComparators::compareIds<
-            valueIdComparators::ComparisonForIncompatibleTypes::CompareByType>(
-            a, b, valueIdComparators::Comparison::LT));
-  };
+  OrderByComparator orderByComparator{
+      getExecutionContext()->getLocalVocabContext()};
 
   // Return true iff `row1` comes before `row2` in the sort order specified by
   // `sortIndices_`: the first column whose values differ decides, in the
-  // direction of that column.
-  //
-  // NOTE: Two different `Id`s can have equal values (e.g. the `Int` `5` and the
-  // `Double` `5.0`). Such a pair is neither less nor greater in either
-  // direction, and the next column decides. This matters because the sort
-  // requires a strict weak ordering: a descending order that was implemented
-  // as the negated `<` made such a pair "less" in both directions, which made
-  // the sort read and write outside of the table.
-  auto comparison = [this, &isLessThan](const auto& row1,
-                                        const auto& row2) -> bool {
+  // direction of that column. Equal values of different `Id`s (e.g. `5` and
+  // `5.0`) let the next column decide.
+  auto comparison = [this, orderByComparator](const auto& row1,
+                                              const auto& row2) -> bool {
     for (auto& [column, isDescending] : sortIndices_) {
-      Id a = row1[column];
-      Id b = row2[column];
-      if (a == b) {
-        continue;
-      }
-      if (isDescending) {
-        std::swap(a, b);
-      }
-      if (isLessThan(a, b)) {
-        return true;
-      }
-      if (isLessThan(b, a)) {
-        return false;
+      int result = orderByComparator.compare(row1[column], row2[column]);
+      if (result != 0) {
+        return isDescending ? result > 0 : result < 0;
       }
     }
     return false;
@@ -506,11 +484,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // function deals with) but also on the `comparison`.
   ad_utility::callFixedSizeVi(
       width, [this, &idTable, &comparison](auto numColumns) {
-        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig());
+        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig(),
+                                       cancellationHandle());
       });
-  // We can't check during sort, so reset status here
-  cancellationHandle_->resetWatchDogState();
-  checkCancellation();
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   Result result{std::move(idTable), resultSortedOn(),
                 subRes->getSharedLocalVocab()};
@@ -529,7 +505,9 @@ LimitOffsetHandling OrderBy::handlesLimitOffset() const {
 }
 
 // _____________________________________________________________________________
-void OrderBy::onLimitOffsetChanged([[maybe_unused]] const LimitOffsetClause&) {
+void OrderBy::onLimitOffsetChanged(
+    [[maybe_unused]] const LimitOffsetClause&,
+    [[maybe_unused]] bool childrenAreExclusivelyOwned) {
   // The complete `LIMIT`/`OFFSET` of this operation (all calls merged).
   const auto& limitOffset = getLimitOffset();
   if (handlesLimitOffset() != LimitOffsetHandling::FULL ||
@@ -573,6 +551,42 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> OrderBy::cloneImpl() const {
-  return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
-                                   sortIndices_);
+  auto result = std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
+                                          sortIndices_);
+  // The cloned subtree is still restricted to the selected blocks.
+  result->numBlocksAfterAndBeforeLimit_ = numBlocksAfterAndBeforeLimit_;
+  return result;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OrderBy::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and the variables that
+  // the `OrderBy` sorts by (those at `sortIndices_`).
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  std::vector<std::pair<Variable, bool>> sortVars;
+  for (const auto& [columnIndex, sortOrder] : sortIndices_) {
+    const auto& sortVariable =
+        subtree_->getVariableAndInfoByColumnIndex(columnIndex).first;
+    sortVars.push_back(std::pair{sortVariable, sortOrder});
+    varsRequiredFromSubtree.add(sortVariable);
+  }
+
+  // Strip the subtree and translate `sortIndices_` to the column indices of
+  // the stripped subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree.get());
+  std::vector<std::pair<ColumnIndex, bool>> newSortIndices;
+  for (const auto& [sortVariable, sortOrder] : sortVars) {
+    newSortIndices.emplace_back(subtree->getVariableColumn(sortVariable),
+                                sortOrder);
+  }
+
+  // The new `OrderBy` also exports sorting variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<OrderBy>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      newSortIndices);
 }

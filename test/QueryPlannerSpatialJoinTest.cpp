@@ -74,9 +74,11 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 100 . "
       "{ ?a <p> ?b } }}",
-      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
-                     BBox, std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+      h::QetWithWarnings(
+          {"`<boundingBox>` is deprecated"},
+          h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                         BBox, std::nullopt, std::nullopt,
+                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -259,6 +261,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 100 ;"
       "spatialSearch:numNearestNeighbors 2 ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ."
       "{ ?a <p> ?b } }}",
       h::spatialJoin(100, 2, V{"?y"}, V{"?b"}, V{"?dist"}, emptyPayload, S2,
@@ -311,6 +314,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -327,6 +331,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -347,6 +352,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -366,6 +372,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -382,6 +389,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -400,6 +408,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -542,6 +551,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?b ;"
       "    spatialSearch:numNearestNeighbors 5 ; "
+      "    spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "    spatialSearch:bindDistance ?db ."
       "  { ?ab <p1> ?b } "
       "}"
@@ -552,6 +562,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "    spatialSearch:numNearestNeighbors 5 ; "
       "    spatialSearch:maxDistance 500 ; "
       "    spatialSearch:payload ?ac ; "
+      "    spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "    spatialSearch:bindDistance ?dc ."
       "  { ?ac <p2> ?c }"
       " }"
@@ -733,7 +744,38 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<numNearestNeighbors>` expects an integer"));
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
+  // Zero and negative limits are rejected (zero used to crash the `s2`
+  // algorithm, which pops an empty result queue for `max_results == 0`).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:numNearestNeighbors 0 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:numNearestNeighbors -1 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1084,6 +1126,69 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 ::testing::_),
       ::testing::HasSubstr("parameter `<de9imFilter>` expects a string "
                            "literal with exactly 9 characters"));
+}
+
+// Test that the parameter `<distanceUnit>` of the spatial search `SERVICE` sets
+// the unit of the `SpatialJoin`, the default unit per algorithm, and the errors
+// for a unit without a distance variable and for a unit that is not a length.
+TEST(QueryPlanner, SpatialJoinServiceDistanceUnit) {
+  auto query = [](std::string_view algorithm, std::string_view config) {
+    return absl::StrCat(
+        "PREFIX spatialSearch: "
+        "<https://qlever.cs.uni-freiburg.de/spatialSearch/> "
+        "SELECT * WHERE { ?x <p> ?y . SERVICE spatialSearch: { "
+        "_:config spatialSearch:left ?y ; spatialSearch:right ?b ; "
+        "spatialSearch:maxDistance 500 ; spatialSearch:algorithm ",
+        algorithm, " ; ", config, " . { ?a <p> ?b } } }");
+  };
+  auto s2 = "spatialSearch:s2";
+  auto libspatialjoin =
+      "spatialSearch:libspatialjoin ; spatialSearch:joinType "
+      "spatialSearch:within-dist";
+  auto bind = "spatialSearch:bindDistance ?dist";
+  auto unit = [](std::string_view unitIri) {
+    return absl::StrCat("spatialSearch:distanceUnit <", unitIri, ">");
+  };
+  auto hasUnit = [](std::optional<UnitOfMeasurement> expected) {
+    return h::RootOperation<SpatialJoin>(
+        AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
+                    AD_FIELD(SpatialJoinConfiguration, distanceUnit_,
+                             ::testing::Eq(expected))));
+  };
+  using enum UnitOfMeasurement;
+
+  // The unit is taken from the `<distanceUnit>` parameter.
+  h::expect(query(s2, absl::StrCat(bind, " ; ", unit(UNIT_MILE_IRI))),
+            hasUnit(MILES));
+  h::expect(query(libspatialjoin,
+                  absl::StrCat(bind, " ; ", unit(UNIT_KILOMETER_IRI))),
+            hasUnit(KILOMETERS));
+
+  // `libspatialjoin` defaults to meters, all other algorithms to kilometers.
+  h::expect(query(libspatialjoin, bind), hasUnit(METERS));
+  h::expect(query(s2, bind), hasUnit(KILOMETERS));
+
+  // Without a distance variable, there is no unit.
+  h::expect(query(s2, "spatialSearch:numNearestNeighbors 5"),
+            hasUnit(std::nullopt));
+
+  // A unit requires a distance variable.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(query(s2, unit(UNIT_METER_IRI)), ::testing::_),
+      ::testing::HasSubstr("`<distanceUnit>` requires the parameter "
+                           "`<bindDistance>`"));
+
+  // The unit must be the IRI of a unit of length.
+  for (std::string_view invalidUnit :
+       {"spatialSearch:distanceUnit <http://qudt.org/vocab/unit/M2>",
+        "spatialSearch:distanceUnit <http://example.com/unit>",
+        "spatialSearch:distanceUnit \"M\""}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::expect(query(s2, absl::StrCat(bind, " ; ", invalidUnit)),
+                  ::testing::_),
+        ::testing::HasSubstr("`<distanceUnit>` expects the IRI of a unit of "
+                             "length"));
+  }
 }
 
 // _____________________________________________________________________________
@@ -1877,6 +1982,23 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                                          "?y <nearest-neighbors:0:-1> ?b }",
                                          ::testing::_),
                                ::testing::ContainsRegex("unknown triple"));
+
+  // A limit of zero matches the regex but is rejected like for the `SERVICE`
+  // syntax, also when it stems from a number too large for `size_t`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:0> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("must be a positive integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:99999999999999999999> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("must be a positive integer"));
 
   EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"

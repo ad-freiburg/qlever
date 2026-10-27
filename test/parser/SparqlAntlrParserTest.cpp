@@ -127,8 +127,7 @@ TEST(SparqlExpressionParser, First) {
       table.asStaticView<0>(),
       alloc,
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   auto result = resultAsExpression->evaluate(&input);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
   ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
@@ -1790,6 +1789,9 @@ TEST(SparqlParser, Query) {
                    contains("?a was used in the expression of a BIND clause"));
   expectQueryFails("SELECT * { } ORDER BY ?s",
                    contains("?s was used by ORDER BY"));
+  expectQueryFails("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?o",
+                   contains("?o was used in an ORDER BY clause, but is "
+                            "neither grouped nor created as an alias"));
   // An `EXISTS`-internal variable must not throw either, but a variable used
   // directly outside the `EXISTS` still does.
   expectQuery("SELECT (EXISTS { ?a <p> ?x } AS ?e) { ?a <q> ?b }",

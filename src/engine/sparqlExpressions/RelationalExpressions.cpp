@@ -11,7 +11,6 @@
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
-#include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
 using namespace sparqlExpression;
@@ -28,10 +27,7 @@ using valueIdComparators::Comparison;
 // input types.
 
 // For the various `SingleExpressionResult`s the `idGenerator` function returns
-// a generator that yields `targetSize` many `ValueId`s. One exception is the
-// case where `S` is `string` or `vector<string>`. In this case the generator
-// yields `pair<ValueId, ValueId>` (see `makeValueId` and `getRangeFromVocab`
-// above for details).
+// a generator that yields `targetSize` many `ValueId`s.
 CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
     S&& input, size_t targetSize, const EvaluationContext* context) {
   [[maybe_unused]] auto makeId = [context](const auto& el) {
@@ -57,9 +53,9 @@ CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
 // both inputs. Else the "plain" generators from `sparqlExpression::detail` are
 // returned. These simply yield the values unchanged.
 CPP_template(typename S1, typename S2)(
-    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<
-        S2>) auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
-                                const EvaluationContext* context) {
+    requires SingleExpressionResult<S1> && SingleExpressionResult<S2>)
+auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
+                   const EvaluationContext* context) {
   if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
     return std::pair{idGenerator(AD_FWD(value1), targetSize, context),
                      idGenerator(AD_FWD(value2), targetSize, context)};
@@ -72,50 +68,53 @@ CPP_template(typename S1, typename S2)(
 }
 
 // Efficiently (using binary search) computes the result of `aVal Comparator
-// valueId` for each `ValueId` that the Variable `variable` is bound to. This
-// only works, if the input (as stored in the `context`) is sorted by the
-// Variable `variable`. If `valueIdUpper` is nullopt, we only have a single
-// `valueId`, otherwise we have a range, [`valueId`, `valueIdUpper`).
+// valueId` for each `ValueId` in the sorted `column`. Return `std::nullopt` if
+// the binary search cannot compute the correct result, the caller then
+// evaluates the comparison row by row.
+//
+// NOTE: This is the case if the result is UNDEF for at least one row (because
+// the row is UNDEF or its datatype is incompatible with `valueId`), as a
+// `SetOfIntervals` can only represent `true` and `false`. It is also the case
+// for comparisons other than `EQ` and `NE` with an encoded IRI (see below).
 template <Comparison Comp>
-ad_utility::SetOfIntervals evaluateWithBinarySearch(
-    const Variable& variable, ValueId valueId,
-    std::optional<ValueId> valueIdUpper, const EvaluationContext* context) {
-  // Set up iterators into the `IdTable` that only access the column where the
-  // `variable` is stored.
-  auto columnIndex = context->getColumnIndexForVariable(variable);
-  AD_CORRECTNESS_CHECK(
-      columnIndex.has_value(),
-      "The input must be sorted to evaluate a relational expression using "
-      "binary search. This should never happen for unbound variables");
-
-  auto getIdFromColumn = ad_utility::makeAssignableLambda(
-      [columnIndex = columnIndex.value()](const auto& idTable, auto i) {
-        return idTable(i, columnIndex);
-      });
-
-  using Iterator = ad_utility::IteratorForAccessOperator<
-      std::decay_t<decltype(context->_inputTable)>, decltype(getIdFromColumn)>;
-  auto begin =
-      Iterator{&context->_inputTable, context->_beginIndex, getIdFromColumn};
-  auto end =
-      Iterator{&context->_inputTable, context->_endIndex, getIdFromColumn};
-
-  // Perform the actual evaluation.
-  const auto resultRanges = [&]() {
-    if (valueIdUpper) {
-      return valueIdComparators::getRangesForEqualIds(
-          begin, end, valueId, valueIdUpper.value(), Comp);
-    } else {
-      return valueIdComparators::getRangesForId(begin, end, valueId, Comp);
+std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
+    ql::span<const Id> column, ValueId valueId) {
+  // The binary search orders encoded IRIs by their encoding, which differs from
+  // the semantic (string) order of the IRIs, see issue #2448. Only `EQ` and
+  // `NE` are therefore safe to evaluate via binary search.
+  if constexpr (Comp != Comparison::EQ && Comp != Comparison::NE) {
+    if (valueId.getDatatype() == Datatype::EncodedVal) {
+      return std::nullopt;
     }
-  }();
+  }
+
+  auto getRanges = [&column, &valueId](Comparison comparison) {
+    return valueIdComparators::getRangesForId(column.begin(), column.end(),
+                                              valueId, comparison);
+  };
+
+  // Return `std::nullopt` if the result is UNDEF for some row. The ranges only
+  // contain rows with a datatype that is compatible with `valueId`, and every
+  // such row is either equal or not equal to `valueId`, so the ranges for `EQ`
+  // and `NE` together cover all rows exactly if no row is UNDEF.
+  auto numRows = [](const auto& ranges) {
+    return ::ranges::accumulate(
+        ranges, size_t{0}, std::plus<>{},
+        [](const auto& range) -> size_t { return range.second - range.first; });
+  };
+  if (numRows(getRanges(Comparison::EQ)) + numRows(getRanges(Comparison::NE)) !=
+      column.size()) {
+    return std::nullopt;
+  }
+  const auto resultRanges = getRanges(Comp);
 
   // Convert pairs of iterators to pairs of indexes.
   ad_utility::SetOfIntervals::Vec intervals;
   for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
-    intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
+    intervals.emplace_back(rangeBegin - column.begin(),
+                           rangeEnd - column.begin());
   }
-  return {std::move(intervals), context->size()};
+  return ad_utility::SetOfIntervals{std::move(intervals), column.size()};
 }
 
 // Compute `a Comp b` for the booleans stored in `a` and `b` at the same row
@@ -152,8 +151,9 @@ ad_utility::SetOfIntervals compareSetsOfIntervals(
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
 CPP_template(Comparison Comp, typename S1, typename S2)(
-    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<S2>
-        CPP_and AreComparable<S1, S2>) ExpressionResult
+    requires SingleExpressionResult<S1> && SingleExpressionResult<S2> &&
+    AreComparable<S1, S2>)
+ExpressionResult
     evaluateRelationalExpression(S1&& value1, S2&& value2,
                                  const EvaluationContext* context) {
   auto resultSize =
@@ -165,19 +165,12 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
   // stuff.
   if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
     auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
-      auto columnIndex = context->getColumnIndexForVariable(value1);
       auto valueId = makeValueId(value2, context);
-      // TODO<C++23> Use `ql::ranges::starts_with`.
-      if (const auto& cols = context->_columnsByWhichResultIsSorted;
-          !cols.empty() && cols[0] == columnIndex) {
-        constexpr static bool value2IsString =
-            !ad_utility::isSimilar<decltype(valueId), Id>;
-        if constexpr (value2IsString) {
-          return evaluateWithBinarySearch<Comp>(value1, valueId.first,
-                                                valueId.second, context);
-        } else {
-          return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
-                                                context);
+      if (auto column = context->getSortedColumnOrNullopt(value1);
+          column.has_value()) {
+        auto result = evaluateWithBinarySearch<Comp>(column.value(), valueId);
+        if (result.has_value()) {
+          return std::move(result.value());
         }
       }
       context->cancellationHandle_->throwIfCancelled();
@@ -230,10 +223,8 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       if constexpr (AreIncomparable<X, Y>) {
         result.push_back(Id::makeUndefined());
       } else {
-        result.push_back(
-            toValueId(sparqlExpression::compareIdsOrStrings<
-                      Comp, valueIdComparators::ComparisonForIncompatibleTypes::
-                                AlwaysUndef>(x, y, context)));
+        result.push_back(toValueId(
+            sparqlExpression::compareIdsOrStrings<Comp>(x, y, context)));
       }
     };
     ad_utility::visitWithVariantsAndParameters(impl, *itA, *itB);
@@ -250,9 +241,9 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
   }
 }
 
-CPP_template(Comparison Comp, typename A,
-             typename B)(requires AreIncomparable<A, B>) Id
-    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+CPP_template(Comparison Comp, typename A, typename B)(
+    requires AreIncomparable<A, B>)
+Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
     return Id::makeFromBool(true);
@@ -264,9 +255,9 @@ CPP_template(Comparison Comp, typename A,
 // For comparisons where exactly one of the operands is a variable, the variable
 // must come first.
 CPP_template(Comparison Comp, typename A, typename B)(
-    requires SingleExpressionResult<A> CPP_and SingleExpressionResult<B> CPP_and
-        CPP_NOT(AreComparable<A, B>)
-            CPP_and AreComparable<B, A>) ExpressionResult
+    requires SingleExpressionResult<A> && SingleExpressionResult<B> &&
+    CPP_NOT(AreComparable<A, B>) && AreComparable<B, A>)
+ExpressionResult
     evaluateRelationalExpression(A&& a, B&& b,
                                  const EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
