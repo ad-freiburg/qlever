@@ -278,14 +278,15 @@ Bind::makeTreeWithStrippedColumns(
   // are required by `Bind` to build its target.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
-  bool bindTargetRequested = true;
-  if (requestedVariables.find(_bind._target) != requestedVariables.end()) {
+  const bool bindTargetRequested = [&](){
+    if(!requestedVariables.contains(_bind._target)){
+      return false;
+    }
     for (const Variable* bindVar : _bind._expression.containedVariables()) {
       varsRequiredFromSubtree.add(*bindVar);
     }
-  } else {
-    bindTargetRequested = false;
-  }
+    return true;
+  }();
 
   // Strip the subtree and only keep `Bind` operation in the
   // `QueryExecutionTree` if its target is requested by the parent.
