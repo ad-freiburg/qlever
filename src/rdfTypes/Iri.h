@@ -56,9 +56,9 @@ class BasicIri {
   // A default constructed IRI is empty.
   BasicIri() = default;
 
-  CPP_template(typename H,
-               typename I)(requires ql::concepts::same_as<I, BasicIri>) friend H
-      AbslHashValue(H h, const I& iri) {
+  CPP_template(typename H, typename I)(
+      requires ql::concepts::same_as<I, BasicIri>)
+  friend H AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
 

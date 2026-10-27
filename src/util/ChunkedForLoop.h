@@ -8,9 +8,11 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <range/v3/view/chunk.hpp>
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 
 namespace ad_utility {
 
@@ -133,6 +135,10 @@ inline void chunkedFill(R&& outputRange, const T& value,
 // Call `action` for each element of the `range`, like a range-based `for` loop,
 // and call `chunkOperation` (e.g. a cancellation check) after every
 // `chunkSize` elements, and once at the end if the `range` is not empty.
+//
+// NOTE: For a forward range that is not random access (e.g. an
+// `unordered_set`), `views::chunk` advances the iterator a second time per
+// chunk to find the end of the chunk, so such a range is traversed twice.
 CPP_template(typename R, typename Action, typename ChunkOpT)(
     requires ql::ranges::input_range<R> CPP_and
         ql::concepts::invocable<ChunkOpT>)
@@ -140,13 +146,9 @@ inline void chunkedForEach(
     R&& range, Action action, ChunkOpT chunkOperation,
     std::size_t chunkSize = CANCELLATION_CHECK_CHUNK_SIZE) {
   AD_CONTRACT_CHECK(chunkSize != 0);
-  // NOTE: We don't use `::ranges::views::chunk`, because it doesn't accept all
-  // `std::ranges` (e.g. move-only views, or the `IdTable` rows with libc++).
-  auto it = ql::ranges::begin(range);
-  auto end = ql::ranges::end(range);
-  while (it != end) {
-    for (std::size_t i = 0; i < chunkSize && it != end; ++i, ++it) {
-      std::invoke(action, *it);
+  for (auto&& chunk : ::ranges::views::chunk(AD_FWD(range), chunkSize)) {
+    for (auto&& element : chunk) {
+      std::invoke(action, AD_FWD(element));
     }
     std::invoke(chunkOperation);
   }

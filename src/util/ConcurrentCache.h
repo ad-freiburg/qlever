@@ -160,7 +160,7 @@ class ConcurrentCache {
   /// Constructor: all arguments are forwarded to the underlying cache type.
   CPP_template(typename CacheArg, typename... CacheArgs)(requires(
       !ql::concepts::same_as<ConcurrentCache, ql::remove_cvref_t<CacheArg>>))
-      ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
+  ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
   struct ResultAndCacheStatus {

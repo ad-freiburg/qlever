@@ -17,6 +17,7 @@
 
 #include "backports/memory_resource.h"
 #include "util/AllocatorPmr.h"
+#include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
 using ad_utility::makePmrAllocatorFromResource;
@@ -142,13 +143,17 @@ TEST(AllocatorPmr, ResourceIsEqual) {
               PolymorphicAllocator{otherAlloc.resource()});
 }
 
-// ____________________________________________________________________________
-// A plain platform resource (non-owning) enforces no limit.
+// Test that a plain platform resource (non-owning) enforces no limit, so it
+// rejects changing the limit.
 TEST(AllocatorPmr, FromResourceNoLimit) {
   ql::pmr::monotonic_buffer_resource platformPool;
   auto alloc = makePmrAllocatorFromResource<int>(&platformPool);
   EXPECT_EQ(alloc.resource(), &platformPool);
   EXPECT_EQ(alloc.amountMemoryLeft(), MemorySize::max());
+  AD_EXPECT_THROW_WITH_MESSAGE(alloc.increaseMemoryLimit(MemorySize::bytes(4)),
+                               ::testing::HasSubstr("does not enforce one"));
+  AD_EXPECT_THROW_WITH_MESSAGE(alloc.decreaseMemoryLimit(MemorySize::bytes(4)),
+                               ::testing::HasSubstr("does not enforce one"));
   int* p = alloc.allocate(10);
   ASSERT_NE(p, nullptr);
   alloc.deallocate(p, 10);

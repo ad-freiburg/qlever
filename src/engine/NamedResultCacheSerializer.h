@@ -46,13 +46,11 @@ using Value = NamedResultCache::Value;
 // `entriesVersion`, and the legacy version can only represent geo indices
 // with a single segment.
 CPP_template(typename Serializer, typename WriteEntry)(
-    requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
-        ql::concepts::invocable<
-            const WriteEntry&, Serializer&, const std::string&,
-            const Value&>) void writeEntries(Serializer& serializer,
-                                             const Entries& entries,
-                                             const WriteEntry& writeEntry,
-                                             uint16_t entriesVersion) {
+    requires ad_utility::serialization::WriteSerializer<Serializer> &&
+    ql::concepts::invocable<const WriteEntry&, Serializer&, const std::string&,
+                            const Value&>)
+void writeEntries(Serializer& serializer, const Entries& entries,
+                  const WriteEntry& writeEntry, uint16_t entriesVersion) {
   AD_CONTRACT_CHECK(entriesVersion == formatVersion ||
                     entriesVersion == legacyFormatVersion);
   // Write the magic byte and format version first, s.t. `readFromSerializer`
@@ -240,14 +238,11 @@ namespace namedResultCacheSerializer {
 // given to `writeEntries`. In the legacy version, the geo index must have a
 // single segment.
 CPP_template(typename Serializer, typename Columns)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void writeValue(Serializer& serializer,
-                                     const NamedResultCache::Value& value,
-                                     const Columns& columns,
-                                     const std::vector<ColumnIndex>&
-                                         resultSortedOn,
-                                     bool writeLocalVocabWords,
-                                     uint16_t entriesVersion) {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
+                const Columns& columns,
+                const std::vector<ColumnIndex>& resultSortedOn,
+                bool writeLocalVocabWords, uint16_t entriesVersion) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);
