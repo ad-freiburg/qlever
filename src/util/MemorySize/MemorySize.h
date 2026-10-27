@@ -75,15 +75,15 @@ class MemorySize {
   memory size saved internally. Always requires the exact memory size unit and
   size wanted.
   */
-  CPP_template(typename T)(requires ql::concepts::integral<T>)  //
+  CPP_template(typename T)(requires ql::concepts::integral<T>)
   constexpr static MemorySize bytes(T numBytes);
-  CPP_template(typename T)(requires Arithmetic<T>)              //
+  CPP_template(typename T)(requires Arithmetic<T>)
   constexpr static MemorySize kilobytes(T numKilobytes);
-  CPP_template(typename T)(requires Arithmetic<T>)              //
+  CPP_template(typename T)(requires Arithmetic<T>)
   constexpr static MemorySize megabytes(T numMegabytes);
-  CPP_template(typename T)(requires Arithmetic<T>)              //
+  CPP_template(typename T)(requires Arithmetic<T>)
   constexpr static MemorySize gigabytes(T numGigabytes);
-  CPP_template(typename T)(requires Arithmetic<T>)              //
+  CPP_template(typename T)(requires Arithmetic<T>)
   constexpr static MemorySize terabytes(T numTerabytes);
 
   // Factory for max size instance.
@@ -129,14 +129,14 @@ class MemorySize {
   constexpr MemorySize operator-(const MemorySize& m) const;
   constexpr MemorySize& operator-=(const MemorySize& m);
 
-  CPP_template(typename T)(requires Arithmetic<T>)  //
+  CPP_template(typename T)(requires Arithmetic<T>)
   constexpr MemorySize operator*(const T c) const;
 
   template <typename T>
   friend constexpr auto operator*(const T c, const MemorySize m)
       -> CPP_ret(MemorySize)(requires Arithmetic<T>);
 
-  CPP_template(typename T)(requires Arithmetic<T>)  //
+  CPP_template(typename T)(requires Arithmetic<T>)
   constexpr MemorySize& operator*=(const T c);
 
   CPP_template(typename T)(requires Arithmetic<T>)
@@ -230,7 +230,7 @@ constexpr size_t ceilAndCastToSizeT(const T d) {
 
 @return The amount of bytes. Rounded up, if needed.
 */
-CPP_template(typename T)(requires Arithmetic<T>)  //
+CPP_template(typename T)(requires Arithmetic<T>)
 constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
                                            std::string_view unitName) {
   if constexpr (std::is_signed_v<T>) {
