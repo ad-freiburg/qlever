@@ -58,9 +58,8 @@ struct PassthroughBlockProcessor {
 // default, the block is written as-is (see `PassthroughBlockProcessor`).
 CPP_template(typename UnderlyingSerializer,
              typename BlockProcessor = PassthroughBlockProcessor)(
-    requires WriteSerializer<
-        UnderlyingSerializer>) class BufferedWriteSerializer
-    : public ad_utility::NoCopy {
+    requires WriteSerializer<UnderlyingSerializer>)
+class BufferedWriteSerializer : public ad_utility::NoCopy {
  public:
   using SerializerType = WriteSerializerTag;
 

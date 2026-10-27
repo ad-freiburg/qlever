@@ -50,10 +50,9 @@ auto makeExpression(L leftValue, R rightValue) {
       {std::move(leftChild), std::move(rightChild)});
 }
 
-CPP_template(typename L,
-             typename... R)(requires SingleExpressionResult<L> CPP_and(
-    SingleExpressionResult<R>&&...)) auto makeInExpression(L leftValue,
-                                                           R... rightValues) {
+CPP_template(typename L, typename... R)(
+    requires SingleExpressionResult<L> && (SingleExpressionResult<R> && ...))
+auto makeInExpression(L leftValue, R... rightValues) {
   auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
   std::vector<SparqlExpression::Ptr> rightChildren;
   (..., (rightChildren.push_back(

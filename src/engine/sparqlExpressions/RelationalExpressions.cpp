@@ -53,9 +53,9 @@ CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
 // both inputs. Else the "plain" generators from `sparqlExpression::detail` are
 // returned. These simply yield the values unchanged.
 CPP_template(typename S1, typename S2)(
-    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<
-        S2>) auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
-                                const EvaluationContext* context) {
+    requires SingleExpressionResult<S1> && SingleExpressionResult<S2>)
+auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
+                   const EvaluationContext* context) {
   if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
     return std::pair{idGenerator(AD_FWD(value1), targetSize, context),
                      idGenerator(AD_FWD(value2), targetSize, context)};

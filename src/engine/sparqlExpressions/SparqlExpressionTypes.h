@@ -192,9 +192,9 @@ struct EvaluationContext {
 namespace detail {
 /// Get Id of constant result of type T.
 CPP_template(typename T, typename LocalVocabT)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        std::is_rvalue_reference_v<T&&>) Id
-    constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
+    requires SingleExpressionResult<T> && isConstantResult<T> &&
+    std::is_rvalue_reference_v<T &&>)
+Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLocalVocabEntry>) {

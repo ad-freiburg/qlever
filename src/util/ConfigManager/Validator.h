@@ -61,12 +61,9 @@ That is, instead of returning `bool`, it now returns
 @param errorMessage Content for `ErrorMessage`.
 */
 CPP_template(typename ValidatorFunc, typename... ValidatorParameterTypes)(
-    requires ValidatorFunction<
-        ValidatorFunc,
-        ValidatorParameterTypes...>) inline auto transformValidatorIntoExceptionValidator(ValidatorFunc
-                                                                                              validatorFunction,
-                                                                                          std::string
-                                                                                              errorMessage) {
+    requires ValidatorFunction<ValidatorFunc, ValidatorParameterTypes...>)
+inline auto transformValidatorIntoExceptionValidator(
+    ValidatorFunc validatorFunction, std::string errorMessage) {
   // The whole 'transformation' is simply a wrapper.
   return [validatorFunction = std::move(validatorFunction),
           errorMessage = ErrorMessage{std::move(errorMessage)}](
