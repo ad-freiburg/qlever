@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <deque>
 #include <future>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +32,7 @@
 #include "index/vocabulary_merger/AsyncBlockWriter.h"
 #include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMapWriters.h"
+#include "index/vocabulary_merger/MemoryBudget.h"
 #include "index/vocabulary_merger/MergeBlock.h"
 #include "index/vocabulary_merger/Segment.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
@@ -44,25 +46,25 @@
 #include "util/RegexSet.h"
 #include "util/Timer.h"
 
-// The stages behind the parallel merge of the partial vocabularies (see
-// `mergeVocabulary` in `index/VocabularyMerger.h`, whose current pipeline a
-// follow-up PR replaces with the `SegmentPipeline` below). This is not part of
-// the public interface of that header.
+// The stages behind the parallel merge of the partial vocabularies (see the
+// comment above `mergeVocabulary` in `index/VocabularyMerger.h`). This is not
+// part of the public interface of that header.
 namespace ad_utility::vocabulary_merger::detail {
 
 // Cut the blocks of merged words, which arrive in the order of the vocabulary,
-// into segments (see `Segment`) of at least `numWordsPerSegment` words. A cut
-// between two blocks is only allowed if the last word of the one differs from
-// the first word of the other, so that no word spans two segments. For each
-// segment, the cutter returns the task that builds it (see `buildSegment`),
-// which the caller can run on any thread.
+// into segments (see `Segment`) of at least `numWordsPerSegment` words or at
+// least `numBytesPerSegment` of merged blocks (see `MergedBlock::memorySize`),
+// whichever comes first. A cut between two blocks is only allowed if the last
+// word of the one differs from the first word of the other, so that no word
+// spans two segments. For each segment, the cutter returns the task that
+// builds it (see `buildSegment`), which the caller can run on any thread.
 //
 // NOTE: The tasks refer to this object, so it has to stay alive until all of
 // them have completed.
 CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
  public:
   // The task that builds a segment.
-  using SegmentTask = absl::AnyInvocable<std::shared_ptr<const Segment>()>;
+  using SegmentTask = absl::AnyInvocable<Segment()>;
 
  private:
   const ParallelWordWriterBase& writer_;
@@ -70,25 +72,31 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
   size_t numPartialVocabularies_;
   const W& comparator_;
   size_t numWordsPerSegment_;
-  // The blocks of the segment that is being cut, and their number of words.
+  size_t numBytesPerSegment_;
+  // The blocks of the segment that is being cut, their number of words, and
+  // their memory.
   std::vector<MergedBlock> currentBlocks_;
   size_t currentNumWords_ = 0;
+  size_t currentNumBytes_ = 0;
   // The total time that the tasks have spent building the segments.
   ad_utility::timer::ThreadSafeTimer segmentBusyTime_;
 
  public:
   // Construct from the arguments of `buildSegment`, which all have to stay
   // alive until all the tasks have completed, and the minimal number of words
-  // per segment, which has to be at least one.
+  // and of bytes per segment (see above). The number of words has to be at
+  // least one.
   SegmentCutter(const ParallelWordWriterBase& writer,
                 const ad_utility::RegexSet& blankNodeIriRegexes,
                 size_t numPartialVocabularies, const W& comparator,
-                size_t numWordsPerSegment)
+                size_t numWordsPerSegment,
+                size_t numBytesPerSegment = std::numeric_limits<size_t>::max())
       : writer_{writer},
         blankNodeIriRegexes_{blankNodeIriRegexes},
         numPartialVocabularies_{numPartialVocabularies},
         comparator_{comparator},
-        numWordsPerSegment_{numWordsPerSegment} {
+        numWordsPerSegment_{numWordsPerSegment},
+        numBytesPerSegment_{numBytesPerSegment} {
     AD_CONTRACT_CHECK(numWordsPerSegment_ > 0);
   }
 
@@ -100,13 +108,16 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
       return std::nullopt;
     }
     std::optional<SegmentTask> task;
-    bool canCutHere = currentNumWords_ >= numWordsPerSegment_ &&
-                      currentBlocks_.back().back().iriOrLiteral() !=
-                          block.front().iriOrLiteral();
+    bool isLargeEnough = currentNumWords_ >= numWordsPerSegment_ ||
+                         currentNumBytes_ >= numBytesPerSegment_;
+    bool canCutHere =
+        isLargeEnough && currentBlocks_.back().back().iriOrLiteral() !=
+                             block.front().iriOrLiteral();
     if (canCutHere) {
       task = cutSegment();
     }
     currentNumWords_ += block.size();
+    currentNumBytes_ += block.memorySize().getBytes();
     currentBlocks_.push_back(std::move(block));
     return task;
   }
@@ -133,12 +144,12 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
   SegmentTask cutSegment() {
     SegmentTask task = [this, blocks = std::move(currentBlocks_)]() mutable {
       auto measurement = segmentBusyTime_.startMeasurement();
-      return std::make_shared<const Segment>(
-          buildSegment(std::move(blocks), writer_, blankNodeIriRegexes_,
-                       numPartialVocabularies_, comparator_));
+      return buildSegment(std::move(blocks), writer_, blankNodeIriRegexes_,
+                          numPartialVocabularies_, comparator_);
     };
     currentBlocks_.clear();
     currentNumWords_ = 0;
+    currentNumBytes_ = 0;
     return task;
   }
 };
@@ -154,22 +165,51 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentCutter {
 //    are being built or waiting to be committed at the same time; a `push`
 //    that would exceed this commits the oldest segment first.
 //
-// NOTE 1: All the member functions are called by a single thread (the one
-// that receives the merged blocks), which must not be a thread of the global
-// executor.
+// The memory of all the data behind the merge (the merged blocks that are
+// cut, the segments that are being built, and the words and ID map entries of
+// the committed segments until they are written) is accounted for in a
+// `MemoryBudget` of `memoryLimit`. Before a `push` adds a block, it waits until
+// the block fits into the budget, see `waitForMemory`. The words and the ID map
+// entries of a committed segment are held separately, so that each is released
+// as soon as its writer is done with it.
+//
+// NOTE 1: All the member functions are called by a single thread, the one that
+// runs `mergeVocabulary`, which must not be a thread of the global executor.
 //
 // NOTE 2: The pipeline is neither copyable nor movable, because the tasks and
 // the sink of the `committer_` refer to it.
 CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     : public ad_utility::NoCopyNoMove {
  private:
+  using Reservation = MemoryBudget::Reservation;
+  // A segment that is being built or waiting to be committed, and the memory
+  // that is reserved for it (see `push`).
+  struct InFlightSegment {
+    std::future<Segment> segment_;
+    Reservation reservation_;
+  };
+  // Data that is shared by several stages, together with the reservation of
+  // its memory, which is released after the data has been destroyed (the
+  // members are destroyed in reverse order), see `makeShared`.
+  template <typename T>
+  struct WithReservation {
+    Reservation reservation_;
+    T value_;
+  };
+
+  // NOTE: The budget is declared first, because all the other members (and
+  // the tasks that they wait for in their destructors) hold reservations.
+  MemoryBudget memoryBudget_;
   size_t maxSegmentsInFlight_;
   SegmentCutter<W> cutter_;
   IdMapWriters idMapWriters_;
   AsyncBlockWriter blockWriter_;
   SegmentCommitter committer_;
+  // The memory reserved for the blocks of the segment that the `cutter_` is
+  // currently cutting.
+  Reservation currentSegmentReservation_;
   // The segments that are being built or waiting to be committed, in order.
-  std::deque<std::future<std::shared_ptr<const Segment>>> segments_;
+  std::deque<InFlightSegment> segments_;
   // The time since the construction, and the time spent inside `push` and
   // `finish` (the rest is spent waiting for merged blocks).
   ad_utility::Timer totalTimer_{ad_utility::Timer::Started};
@@ -178,24 +218,48 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
  public:
   // Construct from the `writer` of the vocabulary (which has to stay alive,
   // and which is not finished by this class), the files of the partial ID maps
-  // (see `IdMapWriters`), the arguments of `buildSegment` that the segments
-  // need, and the bounds on the segments.
+  // (see `IdMapWriters`), the arguments of `buildSegment` and
+  // `mergeVocabulary` that the segments need, and the `memoryLimit` of the
+  // data behind the merge (see above).
   SegmentPipeline(ParallelWordWriterBase& writer,
                   ad_utility::InputRangeTypeErased<std::string> idMapFilenames,
                   size_t numPartialVocabularies,
                   const ad_utility::RegexSet& blankNodeIriRegexes,
                   const W& comparator, size_t maxSegmentsInFlight,
+                  ad_utility::MemorySize memoryLimit,
                   size_t numWordsPerSegment = VOCAB_MERGER_SEGMENT_NUM_WORDS)
-      : maxSegmentsInFlight_{maxSegmentsInFlight},
-        cutter_{writer, blankNodeIriRegexes, numPartialVocabularies, comparator,
-                numWordsPerSegment},
+      : memoryBudget_{memoryLimit},
+        maxSegmentsInFlight_{maxSegmentsInFlight},
+        cutter_{writer,
+                blankNodeIriRegexes,
+                numPartialVocabularies,
+                comparator,
+                numWordsPerSegment,
+                numBytesPerSegment(memoryLimit, maxSegmentsInFlight)},
         idMapWriters_{std::move(idMapFilenames),
                       VOCAB_MERGER_NUM_ID_MAP_WRITER_GROUPS},
-        blockWriter_{writer},
-        committer_{writer, [this](uint8_t sub, BlockPieces block) {
+        blockWriter_{writer, &memoryBudget_},
+        committer_{writer,
+                   [this](uint8_t sub, BlockPieces block) {
                      blockWriter_.push(sub, std::move(block));
-                   }} {
+                   }},
+        currentSegmentReservation_{
+            memoryBudget_.reserve(ad_utility::MemorySize::bytes(0))} {
     AD_CONTRACT_CHECK(maxSegmentsInFlight_ > 0);
+  }
+
+  // The memory of the merged blocks after which a segment is cut (see
+  // `SegmentCutter`), given the `memoryLimit` and the `maxSegmentsInFlight`:
+  // a segment that is being built takes about twice the memory of its blocks
+  // (the blocks and the segment), and its words and ID map entries (about the
+  // memory of its blocks again) stay until they are written, so a quarter of
+  // the share of each segment of the budget. The minimum avoids tiny segments
+  // (with a tiny budget, `push` then waits until the segments are written).
+  static size_t numBytesPerSegment(ad_utility::MemorySize memoryLimit,
+                                   size_t maxSegmentsInFlight) {
+    return std::max(
+        memoryLimit.getBytes() / (4 * std::max<size_t>(maxSegmentsInFlight, 1)),
+        VOCAB_MERGER_MIN_SEGMENT_MEMORY.getBytes());
   }
 
   // Wait for the tasks that are still building segments. This only happens if
@@ -210,8 +274,8 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   // so this destructor can't throw and needs no `noexcept(false)`.
   ~SegmentPipeline() {
     for (auto& segment : segments_) {
-      if (segment.valid()) {
-        segment.wait();
+      if (segment.segment_.valid()) {
+        segment.segment_.wait();
       }
     }
   }
@@ -224,7 +288,13 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     if (hasFailed()) {
       return;
     }
+    // The block is accounted for twice: for itself, and for the segment that
+    // is built from it (see `numBytesPerSegment`). The estimate is replaced by
+    // the actual memory of the segment when it is committed.
+    const size_t numBytes = 2 * block.memorySize().getBytes();
+    waitForMemory(numBytes);
     postSegment(cutter_.push(std::move(block)));
+    currentSegmentReservation_.grow(numBytes);
     commitFinishedSegments(segments_.size() >= maxSegmentsInFlight_);
   }
 
@@ -267,7 +337,9 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
         << blockWriter_.appendBusyTime() << ", writing the ID maps "
         << Milliseconds{std::chrono::duration_cast<std::chrono::milliseconds>(
                idMapWriters_.busyTime())}
-        << std::endl;
+        << "; peak memory of the data behind the merge "
+        << memoryBudget_.peak().asString() << " (limit "
+        << memoryBudget_.limit().asString() << ")" << std::endl;
     return metaData;
   }
 
@@ -278,9 +350,41 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
     if (!task.has_value()) {
       return;
     }
-    segments_.push_back(
+    segments_.push_back(InFlightSegment{
         boost::asio::post(ad_utility::globalExecutor(),
-                          boost::asio::use_future(std::move(task.value()))));
+                          boost::asio::use_future(std::move(task.value()))),
+        std::exchange(
+            currentSegmentReservation_,
+            memoryBudget_.reserve(ad_utility::MemorySize::bytes(0)))});
+  }
+
+  // Block until `numBytes` more fit into the memory budget. While segments are
+  // in flight, commit the oldest one (which replaces the estimate of its
+  // memory by the actual one, and hands its data to the writers, which release
+  // it). Otherwise wait for the writers to release memory, but only as long as
+  // they have pending work: the remaining memory is then held by this thread
+  // (the blocks of the current segment and the open blocks of the
+  // `committer_`), and the budget is exceeded.
+  void waitForMemory(size_t numBytes) {
+    const auto size = ad_utility::MemorySize::bytes(numBytes);
+    while (!memoryBudget_.waitUntilFits(size, [this]() {
+      return !segments_.empty() || (blockWriter_.numPendingBlocks() == 0 &&
+                                    idMapWriters_.numPendingTasks() == 0);
+    })) {
+      if (segments_.empty()) {
+        return;
+      }
+      commitFinishedSegments(true);
+    }
+  }
+
+  // Return a `shared_ptr` to the `value`, whose memory `size` is accounted
+  // for in the budget until the last copy of the pointer is gone.
+  template <typename T>
+  std::shared_ptr<const T> makeShared(T value, ad_utility::MemorySize size) {
+    auto holder = std::make_shared<WithReservation<T>>(
+        WithReservation<T>{memoryBudget_.reserve(size), std::move(value)});
+    return {holder, &holder->value_};
   }
 
   // Commit the segments that are done, in order, and at least one segment if
@@ -289,15 +393,22 @@ CPP_template(typename W)(requires WordComparator<W>) class SegmentPipeline
   void commitFinishedSegments(bool waitForOne) {
     while (!segments_.empty()) {
       auto& next = segments_.front();
-      if (!waitForOne &&
-          next.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+      if (!waitForOne && next.segment_.wait_for(std::chrono::seconds(0)) !=
+                             std::future_status::ready) {
         break;
       }
-      std::shared_ptr<const Segment> segment = next.get();
+      Segment segment = next.segment_.get();
+      // The estimate is released after the actual memory is reserved below.
+      Reservation estimate = std::move(next.reservation_);
       segments_.pop_front();
       waitForOne = false;
-      IdConverterForSegment converter = committer_.commit(segment);
-      idMapWriters_.write(std::move(segment), converter);
+      // The ID map entries and the words are held (and released) separately.
+      auto entriesSize = memorySizeOf(segment.idMapEntries_);
+      auto entries = makeShared(std::move(segment.idMapEntries_), entriesSize);
+      auto wordsSize = segment.memorySizeOfWords();
+      auto words = makeShared(std::move(segment), wordsSize);
+      IdConverterForSegment converter = committer_.commit(words);
+      idMapWriters_.write(std::move(entries), converter);
     }
   }
 };

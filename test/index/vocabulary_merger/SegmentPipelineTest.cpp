@@ -31,6 +31,7 @@ using ::testing::Pair;
 
 namespace {
 const ad_utility::RegexSet noRegexes{};
+const auto oneGigabyte = ad_utility::MemorySize::gigabytes(1);
 
 // A `BlockWriterBase` with blocks of a single word, so that every committed
 // word is immediately handed to the block writer, and whose `AppendBlock`
@@ -85,6 +86,7 @@ TEST(SegmentPipeline, cutAndCommitSegments) {
         noRegexes,
         lessThan,
         /*maxSegmentsInFlight=*/2,
+        /*memoryLimit=*/oneGigabyte,
         /*numWordsPerSegment=*/2};
     for (MergedBlock& block : blocks) {
       EXPECT_FALSE(pipeline.hasFailed());
@@ -121,6 +123,7 @@ TEST(SegmentPipeline, exceptionOfWriterIsPropagated) {
       noRegexes,
       lessThan,
       /*maxSegmentsInFlight=*/1,
+      /*memoryLimit=*/oneGigabyte,
       /*numWordsPerSegment=*/1};
   auto blocks =
       makeMergedBlocks({{{"\"a\"", true, 0, 0}}, {{"\"b\"", true, 0, 1}}});
@@ -149,6 +152,7 @@ TEST(SegmentPipeline, pushAfterFailureIsIgnored) {
       noRegexes,
       lessThan,
       /*maxSegmentsInFlight=*/1,
+      /*memoryLimit=*/oneGigabyte,
       /*numWordsPerSegment=*/1};
   auto blocks = makeMergedBlocks({{{"\"a\"", true, 0, 0}},
                                   {{"\"b\"", true, 0, 1}},
@@ -178,7 +182,7 @@ TEST(SegmentPipeline, zeroSegmentsInFlightIsRejected) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       (SegmentPipeline<decltype(lessThan)>{
           writer, partialVocabularyIdMapFilenames(basename, 1), 1, noRegexes,
-          lessThan, /*maxSegmentsInFlight=*/0}),
+          lessThan, /*maxSegmentsInFlight=*/0, oneGigabyte}),
       ::testing::HasSubstr("maxSegmentsInFlight_ > 0"));
 }
 
@@ -193,7 +197,8 @@ TEST(SegmentPipeline, zeroWordsPerSegmentIsRejected) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       (SegmentPipeline<decltype(lessThan)>{
           writer, partialVocabularyIdMapFilenames(basename, 1), 1, noRegexes,
-          lessThan, /*maxSegmentsInFlight=*/1, /*numWordsPerSegment=*/0}),
+          lessThan, /*maxSegmentsInFlight=*/1, oneGigabyte,
+          /*numWordsPerSegment=*/0}),
       ::testing::HasSubstr("numWordsPerSegment_ > 0"));
 }
 
@@ -216,6 +221,7 @@ TEST(SegmentPipeline, exceptionOfSegmentIsPropagated) {
       noRegexes,
       lessThan,
       /*maxSegmentsInFlight=*/1,
+      /*memoryLimit=*/oneGigabyte,
       /*numWordsPerSegment=*/1};
   auto blocks =
       makeMergedBlocks({{{"\"b\"", true, 0, 0}, {"\"a\"", true, 0, 1}}});
@@ -244,6 +250,7 @@ TEST(SegmentPipeline, exceptionOfSegmentInPush) {
       noRegexes,
       lessThan,
       /*maxSegmentsInFlight=*/2,
+      /*memoryLimit=*/oneGigabyte,
       /*numWordsPerSegment=*/1};
   // The first block violates the order. The `push` of the second block posts
   // the first segment, and the `push` of the third block posts the second
@@ -291,8 +298,8 @@ TEST(SegmentCutter, cutSegments) {
   ASSERT_TRUE(last.has_value());
 
   // The words `"a"`, `"b"`, `"c"`, and the words `"d"`, `"e"`, `"f"`.
-  EXPECT_EQ((*first)()->numDistinctWords(), 3u);
-  EXPECT_EQ((*last)()->numDistinctWords(), 3u);
+  EXPECT_EQ((*first)().numDistinctWords(), 3u);
+  EXPECT_EQ((*last)().numDistinctWords(), 3u);
 }
 
 // Test that `finish()` returns no task if there are no remaining blocks.
@@ -303,4 +310,72 @@ TEST(SegmentCutter, finishWithoutBlocks) {
   EXPECT_FALSE(cutter.push(std::move(makeMergedBlocks({{}})[0])).has_value());
   EXPECT_FALSE(cutter.finish().has_value());
   EXPECT_EQ(cutter.segmentBusyTime(), std::chrono::milliseconds::zero());
+}
+
+// _____________________________________________________________________________
+// Test that the `SegmentCutter` also cuts after the given memory of blocks,
+// but still never between two blocks that share a word.
+TEST(SegmentCutter, cutSegmentsByMemory) {
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
+  auto blocks =
+      makeMergedBlocks({{{"\"a\"", true, 0, 0}},
+                        {{"\"a\"", false, 1, 0}, {"\"b\"", true, 0, 1}},
+                        {{"\"c\"", true, 0, 2}}});
+  // Far too many words for a segment, but every block exceeds one byte.
+  SegmentCutter<decltype(lessThan)> cutter{writer,
+                                           noRegexes,
+                                           2,
+                                           lessThan,
+                                           /*numWordsPerSegment=*/1000,
+                                           /*numBytesPerSegment=*/1};
+  EXPECT_FALSE(cutter.push(std::move(blocks[0])).has_value());
+  // `"a"` must not span two segments.
+  EXPECT_FALSE(cutter.push(std::move(blocks[1])).has_value());
+  auto first = cutter.push(std::move(blocks[2]));
+  ASSERT_TRUE(first.has_value());
+  auto last = cutter.finish();
+  ASSERT_TRUE(last.has_value());
+  EXPECT_EQ((*first)().numDistinctWords(), 2u);
+  EXPECT_EQ((*last)().numDistinctWords(), 1u);
+}
+
+// _____________________________________________________________________________
+// Test that the pipeline produces the same result with a memory limit that is
+// far too small for any block: every `push` then waits for the previous
+// segments to be written (or exceeds the limit if nothing is left to wait
+// for), but never deadlocks.
+TEST(SegmentPipeline, tinyMemoryLimit) {
+  const std::string basename = gtestCurrentTestName();
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(basename, 2);
+  std::vector<std::pair<std::string, bool>> words;
+  auto writer = makeParallelWriter(makeCollectingWordCallback(words));
+  auto blocks =
+      makeMergedBlocks({{{"\"a\"", true, 0, 0}, {"\"b\"", true, 0, 1}},
+                        {{"\"b\"", false, 1, 0}, {"\"c\"", true, 0, 2}},
+                        {{"\"d\"", true, 0, 3}},
+                        {{"\"e\"", true, 0, 4}, {"\"f\"", true, 1, 1}}});
+  VocabularyMetaData meta;
+  {
+    SegmentPipeline<decltype(lessThan)> pipeline{
+        writer,
+        partialVocabularyIdMapFilenames(basename, 2),
+        2,
+        noRegexes,
+        lessThan,
+        /*maxSegmentsInFlight=*/4,
+        /*memoryLimit=*/ad_utility::MemorySize::bytes(1),
+        /*numWordsPerSegment=*/1};
+    for (MergedBlock& block : blocks) {
+      pipeline.push(std::move(block));
+    }
+    meta = pipeline.finish();
+  }
+  EXPECT_THAT(words, ElementsAre(Pair("\"a\"", true), Pair("\"b\"", true),
+                                 Pair("\"c\"", true), Pair("\"d\"", true),
+                                 Pair("\"e\"", true), Pair("\"f\"", true)));
+  EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[1]),
+              ElementsAre(IdMapEntry{L(0), V(1)}, IdMapEntry{L(1), V(5)}));
+  EXPECT_EQ(meta.numWordsTotal(), 6u);
 }

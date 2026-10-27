@@ -630,14 +630,11 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                         std::string_view b) {
       return cmp(a, b, TripleComponentComparator::Level::TOTAL);
     };
-    auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
-    auto& wordCallback = *wordCallbackPtr;
-    wordCallback.readableName() = "internal vocabulary";
-    auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numPartialVocabularies, sortPred, wordCallback,
+    auto writer = vocab_.makeParallelWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
+    writer->readableName() = "internal vocabulary";
+    return ad_utility::vocabulary_merger::mergeVocabulary(
+        onDiskBase_, numPartialVocabularies, sortPred, *writer,
         memoryLimitIndexBuilding(), blankNodeIriRegexes_);
-    wordCallback.finish();
-    return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
   idOfHasPatternDuringIndexBuilding_ =
