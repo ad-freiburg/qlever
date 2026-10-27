@@ -1346,8 +1346,13 @@ TEST_F(ServiceTest, redirectsIntegration) {
   }
 }
 
-// ____________________________________________________________________________
+// Test that the unconsumed lazy result of a `Service` sibling, which is
+// destroyed together with the sibling, does not call back into the already
+// destroyed sibling (this used to crash).
 TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
+  // A `Service` whose request fails, joined with a sibling whose lazy result is
+  // precomputed, exceeds `serviceMaxValueRows_` and is therefore handed back to
+  // the sibling, where the `Join` never consumes it.
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
   auto service = std::make_shared<Service>(
@@ -1365,14 +1370,17 @@ TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
   auto sibling = std::make_shared<ValuesForTesting>(
       testQec, makeIdTableFromVector({{1, 2}, {3, 4}}),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}});
-  // The `Service` is the left child, so it is computed (and fails) before the
-  // sibling on the right consumes its precomputed (lazy) result.
   auto join = std::make_shared<Join>(
       testQec, std::make_shared<QueryExecutionTree>(testQec, service),
       std::make_shared<QueryExecutionTree>(testQec, sibling), 0, 0, true,
       false);
+
+  // The `Service` is the left child, so it is computed (and fails) before the
+  // sibling's precomputed result is consumed.
   EXPECT_ANY_THROW(join->computeResult(true));
-  // Used to terminate the program.
+
+  // Destroying the sibling destroys its unconsumed lazy result, whose cleanup
+  // callback must not touch the operation anymore.
   join.reset();
   sibling.reset();
 }
