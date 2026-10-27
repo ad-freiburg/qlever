@@ -586,7 +586,7 @@ TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
   {
     // The left child only has to supply `limit + offset` rows.
     auto optionalJoin = makeOptionalJoin();
-    optionalJoin.applyLimitOffset({2, 3});
+    optionalJoin.applyLimitOffset({2, 3}, false);
     expectChildLimits(optionalJoin, 5);
   }
   {
@@ -595,21 +595,22 @@ TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
     // child too much. Here the result consists of the rows 5 and 6, so the
     // left child still has to supply 7 rows.
     auto optionalJoin = makeOptionalJoin();
-    optionalJoin.applyLimitOffset({10, 5});
+    optionalJoin.applyLimitOffset({10, 5}, false);
     expectChildLimits(optionalJoin, 15);
-    optionalJoin.applyLimitOffset({2, 0});
+    optionalJoin.applyLimitOffset({2, 0}, false);
     expectChildLimits(optionalJoin, 7);
   }
   {
     // Adding up the limit and the offset must not overflow.
     auto optionalJoin = makeOptionalJoin();
-    optionalJoin.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    optionalJoin.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1},
+                                  false);
     expectChildLimits(optionalJoin, std::nullopt);
   }
   {
     // Without a limit there is no bound that could be pushed down.
     auto optionalJoin = makeOptionalJoin();
-    optionalJoin.applyLimitOffset({std::nullopt, 8});
+    optionalJoin.applyLimitOffset({std::nullopt, 8}, false);
     expectChildLimits(optionalJoin, std::nullopt);
   }
 }
@@ -855,7 +856,7 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
         qec, inputTable.clone(), vars);
 
     OptionalJoin optionalJoin{qec, subtree1, subtree2};
-    optionalJoin.applyLimitOffset({2, 1});
+    optionalJoin.applyLimitOffset({2, 1}, false);
 
     EXPECT_EQ(
         optionalJoin.getChildren().at(0)->getRootOperation()->getLimitOffset(),
@@ -880,7 +881,7 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
         qec, inputTable.clone(), vars);
 
     OptionalJoin optionalJoin{qec, subtree1, subtree2};
-    optionalJoin.applyLimitOffset({std::nullopt, 1337});
+    optionalJoin.applyLimitOffset({std::nullopt, 1337}, false);
 
     EXPECT_TRUE(optionalJoin.getChildren()
                     .at(0)
@@ -907,7 +908,8 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
         qec, std::move(inputTable), vars);
 
     OptionalJoin optionalJoin{qec, subtree1, subtree2};
-    optionalJoin.applyLimitOffset({1, std::numeric_limits<uint64_t>::max()});
+    optionalJoin.applyLimitOffset({1, std::numeric_limits<uint64_t>::max()},
+                                  false);
 
     EXPECT_TRUE(optionalJoin.getChildren()
                     .at(0)
@@ -1413,7 +1415,7 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
   OptionalJoin optionalJoin{qec, std::move(left), std::move(right)};
   // The limit is small enough to make the left input of the inner
   // `OptionalJoin` smaller than its right input.
-  optionalJoin.applyLimitOffset({3});
+  optionalJoin.applyLimitOffset({3}, false);
 
   EXPECT_TRUE(
       optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
@@ -1468,7 +1470,7 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
   OptionalJoin optionalJoin{qec, std::move(left), std::move(right)};
   // The limit is small enough to make the left input of the inner
   // `OptionalJoin` smaller than its right input.
-  optionalJoin.applyLimitOffset({3});
+  optionalJoin.applyLimitOffset({3}, false);
 
   EXPECT_TRUE(
       optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));

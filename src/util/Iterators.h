@@ -173,14 +173,14 @@ class IteratorForAccessOperator {
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
   CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
-      requires HasValidAccessor<A, P> CPP_and(!isConst)) auto
-  operator->() {
+              requires HasValidAccessor<A, P> && (!isConst))
+  auto operator->() {
     return &(*(*this));
   }
 
   CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
-      requires HasValidAccessor<A, P>) auto
-  operator->() const {
+              requires HasValidAccessor<A, P>)
+  auto operator->() const {
     return &(*(*this));
   }
 
@@ -405,9 +405,9 @@ class InputRangeFromGet
 // A simple helper to define an `InputRangeFromGet` where the `get()` function
 // is a simple callable.
 CPP_template(typename T, typename F)(
-    requires ad_utility::InvocableWithConvertibleReturnType<
-        F, std::optional<T>>) struct InputRangeFromGetCallable
-    : public InputRangeFromGet<T> {
+    requires ad_utility::InvocableWithConvertibleReturnType<F,
+                                                            std::optional<T>>)
+struct InputRangeFromGetCallable : public InputRangeFromGet<T> {
  private:
   ::ranges::semiregular_box_t<F> function_;
 
@@ -543,8 +543,9 @@ InputRangeTypeErased(std::unique_ptr<InputRangeFromGet<ValueType, DetailsType>>)
 // being iterated over. Currently, the iterators must be random-access and the
 // resulting range thus also is random access.
 CPP_template(typename It, typename End)(
-    requires ql::concepts::random_access_iterator<It> CPP_and
-        ql::concepts::sized_sentinel_for<End, It>) struct IteratorRange
+    requires ql::concepts::random_access_iterator<It> &&
+    ql::concepts::sized_sentinel_for<End, It>)
+struct IteratorRange
     : public ql::ranges::view_interface<IteratorRange<It, End>> {
  private:
   It it_;

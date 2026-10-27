@@ -47,8 +47,8 @@ AttributeMacros: [CPP_member, CPP_auto_member, CPP_fun, CPP_auto_fun]
 # number of macro arguments (note that commas inside of `<...>` also separate
 # macro arguments). The macros below are expanded for calls with up to 12
 # arguments, except for the plain `CPP_template` macro, which for now is only
-# expanded for calls with 3 or more arguments. Its calls with 1 or 2 arguments
-# will follow in subsequent changes.
+# expanded for calls with 2 or more arguments. Its calls with 1 argument will
+# follow in a subsequent change.
 #
 # NOTE: Prefer combining constraints with `&&` over the `CPP_and` macro (which
 # the existing code uses in many places). `CPP_and` gives slightly better error
@@ -57,6 +57,7 @@ AttributeMacros: [CPP_member, CPP_auto_member, CPP_fun, CPP_auto_fun]
 # `CPP_and(...)` clang-format 18 crashes or runs into an infinite loop. Use
 # `CPP_and` temporarily when debugging such an error.
 Macros:
+  - 'CPP_template(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
   - 'CPP_template(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
   - 'CPP_template(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
   - 'CPP_template(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'

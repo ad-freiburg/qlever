@@ -121,7 +121,7 @@ void testLazyScanForJoinOfTwoScans(
     config.rowsPerBlock = rowsPerBlock;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
-    s1.applyLimitOffset(limit);
+    s1.applyLimitOffset(limit, false);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
     auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
                             const auto& expectedR,
@@ -1239,7 +1239,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
   // Rows 3-5 of the six `<p>` rows, join side with two matching values from
   // different blocks and a value (`<xb>`) that matches no block.
   IndexScan scan = makeScan();
-  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2});
+  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2}, false);
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;

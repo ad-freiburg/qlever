@@ -48,9 +48,9 @@ LimitOffsetHandling Bind::handlesLimitOffset() const {
 }
 
 // _____________________________________________________________________________
-void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
-  _subtree = _subtree->clone();
-  _subtree->applyLimitOffset(limitOffset);
+void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                                bool childrenAreExclusivelyOwned) {
+  applyLimitOffsetToChild(_subtree, limitOffset, childrenAreExclusivelyOwned);
 }
 
 float Bind::getMultiplicity(size_t col) {
@@ -154,7 +154,8 @@ Result Bind::computeResult(bool requestLaziness) {
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
-    IdTable result = applyBind(subRes->cloneIdTable(), &localVocab);
+    IdTable result =
+        applyBind(subRes->cloneIdTable(cancellationChecker()), &localVocab);
     AD_LOG_DEBUG << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
@@ -201,10 +202,10 @@ IdTable Bind::computeExpressionBind(
       auto inputColumn = idTable.getColumn(columnIndex);
       AD_CORRECTNESS_CHECK(inputColumn.size() == outputColumn.size());
       ad_utility::chunkedCopy(inputColumn, outputColumn.begin(), CHUNK_SIZE,
-                              [this]() { checkCancellation(); });
+                              cancellationChecker());
     } else if constexpr (isStrongId) {
       ad_utility::chunkedFill(outputColumn, singleResult, CHUNK_SIZE,
-                              [this]() { checkCancellation(); });
+                              cancellationChecker());
     } else {
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
@@ -219,7 +220,7 @@ IdTable Bind::computeExpressionBind(
                   std::move(*it), *localVocab);
           checkCancellation();
           ad_utility::chunkedFill(outputColumn, constantId, CHUNK_SIZE,
-                                  [this]() { checkCancellation(); });
+                                  cancellationChecker());
         }
       } else {
         size_t i = 0;

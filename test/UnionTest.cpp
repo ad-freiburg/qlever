@@ -820,7 +820,7 @@ TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
 
   // The limit is small enough to make the left input of the `OptionalJoin`
   // smaller than its right input.
-  unionOperation.applyLimitOffset({2});
+  unionOperation.applyLimitOffset({2}, false);
   expectChildrenAreSorted();
 }
 
@@ -858,7 +858,7 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
   {
     // Both children only have to supply `limit + offset` rows.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({2, 3});
+    unionOperation.applyLimitOffset({2, 3}, false);
     expectChildLimits(unionOperation, 5);
     // The `Union` still has to apply the `LIMIT`/`OFFSET` to its own result.
     expectResult(unionOperation, makeIdTableFromVector({{4}, {5}}));
@@ -869,22 +869,23 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
     // too much. Here the result consists of the rows 5 and 6 of the union, so
     // the children still have to supply 7 rows.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({10, 5});
+    unionOperation.applyLimitOffset({10, 5}, false);
     expectChildLimits(unionOperation, 15);
-    unionOperation.applyLimitOffset({2, 0});
+    unionOperation.applyLimitOffset({2, 0}, false);
     expectChildLimits(unionOperation, 7);
     expectResult(unionOperation, makeIdTableFromVector({{6}, {7}}));
   }
   {
     // Adding up the limit and the offset must not overflow.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    unionOperation.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1},
+                                    false);
     expectChildLimits(unionOperation, std::nullopt);
   }
   {
     // Without a limit there is no bound that could be pushed down.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({std::nullopt, 8});
+    unionOperation.applyLimitOffset({std::nullopt, 8}, false);
     expectChildLimits(unionOperation, std::nullopt);
     expectResult(unionOperation, makeIdTableFromVector({{9}, {10}}));
   }
