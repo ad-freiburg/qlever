@@ -393,8 +393,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child should
-  // do so via `applyLimitOffsetToChild` (passing on the second argument,
-  // `childrenAreExclusivelyOwned`, see `applyLimitOffset`) and has to repair
+  // do so via `applyLimitOffsetToChild`, passing on
+  // `childrenAreExclusivelyOwned` (see `applyLimitOffset`), and has to repair
   // the child afterwards, see the caution note on `applyLimitOffset`.
   virtual void onLimitOffsetChanged(const LimitOffsetClause&, bool) {
     // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
@@ -405,12 +405,14 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
  protected:
   // Push `limitOffset` into `child`, for the overrides of
-  // `onLimitOffsetChanged`. A child may be shared with other trees (e.g. other
-  // candidate plans of the query planner), so it is cloned first unless it is
-  // exclusively owned. The clone is a deep copy, so from there on the whole
-  // subtree is exclusively owned and the pushdown continues without further
-  // clones. (Cloning at every level made the pushdown quadratic in the depth
-  // of the tree, see issue #3474.)
+  // `onLimitOffsetChanged`. The child is cloned first unless it is exclusively
+  // owned, and the pushdown then continues in place.
+  //
+  // NOTE: A child may be shared with other trees (e.g. other candidate plans of
+  // the query planner), hence the clone. The clone is a deep copy, so from
+  // there on the whole subtree is exclusively owned and needs no further
+  // clones. Cloning at every level made the pushdown quadratic in the depth of
+  // the tree, see #3474.
   static void applyLimitOffsetToChild(
       std::shared_ptr<QueryExecutionTree>& child,
       const LimitOffsetClause& limitOffset, bool childIsExclusivelyOwned);
