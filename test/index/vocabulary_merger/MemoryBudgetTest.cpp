@@ -27,30 +27,38 @@ TEST(MemoryBudget, reserveGrowAndRelease) {
   MemoryBudget budget{bytes(100)};
   EXPECT_EQ(budget.limit(), bytes(100));
   {
+    // A reservation accounts for its bytes, and may exceed the limit.
     auto a = budget.reserve(bytes(30));
     EXPECT_EQ(a.numBytes(), 30u);
     EXPECT_EQ(budget.used(), bytes(30));
-    // A reservation may exceed the limit.
     auto b = budget.reserve(bytes(80));
     EXPECT_EQ(budget.used(), bytes(110));
+
+    // Growing adds to the reservation and to the budget.
     b.grow(5);
     EXPECT_EQ(b.numBytes(), 85u);
     EXPECT_EQ(budget.used(), bytes(115));
-    // Moving transfers the bytes, the moved-from reservation is empty.
+
+    // Moving transfers the bytes. The moved-from reservation holds nothing and
+    // cannot grow.
     MemoryBudget::Reservation c = std::move(b);
     EXPECT_EQ(c.numBytes(), 85u);
     EXPECT_EQ(budget.used(), bytes(115));
-    // The moved-from reservation holds nothing and cannot grow.
     // NOLINTNEXTLINE(bugprone-use-after-move)
     EXPECT_EQ(b.numBytes(), 0u);
     EXPECT_ANY_THROW(b.grow(1));
+
+    // Releasing returns the bytes, the reservation is then empty.
     c.release();
     EXPECT_EQ(c.numBytes(), 0u);
     EXPECT_EQ(budget.used(), bytes(30));
+
     // A move assignment releases the previous bytes of the target.
     a = budget.reserve(bytes(10));
     EXPECT_EQ(budget.used(), bytes(10));
   }
+
+  // The destructors return the remaining bytes, the peak stays.
   EXPECT_EQ(budget.used(), bytes(0));
   EXPECT_EQ(budget.peak(), bytes(115));
 }

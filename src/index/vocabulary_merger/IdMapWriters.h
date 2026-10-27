@@ -153,8 +153,9 @@ class IdMapWriters {
   bool hasFailed() const { return exceptionCollector_.hasException(); }
 
   // The number of tasks that have been pushed by `write`, but not completed
-  // yet. If it is zero, no task holds any `entries` (or is about to drop
-  // them).
+  // yet. If it is zero, no task is still writing. A task that has just
+  // completed may hold its `entries` for a moment longer, until the queue
+  // drops it.
   size_t numPendingTasks() const { return numPendingTasks_; }
 
   // Wait until all the entries are written, flush and close the maps, and
