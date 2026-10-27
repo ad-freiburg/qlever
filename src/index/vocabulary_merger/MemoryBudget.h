@@ -72,10 +72,14 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
     };
     ad_utility::unique_cleanup::UniqueCleanup<State, Release> state_;
 
-   public:
+    // Only `MemoryBudget::reserve` creates reservations, after it has added
+    // the bytes to the budget (so that every reservation returns exactly what
+    // was added for it).
+    friend class MemoryBudget;
     Reservation(MemoryBudget& budget, size_t numBytes)
         : state_{State{&budget, numBytes}, Release{}} {}
 
+   public:
     // Reserve `numBytes` more (never waits for memory). The reservation must
     // not be empty.
     void grow(size_t numBytes) {
@@ -135,10 +139,11 @@ class MemoryBudget : public ad_utility::NoCopyNoMove {
   }
 
  private:
-  // Whether `numBytes` more fit. NOTE: If nothing is reserved, everything
-  // fits, so that a single reservation that is larger than the limit cannot
-  // block forever.
+  // Whether `numBytes` more fit.
   // PRECONDITION: The `mutex_` is held.
+  //
+  // NOTE: If nothing is reserved, everything fits, so that a single
+  // reservation that is larger than the limit cannot block forever.
   bool fits(size_t numBytes) const {
     return used_ == 0 || used_ + numBytes <= limit_;
   }
