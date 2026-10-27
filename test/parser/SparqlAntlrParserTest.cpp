@@ -677,16 +677,19 @@ TEST(SparqlParser, DataBlock) {
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
 
-  // Literals of all kinds keep their `TripleComponent`.
+  // String literals in every syntactic form (both quote styles, long strings,
+  // language tag, datatype, escape sequences, multiple lines) are parsed to
+  // the expected `TripleComponent`.
   auto expectLiteral = [&](std::string_view literal, TripleComponent expected,
                            ad_utility::source_location l =
                                AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
     expectDataBlock(absl::StrCat("?a { ", literal, " }"),
-                    m::Values({Var{"?a"}}, {{std::move(expected)}}));
+                    m::Values({Var{"?a"}}, {{std::move(expected)}}), l);
   };
   expectLiteral(R"("foo")", lit("\"foo\""));
   expectLiteral(R"('foo')", lit("\"foo\""));
+  expectLiteral(R"("")", lit("\"\""));
+  expectLiteral(R"('''a'b''c''')", lit("\"a'b''c\""));
   expectLiteral(R"("foo"@en-US)", lit("\"foo\"", "@en-US"));
   expectLiteral(R"("foo"^^<http://www.w3.org/2001/XMLSchema#string>)",
                 lit("\"foo\"", "^^<http://www.w3.org/2001/XMLSchema#string>"));
