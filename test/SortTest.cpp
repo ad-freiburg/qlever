@@ -270,7 +270,7 @@ TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
   EXPECT_TRUE(sort.makeSortedTree({1, 0}).has_value());
   // With a `LIMIT` the sort order determines which rows are part of the result,
   // so an additional `Sort` has to be placed on top of this operation instead.
-  sort.applyLimitOffset({1});
+  sort.applyLimitOffset({1}, false);
   EXPECT_FALSE(sort.makeSortedTree({1, 0}).has_value());
 }
 
@@ -540,7 +540,7 @@ TEST(Sort, limitOffsetIsPropagated) {
       qec, std::move(inputTable), vars);
 
   Sort sort{qec, subtree, {0}};
-  sort.applyLimitOffset({2, 1});
+  sort.applyLimitOffset({2, 1}, false);
 
   EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),
             LimitOffsetClause(2, 1));
@@ -562,7 +562,7 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
   ASSERT_NE(sort, nullptr);
   EXPECT_EQ(sort->handlesLimitOffset(), LimitOffsetHandling::NONE);
 
-  sort->applyLimitOffset({2, 1});
+  sort->applyLimitOffset({2, 1}, false);
 
   EXPECT_EQ(sort->getLimitOffset(), LimitOffsetClause(2, 1));
   EXPECT_TRUE(sort->getChildren()
