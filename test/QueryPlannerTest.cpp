@@ -17,6 +17,7 @@
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocatorTestHelpers.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -37,6 +38,7 @@ QueryPlanner makeQueryPlanner() {
                       std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
+// Test that the `QueryPlanner` rejects a null `QueryExecutionContext`.
 TEST(QueryPlanner, constructorRequiresQueryExecutionContext) {
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   EXPECT_ANY_THROW(QueryPlanner(nullptr, handle));
@@ -228,6 +230,8 @@ TEST(QueryPlanner, testBFSLeaveOut) {
   }
 }
 
+// Test the splitting of a `TripleGraph` at the text nodes of context
+// variables, with the filters distributed to the parts.
 TEST(QueryPlanner, splitAtContextVars) {
   ParsedQuery pq = parseQuery(
       "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y> FILTER(?p2 = <Y>)}");

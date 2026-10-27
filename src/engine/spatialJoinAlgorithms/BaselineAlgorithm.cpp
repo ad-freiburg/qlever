@@ -12,6 +12,8 @@
 
 #include <queue>
 
+#include "util/ContainersWithAllocator.h"
+
 // ____________________________________________________________________________
 Result BaselineAlgorithm::run() {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

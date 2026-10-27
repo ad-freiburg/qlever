@@ -15,6 +15,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace SpatialJoinTestHelpers {
 

@@ -13,6 +13,8 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "util/ContainersWithAllocator.h"
+
 // ____________________________________________________________________________
 SpatialJoinAlgorithmBase::SpatialJoinAlgorithmBase(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,

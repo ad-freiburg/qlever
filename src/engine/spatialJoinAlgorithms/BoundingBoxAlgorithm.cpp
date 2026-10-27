@@ -14,6 +14,7 @@
 #include <set>
 
 #include "backports/three_way_comparison.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/VectorWithMemoryLimit.h"
 

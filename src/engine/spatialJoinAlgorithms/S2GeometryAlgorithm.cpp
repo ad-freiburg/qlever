@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "util/ContainersWithAllocator.h"
 #include "util/GeoConverters.h"
 
 using namespace geometryConverters;

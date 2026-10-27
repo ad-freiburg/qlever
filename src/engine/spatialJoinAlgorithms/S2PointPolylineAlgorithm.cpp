@@ -16,6 +16,7 @@
 #include <s2/util/units/length-units.h>
 
 #include "engine/NamedResultCache.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GeoConverters.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"

@@ -25,6 +25,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+#include "util/ContainersWithAllocator.h"
 
 class QueryPlanner {
   using TextLimitMap =
