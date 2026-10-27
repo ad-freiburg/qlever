@@ -2641,7 +2641,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     // exposes the `BIND`'s target.
     {
       auto tree = optional(view(), sharesS());
-      tree->applyLimitOffset(LimitOffsetClause{5});
+      tree->applyLimitOffset(LimitOffsetClause{5}, false);
       tree->getRootOperation()->setSelectedVariablesForSubquery(
           {V{"?s"}, V{"?o"}});
       auto result = tree->makeTreeWithBindColumn(bind);
