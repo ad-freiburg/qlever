@@ -41,16 +41,16 @@ float CompressedRelationWriter::computeMultiplicity(
 
 // ___________________________________________________________________________
 void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
-  if (smallRelationsBuffer_.empty()) {
+  if (smallRelations_.empty()) {
     return;
   }
 
-  AD_CORRECTNESS_CHECK(smallRelationsBuffer_.numColumns() == numColumns());
+  auto block = smallRelations_.takeBlock(takeBlockBuffer());
+  AD_CORRECTNESS_CHECK(block.rows_.numColumns() == numColumns());
   // We write small relations to a single block, so we specify the last
   // argument to `true` to invoke the `smallBlocksCallback_`.
-  compressAndWriteBlock(currentBlockFirstCol0_, currentBlockLastCol0_,
-                        BlockToWrite{std::move(smallRelationsBuffer_)}, true);
-  smallRelationsBuffer_ = takeBlockBuffer();
+  compressAndWriteBlock(block.firstCol0_, block.lastCol0_,
+                        BlockToWrite{std::move(block.rows_)}, true);
 }
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
@@ -110,8 +110,7 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
       hasDuplicates});
   if (invokeCallback && smallBlocksCallback_) {
     // Only blocks of small relations invoke the callback, and those always
-    // own their rows, because they are assembled in the
-    // `smallRelationsBuffer_`.
+    // own their rows, because they are assembled by the `smallRelations_`.
     AD_CORRECTNESS_CHECK(block.ownsRows());
     std::invoke(smallBlocksCallback_, std::move(block).extractTable());
   } else if (block.ownsRows()) {
@@ -127,8 +126,9 @@ IdTable CompressedRelationWriter::takeBlockBuffer() {
   AD_CORRECTNESS_CHECK(buffer.numColumns() == numColumns());
   buffer.clear();
   // Note: A block may exceed the `blocksize()` (see
-  // `smallRelationBlockCapacity`), but the factor of 2 suffices in almost all
-  // cases. For a buffer that is reused, this `reserve` is typically a no-op.
+  // `SmallRelationsBlockBuilder::capacity`), but the factor of 2 suffices in
+  // almost all cases. For a buffer that is reused, this `reserve` is typically
+  // a no-op.
   buffer.reserve(2 * blocksize());
   return buffer;
 }

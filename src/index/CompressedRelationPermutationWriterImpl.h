@@ -660,18 +660,10 @@ struct CompressedRelationWriter::PermutationWriter {
                                      size_t firstRunEnd,
                                      size_t numRowsOfBlock) {
     AD_CORRECTNESS_CHECK(begin < firstRunEnd);
-    // The number of rows that the batch may hold at most. Note that
-    // `addSmallRelations` starts a new block if the batch doesn't fit into the
-    // current one. So if not even the first relation fits, then that new block
-    // is started in any case, and the capacity of a complete fresh block is
-    // available for the batch. That way a batch is never cut short just
-    // because the current block happens to be almost full, while the resulting
-    // blocks are still exactly the same as if the relations were written one
-    // by one.
-    size_t capacity = writer1_->numRowsUntilSmallRelationBlockIsFull();
-    if (firstRunEnd - begin > capacity) {
-      capacity = writer1_->smallRelationBlockCapacity();
-    }
+    // The number of rows that the batch may hold at most, see
+    // `SmallRelationsBlockBuilder::capacityForBatch`.
+    size_t capacity =
+        writer1_->smallRelations_.capacityForBatch(firstRunEnd - begin);
 
     // Greedily extend the batch by the following relations, as long as they
     // are complete small relations that still fit. Note that the first

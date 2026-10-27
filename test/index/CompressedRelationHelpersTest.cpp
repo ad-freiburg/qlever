@@ -15,6 +15,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "index/CompressedRelationHelpersImpl.h"
+#include "index/SmallRelationsBlockBuilder.h"
 
 using namespace compressedRelationHelpers;
 
@@ -153,4 +154,67 @@ TEST(CompressedRelationWriter, makeLargeRelationMetadata) {
       1.0f);
   EXPECT_ANY_THROW(
       CompressedRelationWriter::makeLargeRelationMetadata(V(7), 0, 0));
+}
+
+// _____________________________________________________________________________
+TEST(SmallRelationsBlockBuilder, buildBlocks) {
+  // Three small relations with the `col0` IDs 1, 2, and 3.
+  auto relations = makeIdTableFromVector(
+      {{1, 0, 0}, {1, 1, 0}, {2, 0, 0}, {3, 0, 0}, {3, 1, 0}, {3, 2, 0}});
+  auto freshBuffer = [&]() { return IdTable{3, relations.getAllocator()}; };
+  // The capacity is 1.5 times the blocksize.
+  SmallRelationsBlockBuilder builder{freshBuffer(), 4};
+  EXPECT_EQ(builder.capacity(), 6);
+  EXPECT_TRUE(builder.empty());
+  EXPECT_EQ(builder.numRowsUntilFull(), 6);
+  EXPECT_TRUE(builder.fits(6));
+  EXPECT_FALSE(builder.fits(7));
+
+  builder.add(V(1), V(2), relations, 0, 3);
+  EXPECT_FALSE(builder.empty());
+  EXPECT_EQ(builder.numRows(), 3);
+  EXPECT_EQ(builder.numRowsUntilFull(), 3);
+  EXPECT_TRUE(builder.fits(3));
+  EXPECT_FALSE(builder.fits(4));
+  // A batch whose first relation still fits may use the remaining rows of
+  // the current block, otherwise a complete fresh block is available.
+  EXPECT_EQ(builder.capacityForBatch(3), 3);
+  EXPECT_EQ(builder.capacityForBatch(4), 6);
+  // The `col0` IDs have to match the rows.
+  EXPECT_ANY_THROW(builder.add(V(2), V(3), relations, 3, 6));
+  // A batch that doesn't fit into a non-empty block is rejected.
+  EXPECT_ANY_THROW(builder.add(
+      V(3), V(3),
+      makeIdTableFromVector({{3, 0, 0}, {3, 1, 0}, {3, 2, 0}, {3, 3, 0}}), 0,
+      4));
+
+  auto block = builder.takeBlock(freshBuffer());
+  EXPECT_EQ(block.firstCol0_, V(1));
+  EXPECT_EQ(block.lastCol0_, V(2));
+  EXPECT_EQ(block.rows_,
+            makeIdTableFromVector({{1, 0, 0}, {1, 1, 0}, {2, 0, 0}}));
+  EXPECT_TRUE(builder.empty());
+  EXPECT_EQ(builder.numRowsUntilFull(), 6);
+  // An empty block can't be taken.
+  EXPECT_ANY_THROW(builder.takeBlock(freshBuffer()));
+
+  // A batch that exceeds the capacity on its own is allowed into an empty
+  // block.
+  SmallRelationsBlockBuilder smallBuilder{freshBuffer(), 2};
+  EXPECT_EQ(smallBuilder.capacity(), 3);
+  smallBuilder.add(V(1), V(3), relations, 0, 6);
+  EXPECT_EQ(smallBuilder.numRowsUntilFull(), 0);
+  EXPECT_FALSE(smallBuilder.fits(1));
+  auto bigBlock = smallBuilder.takeBlock(freshBuffer());
+  EXPECT_EQ(bigBlock.firstCol0_, V(1));
+  EXPECT_EQ(bigBlock.lastCol0_, V(3));
+  EXPECT_EQ(bigBlock.rows_, relations);
+
+  // The buffer of the builder and the fresh buffers have to be empty and
+  // have to have the right number of columns.
+  EXPECT_ANY_THROW((SmallRelationsBlockBuilder{relations.clone(), 4}));
+  smallBuilder.add(V(1), V(1), relations, 0, 1);
+  EXPECT_ANY_THROW(smallBuilder.takeBlock(relations.clone()));
+  EXPECT_ANY_THROW(
+      smallBuilder.takeBlock(IdTable{2, relations.getAllocator()}));
 }
