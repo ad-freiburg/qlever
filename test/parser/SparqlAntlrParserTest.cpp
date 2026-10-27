@@ -693,7 +693,7 @@ TEST(SparqlParser, DataBlock) {
   expectLiteral(R"("42"^^<http://www.w3.org/2001/XMLSchema#integer>)", 42);
   expectLiteral(R"("foo"^^<http://example.org/dt>)",
                 lit("\"foo\"", "^^<http://example.org/dt>"));
-  expectLiteral(R"("a\"b\\c\nd")", lit(R"("a\"b\\c\nd")"));
+  expectLiteral(R"("a\"b\\c\nz")", lit(R"("a\"b\\c\nz")"));
   expectLiteral(R"("ä\U0001F600")", lit("\"ä😀\""));
   expectLiteral(R"("""multi
 "line" ""string""")",
