@@ -10,9 +10,9 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
-#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -36,6 +36,21 @@ Filter::Filter(QueryExecutionContext* qec,
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap Filter::computeVariableToColumnMap() const {
+  // The columns of the `ExistsJoin`s are only needed to evaluate this filter.
+  // Hide them, so that parents neither join on them nor see them twice.
+  // TODO<StripColumns> Don't write these columns once `Filter` can strip
+  // columns.
+  auto variableColumns = _subtree->getVariableColumns();
+  for (const auto* expression : _expression.getExistsExpressions()) {
+    variableColumns.erase(
+        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression)
+            .variable());
+  }
+  return variableColumns;
 }
 
 // _____________________________________________________________________________
@@ -163,17 +178,15 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
       requires sparqlExpression::SingleExpressionResult<T>) {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
+      AD_CONTRACT_CHECK(singleResult.size() == input.size(),
+                        "The size of a `SetOfIntervals` does not match the "
+                        "size of the evaluation context.");
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.
-      //
-      // NOTE: One of the interval ends may be larger than `input.size()`
-      // (as the result of a negation).
       auto totalSize = std::accumulate(
           singleResult._intervals.begin(), singleResult._intervals.end(),
-          resultTable.size(), [&input](const auto& sum, const auto& interval) {
-            size_t intervalBegin = interval.first;
-            size_t intervalEnd = std::min(interval.second, input.size());
-            return sum + (intervalEnd - intervalBegin);
+          resultTable.size(), [](const auto& sum, const auto& interval) {
+            return sum + (interval.second - interval.first);
           });
       if (resultTable.empty() && totalSize == inputTable.size()) {
         // The binary filter contains all elements of the input, and we have
@@ -185,7 +198,6 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
       }
       checkCancellation();
       for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
-        intervalEnd = std::min(intervalEnd, input.size());
         resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
         checkCancellation();
       }
@@ -263,31 +275,6 @@ std::unique_ptr<Operation> Filter::cloneWithNewChildren(
     std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Filter>(_executionContext, std::move(children.at(0)),
                                   _expression);
-}
-
-// _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-Filter::makeTreeWithStrippedColumns(
-    const std::set<Variable>& requestedVariables) const {
-  // The subtree has to provide the requested variables and all variables that
-  // the `Filter` operation filters on.
-  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
-      &requestedVariables);
-  std::vector<const Variable*> variablesForFiltering =
-      _expression.containedVariables();
-  for (auto filterVar : variablesForFiltering) {
-    varsRequiredFromSubtree.add(*filterVar);
-  }
-
-  // Strip the subtree.
-  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-      _subtree, varsRequiredFromSubtree.get());
-
-  // The new `Filter` also exports the filtered variables that the parent did
-  // not request, the helper adds a `StripColumns` operation for them.
-  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Filter>(
-      getExecutionContext(), requestedVariables, std::move(subtree),
-      _expression);
 }
 
 // _____________________________________________________________________________
