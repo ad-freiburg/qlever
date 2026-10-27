@@ -160,10 +160,19 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     rti.totalTime_ = timer.msecs();
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
+    // NOTE: A lazy result can outlive this operation (for example, when the
+    // worker thread of a lazy join tears down its generators after the query
+    // has already been destroyed), and the following callbacks are then
+    // still called. They therefore hold a `weak_ptr` to this operation and do
+    // nothing if it no longer exists.
     result.runOnNewChunkComputed(
-        [this, vocabStats = LocalVocabTracking{}, ker = knownEmptyResult()](
-            const Result::IdTableVocabPair& pair,
-            std::chrono::microseconds duration) mutable {
+        [this, self = weak_from_this(), vocabStats = LocalVocabTracking{},
+         ker = knownEmptyResult()](const Result::IdTableVocabPair& pair,
+                                   std::chrono::microseconds duration) mutable {
+          auto keepAlive = self.lock();
+          if (!keepAlive) {
+            return;
+          }
           const IdTable& idTable = pair.idTable_;
           AD_CORRECTNESS_CHECK(idTable.empty() || !ker,
                                "Operation returned non-empty result, but "
@@ -184,8 +193,12 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](Result::GeneratorState state,
-               std::chrono::microseconds duration) {
+        [this, self = weak_from_this()](Result::GeneratorState state,
+                                        std::chrono::microseconds duration) {
+          auto keepAlive = self.lock();
+          if (!keepAlive) {
+            return;
+          }
           // The call that exhausted the generator did not yield a chunk, but
           // its time still belongs to this operation.
           updateRuntimeStats(false, 0, getResultWidth(), duration);
@@ -218,11 +231,15 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
   if (handlesLimitOffset() != LimitOffsetHandling::FULL) {
     AD_CONTRACT_CHECK(!externalLimitApplied_);
     externalLimitApplied_ = !limitOffset_.isUnconstrained();
+    // See the NOTE above `runOnNewChunkComputed` for the `weak_ptr`.
     result.applyLimitOffset(
-        limitOffset_, [this](std::chrono::microseconds limitTime,
-                             const IdTableView<0>& idTable) {
-          updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
-                             limitTime);
+        limitOffset_,
+        [this, self = weak_from_this()](std::chrono::microseconds limitTime,
+                                        const IdTableView<0>& idTable) {
+          if (auto keepAlive = self.lock()) {
+            updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
+                               limitTime);
+          }
         });
   } else {
     result.assertThatLimitWasRespected(limitOffset_);
@@ -442,7 +459,8 @@ void Operation::storeToNamedResultCache(const Result& result) {
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
   auto valueForNamedResultCache = NamedResultCache::Value{
-      std::make_shared<const IdTable>(result.cloneIdTable()),
+      std::make_shared<const IdTable>(
+          result.cloneIdTable(cancellationChecker())),
       getExternallyVisibleVariableColumns(),
       // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
       // migrated to `qlm::vector` throughout the Operation hierarchy.

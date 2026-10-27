@@ -24,6 +24,7 @@
 #include "util/ContainersWithAllocator.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
+#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
@@ -54,7 +55,7 @@ enum class LimitOffsetHandling {
   FULL
 };
 
-class Operation {
+class Operation : public std::enable_shared_from_this<Operation> {
  private:
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using Milliseconds = std::chrono::milliseconds;
@@ -613,6 +614,14 @@ class Operation {
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
     cancellationHandle()->throwIfCancelled(
         location, [this]() { return getDescriptor(); });
+  }
+
+  // Return a function that calls `checkCancellation` (with the location of the
+  // caller of this function), e.g. as the `chunkOperation` of
+  // `ad_utility::chunkedForLoop`.
+  auto cancellationChecker(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
+    return [this, location]() { checkCancellation(location); };
   }
 
   // Get the mapping from variables to column indices. This mapping may only be
