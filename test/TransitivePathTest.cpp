@@ -2110,44 +2110,6 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, costEstimateIsDirectionAware) {
-  auto sub = makeIdTableFromVector({
-      {0, 1},
-      {1, 2},
-  });
-
-  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
-  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-
-  auto [path, qec] =
-      makePath(std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}},
-               left, right, 1, std::numeric_limits<size_t>::max());
-
-  // The cost estimate for a bound transitive path contains the size of the
-  // bound side times the multiplicity of the start column of the subtree,
-  // which is the average number of edges per node in the direction of the
-  // traversal. The subtree is a `ValuesForTesting` whose multiplicities
-  // default to 42 for column 0 and 84 for column 1, so binding the left and
-  // the right side must yield cost estimates that differ by exactly this
-  // term. The size estimates must not depend on the direction.
-  auto boundLeft = path->bindLeftSide(
-      ad_utility::makeExecutionTree<ValuesForTesting>(
-          qec, makeIdTableFromVector({{0, 10}, {1, 11}, {2, 12}}),
-          std::vector<std::optional<Variable>>{Variable{"?start"},
-                                               Variable{"?other"}}),
-      0);
-  auto boundRight = path->bindRightSide(
-      ad_utility::makeExecutionTree<ValuesForTesting>(
-          qec, makeIdTableFromVector({{0, 10}, {1, 11}, {2, 12}}),
-          std::vector<std::optional<Variable>>{Variable{"?target"},
-                                               Variable{"?other"}}),
-      0);
-  EXPECT_EQ(boundLeft->getSizeEstimate(), boundRight->getSizeEstimate());
-  EXPECT_EQ(boundRight->getCostEstimate() - boundLeft->getCostEstimate(),
-            3 * 84 - 3 * 42);
-}
-
-// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),
@@ -2376,4 +2338,170 @@ TEST(TransitivePathHashMap, getEquivalentIdAndMatchingGraphsWithGraphs) {
     EXPECT_THAT(hashMapWrapper.getEquivalentIdAndMatchingGraphs(V(4)),
                 UnorderedElementsAre());
   }
+}
+
+namespace {
+// The number of rows and the multiplicities of the columns that the subtree
+// of the transitive paths in the estimate tests below claims to have. The
+// multiplicities are the defaults of `ValuesForTesting`.
+constexpr double numEdges = 1'000'000;
+constexpr double leftMultiplicity = 42;
+constexpr double rightMultiplicity = 84;
+constexpr auto maxDistInfinity = std::numeric_limits<size_t>::max();
+
+// Return a `ValuesForTesting` with the given variables that claims to have
+// `numRows` rows.
+std::shared_ptr<QueryExecutionTree> makeTreeWithSizeEstimate(
+    QueryExecutionContext* qec, size_t numRows, Vars vars) {
+  VectorTable row{std::vector<IntOrId>(vars.size(), int64_t{0})};
+  auto values = std::make_shared<ValuesForTesting>(
+      qec, makeIdTableFromVector(row), std::move(vars));
+  values->sizeEstimate() = numRows;
+  return std::make_shared<QueryExecutionTree>(qec, std::move(values));
+}
+
+// Return the transitive path `left <p>+ right` with the given distances over
+// a graph with `numEdges` edges.
+std::shared_ptr<TransitivePathBase> makePathForEstimates(
+    TransitivePathSide left, TransitivePathSide right, size_t minDist,
+    size_t maxDist) {
+  auto* qec = getQec();
+  return TransitivePathBase::makeTransitivePath(
+      qec,
+      makeTreeWithSizeEstimate(
+          qec, static_cast<size_t>(numEdges),
+          {Variable{"?internal1"}, Variable{"?internal2"}}),
+      std::move(left), std::move(right), minDist, maxDist, false, Graphs::All(),
+      std::nullopt);
+}
+
+// The sides of `?start <p>+ ?target`. These are functions, because the
+// construction of a `Variable` must not happen during static initialization.
+TransitivePathSide leftVar() {
+  return {std::nullopt, 0, Variable{"?start"}, 0};
+}
+TransitivePathSide rightVar() {
+  return {std::nullopt, 1, Variable{"?target"}, 1};
+}
+
+// A bound transitive path is estimated like a join of the bound side with the
+// complete hull, so its size estimate contains the correction factor of joins.
+double joinCorrection() {
+  return getQec()->getCostFactor("JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR");
+}
+
+// Bind the given side of `path` to a table with 1000 rows, the values of which
+// are in the first column. The second column `?other` is a payload column.
+std::shared_ptr<TransitivePathBase> bindToThousandRows(
+    const TransitivePathBase& path, bool isLeft) {
+  auto variable = (isLeft ? path.getLeft() : path.getRight()).value_;
+  auto tree =
+      makeTreeWithSizeEstimate(path.getExecutionContext(), 1000,
+                               {variable.getVariable(), Variable{"?other"}});
+  return isLeft ? path.bindLeftSide(tree, 0) : path.bindRightSide(tree, 0);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(TransitivePathEstimates, unbound) {
+  auto oneStep = makePathForEstimates(leftVar(), rightVar(), 1, 1);
+  EXPECT_NEAR(oneStep->getSizeEstimate(), numEdges, 1);
+  EXPECT_NEAR(oneStep->getMultiplicity(0), leftMultiplicity, 0.01);
+  EXPECT_NEAR(oneStep->getMultiplicity(1), rightMultiplicity, 0.01);
+
+  // Each node has `leftMultiplicity` successors in the first step and
+  // `leftMultiplicity^2` in the second.
+  auto twoSteps = makePathForEstimates(leftVar(), rightVar(), 1, 2);
+  EXPECT_NEAR(twoSteps->getSizeEstimate(), numEdges * (1 + leftMultiplicity),
+              1);
+
+  // The complete hull is much larger than the graph, but each start node can
+  // reach at most all the target nodes.
+  auto hull = makePathForEstimates(leftVar(), rightVar(), 1, maxDistInfinity);
+  EXPECT_GT(hull->getSizeEstimate(), 10 * numEdges);
+  EXPECT_LE(hull->getSizeEstimate(),
+            (numEdges / leftMultiplicity) * (numEdges / rightMultiplicity));
+  EXPECT_GT(hull->getCostEstimate(), hull->getSizeEstimate());
+
+  // With the empty path, every entity of the knowledge graph is also matched
+  // with itself.
+  auto emptyPath = makePathForEstimates(leftVar(), rightVar(), 0, 1);
+  auto numEntities =
+      emptyPath->getLeft().treeAndCol_.value().first->getSizeEstimate();
+  EXPECT_NEAR(
+      emptyPath->getSizeEstimate(),
+      std::min(static_cast<double>(numEntities), numEdges / leftMultiplicity) *
+              leftMultiplicity +
+          numEntities,
+      1);
+}
+
+// _____________________________________________________________________________
+TEST(TransitivePathEstimates, fixedSides) {
+  TransitivePathSide leftFixed{std::nullopt, 0, V(0), 0};
+  TransitivePathSide rightFixed{std::nullopt, 1, V(3), 1};
+  EXPECT_EQ(makePathForEstimates(leftFixed, rightFixed, 1, maxDistInfinity)
+                ->getSizeEstimate(),
+            1);
+
+  auto fromLeft = makePathForEstimates(leftFixed, rightVar(), 1, 2);
+  double expectedSize = leftMultiplicity + leftMultiplicity * leftMultiplicity;
+  EXPECT_NEAR(fromLeft->getSizeEstimate(), expectedSize, 1);
+  // The fixed column is constant, and the reached nodes are distinct.
+  EXPECT_NEAR(fromLeft->getMultiplicity(0), expectedSize, 1);
+  EXPECT_NEAR(fromLeft->getMultiplicity(1), 1, 0.2);
+
+  // The traversal starts at the fixed right side, so it follows the edges
+  // backwards.
+  auto fromRight = makePathForEstimates(leftVar(), rightFixed, 1, 1);
+  EXPECT_NEAR(fromRight->getSizeEstimate(), rightMultiplicity, 1);
+}
+
+// _____________________________________________________________________________
+TEST(TransitivePathEstimates, boundSideIsDirectionAware) {
+  // A node has fewer successors than predecessors, so binding the left side
+  // must be cheaper than binding the right side, see #3258.
+  auto hull = makePathForEstimates(leftVar(), rightVar(), 1, maxDistInfinity);
+  auto boundLeft = bindToThousandRows(*hull, true);
+  auto boundRight = bindToThousandRows(*hull, false);
+  EXPECT_LT(boundLeft->getSizeEstimate(), boundRight->getSizeEstimate());
+  EXPECT_LT(boundLeft->getCostEstimate(), boundRight->getCostEstimate());
+
+  auto oneStep = makePathForEstimates(leftVar(), rightVar(), 1, 1);
+  EXPECT_NEAR(bindToThousandRows(*oneStep, true)->getSizeEstimate(),
+              joinCorrection() * 1000 * leftMultiplicity, 1);
+  EXPECT_NEAR(bindToThousandRows(*oneStep, false)->getSizeEstimate(),
+              joinCorrection() * 1000 * rightMultiplicity, 1);
+}
+
+// _____________________________________________________________________________
+TEST(TransitivePathEstimates, multiplicitiesOfBoundPath) {
+  auto oneStep = makePathForEstimates(leftVar(), rightVar(), 1, 1);
+  auto bound = bindToThousandRows(*oneStep, true);
+  // Each of the 1000 rows is repeated for each of its `leftMultiplicity`
+  // successors.
+  double size = joinCorrection() * 1000 * leftMultiplicity;
+  ASSERT_NEAR(bound->getSizeEstimate(), size, 1);
+  // The start values are the values of the first column of the bound table,
+  // the multiplicity of which is `leftMultiplicity`.
+  double rowsPerStartRow = joinCorrection() * leftMultiplicity;
+  EXPECT_NEAR(bound->getMultiplicity(0), leftMultiplicity * rowsPerStartRow,
+              0.1);
+  // The 1000 reached nodes overlap a little ("balls into bins").
+  double numTargetNodes = numEdges / rightMultiplicity;
+  double numDistinctTargets =
+      numTargetNodes * (1 - std::exp(-1000 / numTargetNodes));
+  EXPECT_NEAR(bound->getMultiplicity(1), size / numDistinctTargets, 0.1);
+  // The payload column `?other` has the multiplicity `rightMultiplicity` in the
+  // bound table.
+  auto otherCol =
+      bound->getExternallyVisibleVariableColumns().at(Variable{"?other"});
+  EXPECT_NEAR(bound->getMultiplicity(otherCol.columnIndex_),
+              rightMultiplicity * rowsPerStartRow, 0.1);
+
+  // With the empty path, each row is additionally matched with itself.
+  auto withEmptyPath = bindToThousandRows(
+      *makePathForEstimates(leftVar(), rightVar(), 0, 1), true);
+  EXPECT_NEAR(withEmptyPath->getSizeEstimate(), size + joinCorrection() * 1000,
+              1);
 }
