@@ -73,6 +73,12 @@ TEST(ServerTest, chooseBestFittingMediaType) {
   EXPECT_EQ(choose({tsv, csv}, askQuery), sparqlJson);
   EXPECT_EQ(choose({turtle, json}, selectQuery), sparqlJson);
   EXPECT_EQ(choose({octetStream, sparqlJson}, constructQuery), turtle);
+
+  // QLever's binary format is only supported for SELECT queries.
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, selectQuery),
+            binaryQleverExport);
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({binaryQleverExport}, constructQuery), turtle);
 }
 
 // _____________________________________________________________________________
@@ -732,6 +738,24 @@ TEST(ServerTest, processCommands) {
       boost::beast::http::status::bad_request,
       testing::HasSubstr(
           "Unknown value \"not-a-real-command\" for parameter \"cmd\""));
+}
+
+// Test that a request with neither a known URL parameter nor a known path is
+// answered with an error response.
+TEST(ServerTest, unknownParametersAndPath) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown URL parameter results in a 400 Bad Request response.
+  auto response = server.process(makeGetRequest("/?nexistepas=1"));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown query parameters"));
+
+  // An unknown path without URL parameters results in a 404 Not Found response.
+  response = server.process(makeGetRequest("/nexistepas"));
+  EXPECT_THAT(response, StatusIs(http::status::not_found));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown path"));
 }
 
 // _____________________________________________________________________________

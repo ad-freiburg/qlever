@@ -39,8 +39,9 @@ CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 // optional `supportsConst` argument explicitly disables const iteration for
 // this view when set to false, see `OwningViewNoConst` below for details.
 CPP_template(typename UnderlyingRange, bool supportConst = true)(
-    requires ql::ranges::range<UnderlyingRange> CPP_and
-        ql::concepts::movable<UnderlyingRange>) class OwningView
+    requires ql::ranges::range<UnderlyingRange> &&
+    ql::concepts::movable<UnderlyingRange>)
+class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -158,8 +159,9 @@ using all_t = decltype(allView(std::declval<Range>()));
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
 CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
-        ql::concepts::invocable<F&>) class CallbackOnEndView
+    requires ql::ranges::input_range<V> && ql::ranges::view<V> &&
+    ql::concepts::invocable<F&>)
+class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;

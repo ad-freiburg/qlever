@@ -796,19 +796,22 @@ TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
   expectIsIriAndIsLiteral({boolTrue_, int_, double_, date_, geoPoint_}, false,
                           true);
   // The remaining datatypes are neither.
-  expectIsIriAndIsLiteral({undefined_, blankNode_, textRecord_, wordVocab_},
-                          false, false);
+  expectIsIriAndIsLiteral({blankNode_, textRecord_, wordVocab_}, false, false);
+  // An unbound argument is an error.
+  expectAll<IsIriValueGetter>({undefined_}, Eq(Id::makeUndefined()));
+  expectAll<IsLiteralValueGetter>({undefined_}, Eq(Id::makeUndefined()));
 }
 
 // _____________________________________________________________________________
 TEST_F(IriOrUriValueGetterTest, OperatorWithId) {
   using Getter = sparqlExpression::detail::IriOrUriValueGetter;
-  // The getter turns a literal or an IRI into an IRI, which is a
-  // `LocalVocabEntry` because it does not have to be contained in any
-  // vocabulary of the index.
+  // The getter turns a literal or an IRI into an IRI, which is a plain
+  // `LiteralOrIri`. It is only converted to an `Id` or a `LocalVocabEntry`
+  // later (see `promoteToLocalVocabEntry`), which also encodes it if possible.
+  using ad_utility::triple_component::LiteralOrIri;
   auto isIriEntry = [](const std::string& expected) {
-    return VariantWith<LocalVocabEntry>(
-        AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+    return VariantWith<LiteralOrIri>(
+        AD_PROPERTY(LiteralOrIri, toStringRepresentation,
                     Eq(absl::StrCat("<", expected, ">"))));
   };
   for (const auto& words : {plainLiterals_, typedLiterals_, iris_}) {

@@ -427,6 +427,48 @@ TEST(LibQlever, disableCaching) {
   }
 }
 
+// Test that the runtime parameter `memory-for-queries` mirrors and controls
+// the memory limit of the engine's allocator.
+TEST(LibQlever, memoryForQueriesRuntimeParameter) {
+  using namespace ad_utility::memory_literals;
+  EngineConfig ec = buildTestIndex("<s> <p> <o>.");
+  ec.memoryLimit_ = 50_MB;
+  Qlever engine{ec};
+  // Restore the default state of the parameter for the later tests.
+  absl::Cleanup cleanup = [] {
+    auto runtimeParameters = globalRuntimeParameters.wlock();
+    runtimeParameters->memoryForQueries_.clearOnUpdateAction();
+    runtimeParameters->memoryForQueries_.set(DEFAULT_MEM_FOR_QUERIES);
+  };
+
+  // Constructing the engine has synced the parameter to the configured limit.
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            50_MB);
+  auto initialMemoryLeft = engine.allocator().amountMemoryLeft();
+  EXPECT_LE(initialMemoryLeft, 50_MB);
+
+  // Increasing the limit always works.
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(100_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft + 50_MB);
+
+  // Decreasing works as long as the freed part is currently unused, i.e. not
+  // below the 32 MB allocated here (plus what the engine itself has
+  // allocated).
+  Id* chunk = engine.allocator().allocate(4'000'000);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB),
+      HasSubstr("Cannot reduce the memory limit"));
+  // The rejected decrease left both the parameter and the limit unchanged.
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            100_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(),
+            initialMemoryLeft + 50_MB - 32_MB);
+
+  engine.allocator().deallocate(chunk, 4'000'000);
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft - 30_MB);
+}
+
 // _____________________________________________________________________________
 TEST(LibQlever, externallySpecifiedValues) {
   EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
@@ -666,10 +708,7 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
   // `requestTimer` reaches the query planner through `planQuery` and ends up in
   // the runtime information, just as it does via `parseAndPlanQuery`.
   ad_utility::Timer requestTimer{ad_utility::Timer::Started};
-  auto plan =
-      engine.planQuery(engine.parseQuery(query),
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       std::nullopt, requestTimer);
+  auto plan = engine.planQuery(engine.parseQuery(query), requestTimer);
   EXPECT_GT(plan.queryExecutionTree()
                 .getRootOperation()
                 ->getQueryPlanningInfo()
@@ -684,12 +723,35 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
   ASSERT_EQ(queryPlanning.size(), 1u);
   EXPECT_EQ(queryPlanning[0].numNodes_, 1u);
 
+  // The cancellation handle that is passed to `parseQuery` (or
+  // `bindParsedQuery`) is stored in the `QueryExecutionContext` of the query,
+  // where all its operations (including the ones that are only created during
+  // the execution) get it from.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto parseWithHandle = [&engine, &query](auto cancellationHandle) {
+    return engine.parseQuery(query, {}, ad_utility::noop, false, false,
+                             std::move(cancellationHandle));
+  };
+  auto planWithHandle = engine.planQuery(parseWithHandle(handle));
+  EXPECT_EQ(planWithHandle.queryExecutionContext().cancellationHandle(),
+            handle);
+  EXPECT_EQ(planWithHandle.queryExecutionTree()
+                .getRootOperation()
+                ->cancellationHandle(),
+            handle);
+  EXPECT_EQ(engine
+                .bindParsedQuery(planWithHandle.parsedQuery(), ad_utility::noop,
+                                 false, false, handle)
+                .queryExecutionContext()
+                .cancellationHandle(),
+            handle);
+
   // A cancellation handle that is already cancelled makes planning fail, which
   // shows that the handle reaches the query planner as well.
   auto cancelledHandle = std::make_shared<ad_utility::CancellationHandle<>>();
   cancelledHandle->cancel(ad_utility::CancellationState::MANUAL);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      engine.planQuery(engine.parseQuery(query), cancelledHandle),
+      engine.planQuery(parseWithHandle(cancelledHandle)),
       HasSubstr("manually cancelled"));
 }
 
@@ -724,19 +786,6 @@ TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
   EXPECT_EQ(&planOnSecond.queryExecutionContext(),
             &boundToSecond.queryExecutionContext());
   EXPECT_EQ(second.query(planOnSecond, ad_utility::MediaType::tsv), expected);
-}
-
-// _____________________________________________________________________________
-// Test `EngineConfig::computeSortPerformanceEstimators_`: the (potentially
-// expensive) estimates are computed by default, but not if the config disables
-// them.
-TEST(LibQlever, computeSortPerformanceEstimators) {
-  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
-  ASSERT_TRUE(ec.computeSortPerformanceEstimators_);
-  EXPECT_TRUE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
-
-  ec.computeSortPerformanceEstimators_ = false;
-  EXPECT_FALSE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
 }
 
 // _____________________________________________________________________________
@@ -870,7 +919,19 @@ TEST(LibQlever, clearDeltaTriples) {
   auto metadata = applyUpdateToEngine(engine, "INSERT DATA { <a> <b> <c> }");
   EXPECT_THAT(metadata.countAfter_, Optional(Eq(DeltaTriplesCount{1, 0})));
 
+  auto runQuery = [&engine]() {
+    return engine.query(
+        engine.planQuery(engine.parseQuery("SELECT ?s WHERE { ?s <b> ?o }")),
+        ad_utility::MediaType::tsv);
+  };
+  // The result of this query is cached.
+  EXPECT_EQ(runQuery(), "?s\n<a>\n");
+  ASSERT_GT(engine.cache().numNonPinnedEntries(), 0U);
+
   EXPECT_THAT(engine.clearDeltaTriples(), Eq(DeltaTriplesCount{0, 0}));
+
+  // The cached result from before the clear must not be reused.
+  EXPECT_EQ(runQuery(), "?s\n");
 }
 
 // _____________________________________________________________________________

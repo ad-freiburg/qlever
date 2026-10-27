@@ -145,31 +145,6 @@ class QueryExecutionTree {
     return rootOperation_->collectWarnings();
   }
 
-  template <typename F>
-  void forAllDescendants(F f) {
-    static_assert(
-        std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
-    for (auto ptr : rootOperation_->getChildren()) {
-      if (ptr) {
-        f(ptr);
-        ptr->forAllDescendants(f);
-      }
-    }
-  }
-
-  template <typename F>
-  void forAllDescendants(F f) const {
-    static_assert(
-        std::is_same_v<void,
-                       std::invoke_result_t<F, const QueryExecutionTree*>>);
-    for (auto ptr : rootOperation_->getChildren()) {
-      if (ptr) {
-        f(ptr);
-        ptr->forAllDescendants(f);
-      }
-    }
-  }
-
   bool& isRoot() noexcept { return isRoot_; }
   [[nodiscard]] const bool& isRoot() const noexcept { return isRoot_; }
 

@@ -44,6 +44,12 @@ class SpatialJoinAlgorithmBase {
                            size_t rowRight, Id distance,
                            bool swapLeftAndRight = false) const;
 
+  // Convert a distance in kilometers to the `distanceUnit_` of the `config_`.
+  Id kilometersToDistanceId(double kilometers) const {
+    return Id::makeFromDouble(
+        ad_utility::detail::kilometerToUnit(kilometers, config_.distanceUnit_));
+  }
+
   // Calls the `cancellationWrapper` which throws if the query has been
   // cancelled.
   void throwIfCancelled() const;
@@ -52,6 +58,15 @@ class SpatialJoinAlgorithmBase {
   // by the S2-based algorithms as well as `RtreeEntryAlgorithm`.
   static std::optional<GeoPoint> getPoint(const IdTableView<0>* restable,
                                           size_t row, ColumnIndex col);
+
+  // Add a warning to the `SpatialJoin` operation if rows of the left and/or
+  // right input were skipped. The `reason` describes the skipped values, the
+  // default fits all algorithms that parse WKT literals, the `s2` algorithm
+  // passes "values that are not points".
+  void addSkippedRowsWarning(
+      size_t numSkippedLeft, size_t numSkippedRight,
+      std::string_view reason =
+          "invalid or unsupported geometry literals") const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
