@@ -24,7 +24,7 @@ Bind::Bind(QueryExecutionContext* qec,
     : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
-      cancellationHandle_);
+      cancellationHandle());
 }
 
 // BIND adds exactly one new column
@@ -155,7 +155,8 @@ Result Bind::computeResult(bool requestLaziness) {
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
-    IdTable result = applyBind(subRes->cloneIdTable(), &localVocab);
+    IdTable result =
+        applyBind(subRes->cloneIdTable(cancellationChecker()), &localVocab);
     AD_LOG_DEBUG << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
@@ -183,7 +184,7 @@ IdTable Bind::computeExpressionBind(
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       idTable.asStaticView<0>(), getExecutionContext()->getAllocator(),
-      *localVocab, cancellationHandle_, deadline_);
+      *localVocab, cancellationHandle());
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
@@ -202,10 +203,10 @@ IdTable Bind::computeExpressionBind(
       auto inputColumn = idTable.getColumn(columnIndex);
       AD_CORRECTNESS_CHECK(inputColumn.size() == outputColumn.size());
       ad_utility::chunkedCopy(inputColumn, outputColumn.begin(), CHUNK_SIZE,
-                              [this]() { checkCancellation(); });
+                              cancellationChecker());
     } else if constexpr (isStrongId) {
       ad_utility::chunkedFill(outputColumn, singleResult, CHUNK_SIZE,
-                              [this]() { checkCancellation(); });
+                              cancellationChecker());
     } else {
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
@@ -220,7 +221,7 @@ IdTable Bind::computeExpressionBind(
                   std::move(*it), *localVocab);
           checkCancellation();
           ad_utility::chunkedFill(outputColumn, constantId, CHUNK_SIZE,
-                                  [this]() { checkCancellation(); });
+                                  cancellationChecker());
         }
       } else {
         size_t i = 0;

@@ -20,6 +20,7 @@
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 
 #ifdef QLEVER_HAS_IO_URING
 #include <liburing.h>

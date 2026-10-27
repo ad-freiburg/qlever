@@ -42,6 +42,8 @@ namespace net = boost::asio;
 // into the place that was freed last.
 template <typename State>
 void moveSequence(State& state, const std::vector<size_t>& cycle) {
+  // This is the body of every task that moves blocks.
+  state.checkCancellation_();
   auto lease = state.acquireBuffer();
   auto buffer = lease.range();
 

@@ -2,6 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "../util/ColumnStrippingTestHelpers.h"
@@ -10,14 +11,19 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
+<<<<<<< HEAD
 #include "engine/StripColumns.h"
+    =======
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+    >>>>>>> upstream/master
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 
-using namespace sparqlExpression;
+    using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
 using V = Variable;
 
@@ -46,6 +52,41 @@ Bind makeBindForExpression(QueryExecutionContext* qec,
           {SparqlExpressionPimpl{std::move(expression),
                                  std::move(descriptor) + " AS ?b"},
            Variable{"?b"}}};
+}
+
+// Return a `Bind` of `IRI(?s) AS ?x` on an input whose column `?s` holds the
+// `strings` as literals.
+std::shared_ptr<QueryExecutionTree> makeIriBind(
+    QueryExecutionContext* qec, const std::vector<std::string>& strings) {
+  LocalVocab localVocab;
+  VectorTable rows;
+  for (const auto& s : strings) {
+    rows.push_back(
+        {Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::literalWithoutQuotes(
+                s, qec->getLocalVocabContext())))});
+  }
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector(rows), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{}, std::move(localVocab));
+  return ad_utility::makeExecutionTree<Bind>(
+      qec, std::move(valuesTree),
+      parsedQuery::Bind{
+          SparqlExpressionPimpl{
+              makeIriOrUriExpression(
+                  std::make_unique<VariableExpression>(Variable{"?s"}),
+                  std::make_unique<IriExpression>(TripleComponent::Iri{})),
+              "IRI(?s) AS ?x"},
+          Variable{"?x"}});
+}
+
+// Return the `Id`s of the `variable` in the result of the `qet`.
+std::vector<Id> getIdsOfVariable(QueryExecutionTree& qet,
+                                 const Variable& variable) {
+  auto result = qet.getResult();
+  auto col = qet.getVariableColumn(variable);
+  const auto& table = result->idTableView();
+  return {table.getColumn(col).begin(), table.getColumn(col).end()};
 }
 
 void expectBindYieldsIdTable(
@@ -286,7 +327,6 @@ TEST(Bind, cloneSucceedsForNondeterministicBind) {
   EXPECT_FALSE(clone->isDeterministic());
 }
 
-// _____________________________________________________________________________
 // Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
 // variables plus the variables that are required by `Bind` to build its target,
 // erases `Bind` from the `QueryExecutionTree` if the parent does not request
@@ -382,5 +422,64 @@ TEST(Bind, makeTreeWithStrippedColumns) {
                                               {2, 2, 3, 5, 2},
                                               {3, 6, 5, 4, 3},
                                               {1, 6, 5, 1, 1}})));
+  }
+}
+
+// Test that IRIs that are computed by an expression and that match a pattern of
+// the `EncodedIriManager` get the same `Id` as the same IRIs from the index, so
+// that a join on them finds all matches.
+//
+// NOTE: In the index, the non-encodable `<http://example.org/5a>` (a
+// `VocabIndex`) is sorted before the encoded `<http://example.org/5>` (an
+// `EncodedVal`), while the computed IRIs used to be sorted by their string
+// value, so in the opposite order.
+TEST(Bind, joinOfComputedEncodableIris) {
+  ad_utility::testing::TestIndexConfig config{
+      "<http://example.org/5> <p> \"five\" . "
+      "<http://example.org/5a> <p> \"fiveA\" ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  auto bind =
+      makeIriBind(qec, {"http://example.org/5", "http://example.org/5a"});
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?x"},
+                         TripleComponent::Iri::fromIriref("<p>"),
+                         Variable{"?l"}});
+  auto join = ad_utility::makeExecutionTree<Join>(
+      qec, bind, scan, bind->getVariableColumn(Variable{"?x"}),
+      scan->getVariableColumn(Variable{"?x"}));
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  EXPECT_THAT(
+      getIdsOfVariable(*join, Variable{"?l"}),
+      ::testing::UnorderedElementsAre(getId("\"five\""), getId("\"fiveA\"")));
+}
+
+// Test that the `Id`s of a computed encodable IRI, a computed IRI that is not
+// in the vocabulary, and an IRI from the vocabulary are ordered by a strict
+// weak ordering, which sorting them requires. Before the computed encodable IRI
+// was encoded, the three formed a cycle.
+TEST(Bind, computedEncodableIrisAreStrictlyWeaklyOrdered) {
+  ad_utility::testing::TestIndexConfig config{"<http://z> <p> <o> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  auto bind = makeIriBind(qec, {"http://example.org/1", "http://y"});
+  auto ids = getIdsOfVariable(*bind, Variable{"?x"});
+  ASSERT_EQ(ids.size(), 2);
+  ids.push_back(ad_utility::testing::makeGetId(qec->getIndex())("<http://z>"));
+  for (Id a : ids) {
+    EXPECT_FALSE(a < a) << a;
+    for (Id b : ids) {
+      for (Id c : ids) {
+        if (a < b && b < c) {
+          EXPECT_TRUE(a < c) << a << ' ' << b << ' ' << c;
+        }
+      }
+    }
   }
 }

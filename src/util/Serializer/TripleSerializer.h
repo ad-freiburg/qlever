@@ -16,6 +16,7 @@
 #include "global/Id.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
+#include "index/TripleComponentConversions.h"
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -36,8 +37,8 @@ constexpr uint16_t formatVersion = 1;
 
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>) T
-    readValue(Serializer& serializer) {
+    requires serialization::ReadSerializer<Serializer>)
+T readValue(Serializer& serializer) {
   T value;
   serializer >> value;
   return value;
@@ -130,9 +131,17 @@ CPP_template(typename Serializer)(
   for (uint64_t i = 0; i < size; ++i) {
     auto id = readValue<Id::T>(serializer);
     auto s = readValue<std::string>(serializer);
-    auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(std::move(s), context));
-    mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
+    auto idOrEntry = toIdOrLocalVocabEntry(
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            std::move(s)),
+        context);
+    if (auto* entry = std::get_if<LocalVocabEntry>(&idOrEntry)) {
+      mapping.emplace(
+          id, Id::makeFromLocalVocabIndex(
+                  vocab.getIndexAndAddIfNotContained(std::move(*entry))));
+    } else {
+      mapping.emplace(id, std::get<Id>(idOrEntry));
+    }
   }
   return {std::move(vocab), std::move(mapping)};
 }
@@ -140,8 +149,8 @@ CPP_template(typename Serializer)(
 // Serialize a range of Ids to the output stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id before writing it.
 CPP_template(typename Range, typename Serializer)(
-    requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
-                                                         Range&& range) {
+    requires ql::ranges::range<Range>)
+void serializeIds(Serializer& serializer, Range&& range) {
   if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
   } else {

@@ -12,27 +12,13 @@
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
-#include "util/ComparisonWithNan.h"
+#include "util/Log.h"
 #include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
-
-// This enum can be used to configure the behavior of the `compareIds` method
-// below in the case when two `Id`s have incompatible datatypes (e.g.
-// `VocabIndex` and a numeric type, or `Undefined` and any other type).
-// For `AlwaysUndef`, the comparison will always be UNDEF, so for example `"x"`
-// is neither smaller than nor greater than nor equal to `42`. This behavior is
-// similar to the behavior of floating point `NaN` values. It is used for
-// example for filter expressions like `FILTER (?x < 42)` which will filter out
-// all string values. For `CompareByType` such pairs of `Id`s will be compared
-// by the numeric order of their datatypes, so for example all `Undefined` IDs
-// will be smaller than all IDs with a type different from `Undefined`. This
-// behavior is used e.g. in `ORDER BY` expressions where we need a consistent
-// partial ordering on all possible IDs.
-enum struct ComparisonForIncompatibleTypes { CompareByType, AlwaysUndef };
 
 // The result of the comparisons is actually ternary because we sometimes
 // distinguish between "false" and "type mismatch" (see the comment directly
@@ -449,8 +435,8 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 //    type is deliberately absent from `ValueId::stringTypes_` (see the note
 //    there).
 //    Comparing it to a `VocabIndex` or a `LocalVocabIndex` therefore is an
-//    "incompatible types" comparison: it yields `Undef`, resp. compares the two
-//    *datatypes* in the `CompareByType` mode that `ORDER BY` uses. Two `Id`s of
+//    "incompatible types" comparison: it yields `Undef` (and `ORDER BY`
+//    compares the two *datatypes*, see `OrderByComparator`). Two `Id`s of
 //    that type are compared to each other by their index, which is correct for
 //    equality (the two vocabularies are disjoint), but not for `<` and `>`.
 // 2. An `Id` of type `LocalVocabIndex` whose word happens to be stored in the
@@ -492,21 +478,13 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // 2. Comparing literals with different datatypes blurs the distinction between
 //    `sameTerm` and `=`, which is also why `!(A = B)` and `A != B` currently
 //    behave differently, see issue #2405.
-template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef,
-          typename Comparator>
+template <typename Comparator>
 ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
   using enum ComparisonResult;
   if (!areTypesCompatible(typeA, typeB)) {
-    using enum ComparisonForIncompatibleTypes;
-    if constexpr (comparisonForIncompatibleTypes == CompareByType) {
-      return fromBool(comparator(a.getDatatype(), b.getDatatype()));
-    } else {
-      static_assert(comparisonForIncompatibleTypes == AlwaysUndef);
-      return ComparisonResult::Undef;
-    }
+    return ComparisonResult::Undef;
   }
 
   // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
@@ -559,24 +537,19 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
 // bValue are the values contained in `a` and `b`.
 // 2. The datatype of `a` and `b` are compatible, s.t. the comparison in
 // condition one is well-defined.
-// For the definition of the template parameter `comparisonForIncompatibleTypes`
-// see the documentation of the enum `ComparisonForIncompatibleTypes` above.
-template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef>
+// If the datatypes are not compatible (e.g. `VocabIndex` and a numeric type, or
+// `Undefined` and any other type), the result is `Undef`, so for example `"x"`
+// is neither smaller than nor greater than nor equal to `42`. This behavior is
+// similar to the behavior of floating point `NaN` values. It is used for
+// example for filter expressions like `FILTER (?x < 42)`, which filter out all
+// string values.
+//
+// NOTE: This is not the order of `ORDER BY`, `MIN`, and `MAX`, which need an
+// order on all `Id`s, see `OrderByComparator`.
 inline ComparisonResult compareIds(ValueId a, ValueId b,
                                    Comparison comparison) {
-  // A helper lambda to factor out common code
   auto compare = [&](auto comparator) {
-    // For the `compareByType` mode, which is used by ORDER BY, we also need a
-    // proper order of NaN values to not run into undefined behavior.
-    if constexpr (comparisonForIncompatibleTypes ==
-                  ComparisonForIncompatibleTypes::CompareByType) {
-      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(
-          a, b, ad_utility::makeComparatorForNans(comparator));
-    } else {
-      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
-                                                                    comparator);
-    }
+    return detail::compareIdsImpl(a, b, comparator);
   };
 
   using enum Comparison;

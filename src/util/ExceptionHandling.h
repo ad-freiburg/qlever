@@ -56,14 +56,11 @@ CPP_template(typename F)(
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
 CPP_template(typename F, typename TerminateAction = detail::CallStdTerminate)(
-    requires ql::concepts::invocable<ql::remove_cvref_t<F>> CPP_and
-        std::is_nothrow_invocable_v<
-            TerminateAction>) void terminateIfThrows(F&& f,
-                                                     std::string_view message,
-                                                     TerminateAction
-                                                         terminateAction = {},
-                                                     ad_utility::source_location l =
-                                                         AD_CURRENT_SOURCE_LOC()) noexcept {
+    requires ql::concepts::invocable<ql::remove_cvref_t<F>> &&
+    std::is_nothrow_invocable_v<TerminateAction>)
+void terminateIfThrows(
+    F&& f, std::string_view message, TerminateAction terminateAction = {},
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) noexcept {
   auto getErrorMessage =
       [&message, &l](const auto&... additionalMessages) -> std::string {
     return absl::StrCat(
@@ -117,9 +114,9 @@ class ThrowInDestructorIfSafe {
 
  public:
   CPP_template(typename FuncType, typename... Args)(
-      requires ql::concepts::invocable<FuncType> CPP_and(
-          ...&& ql::concepts::convertible_to<Args, std::string_view>)) void
-  operator()(FuncType f, const Args&... additionalMessages) const {
+      requires ql::concepts::invocable<FuncType> &&
+      (... && ql::concepts::convertible_to<Args, std::string_view>))
+  void operator()(FuncType f, const Args&... additionalMessages) const {
     auto logIgnoredException = [&additionalMessages...](std::string_view what) {
       std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";
       AD_LOG_WARN
@@ -168,7 +165,7 @@ class ThrowInDestructorIfSafe {
 //   pool.join();
 //   collector.rethrowIfException();
 class ExceptionCollector {
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::exception_ptr firstException_;
   ThrowInDestructorIfSafe throwIfSafe_;
 
@@ -228,6 +225,13 @@ class ExceptionCollector {
         (*this)(std::current_exception());
       }
     };
+  }
+
+  // Return true iff an exception has been captured and not yet rethrown.
+  // Thread-safe.
+  bool hasException() const {
+    std::lock_guard lock{mutex_};
+    return firstException_ != nullptr;
   }
 
   // Rethrow the first captured exception, if any. After this call the exception
