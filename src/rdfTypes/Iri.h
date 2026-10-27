@@ -18,7 +18,6 @@
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
-#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 #include "util/ParsedUri.h"
 
@@ -57,9 +56,9 @@ class BasicIri {
   // A default constructed IRI is empty.
   BasicIri() = default;
 
-  CPP_template(typename H,
-               typename I)(requires ql::concepts::same_as<I, BasicIri>) friend H
-      AbslHashValue(H h, const I& iri) {
+  CPP_template(typename H, typename I)(
+      requires ql::concepts::same_as<I, BasicIri>)
+  friend H AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
 
@@ -105,7 +104,7 @@ class BasicIri {
 
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
-  NormalizedStringView getContent() const;
+  std::string_view getContent() const;
 };
 
 // Owning IRI type (stores its own `std::string`).
@@ -115,6 +114,10 @@ class Iri : public BasicIri<true> {
 
  private:
   explicit Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
+
+  // The implementation of the `fromIriref` overload for owned strings (see
+  // below).
+  static Iri fromOwnedIriref(std::string stringWithBrackets);
 
  public:
   using BasicIri<true>::toStringRepresentation;
@@ -126,8 +129,35 @@ class Iri : public BasicIri<true> {
 
   static Iri fromStringRepresentation(std::string s);
 
-  // Create a new `Iri` given an IRI string with brackets.
+  // Create a new `Iri` given an IRI string with brackets, resolving all
+  // `\u`/`\U` escape sequences (see the class comment). The input must start
+  // with `<` and end with `>`.
   static Iri fromIriref(std::string_view stringWithBrackets);
+
+  // Overload of `fromIriref` for callers that already own the input string. If
+  // it contains no escape sequence (by far the most common case), the string
+  // is moved into the `Iri` instead of being copied. Note that this only binds
+  // to rvalues of exactly `std::string`; for everything else (in particular
+  // lvalues) the `std::string_view` overload above is chosen.
+  CPP_template(typename S)(
+      requires ql::concepts::same_as<S, std::string>) static Iri
+      fromIriref(S&& stringWithBrackets) {
+    return fromOwnedIriref(std::move(stringWithBrackets));
+  }
+
+  // Create a new `Iri` for QLever's internal representation of a
+  // language-tagged predicate, which prefixes the IRI with the language tag,
+  // e.g. `@en@<http://www.w3.org/2000/01/rdf-schema#label>`. The `langtag` must
+  // be non-empty and must not include the leading `@`; `stringWithBrackets` is
+  // handled exactly as in `fromIriref`.
+  static Iri fromLangtagAndIriref(std::string_view langtag,
+                                  std::string_view stringWithBrackets);
+
+  // Create QLever's internal entity IRI for the language tag `langtag` (e.g.
+  // `en` -> `<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>`). Those
+  // IRIs are the objects of the internal `ql:langtag` triples that implement
+  // the efficient language filter.
+  static Iri fromLangtag(std::string_view langtag);
 
   // Like `fromIriref`, but first validate that `stringWithBrackets` is a
   // syntactically valid `IRIREF` and `throw` an `ad_utility::Exception`
@@ -153,6 +183,19 @@ class Iri : public BasicIri<true> {
   // `<http://...>`), this is the same as `fromIriref`.
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
                                     const qlever::util::ParsedUri& baseUri);
+
+  // Like `fromIrirefConsiderBase`, but for an `Iri` that is already in QLever's
+  // internal representation (see the class comment). Its escape sequences have
+  // already been resolved, so they must not be resolved a second time; a
+  // backslash in this `Iri` is therefore an ordinary character and not the
+  // start of an escape sequence.
+  Iri resolveAgainstBase(const qlever::util::ParsedUri& baseUri) const;
+
+  // Like `fromLangtagAndIriref`, but for an `Iri` that is already in QLever's
+  // internal representation (see the class comment), so that its escape
+  // sequences are not resolved a second time. The `langtag` must be non-empty
+  // and must not include the leading `@`.
+  Iri withLanguageTag(std::string_view langtag) const;
 
   // Create an `Iri` object given from the given `ParsedUri` object.
   static Iri fromUri(const qlever::util::ParsedUri& uri);

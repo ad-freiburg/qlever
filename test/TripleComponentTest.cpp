@@ -8,7 +8,7 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
@@ -154,6 +154,39 @@ TEST(TripleComponent, toRdfLiteral) {
   // This function is just used for cache keys etc, so it is not an issue that
   // the result is not human readable
   EXPECT_THAT(result, ::testing::HasSubstr("encodedId: "));
+}
+
+// _____________________________________________________________________________
+TEST(TripleComponent, toRdfLiteralView) {
+  // For all `TripleComponent`s that store their string representation, the view
+  // is equal to the string that `toRdfLiteral` returns.
+  auto expectSameAsToRdfLiteral = [](const TripleComponent& tripleComponent) {
+    auto view = toRdfLiteralView(tripleComponent);
+    ASSERT_TRUE(view.has_value());
+    EXPECT_EQ(view.value(), toRdfLiteral(tripleComponent));
+  };
+  expectSameAsToRdfLiteral(lit("\"aTypedLiteral\"", "^^<someType>"));
+  expectSameAsToRdfLiteral(TripleComponent{"plainString"});
+  expectSameAsToRdfLiteral(iri("<someIri>"));
+  expectSameAsToRdfLiteral(TripleComponent{Variable{"?alpha"}});
+
+  // The view points into the `TripleComponent`, it is not a copy.
+  TripleComponent iriComponent = iri("<someIri>");
+  EXPECT_EQ(toRdfLiteralView(iriComponent).value().data(),
+            iriComponent.getIri().toStringRepresentation().data());
+
+  // `TripleComponent`s that store a directly encoded value have no string
+  // representation that could be borrowed, so only `toRdfLiteral` works for
+  // them.
+  std::vector<TripleComponent> encodedValues{
+      TripleComponent{42}, TripleComponent{-43.3}, TripleComponent{true},
+      TripleComponent{
+          DateYearOrDuration{123456, DateYearOrDuration::Type::Year}}};
+  for (const auto& tripleComponent : encodedValues) {
+    EXPECT_EQ(toRdfLiteralView(tripleComponent), std::nullopt);
+    // `toRdfLiteral` still builds a new string for them.
+    EXPECT_FALSE(toRdfLiteral(tripleComponent).empty());
+  }
 }
 
 TEST(TripleComponent, toValueIdIfNotString) {
@@ -340,4 +373,40 @@ TEST(TripleComponent, toString) {
   EXPECT_THAT(true, match("true"));
   EXPECT_THAT(false, match("false"));
   EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
+}
+
+// Test that `toIdOrLocalVocabEntry` returns the encoded `Id` of an encodable
+// IRI and a `LocalVocabEntry` for everything else.
+TEST(TripleComponent, toIdOrLocalVocabEntry) {
+  using ad_utility::triple_component::Iri;
+  using ad_utility::triple_component::Literal;
+  using ad_utility::triple_component::LiteralOrIri;
+  TestIndexConfig config{"<subject> <predicate> <http://example.org/42>"};
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+
+  // An encodable IRI yields its encoded `Id`.
+  auto encodable = Iri::fromIriref("<http://example.org/69>");
+  auto expectedId = qec->getIndex()
+                        .encodedIriManager()
+                        .encode(encodable.toStringRepresentation())
+                        .value();
+  auto result = toIdOrLocalVocabEntry(LiteralOrIri{encodable}, context);
+  ASSERT_TRUE(std::holds_alternative<Id>(result));
+  // Compare the bits, as `Id::operator==` also matches a `LocalVocabIndex`.
+  EXPECT_EQ(std::get<Id>(result).getBits(), expectedId.getBits());
+
+  // Everything else becomes a `LocalVocabEntry`, including IRIs from the
+  // vocabulary and literals that look like an encodable IRI.
+  auto expectEntry = [&context](LiteralOrIri word) {
+    auto result = toIdOrLocalVocabEntry(word, context);
+    ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(result));
+    const auto& entry = std::get<LocalVocabEntry>(result);
+    EXPECT_EQ(entry, word);
+  };
+  expectEntry(LiteralOrIri{Iri::fromIriref("<subject>")});
+  expectEntry(LiteralOrIri{Iri::fromIriref("<http://example.org/5a>")});
+  expectEntry(
+      LiteralOrIri{Literal::literalWithoutQuotes("<http://example.org/69>")});
 }

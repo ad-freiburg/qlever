@@ -39,8 +39,9 @@ CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 // optional `supportsConst` argument explicitly disables const iteration for
 // this view when set to false, see `OwningViewNoConst` below for details.
 CPP_template(typename UnderlyingRange, bool supportConst = true)(
-    requires ql::ranges::range<UnderlyingRange> CPP_and
-        ql::concepts::movable<UnderlyingRange>) class OwningView
+    requires ql::ranges::range<UnderlyingRange> &&
+    ql::concepts::movable<UnderlyingRange>)
+class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -113,57 +114,6 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
   }
 };
 
-// Takes a view of blocks and yields the elements of the same view, but removes
-// consecutive duplicates inside the blocks and across block boundaries.
-template <typename SortedBlockView,
-          typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
-          typename ValueType = ql::ranges::range_value_t<BlockType>>
-InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
-  struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
-    SortedBlockView view_;
-
-    decltype(ql::views::filter(view_,
-                               std::not_fn(ql::ranges::empty))) nonEmptyView_;
-    decltype(ql::ranges::begin(nonEmptyView_)) iter_;
-
-    std::optional<ValueType> lastValueFromPreviousBlock_{std::nullopt};
-    size_t numInputs_{0};
-    size_t numUnique_{0};
-
-    explicit UniqueBlockViewFromGet(SortedBlockView view)
-        : view_{std::move(view)},
-          nonEmptyView_(
-              ql::views::filter(view_, std::not_fn(ql::ranges::empty))),
-          iter_{ql::ranges::begin(nonEmptyView_)} {}
-
-    std::optional<BlockType> get() override {
-      if (iter_ == ql::ranges::end(nonEmptyView_)) {
-        AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
-                    << '\n';
-        AD_LOG_INFO << "Number of unique elements: " << numUnique_ << std::endl;
-        return std::nullopt;
-      }
-
-      auto block = std::move(*iter_);
-      ++iter_;
-      numInputs_ += block.size();
-      auto beg = lastValueFromPreviousBlock_
-                     ? ql::ranges::find_if(
-                           block, [&p = lastValueFromPreviousBlock_.value()](
-                                      const auto& el) { return el != p; })
-                     : block.begin();
-      lastValueFromPreviousBlock_ = block.back();
-      auto it = std::unique(beg, block.end());
-      block.erase(it, block.end());
-      block.erase(block.begin(), beg);
-      numUnique_ += block.size();
-      return block;
-    }
-  };
-  return InputRangeTypeErased{
-      std::make_unique<UniqueBlockViewFromGet>(std::move(view))};
-}
-
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
 // not exist. This is currently used in the `CompressedExternalIdTable.h`, where
 // have a deeply nested stack of views, one of which is `OnwingView<vector>`
@@ -209,8 +159,9 @@ using all_t = decltype(allView(std::declval<Range>()));
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
 CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
-        ql::concepts::invocable<F&>) class CallbackOnEndView
+    requires ql::ranges::input_range<V> && ql::ranges::view<V> &&
+    ql::concepts::invocable<F&>)
+class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
@@ -278,7 +229,18 @@ CPP_template(typename V, typename F)(
   CallbackOnEndView& operator=(const CallbackOnEndView&) = delete;
 
   CallbackOnEndView(CallbackOnEndView&&) = default;
-  CallbackOnEndView& operator=(CallbackOnEndView&&) = default;
+  // Invoke the callback of the overwritten view (if not yet invoked).
+  CallbackOnEndView& operator=(CallbackOnEndView&& other) noexcept(
+      isNoexcept && std::is_nothrow_move_assignable_v<V> &&
+      std::is_nothrow_move_assignable_v<::ranges::semiregular_box_t<F>>) {
+    if (this != &other) {
+      maybeInvoke();
+      base_ = std::move(other.base_);
+      callback_ = std::move(other.callback_);
+      called_ = std::move(other.called_);
+    }
+    return *this;
+  }
 
   ~CallbackOnEndView() noexcept(isNoexcept) {
     if constexpr (isNoexcept) {
@@ -288,7 +250,15 @@ CPP_template(typename V, typename F)(
     }
   }
 
-  auto begin() { return Iterator{ql::ranges::begin(base_), this}; }
+  auto begin() {
+    auto it = ql::ranges::begin(base_);
+    // For an empty range the iteration ends right away, without any call to
+    // `operator++` of the `Iterator`.
+    if (it == ql::ranges::end(base_)) {
+      maybeInvoke();
+    }
+    return Iterator{std::move(it), this};
+  }
 
   auto end() { return ql::ranges::end(base_); }
 };

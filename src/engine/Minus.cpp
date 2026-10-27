@@ -10,6 +10,7 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "util/Algorithm.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -96,6 +97,21 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {_left, _right}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Minus::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Minus>(_executionContext, std::move(children.at(0)),
+                                 std::move(children.at(1)));
+}
+
+// _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
   // This is an upper bound on the multiplicity as an arbitrary number
   // of rows might be deleted in this operation.
@@ -129,7 +145,7 @@ auto Minus::makeUndefRangesChecker(bool left,
             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
         return colAlwaysDefined ||
                ql::ranges::none_of(idTable.getColumn(tableColumn),
-                                   &Id::isUndefined);
+                                   Id::isUndefinedL);
       });
   // Use expensive operation if one of the columns might contain undef.
   using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;
@@ -147,7 +163,7 @@ IdTable Minus::copyMatchingRows(
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
 
   // Transform into dense vector of indices.
-  std::vector<size_t> nonMatchingIndices;
+  qlm::vector<size_t> nonMatchingIndices{allocator()};
   for (size_t row = 0; row < left.numRows(); ++row) {
     if (keepEntry.at(row) == reference) {
       nonMatchingIndices.push_back(row);
@@ -161,7 +177,7 @@ IdTable Minus::copyMatchingRows(
         ql::views::transform(nonMatchingIndices,
                              [&inputCol](size_t row) { return inputCol[row]; }),
         outputCol.begin(), qlever::joinHelpers::CHUNK_SIZE,
-        [this]() { checkCancellation(); });
+        cancellationChecker());
   }
 
   return result;
@@ -222,7 +238,7 @@ IdTable Minus::computeMinus(
             joinColumnsLeft, joinColumnsRight,
             ql::ranges::lexicographical_compare, handleCompatibleRow,
             std::move(findUndefLeft), std::move(findUndefRight), {},
-            [this]() { checkCancellation(); });
+            cancellationChecker());
       },
       makeUndefRangesChecker(true, left), makeUndefRangesChecker(false, right));
 
@@ -338,7 +354,7 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
        permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         ad_utility::MinusRowHandler rowAdder{
             _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
-            cancellationHandle_, std::move(yieldTable)};
+            cancellationHandle(), std::move(yieldTable)};
         auto leftRange = qlever::joinHelpers::resultToView(*left, permutation);
         auto rightRange = qlever::joinHelpers::resultToView(
             *right, {_matchedColumns.at(0).at(1)});

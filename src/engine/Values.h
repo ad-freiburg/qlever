@@ -9,6 +9,7 @@
 
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 class TripleComponent;
 
@@ -39,7 +40,7 @@ class Values : virtual public Operation {
   virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
-    return parsedValues_._variables.empty() || parsedValues_._values.empty();
+    return parsedValues_._values.empty();
   }
 
   virtual float getMultiplicity(size_t col) override;
@@ -51,8 +52,8 @@ class Values : virtual public Operation {
   virtual size_t getCostEstimate() override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
 
  public:

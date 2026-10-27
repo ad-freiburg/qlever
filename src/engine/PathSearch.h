@@ -14,6 +14,7 @@
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/VectorWithMemoryLimit.h"
 
 enum class PathSearchAlgorithm { ALL_PATHS };
@@ -22,7 +23,7 @@ enum class PathSearchAlgorithm { ALL_PATHS };
  * @brief Represents the source or target side of a PathSearch.
  * The side can either be a variable or a list of Ids.
  */
-using SearchSide = std::variant<Variable, std::vector<Id>>;
+using SearchSide = std::variant<Variable, IdColumn>;
 
 namespace pathSearch {
 struct Edge {
@@ -86,7 +87,7 @@ class BinSearchWrapper {
    * the search starts from all possible sources (i.e. all
    * start nodes). Returns only unique start nodes.
    */
-  std::vector<Id> getSources() const;
+  IdColumn getSources() const;
 
   std::vector<Id> getEdgeProperties(const Edge& edge) const;
 
@@ -122,7 +123,7 @@ struct PathSearchConfiguration {
       return std::get<Variable>(side).toSparql();
     }
     std::ostringstream os;
-    for (auto id : std::get<std::vector<Id>>(side)) {
+    for (auto id : std::get<IdColumn>(side)) {
       os << id << ", ";
     }
     return std::move(os).str();
@@ -184,7 +185,7 @@ class PathSearch : public Operation {
              PathSearchConfiguration config);
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   const PathSearchConfiguration& getConfig() const { return config_; }
@@ -273,14 +274,14 @@ class PathSearch : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
+  std::pair<ConstIdColumnRef, ConstIdColumnRef> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
   pathSearch::PathsLimited findPaths(
-      const Id& source, const std::unordered_set<uint64_t>& targets,
+      const Id& source, const std::unordered_set<Id::T>& targets,
       const pathSearch::BinSearchWrapper& binSearch,
       std::optional<uint64_t> numPathsPerTarget,
       std::optional<uint64_t> maxDepth) const;
@@ -290,7 +291,7 @@ class PathSearch : public Operation {
    * @return A vector of all paths.
    */
   pathSearch::PathsLimited allPaths(
-      ql::span<const Id> sources, ql::span<const Id> targets,
+      ConstIdColumnRef sources, ConstIdColumnRef targets,
       const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
       std::optional<uint64_t> numPathsPerTarget,
       std::optional<uint64_t> maxDepth) const;

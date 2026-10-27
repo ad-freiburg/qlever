@@ -69,7 +69,8 @@ enum class LogLevelEnum {
 }
 
 // Log level wrapper using the `EnumWithStrings` CRTP base to provide string
-// conversion, JSON serialization, and boost::program_options integration.
+// conversion and JSON serialization (for `boost::program_options` support,
+// include `util/EnumWithStringsProgramOptions.h`).
 class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
  public:
   using Enum = detail::LogLevelEnum;

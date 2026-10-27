@@ -21,6 +21,7 @@
 #include "backports/asio.h"
 #include "parser/RdfParser.h"
 #include "util/AsyncHandlerUtils.h"
+#include "util/Forward.h"
 
 // Abstract base class for RDF parsers that deliver their batches of triples
 // asynchronously via `boost::asio`. This is the asynchronous counterpart of
@@ -29,9 +30,8 @@
 // Derived classes own no threads of their own, but schedule all of their work
 // on the executor that is passed to the constructor. The parallelism therefore
 // comes entirely from the caller keeping several `asyncGetBatch()` calls in
-// flight at once. The main use case is the first pass of the index building
-// (parsing the input and building the partial vocabularies), which a follow-up
-// PR moves onto a single thread pool using this interface.
+// flight at once, see `IndexImpl::buildPartialVocabularies` for the main use
+// case.
 //
 // NOTE: This class deliberately only uses features of `boost::asio` that are
 // available in Boost 1.71 (in particular no coroutines and no
@@ -84,13 +84,22 @@ class AsyncRdfParserBase {
   //
   // The completion handler is always `post`ed (never `dispatch`ed) onto its
   // associated executor, and is therefore never invoked inline.
+  //
+  // `buffer` becomes the storage of the batch that this call completes with
+  // (its contents are discarded), so that a caller can pass back a batch it
+  // has consumed and thus reuse its capacity instead of having a fresh buffer
+  // grown for every batch. It is only an optimization: passing no buffer at
+  // all (see the overload below) is always correct. A call that completes with
+  // `nullopt` or with an error does not return the buffer.
   template <typename CompletionToken>
-  auto asyncGetBatch(CompletionToken&& token) {
+  auto asyncGetBatch(std::vector<TurtleTriple> buffer,
+                     CompletionToken&& token) {
     namespace net = boost::asio;
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, OptionalTriples)>(
-        [this](auto handler) mutable {
+        [this, buffer = std::move(buffer)](auto handler) mutable {
           asyncGetBatchImpl(
+              std::move(buffer),
               ad_utility::makeHandlerExecutorAware<OptionalTriples>(
                   std::move(handler), executor_));
         },
@@ -99,14 +108,22 @@ class AsyncRdfParserBase {
         token);
   }
 
+  // The same for callers that have no buffer to reuse.
+  template <typename CompletionToken>
+  auto asyncGetBatch(CompletionToken&& token) {
+    return asyncGetBatch({}, AD_FWD(token));
+  }
+
  protected:
   // The single extension point required from every derived class. Must invoke
   // `handler` exactly once (synchronously or asynchronously, from any thread),
   // see `asyncGetBatch` for the semantics of the arguments. Must never throw,
   // but report errors via the `exception_ptr` argument of the handler.
   // `handler` may be invoked directly, also from within a strand, see the
-  // comment on `Handler` above.
-  virtual void asyncGetBatchImpl(Handler handler) = 0;
+  // comment on `Handler` above. `buffer` may be used as the storage of the
+  // batch, or simply be dropped.
+  virtual void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                                 Handler handler) = 0;
 };
 
 #endif  // QLEVER_SRC_PARSER_ASYNCRDFPARSERBASE_H

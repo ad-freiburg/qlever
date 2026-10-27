@@ -28,8 +28,8 @@
 // the executor that happens to run it, so the parallelism of this class is
 // limited to one call at a time; it is meant for inputs that cannot be parsed
 // in parallel (see `RdfAsyncMultifileParser`), and as the fallback for the
-// `REDUCED_FEATURE_SET_FOR_CPP17` build, which has no coroutines and hence
-// cannot use `RdfAsyncMultifileParser`.
+// `REDUCED_FEATURE_SET_FOR_CPP17` build, which has no coroutines (see
+// `IndexImpl::makeRdfParser`).
 class AsyncSerialParserAdapter : public AsyncRdfParserBase {
  public:
   // A factory for the wrapped parser, see the constructor below. The `&&` in
@@ -65,7 +65,8 @@ class AsyncSerialParserAdapter : public AsyncRdfParserBase {
                            ParserFactory parserFactory);
 
  protected:
-  void asyncGetBatchImpl(Handler handler) override;
+  void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                         Handler handler) override;
 };
 
 #endif  // QLEVER_SRC_PARSER_ASYNCSERIALPARSERADAPTER_H

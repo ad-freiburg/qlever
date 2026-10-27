@@ -11,6 +11,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 class Distinct : public Operation {
  private:
@@ -63,9 +64,13 @@ class Distinct : public Operation {
 
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {subtree_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{subtree_.get()}, allocator()};
   }
 
  protected:

@@ -14,6 +14,7 @@
 #include <tuple>
 #include <utility>
 
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "util/ChunkedForLoop.h"
@@ -24,53 +25,9 @@ namespace sparqlExpression::detail {
 // getter(s) are specified using `FunctionAndValueGetters`. A single value
 // getter can be used for both operands, or separate getters can be specified.
 //
-// This is more efficient than the generic `NaryExpression` infrastructure for
-// binary expressions because the operation is applied in direct loops over
-// vector or constant operands, avoiding the generator-based per-element
-// abstraction.
-
-// Convert an expression result into either a vector-like or constant
-// representation that can be handled directly by the binary evaluation loop.
-template <typename T>
-decltype(auto) convertToVectorOrConstant(T&& value,
-                                         EvaluationContext* context) {
-  using Type = std::decay_t<T>;
-
-  if constexpr (ad_utility::isSimilar<Type, ad_utility::SetOfIntervals>) {
-    return ad_utility::SetOfIntervals::toIdVector(value, context->size(),
-                                                  context->_allocator);
-  } else if constexpr (ad_utility::isSimilar<Type, ::Variable>) {
-    return getIdsFromVariable(value, context);
-  } else {
-    static_assert(isVectorResult<Type> || isConstantResult<Type>,
-                  "BinaryExpression only supports vectors and constants after "
-                  "conversion");
-    return AD_FWD(value);
-  }
-}
-
-// Return a callable that provides the converted value at index `i`. For
-// constant operands, the converted value is computed only once.
-template <typename ValueGetter, typename Operand>
-auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
-  using OperandType = std::decay_t<Operand>;
-
-  if constexpr (isVectorResult<OperandType>) {
-    AD_CORRECTNESS_CHECK(operand.size() == context->size());
-
-    // TODO<Prashanth0703>: The generator-based `NaryExpression` infrastructure
-    // forwards/moves individual values into the value getter. Here, indexed
-    // vector elements are passed as lvalues. This is irrelevant for the
-    // currently used value getters, but should be revisited for move-sensitive
-    // value types.
-    return [&operand, context](size_t i) {
-      return ValueGetter{}(operand[i], context);
-    };
-  } else {
-    return [value = ValueGetter{}(AD_FWD(operand), context)](
-               size_t) -> decltype(auto) { return (value); };
-  }
-}
+// This is a leaner variant of the `NaryExpression` infrastructure for exactly
+// two operands: no specialized functions, no local-vocab results (the function
+// has to return an `Id`), and a direct `std::visit` on both operand results.
 
 // Evaluate a binary operation whose operands are already vectors or constants.
 template <typename Function, typename LeftValueGetter,
@@ -82,10 +39,14 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
   using RightType = std::decay_t<Right>;
 
   Function function;
+  using ValueGetters = std::tuple<LeftValueGetter, RightValueGetter>;
 
   // Constant–constant operands don't benefit from upfront classification.
   if constexpr (isConstantResult<LeftType> && isConstantResult<RightType>) {
     context->cancellationHandle_->throwIfCancelled();
+    if (hasNonNumericOperand<Function, ValueGetters>(left, right)) {
+      return Id::makeUndefined();
+    }
     return function(LeftValueGetter{}(AD_FWD(left), context),
                     RightValueGetter{}(AD_FWD(right), context));
 
@@ -93,19 +54,27 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
-    // Use the homogeneous numeric fast path when both operands and value
-    // getters support it.
-    if constexpr (supportsHomogeneousNumericFastPath<LeftValueGetter> &&
-                  supportsHomogeneousNumericFastPath<RightValueGetter> &&
-                  supportsHomogeneousNumericOperand<Left>() &&
-                  supportsHomogeneousNumericOperand<Right>()) {
-      const auto types = classifyNumericOperands(context, left, right);
+    // Check for datatypes rejected by the numeric getters unless classification
+    // proves that every value is accepted (including booleans). Only functions
+    // with an `UNDEF` opt-in use this check; see `hasNonNumericOperand`.
+    bool checkForValuesRejectedByGetter = true;
+    // Use the shared numeric/date fast paths when both operands and value
+    // getters support typed execution.
+    if constexpr (supportsNumericFastPath<LeftValueGetter> &&
+                  supportsNumericFastPath<RightValueGetter> &&
+                  supportsNumericFastPathOperand<Left>() &&
+                  supportsNumericFastPathOperand<Right>()) {
+      constexpr bool includeDates = supportsDateOperands<ValueGetters>;
+      const auto classifications =
+          classifyNumericOperands<includeDates>(context, left, right);
+      checkForValuesRejectedByGetter =
+          classifications[0].containsValueRejectedByGetter_ ||
+          classifications[1].containsValueRejectedByGetter_;
 
-      if (ql::ranges::all_of(types, [](HomogeneousNumericType type) {
-            return type != HomogeneousNumericType::Other;
-          })) {
-        return dispatchHomogeneousNumericTypes(
-            types,
+      if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications);
+          homogeneousTypes.has_value()) {
+        return dispatchNumericTypes<includeDates>(
+            homogeneousTypes.value(),
             [&left, &right, context](auto leftType,
                                      auto rightType) -> ExpressionResult {
               using LeftNumericType = typename decltype(leftType)::type;
@@ -114,6 +83,21 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
               return evaluateHomogeneousNumericOperation<
                   Function, LeftNumericType, RightNumericType>(
                   std::tie(left, right), context);
+            });
+      }
+
+      if (auto majorityTypes = getMajorityNumericTypes(classifications);
+          majorityTypes.has_value()) {
+        return dispatchNumericTypes<includeDates>(
+            majorityTypes.value(),
+            [&left, &right, context](auto leftType,
+                                     auto rightType) -> ExpressionResult {
+              using LeftNumericType = typename decltype(leftType)::type;
+              using RightNumericType = typename decltype(rightType)::type;
+
+              return evaluateSpeculativeNumericOperation<
+                  Function, LeftValueGetter, RightValueGetter, LeftNumericType,
+                  RightNumericType>(left, right, context);
             });
       }
     }
@@ -127,11 +111,19 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
 
     ad_utility::chunkedForLoop<1000>(
         0, context->size(),
-        [&](size_t i) { result.push_back(function(getLeft(i), getRight(i))); },
+        [&left, &right, &result, &function, &getLeft, &getRight,
+         checkForValuesRejectedByGetter](size_t i) {
+          if (checkForValuesRejectedByGetter &&
+              hasNonNumericOperand<Function, ValueGetters>(
+                  getValueAt(left, i), getValueAt(right, i))) {
+            result.push_back(Id::makeUndefined());
+            return;
+          }
+          result.push_back(function(getLeft(i), getRight(i)));
+        },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
     return result;
-
   } else {
     static_assert(ad_utility::alwaysFalse<std::tuple<LeftType, RightType>>,
                   "Unhandled binary expression operand types");

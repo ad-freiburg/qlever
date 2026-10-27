@@ -12,9 +12,11 @@
 #include <gmock/gmock.h>
 #include <re2/re2.h>
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <thread>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
@@ -243,8 +245,8 @@ class CopyShield {
 
  public:
   CPP_variadic_template(typename... Ts)(
-      requires ql::concepts::constructible_from<
-          T, Ts&&...>) explicit CopyShield(Ts&&... args)
+      requires ql::concepts::constructible_from<T, Ts...>)
+  explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
   CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)
@@ -293,10 +295,8 @@ auto liftOptionalMatcher(MakeMatcher makeMatcher) {
 // `MakeMatcher` to each of the expected values in the argument of `ArrayType`
 // and returns an `ElementsAreArray` matcher of these submatchers.
 CPP_template(typename T, typename ArrayType, typename MakeMatcher)(
-    requires std::is_convertible_v<
-        ArrayType,
-        std::vector<T>>) auto liftMatcherToElementsAreArray(MakeMatcher
-                                                                makeMatcher) {
+    requires std::is_convertible_v<ArrayType, std::vector<T>>)
+auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
         std::vector<::testing::Matcher<T>> childMatchers;
@@ -343,6 +343,24 @@ inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
   return absl::StrReplaceAll(
       absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name()),
       {{"/", "_"}});
+}
+
+// _____________________________________________________________________________
+// Block until the `predicate` is true, polling it every millisecond, but at
+// most for the `timeout`. Return the final value of the `predicate`. Use this
+// to wait for the effect of work that runs on another thread, typically as
+// `ASSERT_TRUE(waitUntil(...))`.
+//
+// NOTE: The `timeout` is deliberately generous, because it is only waited for
+// in full when the awaited event never happens, which is a failing test anyway.
+template <typename Predicate>
+bool waitUntil(const Predicate& predicate,
+               std::chrono::milliseconds timeout = std::chrono::seconds{10}) {
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (!predicate() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  return predicate();
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

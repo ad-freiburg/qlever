@@ -10,6 +10,7 @@
 #include <array>
 #include <stdexcept>
 
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -94,8 +95,8 @@ CPP_concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
 /// If we try to serialize from a const object or reference, the serializer must
 /// be a `WriteSerializer`. The following type trait can be used to check this
 /// constraint at compile time.
-CPP_template(typename S, typename T)(
-    requires Serializer<S>) static constexpr bool SerializerMatchesConstness =
+CPP_template(typename S, typename T)(requires Serializer<S>)
+static constexpr bool SerializerMatchesConstness =
     WriteSerializer<S> || !std::is_const_v<std::remove_reference_t<T>>;
 
 /**
@@ -122,12 +123,11 @@ CPP_template(typename S, typename T)(
  * - The second argument to `serialize` is a `T`, `T&`, `const T&`, `T&&` etc.
  * - If the `arg` is const then the serializer is a `WriteSerializer`.
  */
-#define AD_SERIALIZE_FUNCTION(T)                                             \
-  CPP_template(typename S, typename U)(                                      \
-      requires ad_utility::serialization::Serializer<S> CPP_and              \
-          ad_utility::SimilarTo<U, T>                                        \
-              CPP_and ad_utility::serialization::SerializerMatchesConstness< \
-                  S, U>) void                                                \
+#define AD_SERIALIZE_FUNCTION(T)                                        \
+  CPP_template(typename S, typename U)(                                 \
+      requires ad_utility::serialization::Serializer<S> &&              \
+      ad_utility::SimilarTo<U, T> &&                                    \
+      ad_utility::serialization::SerializerMatchesConstness<S, U>) void \
   serialize(S& serializer, U&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION` but defines a `friend` function to also
@@ -152,26 +152,25 @@ CPP_template(typename S, typename T)(
  * `Serializer` , `WriteSerializer` and `ReadSerializer` are also true for
  * references to serializers. For an example usage see `SerializePair.h`.
  */
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(Constraint)       \
-  CPP_template(typename S, typename T)(                         \
-      requires ad_utility::serialization::Serializer<S> CPP_and \
-          Constraint) void                                      \
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(Constraint)                   \
+  CPP_template(typename S, typename T)(                                     \
+      requires ad_utility::serialization::Serializer<S> && Constraint) void \
   serialize(S& serializer, T&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
 /// `WriteSerializer`s. For an example usage see `SerializeVector.h`
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint)      \
-  CPP_template(typename S, typename T)(                              \
-      requires ad_utility::serialization::WriteSerializer<S> CPP_and \
-          Constraint) void                                           \
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint) \
+  CPP_template(typename S, typename T)(                         \
+      requires ad_utility::serialization::WriteSerializer<S> && \
+      Constraint) void                                          \
   serialize(S& serializer, T&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
 /// `ReadSerializer`s. For an example usage see `SerializeVector.h`
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(Constraint)      \
-  CPP_template(typename S, typename T)(                             \
-      requires ad_utility::serialization::ReadSerializer<S> CPP_and \
-          Constraint) void                                          \
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(Constraint) \
+  CPP_template(typename S, typename T)(                        \
+      requires ad_utility::serialization::ReadSerializer<S> && \
+      Constraint) void                                         \
   serialize(S& serializer, T&& arg)
 
 /**
@@ -180,20 +179,20 @@ CPP_template(typename S, typename T)(
  * instead of
  * `serialize(serializer, t)`
  */
-CPP_template(typename S, typename T)(requires Serializer<S>) void operator|(
-    S& serializer, T&& t) {
+CPP_template(typename S, typename T)(requires Serializer<S>)
+void operator|(S& serializer, T&& t) {
   serialize(serializer, AD_FWD(t));
 }
 
 /// Serialization operator for explicitly writing to a serializer.
-CPP_template(typename S, typename T)(requires WriteSerializer<S>) void
-operator<<(S& serializer, const T& t) {
+CPP_template(typename S, typename T)(requires WriteSerializer<S>)
+void operator<<(S& serializer, const T& t) {
   serializer | t;
 }
 
 /// Serialization operator for explicitly reading from a serializer.
-CPP_template(typename S, typename T)(requires ReadSerializer<S>) void
-operator>>(S& serializer, T&& t) {
+CPP_template(typename S, typename T)(requires ReadSerializer<S>)
+void operator>>(S& serializer, T&& t) {
   serializer | t;
 }
 
@@ -253,8 +252,8 @@ CPP_concept TriviallySerializable =
 // don't have the explicit serialization enabled. It simply serializes the
 // bytes.
 CPP_template(typename S, typename T)(
-    requires Serializer<S> CPP_and std::is_trivially_copyable_v<
-        std::decay_t<T>>) void triviallySerialize(S& serializer, T&& t) {
+    requires Serializer<S> && std::is_trivially_copyable_v<std::decay_t<T>>)
+void triviallySerialize(S& serializer, T&& t) {
   if constexpr (WriteSerializer<S>) {
     serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
   } else {
@@ -265,18 +264,17 @@ CPP_template(typename S, typename T)(
 
 /// Serialization function for `TriviallySerializable` types that is implemented
 /// in terms of `triviallySerialize` above.
-CPP_template(typename S, typename T)(
-    requires Serializer<S> CPP_and
-        TriviallySerializable<T>) void serialize(S& serializer, T&& t) {
+CPP_template(typename S, typename T)(requires Serializer<S> &&
+                                           TriviallySerializable<T>)
+void serialize(S& serializer, T&& t) {
   triviallySerialize(serializer, AD_FWD(t));
 }
 
 /// Arithmetic types (the builtins like int, char, double), as well as enums can
 /// be trivially serialized.
-CPP_template(typename T,
-             typename U)(requires(std::is_arithmetic_v<std::decay_t<T>> ||
-                                  std::is_enum_v<std::decay_t<T>>))
-    [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
+CPP_template(typename T, typename U)(requires(
+    std::is_arithmetic_v<std::decay_t<T>> || std::is_enum_v<std::decay_t<T>>))
+[[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
 }
 
@@ -301,9 +299,14 @@ template <typename S>
 constexpr bool usesAlignedSerialization =
     detail::UsesAlignedSerializationImpl<std::decay_t<S>>::value;
 
-// Concept for serializers that support zero-copy reads by providing direct
-// access to the underlying buffer.
-// Note: The concept currently only checks for the existence of the functions,
+// Concept for serializers that provide direct access to the underlying buffer
+// (`getSpanToBytes`), so that bytes can be read without copying them. This is
+// enough for zero-copy reads of data without alignment requirements, see
+// `zeroCopyDeserializeToStringView` in `SerializeString.h`. For the zero-copy
+// reads of trivially serializable values, which have to be aligned, see
+// `ZeroCopyReadSerializer` below.
+//
+// NOTE: The concept currently only checks for the existence of the functions,
 // but leaves the return types unchecked, because the syntax in C++17 mode for
 // those checks is very very verbose.
 template <typename S>
@@ -313,10 +316,18 @@ CPP_requires(zeroCopyReadSerializerRequires,
                                        s.getCurrentPosition(), s.skip(numBytes),
                                        concepts::requires_<ReadSerializer<S>>));
 
+// The concept for the requirements above.
+template <typename S>
+CPP_concept SpanReadSerializer =
+    ReadSerializer<S> && CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+
+// Concept for serializers that support zero-copy reads of trivially
+// serializable values, which additionally requires that the serializer uses
+// aligned serialization (see `zeroCopyDeserializeToSpan` in
+// `SerializeVector.h`).
 template <typename S>
 CPP_concept ZeroCopyReadSerializer =
-    ReadSerializer<S> && usesAlignedSerialization<S> &&
-    CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+    SpanReadSerializer<S> && usesAlignedSerialization<S>;
 
 // Concept that checks whether a type `T` provides a static
 // `fromZeroCopyDeserializer(S&)` factory for the zero-copy read serializer `S`.
@@ -334,12 +345,12 @@ CPP_concept SupportsZeroCopyDeserialization =
 // Align the current write position to the alignment requirement of type `T`.
 // This adds padding bytes (zeros) if necessary. If the serializer does not use
 // aligned serialization, this is a no-op.
-CPP_template(typename T, typename S)(
-    requires WriteSerializer<S>) void alignSerializerForType(S& serializer) {
+CPP_template(typename T, typename S)(requires WriteSerializer<S>)
+void alignSerializerForType(S& serializer) {
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       static constexpr std::array<char, alignment> zeros = {0};
       serializer.serializeBytes(zeros.data(), padding);
@@ -350,12 +361,12 @@ CPP_template(typename T, typename S)(
 // Skip bytes to align the current read position to the alignment requirement
 // of type `T`. If the serializer does not use aligned serialization, this is a
 // no-op.
-CPP_template(typename T, typename S)(
-    requires ReadSerializer<S>) void alignSerializerForType(S& serializer) {
+CPP_template(typename T, typename S)(requires ReadSerializer<S>)
+void alignSerializerForType(S& serializer) {
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       serializer.skip(padding);
     }
@@ -370,11 +381,11 @@ CPP_template(typename T, typename S)(
 // NOTE: The `serializer` has to support `get/setSerializationPosition`, which
 // not all `WriteSerializer`s do. For a `BufferedWriteSerializer` (which cannot
 // simply seek, because a part of the data might still be sitting in its
-// buffer) there is a dedicated overload in `BufferedSerializer.h`.
-CPP_template(typename S, typename T)(
-    requires WriteSerializer<S>) void serializeAtPosition(S& serializer,
-                                                          uint64_t position,
-                                                          const T& element) {
+// buffer) there is a dedicated overload in `BufferedSerializer.h`, and for a
+// `ByteBufferWriteSerializer` (which has no seekable position, but a buffer
+// that can be patched in place) in `ByteBufferSerializer.h`.
+CPP_template(typename S, typename T)(requires WriteSerializer<S>)
+void serializeAtPosition(S& serializer, uint64_t position, const T& element) {
   auto previousPosition = serializer.getSerializationPosition();
   serializer.setSerializationPosition(position);
   serializer << element;

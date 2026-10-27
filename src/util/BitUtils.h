@@ -15,7 +15,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <exception>
 #include <functional>
 
 #include "util/Exception.h"
@@ -26,9 +25,8 @@ namespace ad_utility {
 // The return value has 1s for the lowest `numBits` bits, and 0 in all the
 // higher bits.
 constexpr inline uint64_t bitMaskForLowerBits(uint64_t numBits) {
-  if (numBits > 64) {
-    throw std::out_of_range{"mask for more than 64 bits required"};
-  }
+  AD_CONTRACT_CHECK(numBits <= 64,
+                    "mask for more than 64 bits required, but was ", numBits);
   if (numBits == 64) {
     return std::numeric_limits<uint64_t>::max();
   }
@@ -48,6 +46,16 @@ constexpr int bitMaskSizeForValue(uint64_t maxValue) {
     return 0;
   }
   return bitMaskSizeForValue(maxValue >> 1) + 1;
+}
+
+// Round `offset` up to the next multiple of `alignment`, which has to be a
+// power of two (see `absl::has_single_bit`). For example, `alignUp(13, 8)` is
+// `16`, and `alignUp(16, 8)` is again `16`.
+constexpr size_t alignUp(size_t offset, size_t alignment) {
+  // NOTE: This function is called in tight loops, so the check is only an
+  // expensive check, although it is rather cheap.
+  AD_EXPENSIVE_CHECK(absl::has_single_bit(alignment));
+  return (offset + alignment - 1) & ~(alignment - 1);
 }
 
 namespace detail {

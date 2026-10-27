@@ -18,6 +18,22 @@
 #include "util/Log.h"
 #include "util/Timer.h"
 
+namespace {
+// TODO<vrbommireddy>: Remove these conversions once all operations pass
+// `qlm::vector` for the sorted columns.
+qlm::vector<ColumnIndex> toQlmSortedColumns(
+    const std::vector<ColumnIndex>& sortedColumns) {
+  return {sortedColumns.begin(), sortedColumns.end(),
+          qlever::makeUnlimitedAllocator<ColumnIndex>()};
+}
+
+qlm::vector<ColumnIndex> toQlmSortedColumns(
+    std::initializer_list<ColumnIndex> sortedColumns) {
+  return {sortedColumns.begin(), sortedColumns.end(),
+          qlever::makeUnlimitedAllocator<ColumnIndex>()};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::string Result::asDebugString() const {
   std::ostringstream os;
@@ -42,7 +58,7 @@ auto Result::getMergedLocalVocab(const Result& result1, const Result& result2)
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
+auto compareRowsBySortColumns(const qlm::vector<ColumnIndex>& sortedBy) {
   return [&sortedBy](const auto& row1, const auto& row2) {
     for (ColumnIndex col : sortedBy) {
       if (row1[col] != row2[col]) {
@@ -58,7 +74,7 @@ namespace {
 // Check if sort order promised by `sortedBy` is kept within `idTable`.
 template <typename IdTableT>
 void assertSortOrderIsRespected(const IdTableT& idTable,
-                                const std::vector<ColumnIndex>& sortedBy) {
+                                const qlm::vector<ColumnIndex>& sortedBy) {
   static_assert(ad_utility::SameAsAny<IdTableT, IdTable, IdTableView<0>>);
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
@@ -71,7 +87,7 @@ void assertSortOrderIsRespected(const IdTableT& idTable,
 }  // namespace
 
 // _____________________________________________________________________________
-Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+Result::Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
     : data_{IdTableSharedLocalVocabPair{std::move(idTable),
                                         std::move(localVocab.localVocab_)}},
@@ -82,7 +98,19 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTablePtr idTablePtr, qlm::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : data_{IdTableSharedLocalVocabPair{
           std::move(idTablePtr),
@@ -97,13 +125,38 @@ Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result{std::move(idTablePtr), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTablePtr idTablePtr,
+               std::initializer_list<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result{std::move(idTablePtr), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(idTable), std::move(sortedBy),
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
-Result::Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTableView<0> view, qlm::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : data_{IdTableSharedLocalVocabPair{
           std::move(view),
@@ -113,18 +166,49 @@ Result::Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
+Result::Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result{std::move(view), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTableView<0> view, std::initializer_list<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result{std::move(view), toQlmSortedColumns(sortedBy),
+             std::move(localVocab)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTableVocabPair pair, qlm::vector<ColumnIndex> sortedBy)
     : Result{std::move(pair.idTable_), std::move(sortedBy),
+             std::move(pair.localVocab_)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
+    : Result{std::move(pair.idTable_), toQlmSortedColumns(sortedBy),
+             std::move(pair.localVocab_)} {}
+
+// _____________________________________________________________________________
+Result::Result(IdTableVocabPair pair,
+               std::initializer_list<ColumnIndex> sortedBy)
+    : Result{std::move(pair.idTable_), toQlmSortedColumns(sortedBy),
              std::move(pair.localVocab_)} {}
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
+Result::Result(Generator idTables, qlm::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
+
+// _____________________________________________________________________________
+Result::Result(Generator idTables, std::initializer_list<ColumnIndex> sortedBy)
+    : Result{LazyResult{std::move(idTables)}, toQlmSortedColumns(sortedBy)} {}
+
+// _____________________________________________________________________________
+Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
+    : Result{LazyResult{std::move(idTables)}, toQlmSortedColumns(sortedBy)} {}
 #endif
 
 // _____________________________________________________________________________
-Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
+Result::Result(LazyResult idTables, qlm::vector<ColumnIndex> sortedBy)
     : data_{GenContainer{ad_utility::CachingTransformInputRange(
           std::move(idTables),
           [sortedBy, previousId = std::optional<IdTable::row_type>{}](
@@ -142,6 +226,14 @@ Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
           })}},
       sortedBy_{std::move(sortedBy)} {}
 
+// _____________________________________________________________________________
+Result::Result(LazyResult idTables, std::initializer_list<ColumnIndex> sortedBy)
+    : Result{std::move(idTables), toQlmSortedColumns(sortedBy)} {}
+
+// _____________________________________________________________________________
+Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
+    : Result{std::move(idTables), toQlmSortedColumns(sortedBy)} {}
+
 namespace {
 // _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
@@ -150,7 +242,7 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
-           limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
+           limitOffset.upperBound(idTable.numRows())](IdColumnRef column) {
         ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
@@ -339,7 +431,8 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 void Result::runOnNewChunkComputed(
     std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
         onNewChunk,
-    std::function<void(GeneratorState)> onGeneratorFinished) {
+    std::function<void(GeneratorState, std::chrono::microseconds)>
+        onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto inputAsGet = ad_utility::CachingTransformInputRange(
       idTables(), [](auto& input) { return std::move(input); });
@@ -350,30 +443,37 @@ void Result::runOnNewChunkComputed(
       std::move(onGeneratorFinished));
 
   // The main lambda that when being called processes the next chunk.
-  auto get = [inputAsGet = std::move(inputAsGet), sharedFinish,
-              cleanup = absl::Cleanup{[&finish = *sharedFinish]() noexcept {
-                ad_utility::ignoreExceptionIfThrows(
-                    [&finish]() { finish(GeneratorState::FINISHED); });
-              }},
-              onNewChunk = std::move(
-                  onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
+  auto get =
+      [inputAsGet = std::move(inputAsGet), sharedFinish,
+       cleanup = absl::Cleanup{[&finish = *sharedFinish]() noexcept {
+         ad_utility::ignoreExceptionIfThrows([&finish]() {
+           finish(GeneratorState::FINISHED, std::chrono::microseconds::zero());
+         });
+       }},
+       onNewChunk =
+           std::move(onNewChunk)]() mutable -> std::optional<IdTableVocabPair> {
+    Timer timer{Timer::Started};
+    auto finish = [&cleanup, &sharedFinish, &timer](GeneratorState state) {
+      std::move(cleanup).Cancel();
+      (*sharedFinish)(state, timer.value());
+    };
     try {
-      Timer timer{Timer::Started};
       auto input = inputAsGet.get();
       if (!input.has_value()) {
-        std::move(cleanup).Cancel();
-        (*sharedFinish)(GeneratorState::FINISHED);
+        finish(GeneratorState::FINISHED);
         return std::nullopt;
       }
-      onNewChunk(input.value(), timer.value());
+      auto duration = timer.value();
+      // The duration is now owned by `onNewChunk`, so `finish` must not report
+      // it again if `onNewChunk` throws.
+      timer.reset();
+      onNewChunk(input.value(), duration);
       return input;
     } catch (const ad_utility::CancellationException&) {
-      std::move(cleanup).Cancel();
-      (*sharedFinish)(GeneratorState::CANCELLED);
+      finish(GeneratorState::CANCELLED);
       throw;
     } catch (...) {
-      std::move(cleanup).Cancel();
-      (*sharedFinish)(GeneratorState::FAILED);
+      finish(GeneratorState::FAILED);
       throw;
     }
   };
@@ -386,9 +486,6 @@ const IdTableView<0>& Result::idTableView() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
   return std::get<IdTableSharedLocalVocabPair>(data_).idTableView();
 }
-
-// _____________________________________________________________________________
-IdTable Result::cloneIdTable() const { return idTableView().clone(); }
 
 // _____________________________________________________________________________
 Result::LazyResult Result::idTables() const {

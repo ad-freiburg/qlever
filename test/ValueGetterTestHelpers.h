@@ -48,8 +48,7 @@ struct TestContextWithGivenTTl {
       table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
 
@@ -136,8 +135,8 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
     if (isIri) {
       return LiteralOrIri::iriref(std::string(content));
     } else {
-      return LiteralOrIri{Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(content), descriptor)};
+      return LiteralOrIri{
+          Literal::literalWithNormalizedContent(content, descriptor)};
     }
   };
   LiteralOrIri literalOrIri =
@@ -149,13 +148,9 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
 };
 
 // The words of the secondary vocabulary of the index of
-// `AllDatatypesTestContext` (see `index/vocabulary/SecondaryVocabulary.h`), in
-// the order in which a `SecondaryVocabulary` stores them. NOTE: That order is
-// the one of `std::string`, whereas the actual implementation will use the
-// collation of the vocabulary of the main index. These words are deliberately
-// chosen such that the two orders agree (verified against the vocabulary of a
-// test index), so that the tests do not encode a wrong assumption about the
-// order.
+// `AllDatatypesTestContext` (see `index/vocabulary/SecondaryVocabulary.h`),
+// sorted (bytewise), as a `SecondaryVocabulary` requires the words of a
+// segment to be (see `SecondaryVocabulary::appendSegment`).
 inline const std::vector<std::string> secondaryVocabWords{
     "\"\"",
     "\"LINESTRING(6 6, 8 8)\""
@@ -371,6 +366,8 @@ class ValueGetterTester {
       " <https://example.com/test>,"
       " \"noType\" ,"
       " \"LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 3, 4 5)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
       " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.\n";

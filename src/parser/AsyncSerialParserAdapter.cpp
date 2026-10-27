@@ -27,8 +27,10 @@ AsyncSerialParserAdapter::AsyncSerialParserAdapter(
 }
 
 // _____________________________________________________________________________
-void AsyncSerialParserAdapter::asyncGetBatchImpl(Handler handler) {
-  net::post(strand_, [this, h = std::move(handler)]() mutable {
+void AsyncSerialParserAdapter::asyncGetBatchImpl(
+    std::vector<TurtleTriple> buffer, Handler handler) {
+  net::post(strand_, [this, buffer = std::move(buffer),
+                      h = std::move(handler)]() mutable {
     std::exception_ptr exception;
     OptionalTriples batch;
     if (!finished_) {
@@ -38,7 +40,7 @@ void AsyncSerialParserAdapter::asyncGetBatchImpl(Handler handler) {
           parser_ = std::move(parserFactory_)();
           AD_CORRECTNESS_CHECK(parser_ != nullptr);
         }
-        batch = parser_->getBatch();
+        batch = parser_->getBatch(std::move(buffer));
       } catch (...) {
         exception = std::current_exception();
       }

@@ -12,27 +12,13 @@
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
-#include "util/ComparisonWithNan.h"
+#include "util/Log.h"
 #include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
-
-// This enum can be used to configure the behavior of the `compareIds` method
-// below in the case when two `Id`s have incompatible datatypes (e.g.
-// `VocabIndex` and a numeric type, or `Undefined` and any other type).
-// For `AlwaysUndef`, the comparison will always be UNDEF, so for example `"x"`
-// is neither smaller than nor greater than nor equal to `42`. This behavior is
-// similar to the behavior of floating point `NaN` values. It is used for
-// example for filter expressions like `FILTER (?x < 42)` which will filter out
-// all string values. For `CompareByType` such pairs of `Id`s will be compared
-// by the numeric order of their datatypes, so for example all `Undefined` IDs
-// will be smaller than all IDs with a type different from `Undefined`. This
-// behavior is used e.g. in `ORDER BY` expressions where we need a consistent
-// partial ordering on all possible IDs.
-enum struct ComparisonForIncompatibleTypes { CompareByType, AlwaysUndef };
 
 // The result of the comparisons is actually ternary because we sometimes
 // distinguish between "false" and "type mismatch" (see the comment directly
@@ -333,26 +319,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   return std::move(rangeFilter).getResult();
 }
 
-// This function is part of the implementation of `getRangesForEqualIds`. See
-// the documentation there.
-template <typename RandomIt>
-inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
-    RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
-    Comparison comparison) {
-  auto [beginOfType, endOfType] =
-      getRangeForDatatype(begin, end, valueIdBegin.getDatatype());
-
-  RangeFilter<RandomIt> rangeFilter{comparison};
-  auto eqBegin =
-      std::lower_bound(beginOfType, endOfType, valueIdBegin, &compareByBits);
-  auto eqEnd =
-      std::lower_bound(beginOfType, endOfType, valueIdEnd, &compareByBits);
-  rangeFilter.addSmaller(beginOfType, eqBegin);
-  rangeFilter.addEqual(eqBegin, eqEnd);
-  rangeFilter.addGreater(eqEnd, endOfType);
-  return std::move(rangeFilter).getResult();
-}
-
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
 template <typename RandomIt>
@@ -439,51 +405,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   AD_FAIL();
 }
 
-// Similar to `getRangesForId` above but takes a range [valueIdBegin,
-// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
-// `valueIdEnd` must have the same datatype which must be one of the index
-// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CONTRACT_CHECK`
-// will fail at runtime.
-template <typename RandomIt>
-inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
-    RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
-    Comparison comparison) {
-  // For an explanation of the case `valueIdBegin == valueIdEnd`, see the
-  // documentation of a similar check in `compareIds` below.
-  AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
-  // This lambda enforces the invariants `non-empty` and `sorted` and also
-  // merges directly adjacent ranges.
-  auto typeBegin = valueIdBegin.getDatatype();
-  auto typeEnd = valueIdEnd.getDatatype();
-  AD_CONTRACT_CHECK(typeBegin == typeEnd ||
-                    (ad_utility::contains(Id::stringTypes_, typeBegin) &&
-                     ad_utility::contains(Id::stringTypes_, typeEnd)));
-  switch (valueIdBegin.getDatatype()) {
-    case Datatype::Double:
-    case Datatype::Int:
-    case Datatype::Bool:
-    case Datatype::Undefined:
-    case Datatype::Date:
-    case Datatype::GeoPoint:
-    case Datatype::BlankNodeIndex:
-      AD_FAIL();
-    // TODO<joka921> check what the correct behavior is here.
-    case Datatype::EncodedVal:
-    case Datatype::VocabIndex:
-    case Datatype::LocalVocabIndex:
-    case Datatype::WordVocabIndex:
-    case Datatype::TextRecordIndex:
-      // TODO<joka921> For the `SecondaryVocabIndex` type this is not yet
-      // finally correct (for the same reason as in `getRangesForId` above), but
-      // will be corrected in a follow-up PR, see the detailed note in
-      // `compareIdsImpl` below.
-    case Datatype::SecondaryVocabIndex:
-      return detail::simplifyRanges(detail::getRangesForIndexTypes(
-          begin, end, valueIdBegin, valueIdEnd, comparison));
-  }
-  AD_FAIL();
-}
-
 namespace detail {
 
 // Determine whether the two datatypes can be compared. If they cannot be
@@ -514,8 +435,8 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 //    type is deliberately absent from `ValueId::stringTypes_` (see the note
 //    there).
 //    Comparing it to a `VocabIndex` or a `LocalVocabIndex` therefore is an
-//    "incompatible types" comparison: it yields `Undef`, resp. compares the two
-//    *datatypes* in the `CompareByType` mode that `ORDER BY` uses. Two `Id`s of
+//    "incompatible types" comparison: it yields `Undef` (and `ORDER BY`
+//    compares the two *datatypes*, see `OrderByComparator`). Two `Id`s of
 //    that type are compared to each other by their index, which is correct for
 //    equality (the two vocabularies are disjoint), but not for `<` and `>`.
 // 2. An `Id` of type `LocalVocabIndex` whose word happens to be stored in the
@@ -531,9 +452,11 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // (`FILTER`, `ORDER BY`, the range filters above, and the prefilters in
 // `PrefilterExpressionIndex.cpp`) silently yield wrong results.
 //
-// This is deliberate for now: nothing but a unit test can currently create a
-// secondary vocabulary (see `IndexImpl::setSecondaryVocabForTesting`), so no
-// query is affected. It has to be fixed *before* anything else creates one.
+// This is a known limitation for now: apart from unit tests, a secondary
+// vocabulary is only created when a blob of `NamedCachedQueryBlobManager` that
+// contains new words is loaded (see `IndexImpl::setSecondaryVocab`), so only
+// queries on such a blob are affected. It has to be fixed before a secondary
+// vocabulary is used more widely.
 // The fix requires the semantically correct position of each word of the
 // secondary vocabulary within the main vocabulary, which the secondary
 // vocabulary will store, and it will most likely mean that this function must
@@ -555,21 +478,13 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // 2. Comparing literals with different datatypes blurs the distinction between
 //    `sameTerm` and `=`, which is also why `!(A = B)` and `A != B` currently
 //    behave differently, see issue #2405.
-template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef,
-          typename Comparator>
+template <typename Comparator>
 ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
   using enum ComparisonResult;
   if (!areTypesCompatible(typeA, typeB)) {
-    using enum ComparisonForIncompatibleTypes;
-    if constexpr (comparisonForIncompatibleTypes == CompareByType) {
-      return fromBool(comparator(a.getDatatype(), b.getDatatype()));
-    } else {
-      static_assert(comparisonForIncompatibleTypes == AlwaysUndef);
-      return ComparisonResult::Undef;
-    }
+    return ComparisonResult::Undef;
   }
 
   // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
@@ -622,24 +537,19 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
 // bValue are the values contained in `a` and `b`.
 // 2. The datatype of `a` and `b` are compatible, s.t. the comparison in
 // condition one is well-defined.
-// For the definition of the template parameter `comparisonForIncompatibleTypes`
-// see the documentation of the enum `ComparisonForIncompatibleTypes` above.
-template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef>
+// If the datatypes are not compatible (e.g. `VocabIndex` and a numeric type, or
+// `Undefined` and any other type), the result is `Undef`, so for example `"x"`
+// is neither smaller than nor greater than nor equal to `42`. This behavior is
+// similar to the behavior of floating point `NaN` values. It is used for
+// example for filter expressions like `FILTER (?x < 42)`, which filter out all
+// string values.
+//
+// NOTE: This is not the order of `ORDER BY`, `MIN`, and `MAX`, which need an
+// order on all `Id`s, see `OrderByComparator`.
 inline ComparisonResult compareIds(ValueId a, ValueId b,
                                    Comparison comparison) {
-  // A helper lambda to factor out common code
   auto compare = [&](auto comparator) {
-    // For the `compareByType` mode, which is used by ORDER BY, we also need a
-    // proper order of NaN values to not run into undefined behavior.
-    if constexpr (comparisonForIncompatibleTypes ==
-                  ComparisonForIncompatibleTypes::CompareByType) {
-      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(
-          a, b, ad_utility::makeComparatorForNans(comparator));
-    } else {
-      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
-                                                                    comparator);
-    }
+    return detail::compareIdsImpl(a, b, comparator);
   };
 
   using enum Comparison;
@@ -656,67 +566,6 @@ inline ComparisonResult compareIds(ValueId a, ValueId b,
       return compare(std::greater_equal{});
     case GT:
       return compare(std::greater{});
-    default:
-      AD_FAIL();
-  }
-}
-
-// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
-// are considered to be equal.
-template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef>
-inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
-                                            ValueId bEnd,
-                                            Comparison comparison) {
-  // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are
-  // compared to "pseudo"-IDs that represent words that are not part of the
-  // vocabulary. In this case the ID `bBegin` is the ID of the smallest
-  // vocabulary entry that is larger than the non-existing word that it
-  // represents.
-  AD_CONTRACT_CHECK(bBegin <= bEnd);
-
-  static constexpr auto mode = comparisonForIncompatibleTypes;
-
-  // The comparison for `equal` is also used for the `not equal` case, so we
-  // factor it out.
-  auto compareEqual = [&]() {
-    return toBoolNotUndef(detail::compareIdsImpl<mode>(
-               a, bBegin, std::greater_equal<>())) &&
-           toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>()));
-  };
-  using enum Comparison;
-  switch (comparison) {
-    case LT:
-      return detail::compareIdsImpl<mode>(a, bBegin, std::less<>());
-    case LE:
-      return detail::compareIdsImpl<mode>(a, bEnd, std::less<>());
-    case EQ: {
-      if constexpr (mode == ComparisonForIncompatibleTypes::AlwaysUndef) {
-        bool typesAreCompatible =
-            detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
-        return typesAreCompatible ? fromBool(compareEqual())
-                                  : ComparisonResult::Undef;
-      } else {
-        return fromBool(compareEqual());
-      }
-    }
-    case NE: {
-      // If the datatypes are not compatible then we always yield `false`. This
-      // is the correct behavior for SPARQL filters where this is called an
-      // `expression error`.
-      bool typesAreCompatible =
-          detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
-      if constexpr (mode == ComparisonForIncompatibleTypes::AlwaysUndef) {
-        return typesAreCompatible ? fromBool(!compareEqual())
-                                  : ComparisonResult::Undef;
-      } else {
-        return fromBool(!typesAreCompatible || !compareEqual());
-      }
-    }
-    case GE:
-      return detail::compareIdsImpl<mode>(a, bBegin, std::greater_equal<>());
-    case GT:
-      return detail::compareIdsImpl<mode>(a, bEnd, std::greater_equal<>());
     default:
       AD_FAIL();
   }

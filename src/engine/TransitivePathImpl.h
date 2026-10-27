@@ -14,6 +14,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/TransitivePathGraphSearch.h"
 #include "index/TripleComponentConversions.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 
@@ -74,7 +75,7 @@ template <typename T>
 class TransitivePathImpl : public TransitivePathBase {
   // Tuple-like class
   using ZippedType = ql::ranges::range_value_t<
-      ::ranges::zip_view<ql::span<const Id>, ::ranges::repeat_view<Id>>>;
+      ::ranges::zip_view<ConstIdColumnRef, ::ranges::repeat_view<Id>>>;
   using TableColumnWithVocab = detail::TableColumnWithVocab<
       ad_utility::InputRangeTypeErased<ZippedType>>;
 
@@ -249,6 +250,9 @@ class TransitivePathImpl : public TransitivePathBase {
            ::ranges::views::enumerate(tableColumn.startNodes_)) {
         for (const auto& [startNode, graphId] :
              tableColumn.expandUndef(pair, edges, graphVariable_.has_value())) {
+          // The graph search only checks for cancellation per visited node,
+          // which doesn't happen for start nodes without successors.
+          checkCancellation();
           // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
           // where both `?g` variables are not the same.
           if (startsWithGraphVariable && startNode != graphId) {
@@ -264,7 +268,7 @@ class TransitivePathImpl : public TransitivePathBase {
           // Pick the appropriate graph search strategy and run it.
           GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_,
                                     maxDist_);
-          GraphSearchExecutionParams ep(cancellationHandle_, allocator());
+          GraphSearchExecutionParams ep(cancellationHandle(), allocator());
           Set connectedNodes = runOptimalGraphSearch(gsp, ep);
 
           if (!connectedNodes.empty()) {
@@ -308,16 +312,20 @@ class TransitivePathImpl : public TransitivePathBase {
     // var -> var
     if (startSide.isVariable()) {
       if (graphVariable_.has_value()) {
-        for (const auto& [id, graph] : ::ranges::views::zip(
-                 sub.getColumn(startSide.subCol_),
-                 sub.getColumn(
-                     subtree_->getVariableColumn(graphVariable_.value())))) {
-          result.emplace(id, graph);
-        }
+        ad_utility::chunkedForEach(
+            ::ranges::views::zip(sub.getColumn(startSide.subCol_),
+                                 sub.getColumn(subtree_->getVariableColumn(
+                                     graphVariable_.value()))),
+            [&result](const auto& idAndGraph) {
+              const auto& [id, graph] = idAndGraph;
+              result.emplace(id, graph);
+            },
+            cancellationChecker());
       } else {
-        for (Id id : sub.getColumn(startSide.subCol_)) {
-          result.emplace(id, Id::makeUndefined());
-        }
+        ad_utility::chunkedForEach(
+            sub.getColumn(startSide.subCol_),
+            [&result](Id id) { result.emplace(id, Id::makeUndefined()); },
+            cancellationChecker());
       }
       return result;
     }
@@ -354,7 +362,7 @@ class TransitivePathImpl : public TransitivePathBase {
         computeColumnsWithoutJoinColumns(joinColumn, cols, graphColumn);
     auto columnsToRange = [graphColumn = std::move(graphColumn),
                            joinColumn](const auto& idTable) {
-      ql::span<const Id> startNodes = idTable.getColumn(joinColumn);
+      ConstIdColumnRef startNodes = idTable.getColumn(joinColumn);
       return graphColumn.has_value()
                  ? InputRangeTypeErased{zipColumns(
                        startNodes, idTable.getColumn(graphColumn.value()))}
@@ -417,14 +425,13 @@ class TransitivePathImpl : public TransitivePathBase {
 
   // Create a zipped view that returns `Id::makeUndefined()` for the graph
   // column.
-  static auto padWithMissingGraph(ql::span<const Id> input) {
+  static auto padWithMissingGraph(ConstIdColumnRef input) {
     return ::ranges::views::zip(input,
                                 ::ranges::views::repeat(Id::makeUndefined()));
   }
 
   // Create a zipped view from two columns.
-  static auto zipColumns(ql::span<const Id> input,
-                         ql::span<const Id> graphInput) {
+  static auto zipColumns(ConstIdColumnRef input, ConstIdColumnRef graphInput) {
     return ::ranges::views::zip(input, graphInput);
   }
 };

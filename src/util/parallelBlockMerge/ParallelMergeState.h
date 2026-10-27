@@ -17,11 +17,16 @@
 // *serial* merge is unaffected and available in both modes.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/functional/any_invocable.h>
+
 #include <boost/asio/as_tuple.hpp>
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/consign.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
@@ -125,14 +130,22 @@ inline void logIgnoredException(std::exception_ptr exception,
 // outlives them as well. A consumer that abandons the merge has to call
 // `stop()`, so that those coroutines actually finish instead of waiting for a
 // consumer that is gone.
+//
+// A consequence of this is that the merge still owns (and still uses) its input
+// after the consumer is gone, and that the input is released on whichever
+// thread happens to run the last coroutine. A consumer that has to know when
+// the input is truly untouched again — for example because it then deletes the
+// file that the input reads from — therefore has to wait for
+// `asyncWaitForCompletion`, see `ParallelMergeRange`.
 template <bool moveElements, typename Input, typename Comparator, typename Sink>
-requires InputConcept<Input> && SinkConcept<Sink, typename Input::Block>
+requires InputConcept<Input> && SinkConcept<Sink, OutputBlockT<Input>>
 class ParallelMergeState
     : public std::enable_shared_from_this<
           ParallelMergeState<moveElements, Input, Comparator, Sink>>,
       public ad_utility::NoCopyNoMove {
  public:
-  using Block = typename Input::Block;
+  // The blocks that the merge yields and that the `Sink` receives.
+  using Block = OutputBlockT<Input>;
   // The merger of a single chunk, and the state that the mergers of all chunks
   // share (see `ChunkMerger`). The latter is the single owner of the input, the
   // comparator, the options, the cancellation handle, and the chunk boundaries
@@ -150,6 +163,30 @@ class ParallelMergeState
   // `ParallelMergeState` can only be created via `create()` and hence only ever
   // exists inside a `shared_ptr`, see the LIFETIME note above.
   struct PrivateTag {};
+
+  // Invokes the completion handler that `asyncWaitForCompletion` registered
+  // (if any) when it is destroyed.
+  struct CompletionSignal {
+    absl::AnyInvocable<void() &&> onCompletion_;
+    ~CompletionSignal() noexcept {
+      if (!onCompletion_) {
+        return;
+      }
+      ad_utility::terminateIfThrows(
+          [this] { std::move(onCompletion_)(); },
+          "Signalling the completion of a `ParallelMergeState` failed.");
+    }
+  };
+
+  // IMPORTANT: This is the *first* data member, such that it is destroyed
+  // *last*. Only then does the handler that it invokes mean what
+  // `asyncWaitForCompletion` promises: that every other member is gone, in
+  // particular the `mergeState_`, which is the single owner of the input of the
+  // merge (see `MergeState`). The `ChunkMerger`s, which are the only other
+  // owners of the `mergeState_`, live in the frames of the chunk coroutines and
+  // are therefore already destroyed when the last of those coroutines releases
+  // its `shared_ptr` to this object.
+  CompletionSignal completionSignal_;
 
   ql::any_io_executor executor_;
   // Both are never `nullptr`, see `create()` below.
@@ -202,6 +239,35 @@ class ParallelMergeState
   // The number of chunks that this merge consists of, see
   // `computeChunkBoundaries`. Always at least one.
   size_t numChunks() const { return mergeState_->chunkBoundaries_.size(); }
+
+  // Asynchronously wait until this object has been destroyed, which is when the
+  // last coroutine of the merge is done (see the LIFETIME note above). At that
+  // point the merge has released everything that it owns, in particular its
+  // input, and will never touch it again. Combine this with `stop()` to wait
+  // for a merge that is abandoned; without the `stop()` the wait may last until
+  // the merge has run to completion.
+  //
+  // This is an ordinary Boost.Asio operation with the completion signature
+  // `void()`, so for example `net::use_future` yields a `std::future<void>`.
+  // The completion handler is dispatched to its associated executor from the
+  // destructor of this object, see `completionSignal_`.
+  //
+  // NOTE: May be called at most once per merge, and only while the caller
+  // holds a `shared_ptr` to this object (so that it cannot be destroyed while
+  // the handler is registered).
+  template <typename CompletionToken>
+  auto asyncWaitForCompletion(CompletionToken&& completionToken) {
+    return net::async_initiate<CompletionToken, void()>(
+        [this](auto handler) {
+          AD_CONTRACT_CHECK(!completionSignal_.onCompletion_);
+          completionSignal_.onCompletion_ = [handler =
+                                                 std::move(handler)]() mutable {
+            auto executor = net::get_associated_executor(handler);
+            net::dispatch(executor, std::move(handler));
+          };
+        },
+        completionToken);
+  }
 
   // Stop the merge, so that no coroutine is left waiting for a consumer that is
   // gone. NOTE: This returns immediately, it does *not* wait for the coroutines
@@ -288,8 +354,14 @@ class ParallelMergeState
       // soon as the permit was *acquired* and not when the chunk is done. It
       // therefore needs the permit as an explicit RAII handle that it can hand
       // to the chunk.
-      auto [errorCode, permit] =
+      //
+      // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+      // structured binding in a coroutine is not always destroyed at the end
+      // of its scope, for example when it is initialized by a `co_await` or
+      // lives across one (gcc.gnu.org bug 124584).
+      auto errorCodeAndPermit =
           co_await semaphore_.asyncAcquire(net::as_tuple(net::use_awaitable));
+      auto& [errorCode, permit] = errorCodeAndPermit;
       // The two conditions below cover the two ways in which a merge ends
       // early, and this loop is the only waiter on the `semaphore_`, so
       // whichever of them happens is seen right here:

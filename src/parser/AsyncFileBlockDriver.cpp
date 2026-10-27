@@ -24,7 +24,10 @@ AsyncFileBlockDriver::AsyncFileBlockDriver(
   fileBuffer_ = std::make_unique<AsyncStatementBoundaryBlockSource>(
       ioPool_.get_executor(),
       spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
-      std::move(findEndPosition), std::move(description));
+      std::move(findEndPosition), std::move(description), spec.filename(),
+      // This driver exists only to serve the synchronous `RdfStreamParser`,
+      // which never parses a single file in parallel.
+      false);
   pendingBlock_ = fileBuffer_->asyncGetNextBlock(boost::asio::use_future);
 }
 

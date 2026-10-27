@@ -18,21 +18,20 @@
 #include <absl/container/inlined_vector.h>
 #endif
 
-#include <absl/functional/bind_front.h>
-
 #ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include "backports/functional.h"
 #endif
+#include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
 namespace sparqlExpression::detail {
 
-/// Convert a variable to a vector of all the Ids it is bound to in the
-/// `context`.
-inline ql::span<const ValueId> getIdsFromVariable(
-    const ::Variable& variable, const EvaluationContext* context,
-    size_t beginIndex, size_t endIndex) {
+/// Return the column of all the `Id`s that the `variable` is bound to in the
+/// `context`, restricted to the rows `[beginIndex, endIndex)`.
+inline ConstIdColumnRef getIdsFromVariable(const ::Variable& variable,
+                                           const EvaluationContext* context,
+                                           size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
   const auto& varToColMap = context->_variableToColumnMap;
@@ -41,18 +40,17 @@ inline ql::span<const ValueId> getIdsFromVariable(
 
   const size_t columnIndex = it->second.columnIndex_;
 
-  ql::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+  ConstIdColumnRef completeColumn = inputTable.getColumn(columnIndex);
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
                     endIndex <= completeColumn.size());
-  return {completeColumn.begin() + beginIndex,
-          completeColumn.begin() + endIndex};
+  return completeColumn.subspan(beginIndex, endIndex - beginIndex);
 }
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline ql::span<const ValueId> getIdsFromVariable(
-    const ::Variable& variable, const EvaluationContext* context) {
+inline ConstIdColumnRef getIdsFromVariable(const ::Variable& variable,
+                                           const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
 }
@@ -64,23 +62,22 @@ inline ql::span<const ValueId> getIdsFromVariable(
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // Use range-based implementation for C++17 compatibility.
 CPP_template(typename T, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<
-            Transformation,
-            T>) auto resultGeneratorImpl(T constant, size_t numItems,
-                                         Transformation transformation = {}) {
+    requires SingleExpressionResult<T> && isConstantResult<T> &&
+    ranges::invocable<Transformation, T>)
+auto resultGeneratorImpl(T constant, size_t numItems,
+                         Transformation transformation = {}) {
   // We have to use `range-v3` as `views::repeat` is a C++23 feature.
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
 #else
 // Use faster coroutine-based implementation.
 CPP_template(typename T, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<Transformation, T>)
-    cppcoro::generator<const std::decay_t<std::invoke_result_t<
-        Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
-                                                 Transformation transformation =
-                                                     {}) {
+    requires SingleExpressionResult<T> && isConstantResult<T> &&
+    ranges::invocable<Transformation, T>)
+cppcoro::generator<const std::decay_t<std::invoke_result_t<
+    Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
+                                             Transformation transformation =
+                                                 {}) {
   auto transformed = transformation(constant);
   for (size_t i = 0; i < numItems; ++i) {
     co_yield transformed;
@@ -89,9 +86,9 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 #endif
 
 CPP_template(typename T, typename Transformation = ql::identity)(
-    requires ql::ranges::input_range<
-        T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
-                                     Transformation transformation = {}) {
+    requires ql::ranges::input_range<T>)
+auto resultGeneratorImpl(T&& vector, size_t numItems,
+                         Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
   return AD_FWD(vector) | ql::views::transform(std::move(transformation));
 }
@@ -108,11 +105,11 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
   };
   absl::InlinedVector<Bounds, 10> bounds;
   bounds.reserve(set._intervals.size() * 2 + 1);
+  AD_CONTRACT_CHECK(set.size() == targetSize,
+                    "The size of a `SetOfIntervals` does not match the size "
+                    "of the evaluation context.");
   size_t last = 0;
   for (const auto& [lower, upper] : set._intervals) {
-    AD_CONTRACT_CHECK(upper <= targetSize,
-                      "The size of a `SetOfIntervals` exceeds the total size "
-                      "of the evaluation context.");
     if (lower != last) {
       bounds.push_back(Bounds{lower - last, false});
     }
@@ -142,11 +139,9 @@ resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
   size_t i = 0;
   const auto trueTransformed = transformation(Id::makeFromBool(true));
   const auto falseTransformed = transformation(Id::makeFromBool(false));
-  if (!set._intervals.empty()) {
-    AD_CONTRACT_CHECK(set._intervals.back().second <= targetSize,
-                      "The size of a `SetOfIntervals` exceeds the total size "
-                      "of the evaluation context.");
-  }
+  AD_CONTRACT_CHECK(set.size() == targetSize,
+                    "The size of a `SetOfIntervals` does not match the size "
+                    "of the evaluation context.");
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
       co_yield falseTransformed;
@@ -187,10 +182,10 @@ inline auto resultGenerator(S&& input, size_t targetSize,
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
 CPP_template(typename Input, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<
-        Input>) auto makeGenerator(Input&& input, size_t numItems,
-                                   const EvaluationContext* context,
-                                   Transformation transformation = {}) {
+    requires SingleExpressionResult<Input>)
+auto makeGenerator(Input&& input, size_t numItems,
+                   const EvaluationContext* context,
+                   Transformation transformation = {}) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     return resultGenerator(getIdsFromVariable(AD_FWD(input), context), numItems,
                            transformation);
@@ -215,90 +210,13 @@ inline auto valueGetterGenerator =
   return makeGenerator(AD_FWD(input), numElements, context, transformation);
 };
 
-/// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
-/// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
-/// generator.
-#ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
-// Use range-based implementation for C++17 compatibility.
-inline auto applyFunction = [](auto function, [[maybe_unused]] size_t numItems,
-                               auto... generators) {
-  // We have to use `range-v3` as `std::views::zip` is not available in our
-  // toolchains.
-  return ::ranges::views::zip(
-             ad_utility::RvalueView{std::move(generators)}...) |
-         ::ranges::views::transform(
-             [f = std::move(function)](auto&& tuple) -> decltype(auto) {
-               // If the transformation would return an rvalue reference,
-               // return a plain value instead (obtained by moving the
-               // reference) otherwise we get dangling references, but only
-               // in Release builds.
-               // TODO<joka921> I don't fully understand yet WHERE the
-               // dangling reference comes from.
-               using T = decltype(std::apply(f, AD_MOVE(tuple)));
-               using R = std::conditional_t<std::is_rvalue_reference_v<T>,
-                                            std::decay_t<T>, T>;
-               return R{std::apply(f, AD_MOVE(tuple))};
-             });
-};
-#else
-// Use faster coroutine-based implementation.
-inline auto applyFunction = [](auto function, size_t numItems,
-                               auto... generators)
-    -> cppcoro::generator<std::invoke_result_t<
-        decltype(function),
-        ql::ranges::range_value_t<decltype(generators)>...>> {
-  // A tuple holding one iterator to each of the generators.
-  std::tuple iterators{generators.begin()...};
-
-  auto functionOnIterators = [&function](auto&&... iterators) {
-    return function(AD_MOVE(*iterators)...);
-  };
-
-  for (size_t i = 0; i < numItems; ++i) {
-    co_yield std::apply(functionOnIterators, iterators);
-
-    // Increase all the iterators.
-    std::apply([](auto&&... its) { (..., ++its); }, iterators);
-  }
-};
-#endif
-
-/// Return a generator that returns the `numElements` many results of the
-/// `Operation` applied to the `operands`
-CPP_template(typename Operation, typename... Operands)(requires(
-    SingleExpressionResult<
-        Operands>&&...)) auto applyOperation(size_t numElements, Operation&&,
-                                             EvaluationContext* context,
-                                             Operands&&... operands) {
-  using ValueGetters = typename std::decay_t<Operation>::ValueGetters;
-  using Function = typename std::decay_t<Operation>::Function;
-  static_assert(std::tuple_size_v<ValueGetters> == sizeof...(Operands));
-
-  // Function that takes a single operand and a single value getter and computes
-  // the corresponding generator.
-  auto getValue = absl::bind_front(valueGetterGenerator, numElements, context);
-
-  // Function that takes all the generators as a parameter pack and computes the
-  // generator for the operation result;
-  auto getResultFromGenerators =
-      absl::bind_front(applyFunction, Function{}, numElements);
-
-  /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
-  /// them via `std::apply`. First set up a lambda that performs the actual
-  /// logic on a parameter pack of `ValueGetters`
-  auto getResultFromValueGetters = [&](auto&&... valueGetters) {
-    // Both `operands` and `valueGetters` are parameter packs of equal size,
-    // so there will be one call to `getValue` for each pair of
-    // (`operands`, `valueGetter`)
-    return getResultFromGenerators(
-        getValue(std::forward<Operands>(operands), valueGetters)...);
-  };
-
-  return std::apply(getResultFromValueGetters, ValueGetters{});
-}
-
 // Return a lambda that takes a `LocalVocabEntry` and converts it to an `Id` by
-// adding it to the `localVocab`.
+// adding it to the `localVocab`. This is used to write the results of an
+// expression to an `IdTable`.
+//
+// NOTE: An IRI that can be encoded directly in an `Id` has already been encoded
+// when it was converted to the `Id` or `LocalVocabEntry` of the expression
+// result (see `toIdOrLocalVocabEntry`), so `entry` never needs this encoding.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
   return [localVocab](const LocalVocabEntry& entry) {
     auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);
