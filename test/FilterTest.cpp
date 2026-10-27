@@ -339,9 +339,7 @@ TEST(Filter, makeTreeWithStrippedColumns) {
   using namespace makeSparqlExpression;
   using namespace ad_utility::testing;
   using ::column_stripping_test_helpers::isStrippedColumns;
-  using ::testing::ElementsAre;
   using ::testing::Key;
-  using ::testing::SizeIs;
   using ::testing::UnorderedElementsAre;
 
   auto I = ad_utility::testing::IntId;

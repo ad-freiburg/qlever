@@ -331,9 +331,7 @@ TEST(Bind, cloneSucceedsForNondeterministicBind) {
 // that the parent did not request.
 TEST(Bind, makeTreeWithStrippedColumns) {
   using ::column_stripping_test_helpers::isStrippedColumns;
-  using ::testing::ElementsAre;
   using ::testing::Key;
-  using ::testing::SizeIs;
   using ::testing::UnorderedElementsAre;
   // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
   auto qec = ad_utility::testing::getQec();
