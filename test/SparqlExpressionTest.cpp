@@ -2141,30 +2141,46 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
-  checkCentroid(v, v);
+  checkCentroid(v, geoLit("POINT(24.3 26.8)"));
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
   checkIsGeoPoint(U, U);
-  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
+  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, IdOrLocalVocabEntry{U});
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);
   checkDist(U, v, IdOrLocalVocabEntry{lit("NotAPoint")});
   checkDist(U, IdOrLocalVocabEntry{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = GP({3, 3});
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)"));
+
   checkCentroid(IdOrLocalVocabEntry{lit(
-                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "\"POLYGON((40 10, 40 30, 60 30, 60 10))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-                polygonCentroid);
+                geoLit("POINT(50 20)"));
+
+  checkCentroid(
+      IdOrLocalVocabEntry{
+          lit("\"<http://www.opengis.net/def/crs/EPSG/0/4326> "
+              "POLYGON((10 40, 30 40, 30 60, 10 60))\"",
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(20 50)"));
 
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
-                             geoLit("LINESTRING(2 4, 8 8)")},
-      IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
-                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+                             geoLit("LINESTRING(2 4, 8 8)"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> LINESTRING(4 2, 8 8)")},
+      IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4))"),
+                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> POLYGON((4 2,4 8,8 8,8 2,4 2))")});
   checkEnvelopeLL(IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
                                          geoLit("LINESTRING(2 4, 8 8)")},
                   Ids{U, U, GP({4, 2}), GP({4, 2})});

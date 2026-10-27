@@ -76,6 +76,16 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
+// Helper to avoid including `GeometryInfoHelpersImpl.h`.
+// Project the coordinates of a `GeoPoint` to another coordinate reference
+// system and return as WKT string.
+std::optional<std::string> geoPointToWktInCrs(const GeoPoint& point,
+                                              SourceCrsType projCrs);
+
+// Helper to avoid including `GeometryInfoHelpersImpl.h`.
+std::string boundingBoxToWkt(const GeoPoint& lowerLeft,
+                             const GeoPoint& upperRight, SourceCrsType projCrs);
+
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
 // quotation marks nor a datatype yet.
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
@@ -172,11 +182,28 @@ class WktMetricLength {
 // Get the centroid of a geometry.
 class WktCentroid {
  public:
-  ValueId operator()(const std::optional<Centroid>& geom) const {
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeometryInfo>& geom) const {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().centroid());
+    std::optional<SourceCrsType> sourceCrs = geom.value().getSourceCrsType();
+    AD_CORRECTNESS_CHECK(sourceCrs.has_value());
+    // TODO<yarox-1> Check if this breaks somethings (old index might have
+    // problem as stored with unsupported Crs -> maybe just assume CRS84)
+
+    Centroid centroid = geom.value().getCentroid();
+
+    auto resultWkt = ad_utility::detail::geoPointToWktInCrs(centroid.centroid(),
+                                                            sourceCrs.value());
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 
@@ -184,12 +211,22 @@ class WktCentroid {
 class WktEnvelope {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<BoundingBox>& boundingBox) const {
-    if (!boundingBox.has_value()) {
+      const std::optional<ad_utility::GeometryInfo>& geom) const {
+    if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
+
+    std::optional<SourceCrsType> sourceCrs = geom.value().getSourceCrsType();
+    AD_CORRECTNESS_CHECK(sourceCrs.has_value());
+    // TODO<yarox-1> Check if this breaks somethings (old index might have
+    // problem as stored with unsupported Crs -> maybe just assume CRS84)
+
+    BoundingBox boundingBox = geom.value().getBoundingBox();
     using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
+    auto lit =
+        Literal::literalWithoutQuotes(ad_utility::detail::boundingBoxToWkt(
+            boundingBox.lowerLeft(), boundingBox.upperRight(),
+            sourceCrs.value()));
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
