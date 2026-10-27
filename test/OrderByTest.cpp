@@ -2,6 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -533,6 +534,33 @@ TEST(OrderBy, limitOffsetOnSortedInput) {
             LimitOffsetHandling::FULL);
 }
 
+namespace {
+// Run the query on the `qec` and return the result as TSV together with the
+// runtime details of the root operation, which must be an `OrderBy`. The cache
+// is cleared first, because a scan that is restricted to some blocks can read
+// the result of the complete scan from the cache, which would hide a wrong
+// selection of blocks.
+std::pair<std::string, nlohmann::json> queryWithOrderByAtRoot(
+    QueryExecutionContext* qec, const std::string& queryString) {
+  qec->clearCacheUnpinnedOnly();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner planner{qec, cancellationHandle};
+  auto parsedQuery = ad_utility::testing::parseQuery(queryString);
+  auto tree = planner.createExecutionTree(parsedQuery);
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  std::string result;
+  for (const auto& block : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, *tree, ad_utility::MediaType::tsv, timer,
+           std::move(cancellationHandle))) {
+    result += block;
+  }
+  auto rootOperation = tree->getRootOperation();
+  EXPECT_NE(dynamic_cast<const OrderBy*>(rootOperation.get()), nullptr);
+  return {std::move(result), rootOperation->runtimeInfo().details_};
+}
+}  // namespace
+
 // Test that an `ORDER BY` with a `LIMIT` on top of an `IndexScan` that is
 // sorted by the `ORDER BY` variable only reads the blocks that can contain the
 // requested rows. With three rows per block, the values of `<p>` form the
@@ -550,24 +578,8 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
   config.rowsPerBlock = 3;
   auto* qec = ad_utility::testing::getQec(std::move(config));
 
-  // Run the query and return the result as TSV together with the runtime
-  // details of the root operation (the `OrderBy`).
   auto query = [qec](const std::string& queryString) {
-    auto cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
-    QueryPlanner planner{qec, cancellationHandle};
-    auto parsedQuery = ad_utility::testing::parseQuery(queryString);
-    auto tree = planner.createExecutionTree(parsedQuery);
-    ad_utility::Timer timer{ad_utility::Timer::Started};
-    std::string result;
-    for (const auto& block : ExportQueryExecutionTrees::computeResult(
-             parsedQuery, *tree, ad_utility::MediaType::tsv, timer,
-             std::move(cancellationHandle))) {
-      result += block;
-    }
-    auto rootOperation = tree->getRootOperation();
-    EXPECT_NE(dynamic_cast<const OrderBy*>(rootOperation.get()), nullptr);
-    return std::pair{std::move(result), rootOperation->runtimeInfo().details_};
+    return queryWithOrderByAtRoot(qec, queryString);
   };
   auto expected = [&values](const std::string& prefix, bool isDescending,
                             size_t offset, size_t limit) {
@@ -621,6 +633,77 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
   EXPECT_EQ(result, expected("s", true, 0, 100));
   EXPECT_TRUE(details.contains("sorted-numeric-input"));
   EXPECT_FALSE(details.contains("num-blocks-read-for-limit"));
+}
+
+// Test the pushdown of a `LIMIT` into an `IndexScan` on an index with named
+// graphs, where the scan can return fewer rows than the blocks contain: rows
+// from other graphs are filtered out, and rows that only differ in their graph
+// are merged. The triples `<s1> <p> 1`, `<s2> <p> 2`, and `<s7> <p> 7` are in
+// both graphs.
+TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
+  std::string nquads;
+  auto addQuad = [&nquads](int i, std::string_view graph) {
+    absl::StrAppend(&nquads, "<s", i, "> <p> \"", i,
+                    "\"^^<http://www.w3.org/2001/XMLSchema#integer> <", graph,
+                    "> .\n");
+  };
+  for (int i = 1; i <= 12; ++i) {
+    addQuad(i, "g1");
+  }
+  for (int i : {1, 2, 7}) {
+    addQuad(i, "g2");
+  }
+  ad_utility::testing::TestIndexConfig config{nquads};
+  config.indexType = qlever::Filetype::NQuad;
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  // Return the rows of the result of the `query` with the given `LIMIT` and
+  // `OFFSET` (without the header row).
+  auto rows = [qec](const std::string& query, std::optional<size_t> limit,
+                    size_t offset) {
+    std::string queryString = query;
+    if (limit.has_value()) {
+      absl::StrAppend(&queryString, " LIMIT ", limit.value(), " OFFSET ",
+                      offset);
+    }
+    auto result = queryWithOrderByAtRoot(qec, queryString).first;
+    std::vector<std::string> lines = absl::StrSplit(result, '\n');
+    lines.erase(lines.begin());
+    lines.pop_back();
+    return lines;
+  };
+
+  // Compare with the slices of the result without a `LIMIT`, which reads all
+  // blocks.
+  for (std::string_view dataset :
+       {"", "FROM <g1>", "FROM <g2>", "FROM <g1> FROM <g2>"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      auto query = absl::StrCat("SELECT ?s ", dataset, " WHERE { ?s <p> ?x } ",
+                                "ORDER BY ", direction, "(?x)");
+      auto complete = rows(query, std::nullopt, 0);
+      for (size_t offset : {0, 1, 2, 4}) {
+        for (size_t limit : {1, 2, 3, 5, 20}) {
+          std::vector<std::string> expected;
+          for (size_t i = offset; i < std::min(complete.size(), offset + limit);
+               ++i) {
+            expected.push_back(complete[i]);
+          }
+          EXPECT_EQ(rows(query, limit, offset), expected)
+              << query << " LIMIT " << limit << " OFFSET " << offset;
+        }
+      }
+    }
+  }
+
+  // The blocks with only triples from `<g1>` and no duplicates still count, so
+  // the pushdown still applies to the largest values.
+  auto [result, details] = queryWithOrderByAtRoot(
+      qec, "SELECT ?s FROM <g1> WHERE { ?s <p> ?x } ORDER BY DESC(?x) LIMIT 1");
+  EXPECT_EQ(result, "?s\n<s12>\n");
+  ASSERT_TRUE(details.contains("num-blocks-read-for-limit"));
+  EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
+            details["num-blocks-total"].get<size_t>());
 }
 
 // Test that the cost estimate of `ORDER BY` is linear for an input that is

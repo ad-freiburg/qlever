@@ -383,6 +383,23 @@ IndexScan::makeCopyWithSelectedBlocks(const BlockSelector& selectBlocks) const {
   };
   const auto& locatedTriples =
       permutation().getLocatedTriplesForPermutation(locatedTriplesState());
+  // Return true iff the filtering of the scan by graph and by duplicates from
+  // different graphs (see
+  // `CompressedRelationReader::FilterDuplicatesAndGraphs`) removes no row of
+  // the block, as far as the metadata tells.
+  const auto& graphFilter = scanSpec.graphFilter();
+  auto keepsAllRows = [&graphFilter](const CompressedBlockMetadata& block) {
+    if (block.containsDuplicatesWithDifferentGraphs_) {
+      return false;
+    }
+    if (graphFilter.areAllGraphsAllowed()) {
+      return true;
+    }
+    return block.graphInfo_.has_value() &&
+           ql::ranges::all_of(block.graphInfo_.value(), [&](Id graph) {
+             return graphFilter.isGraphAllowed(graph);
+           });
+  };
 
   // Flatten the block ranges, and remember the iterator of each block so that
   // the selection can be turned back into ranges.
@@ -397,11 +414,15 @@ IndexScan::makeCopyWithSelectedBlocks(const BlockSelector& selectBlocks) const {
     for (auto it = range.begin(); it != range.end(); ++it) {
       const CompressedBlockMetadata& block = *it;
       // Each delta triple can delete at most one row of the block, so this is
-      // a lower bound on the number of rows that the block contributes.
+      // a lower bound on the number of rows that the block contributes. If the
+      // graph filter or the removal of duplicates may remove rows, there is
+      // no such bound, so use zero.
       size_t numDeleted =
           locatedTriples.numTriples(block.blockIndex_).numDeleted_;
       size_t numRowsLowerBound =
-          block.numRows_ - std::min(block.numRows_, numDeleted);
+          keepsAllRows(block)
+              ? block.numRows_ - std::min(block.numRows_, numDeleted)
+              : 0;
       blocks.push_back(
           {getColumn(block.firstTriple_, colIdx),
            getColumn(block.lastTriple_, colIdx), numRowsLowerBound,

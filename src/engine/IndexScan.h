@@ -106,12 +106,13 @@ class IndexScan final : public Operation {
   // of `makeCopyWithSelectedBlocks` below. For each block: the first and the
   // last value of the first sorted variable in the block, the number of rows
   // of the block that are guaranteed to be in the result of the scan (a lower
-  // bound), and whether the block is completely inside the scanned relation.
-  // A block at the border of the relation also holds triples of other
-  // relations, so its `first_` or `last_` may belong to another relation and
-  // its rows only partially to this scan. `firstIdOfScan_` and `lastIdOfScan_`
-  // are the values of the sorted variable in the first and the last row of the
-  // scan result.
+  // bound, which accounts for deleted triples, and is zero if the scan may
+  // filter rows of the block by graph or as duplicates), and whether the block
+  // is completely inside the scanned relation. A block at the border of the
+  // relation also holds triples of other relations, so its `first_` or `last_`
+  // may belong to another relation and its rows only partially to this scan.
+  // `firstIdOfScan_` and `lastIdOfScan_` are the values of the sorted variable
+  // in the first and the last row of the scan result.
   struct BlockOfSortedVariable {
     Id first_;
     Id last_;
