@@ -1978,6 +1978,58 @@ class GatedSink : public ad_utility::NoCopyNoMove {
 static_assert(
     ad_utility::parallelBlockMerge::SinkConcept<GatedSink, SorterBlock>);
 
+// A `CollectingSink` whose `asyncFinishChunk` fails with a
+// `std::runtime_error`, to check that `mergeToSink` reports a sink that fails
+// to finish its chunk.
+class FailingSink : public ad_utility::NoCopyNoMove {
+ public:
+  CollectingSink inner_;
+
+ private:
+  ql::any_io_executor executor_;
+
+ public:
+  FailingSink(ql::any_io_executor executor, size_t numChunks)
+      : inner_{executor, numChunks}, executor_{std::move(executor)} {}
+
+  // ________________________________________________________________________
+  bool stopRequested() const noexcept { return inner_.stopRequested(); }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncPush(size_t chunkIndex, SorterBlock block,
+                 CompletionToken&& completionToken) {
+    return inner_.asyncPush(chunkIndex, std::move(block),
+                            AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncFinishChunk([[maybe_unused]] size_t chunkIndex,
+                        CompletionToken&& completionToken) {
+    return ad_utility::runFunctionOnExecutor(
+        executor_,
+        []() -> bool { throw std::runtime_error{"finishChunk failed"}; },
+        AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncPushException(std::exception_ptr exception,
+                          CompletionToken&& completionToken) {
+    return inner_.asyncPushException(std::move(exception),
+                                     AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto asyncStop(CompletionToken&& completionToken) {
+    return inner_.asyncStop(AD_FWD(completionToken));
+  }
+};
+static_assert(
+    ad_utility::parallelBlockMerge::SinkConcept<FailingSink, SorterBlock>);
+
 // Check that the `sink` received every chunk exactly once and that the
 // concatenation of its chunks is the `expected` table.
 void expectSinkResult(const CollectingSink& sink,
@@ -2091,6 +2143,40 @@ TEST(CompressedExternalIdTable, mergeToSinkWaitsForTheSink) {
     auto expected2 = pushRandomRows(sorter, 300);
     EXPECT_THAT(concatenateBlocks(sorter.getSortedBlocks()),
                 ::testing::ElementsAreArray(expected2));
+  }
+}
+
+// Test that the future of `mergeToSink` rethrows the exception of a sink that
+// fails to finish the single chunk of a result that needs no merge, and that
+// the merge is ended on this path, so that the result can be merged again.
+TEST(CompressedExternalIdTable, mergeToSinkRethrowsSinkFailure) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  constexpr size_t numThreads = 4;
+  net::thread_pool pool{numThreads};
+  // The cases with a single block (one chunk without a merge) and no rows.
+  for (auto [numRows, blockSize] : mergeToSinkCases) {
+    if (numRows > blockSize) {
+      continue;
+    }
+    OspSorter<> sorter{filename, NUM_COLS,
+                       memoryForBlocksize(blockSize, NUM_COLS),
+                       ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(pool.get_executor(), numThreads);
+    sorter.moveResultOnMerge() = false;
+    auto expected = pushRandomRows(sorter, numRows);
+    auto merged = sorter.mergeToSink([](size_t numChunks) {
+      return std::make_shared<FailingSink>(sharedTestExecutor(), numChunks);
+    });
+    EXPECT_THROW(merged.get(), std::runtime_error);
+    // The failed merge has been ended, so the result can be merged again.
+    std::shared_ptr<CollectingSink> sink;
+    sorter.mergeToSink(collectingSinkFactory(sharedTestExecutor(), sink)).get();
+    ASSERT_NE(sink, nullptr);
+    expectSinkResult(*sink, expected);
   }
 }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
