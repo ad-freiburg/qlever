@@ -74,18 +74,20 @@
 // CPP file: `CPP_template_out_def(typename T)(requires Concept<T>) int
 //   Foo<CPP_sfinae_args(T)>::bar() {...}`
 //
-// NOTE: The macros are variadic to allow for commas in the argument, like in
+// NOTE 1: The macros are variadic to allow for commas in the argument, like in
 // the second example above.
 //
-// NOTE: Combine several constraints with a plain `&&`, e.g.
+// NOTE 2: Combine several constraints with a plain `&&`, for example
 // `CPP_template(typename T)(requires Concept1<T> && Concept2<T>)`. Do not use
 // the `CPP_and` macro from `range-v3` or its variants `CPP_and_2`,
-// `CPP_and_def`, and `CPP_and_2_def` defined below: `clang-format` cannot
-// format them properly, which leads to unreadable code. In C++17 mode, they
-// split the constraint into several `std::enable_if_t` template parameters,
-// which leads to more readable compiler errors. They can therefore be used
-// temporarily when debugging a compilation failure that only happens in C++17
-// mode, but must be replaced by `&&` afterwards.
+// `CPP_and_def` and `CPP_and_2_def` defined below, since `clang-format` cannot
+// format them properly.
+//
+// The `CPP_and` macros are kept because in C++17 mode they split the
+// constraint into several `std::enable_if_t` template parameters, which gives
+// more readable compiler errors. Use them temporarily when debugging a
+// compilation failure that only happens in C++17 mode, and replace them by
+// `&&` afterwards.
 
 // Additionally define the macros `CPP_template_2` and `CPP_and_2` that can
 // be used to constrain member functions of classes where the outer class
