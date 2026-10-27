@@ -27,13 +27,16 @@ namespace qlever::blobDiff {
 // compressed with ZSTD using the decompressed `base` as a reference (the
 // "prefix dictionary" of ZSTD, the same mechanism as `zstd --patch-from`), so
 // every piece of the `target` that also occurs somewhere in the `base` costs
-// only a few bytes. The diff is small if the `target` was written
-// incrementally against the `base` (see `BlobSerializationConfig::
-// IncrementalBase`), because then the `Id`s of all words and the segments of
-// the secondary vocabulary and of the geo indices are stable, and the tables
-// of the named results only differ by the inserted and deleted rows. The diff
-// knows nothing about the layout of a blob, which makes it robust against
-// changes of the blob format.
+// only a few bytes.
+//
+// The diff is small if the `target` was written incrementally against the
+// `base` (see `BlobSerializationConfig::IncrementalBase`), because then the
+// `Id`s of all words and the segments of the secondary vocabulary and of the
+// geo indices are stable, and the tables of the named results only differ by
+// the inserted and deleted rows.
+//
+// The diff knows nothing about the layout of a blob, which makes it robust
+// against changes of the blob format.
 //
 // FILE FORMAT (all integers in the native byte order, which is little endian
 // on all platforms that QLever currently supports):

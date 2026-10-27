@@ -73,20 +73,22 @@ inline UpdateMetadata applyUpdateToEngine(qlever::Qlever& engine,
 
 // Write `turtleContents` to a turtle file, build an index from it, and return
 // the corresponding `IndexBuilderConfig`. If a vocabulary `type` is given, it
-// is used for the index, otherwise the default one. The base name of both the
-// turtle file and the index is derived from the name of the currently running
-// test and the optional `suffix`, so that concurrently running tests do not
-// interfere with each other, and a single test can build several distinct
-// indexes. All files of an index with that base name that are left over from
-// a previous run (in particular persisted updates, which would otherwise be
-// applied to the new index) are deleted first. The turtle file is deleted
-// again before this returns; the files of the index itself remain on disk.
+// is used for the index, otherwise the default one.
 //
-// NOTE: An index that cannot be built throws, which `gtest` reports as a
+// The base name of both the turtle file and the index is derived from the name
+// of the currently running test and the optional `suffix`, so that concurrently
+// running tests do not interfere with each other, and a single test can build
+// several distinct indexes. All files of an index with that base name that are
+// left over from a previous run (in particular persisted updates, which would
+// otherwise be applied to the new index) are deleted first. The turtle file is
+// deleted again before this returns, the files of the index itself remain on
+// disk.
+//
+// NOTE 1: An index that cannot be built throws, which `gtest` reports as a
 // failure of the running test. This is deliberately not an `EXPECT_NO_THROW`,
 // which would let the test continue with a nonexistent index.
 //
-// NOTE: `serializeVocabAndNamedCacheToCompressedBlob` currently requires the
+// NOTE 2: `serializeVocabAndNamedCacheToCompressedBlob` currently requires the
 // `InMemoryUncompressed` vocabulary unless vocabulary entries are excluded (see
 // `Vocabulary::writeAsZeroCopyBlob`), so tests of blobs have to pass it as the
 // `type`.

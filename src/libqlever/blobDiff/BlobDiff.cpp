@@ -145,9 +145,11 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile,
         std::get<size_t>(frameSize), " bytes (the file is corrupted)");
   }
   // Second, both sizes might be corrupted consistently, so check that the size
-  // does not exceed the limit of the caller. NOTE: There is no useful bound in
-  // terms of the size of the payload or of the base, because highly repetitive
-  // data compresses to almost nothing even without a base.
+  // does not exceed the limit of the caller.
+  //
+  // NOTE: There is no useful bound in terms of the size of the payload or of
+  // the base, because highly repetitive data compresses to almost nothing even
+  // without a base.
   if (header.targetSize_ > maxTargetSize.getBytes()) {
     return makeError(ErrorType::invalidTargetSize,
                      "The blob diff file announces a target of ",

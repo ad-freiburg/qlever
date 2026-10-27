@@ -145,7 +145,10 @@ Bytes pinAndSerialize(Qlever& qlever) {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the diff of synthetic byte sequences: a target made of pieces of the
+// base gives a tiny diff, unrelated data a diff slightly larger than the
+// target, and the edge cases (identical, empty, highly repetitive inputs, all
+// compression levels) round-trip.
 TEST(BlobDiff, syntheticBytes) {
   // A target that mostly consists of pieces of the base gives a tiny diff,
   // no matter where the pieces are.
@@ -187,7 +190,9 @@ TEST(BlobDiff, syntheticBytes) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a wrong base, garbage, a wrong version, a truncated or extended
+// file, a corrupted target size, frame header, payload or target checksum are
+// all reported with the right `BlobDiffErrorType`, and nothing throws.
 TEST(BlobDiff, invalidInputsAreReported) {
   auto base = randomBytes(10'000, 1);
   auto other = randomBytes(10'000, 2);
@@ -253,7 +258,8 @@ TEST(BlobDiff, invalidInputsAreReported) {
               isError(ErrorType::corruptedPayload, "checksum of the result"));
 }
 
-// _____________________________________________________________________________
+// Test that a forged diff whose header and ZSTD frame consistently announce a
+// huge target is rejected via `maxTargetSize` before the target is allocated.
 TEST(BlobDiff, implausibleTargetSizeIsReported) {
   // A ZSTD frame of a few bytes whose header consistently announces a huge
   // content size, as could be forged. The size exceeds the `maxTargetSize`, so
@@ -278,7 +284,8 @@ TEST(BlobDiff, implausibleTargetSizeIsReported) {
       isError(ErrorType::invalidTargetSize, "exceeds the maximum target size"));
 }
 
-// _____________________________________________________________________________
+// Test that `maxTargetSize` admits a target of exactly that size and rejects
+// a target one byte larger, for all three reading functions.
 TEST(BlobDiff, maxTargetSizeIsRespected) {
   using namespace ad_utility::memory_literals;
   auto base = randomBytes(10'000, 1);
@@ -306,7 +313,10 @@ TEST(BlobDiff, maxTargetSizeIsRespected) {
               matcher);
 }
 
-// _____________________________________________________________________________
+// Test the diff between the blobs of a real index before and after an update
+// with new words: the diff is small, applying it to the compressed base gives
+// the compressed target byte for byte, the result loads and answers queries,
+// and a wrong base or garbage is rejected.
 TEST(BlobDiff, realBlobsAfterUpdate) {
   auto config = buildTestIndex(
       manyTriples(2000), ad_utility::VocabularyType::InMemoryUncompressed);
@@ -359,7 +369,9 @@ TEST(BlobDiff, realBlobsAfterUpdate) {
       isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
 }
 
-// _____________________________________________________________________________
+// Test that `applyBlobDiffToCompressedBase` validates the diff before the
+// base, and detects a base of the wrong size (via its frame header) as well as
+// a base of the right size but wrong content (via its checksum).
 TEST(BlobDiff, compressedBaseIsCheckedAfterTheDiff) {
   using Manager = qlever::NamedCachedQueryBlobManager;
   auto base = randomBytes(10'000, 1);
