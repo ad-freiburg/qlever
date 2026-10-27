@@ -375,12 +375,10 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return getSerializationType();
   } else if constexpr (std::is_same_v<RequestedInfo, WithSourceCrs<Centroid>>) {
-    return WithSourceCrs<Centroid>{
-        getCentroid(), detail::sourceCrsOrUnsupported(getSourceCrsType())};
+    return detail::getWithSourceCrs(getCentroid(), getSourceCrsType());
   } else if constexpr (std::is_same_v<RequestedInfo,
                                       WithSourceCrs<BoundingBox>>) {
-    return WithSourceCrs<BoundingBox>{
-        getBoundingBox(), detail::sourceCrsOrUnsupported(getSourceCrsType())};
+    return detail::getWithSourceCrs(getBoundingBox(), getSourceCrsType());
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }

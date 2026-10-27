@@ -270,14 +270,16 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
           geoPointToUtilPoint(boundingBox.upperRight())};
 }
 
-// Helper for `getRequestedInfo()` that removes the optional part from
-// `getSourceCrs`.
-inline SourceCrsType sourceCrsOrUnsupported(std::optional<SourceCrsType> crs) {
+// Helper for `getRequestedInfo()` that constructs the result `WithSourceCrs<T>`
+// with T = `Centroid` or `BoundingBox`. This is supposed to be used with
+// `getCentroid/BoundingBox` and `getSourceCrsType` as inputs.
+CPP_template(typename T)(requires WithSourceCrsT<T>) inline std::optional<
+    WithSourceCrs<T>> getWithSourceCrs(T info,
+                                       std::optional<SourceCrsType> crs) {
   if (!crs.has_value()) {
-    return SourceCrsType{::util::geo::CRSType::UNSUPPORTED};
-  } else {
-    return crs.value();
+    return std::nullopt;
   }
+  return WithSourceCrs<T>{info, crs.value()};
 }
 
 // Helper for `getRequestedInfo(std::string_view wkt)` to construct a
