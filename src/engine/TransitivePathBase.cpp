@@ -490,7 +490,10 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
     if (col.has_value()) {
       auto leftVar = getVar(leftCol);
       auto rightVar = getVar(rightCol);
-      op = matchWithKnowledgeGraph(col.value(), op);
+      // Only match the operation with the start column of the transitive path.
+      if (col == leftCol || (!leftCol.has_value() && col == rightCol)) {
+        op = matchWithKnowledgeGraph(col.value(), op);
+      }
       // Update the side columns indices which might get messed up by
       // `EmptyPath` operations added by `matchWithKnowedgeGraph`.
       updateCol(leftCol, leftVar, lhs);
