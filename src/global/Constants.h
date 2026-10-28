@@ -52,18 +52,18 @@ constexpr inline size_t VOCABULARY_SCAN_MAX_WORDS_PER_BATCH = 10'000;
 constexpr inline ad_utility::MemorySize
     VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH = 10_MB;
 
-// Read-ahead parameters for `VocabularyOnDisk::operator[]`: if the lookups of a
-// thread are (nearly) sequential, the following words are read together with
-// the requested word and kept in memory (one window per thread).
-// A lookup is sequential if it is after the previous lookup of the same thread
-// in the same vocabulary, and at most this many words after it.
+// Read-ahead of `VocabularyOnDisk::operator[]`: when a thread looks up words
+// (nearly) sequentially, the following words are read together with the
+// requested one and cached (one window per thread).
+//
+// A lookup is sequential if it is at most this many words after the previous
+// lookup of the same thread in the same vocabulary.
 constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_GAP = 64;
-// The window starts with a single word and is doubled with every sequential
-// lookup that is not in the window, up to this many words (8 bytes of offset
-// per word).
+// The window starts with one word and doubles with every sequential lookup that
+// is not in it, up to this many words (8 bytes of offset each).
 constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_WORDS = 4096;
-// The maximum number of bytes of word data in the window. A window that
-// doesn't fit at least two words is not kept.
+// The maximum size of the word data in a window, which bounds the memory per
+// thread.
 constexpr inline ad_utility::MemorySize VOCABULARY_READ_AHEAD_MAX_WORD_DATA =
     1_MB;
 

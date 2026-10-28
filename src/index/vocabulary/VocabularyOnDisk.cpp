@@ -27,23 +27,23 @@ OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
   // Read the offset of the word at index `i` and the offset of the next word
   // (which marks the end of the word at index `i`) in a single `pread`.
   std::array<Offset, 2> offsets{};
-  readOffsets(i, offsets);
+  readConsecutiveOffsets(i, offsets);
   return {offsets[0], offsets[1] - offsets[0]};
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::readOffsets(uint64_t first,
-                                   ql::span<Offset> offsets) const {
-  offsetsFile_.read(offsets.data(), offsets.size() * sizeof(Offset),
+void VocabularyOnDisk::readConsecutiveOffsets(
+    uint64_t first, ql::span<Offset> offsetsOut) const {
+  offsetsFile_.read(offsetsOut.data(), offsetsOut.size() * sizeof(Offset),
                     static_cast<off_t>(first * sizeof(Offset)));
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::readWordData(
-    ql::span<const Offset> offsets,
-    ad_utility::UninitializedVector<char>& data) const {
-  data.resize(offsets.back() - offsets.front());
-  file_.read(data.data(), data.size(), static_cast<off_t>(offsets.front()));
+void VocabularyOnDisk::readConsecutiveWordBatch(
+    Offset beginOffset, Offset endOffset,
+    ad_utility::UninitializedVector<char>& dataOut) const {
+  dataOut.resize(endOffset - beginOffset);
+  file_.read(dataOut.data(), dataOut.size(), static_cast<off_t>(beginOffset));
 }
 
 // _____________________________________________________________________________
@@ -118,85 +118,100 @@ auto mapOffsetsToStringViews(ql::span<const uint64_t> offsets,
          });
 }
 
-// The read-ahead state of `VocabularyOnDisk::operator[]` for a single thread.
-struct ReadAheadState {
-  // The `id_` of the vocabulary of the previous lookup (0 for none).
-  uint64_t vocabId_ = 0;
-  // The index of the previous lookup.
-  uint64_t lastIdx_ = 0;
-  // The size of the previous window (see `VOCABULARY_READ_AHEAD_MAX_WORDS`).
-  size_t windowSize_ = 1;
-  // The words `first_, first_ + 1, ...` of the vocabulary `vocabId_`: their
-  // offsets (plus the offset after the last word) and their data. Empty if the
-  // previous window was a single word, which is not kept.
-  uint64_t first_ = 0;
-  ad_utility::UninitializedVector<uint64_t> offsets_;
-  ad_utility::UninitializedVector<char> data_;
+}  // namespace
 
-  // Return true iff the word `idx` of the vocabulary `vocabId` is kept.
-  bool contains(uint64_t vocabId, uint64_t idx) const {
-    return vocabId == vocabId_ && idx >= first_ &&
-           idx - first_ + 1 < offsets_.size();
+// The read-ahead state of `VocabularyOnDisk::operator[]` for a single thread.
+struct VocabularyOnDisk::ReadAheadState {
+  // The `id_` of the vocabulary of the most recent lookup (0 for none).
+  uint64_t mostRecentVocabId_ = 0;
+  // The index of the most recent lookup.
+  uint64_t mostRecentIdx_ = 0;
+  // The size of the most recent window.
+  size_t mostRecentWindowSize_ = 1;
+  // The cached words `cachedFirstIdx_, cachedFirstIdx_ + 1, ...` of the
+  // vocabulary `mostRecentVocabId_`: their offsets (plus the offset after the
+  // last word) and their data. Empty if nothing is cached (see `readWindow`).
+  uint64_t cachedFirstIdx_ = 0;
+  ad_utility::UninitializedVector<Offset> cachedOffsets_;
+  ad_utility::UninitializedVector<char> cachedData_;
+
+  // Return the word `idx` of the `vocab`, from the cache if possible. Otherwise
+  // read it from disk, together with the following words if the lookups are
+  // sequential.
+  std::string lookup(const VocabularyOnDisk& vocab, uint64_t idx) {
+    bool isCached = isCachedByThisState(vocab.id_, idx);
+    if (!isCached) {
+      size_t windowSize = nextWindowSize(vocab.id_, idx);
+      isCached = readWindow(vocab, idx, windowSize);
+      mostRecentVocabId_ = vocab.id_;
+      cachedFirstIdx_ = idx;
+      mostRecentWindowSize_ = windowSize;
+    }
+    mostRecentIdx_ = idx;
+    return isCached ? cachedWord(idx) : vocab.readWord(idx);
   }
 
-  // Return the size of the window for a lookup of the word `idx` of the
-  // vocabulary `vocabId` that is not kept: the previous window doubled if the
+ private:
+  // Return true iff the word `idx` of the vocabulary `vocabId` is cached.
+  bool isCachedByThisState(uint64_t vocabId, uint64_t idx) const {
+    return vocabId == mostRecentVocabId_ && idx >= cachedFirstIdx_ &&
+           idx - cachedFirstIdx_ + 1 < cachedOffsets_.size();
+  }
+
+  // Return the window size for a lookup of the word `idx` of the vocabulary
+  // `vocabId` that is not cached: the most recent window size doubled if the
   // lookup is sequential (see `VOCABULARY_READ_AHEAD_MAX_GAP`), else 1.
   size_t nextWindowSize(uint64_t vocabId, uint64_t idx) const {
-    bool isSequential = vocabId == vocabId_ && idx > lastIdx_ &&
-                        idx - lastIdx_ <= VOCABULARY_READ_AHEAD_MAX_GAP;
-    return isSequential
-               ? std::min(2 * windowSize_, VOCABULARY_READ_AHEAD_MAX_WORDS)
-               : 1;
+    bool isSequential = vocabId == mostRecentVocabId_ && idx > mostRecentIdx_ &&
+                        idx - mostRecentIdx_ <= VOCABULARY_READ_AHEAD_MAX_GAP;
+    return isSequential ? std::min(2 * mostRecentWindowSize_,
+                                   VOCABULARY_READ_AHEAD_MAX_WORDS)
+                        : 1;
   }
 
-  // Return the word `idx`, which must be kept.
-  std::string word(uint64_t idx) const {
-    size_t i = idx - first_;
-    return std::string(data_.data() + (offsets_[i] - offsets_.front()),
-                       offsets_[i + 1] - offsets_[i]);
+  // Cache the `windowSize` words of the `vocab` starting at `first`, but only
+  // up to the end of the vocabulary and `VOCABULARY_READ_AHEAD_MAX_WORD_DATA`
+  // bytes of data. If that leaves fewer than two words, cache nothing and
+  // return false: a single word is cheaper to read via `readWord` (same two
+  // reads, no extra copy), and a single word above the byte limit would grow
+  // the buffers of this thread for good, because they never shrink.
+  bool readWindow(const VocabularyOnDisk& vocab, uint64_t first,
+                  size_t windowSize) {
+    // Invalidate first, so that the state stays consistent if a read throws.
+    mostRecentVocabId_ = 0;
+    cachedOffsets_.clear();
+    size_t numWords = std::min<size_t>(windowSize, vocab.size() - first);
+    if (numWords < 2) {
+      return false;
+    }
+    cachedOffsets_.resize(numWords + 1);
+    vocab.readConsecutiveOffsets(first, cachedOffsets_);
+    numWords = numWordsWithinLimit(cachedOffsets_, 0,
+                                   VOCABULARY_READ_AHEAD_MAX_WORD_DATA);
+    if (numWords < 2) {
+      cachedOffsets_.clear();
+      return false;
+    }
+    cachedOffsets_.resize(numWords + 1);
+    vocab.readConsecutiveWordBatch(cachedOffsets_.front(),
+                                   cachedOffsets_.back(), cachedData_);
+    return true;
+  }
+
+  // Return the word `idx`, which must be cached.
+  std::string cachedWord(uint64_t idx) const {
+    size_t i = idx - cachedFirstIdx_;
+    return std::string(
+        cachedData_.data() + (cachedOffsets_[i] - cachedOffsets_.front()),
+        cachedOffsets_[i + 1] - cachedOffsets_[i]);
   }
 };
-}  // namespace
 
 // _____________________________________________________________________________
 std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   AD_CONTRACT_CHECK(idx < size());
   thread_local ReadAheadState state;
-  bool isKept = state.contains(id_, idx);
-  if (!isKept) {
-    size_t windowSize = state.nextWindowSize(id_, idx);
-    // Invalidate the state first, so that it stays consistent if one of the
-    // reads throws.
-    state.vocabId_ = 0;
-    state.offsets_.clear();
-    size_t numWords = std::min<size_t>(windowSize, size() - idx);
-    isKept =
-        numWords > 1 && readWindow(idx, numWords, state.offsets_, state.data_);
-    state.vocabId_ = id_;
-    state.first_ = idx;
-    state.windowSize_ = windowSize;
-  }
-  state.lastIdx_ = idx;
-  return isKept ? state.word(idx) : readWord(idx);
-}
-
-// _____________________________________________________________________________
-bool VocabularyOnDisk::readWindow(
-    uint64_t first, size_t numWords,
-    ad_utility::UninitializedVector<Offset>& offsets,
-    ad_utility::UninitializedVector<char>& data) const {
-  offsets.resize(numWords + 1);
-  readOffsets(first, offsets);
-  numWords =
-      numWordsWithinLimit(offsets, 0, VOCABULARY_READ_AHEAD_MAX_WORD_DATA);
-  if (numWords < 2) {
-    offsets.clear();
-    return false;
-  }
-  offsets.resize(numWords + 1);
-  readWordData(offsets, data);
-  return true;
+  return state.lookup(*this, idx);
 }
 
 // _____________________________________________________________________________
@@ -205,7 +220,8 @@ auto VocabularyOnDisk::chunkToWords(ql::span<const uint64_t> offsets) const {
              chunkOffsets(offsets),
              [this, data = ad_utility::UninitializedVector<char>{}](
                  ql::span<const uint64_t> subOffsets) mutable {
-               readWordData(subOffsets, data);
+               readConsecutiveWordBatch(subOffsets.front(), subOffsets.back(),
+                                        data);
                return mapOffsetsToStringViews(
                    subOffsets, std::string_view{data.data(), data.size()});
              }}) |
@@ -226,7 +242,7 @@ auto VocabularyOnDisk::readOffsetsInBatches() const {
         size_t numWords = std::min<size_t>(VOCABULARY_SCAN_MAX_WORDS_PER_BATCH,
                                            size() - chunkStart);
         ql::span<uint64_t> offsets{buffer.data(), numWords + 1};
-        readOffsets(chunkStart, offsets);
+        readConsecutiveOffsets(chunkStart, offsets);
         return ql::span<const uint64_t>{offsets};
       }};
 }

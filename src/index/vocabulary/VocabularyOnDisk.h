@@ -41,9 +41,9 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
 
-  // A unique id of this vocabulary, which is assigned by `open`. Used to
-  // identify the vocabulary in the read-ahead of `operator[]`, because unlike
-  // the address it is never reused by another vocabulary.
+  // A unique id of this vocabulary, assigned by `open`. Identifies the
+  // vocabulary in the read-ahead of `operator[]`; unlike the address, it is
+  // never reused.
   uint64_t id_ = 0;
 
   // Pool of persistent `BatchIoManager`s for `lookupBatch`.
@@ -107,10 +107,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   void open(const std::string& filename);
 
   // Return the word that is stored at the index. Throw an exception if `idx >=
-  // size`. If the lookups of a thread are (nearly) sequential, the following
-  // words are read ahead in growing windows and kept in memory per thread,
-  // which makes them much cheaper than two small `pread`s per word (see
-  // `VOCABULARY_READ_AHEAD_MAX_GAP` and the following constants).
+  // size`. If a thread looks up words (nearly) sequentially, the following
+  // words are read ahead and cached per thread, which is much cheaper than two
+  // small `pread`s per word (see `VOCABULARY_READ_AHEAD_MAX_GAP` and the
+  // following constants).
   std::string operator[](uint64_t idx) const;
 
   // Efficient iteration over all words in the vocabulary, in order, yielded as
@@ -184,26 +184,23 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
 
-  // Read the offsets of the words `first, first + 1, ...` into `offsets` (one
-  // per element) with a single read.
-  void readOffsets(uint64_t first, ql::span<Offset> offsets) const;
+  // Read the offsets of the words `first, first + 1, ...` into `offsetsOut`
+  // with a single read.
+  void readConsecutiveOffsets(uint64_t first,
+                              ql::span<Offset> offsetsOut) const;
 
-  // Read the data of the words with the given `offsets` (plus the offset after
-  // the last word) into `data` with a single read.
-  void readWordData(ql::span<const Offset> offsets,
-                    ad_utility::UninitializedVector<char>& data) const;
+  // Read the bytes `[beginOffset, endOffset)` of `file_`, i.e. the data of the
+  // consecutive words between these offsets, into `dataOut` with a single read.
+  void readConsecutiveWordBatch(
+      Offset beginOffset, Offset endOffset,
+      ad_utility::UninitializedVector<char>& dataOut) const;
 
   // Read the word at the `idx` with two small reads (its offsets and its data).
   std::string readWord(uint64_t idx) const;
 
-  // Helper for the read-ahead of `operator[]`: read the `offsets` (plus the
-  // offset after the last word) and the `data` of up to `numWords` words
-  // starting at `first`, but at most `VOCABULARY_READ_AHEAD_MAX_WORD_DATA`
-  // bytes of data. If not even two words fit, return false and leave the
-  // `offsets` empty.
-  bool readWindow(uint64_t first, size_t numWords,
-                  ad_utility::UninitializedVector<Offset>& offsets,
-                  ad_utility::UninitializedVector<char>& data) const;
+  // The read-ahead state of `operator[]` for a single thread, defined in the
+  // `.cpp` file.
+  struct ReadAheadState;
 
   // Helper for `scanAll`: return a lazy input range that reads the word offsets
   // from the `.offsets` file in batches of at most
