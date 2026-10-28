@@ -1,4 +1,4 @@
-// Copyright 2026, The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
@@ -13,6 +13,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <utility>
 #if __has_include(<version>)
 #include <version>
 #endif
@@ -47,9 +48,9 @@ TEST(StringTest, ResizeAndOverwriteSmallerSize) {
 }
 
 // _____________________________________________________________________________
-TEST(StringTest, ResizeAndOverwriteZeroSize) {
+TEST(StringTest, ResizeAndOverwriteOperationReturnsZero) {
   std::string s = "not empty";
-  ql::resize_and_overwrite(s, 20, [](char*, size_t) { return 0u; });
+  ql::resize_and_overwrite(s, 20, [](char*, size_t) { return size_t{0}; });
   EXPECT_TRUE(s.empty());
   EXPECT_EQ(s.size(), 0u);
 }
@@ -59,7 +60,7 @@ TEST(StringTest, ResizeAndOverwriteEmptyStringZeroCount) {
   std::string s;
   ql::resize_and_overwrite(s, 0, [](char*, size_t count) {
     EXPECT_EQ(count, 0u);
-    return 0u;
+    return size_t{0};
   });
   EXPECT_TRUE(s.empty());
   EXPECT_EQ(s.size(), 0u);
