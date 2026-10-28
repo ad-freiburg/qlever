@@ -15,8 +15,8 @@
 // serializable (their raw bytes would contain padding).
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<T, std::optional>)
-        CPP_and CPP_NOT(TriviallySerializable<T>)) {
+    (ad_utility::similarToInstantiation<T, std::optional>) &&
+    CPP_NOT(TriviallySerializable<T>)) {
   if constexpr (ReadSerializer<S>) {
     bool hasValue;
     serializer >> hasValue;

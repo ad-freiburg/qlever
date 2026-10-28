@@ -707,6 +707,16 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 // please the coverage tool.
 TEST(ValueId, isTrivial) {
   EXPECT_TRUE(ValueId::makeUndefined().isTrivial());
+  EXPECT_TRUE(ValueId::makeFromBool(true).isTrivial());
+  EXPECT_TRUE(ValueId::makeFromInt(42).isTrivial());
+  EXPECT_TRUE(ValueId::makeFromDouble(3.14).isTrivial());
+  EXPECT_TRUE(
+      ValueId::makeFromDate(DateYearOrDuration::parseXsdDate("2000-01-01"))
+          .isTrivial());
+  EXPECT_FALSE(ValueId::makeFromVocabIndex(VocabIndex::make(0)).isTrivial());
+  EXPECT_FALSE(
+      ValueId::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(0x100))
+          .isTrivial());
   EXPECT_FALSE(
       ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
   EXPECT_FALSE(ValueId::makeFromEncodedVal(738).isTrivial());

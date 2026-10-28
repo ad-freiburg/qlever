@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -28,8 +28,11 @@ namespace columnBasedIdTable::splitLayout {
 // consistent with the ordering of the legacy `ValueId`s (as long as no
 // `LocalVocabIndex` is involved).
 struct SplitLayoutIdBitRepresentation {
-  uint8_t datatype_;
-  uint64_t payload_;
+  using PayloadType = uint64_t;
+  using DatatypeType = uint8_t;
+
+  DatatypeType datatype_;
+  PayloadType payload_;
 
   // The default three-way comparison is datatype-major because `datatype_`
   // is declared before `payload_`.
@@ -42,8 +45,8 @@ struct SplitLayoutIdBitRepresentation {
   // the single integer in the packed 64-bit representation of the legacy
   // `ValueId`.
   [[nodiscard]] constexpr SplitLayoutIdBitRepresentation incremented() const {
-    if (payload_ == std::numeric_limits<uint64_t>::max()) {
-      return {static_cast<uint8_t>(datatype_ + 1), 0};
+    if (payload_ == std::numeric_limits<PayloadType>::max()) {
+      return {static_cast<DatatypeType>(datatype_ + 1), 0};
     }
     return {datatype_, payload_ + 1};
   }
@@ -89,8 +92,10 @@ struct std::hash<
   size_t operator()(
       const columnBasedIdTable::splitLayout::SplitLayoutIdBitRepresentation&
           rep) const noexcept {
-    return std::hash<uint64_t>{}(rep.payload_ ^
-                                 (static_cast<uint64_t>(rep.datatype_) << 56));
+    using PayloadType = columnBasedIdTable::splitLayout::
+        SplitLayoutIdBitRepresentation::PayloadType;
+    return std::hash<PayloadType>{}(
+        rep.payload_ ^ (static_cast<PayloadType>(rep.datatype_) << 56));
   }
 };
 

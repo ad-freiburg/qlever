@@ -11,12 +11,13 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
+#include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
-#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -34,6 +35,7 @@
 #include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "util/Algorithm.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
@@ -346,7 +348,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
   for (const auto& alias : _aliases) {
     subtree = ExistsJoin::addExistsJoinsToSubtree(
         alias._expression, std::move(subtree), getExecutionContext(),
-        cancellationHandle_);
+        cancellationHandle());
   }
 
   // The input of a GROUP BY has to be sorted. If possible, we get optimize out
@@ -356,6 +358,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
+// _____________________________________________________________________________
 std::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
@@ -388,6 +391,7 @@ std::string GroupByImpl::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
+// _____________________________________________________________________________
 std::string GroupByImpl::getDescriptor() const {
   if (isImplicitGroupBy_) {
     return "GroupBy (implicit)";
@@ -399,10 +403,12 @@ std::string GroupByImpl::getDescriptor() const {
          absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
 
+// _____________________________________________________________________________
 size_t GroupByImpl::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
+// _____________________________________________________________________________
 std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
   vector<ColumnIndex> sortedOn;
@@ -413,6 +419,7 @@ std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   return sortedOn;
 }
 
+// _____________________________________________________________________________
 std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
@@ -463,6 +470,7 @@ VariableToColumnMap GroupByImpl::computeVariableToColumnMap() const {
   return result;
 }
 
+// _____________________________________________________________________________
 float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   // Group by should currently not be used in the optimizer, unless
   // it is part of a subquery. In that case multiplicities may only be
@@ -470,6 +478,56 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   return 1;
 }
 
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+GroupByImpl::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // Keep the aliases whose target is requested, and the aliases whose target
+  // is read by a kept alias. The subtree must provide the requested variables,
+  // the variables read by the kept aliases, and the variables that the
+  // `GroupBy` groups by.
+  //
+  // NOTE: An alias can only read the targets of earlier aliases, so one pass
+  // from the last alias to the first finds all aliases to keep.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  std::vector<Alias> keptAliases;
+  for (const Alias& alias : _aliases | ql::views::reverse) {
+    if (!ad_utility::contains(varsRequiredFromSubtree.get(), alias._target)) {
+      continue;
+    }
+    // A `COUNT(DISTINCT *)` reads all columns of the subtree, so nothing may
+    // be stripped below it (the caller then adds a `StripColumns` on top).
+    if (alias._expression.readsAllVisibleColumns()) {
+      return std::nullopt;
+    }
+    keptAliases.push_back(alias);
+    for (const Variable* aliasVar : alias._expression.containedVariables()) {
+      varsRequiredFromSubtree.add(*aliasVar);
+    }
+  }
+  ql::ranges::reverse(keptAliases);
+  for (const Variable& groupByVar : _groupByVariables) {
+    varsRequiredFromSubtree.add(groupByVar);
+  }
+
+  // Strip the subtree and build the new `GroupByImpl` with the private
+  // constructor, which keeps `isImplicitGroupBy_` (like `cloneImpl`, because
+  // `_groupByVariables` is already reduced to the variables of the subtree).
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      _subtree, varsRequiredFromSubtree.get());
+  auto impl = std::unique_ptr<GroupByImpl>(
+      new GroupByImpl{_executionContext, isImplicitGroupBy_, _groupByVariables,
+                      std::move(keptAliases), std::move(subtree)});
+
+  // The new `GroupBy` also exports the grouped variables and alias targets
+  // that the parent did not request. The helper adds a `StripColumns` operation
+  // for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<GroupBy>(
+      getExecutionContext(), requestedVariables, std::move(impl));
+}
+
+// _____________________________________________________________________________
 uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
@@ -492,6 +550,7 @@ size_t GroupByImpl::getCostEstimate() {
   return _subtree->getCostEstimate();
 }
 
+// _____________________________________________________________________________
 template <size_t OUT_WIDTH>
 void GroupByImpl::processGroup(
     const Aggregate& aggregate,
@@ -589,8 +648,7 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
       idTable,
       getExecutionContext()->getAllocator(),
       localVocab,
-      cancellationHandle_,
-      deadline_};
+      cancellationHandle()};
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -874,10 +932,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   // The statistics used below are precomputed at index build time and do not
   // reflect delta triples from SPARQL updates. Fall back to the general
   // computation when there are any delta triples.
-
+  //
+  // NOTE: Use the `LocatedTriplesState` of the `IndexScan`, not the one of this
+  // operation (which is the one of the main index from the
+  // `QueryExecutionContext`). They differ if the scan is on a materialized
+  // view, which has its own block metadata and located triples.
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
-          locatedTriplesState());
+          indexScan->locatedTriplesState());
   bool hasLocatedTriples = !locTriples.isEmpty();
   bool isMaterializedView = indexScan->permutation().permutationType() ==
                             Permutation::Type::MATERIALIZED_VIEW;
@@ -958,9 +1020,12 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
 
   // Compute the result and update the runtime information (we don't actually
   // do the index scan, but something smarter).
+  //
+  // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
+  // `computeGroupByForSingleIndexScan` for details).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle_, locatedTriplesState(),
+      col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
       indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
@@ -1015,8 +1080,14 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   const auto& operation = _subtree->getRootOperation();
   operation->updateRuntimeInformationWhenOptimizedOut();
 
+  // Compute the distinct values of the first column and their counts directly
+  // from the blocks of the permutation.
+  //
+  // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
+  // `computeGroupByForSingleIndexScan` for details).
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesState(), operation->getLimitOffset());
+      cancellationHandle(), operation->locatedTriplesState(),
+      operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -1177,6 +1248,9 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   for (size_t i = 0; i < subresult->idTableView().size(); ++i) {
     auto id = subresult->idTableView()(i, columnIndex);
     if (id != currentId) {
+      // The lookup of the cardinality reads the index, so check for
+      // cancellation once per distinct `id`.
+      checkCancellation();
       pushRow();
       currentId = id;
       currentCount = 0;
@@ -1854,14 +1928,22 @@ static constexpr auto makeProcessGroupsVisitor =
 
         auto hashEntryIndex = 0;
 
-        for (const auto& val : generator) {
-          auto vectorOffset = hashEntries[hashEntryIndex];
-          auto& aggregateData = aggregationDataVector.at(vectorOffset);
+        // `addValue` might look up strings in the vocabulary (e.g. for
+        // `GROUP_CONCAT`), so a block of rows can take a while.
+        ad_utility::chunkedForEach(
+            std::move(generator),
+            [&hashEntries, &hashEntryIndex, &aggregationDataVector,
+             evaluationContext](const auto& val) {
+              auto vectorOffset = hashEntries[hashEntryIndex];
+              auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
-          aggregateData.addValue(val, evaluationContext);
+              aggregateData.addValue(val, evaluationContext);
 
-          ++hashEntryIndex;
-        }
+              ++hashEntryIndex;
+            },
+            [evaluationContext]() {
+              evaluationContext->cancellationHandle_->throwIfCancelled();
+            });
       };
     };
 
@@ -1895,8 +1977,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     // Setup the `EvaluationContext` for this input block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
-        getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
-        deadline_);
+        getExecutionContext()->getAllocator(), localVocab,
+        cancellationHandle());
     evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
         _groupByVariables.begin(), _groupByVariables.end()};
     evaluationContext._isPartOfGroupBy = true;

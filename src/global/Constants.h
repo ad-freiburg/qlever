@@ -298,10 +298,6 @@ constexpr inline uint8_t NUM_COMPRESSION_PREFIXES = 126;
 constexpr inline uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
 
-// When initializing a sort performance estimator, at most this percentage of
-// the number of triples in the index is being sorted at once.
-constexpr inline size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
-
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.
 constexpr inline size_t MAKE_ROOM_SLACK_FACTOR = 2;
