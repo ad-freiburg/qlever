@@ -251,6 +251,45 @@ TEST(TripleSerializer, serializeOnlyBlankNodeBlocksFromLocalVocab) {
   }
 }
 
+// Test that an IRI of a serialized local vocab that the deserializing index
+// encodes directly in an `Id` is mapped to that `Id`, not to a local vocab
+// entry.
+TEST(TripleSerializer, encodableIrisAreDeserializedAsEncodedIds) {
+  // Serialize a local vocab from an index that does not encode any IRIs.
+  auto* qecWithoutEncoding = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto LV = [&localVocab, qecWithoutEncoding](std::string_view iri) {
+    return Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+            iri, qecWithoutEncoding->getLocalVocabContext())));
+  };
+  Id encodable = LV("<http://example.org/42>");
+  Id notEncodable = LV("<http://other.org/42>");
+
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::detail::serializeLocalVocab(writer, localVocab);
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::move(writer).data()};
+
+  // Deserialize it for an index that encodes the first IRI directly in an
+  // `Id`, so it must not end up in the deserialized local vocab.
+  ad_utility::testing::TestIndexConfig config;
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qecWithEncoding = ad_utility::testing::getQec(std::move(config));
+  auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
+      reader, qecWithEncoding->getLocalVocabContext());
+
+  EXPECT_EQ(localVocabOut.size(), 1);
+  auto expectedId = qecWithEncoding->getIndex()
+                        .encodedIriManager()
+                        .encode("<http://example.org/42>")
+                        .value();
+  // Compare the bits, as `Id::operator==` also matches a `LocalVocabIndex`.
+  EXPECT_EQ(mapping.at(encodable.getBits()).getBits(), expectedId.getBits());
+  EXPECT_EQ(mapping.at(notEncodable.getBits()).getDatatype(),
+            Datatype::LocalVocabIndex);
+}
+
 // _____________________________________________________________________________
 TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   using namespace ::testing;

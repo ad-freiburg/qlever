@@ -6,6 +6,7 @@
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -18,6 +19,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -39,9 +41,12 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 using namespace ad_utility::testing;
 using ::testing::Eq;
 using ::testing::Optional;
+using V = Variable;
 
 namespace {
 auto I = IntId;
@@ -1624,7 +1629,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // The join cannot have a `LIMIT` or `OFFSET` for this optimization.
     auto join =
         makeExecutionTree<Join>(qec, xyzScanSortedByX, xyzScanSortedByX, 0, 0);
-    join->applyLimitOffset({1});
+    join->applyLimitOffset({1}, false);
     GroupByImpl joinHasLimitAndOffset{qec, variablesOnlyX, aliasesCountX,
                                       std::move(join)};
     EXPECT_EQ(std::nullopt,
@@ -1753,21 +1758,21 @@ TEST_F(GroupByOptimizations,
   // LIMIT OR OFFSET should prevent this optimization.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({3});
+    clone->applyLimitOffset({3}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({std::nullopt, 1});
+    clone->applyLimitOffset({std::nullopt, 1}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({3, 1});
+    clone->applyLimitOffset({3, 1}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
@@ -1775,7 +1780,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({1, 2});
+    clone->applyLimitOffset({1, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1784,7 +1789,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({100, 2});
+    clone->applyLimitOffset({100, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The 15 elements should be reduced by 2.
@@ -1792,7 +1797,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -1802,7 +1807,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({1, 2});
+    clone->applyLimitOffset({1, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1811,7 +1816,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({100, 2});
+    clone->applyLimitOffset({100, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1820,7 +1825,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -1944,7 +1949,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   auto getId = makeGetId(qec->getIndex());
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({1, 3});
+    clone->applyLimitOffset({1, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable({{getId("<x>"), I(1)}}));
@@ -1953,7 +1958,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // Group by object.
   {
     auto clone = yxScan->clone();
-    clone->applyLimitOffset({2, 2});
+    clone->applyLimitOffset({2, 2}, false);
     GroupByImpl groupBy{qec, variablesOnlyY, aliasesCountY, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable(
@@ -1963,7 +1968,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // LIMIT 0 edge case
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({0, 1});
+    clone->applyLimitOffset({0, 1}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(), optionalHasTable({}));
   }
@@ -2021,9 +2026,9 @@ struct QecWrapper {
         index_,
         &cache_,
         makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{},
         &namedCache_,
-        materializedViewsManager_};
+        materializedViewsManager_,
+        executor()};
   }
 };
 
@@ -2295,7 +2300,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   auto V = VocabId;
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({8, 3});
+    clone->applyLimitOffset({8, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2304,7 +2309,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({0, 1});
+    clone->applyLimitOffset({0, 1}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2312,7 +2317,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({8, 3});
+    clone->applyLimitOffset({8, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountNotExisting,
                         std::move(clone)};
 
@@ -3582,4 +3587,376 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(0, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables that the `GroupBy` groups by or that its
+// aliases read, drops the aliases whose target is not requested, and adds a
+// `StripColumns` operation for the variables that the parent did not request.
+TEST(GroupBy, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::hasRootOperation;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::ElementsAre;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{I(6), I(6), I(3), I(6)},
+                             {I(6), I(6), I(3), I(5)},
+                             {I(3), I(5), I(5), I(4)},
+                             {I(1), I(2), I(5), I(1)}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<Variable> groupByVariables,
+                   std::vector<Alias> aliases, std::set<V> requestedVariables) {
+    GroupBy groupBy(qec, groupByVariables, aliases, values);
+    auto tree = groupBy.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+  Alias alias(
+      SparqlExpressionPimpl{
+          std::make_unique<SumExpression>(
+              false, std::make_unique<VariableExpression>(Variable{"?b"})),
+          "SUM(?b)"},
+      Variable{"?sumB"});
+
+  // `GroupBy` `?a` and compute alias `?sumB` from `?b`. `?a` and `?sumB`
+  // requested: the result has `?a` and `?sumB`.
+  {
+    auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}},
+                    matchesIdTableFromVector(
+                        {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}})));
+  }
+
+  // `GroupBy` `?b` and `?c` and compute alias `?sumB` from `?b`. `?b`, `?c` and
+  // `?sumB` requested: `?a` and `?d` are stripped and the columns are
+  // renumbered.
+  {
+    auto tree =
+        strip({V{"?b"}, V{"?c"}}, {alias}, {V{"?b"}, V{"?c"}, V{"?sumB"}});
+    auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
+    ASSERT_TRUE(groupBy);
+    EXPECT_THAT(groupBy->resultSortedOn(), ElementsAre(0, 1));
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?c"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?sumB"}), 2u);
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree =
+        strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}, V{"?notValid"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
+  }
+
+  // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?sumB` and
+  // `?c` requested: the result has `?sumB` and `?c`, a `StripColumns` on top
+  // removes `?a`.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?c"}, V{"?sumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?c"}, V{"?sumB"}},
+                    matchesIdTableFromVector(
+                        {{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}})));
+
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?c"}, V{"?sumB"}},
+                    matchesIdTableFromVector({{I(1), I(5), I(2)},
+                                              {I(3), I(5), I(5)},
+                                              {I(6), I(3), I(12)}})));
+  }
+
+  // All variables requested: nothing is stripped and the result has the
+  // additional column `?sumB`.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, {alias},
+                      {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}});
+    EXPECT_THAT(
+        tree.get(),
+        isStrippedColumns<GroupBy>(
+            {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}},
+            matchesIdTableFromVector({{I(1), I(2), I(5), I(1), I(2)},
+                                      {I(3), I(5), I(5), I(4), I(5)},
+                                      {I(6), I(6), I(3), I(5), I(6)},
+                                      {I(6), I(6), I(3), I(6), I(6)}})));
+  }
+
+  // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?a` and `?c`
+  // requested: the result has `?a` and `?c`, the alias is erased from the
+  // `GroupBy` operation, as its target is not requested.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?a"}, V{"?c"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?c"}},
+                    matchesIdTableFromVector(
+                        {{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}})));
+    auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
+    ASSERT_TRUE(groupBy);
+    EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});
+  }
+
+  // The alias `?twiceSumB` reads the target of the alias `?sumB`. Only
+  // `?twiceSumB` requested: both aliases are kept, a `StripColumns` on top
+  // removes `?a` and `?sumB`.
+  {
+    Alias twiceSumB(
+        SparqlExpressionPimpl{
+            makeMultiplyExpression(
+                std::make_unique<VariableExpression>(Variable{"?sumB"}),
+                std::make_unique<IdExpression>(I(2))),
+            "?sumB * 2"},
+        Variable{"?twiceSumB"});
+    auto tree = strip({V{"?a"}}, {alias, twiceSumB}, {V{"?twiceSumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?twiceSumB"}},
+                    matchesIdTableFromVector({{I(4)}, {I(10)}, {I(24)}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}, V{"?twiceSumB"}},
+                    matchesIdTableFromVector({{I(1), I(2), I(4)},
+                                              {I(3), I(5), I(10)},
+                                              {I(6), I(12), I(24)}})));
+  }
+
+  // A `COUNT(DISTINCT *)` alias reads all columns of the subtree. If it is
+  // requested, nothing can be stripped (`std::nullopt`), if it is not
+  // requested, it is dropped like any other alias.
+  {
+    Alias countDistinctStar(SparqlExpressionPimpl{makeCountStarExpression(true),
+                                                  "COUNT(DISTINCT *)"},
+                            Variable{"?count"});
+    GroupBy groupBy(qec, {V{"?a"}}, {countDistinctStar}, values);
+    EXPECT_EQ(groupBy.makeTreeWithStrippedColumns({V{"?count"}}), std::nullopt);
+    auto tree =
+        strip({V{"?a"}}, {countDistinctStar, alias}, {V{"?a"}, V{"?sumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}},
+                    matchesIdTableFromVector(
+                        {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}})));
+  }
+
+  // A `GroupBy` on a variable that the subtree does not have groups by nothing,
+  // but unlike an implicit `GroupBy` has no group for an empty input. This is
+  // preserved by the stripping.
+  {
+    auto emptyValues = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{4, qec->getAllocator()},
+        std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    Alias sumC(
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(V{"?c"})),
+            "SUM(?c)"},
+        Variable{"?sumC"});
+    GroupBy groupBy(qec, {V{"?notInSubtree"}}, {alias, sumC}, emptyValues);
+    auto tree = groupBy.makeTreeWithStrippedColumns({V{"?sumB"}}).value();
+    EXPECT_THAT(tree.get(), hasRootOperation<GroupBy>());
+    EXPECT_EQ(tree->getRootOperation()->getDescriptor(),
+              "GroupBy on unbound variables");
+    EXPECT_EQ(tree->getResult(false)->idTableView().numRows(), 0u);
+  }
+}
+
+// Test that a `GROUP BY` on unbound variables has one group for a non-empty
+// input, but, unlike an implicit `GROUP BY`, none for an empty input.
+TEST(GroupBy, GroupByUnboundVariable) {
+  auto* qec = getQec();
+  Variable x{"?x"};
+  Variable unbound{"?unbound"};
+
+  auto makeSubtree = [qec, &x](IdTable input, bool inputIsLazy) {
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), std::vector<std::optional<Variable>>{x});
+    dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
+        .forceFullyMaterialized() = !inputIsLazy;
+    return subtree;
+  };
+  auto sum = [&x]() {
+    return Alias{SparqlExpressionPimpl{
+                     std::make_unique<SumExpression>(
+                         false, std::make_unique<VariableExpression>(x)),
+                     "SUM(?x)"},
+                 Variable{"?sum"}};
+  };
+  // `COUNT(*)` is computed by `computeCountStar` for an implicit `GROUP BY`.
+  auto countStar = []() {
+    return Alias{
+        SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*)"},
+        Variable{"?count"}};
+  };
+
+  // Compute `GROUP BY ?unbound` (implicit `GROUP BY` if `implicit`) with the
+  // alias `makeAlias()` (none for `nullptr`) on the materialized and the lazy
+  // path, check that both agree, and return the result.
+  auto compute = [&](IdTable input, auto makeAlias, bool implicit,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    std::optional<IdTable> firstResult;
+    for (bool inputIsLazy : {false, true}) {
+      // Clear the cache, else the second run reuses the first one's result.
+      qec->getQueryTreeCache().clearAll();
+      std::vector<Alias> aliases;
+      if constexpr (!std::is_same_v<decltype(makeAlias), std::nullptr_t>) {
+        aliases.push_back(makeAlias());
+      }
+      GroupByImpl groupBy{
+          qec,
+          implicit ? std::vector<Variable>{} : std::vector<Variable>{unbound},
+          std::move(aliases), makeSubtree(input.clone(), inputIsLazy)};
+      EXPECT_TRUE(groupBy.groupByVariables().empty());
+      auto result = groupBy.computeResultOnlyForTesting(inputIsLazy);
+      IdTable table{groupBy.getResultWidth(), qec->getAllocator()};
+      if (result.isFullyMaterialized()) {
+        table = result.idTableView().clone();
+      } else {
+        for (auto& [idTable, localVocab] : result.idTables()) {
+          table.insertAtEnd(idTable);
+        }
+      }
+      if (firstResult.has_value()) {
+        EXPECT_EQ(table, firstResult.value());
+      } else {
+        firstResult = std::move(table);
+      }
+    }
+    return std::move(firstResult).value();
+  };
+
+  auto emptyInput = [qec]() { return IdTable{1, qec->getAllocator()}; };
+  auto nonEmptyInput = []() {
+    return makeIdTableFromVector({{I(1)}, {I(2)}, {I(4)}});
+  };
+
+  // Empty input: no group, but one for the implicit `GROUP BY`.
+  EXPECT_EQ(compute(emptyInput(), sum, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), countStar, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), nullptr, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), sum, true), makeIdTableFromVector({{I(0)}}));
+  EXPECT_EQ(compute(emptyInput(), countStar, true),
+            makeIdTableFromVector({{I(0)}}));
+
+  // Non-empty input: one group in both cases.
+  for (bool implicit : {false, true}) {
+    EXPECT_EQ(compute(nonEmptyInput(), sum, implicit),
+              makeIdTableFromVector({{I(7)}}));
+    EXPECT_EQ(compute(nonEmptyInput(), countStar, implicit),
+              makeIdTableFromVector({{I(3)}}));
+    EXPECT_EQ(compute(nonEmptyInput(), nullptr, implicit).numRows(), 1);
+  }
+
+  // Both cases differ in the cache key, descriptor and `knownEmptyResult()`.
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, emptyInput(), std::vector<std::optional<Variable>>{x});
+  GroupBy groupByUnbound{qec, {unbound}, {sum()}, subtree};
+  GroupBy groupByImplicit{qec, {}, {sum()}, subtree};
+  EXPECT_NE(groupByUnbound.getCacheKey(), groupByImplicit.getCacheKey());
+  EXPECT_EQ(groupByUnbound.getDescriptor(), "GroupBy on unbound variables");
+  EXPECT_EQ(groupByImplicit.getDescriptor(), "GroupBy (implicit)");
+  EXPECT_TRUE(groupByUnbound.knownEmptyResult());
+  EXPECT_FALSE(groupByImplicit.knownEmptyResult());
+
+  auto clone = groupByUnbound.clone();
+  EXPECT_THAT(groupByUnbound, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getCacheKey(), groupByUnbound.getCacheKey());
+  EXPECT_TRUE(clone->knownEmptyResult());
+}
+
+// Test that the hash map optimization is not applied to a `GROUP BY` without
+// `GROUP BY` columns. It used to be applied anyway (if the input is a `Sort`),
+// which crashed for a non-empty input and returned no row for an empty input
+// with an implicit `GROUP BY`.
+TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
+  auto* qec = getQec();
+  Variable x{"?x"};
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+          true);
+
+  auto compute = [&](IdTable input, std::vector<Variable> groupByVariables) {
+    qec->getQueryTreeCache().clearAll();
+    auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), std::vector<std::optional<Variable>>{x});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(
+        qec, std::move(values), std::vector<ColumnIndex>{0});
+    GroupByImpl groupBy{
+        qec,
+        std::move(groupByVariables),
+        {Alias{SparqlExpressionPimpl{
+                   std::make_unique<SumExpression>(
+                       false, std::make_unique<VariableExpression>(x)),
+                   "SUM(?x)"},
+               Variable{"?sum"}}},
+        std::move(sorted)};
+    return groupBy.computeResultOnlyForTesting(false).idTableView().clone();
+  };
+
+  auto emptyInput = [qec]() { return IdTable{1, qec->getAllocator()}; };
+  auto nonEmptyInput = []() { return makeIdTableFromVector({{I(1)}, {I(2)}}); };
+  Variable unbound{"?unbound"};
+
+  EXPECT_EQ(compute(emptyInput(), {}), makeIdTableFromVector({{I(0)}}));
+  EXPECT_EQ(compute(nonEmptyInput(), {}), makeIdTableFromVector({{I(3)}}));
+  EXPECT_EQ(compute(emptyInput(), {unbound}).numRows(), 0);
+  EXPECT_EQ(compute(nonEmptyInput(), {unbound}),
+            makeIdTableFromVector({{I(3)}}));
+}
+
+// Test that an IRI that is computed inside of an aggregate and that can be
+// encoded directly in an `Id` (see `EncodedIriManager`) gets that `Id`, both
+// with and without the hash map optimization.
+TEST(GroupBy, aggregateOfComputedEncodableIri) {
+  TestIndexConfig config{"<http://example.org/1> <p> <o> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& encodedIriManager = qec->getIndex().encodedIriManager();
+  auto encoded = [&](std::string_view iri) {
+    return encodedIriManager.encode(iri).value();
+  };
+
+  std::string query =
+      "SELECT ?g (MIN(IRI(CONCAT(\"http://example.org/\", ?n))) AS ?min) "
+      "(MAX(IRI(CONCAT(\"http://example.org/\", ?n))) AS ?max) "
+      "WHERE { VALUES (?g ?n) { (1 \"5\") (2 \"6\") (2 \"7\") } } GROUP BY ?g";
+  for (bool hashMapEnabled : {true, false}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+            hashMapEnabled);
+    qec->clearCacheUnpinnedOnly();
+    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {});
+    QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+    auto qet = qp.createExecutionTree(parsedQuery);
+    auto result = qet->getResult();
+    // `timeMapLookup` is only reported by the hash map optimization.
+    auto groupBy =
+        std::dynamic_pointer_cast<const GroupBy>(qet->getRootOperation());
+    ASSERT_NE(groupBy, nullptr);
+    EXPECT_EQ(
+        groupBy->getImpl().runtimeInfo().details_.contains("timeMapLookup"),
+        hashMapEnabled);
+    auto e5 = encoded("<http://example.org/5>");
+    auto e6 = encoded("<http://example.org/6>");
+    auto e7 = encoded("<http://example.org/7>");
+    const auto& table = result->idTableView();
+    EXPECT_THAT(table,
+                matchesIdTableFromVector({{I(1), e5, e5}, {I(2), e6, e7}}));
+    // The comparison above also succeeds for a `LocalVocabIndex` of the same
+    // IRIs, so check the datatype explicitly.
+    for (size_t col : {1, 2}) {
+      for (Id id : table.getColumn(col)) {
+        EXPECT_EQ(id.getDatatype(), Datatype::EncodedVal);
+      }
+    }
+  }
 }
