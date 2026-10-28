@@ -25,7 +25,7 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Constants.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/InputFileSpecification.h"
 #include "index/TripleComponentConversions.h"
@@ -340,15 +340,13 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
                         fromIri(GEO_WKT_LITERAL));
   ASSERT_TRUE(result2.isLiteral());
-  EXPECT_EQ(asStringViewUnsafe(result2.getLiteral().getContent()),
+  EXPECT_EQ(result2.getLiteral().getContent(),
             "POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)");
-  EXPECT_EQ(asStringViewUnsafe(result2.getLiteral().getDatatype()),
-            GEO_WKT_LITERAL);
+  EXPECT_EQ(result2.getLiteral().getDatatype(), GEO_WKT_LITERAL);
   // Invalid points should be converted to plain string literals
   auto result3 = ladttc("POINT(0.0 99.9999)", fromIri(GEO_WKT_LITERAL));
   ASSERT_FALSE(result3.getLiteral().hasDatatype());
-  ASSERT_EQ(asStringViewUnsafe(result3.getLiteral().getContent()),
-            "POINT(0.0 99.9999)");
+  ASSERT_EQ(result3.getLiteral().getContent(), "POINT(0.0 99.9999)");
 }
 
 TEST(RdfParserTest, blankNode) {
@@ -1113,6 +1111,26 @@ TEST(RdfParserTest, commentThatEndsWithADot) {
                 ::testing::UnorderedElementsAreArray(expected));
   };
   forAllParsers(testWithParser);
+}
+
+// Test that a comment at the end of the input needs no trailing newline (the
+// end of the input also ends the comment), and that a `\r` ends a comment.
+TEST(RdfParserTest, commentAtEndOfInputWithoutNewline) {
+  std::string filename{gtestCurrentTestName()};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto testWithParser = [&](auto t, std::string_view input,
+                            const std::vector<TurtleTriple>& expected) {
+    using Parser = typename decltype(t)::type;
+    ad_utility::makeOfstream(filename) << input;
+    EXPECT_THAT(parseFromFile<Parser>(filename),
+                ::testing::UnorderedElementsAreArray(expected));
+  };
+  std::vector<TurtleTriple> expected{{iri("<s>"), iri("<p>"), iri("<o>")}};
+  forAllParsers(testWithParser, "<s> <p> <o> .\n# comment", expected);
+  forAllParsers(testWithParser, "<s> <p> <o> . # comment", expected);
+  forAllParsers(testWithParser, "# comment", std::vector<TurtleTriple>{});
+  // A plain `\r` also ends a comment.
+  forAllParsers(testWithParser, "# comment\r<s> <p> <o> .", expected);
 }
 
 // The same, but with a comment that is larger than the buffer, such that the

@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
 #include "util/Exception.h"
@@ -71,9 +72,8 @@ class CompactVectorOfStrings {
   // `util/Serializer/Serializer.h`). The returned object is only valid as
   // long as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          S>) static CompactVectorOfStrings
-      fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+  static CompactVectorOfStrings fromZeroCopyDeserializer(S& serializer) {
     using namespace ad_utility::serialization;
     CompactVectorOfStrings result;
     result.data_ = DataStorage::fromZeroCopyDeserializer(serializer);
@@ -86,6 +86,28 @@ class CompactVectorOfStrings {
     build(input);
   }
 
+  // Create a `CompactVectorOfStrings` directly from its storage layout: the
+  // concatenated `data` of all the elements and the `offsets` of the elements
+  // in `data` (one more than the number of elements, the last offset is the
+  // size of `data`; see `offsetsSpan()`). Throw if the `offsets` are not a
+  // valid layout for the `data` (start at `0`, non-decreasing, end at
+  // `data.size()`).
+  //
+  // NOTE: This is for callers that produce the elements in this layout anyway
+  // (for example with a counting sort), which thus avoid building them twice.
+  static CompactVectorOfStrings fromDataAndOffsets(
+      std::vector<data_type> data, std::vector<offset_type> offsets) {
+    AD_CONTRACT_CHECK(!offsets.empty() && offsets.front() == 0 &&
+                          offsets.back() == data.size() &&
+                          ql::ranges::is_sorted(offsets),
+                      "The offsets are not a valid layout for the data of a "
+                      "`CompactVectorOfStrings`");
+    CompactVectorOfStrings result;
+    result.data_ = DataStorage{std::move(data)};
+    result.offsets_ = OffsetStorage{std::move(offsets)};
+    return result;
+  }
+
   void clear() { *this = CompactVectorOfStrings{}; }
 
   virtual ~CompactVectorOfStrings() = default;
@@ -94,10 +116,11 @@ class CompactVectorOfStrings {
   // allowed if this object currently owns its storage (i.e. was not created
   // via `fromZeroCopyDeserializer`).
   CPP_template(typename T)(
-      requires ql::ranges::forward_range<T>&& ql::ranges::sized_range<T>&&
-          ql::ranges::sized_range<ql::ranges::range_value_t<T>>&& ad_utility::
-              SimilarTo<ql::ranges::range_value_t<ql::ranges::range_value_t<T>>,
-                        data_type>) void build(const T& input) {
+      requires ql::ranges::forward_range<T> && ql::ranges::sized_range<T> &&
+      ql::ranges::sized_range<ql::ranges::range_value_t<T>> &&
+      ad_utility::SimilarTo<
+          ql::ranges::range_value_t<ql::ranges::range_value_t<T>>, data_type>)
+  void build(const T& input) {
     // Check both before modifying either of them, so that a failed check
     // leaves this object unchanged.
     AD_CONTRACT_CHECK(data_.isOwned() && offsets_.isOwned(),
@@ -121,6 +144,24 @@ class CompactVectorOfStrings {
       for (const auto& el : input) {
         data.insert(data.end(), el.begin(), el.end());
       }
+    });
+  }
+
+  // Append a single `element` at the end. Only allowed if this object owns its
+  // storage (see `build`). The `element` must not point into this object.
+  void push_back(value_type element) {
+    AD_CONTRACT_CHECK(data_.isOwned() && offsets_.isOwned(),
+                      "A `CompactVectorOfStrings` that is a zero-copy view "
+                      "cannot be appended to");
+    data_.modify([&element](auto& data) {
+      data.insert(data.end(), element.begin(), element.end());
+    });
+    offsets_.modify([dataSize = data_.size()](auto& offsets) {
+      // The first element also adds the start offset of the elements.
+      if (offsets.empty()) {
+        offsets.push_back(0);
+      }
+      offsets.push_back(dataSize);
     });
   }
 
@@ -164,7 +205,7 @@ class CompactVectorOfStrings {
   CPP_template(typename Func)(
       requires ad_utility::InvocableWithSimilarReturnType<Func, data_type,
                                                           data_type>)
-      CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
+  CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
     clone.offsets_ = offsets_.clone();
     clone.data_ = DataStorage{::ranges::to_vector(
@@ -194,13 +235,15 @@ class CompactVectorOfStrings {
     }
   }
 
- private:
   // Return a read-only view of the data, regardless of whether the storage
   // currently owns its elements or is a non-owning view.
   DataView dataSpan() const { return data_.view(); }
 
   // Return a read-only view of the offsets, regardless of whether the
   // storage currently owns its elements or is a non-owning view.
+  // NOTE: The `i`-th element starts at the `i`-th offset, and the last offset
+  // is the end of the last element. The offsets are empty if this object has
+  // no elements and was never built (see `ready()`).
   OffsetView offsetsSpan() const { return offsets_.view(); }
 };
 

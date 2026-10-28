@@ -53,6 +53,18 @@ std::optional<Id> toValueIdIfNotString(
   return tripleComponent.visit(visitor);
 }
 
+// _____________________________________________________________________________
+IdOrLocalVocabEntry toIdOrLocalVocabEntry(
+    ad_utility::triple_component::LiteralOrIri word,
+    const LocalVocabContext& context) {
+  if (word.isIri()) {
+    if (auto id = context.encodeAsId(word.toStringRepresentation())) {
+      return id.value();
+    }
+  }
+  return LocalVocabEntry{std::move(word), context};
+}
+
 // ____________________________________________________________________________
 std::string toRdfLiteral(const TripleComponent& tripleComponent) {
   if (auto view = toRdfLiteralView(tripleComponent)) {

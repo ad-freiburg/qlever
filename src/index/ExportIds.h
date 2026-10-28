@@ -139,10 +139,10 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
              typename LiteralOrIriType = LiteralOrIri,
              typename EscapeFunction = ql::identity)(
     requires ad_utility::SameAsAny<LiteralOrIriType, LiteralOrIri,
-                                   LiteralOrIriView>) std::
-    optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
-        const LiteralOrIriType& word,
-        EscapeFunction&& escapeFunction = EscapeFunction{}) {
+                                   LiteralOrIriView>)
+std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
+    const LiteralOrIriType& word,
+    EscapeFunction&& escapeFunction = EscapeFunction{}) {
   if constexpr (returnOnlyLiterals) {
     if (!word.isLiteral()) {
       return std::nullopt;
@@ -155,9 +155,7 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
   }
   if constexpr (removeQuotesAndAngleBrackets) {
     // TODO<joka921> Can we get rid of the string copying here?
-    return std::pair{
-        escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
-        nullptr};
+    return std::pair{escapeFunction(std::string{word.getContent()}), nullptr};
   }
   // TODO<ms2144>: we unconditionally always materialize a string here, which
   // is wasteful and should be mitigated in the future.

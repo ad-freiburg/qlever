@@ -29,9 +29,9 @@ namespace detail {
 // for why that value has to be passed at all). The function is called directly,
 // but the invocation of the handler is posted to the associated executor of the
 // `handler`, or to the `executor` if no such associated executor exists.
-CPP_template(typename Executor, typename Function,
-             typename Handler)(requires ql::concepts::invocable<
-                               Function>) struct CallFunctionAndPassToHandler {
+CPP_template(typename Executor, typename Function, typename Handler)(
+    requires ql::concepts::invocable<Function>)
+struct CallFunctionAndPassToHandler {
   Executor executor_;
   Function function_;
   Handler handler_;
@@ -76,11 +76,10 @@ CPP_template(typename Executor, typename Function,
 // Explicit deduction guides, we need objects and not references as the template
 // parameters.
 CPP_template(typename Executor, typename Function, typename Handler)(
-    requires ql::concepts::invocable<std::decay_t<Function>>)
-    CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
-        -> CallFunctionAndPassToHandler<std::decay_t<Executor>,
-                                        std::decay_t<Function>,
-                                        std::decay_t<Handler>>;
+            requires ql::concepts::invocable<std::decay_t<Function>>)
+CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
+    -> CallFunctionAndPassToHandler<
+        std::decay_t<Executor>, std::decay_t<Function>, std::decay_t<Handler>>;
 }  // namespace detail
 
 // Run the `function` on the `executor` (e.g. a strand for synchronization or
@@ -97,13 +96,11 @@ CPP_template(typename Executor, typename Function, typename Handler)(
 // currently require, so the handler has to be called with a `Value` even on the
 // error path, where there is no result to report.
 CPP_template(typename Executor, typename CompletionToken, typename Function)(
-    requires ql::concepts::invocable<Function> CPP_and(
-        std::is_default_constructible_v<std::invoke_result_t<Function>> ||
-        std::is_void_v<std::invoke_result_t<
-            Function>>)) auto runFunctionOnExecutor(Executor executor,
-                                                    Function function,
-                                                    CompletionToken&&
-                                                        completionToken) {
+    requires ql::concepts::invocable<Function> &&
+    (std::is_default_constructible_v<std::invoke_result_t<Function>> ||
+     std::is_void_v<std::invoke_result_t<Function>>))
+auto runFunctionOnExecutor(Executor executor, Function function,
+                           CompletionToken&& completionToken) {
   using Value = std::invoke_result_t<Function>;
   static constexpr bool isVoid = std::is_void_v<Value>;
 
@@ -159,8 +156,9 @@ inline net::awaitable<T> interruptible(
       handle->throwIfCancelled(loc);
       timer->expires_after(timeout);
       // Workaround for a GCC 15/16 bug: the hidden object of a by-value
-      // structured binding is not destroyed when the coroutine frame is
-      // destroyed while suspended (gcc.gnu.org bug 124584).
+      // structured binding in a coroutine is not always destroyed at the end
+      // of its scope, for example when it is initialized by a `co_await` or
+      // lives across one (gcc.gnu.org bug 124584).
       auto waitResult =
           co_await timer->async_wait(net::as_tuple(net::deferred));
       auto& [ec] = waitResult;
