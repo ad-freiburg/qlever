@@ -278,21 +278,14 @@ Bind::makeTreeWithStrippedColumns(
   // are required by `Bind` to build its target.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
-  const bool bindTargetRequested = [&](){
-    if(!requestedVariables.contains(_bind._target)){
-      return false;
-    }
-    for (const Variable* bindVar : _bind._expression.containedVariables()) {
-      varsRequiredFromSubtree.add(*bindVar);
-    }
-    return true;
-  }();
+  bool bindTargetRequested = requestedVariables.contains(_bind._target);
+  if (bindTargetRequested) {
+    varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
+  }
 
   // Strip the subtree and only keep `Bind` operation in the
   // `QueryExecutionTree` if its target is requested by the parent.
-  std::shared_ptr<QueryExecutionTree> subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(
-          _subtree, varsRequiredFromSubtree.get());
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
   if (!bindTargetRequested) {
     return subtree;
   }
