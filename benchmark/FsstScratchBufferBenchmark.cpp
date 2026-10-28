@@ -185,7 +185,7 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
   // at the same time in the pre-API `decompress` (the previous and the
   // current stage's string), over all words and stages.
   size_t maxLiveOwnedStringBytes_ = 0;
-  // Largest one-shot scratch that `decompressInto(out)` allocates per word.
+  // Largest scratch that a per-word (one-shot) scratch string allocates.
   size_t maxOneShotScratchBytes_ = 0;
 
  public:
@@ -249,7 +249,9 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
       size_t size =
           repeatedDecoder_.decompressInto(compressed_[i], outputSpan, scratch);
       AD_CORRECTNESS_CHECK(std::string_view(output.data(), size) == word);
-      size = repeatedDecoder_.decompressInto(compressed_[i], outputSpan);
+      std::string oneShotScratch;
+      size = repeatedDecoder_.decompressInto(compressed_[i], outputSpan,
+                                             oneShotScratch);
       AD_CORRECTNESS_CHECK(std::string_view(output.data(), size) == word);
     }
   }
@@ -295,9 +297,11 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
            return repeatedDecoder_.decompressInto(c, reusedOutputSpan,
                                                   reusedScratch);
          }},
-        {"3 decompressInto(out): one-shot scratch per word",
+        {"3 decompressInto(out, scratch): one-shot scratch per word",
          [&](std::string_view c) {
-           return repeatedDecoder_.decompressInto(c, reusedOutputSpan);
+           std::string oneShotScratch;
+           return repeatedDecoder_.decompressInto(c, reusedOutputSpan,
+                                                  oneShotScratch);
          }},
         {"4 spans, full-size std::string scratch (allocated once)",
          [&](std::string_view c) {

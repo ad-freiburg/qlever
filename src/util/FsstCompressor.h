@@ -55,9 +55,9 @@ constexpr CastToUnsignedPtr castToUnsignedPtr{};
 // which also checks that `decode` returns at most `bound`. `decode` writes
 // into the span and returns the number of bytes written.
 CPP_template(typename Decode)(
-    requires ad_utility::InvocableWithConvertibleReturnType<
-        Decode&, size_t, ql::span<char>>) std::string
-    decompressToOwnedString(size_t bound, Decode decode) {
+    requires ad_utility::InvocableWithConvertibleReturnType<Decode&, size_t,
+                                                            ql::span<char>>)
+std::string decompressToOwnedString(size_t bound, Decode decode) {
   std::string result;
   ql::resize_and_overwrite(result, bound, [&decode](char* buf, size_t count) {
     return decode(ql::span<char>{buf, count});
@@ -80,7 +80,7 @@ class FsstDecoder {
   fsst_decoder_t decoder_;
 
   // `FsstRepeatedDecoder::decompress` chains the stages through
-  // `decompressTruncated`.
+  // `decompressPossiblyTruncated`.
   template <size_t N>
   friend class FsstRepeatedDecoder;
 
@@ -88,8 +88,8 @@ class FsstDecoder {
   // Decompress `str` into `out`, which may have any size. Return the size of
   // the decompressed string. If it is larger than `out.size()`, `out` holds
   // only a prefix of it (FSST truncates, it never writes past `out`).
-  [[nodiscard]] size_t decompressTruncated(std::string_view str,
-                                           ql::span<char> out) const {
+  [[nodiscard]] size_t decompressPossiblyTruncated(std::string_view str,
+                                                   ql::span<char> out) const {
     auto cast = detail::castToUnsignedPtr;
     return fsst_decompress(&decoder_, str.size(), cast(str.data()), out.size(),
                            cast(out.data()));
@@ -161,8 +161,8 @@ class FsstDecoder {
     // bound. Longer strings decode a second time into a heap buffer of the
     // now known exact size.
     std::array<char, decodeStackBufferSize> buffer;
-    const size_t size =
-        decompressTruncated(str, ql::span<char>{buffer.data(), buffer.size()});
+    const size_t size = decompressPossiblyTruncated(
+        str, ql::span<char>{buffer.data(), buffer.size()});
     // Strictly less: for a decoder in FSST's zero-terminated mode,
     // `fsst_decompress` overwrites the last byte of a buffer that the result
     // fills completely. The heap buffer below has one spare byte for the same
@@ -172,7 +172,7 @@ class FsstDecoder {
     }
     return detail::decompressToOwnedString(
         size + 1, [this, str, size](ql::span<char> out) {
-          const size_t written = decompressTruncated(str, out);
+          const size_t written = decompressPossiblyTruncated(str, out);
           AD_CORRECTNESS_CHECK(written == size);
           return written;
         });
@@ -258,19 +258,6 @@ class FsstRepeatedDecoder {
   }
 
   // ___________________________________________________________________________
-  // Decompress `str` into `out` without requiring a caller-owned scratch
-  // buffer.
-  [[nodiscard]] size_t decompressInto(std::string_view str,
-                                      ql::span<char> out) const {
-    if constexpr (N == 1) {
-      return decoders_[0].decompressInto(str, out);
-    } else {
-      std::string scratch;
-      return decompressInto(str, out, scratch);
-    }
-  }
-
-  // ___________________________________________________________________________
   // Decompress a single string. Callers that already own an output buffer
   // should use `decompressInto` instead.
   std::string decompress(std::string_view str) const {
@@ -287,7 +274,7 @@ class FsstRepeatedDecoder {
       size_t bufferIdx = 0;
       for (size_t stage = N - 1; stage > 0; --stage) {
         auto& buffer = buffers[bufferIdx];
-        const size_t size = decoders_[stage].decompressTruncated(
+        const size_t size = decoders_[stage].decompressPossiblyTruncated(
             input, ql::span<char>{buffer.data(), buffer.size()});
         // Strictly less, see `FsstDecoder::decompress`.
         if (size >= buffer.size()) {
