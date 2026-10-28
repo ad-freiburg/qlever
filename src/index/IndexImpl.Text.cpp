@@ -69,10 +69,10 @@ IdTable IndexImpl::mergeTextBlockResults(
         reader,
     const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    TextScanMode textScanMode, const SortConfig& sortConfig,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    TextScanMode textScanMode, const SortConfig& sortConfig) const {
   AD_CONTRACT_CHECK(tbmds.size() > 0);
   // Collect all blocks as IdTables
+  const auto& cancellationHandle = sortConfig.cancellationHandle_;
   std::vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
     cancellationHandle->throwIfCancelled();
@@ -111,7 +111,7 @@ IdTable IndexImpl::mergeTextBlockResults(
               return x.compareWithoutLocalVocab(y) < 0;
             });
       },
-      sortConfig, cancellationHandle);
+      sortConfig);
   auto toSort = std::move(result).toStatic<3>();
   // If not entitySearch don't filter duplicates
   if (textScanMode == TextScanMode::WordScan) {
@@ -148,8 +148,7 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 IdTable IndexImpl::getWordPostingsForTerm(
     const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const SortConfig& sortConfig,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const SortConfig& sortConfig) const {
   AD_LOG_DEBUG << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
@@ -158,9 +157,9 @@ IdTable IndexImpl::getWordPostingsForTerm(
     return idTable;
   }
 
-  IdTable result = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
-                                         allocator, TextScanMode::WordScan,
-                                         sortConfig, cancellationHandle);
+  IdTable result =
+      mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds, allocator,
+                            TextScanMode::WordScan, sortConfig);
 
   AD_LOG_DEBUG << "Word postings for term: " << term
                << ": cids: " << result.getColumn(0).size() << '\n';
@@ -171,13 +170,11 @@ IdTable IndexImpl::getWordPostingsForTerm(
 IdTable IndexImpl::getEntityMentionsForWord(
     const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const SortConfig& sortConfig,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const SortConfig& sortConfig) const {
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
   AD_CORRECTNESS_CHECK(!tbmds.empty());
   return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl, tbmds,
-                               allocator, TextScanMode::EntityScan, sortConfig,
-                               cancellationHandle);
+                               allocator, TextScanMode::EntityScan, sortConfig);
 }
 
 // _____________________________________________________________________________

@@ -269,8 +269,7 @@ ResultAndFastPath orderByOnSortedInput(
   // subtree that reports being sorted by these columns.
   auto qec = ad_utility::testing::getQec();
   IdTable table = makeIdTableFromVector(input);
-  IdTableUtils::sort(table, sortedColumns, qec->sortConfig(),
-                     std::make_shared<ad_utility::CancellationHandle<>>());
+  IdTableUtils::sort(table, sortedColumns, qec->sortConfig());
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < table.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));

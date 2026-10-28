@@ -20,7 +20,6 @@
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/Views.h"
-#include "util/blockSort/BlockIndirectSort.h"
 
 namespace {
 // One entity of the knowledge graph and the graph it occurs in. Without a graph
@@ -440,9 +439,7 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   ids.reserve(joinColumn.size());
   ql::ranges::copy_if(joinColumn, std::back_inserter(ids), Id::isDefinedL);
   bool hasUndef = ids.size() != joinColumn.size();
-  ad_utility::blockSort::blockIndirectSort(
-      ids, std::less<>{}, sortConfig().numTasksInFlight_,
-      sortConfig().executor_, cancellationHandle());
+  sortConfig().sort(ids, std::less<>{});
   // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the
   // return types between `std::ranges` and `range-v3`.
   ids.erase(::ranges::unique(ids), ids.end());

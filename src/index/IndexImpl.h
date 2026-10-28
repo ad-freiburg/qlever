@@ -546,13 +546,12 @@ class IndexImpl {
   // the textRecord. The term can be either the wordOrPrefix itself or a word
   // that has wordOrPrefix as a prefix. Returned IdTable has columns:
   // textRecord, word. Sorted by textRecord. If several blocks have to be
-  // merged, they are sorted using the `sortConfig`. The `cancellationHandle`
-  // is checked regularly.
+  // merged, they are sorted using the `sortConfig`, the cancellation handle of
+  // which is also checked once per block.
   IdTable getWordPostingsForTerm(
       const std::string& wordOrPrefix,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const SortConfig& sortConfig,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+      const SortConfig& sortConfig) const;
 
   // Returns a set of textRecords and their corresponding entities and
   // scores. Each textRecord contains its corresponding entity and the term.
@@ -560,13 +559,12 @@ class IndexImpl {
   // textRecord.
   // NOTE: This returns a superset because it contains the whole block and
   // unfitting words are filtered out later by the join with the
-  // TextIndexScanForWords operation. The `sortConfig` and the
-  // `cancellationHandle` are used as in `getWordPostingsForTerm`.
+  // TextIndexScanForWords operation. The `sortConfig` is used as in
+  // `getWordPostingsForTerm`.
   IdTable getEntityMentionsForWord(
       const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const SortConfig& sortConfig,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+      const SortConfig& sortConfig) const;
 
   size_t getIndexOfBestSuitedElTerm(
       const std::vector<std::string>& terms) const;
@@ -901,8 +899,8 @@ class IndexImpl {
    *              record. It is checked that no duplicates occur in one block
    *              but when combining multiple blocks they have to be accounted
    *              for.
-   * @param sortConfig: Used to sort the merged blocks.
-   * @param cancellationHandle: Checked once per block and during the sort.
+   * @param sortConfig: Used to sort the merged blocks. Its cancellation
+   *                    handle is also checked once per block.
    */
   IdTable mergeTextBlockResults(
       absl::FunctionRef<IdTable(const TextBlockMetaData&,
@@ -911,8 +909,7 @@ class IndexImpl {
           reader,
       const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      TextScanMode textScanMode, const SortConfig& sortConfig,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+      TextScanMode textScanMode, const SortConfig& sortConfig) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 

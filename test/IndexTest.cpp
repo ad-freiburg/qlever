@@ -546,8 +546,7 @@ TEST(IndexTest, emptyTextIndex) {
     // Building an empty text index must succeed, and scanning it for any word
     // must yield no postings.
     IdTable result = qec->getIndex().getWordPostingsForTerm(
-        "*", qec->getAllocator(), qec->sortConfig(),
-        std::make_shared<ad_utility::CancellationHandle<>>());
+        "*", qec->getAllocator(), qec->sortConfig());
     EXPECT_EQ(result.size(), 0);
   }
 }
@@ -690,13 +689,11 @@ TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
                 createDocsFileLineAsString(1, "dummy")};
   auto* qec = ad_utility::testing::getQec(std::move(config));
   IdTable helloResult = qec->getIndex().getWordPostingsForTerm(
-      "hello", qec->getAllocator(), qec->sortConfig(),
-      std::make_shared<ad_utility::CancellationHandle<>>());
+      "hello", qec->getAllocator(), qec->sortConfig());
   ASSERT_EQ(helloResult.size(), 1u);
 
   IdTable polygonResult = qec->getIndex().getWordPostingsForTerm(
-      "polygon", qec->getAllocator(), qec->sortConfig(),
-      std::make_shared<ad_utility::CancellationHandle<>>());
+      "polygon", qec->getAllocator(), qec->sortConfig());
   ASSERT_EQ(polygonResult.size(), 1u);
   EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
 }

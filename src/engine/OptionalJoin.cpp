@@ -505,7 +505,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols, sortConfig(), cancellationHandle());
+    IdTableUtils::sort(*result, cols, sortConfig());
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();

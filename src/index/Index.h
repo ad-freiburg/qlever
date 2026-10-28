@@ -173,14 +173,12 @@ class Index {
   IdTable getWordPostingsForTerm(
       const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const SortConfig& sortConfig,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+      const SortConfig& sortConfig) const;
 
   IdTable getEntityMentionsForWord(
       const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const SortConfig& sortConfig,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+      const SortConfig& sortConfig) const;
 
   size_t getIndexOfBestSuitedElTerm(
       const std::vector<std::string>& terms) const;

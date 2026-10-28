@@ -78,7 +78,7 @@ Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
                  (compareScores(lhs, rhs) == 0 &&
                   (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
       },
-      sortConfig(), cancellationHandle());
+      sortConfig());
 
   // Go through the table and add the first n texts for each
   // entity to a new empty table (where n is the limit).

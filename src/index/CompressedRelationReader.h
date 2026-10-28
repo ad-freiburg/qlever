@@ -355,8 +355,7 @@ class CompressedRelationReader {
 
  private:
   // Common implementation of `getResultSizeOfScan` and `getSizeEstimateForScan`
-  // above. The `cancellationHandle` is only used (and then must not be
-  // `nullptr`) if `exactSize` is true.
+  // above. The `cancellationHandle` is only checked if `exactSize` is true.
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecAndBlocks& scanSpecAndBlocks,

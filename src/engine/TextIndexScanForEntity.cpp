@@ -32,8 +32,7 @@ Result TextIndexScanForEntity::computeResult(
   oss << config_;
   runtimeInfo().addDetail("text-index-scan-for-entity-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
-      config_.word_, getExecutionContext()->getAllocator(), sortConfig(),
-      cancellationHandle());
+      config_.word_, getExecutionContext()->getAllocator(), sortConfig());
 
   std::vector<ColumnIndex> cols{0};
   if (hasFixedEntity()) {

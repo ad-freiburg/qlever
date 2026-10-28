@@ -500,8 +500,11 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock,
-                                  nullptr);
+  // Without `exactSize`, no blocks are read, so there is nothing to cancel and
+  // a fresh handle suffices.
+  return getResultSizeImpl<false>(
+      scanSpecAndBlocks, locatedTriplesPerBlock,
+      std::make_shared<ad_utility::CancellationHandle<>>());
 }
 
 // ____________________________________________________________________________

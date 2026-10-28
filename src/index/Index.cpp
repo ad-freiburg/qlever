@@ -106,20 +106,16 @@ size_t Index::getSizeOfTextBlocksSum(const std::string& word,
 IdTable Index::getWordPostingsForTerm(
     const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const SortConfig& sortConfig,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->getWordPostingsForTerm(term, allocator, sortConfig,
-                                        cancellationHandle);
+    const SortConfig& sortConfig) const {
+  return pimpl_->getWordPostingsForTerm(term, allocator, sortConfig);
 }
 
 // ____________________________________________________________________________
 IdTable Index::getEntityMentionsForWord(
     const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const SortConfig& sortConfig,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->getEntityMentionsForWord(term, allocator, sortConfig,
-                                          cancellationHandle);
+    const SortConfig& sortConfig) const {
+  return pimpl_->getEntityMentionsForWord(term, allocator, sortConfig);
 }
 
 // ____________________________________________________________________________

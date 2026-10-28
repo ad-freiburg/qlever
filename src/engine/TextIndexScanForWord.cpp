@@ -34,8 +34,7 @@ Result TextIndexScanForWord::computeResult(
   oss << config_;
   runtimeInfo().addDetail("text-index-scan-for-word-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getWordPostingsForTerm(
-      config_.word_, getExecutionContext()->getAllocator(), sortConfig(),
-      cancellationHandle());
+      config_.word_, getExecutionContext()->getAllocator(), sortConfig());
 
   // This filters out the word column. When the searchword is a prefix this
   // column shows the word the prefix got extended to

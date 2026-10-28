@@ -39,7 +39,6 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
-#include "util/blockSort/BlockIndirectSort.h"
 
 namespace groupBy::detail {
 
@@ -1674,8 +1673,7 @@ template <size_t NUM_GROUP_COLUMNS>
 [[nodiscard]] GroupByImpl::HashMapAggregationData<
     NUM_GROUP_COLUMNS>::ArrayOrVector<std::vector<Id>>
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns(
-    const SortConfig& sortConfig,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const SortConfig& sortConfig) const {
   // Get data in a row-wise manner.
   std::vector<ArrayOrVector<Id>> sortedKeys;
   for (const auto& val : map_) {
@@ -1683,9 +1681,7 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns(
   }
 
   // Sort data.
-  ad_utility::blockSort::blockIndirectSort(
-      sortedKeys, std::less<>{}, sortConfig.numTasksInFlight_,
-      sortConfig.executor_, cancellationHandle);
+  sortConfig.sort(sortedKeys, std::less<>{});
 
   // Get data in a column-wise manner.
   ArrayOrVector<std::vector<Id>> result;
@@ -1881,8 +1877,7 @@ IdTable GroupByImpl::createResultFromHashMap(
   // Create result table, filling in the group values, since they might be
   // required in evaluation
   ad_utility::Timer sortingTimer{ad_utility::Timer::Started};
-  auto sortedKeys =
-      aggregationData.getSortedGroupColumns(sortConfig(), cancellationHandle());
+  auto sortedKeys = aggregationData.getSortedGroupColumns(sortConfig());
   runtimeInfo().addDetail("timeResultSorting", sortingTimer.msecs());
 
   size_t numberOfGroups = aggregationData.getNumberOfGroups();
