@@ -1649,10 +1649,10 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // count their term frequencies.
     if (addHasWordTriples_) {
       std::string_view content = lit.getContent();
-      // Remove the accents before tokenizing: combining marks are not
-      // alphanumeric, so they would otherwise split words.
-      // Owns the content if the accents are removed, so that `content` stays
-      // valid during the tokenization.
+      // With `LowercaseNoAccents`, remove the accents before the tokenization
+      // (combining marks are not alphanumeric and would otherwise split
+      // words). `contentWithoutAccents` owns the result, so that `content`
+      // stays valid during the tokenization.
       std::string contentWithoutAccents;
       if (hasWordNormalization_ ==
           ad_utility::HasWordNormalization::LowercaseNoAccents) {
