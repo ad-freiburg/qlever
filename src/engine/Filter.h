@@ -91,7 +91,8 @@ class Filter : public Operation {
                          qlm::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable.
-  CPP_template(typename Table)(requires IdTableLike<Table>) IdTable
+  CPP_template(typename Table)(requires IdTableLike<Table>)
+  IdTable
       filterIdTable(qlm::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 

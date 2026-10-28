@@ -226,7 +226,7 @@ TEST(Bind, limitIsPropagated) {
            std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
        Variable{"?b"}}};
 
-  bind.applyLimitOffset({1, 1});
+  bind.applyLimitOffset({1, 1}, false);
   EXPECT_EQ(bind.getChildren().at(0)->getRootOperation()->getLimitOffset(),
             LimitOffsetClause(1, 1));
   // We expect that the original subtree is unchanged.

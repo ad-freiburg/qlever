@@ -50,8 +50,8 @@ class Timer {
   // Convert any `std::chrono::duration` to the underlying `Duration` type
   // of the `Timer` class.
   CPP_template(typename T)(
-      requires ad_utility::isInstantiation<T, chr::duration>) static Duration
-      toDuration(T duration) {
+      requires ad_utility::isInstantiation<T, chr::duration>)
+  static Duration toDuration(T duration) {
     return chr::duration_cast<Duration>(duration);
   }
 

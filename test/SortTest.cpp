@@ -11,9 +11,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -24,6 +26,7 @@
 
 using namespace std::string_literals;
 using ad_utility::source_location;
+using V = Variable;
 
 namespace {
 
@@ -267,7 +270,7 @@ TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
   EXPECT_TRUE(sort.makeSortedTree({1, 0}).has_value());
   // With a `LIMIT` the sort order determines which rows are part of the result,
   // so an additional `Sort` has to be placed on top of this operation instead.
-  sort.applyLimitOffset({1});
+  sort.applyLimitOffset({1}, false);
   EXPECT_FALSE(sort.makeSortedTree({1, 0}).has_value());
 }
 
@@ -537,7 +540,7 @@ TEST(Sort, limitOffsetIsPropagated) {
       qec, std::move(inputTable), vars);
 
   Sort sort{qec, subtree, {0}};
-  sort.applyLimitOffset({2, 1});
+  sort.applyLimitOffset({2, 1}, false);
 
   EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),
             LimitOffsetClause(2, 1));
@@ -559,7 +562,7 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
   ASSERT_NE(sort, nullptr);
   EXPECT_EQ(sort->handlesLimitOffset(), LimitOffsetHandling::NONE);
 
-  sort->applyLimitOffset({2, 1});
+  sort->applyLimitOffset({2, 1}, false);
 
   EXPECT_EQ(sort->getLimitOffset(), LimitOffsetClause(2, 1));
   EXPECT_TRUE(sort->getChildren()
@@ -568,4 +571,82 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
                   ->getLimitOffset()
                   .isUnconstrained());
   EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables the `Sort` sorts by, translates
+// `sortColumnIndices_` accordingly, and adds a `StripColumns` operation for
+// the sort variables that the parent did not request.
+TEST(Sort, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::ElementsAre;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 6, 3, 5}, {3, 5, 5, 4}, {1, 2, 5, 1}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<ColumnIndex> sortColumnIndices,
+                   std::set<V> requestedVariables) {
+    Sort sort{qec, values, sortColumnIndices};
+    auto tree = sort.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `Sort` on `?b`, only `?b` requested: the result has only `?b`, the
+  // `Sort` now sorts by column 0.
+  {
+    auto tree = strip({1}, {V{"?b"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Sort>(
+                    {V{"?b"}}, matchesIdTableFromVector({{1}, {2}, {5}, {6}})));
+  }
+
+  // `Sort` by `?b` and `?d`, `?a`, `?b` and `?d` requested: `?c` is stripped
+  // and the columns are renumbered.
+  {
+    auto tree = strip({1, 3}, {V{"?a"}, V{"?b"}, V{"?d"}});
+    auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+    ASSERT_TRUE(sort);
+    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(1, 2));
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree = strip({1}, {V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // `Sort` on `?b`, only `?c` requested: the `Sort` keeps `?b` and `?c`,
+  // a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({1}, {V{"?c"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?c"}}, matchesIdTableFromVector({{3}, {5}, {5}, {3}})));
+
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Sort>({V{"?b"}, V{"?c"}},
+                                        matchesIdTableFromVector(
+                                            {{1, 3}, {2, 5}, {5, 5}, {6, 3}})));
+  }
+
+  // All variables requested: nothing is stripped and the indices stay.
+  {
+    auto tree = strip({0}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    EXPECT_THAT(
+        tree.get(),
+        isStrippedColumns<Sort>(
+            {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
+            matchesIdTableFromVector(
+                {{1, 2, 5, 1}, {2, 6, 3, 5}, {3, 5, 5, 4}, {6, 1, 3, 6}})));
+  }
 }

@@ -552,11 +552,11 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
       if (auto encodedId = encodedIriManager_->encode(iriString)) {
         return TripleComponent{*encodedId};
       }
-      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           iriString);
     } else {
       static_assert(ad_utility::isSimilar<T, Literal>);
-      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           item.toSparql());
     }
   };
@@ -1968,7 +1968,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+    return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
         visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     return std::visit(

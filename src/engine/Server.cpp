@@ -619,9 +619,8 @@ std::optional<std::string> checkAndLogParameterSetting(
 
 // Create a factory for a bound version of `createJsonResponse` with
 // `request` as the second bound argument.
-CPP_template(typename RequestT)(
-    requires HttpRequest<RequestT>) auto makeJsonResponseFactory(const RequestT&
-                                                                     request) {
+CPP_template(typename RequestT)(requires HttpRequest<RequestT>)
+auto makeJsonResponseFactory(const RequestT& request) {
   return [&request](const nlohmann::json& j) {
     return createJsonResponse(j, request);
   };

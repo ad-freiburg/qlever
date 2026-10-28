@@ -97,6 +97,13 @@ std::unique_ptr<Operation> GroupBy::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+GroupBy::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  return _impl->makeTreeWithStrippedColumns(requestedVariables);
+}
+
+// _____________________________________________________________________________
 const GroupByImpl& GroupBy::getImpl() const { return *_impl; }
 
 // _____________________________________________________________________________
