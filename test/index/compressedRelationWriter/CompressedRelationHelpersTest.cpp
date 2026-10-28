@@ -10,6 +10,7 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,7 +37,7 @@ std::vector<Id> col0Column(const std::vector<int64_t>& ids) {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the `<= 0.8 * blocksize` rule for small relations at the boundary.
 TEST(CompressedRelationHelpers, isSmallRelation) {
   EXPECT_TRUE(isSmallRelation(0, 10));
   EXPECT_TRUE(isSmallRelation(8, 10));
@@ -44,7 +45,8 @@ TEST(CompressedRelationHelpers, isSmallRelation) {
   EXPECT_FALSE(isSmallRelation(100, 10));
 }
 
-// _____________________________________________________________________________
+// Test that `findEndOfRun` finds the end of a run of equal `col0` IDs, for
+// short and for long runs.
 TEST(CompressedRelationHelpers, findEndOfRun) {
   auto col0 = col0Column({1, 1, 2, 3, 3, 3, 3, 3, 3, 3, 4});
   EXPECT_EQ(findEndOfRun(col0, 0), 2);
@@ -54,7 +56,8 @@ TEST(CompressedRelationHelpers, findEndOfRun) {
   EXPECT_EQ(findEndOfRun(col0, 10), 11);
 }
 
-// _____________________________________________________________________________
+// Test that `findFirstTripleChange` ignores the graph column and returns
+// `end` if there is no change.
 TEST(CompressedRelationHelpers, findFirstTripleChange) {
   // The fourth column (the graph) is ignored.
   auto rows = makeIdTableFromVector(
@@ -69,7 +72,8 @@ TEST(CompressedRelationHelpers, findFirstTripleChange) {
   EXPECT_EQ(findFirstTripleChange(rows, 4, 5, lastTriple), 5);
 }
 
-// _____________________________________________________________________________
+// Test that `forEachSliceOfLargeBlock` cuts slices of about `blocksize` rows
+// and never splits equal triples.
 TEST(CompressedRelationHelpers, forEachSliceOfLargeBlock) {
   auto slices = [](const IdTable& rows, size_t blocksize) {
     std::vector<std::pair<size_t, size_t>> result;
@@ -100,7 +104,8 @@ TEST(CompressedRelationHelpers, forEachSliceOfLargeBlock) {
               ::testing::ElementsAre(P{0, 1}, P{1, 4}, P{4, 5}, P{5, 6}));
 }
 
-// _____________________________________________________________________________
+// Test that the `TripleAlignedBlockBuffer` keeps the equal triples at the
+// boundaries of the input blocks in one block.
 TEST(CompressedRelationHelpers, TripleAlignedBlockBuffer) {
   auto toVector = [](const std::optional<IdTable>& block) {
     std::vector<int64_t> result;
@@ -143,7 +148,8 @@ TEST(CompressedRelationHelpers, TripleAlignedBlockBuffer) {
   EXPECT_FALSE(emptyBuffer.finish().has_value());
 }
 
-// _____________________________________________________________________________
+// Test the metadata of a large relation (the multiplicities and the missing
+// offset).
 TEST(CompressedRelationWriter, makeLargeRelationMetadata) {
   auto md = CompressedRelationWriter::makeLargeRelationMetadata(V(7), 10, 5);
   EXPECT_EQ(md.col0Id_, V(7));
@@ -161,7 +167,7 @@ TEST(CompressedRelationWriter, makeLargeRelationMetadata) {
       ::testing::HasSubstr("numRows != 0"));
 }
 
-// _____________________________________________________________________________
+// Test the capacity rules and the checks of the `SmallRelationsBlockBuilder`.
 TEST(SmallRelationsBlockBuilder, buildBlocks) {
   // Three small relations with the `col0` IDs 1, 2, and 3.
   auto relations = makeIdTableFromVector(
@@ -245,25 +251,34 @@ class RecordingCutter : public RelationBlockCutter<RecordingCutter> {
   std::vector<std::string> events_;
   size_t numTriples_ = 0;
   bool allowShortcuts_;
+  size_t numColumns_;
   SmallRelationsBlockBuilder builder_;
 
-  RecordingCutter(size_t blocksize, bool allowShortcuts)
-      : Base{blocksize, IdTable{3, ad_utility::makeUnlimitedAllocator<Id>()}},
+  RecordingCutter(size_t blocksize, bool allowShortcuts, size_t numColumns = 3)
+      : Base{blocksize, emptyTable(numColumns)},
         allowShortcuts_{allowShortcuts},
-        builder_{IdTable{3, ad_utility::makeUnlimitedAllocator<Id>()},
-                 blocksize} {}
+        numColumns_{numColumns},
+        builder_{emptyTable(numColumns), blocksize} {}
 
-  // Process the given `rows`, see `RelationBlockCutter::addInputBlock`.
+  // Process the given `rows` (all their columns in their order), see
+  // `RelationBlockCutter::addInputBlock`.
   void add(const IdTable& rows) {
+    AD_CONTRACT_CHECK(rows.numColumns() == numColumns_);
+    std::vector<ColumnIndex> allColumns(numColumns_);
+    std::iota(allColumns.begin(), allColumns.end(), 0);
     addInputBlock(
         std::make_shared<const IdTableStatic<0>>(rows.clone().toStatic<0>()), 0,
-        {0, 1, 2});
+        allColumns);
   }
 
   // Finish the last relation, as a permutation writer does at the end.
   void finish() { finishRelation(); }
 
  private:
+  static IdTable emptyTable(size_t numColumns) {
+    return IdTable{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
+  }
+
   static std::string col0(Id id) {
     return std::to_string(id.getVocabIndex().get());
   }
@@ -303,7 +318,7 @@ class RecordingCutter : public RelationBlockCutter<RecordingCutter> {
                                    col0(lastCol0Id), " ", end - begin, " ",
                                    numRelations));
     if (!builder_.fits(end - begin)) {
-      builder_.takeBlock(IdTable{3, ad_utility::makeUnlimitedAllocator<Id>()});
+      builder_.takeBlock(emptyTable(numColumns_));
     }
     builder_.add(firstCol0Id, lastCol0Id, permutedCols, begin, end);
   }
@@ -331,7 +346,8 @@ IdTable cutterInput() {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the cutting of an input block with the optional hooks enabled (the
+// default of the `PermutationWriter`).
 TEST(RelationBlockCutter, withShortcuts) {
   RecordingCutter cutter{4, true};
   cutter.add(cutterInput());
@@ -347,7 +363,8 @@ TEST(RelationBlockCutter, withShortcuts) {
   EXPECT_EQ(cutter.numTriples_, 14);
 }
 
-// _____________________________________________________________________________
+// Test the cutting of the same input block with the optional hooks disabled,
+// where everything goes through the `relation_` buffer.
 TEST(RelationBlockCutter, withoutShortcuts) {
   RecordingCutter cutter{4, false};
   cutter.add(cutterInput());
@@ -361,20 +378,25 @@ TEST(RelationBlockCutter, withoutShortcuts) {
   EXPECT_EQ(cutter.numTriples_, 14);
 }
 
-// _____________________________________________________________________________
+// Test a large relation that spans two input blocks, where the buffer is full
+// at the boundary and the equal triples of the next input block grow it
+// beyond the `blocksize`.
 TEST(RelationBlockCutter, relationContinuesInNextBlock) {
-  // The large relation 1 spans two input blocks, and its equal triples
-  // (which differ only in the last column) at the boundary of the input
-  // blocks end up in the same block.
-  RecordingCutter cutter{2, true};
-  cutter.add(makeIdTableFromVector({{1, 0, 0}, {1, 1, 0}, {1, 2, 0}}));
-  cutter.add(makeIdTableFromVector({{1, 2, 1}, {1, 3, 0}, {2, 0, 0}}));
+  // The large relation 1 spans two input blocks with four columns (the fourth
+  // is the graph), with the equal triples `{1, 3, 0, 0}` and `{1, 3, 0, 1}` at
+  // the boundary.
+  RecordingCutter cutter{2, true, 4};
+  cutter.add(makeIdTableFromVector(
+      {{1, 0, 0, 0}, {1, 1, 0, 0}, {1, 2, 0, 0}, {1, 3, 0, 0}}));
+  cutter.add(makeIdTableFromVector({{1, 3, 0, 1}, {1, 4, 0, 0}, {2, 0, 0, 0}}));
   cutter.finish();
-  // In the first block, the rows `{1, 0, 0}` and `{1, 1, 0}` can be written
-  // directly, but `{1, 2, 0}` has to be buffered. In the second block, the
-  // buffer is full, but `{1, 2, 1}` continues its last triple.
+  // In the first block, the first two rows are written directly, and the other
+  // two fill the buffer, which cannot be written yet, because `{1, 3, 0, 0}`
+  // may continue in the next block. There, `{1, 3, 0, 1}` is equal to the last
+  // buffered triple and grows the buffer to three rows before the block is
+  // written.
   EXPECT_THAT(cutter.events_,
-              ::testing::ElementsAre("direct 2", "buffered 2",
+              ::testing::ElementsAre("direct 2", "buffered 3",
                                      "finish 1 large 1", "finish 2 small 1"));
-  EXPECT_EQ(cutter.numTriples_, 6);
+  EXPECT_EQ(cutter.numTriples_, 7);
 }
