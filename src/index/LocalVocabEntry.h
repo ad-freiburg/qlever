@@ -43,10 +43,10 @@ class LocalVocabEntryFactory;
 // *internal* order, see `ValueId::compareThreeWay`). Without a secondary
 // vocabulary (see `index/vocabulary/SecondaryVocabulary.h`) that order
 // coincides with the semantic (that is, by string value) order, except for the
-// encoded IRIs
-// (see `LocalVocabContext::encodeAsId`), which are ordered by their encoding
-// (a pre-existing deviation that is tracked separately, see the note at
-// `compareThreeWay` below). As soon as an index has such a vocabulary, the two
+// encoded IRIs (see `LocalVocabContext::encodeAsId`), which are ordered by
+// their encoding (a pre-existing deviation that is tracked separately, see the
+// note at `valueIdComparators::detail::compareIdsImpl`). As soon as an index
+// has such a vocabulary, the two
 // orders differ much more fundamentally: a word of the secondary vocabulary is
 // positioned after *all* words of the main vocabulary, no matter what it is. An
 // entry whose word is stored in the secondary vocabulary therefore compares
@@ -190,14 +190,16 @@ class alignas(16) LocalVocabEntry
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   //
-  // The bounds are `Id`s of type `VocabIndex`, `EncodedVal`, or
-  // `SecondaryVocabIndex` (the latter only if the index has a secondary
-  // vocabulary that contains this word, see the warning in the class comment
-  // above), and this entry compares exactly like an `Id` at that position.
+  // The bounds are `Id`s of type `VocabIndex` or `SecondaryVocabIndex` (the
+  // latter only if the index has a secondary vocabulary that contains this
+  // word, see the warning in the class comment above), and this entry compares
+  // exactly like an `Id` at that position. They are never of type `EncodedVal`,
+  // because an IRI that is encoded directly in an `Id` is never stored in a
+  // `LocalVocabEntry` (see `toIdOrLocalVocabEntry`).
   // NOTE: An `Id` of an unrelated datatype (like `Int` or `Date`) is
   // deliberately *not* compared to this position, but to the datatype bits of
-  // the `LocalVocabIndex`, which yields the same result unless the bounds are
-  // of type `EncodedVal`, see the note at `ValueId::compareThreeWay`.
+  // the `LocalVocabIndex`, which yields the same result, see the note at
+  // `ValueId::compareThreeWay`.
   struct PositionInVocab {
     IdProxy lowerBound_;
     IdProxy upperBound_;
@@ -245,12 +247,8 @@ class alignas(16) LocalVocabEntry
   // `LocalVocab` to each other, and never to an `Id` of the index (which needs
   // the position anyway).
   //
-  // NOTE: This shortcut also means that an entry whose word is an encoded IRI
-  // (see `LocalVocabContext::encodeAsId`) is compared by its string value here,
-  // but by its encoding when the corresponding `Id`s are compared. That
-  // inconsistency is pre-existing and tracked separately, see the note at
-  // `valueIdComparators::detail::compareIdsImpl`. Note also that `operator==`
-  // below never looks up the position, no matter which vocabularies exist.
+  // NOTE: `operator==` below never looks up the position, no matter which
+  // vocabularies exist.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 

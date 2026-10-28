@@ -702,9 +702,11 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
       ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
   // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is
   // one that is greater, and neither of them is a datatype that a position in
-  // the vocabularies can have.
+  // the vocabularies can have. The same holds for `EncodedVal`, because an
+  // encoded IRI is never stored in a `LocalVocabEntry`.
   ValueId intId = ValueId::makeFromInt(42);
   ValueId dateId = ValueId::makeFromDate(DateYearOrDuration{Date{2026, 8, 19}});
+  ValueId encodedId = ValueId::makeFromEncodedVal(42);
 
   // `isDatatypeOfPositionInVocab(type) == true` and
   // `otherType == LocalVocabIndex`: the position of the entry is compared to
@@ -728,6 +730,7 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // the bits are compared instead.
   EXPECT_LT(intId, localVocabId);
   EXPECT_GT(dateId, localVocabId);
+  EXPECT_GT(encodedId, localVocabId);
 
   // `isDatatypeOfPositionInVocab(type) == false` and
   // `otherType != LocalVocabIndex`, because `type == LocalVocabIndex`. This is
@@ -745,6 +748,7 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // compared.
   EXPECT_GT(localVocabId, intId);
   EXPECT_LT(localVocabId, dateId);
+  EXPECT_LT(localVocabId, encodedId);
   // NOTE: For the second condition, the combination
   // `type != LocalVocabIndex` and `isDatatypeOfPositionInVocab(otherType) ==
   // true` is unreachable by the same argument as above: `type !=
