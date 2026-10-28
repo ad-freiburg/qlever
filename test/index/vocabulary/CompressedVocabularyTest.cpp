@@ -205,8 +205,10 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchRejectsEmptyIndices) {
       std::vector<std::string>{"alpha", "beta"});
   ql::span<const size_t> noIndices{};
   ArenaVocabBatchBuilder builder(1);
-  EXPECT_ANY_THROW(vocab.lookupBatch(noIndices, builder));
-  EXPECT_ANY_THROW(static_cast<void>(vocab.lookupBatch(noIndices)));
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(noIndices, builder),
+                               ::testing::HasSubstr("!indices.empty()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(vocab.lookupBatch(noIndices)),
+                               ::testing::HasSubstr("!indices.empty()"));
 }
 
 // _____________________________________________________________________________
@@ -665,8 +667,8 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchAcrossDecoderBlocks) {
                                        "iota",  "kappa", "",      "lambda"};
 
   const std::string filename = std::string{gtestCurrentTestName()} + "-blocks";
-  ad_utility::deleteFile(filename, false);
   CompressedVocabulary<VocabularyInMemory, TypeParam, 2> vocab;
+  auto cleanup = makeVocabFileCleanup<decltype(vocab)>(filename);
   {
     auto writerPtr = vocab.makeDiskWriterPtr(filename);
     writeWordsAndFinish(*writerPtr, words);
@@ -689,18 +691,10 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchAcrossDecoderBlocks) {
   EXPECT_EQ(result[6], "");
 
   // All views yielded by the result must stay intact while the result object
-  // is alive, even after unrelated allocations have run in between. The
-  // append forces a real heap reallocation of `unrelatedAllocation` after
-  // `lookupBatch` produced the views, so a dangling view would be exposed
-  // by the comparison loop below.
-  std::string unrelatedAllocation;
-  unrelatedAllocation.append(64, 'x');
-  ASSERT_EQ(unrelatedAllocation.size(), 64u);
-  EXPECT_EQ(unrelatedAllocation, std::string(64, 'x'));
+  // is alive (see `LookupBatchShortWordViewsStayValid` for the stack clobbering
+  // variant of this check).
   for (size_t i = 0; i < indices.size(); ++i) {
     const size_t idx = indices[i];
     EXPECT_EQ(result[i], vocab[idx]) << "at vocabulary index " << idx;
   }
-
-  ad_utility::deleteFile(filename);
 }

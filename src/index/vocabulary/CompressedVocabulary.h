@@ -181,26 +181,33 @@ class CompressedVocabulary {
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const {
     AD_CONTRACT_CHECK(!indices.empty());
-    auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
-    AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
-
-    for (const auto& [idx, compressedWord] :
-         ::ranges::views::zip(indices, compressedWords)) {
-      size_t decoderIdx;
-      if constexpr (underlyingHasHoles) {
-        const auto position = underlyingVocabulary_.positionOfIndex(idx);
+    if constexpr (underlyingHasHoles) {
+      // The vocabulary with holes has no real batch implementation (its
+      // `lookupBatch` is the per-word fallback), so we resolve the position of
+      // each index exactly once, like `operator[]` does, and read the
+      // compressed word directly.
+      for (size_t idx : indices) {
+        auto position = underlyingVocabulary_.positionOfIndex(idx);
         if (!position.has_value()) {
           builder.appendWord(
               ad_utility::vocabulary::placeholderForMissingVocabIndex(idx));
           continue;
         }
-        decoderIdx = getDecoderIdxFromPosition(position.value());
-      } else {
-        decoderIdx = getDecoderIdx(idx);
+        builder.appendWord(compressionWrapper_.decompress(
+            underlyingVocabulary_.wordAtPosition(position.value()),
+            getDecoderIdxFromPosition(position.value())));
       }
-      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
-      builder.appendWord(
-          compressionWrapper_.decompress(compressedWord, decoderIdx));
+    } else {
+      auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
+      AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
+
+      for (const auto& [idx, compressedWord] :
+           ::ranges::views::zip(indices, compressedWords)) {
+        size_t decoderIdx = getDecoderIdx(idx);
+        AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
+        builder.appendWord(
+            compressionWrapper_.decompress(compressedWord, decoderIdx));
+      }
     }
   }
 
