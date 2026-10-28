@@ -297,7 +297,9 @@ Filter::makeTreeWithStrippedColumns(
   // the `Filter` operation filters on.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
-  varsRequiredFromSubtree.addVarsFromExpression(_expression);
+  bool isAggregate = varsRequiredFromSubtree.addVarsFromExpression(_expression);
+  // Aggregate functions are not allowed in a `Filer` clause
+  AD_CORRECTNESS_CHECK(!isAggregate);
 
   // Strip the subtree.
   auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);

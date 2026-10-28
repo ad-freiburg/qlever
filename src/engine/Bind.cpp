@@ -280,7 +280,9 @@ Bind::makeTreeWithStrippedColumns(
       &requestedVariables);
   bool bindTargetRequested = requestedVariables.contains(_bind._target);
   if (bindTargetRequested) {
-    varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
+    bool isAggregate = varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
+    // Aggregate functions are not allowed in a `Bind` clause
+    AD_CORRECTNESS_CHECK(!isAggregate);
   }
 
   // Strip the subtree and only keep `Bind` operation in the
