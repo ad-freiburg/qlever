@@ -27,10 +27,16 @@ TEST(GTestHelpersTest, CurrentTestSuiteAndTestName) {
 }
 
 // _____________________________________________________________________________
-class GTestHelpersParameterizedTest
-    : public ::testing::TestWithParam<const char*> {};
+class GTestHelpersParameterizedTest : public ::testing::TestWithParam<int> {};
 
 TEST_P(GTestHelpersParameterizedTest, SlashesAreReplaced) {
+  // The raw gtest names of this instantiation contain a '/' (from the
+  // `CustomInstantiation/` prefix and the parameter index), so the checks below
+  // actually exercise the sanitizing. The parameter value itself is irrelevant.
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  EXPECT_THAT(std::string{testInfo->test_suite_name()},
+              ::testing::HasSubstr("/"));
   const std::string suiteName = gtestCurrentTestSuiteName();
   const std::string testName = gtestCurrentTestName();
   EXPECT_THAT(suiteName, ::testing::Not(::testing::HasSubstr("/")));
@@ -40,10 +46,13 @@ TEST_P(GTestHelpersParameterizedTest, SlashesAreReplaced) {
 }
 
 INSTANTIATE_TEST_SUITE_P(CustomInstantiation, GTestHelpersParameterizedTest,
-                         ::testing::Values("param/1"));
+                         ::testing::Values(1));
 
 // _____________________________________________________________________________
-// Return true iff `pointer` points inside the object storage of `object`.
+// Return true iff `pointer` points inside the object storage of `object`. A
+// string keeps its characters inline (SSO) iff `data()` points into the string
+// object itself; this address check complements the allocation counting in
+// `SsoCapacityOfPmrString`.
 template <typename T>
 static bool pointsIntoObject(const void* pointer, const T& object) {
   const auto start = reinterpret_cast<std::uintptr_t>(&object);
@@ -53,14 +62,14 @@ static bool pointsIntoObject(const void* pointer, const T& object) {
 
 // _____________________________________________________________________________
 TEST(GTestHelpersTest, PmrStringSsoCapacity) {
-  // Ensure that the discovered capacity is usable: strings up to that size are
-  // stored inside the object, and a string with one additional character is
-  // not.
+  // The probed capacity must be exact: a string of that size is stored inside
+  // the object, and a string with one additional character is not. The second
+  // check shows that the capacity is the maximum and not merely a lower bound.
   const size_t capacity = SsoCapacityOfPmrString();
   // A zero capacity means this platform offers no inline string storage at
   // all, so every SSO-dependent assertion below would be meaningless there.
   // All supported STLs provide SSO; this states the premise explicitly
-  // instead of tripping the `maxSize > 0` contract inside
+  // instead of tripping the `minCapacity > 0` contract inside
   // `requireSsoCapacityOfPmrStringAtLeast` with a confusing message.
   ASSERT_GT(capacity, 0u) << "This platform offers no inline string storage, "
                              "so the SSO assertions below are meaningless";
@@ -73,10 +82,10 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
 
 // _____________________________________________________________________________
 TEST(GTestHelpersTest, RequirePmrStringInlineStorageRejectsInvalidSizes) {
-  // `maxSize == 0` violates the precondition, and a size above the probed
-  // capacity violates the platform premise; both must throw.
+  // `minCapacity == 0` violates the precondition, and a size above the probed
+  // capacity violates the platform premise.
   AD_EXPECT_THROW_WITH_MESSAGE(requireSsoCapacityOfPmrStringAtLeast(0),
-                               ::testing::HasSubstr("maxSize > 0"));
+                               ::testing::HasSubstr("minCapacity > 0"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       requireSsoCapacityOfPmrStringAtLeast(SsoCapacityOfPmrString() + 1),
       ::testing::HasSubstr("Platform premise violated"));
@@ -87,7 +96,7 @@ TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
   // Verify that empty and small strings use inline storage: the data must lie
   // inside the string object itself, not in allocator-provided memory.
   for (const size_t size : {size_t{0}, size_t{7}, size_t{15}}) {
-    // `maxSize == 0` is a rejected precondition, so probe from 1 on.
+    // `minCapacity == 0` is a rejected precondition, so probe from 1 on.
     if (size > 0) {
       requireSsoCapacityOfPmrStringAtLeast(size);
     }
@@ -95,8 +104,9 @@ TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
     EXPECT_TRUE(pointsIntoObject(shortString.data(), shortString));
     EXPECT_EQ(shortString.size(), size);
   }
-  // Verify that a string above the SSO threshold is not stored inside the
-  // object.
+  // 64 characters exceed the SSO capacity of every supported STL (22 for
+  // libc++, 15 for libstdc++), so this string must live in allocator-provided
+  // memory.
   const detail::PmrSsoProbeString longString(64, 'y');
   EXPECT_FALSE(pointsIntoObject(longString.data(), longString));
 }

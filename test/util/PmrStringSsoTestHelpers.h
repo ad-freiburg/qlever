@@ -13,7 +13,6 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstddef>
-#include <memory_resource>
 #include <string>
 
 #include "backports/memory_resource.h"
@@ -31,12 +30,10 @@ using PmrSsoProbeString =
 }  // namespace detail
 
 // _____________________________________________________________________________
-// Return the largest number of characters that a `PmrSsoProbeString` is
-// guaranteed by this helper to store inside its own object storage (SSO).
-// See also `clobberStack` in `util/DanglingViewTestHelpers.h`. The SSO
-// capacity of `std::basic_string` is implementation-defined (e.g. 15 characters
-// for libstdc++ and 22 for libc++), so it is determined here by probing rather
-// than hardcoded.
+// Return the largest number of characters that a `PmrSsoProbeString` stores
+// inside its own object storage (SSO), or 0 if it stores none. The SSO capacity
+// of `std::basic_string` is implementation-defined (e.g. 15 characters for
+// libstdc++ and 22 for libc++), so it is probed rather than hardcoded.
 inline size_t SsoCapacityOfPmrString() {
   // A counting memory resource lets us detect an allocation directly instead of
   // guessing from pointer addresses: a string uses SSO exactly when
