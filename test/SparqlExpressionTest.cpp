@@ -2350,7 +2350,20 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   auto checkTransform =
       std::bind_front(testNaryExpression, &makeTransformExpression);
-  // TODO: use it
+  auto examplePoint = geoLit("POINT(1 2)");
+  checkTransform(
+      IdOrLocalVocabEntryVec{
+          geoLit("POINT(1 2)"), U,
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                 "POINT(111319.490793 222684.208506)")},
+      IdOrLocalVocabEntryVec{examplePoint, examplePoint, examplePoint,
+                             examplePoint},
+      IdOrLocalVocabEntryVec{
+          iriref("<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"),
+          iriref("<http://www.opengis.net/bla/bli/>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/4326>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/3857>")});
 
   // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =

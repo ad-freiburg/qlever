@@ -187,7 +187,55 @@ TEST(GeoSparqlHelpers, WktTypeIri) {
 }
 
 TEST(GeoSparqlHelpers, WktTransform) {
-  // TODO
+  using namespace ad_utility::triple_component;
+  using ad_utility::GeoPointOrWkt;
+  using ad_utility::WktTransform;
+  auto anyWkt = [](std::string_view wkt) {
+    auto lit = Literal::literalWithoutQuotes(wkt);
+    lit.addDatatype(ad_utility::detail::wktLiteralIri);
+    return sparqlExpression::IdOrLiteralOrIri{LiteralOrIri{std::move(lit)}};
+  };
+  // From `GeoPoint` to other CRS.
+  GeoPoint examplePoint{2, 1};
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{examplePoint},
+                     Iri::fromStringRepresentation(
+                         "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>")),
+      anyWkt("POINT(1 2)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint},
+                           Iri::fromStringRepresentation(
+                               "<http://www.opengis.net/def/crs/EPSG/0/4326>")),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint},
+                           Iri::fromStringRepresentation(
+                               "<http://www.opengis.net/def/crs/EPSG/0/3857>")),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+
+  // From `std::string` to other CRS.
+  std::string exampleWkt{
+      "\"POINT(1 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{exampleWkt},
+                     Iri::fromStringRepresentation(
+                         "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>")),
+      anyWkt("POINT(1 2)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWkt},
+                           Iri::fromStringRepresentation(
+                               "<http://www.opengis.net/def/crs/EPSG/0/4326>")),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWkt},
+                           Iri::fromStringRepresentation(
+                               "<http://www.opengis.net/def/crs/EPSG/0/3857>")),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+
+  // Unsupported CRS.
+  sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint},
+                           Iri::fromStringRepresentation(
+                               "<http://www.opengis.net/def/unsupported>")),
+            undef);
 }
 
 }  // namespace

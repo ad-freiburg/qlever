@@ -91,6 +91,9 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
 std::optional<std::string> transformAsWkt(GeoPointOrWkt wkt,
                                           const std::string& iri) {
   ::util::geo::CRSType crs = ::util::geo::getCRSType(iri);
+  if (crs == ::util::geo::CRSType::UNSUPPORTED) {
+    return std::nullopt;
+  }
   auto parseResult = parseGeoPointOrWkt(wkt, crs);
   auto wktResult = utilGeomToWkt(parseResult.parsedWkt_);
   if (!wktResult.has_value()) {
