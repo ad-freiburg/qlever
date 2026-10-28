@@ -13,17 +13,24 @@
 
 #include "backports/keywords.h"
 #include "engine/OrderByComparator.h"
-#include "engine/QueryExecutionContext.h"
+#include "engine/VariableToColumnMap.h"
+#include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/CancellationHandle.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VectorWithMemoryLimit.h"
 #include "util/VisitMixin.h"
+
+// Forward declaration, to not include the expensive
+// `engine/QueryExecutionContext.h` in every file that uses expressions.
+class QueryExecutionContext;
 
 namespace sparqlExpression {
 
@@ -187,6 +194,11 @@ struct EvaluationContext {
   // change in the future so we hide the implementation details behind this
   // function.
   const LocalVocabContext& getLocalVocabContext() const;
+
+  // Return the index of `_qec`. This function is not inline, so that this
+  // header does not have to include the expensive
+  // `engine/QueryExecutionContext.h`.
+  const IndexImpl& getIndexImpl() const;
 };
 
 namespace detail {

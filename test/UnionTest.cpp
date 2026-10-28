@@ -16,6 +16,7 @@
 #include "engine/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
+#include "parser/SparqlTriple.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 

@@ -13,6 +13,7 @@
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"

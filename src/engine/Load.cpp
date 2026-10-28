@@ -10,6 +10,8 @@
 #include "global/RuntimeParameters.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/BlankNodeAdder.h"
+#include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________

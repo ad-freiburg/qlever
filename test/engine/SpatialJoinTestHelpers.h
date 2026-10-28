@@ -13,6 +13,7 @@
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "parser/SparqlTriple.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
 

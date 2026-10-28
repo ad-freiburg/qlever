@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/SparqlTriple.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"

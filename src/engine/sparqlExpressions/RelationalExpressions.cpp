@@ -8,6 +8,7 @@
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "rdfTypes/GeoSparqlHelpers.h"

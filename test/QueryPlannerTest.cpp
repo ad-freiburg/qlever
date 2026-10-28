@@ -17,6 +17,7 @@
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
+#include "util/ParseException.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"

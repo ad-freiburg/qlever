@@ -20,6 +20,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/ParseException.h"
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;

@@ -8,6 +8,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/Constants.h"
 #include "global/Id.h"

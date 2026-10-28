@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"

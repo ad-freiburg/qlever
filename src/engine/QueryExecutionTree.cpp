@@ -19,6 +19,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 

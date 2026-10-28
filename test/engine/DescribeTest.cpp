@@ -14,6 +14,7 @@
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
+#include "parser/SparqlTriple.h"
 
 using namespace ad_utility::testing;
 

@@ -15,6 +15,7 @@
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/Union.h"
+#include "parser/SparqlTriple.h"
 
 using namespace ad_utility::testing;
 

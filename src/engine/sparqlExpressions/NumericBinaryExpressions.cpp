@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 #include "engine/sparqlExpressions/BinaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 

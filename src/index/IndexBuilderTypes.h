@@ -23,7 +23,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/memory_resource.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"

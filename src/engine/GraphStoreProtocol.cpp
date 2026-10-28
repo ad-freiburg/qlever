@@ -121,8 +121,8 @@ ParsedQuery GraphStoreProtocol::transformHead(
   auto pq = transformGet(graph, encodedIriManager);
   // HEAD does the same as GET except that the response has no body.
   // Overwrite the body to be empty.
-  pq.responseMiddleware_ =
-      ResponseMiddleware([](ResponseMiddleware::ResponseT&& response) {
+  pq.responseMiddleware_ = std::make_shared<const ResponseMiddleware>(
+      [](ResponseMiddleware::ResponseT&& response) {
         response.body() = []() -> cppcoro::generator<std::string> {
           co_return;
         }();
@@ -149,7 +149,7 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
   // DELETE must return 404 if the graph being deleted does not exist (GSP 5.4).
   // With implicit graph existence a graph existed iff triples were actually
   // deleted.
-  update.responseMiddleware_ = ResponseMiddleware(
+  update.responseMiddleware_ = std::make_shared<const ResponseMiddleware>(
       [](ResponseMiddleware::ResponseT response, const auto& result) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
         const auto& updateMeta = result.at(0);

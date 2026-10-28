@@ -11,6 +11,7 @@
 #include "engine/IndexScan.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralOptional.h"
+#include "parser/SparqlTriple.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"

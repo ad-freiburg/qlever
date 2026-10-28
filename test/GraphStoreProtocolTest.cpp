@@ -36,7 +36,7 @@ auto ClearGraph = [](ad_utility::triple_component::Iri graph)
 };
 
 auto HasMiddleware =
-    AD_FIELD(ParsedQuery, responseMiddleware_, testing::Ne(std::nullopt));
+    AD_FIELD(ParsedQuery, responseMiddleware_, testing::Ne(nullptr));
 
 auto GetGraph = [](ad_utility::triple_component::Iri graph) {
   return m::ConstructQuery(
