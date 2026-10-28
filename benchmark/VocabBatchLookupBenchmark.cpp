@@ -18,6 +18,8 @@
 //   against a real `VocabularyInMemoryBinSearch` via a single `lookupBatch`
 //   call vs. the old per-word `operator[]` loop.
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
@@ -52,16 +54,18 @@ size_t parseEnvironmentSize(const char* value, size_t defaultValue) {
 
 // _____________________________________________________________________________
 // Deterministic synthetic vocabulary words: Wikidata-style IRIs of varying
-// length, with an empty word every 97th entry to cover the zero-size path.
+// length. Every word is unique because the zero-padded index is encoded into
+// it (a real vocabulary has no duplicate words); only word 0 is empty, to cover
+// the zero-size path.
 std::string makeSyntheticWord(size_t index) {
-  if (index % 97 == 0) {
+  if (index == 0) {
     return "";
   }
   static constexpr std::string_view alphabet{
       "abcdefghijklmnopqrstuvwxyz0123456789_:/.-#"};
-  std::string suffix;
+  std::string suffix = absl::StrCat(absl::Dec(index, absl::kZeroPad8));
   const size_t suffixLength = 8 + (index * 13) % 64;
-  suffix.reserve(suffixLength);
+  suffix.reserve(suffix.size() + suffixLength);
   for (size_t character = 0; character < suffixLength; ++character) {
     suffix += alphabet[(index * 17 + character * 31) % alphabet.size()];
   }
@@ -74,27 +78,34 @@ std::string makeSyntheticWord(size_t index) {
 }
 
 // _____________________________________________________________________________
-// Checksum over looked-up bytes. Returned (not discarded) by every measured
-// lambda so the optimizer cannot eliminate the looked-up data.
-size_t checksumViews(ql::span<const std::string_view> views) {
-  size_t hash = 0;
-  for (std::string_view view : views) {
-    hash += view.size();
-    for (char c : view) {
-      hash = hash * 1315423911u + static_cast<unsigned char>(c);
-    }
+// Cheap checksum over the looked-up words. Returned (not discarded) by every
+// measured lambda so the optimizer cannot eliminate the looked-up data. It
+// folds only the size and the first and last byte of each word (XOR), so its
+// cost does not dominate the timed region.
+size_t foldWord(size_t hash, std::string_view word) {
+  hash += word.size();
+  if (!word.empty()) {
+    hash ^=
+        (static_cast<size_t>(static_cast<unsigned char>(word.front())) << 8) |
+        static_cast<unsigned char>(word.back());
   }
   return hash;
 }
 
 // _____________________________________________________________________________
-size_t checksumStrings(const std::vector<std::string>& words) {
+size_t checksumViews(ql::span<const std::string_view> views) {
+  size_t hash = 0;
+  for (std::string_view view : views) {
+    hash = foldWord(hash, view);
+  }
+  return hash;
+}
+
+// _____________________________________________________________________________
+size_t checksumStrings(ql::span<const std::string> words) {
   size_t hash = 0;
   for (const std::string& word : words) {
-    hash += word.size();
-    for (char c : word) {
-      hash = hash * 1315423911u + static_cast<unsigned char>(c);
-    }
+    hash = foldWord(hash, word);
   }
   return hash;
 }
@@ -130,7 +141,7 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results;
     auto& group =
-        results.addGroup("Assemble 20,000-word batch (mean word length ~45)");
+        results.addGroup("Assemble 20,000-word batch (mean word length ~74)");
     // Bound the total work even when configured through the environment
     // (high enough for timed measurements of at least one second).
     constexpr size_t maxRepetitions = 100'000;
@@ -212,9 +223,14 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
   VocabularyInMemoryBinSearch vocabulary_;
   // Shuffled batch of vocabulary indices, resolved by every measurement.
   std::vector<size_t> batch_;
+  bool isSetUp_ = false;
 
- public:
-  VocabBatchLookupEndToEndBenchmark() {
+  // `AD_REGISTER_BENCHMARK` constructs the benchmark during static
+  // initialization, so the file I/O happens lazily on the first run instead.
+  void setUp() {
+    if (isSetUp_) {
+      return;
+    }
     constexpr size_t numWords = 50'000;
     constexpr size_t batchSize = 4'096;
     ad_utility::deleteFile(filename_, false);
@@ -247,8 +263,10 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
       AD_CONTRACT_CHECK(single.has_value());
       AD_CONTRACT_CHECK(expected[i] == *single);
     }
+    isSetUp_ = true;
   }
 
+ public:
   ~VocabBatchLookupEndToEndBenchmark() override {
     ad_utility::deleteFile(filename_, false);
     ad_utility::deleteFile(filename_ + ".ids", false);
@@ -259,6 +277,7 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
   }
 
   BenchmarkResults runAllBenchmarks() final {
+    setUp();
     BenchmarkResults results;
     auto& group = results.addGroup(
         "Resolve 4,096-word batch from 50,000-word "

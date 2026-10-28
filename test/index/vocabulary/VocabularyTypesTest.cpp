@@ -23,6 +23,7 @@
 
 #include "../../util/DanglingViewTestHelpers.h"
 #include "../../util/GTestHelpers.h"
+#include "./VocabularyTestHelpers.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/File.h"
@@ -222,8 +223,8 @@ class VocabBatchLookupDataVocabTest : public ::testing::Test {
   VocabularyInMemoryBinSearch buildVocab(std::string_view word,
                                          std::string_view suffix = "") {
     const std::string filename = absl::StrCat(gtestCurrentTestName(), suffix);
-    ad_utility::deleteFile(filename, false);
-    ad_utility::deleteFile(filename + ".ids", false);
+    vocabulary_test::deleteVocabularyFiles<VocabularyInMemoryBinSearch>(
+        filename);
     VocabularyInMemoryBinSearch vocabulary;
     {
       VocabularyInMemoryBinSearch::WordWriter writer{filename};
@@ -314,8 +315,9 @@ TEST(VocabBatchLookupData, ArenaVocabBatchBuilderKeepsViewsAlive) {
 TEST(PmrVocabBatchLookupData, LimitedAllocatorThrowsWhenArenaExceedsBudget) {
   auto alloc = ad_utility::makeAllocatorWithLimit<Id>(8_B);
   ArenaVocabBatchBuilder builder(1, alloc);
-  EXPECT_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       builder.appendWord("this string is definitely more than eight bytes"),
+      ::testing::HasSubstr("Tried to allocate"),
       ad_utility::detail::AllocationExceedsLimitException);
 }
 
@@ -588,7 +590,7 @@ TEST(PmrVocabBatchLookupData, ArenaChargesAndReleasesAllocatorBudget) {
 namespace {
 // A memory resource that counts the allocations it forwards upstream.
 class CountingMemoryResource : public ql::pmr::memory_resource {
-  ql::pmr::memory_resource* upstream_ = ql::pmr::new_delete_resource();
+  ql::pmr::memory_resource& upstream_ = *ql::pmr::new_delete_resource();
 
  public:
   size_t numAllocations_ = 0;
@@ -596,10 +598,10 @@ class CountingMemoryResource : public ql::pmr::memory_resource {
  private:
   void* do_allocate(size_t bytes, size_t alignment) override {
     ++numAllocations_;
-    return upstream_->allocate(bytes, alignment);
+    return upstream_.allocate(bytes, alignment);
   }
   void do_deallocate(void* p, size_t bytes, size_t alignment) override {
-    upstream_->deallocate(p, bytes, alignment);
+    upstream_.deallocate(p, bytes, alignment);
   }
   bool do_is_equal(
       const ql::pmr::memory_resource& other) const noexcept override {
