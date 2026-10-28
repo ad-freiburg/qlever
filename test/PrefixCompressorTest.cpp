@@ -65,7 +65,7 @@ TEST(PrefixCompressor, TooManyPrefixesThrow) {
 TEST(PrefixCompressor, DecompressIntoMatchesDecompress) {
   PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alp", "alpha", "al"});
-  auto checkWord = [&](std::string_view word) {
+  const auto checkWord = [&](std::string_view word) {
     const std::string compressed = p.compress(word);
     const std::string decompressedWord = p.decompress(compressed);
     std::string decompressedIntoBuffer(p.maxDecompressedSize(compressed), '\0');

@@ -51,6 +51,9 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
   size_t outputCapacity_ = 0;
   // Sum of the exact decompressed sizes; sizes the end-to-end arena.
   size_t totalDecompressedSize_ = 0;
+  // Exact decompressed size of every word, computed once here so that the
+  // timed arena loop does not recompute it per word.
+  std::vector<size_t> decompressedSizes_;
 
  public:
   PrefixCompressorBenchmark() {
@@ -77,8 +80,10 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
       compressedStorage_.push_back(compressor_.compress(word));
     }
     compressed_.assign(compressedStorage_.begin(), compressedStorage_.end());
+    decompressedSizes_.reserve(compressed_.size());
     for (const std::string_view& compressed : compressed_) {
       const size_t size = compressor_.maxDecompressedSize(compressed);
+      decompressedSizes_.push_back(size);
       outputCapacity_ = std::max(outputCapacity_, size);
       totalDecompressedSize_ += size;
     }
@@ -138,6 +143,19 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
       return totalBytes;
     });
 
+    // Validate the in-place API once, outside the timed regions: every word
+    // decodes to the same bytes as `decompress` and to its exact size.
+    {
+      std::string output(outputCapacity_, '\0');
+      for (size_t i = 0; i < compressed_.size(); ++i) {
+        const size_t written = compressor_.decompressInto(
+            compressed_[i], ql::span<char>{output.data(), output.size()});
+        AD_CORRECTNESS_CHECK(written == decompressedSizes_[i]);
+        AD_CORRECTNESS_CHECK(std::string_view(output.data(), written) ==
+                             compressor_.decompress(compressed_[i]));
+      }
+    }
+
     // End-to-end benchmark: batch resolution of all words, either into
     // owning strings or into a single preallocated arena.
     auto& endToEnd =
@@ -160,12 +178,12 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
       auto arena = std::make_unique<char[]>(totalDecompressedSize_);
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         size_t offset = 0;
-        for (const auto& compressed : compressed_) {
-          const size_t size = compressor_.maxDecompressedSize(compressed);
+        for (size_t i = 0; i < compressed_.size(); ++i) {
+          // The span is exactly the word's size, as a batch lookup that has
+          // sized its arena from `maxDecompressedSize` would pass it.
           const size_t written = compressor_.decompressInto(
-              compressed, ql::span<char>{arena.get() + offset,
-                                         totalDecompressedSize_ - offset});
-          AD_CORRECTNESS_CHECK(written == size);
+              compressed_[i],
+              ql::span<char>{arena.get() + offset, decompressedSizes_[i]});
           keepDecodedBytes(arena.get() + offset);
           totalBytes += written;
           offset += written;
