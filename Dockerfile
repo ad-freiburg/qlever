@@ -60,8 +60,19 @@ ARG RUN_TESTS=true
 ARG QLEVER_ENABLE_LTO=false
 WORKDIR /qlever/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DQLEVER_ENABLE_LTO=${QLEVER_ENABLE_LTO} -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -DCMAKE_TEST_LAUNCHER=/qlever/misc/run-test-with-stall-watchdog.sh -GNinja ..
+# TEMPORARY (for diagnosing the spurious failures of the arm64 build): Instead
+# of building and running all tests, only build the tests that so far have
+# stalled or failed (plus the binaries that the image needs), and run these
+# tests over and over again (each run in a fresh process, with one worker per
+# core), see `misc/repeat-tests-until-failure.sh`.
+ARG REPEAT_TESTS_SECONDS=12600
+COPY misc/repeat-tests-until-failure.sh /qlever/misc/
 RUN if [ "$RUN_TESTS" = "true" ]; then \
-      cmake --build . && ctest --rerun-failed --output-on-failure --timeout 900; \
+      cmake --build . --target qlever-index qlever-server qlever-upgrade-index PrintIndexVersionMain VocabularyMergerMain IndexTest OptionalJoinTest QueryPlannerTest && \
+      /qlever/misc/repeat-tests-until-failure.sh ${REPEAT_TESTS_SECONDS} $(nproc) \
+        test/IndexTest:IndexImpl.graphNameManagerIntegration \
+        test/engine/OptionalJoinTest:OptionalJoin.rightIsScanWithoutVariables \
+        test/QueryPlannerTest:QueryPlanner.bindTransitivePathWithGraphTwice; \
     else \
       cmake --build . --target qlever-index qlever-server qlever-upgrade-index && echo "Skipping tests"; \
     fi
