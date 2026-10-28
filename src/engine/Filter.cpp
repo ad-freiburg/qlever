@@ -9,8 +9,8 @@
 #include <sstream>
 
 #include "backports/algorithm.h"
-#include "engine/ColumnStrippingHelpers.h"
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -297,15 +297,10 @@ Filter::makeTreeWithStrippedColumns(
   // the `Filter` operation filters on.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
-  std::vector<const Variable*> variablesForFiltering =
-      _expression.containedVariables();
-  for (auto filterVar : variablesForFiltering) {
-    varsRequiredFromSubtree.add(*filterVar);
-  }
+  varsRequiredFromSubtree.addVarsFromExpression(_expression);
 
   // Strip the subtree.
-  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-      _subtree, varsRequiredFromSubtree.get());
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
 
   // The new `Filter` also exports the filtered variables that the parent did
   // not request, the helper adds a `StripColumns` operation for them.
