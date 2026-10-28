@@ -907,6 +907,17 @@ if (COVERAGE_FRIENDLY_CHECKS)
     add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
 endif ()
 
+# Use the `SplitLayoutId` (a full 64-bit payload and a datatype byte) instead of
+# the legacy `ValueId` as `Id`, see `src/global/Id.h`. Atomics of the 16 bytes
+# of such an `Id` need `libatomic`, except on Apple.
+option(USE_SPLIT_LAYOUT "Use SplitLayoutId instead of ValueId as Id" OFF)
+if (USE_SPLIT_LAYOUT)
+    add_compile_definitions(QLEVER_USE_ID_SPLIT_LAYOUT)
+    if (NOT APPLE)
+        link_libraries(atomic)
+    endif ()
+endif ()
+
 ##################################################
 # Warnings about incorrect combination of CMake variables
 

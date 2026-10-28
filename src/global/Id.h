@@ -9,16 +9,19 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "global/FoldedValueId.h"
 #include "index/IdBitRepresentation.h"
 
 // The implementation of `Id`. Every file that needs `Id` or `ValueId` includes
-// this header, not the implementation header.
-//
-// TODO<pas-kes> Once the split layout exists, choose between
-// `foldedValueId::ValueId` and `SplitLayoutId` here via
-// `QLEVER_USE_SPLIT_LAYOUT`.
+// this header, not the implementation header. The CMake option
+// `USE_SPLIT_LAYOUT` chooses between the legacy `ValueId` and the
+// `SplitLayoutId`.
+#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
+#include "engine/idTable/splitLayout/SplitLayoutId.h"
+using Id = columnBasedIdTable::splitLayout::SplitLayoutId;
+#else
+#include "global/FoldedValueId.h"
 using Id = foldedValueId::ValueId;
+#endif
 using ValueId = Id;
 using Score = float;
 
