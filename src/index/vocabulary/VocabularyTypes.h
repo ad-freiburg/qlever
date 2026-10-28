@@ -14,6 +14,7 @@
 #include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -234,7 +235,7 @@ class ContiguousVocabBatchBuilder {
   // valid after `finalize()` because the result takes ownership of `buffer_`.
   // They become invalid when that result is destroyed. Multiple zero-sized
   // words may share an address, but no bytes are written through those entries.
-  [[nodiscard]] std::vector<char*> targets() noexcept {
+  [[nodiscard]] std::vector<char*> targets() {
     std::vector<char*> result;
     result.reserve(targetOffsets_.size());
     for (size_t offset : targetOffsets_) {
@@ -322,7 +323,7 @@ class StringVectorVocabBatchLookupData : public VocabBatchStorage {
   std::vector<std::string> words_;
 
   static std::vector<std::string_view> viewsInto(
-      const std::vector<std::string>& words) {
+      ql::span<const std::string> words) {
     return ::ranges::to_vector(
         words | ql::views::transform(ad_utility::staticCast<std::string_view>));
   }
@@ -432,8 +433,8 @@ class ArenaVocabBatchBuilder {
   std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_;
   std::vector<std::string_view> views_;
 
-  void initBuffer(ql::pmr::memory_resource* resource) {
-    buffer_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(resource);
+  void initBuffer(ql::pmr::memory_resource& resource) {
+    buffer_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(&resource);
   }
 
  public:
@@ -442,7 +443,7 @@ class ArenaVocabBatchBuilder {
   explicit ArenaVocabBatchBuilder(size_t expectedSize) {
     AD_CONTRACT_CHECK(expectedSize > 0);
     views_.reserve(expectedSize);
-    initBuffer(ql::pmr::get_default_resource());
+    initBuffer(*ql::pmr::get_default_resource());
   }
 
   // Charge `allocator`'s shared memory tracker (same object as the Index /
@@ -454,7 +455,7 @@ class ArenaVocabBatchBuilder {
     views_.reserve(expectedSize);
     upstream_ =
         std::make_unique<AllocatorAsMemoryResource>(allocator.as<std::byte>());
-    initBuffer(upstream_.get());
+    initBuffer(*upstream_);
   }
 
   // Allocate storage inside the arena for `bound` bytes, invoke
