@@ -53,6 +53,27 @@ class VarsRequiredFromSubtree {
     newVariables_.insert(variable);
   }
 
+  // Add the variables contained in the given `expression`. Return true if all
+  // variables from the subtree are requested by the expression. Otherwise
+  // return false.
+  bool addVarsFromExpression(
+      sparqlExpression::SparqlExpressionPimpl expression) {
+    if (expression.readsAllVisibleColumns()) {
+      return true;
+    }
+    for (auto var : expression.containedVariables()) {
+      add(*var);
+    }
+    return false;
+  }
+
+  // Strip all columns from `qet` that are not in `varsRequiredFromSubtree_`.
+  std::shared_ptr<QueryExecutionTree> stripSubtree(
+      std::shared_ptr<QueryExecutionTree> qet) {
+    return QueryExecutionTree::makeTreeWithStrippedColumns(
+        qet, *varsRequiredFromSubtree_);
+  }
+
   // Return all variables that are required from the subtree.
   const std::set<Variable>& get() const { return *varsRequiredFromSubtree_; }
 };
