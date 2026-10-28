@@ -135,3 +135,45 @@ TEST(LocalVocabEntry, compareThreeWayOnlyOneEntryIsContainedInVocabulary) {
   EXPECT_EQ(notContained.compareThreeWay(contained), ql::strong_ordering::less);
   EXPECT_LT(notContained, contained);
 }
+
+// Test that `reanchoredTo` returns an equal entry with the position in the
+// vocabulary of the new index, and that it rejects an IRI that the new index
+// encodes directly in an `Id`.
+TEST(LocalVocabEntry, reanchoredTo) {
+  using namespace ad_utility::testing;
+  Index oldIndex =
+      makeTestIndex(gtestCurrentTestName() + "-old", "<a> <b> <c> .");
+  TestIndexConfig config{"<a> <b> <c> . <w> <w> <w> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  Index newIndex =
+      makeTestIndex(gtestCurrentTestName() + "-new", std::move(config));
+  const auto& oldContext = oldIndex.getImpl().getLocalVocabContext();
+  const auto& newContext = newIndex.getImpl().getLocalVocabContext();
+
+  // `<x>` is sorted after `<w>` in the new index, so its position changes.
+  LocalVocabEntry entry = LocalVocabEntry::fromIriref("<x>", oldContext);
+  auto oldPosition = entry.positionInVocab();
+  LocalVocabEntry reanchored = entry.reanchoredTo(newContext);
+  EXPECT_EQ(reanchored, entry);
+  EXPECT_EQ(&reanchored.getContextForTesting(), &newContext);
+  auto newPosition = reanchored.positionInVocab();
+  EXPECT_FALSE(newPosition == oldPosition);
+  EXPECT_TRUE(newPosition ==
+              LocalVocabEntry::fromIriref("<x>", newContext).positionInVocab());
+
+  // Literals are never encoded and can always be reanchored.
+  LocalVocabEntry literal = LocalVocabEntry::literalWithoutQuotes(
+      "http://example.org/42", oldContext);
+  EXPECT_EQ(literal.reanchoredTo(newContext), literal);
+
+  // An IRI that the new index encodes directly in an `Id` cannot be
+  // reanchored.
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    LocalVocabEntry encodable =
+        LocalVocabEntry::fromIriref("<http://example.org/42>", oldContext);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        encodable.reanchoredTo(newContext),
+        ::testing::HasSubstr("must not be stored in a `LocalVocabEntry`"));
+  }
+}

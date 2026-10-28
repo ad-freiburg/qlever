@@ -81,9 +81,9 @@ class StrExpression : public StrExpressionImpl {
 // work on strings.
 template <typename Function>
 struct LiftStringFunction {
-  CPP_template(typename... Arguments)(requires(
-      concepts::same_as<Arguments, std::optional<std::string>>&&...)) auto
-  operator()(Arguments... arguments) const {
+  CPP_template(typename... Arguments)(
+      requires(concepts::same_as<Arguments, std::optional<std::string>>&&...))
+  auto operator()(Arguments... arguments) const {
     using ResultOfFunction =
         decltype(std::invoke(Function{}, std::move(arguments.value())...));
     static_assert(concepts::same_as<ResultOfFunction, Id> ||
@@ -108,23 +108,23 @@ struct LiftStringFunction {
 // consideration within the `IriOrUriValueGetter`, hence automatically
 // ignores values like `1`, `true`, `Date` etc.
 
-const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
-  AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(litOrIri));
-  const auto& baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
+const Iri& extractIri(const IdOrLiteralOrIri& litOrIri) {
+  AD_CORRECTNESS_CHECK(std::holds_alternative<LiteralOrIri>(litOrIri));
+  const auto& baseIriOrUri = std::get<LiteralOrIri>(litOrIri);
   AD_CORRECTNESS_CHECK(baseIriOrUri.isIri());
   return baseIriOrUri.getIri();
 }
 
 struct ApplyBaseIfPresent {
   IdOrLiteralOrIri operator()(
-      IdOrLocalVocabEntry iri,
+      IdOrLiteralOrIri iri,
       const std::optional<qlever::util::ParsedUri>& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
       return std::get<Id>(iri);
     }
     if (!base.has_value()) {
-      return std::get<LocalVocabEntry>(std::move(iri));
+      return std::get<LiteralOrIri>(std::move(iri));
     }
     return LiteralOrIri{extractIri(iri).resolveAgainstBase(base.value())};
   }
@@ -250,9 +250,8 @@ struct StrStartsImpl {
 
 namespace {
 
-CPP_template(typename NaryOperation)(
-    requires isOperation<NaryOperation>) class StrStartsExpressionImpl
-    : public NaryExpression<NaryOperation> {
+CPP_template(typename NaryOperation)(requires isOperation<NaryOperation>)
+class StrStartsExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
@@ -653,9 +652,9 @@ using std::make_unique;
 using std::move;
 using Expr = SparqlExpression::Ptr;
 
-CPP_template(typename T,
-             typename... C)(requires(concepts::same_as<Expr, C>&&...)) Expr
-    make(C&... children) {
+CPP_template(typename T, typename... C)(
+    requires(concepts::same_as<Expr, C>&&...))
+Expr make(C&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }

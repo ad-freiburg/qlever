@@ -26,15 +26,15 @@ namespace columnBasedIdTable::splitLayout {
 // `std::vector<Id>` in `IdTable`.
 //
 // `Allocator` is `IdTable`'s own `Id` allocator; the two underlying arrays
-// use it rebound to `uint64_t`/`uint8_t`, so both count towards the same
-// memory limit.
+// use it rebound to `PayloadType`/`DatatypeType`, so both count towards the
+// same memory limit.
 template <typename Allocator>
 class IdColumnVector {
  public:
   using PayloadAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<uint64_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<Id::PayloadType>;
   using DatatypeAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<uint8_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<Id::DatatypeType>;
 
   using value_type = Id;
   // The two reference types, see `BasicIdColumnIterator`.
@@ -50,8 +50,8 @@ class IdColumnVector {
   // allocators) to preserve the passed-in allocator's exact state (e.g. a
   // shared memory limit).
   Allocator allocator_;
-  std::vector<uint64_t, PayloadAllocator> payloads_;
-  std::vector<uint8_t, DatatypeAllocator> datatypes_;
+  std::vector<Id::PayloadType, PayloadAllocator> payloads_;
+  std::vector<Id::DatatypeType, DatatypeAllocator> datatypes_;
 
  public:
   explicit IdColumnVector(Allocator allocator = Allocator{})
@@ -163,8 +163,8 @@ class IdColumnVector {
   }
   template <typename InputIt>
   void insertImpl(ptrdiff_t offset, InputIt first, InputIt last) {
-    std::vector<uint64_t> newPayloads;
-    std::vector<uint8_t> newDatatypes;
+    std::vector<Id::PayloadType> newPayloads;
+    std::vector<Id::DatatypeType> newDatatypes;
     for (; first != last; ++first) {
       const auto id = static_cast<Id>(*first);
       newPayloads.push_back(id.getPayloadBits());
