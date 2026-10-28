@@ -84,7 +84,7 @@ void serializeLocalVocab(Serializer& serializer, const LocalVocab& vocab) {
 
   auto writeWordSet = [&serializer](const auto& words) {
     ql::ranges::for_each(words, [&serializer](const auto& localVocabEntry) {
-      serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
+      serializer << Id::makeFromLocalVocabIndex(&localVocabEntry).getBits();
       serializer << localVocabEntry.toStringRepresentation();
     });
   };
@@ -126,7 +126,7 @@ std::tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
   absl::flat_hash_map<Id::T, Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {
-    auto id = readValue<Id>(serializer);
+    auto id = readValue<Id::T>(serializer);
     auto s = readValue<std::string>(serializer);
     auto idOrEntry = toIdOrLocalVocabEntry(
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
