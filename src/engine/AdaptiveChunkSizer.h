@@ -71,6 +71,8 @@ class AdaptiveChunkSizer {
   AdaptiveChunkConfig config_;
   size_t currentChunkBytesTarget_;
   uint64_t totalBytesObserved_{0};
+  // Bytes of those chunks whose row count is known, for the row-size average.
+  uint64_t bytesWithKnownRows_{0};
   uint64_t totalRowsObserved_{0};
   size_t chunksFlushed_{0};
   double estimatedRowBytes_;
@@ -123,8 +125,16 @@ class AdaptiveChunkSizer {
     AD_CORRECTNESS_CHECK(estimatedRowBytes_ > 0.0);
     const double rawTargetRows =
         static_cast<double>(currentChunkBytesTarget_) / estimatedRowBytes_;
-    const auto rows = static_cast<size_t>(std::ceil(rawTargetRows));
-    return std::clamp(rows, config_.minChunkRows_, config_.maxChunkRows_);
+    // Clamp in `double` before converting, because converting an out-of-range
+    // (or infinite) value to `size_t` is undefined behavior. `maxChunkRows_`
+    // may itself round up to 2^64 as a `double`, so it is returned directly.
+    const double clampedRows = std::clamp(
+        std::ceil(rawTargetRows), static_cast<double>(config_.minChunkRows_),
+        static_cast<double>(config_.maxChunkRows_));
+    if (clampedRows >= static_cast<double>(config_.maxChunkRows_)) {
+      return config_.maxChunkRows_;
+    }
+    return std::max(static_cast<size_t>(clampedRows), config_.minChunkRows_);
   }
 
   // ___________________________________________________________________________
@@ -152,15 +162,19 @@ class AdaptiveChunkSizer {
   // Feedback callback invoked whenever a chunk is flushed.
   // Updates running empirical row-size statistics and exponentially scales up
   // chunk capacity for the next batch up to `maxChunkBytes_`.
+  // `rowCount == 0` means that the row count is unknown: the bytes are still
+  // counted in `totalBytes()`, but the row estimate keeps its prior (or its
+  // value from earlier chunks with a known row count).
   void recordChunk(size_t bytesWritten, size_t rowCount) {
+    totalBytesObserved_ += bytesWritten;
     if (rowCount > 0 && bytesWritten > 0) {
-      totalBytesObserved_ += bytesWritten;
+      bytesWithKnownRows_ += bytesWritten;
       totalRowsObserved_ += rowCount;
       // Exponentially weighted moving average combined with cumulative average
       // to adapt smoothly to varying row lengths while maintaining stability.
       const double chunkAvg =
           static_cast<double>(bytesWritten) / static_cast<double>(rowCount);
-      const double cumulativeAvg = static_cast<double>(totalBytesObserved_) /
+      const double cumulativeAvg = static_cast<double>(bytesWithKnownRows_) /
                                    static_cast<double>(totalRowsObserved_);
       // Weight recent chunk 30% and cumulative history 70%
       estimatedRowBytes_ = std::max(1.0, 0.7 * cumulativeAvg + 0.3 * chunkAvg);
@@ -188,6 +202,7 @@ class AdaptiveChunkSizer {
   void reset() noexcept {
     currentChunkBytesTarget_ = config_.initialChunkBytes_;
     totalBytesObserved_ = 0;
+    bytesWithKnownRows_ = 0;
     totalRowsObserved_ = 0;
     chunksFlushed_ = 0;
     estimatedRowBytes_ = config_.initialEstimatedRowBytes_;

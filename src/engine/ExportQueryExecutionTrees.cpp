@@ -876,7 +876,8 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
         try {
           std::string output{*it};
           if (chunkSizer.has_value()) {
-            // The row count is unknown at this level, only the bytes count.
+            // The row count is unknown at this level, so only the bytes count
+            // and the row estimate of the sizer stays at its prior.
             chunkSizer->recordChunk(output.size(), 0);
             streamGenerator.setChunkCapacity(chunkSizer->currentChunkBytes());
           }
