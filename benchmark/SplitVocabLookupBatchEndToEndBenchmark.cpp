@@ -162,6 +162,22 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
     batch.push_back(marked[(i * 2654435761u) % marked.size()]);
   }
 
+  // Validate the benchmark once, outside the timed region: the batched and the
+  // fallback lookups must agree with `operator[]`.
+  const auto checkBatch = [&](const std::vector<size_t>& batch) {
+    const auto batched = vocab.lookupBatch(batch);
+    const auto fallback =
+        ad_utility::vocabulary::sequentialLookupBatch(vocab, batch);
+    AD_CONTRACT_CHECK(batched.size() == batch.size());
+    AD_CONTRACT_CHECK(fallback.size() == batch.size());
+    for (size_t i = 0; i < batch.size(); ++i) {
+      const std::string expected{vocab[batch[i]]};
+      AD_CONTRACT_CHECK(batched[i] == expected);
+      AD_CONTRACT_CHECK(fallback[i] == expected);
+    }
+  };
+  checkBatch(batch);
+
   const auto sumSizes = [](const auto& result) {
     size_t totalBytes = 0;
     for (const auto& word : result) {

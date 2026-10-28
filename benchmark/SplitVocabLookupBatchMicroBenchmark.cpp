@@ -18,7 +18,8 @@
 //   `SplitVocabulary::lookupBatch` did before it was specialized: one owning
 //   `std::string` per word, all kept alive in the result), and
 // - `SplitVocabulary::lookupBatch`.
-// Mixed-marker batches and single-marker batches are measured separately.
+// Mixed-marker batches and single-marker batches (marker 0, which needs no
+// marker stripping, and marker 1, which does) are measured separately.
 // Every measurement repeats the batch until `SPLIT_VOCAB_MIN_SECONDS` (default
 // 10) have passed, after one untimed warm-up pass; the time per word is the
 // measured time divided by the `words` in the measurement's metadata.
@@ -142,7 +143,8 @@ std::vector<std::string> makeWords() {
 
 // Build a split vocabulary with `Underlying` vocabularies from `words` in
 // `dir`, and measure the three lookup strategies (see the file comment) on a
-// mixed-marker and a single-marker batch into a new group of `results`.
+// mixed-marker batch and two single-marker batches into a new group of
+// `results`.
 template <typename Underlying>
 void measureUnderlying(BenchmarkResults& results, const std::string& label,
                        const std::vector<std::string>& words,
@@ -164,23 +166,48 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
     marked.push_back(static_cast<size_t>(indexAndWord.index_));
   }
   // A batch in non-ascending order with duplicates, mixing both markers, and
-  // a batch holding only marker-0 indices.
+  // batches holding only marker-0 and only marker-1 indices (the latter
+  // additionally needs the marker bits stripped).
   std::vector<size_t> mixedBatch;
   mixedBatch.reserve(batchSize);
   for (size_t i = 0; i < batchSize; ++i) {
     mixedBatch.push_back(marked[(i * 2654435761u) % marked.size()]);
   }
-  std::vector<size_t> markerZero;
-  for (size_t index : marked) {
-    if (Vocab::getMarker(index) == 0) {
-      markerZero.push_back(index);
+  const auto makeSingleMarkerBatch = [&](size_t marker) {
+    std::vector<size_t> withMarker;
+    for (size_t index : marked) {
+      if (Vocab::getMarker(index) == marker) {
+        withMarker.push_back(index);
+      }
     }
-  }
-  std::vector<size_t> singleMarkerBatch;
-  singleMarkerBatch.reserve(batchSize);
-  for (size_t i = 0; i < batchSize; ++i) {
-    singleMarkerBatch.push_back(markerZero[i % markerZero.size()]);
-  }
+    AD_CONTRACT_CHECK(!withMarker.empty());
+    std::vector<size_t> batch;
+    batch.reserve(batchSize);
+    for (size_t i = 0; i < batchSize; ++i) {
+      batch.push_back(withMarker[i % withMarker.size()]);
+    }
+    return batch;
+  };
+  const std::vector<size_t> markerZeroBatch = makeSingleMarkerBatch(0);
+  const std::vector<size_t> markerOneBatch = makeSingleMarkerBatch(1);
+
+  // Validate the benchmark once, outside the timed region: the batched and the
+  // fallback lookups must agree with `operator[]`.
+  const auto checkBatch = [&](const std::vector<size_t>& batch) {
+    const auto batched = vocab.lookupBatch(batch);
+    const auto fallback =
+        ad_utility::vocabulary::sequentialLookupBatch(vocab, batch);
+    AD_CONTRACT_CHECK(batched.size() == batch.size());
+    AD_CONTRACT_CHECK(fallback.size() == batch.size());
+    for (size_t i = 0; i < batch.size(); ++i) {
+      const std::string expected{vocab[batch[i]]};
+      AD_CONTRACT_CHECK(batched[i] == expected);
+      AD_CONTRACT_CHECK(fallback[i] == expected);
+    }
+  };
+  checkBatch(mixedBatch);
+  checkBatch(markerZeroBatch);
+  checkBatch(markerOneBatch);
 
   const auto sumSizes = [](const auto& result) {
     size_t totalBytes = 0;
@@ -219,7 +246,7 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
   };
 
   // One untimed warm-up repetition of every strategy (caches, allocator).
-  for (const auto* batch : {&mixedBatch, &singleMarkerBatch}) {
+  for (const auto* batch : {&mixedBatch, &markerZeroBatch, &markerOneBatch}) {
     runSequential(*batch, 1);
     runFallback(*batch, 1);
     runBatched(*batch, 1);
@@ -229,7 +256,8 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
       label, ": ", batchSize, " lookups into ", words.size(), " words"));
   for (const auto& [batch, suffix] :
        {std::pair{&mixedBatch, ", mixed markers"},
-        std::pair{&singleMarkerBatch, ", single marker"}}) {
+        std::pair{&markerZeroBatch, ", single marker 0"},
+        std::pair{&markerOneBatch, ", single marker 1"}}) {
     const auto& b = *batch;
     addTimedMeasurement(group, absl::StrCat("sequential operator[]", suffix),
                         minSeconds, batchSize,
