@@ -351,7 +351,10 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
                                          after.requests - before.requests);
         entry.metadata().addKeyValuePair(
             "allocatedBytes", after.allocatedBytes - before.allocatedBytes);
-        entry.metadata().addKeyValuePair("peakLiveHeapBytesAboveStart", peak);
+        // `thread.peak.reset` starts the high-water mark at the thread's live
+        // bytes at that moment, so this is an absolute peak of live heap
+        // bytes, not the growth above the start.
+        entry.metadata().addKeyValuePair("peakLiveHeapBytes", peak);
       }
       entry.metadata().addKeyValuePair("decodes", numberOfWords * repetitions);
       entry.metadata().addKeyValuePair("outputCapacity", outputCapacity_);
