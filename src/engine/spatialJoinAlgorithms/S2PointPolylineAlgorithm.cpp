@@ -103,6 +103,7 @@ Result S2PointPolylineAlgorithm::run() {
 
   // Use the index to lookup the points of the other table
   for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
+    throwIfCancelled();
     auto p = getPoint(idTableLeft, rowLeft, leftJoinCol);
     if (!p.has_value()) {
       continue;
