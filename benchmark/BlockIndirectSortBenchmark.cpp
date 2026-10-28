@@ -8,10 +8,10 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <boost/asio/thread_pool.hpp>
-#include <boost/sort/sort.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <random>
 #include <string>
 #include <thread>
@@ -20,7 +20,18 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "engine/idTable/IdTable.h"
+#include "global/Id.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/CancellationHandle.h"
+#include "util/CompilerWarnings.h"
 #include "util/blockSort/BlockIndirectSort.h"
+
+// `<boost/sort/sort.hpp>` includes the deprecated `<ciso646>`, see
+// `util/blockSort/BoostSortHeaders.h`.
+DISABLE_PREPROCESSOR_WARNINGS
+#include <boost/sort/sort.hpp>
+REENABLE_PREPROCESSOR_WARNINGS
 
 // Compare `ad_utility::blockSort::blockIndirectSort` with the original
 // `boost::sort::block_indirect_sort` and a single-threaded sort. Only
@@ -63,9 +74,61 @@ std::vector<T> randomElements(size_t numElements) {
   }
   return elements;
 }
+// An `IdTable` with `numRows` random rows of `numColumns` columns, the same
+// ones in every run.
+IdTable randomIdTable(size_t numRows, size_t numColumns) {
+  std::mt19937_64 generator{0xC0FFEE};
+  IdTable table{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.resize(numRows);
+  for (auto column : table.getColumns()) {
+    for (auto& id : column) {
+      id = Id::makeFromVocabIndex(VocabIndex::make(generator() >> 20));
+    }
+  }
+  return table;
+}
 }  // namespace
 
 class BlockIndirectSortBenchmark : public BenchmarkInterface {
+  // Measure the sort of an `IdTable` with `NumColumns` columns (`0` for a
+  // dynamic number of columns, then `numColumns`) by its first two columns,
+  // like `IdTableUtils::sort` does for the sorts of the queries, with and
+  // without a cancellation handle (that is never cancelled), with
+  // `numThreads` and in a single task.
+  template <size_t NumColumns>
+  void addIdTableMeasurements(BenchmarkResults& results, size_t numRows,
+                              size_t numColumns, uint32_t numThreads,
+                              boost::asio::thread_pool& pool) {
+    IdTable pristine = randomIdTable(numRows, numColumns);
+    IdTable elements = pristine.clone();
+    auto compare = [](const auto& a, const auto& b) {
+      if (a[0] != b[0]) {
+        return a[0] < b[0];
+      }
+      return a[1] < b[1];
+    };
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    for (uint32_t threads : {numThreads, 1u}) {
+      auto suffix =
+          absl::StrCat(" (IdTable<", NumColumns, ">, ", numRows, " rows, ",
+                       numColumns, " columns, ", threads, " threads)");
+      auto sort = [&elements, &pristine, threads, &pool,
+                   compare](auto... cancellationHandle) {
+        elements = pristine.clone();
+        auto table = std::move(elements).toStatic<NumColumns>();
+        ad_utility::blockSort::blockIndirectSort(table, compare, threads,
+                                                 pool.get_executor(),
+                                                 cancellationHandle...);
+        elements = std::move(table).toDynamic();
+      };
+      results.addMeasurement(absl::StrCat("blockIndirectSort", suffix),
+                             [&sort]() { sort(); });
+      results.addMeasurement(
+          absl::StrCat("blockIndirectSort, cancellable", suffix),
+          [&sort, &handle]() { sort(handle); });
+    }
+  }
+
   // Measure the three sorts on `numElements` random elements of type `T`. All
   // measurements sort the same input.
   template <typename T>
@@ -114,6 +177,8 @@ class BlockIndirectSortBenchmark : public BenchmarkInterface {
                                     pool);
     addMeasurementsFor<std::string>(results, "std::string", 5'000'000,
                                     numThreads, pool);
+    addIdTableMeasurements<3>(results, 20'000'000, 3, numThreads, pool);
+    addIdTableMeasurements<0>(results, 10'000'000, 7, numThreads, pool);
     pool.join();
     return results;
   }

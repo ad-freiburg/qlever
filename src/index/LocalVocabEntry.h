@@ -14,6 +14,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
+#include "index/IdBitRepresentation.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
@@ -50,9 +51,10 @@ class LocalVocabContext;
 // prefilters), see the detailed note at
 // `valueIdComparators::detail::compareIdsImpl`.
 //
-// This is deliberate for now: nothing but a unit test can currently create a
-// secondary vocabulary (see `IndexImpl::setSecondaryVocab`), so no
-// query is affected. It has to be fixed *before* anything else creates one,
+// This is a known limitation for now: apart from unit tests, a secondary
+// vocabulary is only created when a blob of `NamedCachedQueryBlobManager` that
+// contains new words is loaded, so only queries on such a blob are affected.
+// It has to be fixed before a secondary vocabulary is used more widely,
 // most likely by keeping the position in the main vocabulary (which is what a
 // semantic comparison needs, and which can always be computed from the word)
 // separately from the position in the internal order, and by exposing the two
@@ -67,7 +69,7 @@ class alignas(16) LocalVocabEntry
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
   static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
-  using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
+  using IdProxy = ad_utility::TypedIndex<IdBitRepresentation, proxyTag>;
 
   FRIEND_TEST(TripleComponent, toValueId);
 
@@ -86,6 +88,10 @@ class alignas(16) LocalVocabEntry
   // downside is, that in parallel code multiple threads might look up the
   // position concurrently, which wastes a bit of resources. However, we don't
   // consider this case to be likely.
+  // TODO<pas-kes> For the split layout `IdProxy` has 16 bytes, so these atomics
+  // are not lock-free everywhere (`libatomic` on Linux). Check the alternatives
+  // (once-pattern with plain fields, or separate atomics for datatype and
+  // payload).
   mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
   mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
@@ -150,7 +156,14 @@ class alignas(16) LocalVocabEntry
                                               const LocalVocabContext& ctx);
 
   static LocalVocabEntry literalWithNormalizedContent(
-      NormalizedStringView view, const LocalVocabContext& ctx);
+      std::string_view view, const LocalVocabContext& ctx);
+
+  // Return a copy of this entry that is anchored to `newContext`, with an empty
+  // cache for the position in the vocabulary. This is used when an index is
+  // replaced by a rebuilt one, which encodes exactly the same IRIs directly in
+  // an `Id` (see `toIdOrLocalVocabEntry`), so an entry that was not encodable
+  // before stays not encodable.
+  LocalVocabEntry reanchoredTo(const LocalVocabContext& newContext) const;
 
   // Slice to base class `LiteralOrIri`.
   const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {

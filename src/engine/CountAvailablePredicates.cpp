@@ -9,6 +9,7 @@
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
+#include "util/ChunkedForLoop.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/ParallelExecutor.h"
 
@@ -159,9 +160,9 @@ Result CountAvailablePredicates::computeResult(
     size_t width = subresult->idTableView().numColumns();
     size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
     ad_utility::callFixedSizeVi(width, [&](auto width) {
-      return computePatternTrick<width>(subresult->idTableView(), &idTable,
-                                        patterns, subjectColumnIndex_,
-                                        patternColumn, runtimeInfo());
+      return computePatternTrick<width>(
+          subresult->idTableView(), &idTable, patterns, subjectColumnIndex_,
+          patternColumn, runtimeInfo(), executor());
     });
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
@@ -183,17 +184,22 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   // Note: In contrast to `computePatternTrick` the subjects don't have to be
   // deduplicated, because the `ql:has-pattern` relation contains exactly one
   // triple per entity.
-  auto countPatterns = [&patternCounts, &patterns,
+  auto countPatterns = [this, &patternCounts, &patterns,
                         patternColumn](const auto& idTable) {
-    for (Id patternId : idTable.getColumn(patternColumn)) {
-      AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
-      size_t patternIdx = patternId.getInt();
-      if (patternIdx >= patterns.size()) {
-        AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
-        patternIdx = patterns.size();
-      }
-      patternCounts[patternIdx]++;
-    }
+    // A materialized `idTable` contains the complete `ql:has-pattern`
+    // relation, so check for cancellation within the loop.
+    ad_utility::chunkedForEach(
+        idTable.getColumn(patternColumn),
+        [&patternCounts, &patterns](Id patternId) {
+          AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
+          size_t patternIdx = patternId.getInt();
+          if (patternIdx >= patterns.size()) {
+            AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
+            patternIdx = patterns.size();
+          }
+          patternCounts[patternIdx]++;
+        },
+        cancellationChecker());
   };
   // The subresult is lazy unless it was already fully materialized (for
   // example because it was read from the cache).
@@ -238,7 +244,7 @@ struct CountMap : ad_utility::HashMap<T, size_t> {
 // The number of rows (patterns) that make up a single chunk of work in the
 // first (second) loop of `computePatternTrick`. Inputs that are not larger than
 // this are handled by a single thread, because then the work is dominated by
-// the cost of spawning threads and of merging the partial results.
+// the cost of the tasks and of merging the partial results.
 constexpr size_t CHUNK_SIZE_ROWS = 500'000;
 constexpr size_t CHUNK_SIZE_PATTERNS = 100'000;
 }  // namespace
@@ -248,7 +254,8 @@ template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTableView<0>& dynInput, IdTable* dynResult,
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumnIdx,
-    const size_t patternColumnIdx, RuntimeInformation& runtimeInfo) {
+    const size_t patternColumnIdx, RuntimeInformation& runtimeInfo,
+    const qlever::Executor& executor) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   AD_LOG_DEBUG << "For " << input.size() << " entities in column "
@@ -260,10 +267,10 @@ void CountAvailablePredicates::computePatternTrick(
 
   decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
   decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
-  size_t numThreads =
-      getRuntimeParameter<&RuntimeParameters::patternTrickNumThreads_>();
+  size_t numTasks =
+      getRuntimeParameter<&RuntimeParameters::patternTrickNumTasksInFlight_>();
   CountMap<size_t> patternCounts = ad_utility::computeInParallelChunks(
-      input.size(), CHUNK_SIZE_ROWS,
+      executor, input.size(), CHUNK_SIZE_ROWS,
       [&subjectColumn, &patternColumn](CountMap<size_t>& counts, size_t begin,
                                        size_t end) {
         for (size_t i = begin; i < end; ++i) {
@@ -276,7 +283,7 @@ void CountAvailablePredicates::computePatternTrick(
           counts[patternColumn[i].getInt()]++;
         }
       },
-      numThreads);
+      numTasks);
   AD_LOG_DEBUG << "Using " << patternCounts.size()
                << " patterns for computing the result." << std::endl;
   // the number of predicates counted with patterns
@@ -304,7 +311,7 @@ void CountAvailablePredicates::computePatternTrick(
   AD_LOG_DEBUG << "Start translating pattern counts to predicate counts"
                << std::endl;
   CountMap<Id> predicateCounts = ad_utility::computeInParallelChunks(
-      patternVec.size(), CHUNK_SIZE_PATTERNS,
+      executor, patternVec.size(), CHUNK_SIZE_PATTERNS,
       [&patternVec, &patterns](CountMap<Id>& counts, size_t begin, size_t end) {
         for (auto [patternIndex, patternCount] : ql::ranges::subrange(
                  patternVec.begin() + begin, patternVec.begin() + end)) {
@@ -318,7 +325,7 @@ void CountAvailablePredicates::computePatternTrick(
           }
         }
       },
-      numThreads);
+      numTasks);
   AD_LOG_DEBUG << "Finished translating pattern counts to predicate counts"
                << std::endl;
   // write the predicate counts to the result

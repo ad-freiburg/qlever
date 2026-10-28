@@ -24,6 +24,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/IndexFormatConverter.h"
 #include "util/Forward.h"
+#include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/ProgramOptionsHelpers.h"
 
@@ -84,7 +85,8 @@ int main(int argc, char** argv) {
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
-    qlever::indexFormatConverter::upgradeIndexInPlace(indexBasename);
+    qlever::indexFormatConverter::upgradeIndexInPlace(
+        indexBasename, ad_utility::globalExecutor());
   } catch (const std::exception& e) {
     AD_LOG_ERROR << "Upgrading the index failed with the following exception: "
                  << e.what() << std::endl;

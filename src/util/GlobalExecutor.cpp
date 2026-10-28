@@ -81,7 +81,7 @@ size_t globalExecutorNumThreads() {
 }
 
 // _____________________________________________________________________________
-ql::any_io_executor globalExecutor() {
+qlever::Executor globalExecutor() {
   // NOTE: The initialization of a function-local static is thread-safe, so the
   // lambda (and with it the marking of the configuration as final) runs exactly
   // once.
