@@ -244,7 +244,6 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
 }
 
 // _____________________________________________________________________________
-/* TODO wieder einkommentieren
 TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
   using namespace makeSparqlExpression;
   QueryExecutionContext* qec = ad_utility::testing::getQec();
@@ -284,7 +283,7 @@ TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       filterWithWrongSize.getResult(false, ComputationMode::FULLY_MATERIALIZED),
       ::testing::HasSubstr("does not match the size of the evaluation"));
-}*/
+}
 
 // _____________________________________________________________________________
 TEST(Filter, clone) {
