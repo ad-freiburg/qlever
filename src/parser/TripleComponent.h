@@ -90,6 +90,13 @@ class TripleComponent {
     checkThatStringIsValid();
   }
 
+  // Construct from a `LiteralOrIri`, which becomes a `Literal` or an `Iri`.
+  explicit TripleComponent(
+      ad_utility::triple_component::LiteralOrIri literalOrIri)
+      : _variant{literalOrIri.isIri()
+                     ? Variant{std::move(literalOrIri.getIri())}
+                     : Variant{std::move(literalOrIri.getLiteral())}} {}
+
   /// Defaulted copy and move constructors.
   TripleComponent(const TripleComponent&) = default;
   TripleComponent(TripleComponent&&) noexcept = default;
