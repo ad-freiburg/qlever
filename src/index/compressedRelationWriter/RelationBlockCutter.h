@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_RELATIONBLOCKCUTTER_H
-#define QLEVER_SRC_INDEX_RELATIONBLOCKCUTTER_H
+#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_RELATIONBLOCKCUTTER_H
+#define QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_RELATIONBLOCKCUTTER_H
 
 #include <algorithm>
 #include <memory>
@@ -367,4 +367,4 @@ class RelationBlockCutter {
   }
 };
 
-#endif  // QLEVER_SRC_INDEX_RELATIONBLOCKCUTTER_H
+#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_RELATIONBLOCKCUTTER_H

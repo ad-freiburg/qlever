@@ -1,6 +1,6 @@
-// Copyright 2021 - 2025 The QLever Authors, in particular:
+// Copyright 2021 - 2026 The QLever Authors, in particular:
 //
-// 2021 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025        Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -8,8 +8,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
-#define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
+#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONHELPERSIMPL_H_
+#define QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONHELPERSIMPL_H_
 
 #include <algorithm>
 #include <array>
@@ -364,4 +364,4 @@ class TripleAlignedBlockBuffer {
 
 }  // namespace compressedRelationHelpers
 
-#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
+#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONHELPERSIMPL_H_
