@@ -10,12 +10,12 @@
 #include <absl/strings/str_join.h>
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/BinaryExport.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/binary_export/BinaryImport.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "index/TripleComponentConversions.h"

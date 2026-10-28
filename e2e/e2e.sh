@@ -218,7 +218,7 @@ echo "The HTTP proxy tests passed"
 
 # Test the transfer of the results of federated queries (`SERVICE`) between
 # two QLever instances, which use QLever's binary format for that (see
-# `src/engine/BinaryExport.h`). The second server (which uses the proxy) sends
+# `src/engine/binary_export/BinaryExport.h`). The second server (which uses the proxy) sends
 # queries with `SERVICE` parts to the first server, and the result must be the
 # same as the one of the direct query. The queries cover all the datatypes
 # that the binary format has to handle, except for the ones that are tested in

@@ -26,6 +26,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   serializer | size;
 
   if constexpr (ReadSerializer<S>) {
+    checkAllocation(serializer, size, sizeof(V));
     arg.resize(size);
   }
   if constexpr (TriviallySerializable<V>) {

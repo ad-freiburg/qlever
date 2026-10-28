@@ -10,13 +10,13 @@
 #include <regex>
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/BinaryExport.h"
 #include "engine/Join.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/binary_export/BinaryExport.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"

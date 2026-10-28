@@ -8,8 +8,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_STRING_MAPPING_H
-#define QLEVER_SRC_ENGINE_STRING_MAPPING_H
+#ifndef QLEVER_SRC_ENGINE_BINARY_EXPORT_STRINGMAPPING_H
+#define QLEVER_SRC_ENGINE_BINARY_EXPORT_STRINGMAPPING_H
 
 #include <string>
 #include <vector>
@@ -28,7 +28,7 @@ namespace qlever::binary_export {
 // those IDs and resolves it to its string right away, so the size of a batch
 // is known.
 // The counterpart on the importing side is the `IdRewriter` (see
-// `BinaryExport.h`).
+// `IdRewriter.h`).
 class StringMapping {
   const Index* index_;
   // Only required for the signature of `idToLiteralOrIri`. A `LocalVocabIndex`
@@ -73,4 +73,4 @@ class StringMapping {
 };
 }  // namespace qlever::binary_export
 
-#endif  // QLEVER_SRC_ENGINE_STRING_MAPPING_H
+#endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_STRINGMAPPING_H

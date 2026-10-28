@@ -34,7 +34,7 @@ enum class MediaType {
   nquads,
   octetStream,
   // QLever's binary format for the efficient transfer of results between two
-  // QLever instances, see `engine/BinaryExport.h`.
+  // QLever instances, see `engine/binary_export/BinaryExport.h`.
   binaryQleverExport
 };
 
