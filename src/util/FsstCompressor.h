@@ -170,12 +170,14 @@ class FsstDecoder {
     if (size < buffer.size()) {
       return std::string(buffer.data(), size);
     }
-    return detail::decompressToOwnedString(
-        size + 1, [this, str, size](ql::span<char> out) {
-          const size_t written = decompressPossiblyTruncated(str, out);
-          AD_CORRECTNESS_CHECK(written == size);
-          return written;
+    // The operation passed to `resize_and_overwrite` must not throw, so the
+    // size is checked after the string is built.
+    std::string result = detail::decompressToOwnedString(
+        size + 1, [this, str](ql::span<char> out) {
+          return decompressPossiblyTruncated(str, out);
         });
+    AD_CORRECTNESS_CHECK(result.size() == size);
+    return result;
   }
 
   // ___________________________________________________________________________
