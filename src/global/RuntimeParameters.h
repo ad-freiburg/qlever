@@ -240,14 +240,16 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
-  // If set to true, `VocabularyOnDisk::lookupBatch` first reads the vocabulary
-  // words (and their offsets) that are in the page cache with non-blocking
-  // `preadv2(RWF_NOWAIT)` calls (adjacent ranges coalesced into one call) and
-  // submits only the remaining reads to its `io_uring` ring. A read that hits
-  // the page cache then costs a share of one syscall instead of an `io_uring`
-  // submission and completion; a read that misses costs one extra failed
-  // syscall per run of adjacent ranges. On by default: it removes the
-  // warm-cache cost of the ring and also speeds up cold exports.
+  // If set to true, the I/O managers of `VocabularyOnDisk::lookupBatch` first
+  // read the vocabulary words (and their offsets) that are in the page cache
+  // with non-blocking `preadv2(RWF_NOWAIT)` calls (adjacent ranges coalesced
+  // into one call, see `PageCacheFirstPolicy`) and submit only the remaining
+  // reads to their `io_uring` ring. A read that hits the page cache then costs
+  // a share of one syscall instead of an `io_uring` submission and completion;
+  // a read that misses costs one extra failed syscall per run of adjacent
+  // ranges. On by default: it removes the warm-cache cost of the ring and also
+  // speeds up cold exports. The parameter is read at the start of every
+  // `lookupBatch`.
   Bool vocabularyIouringPageCacheFastPath_{
       true, "vocabulary-iouring-page-cache-fast-path"};
 

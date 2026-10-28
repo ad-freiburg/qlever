@@ -190,30 +190,17 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
   // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
-  // With `pageCacheFastPath`, each run of consecutive indices is first read as
-  // one range of the `.offsets` file with `readPageCacheHits`, and only the
-  // pairs of the runs that were not in the page cache go through `manager`.
+  // Each run of consecutive indices is read as one range, because their pairs
+  // overlap in the file.
   std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
-                                          ql::span<const size_t> indices,
-                                          bool pageCacheFastPath) const;
+                                          ql::span<const size_t> indices) const;
 
   // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
   // string data from `file_` into one contiguous buffer in a single batched
   // read via `manager`, and return it as a `VocabBatchLookupResult`.
-  // With `pageCacheFastPath`, the words that are in the page cache are read
-  // with `readPageCacheHits` (adjacent words in one call), and only the others
-  // go through `manager`.
-  VocabBatchLookupResult readStrings(ad_utility::BatchManagerBase& manager,
-                                     ql::span<const OffsetPair> offsetPairs,
-                                     bool pageCacheFastPath) const;
-
-  // Read `numBytes[i]` bytes at `offsets[i]` of `fd` into `buffers[i]` for
-  // every `i` in `positions` through `manager` and wait for them.
-  static void readThroughManager(ad_utility::BatchManagerBase& manager, int fd,
-                                 ql::span<const size_t> numBytes,
-                                 ql::span<const uint64_t> offsets,
-                                 ql::span<char*> buffers,
-                                 ql::span<const size_t> positions);
+  VocabBatchLookupResult readStrings(
+      ad_utility::BatchManagerBase& manager,
+      ql::span<const OffsetPair> offsetPairs) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H
