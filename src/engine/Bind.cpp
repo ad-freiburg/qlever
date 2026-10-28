@@ -19,8 +19,14 @@
 
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,
-           std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b)
-    : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
+           std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b,
+           std::optional<Variable> onlyIfBound)
+    : Operation(qec),
+      _subtree(std::move(subtree)),
+      _bind(std::move(b)),
+      onlyIfBound_(std::move(onlyIfBound)) {
+  AD_CONTRACT_CHECK(!onlyIfBound_.has_value() ||
+                    _subtree->containsVariable(onlyIfBound_.value()));
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle());
@@ -66,7 +72,13 @@ float Bind::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
+std::string Bind::getDescriptor() const {
+  if (onlyIfBound_.has_value()) {
+    return absl::StrCat(_bind.getDescriptor(), " only if ",
+                        onlyIfBound_.value().name(), " is bound");
+  }
+  return _bind.getDescriptor();
+}
 
 // _____________________________________________________________________________
 [[nodiscard]] std::vector<ColumnIndex> Bind::resultSortedOn() const {
@@ -81,9 +93,15 @@ bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
 std::string Bind::getCacheKeyImpl() const {
-  return absl::StrCat(
-      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
-      "\n", _subtree->getCacheKey());
+  const auto& varCols = _subtree->getVariableColumns();
+  std::string onlyIfBound =
+      onlyIfBound_.has_value()
+          ? absl::StrCat(" only if column ",
+                         varCols.at(onlyIfBound_.value()).columnIndex_,
+                         " is bound")
+          : "";
+  return absl::StrCat("BIND ", _bind._expression.getCacheKey(varCols),
+                      onlyIfBound, "\n", _subtree->getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -93,9 +111,10 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto columnIndex = getResultWidth() - 1;
   // Determine whether the added column might contain UNDEF values.
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  auto statusOfNewColumn = _bind._expression.isResultAlwaysDefined(res)
-                               ? AlwaysDefined
-                               : PossiblyUndefined;
+  auto statusOfNewColumn =
+      !onlyIfBound_.has_value() && _bind._expression.isResultAlwaysDefined(res)
+          ? AlwaysDefined
+          : PossiblyUndefined;
 
   auto [it, wasNew] =
       res.insert({_bind._target, {columnIndex, statusOfNewColumn}});
@@ -238,6 +257,17 @@ IdTable Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
+  // Set the target to UNDEF for all rows where `onlyIfBound_` is UNDEF.
+  if (onlyIfBound_.has_value()) {
+    auto guardColumn = idTable.getColumn(
+        _subtree->getVariableColumns().at(onlyIfBound_.value()).columnIndex_);
+    for (size_t i = 0; i < guardColumn.size(); ++i) {
+      if (guardColumn[i].isUndefined()) {
+        outputColumn[i] = Id::makeUndefined();
+      }
+    }
+  }
+
   return idTable;
 }
 
@@ -255,7 +285,7 @@ std::unique_ptr<Operation> Bind::cloneImpl() const {
 std::unique_ptr<Operation> Bind::cloneWithNewChildren(
     std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Bind>(_executionContext, std::move(children.at(0)),
-                                _bind);
+                                _bind, onlyIfBound_);
 }
 
 // _____________________________________________________________________________

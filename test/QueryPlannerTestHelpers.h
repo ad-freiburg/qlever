@@ -234,15 +234,18 @@ constexpr auto TextIndexScanForEntityConf =
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,
-                      std::string_view expression,
-                      Variable target) -> QetMatcher {
+                      std::string_view expression, Variable target,
+                      std::optional<Variable> onlyIfBound =
+                          std::nullopt) -> QetMatcher {
   auto innerMatcher =
       AllOf(AD_FIELD(parsedQuery::Bind, _target, Eq(target)),
             AD_FIELD(parsedQuery::Bind, _expression,
                      AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
                                  getDescriptor, Eq(expression))));
-  return RootOperation<::Bind>(AllOf(
-      AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)), children(childMatcher)));
+  return RootOperation<::Bind>(
+      AllOf(AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)),
+            AD_PROPERTY(::Bind, onlyIfBound, Eq(onlyIfBound)),
+            children(childMatcher)));
 };
 
 // Matcher for a `CountAvailablePredicatesMatcher` operation. The case of 0
