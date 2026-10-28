@@ -34,8 +34,11 @@ OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
 // _____________________________________________________________________________
 void VocabularyOnDisk::readConsecutiveOffsets(
     uint64_t first, ql::span<Offset> offsetsOut) const {
-  offsetsFile_.read(offsetsOut.data(), offsetsOut.size() * sizeof(Offset),
-                    static_cast<off_t>(first * sizeof(Offset)));
+  size_t numBytes = offsetsOut.size() * sizeof(Offset);
+  auto numBytesRead = offsetsFile_.read(
+      offsetsOut.data(), numBytes, static_cast<off_t>(first * sizeof(Offset)));
+  // A short read means a truncated or corrupt offsets file.
+  AD_CORRECTNESS_CHECK(numBytesRead == static_cast<ssize_t>(numBytes));
 }
 
 // _____________________________________________________________________________
@@ -43,7 +46,11 @@ void VocabularyOnDisk::readConsecutiveWordBatch(
     Offset beginOffset, Offset endOffset,
     ad_utility::UninitializedVector<char>& dataOut) const {
   dataOut.resize(endOffset - beginOffset);
-  file_.read(dataOut.data(), dataOut.size(), static_cast<off_t>(beginOffset));
+  auto numBytesRead = file_.read(dataOut.data(), dataOut.size(),
+                                 static_cast<off_t>(beginOffset));
+  // A short read means a truncated or corrupt data file. The check also
+  // guarantees that the uninitialized `dataOut` is completely written.
+  AD_CORRECTNESS_CHECK(numBytesRead == static_cast<ssize_t>(dataOut.size()));
 }
 
 // _____________________________________________________________________________
@@ -172,9 +179,11 @@ struct VocabularyOnDisk::ReadAheadState {
   // Cache the `windowSize` words of the `vocab` starting at `first`, but only
   // up to the end of the vocabulary and `VOCABULARY_READ_AHEAD_MAX_WORD_DATA`
   // bytes of data. If that leaves fewer than two words, cache nothing and
-  // return false: a single word is cheaper to read via `readWord` (same two
-  // reads, no extra copy), and a single word above the byte limit would grow
-  // the buffers of this thread for good, because they never shrink.
+  // return false.
+  //
+  // NOTE: A single word is cheaper to read via `readWord` (the same two reads,
+  // but no extra copy), and a single word above the byte limit would grow the
+  // buffers of this thread for good, because they never shrink.
   bool readWindow(const VocabularyOnDisk& vocab, uint64_t first,
                   size_t windowSize) {
     // Invalidate first, so that the state stays consistent if a read throws.
