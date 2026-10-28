@@ -76,7 +76,18 @@ struct TransitivePathSide {
   TransitivePathSide clone() const {
     TransitivePathSide copy = *this;
     if (copy.treeAndCol_.has_value()) {
-      copy.treeAndCol_.value().first = copy.treeAndCol_.value().first->clone();
+      copy.treeAndCol_.value().first = treeAndCol_.value().first->clone();
+    }
+    return copy;
+  }
+
+  // Override of `clone()`, but instead of creating a new tree, use a given
+  // one to slot in.
+  TransitivePathSide clone(
+      std::shared_ptr<QueryExecutionTree> foreignTree) const {
+    TransitivePathSide copy = *this;
+    if (treeAndCol_.has_value()) {
+      copy.treeAndCol_->first = std::move(foreignTree);
     }
     return copy;
   }
@@ -158,6 +169,11 @@ class TransitivePathBase : public Operation {
   // bound in `minDist_ == 0` scenarios. This is necessary for queries of the
   // form `?x wdt:P31 ?g . GRAPH ?g { ?g wdt:P279* ?y }`.
   static const Variable internalGraphHelper_;
+
+  // Set the tree and sides of a clone of one of the implemented types of
+  // transitive paths (`TransitivePathHashMap` or `TransitivePathBinSearch`).
+  // Unites shared logic from their `cloneImpl` members.
+  void setTreeAndChildrenToClone(TransitivePathBase& copy) const;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,

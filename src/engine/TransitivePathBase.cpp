@@ -628,6 +628,21 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
 }
 
 // _____________________________________________________________________________
+void TransitivePathBase::setTreeAndChildrenToClone(
+    TransitivePathBase& copy) const {
+  copy.subtree_ = subtree_->clone();
+  copy.lhs_ = lhs_.clone();
+
+  // Don't duplicate trees if both sides are bound at once, instead use the same
+  // for both sides.
+  if (lhs_.isBoundVariable() && rhs_.isBoundVariable()) {
+    copy.rhs_ = rhs_.clone(copy.lhs_.treeAndCol_->first);
+  } else {
+    copy.rhs_ = rhs_.clone();
+  }
+}
+
+// _____________________________________________________________________________
 // Don't check the name because this leads to segfaults during static
 // initialization.
 const Variable TransitivePathBase::internalGraphHelper_{

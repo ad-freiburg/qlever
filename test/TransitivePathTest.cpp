@@ -2532,6 +2532,57 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
   }
 }
 
+//_____________________________________________________________________________
+TEST_P(TransitivePathTest, cloneKeepsSameTreeWhenBothSidesBound) {
+  auto sub = makeIdTableFromVector({{1, 2}, {2, 1}});
+  auto opTable = makeIdTableFromVector({{2, 2}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+
+  // We need to manually bind the path in order to obtain the  `qec` here.
+  auto [T, qec] = makePath(sub.clone(), {Variable{"?i1"}, Variable{"?i2"}},
+                           left, right, 1, std::numeric_limits<size_t>::max());
+  auto tree = ad_utility::makeExecutionTree<ValuesForTestingCountClones>(
+      qec, opTable.clone(), Vars{Variable{"?target"}, Variable{"?start"}});
+  // Reset number of clones just to be sure.
+  ValuesForTestingCountClones::numClones = 0;
+  auto bound = T->bindSides(tree, 1, 0);
+
+  auto cloned = bound->clone();
+
+  // Only once should the tree have been cloned.
+  EXPECT_EQ(ValuesForTestingCountClones::numClones, 1);
+}
+
+//_____________________________________________________________________________
+TEST_P(TransitivePathTest, cloneActuallyClonesChildrenBothSidesBound) {
+  auto sub = makeIdTableFromVector({{1, 2}, {2, 1}});
+  auto opTable = makeIdTableFromVector({{2, 2}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+
+  auto T = makePathBoundOnBothSides(
+      sub.clone(), {Variable{"?i1"}, Variable{"?i2"}}, opTable.clone(), 1, 0,
+      {Variable{"?target"}, Variable{"?start"}}, left, right, 1,
+      std::numeric_limits<size_t>::max());
+
+  auto cloned = T->clone();
+
+  // Ensure the same amount of children are cloned.
+  auto children = T->getChildren();
+  auto clonedChildren = cloned->getChildren();
+  EXPECT_EQ(children.size(), 2);
+  EXPECT_EQ(clonedChildren.size(), 2);
+
+  // Ensure all children of the clone are actual new clones.
+  for (auto& clonedChild : clonedChildren) {
+    EXPECT_FALSE(ranges::contains(children, clonedChild));
+  }
+  EXPECT_EQ(T->getCacheKey(), cloned->getCacheKey());
+}
+
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
