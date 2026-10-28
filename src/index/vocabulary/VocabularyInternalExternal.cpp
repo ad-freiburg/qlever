@@ -42,21 +42,27 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   // vocabulary. The internal vocabulary has "holes", so each index needs one
   // membership probe (an allocation-free binary search); indices at or past
   // `internalVocab_.endIndex()` are known misses and skip the search.
-  MultiSourceVocabBatchAssembler assembler(indices.size());
+  // Created on the first internal hit, so a batch without any internal word
+  // (the common case) does not allocate it.
+  std::optional<MultiSourceVocabBatchAssembler> assembler;
   MarkerIndicesAndPositions externalSlots;
   const uint64_t internalEnd = internalVocab_.endIndex();
   for (const auto& [position, index] : ::ranges::views::enumerate(indices)) {
     auto internalWord = index < internalEnd ? internalVocab_[index]
                                             : std::optional<std::string_view>{};
     if (internalWord.has_value()) {
-      assembler.assignUnownedViewAtPosition(position, internalWord.value());
+      if (!assembler.has_value()) {
+        assembler.emplace(indices.size());
+      }
+      assembler->assignUnownedViewAtPosition(position, internalWord.value());
     } else {
       externalSlots.addPair(index, position);
     }
   }
 
   if (externalSlots.empty()) {
-    return std::move(assembler).finalizeVocabBatchLookupResult();
+    // All indices were internal, so the assembler exists.
+    return std::move(assembler).value().finalizeVocabBatchLookupResult();
   }
   auto external =
       externalVocab_.lookupBatch(externalSlots.getUnderlyingIndices());
@@ -65,9 +71,11 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     // already is the result.
     return external;
   }
-  assembler.scatterSubBatchResultAtPositions(
+  // Some, but not all, indices were internal, so the assembler exists.
+  AD_CORRECTNESS_CHECK(assembler.has_value());
+  assembler->scatterSubBatchResultAtPositions(
       std::move(external), externalSlots.getResultPositions());
-  return std::move(assembler).finalizeVocabBatchLookupResult();
+  return std::move(assembler).value().finalizeVocabBatchLookupResult();
 }
 
 // _____________________________________________________________________________

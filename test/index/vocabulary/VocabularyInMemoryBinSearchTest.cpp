@@ -27,13 +27,6 @@ class VocabularyCreator {
  private:
   std::string vocabFilename_;
 
-  // Remove both the vocabulary and its .ids sidecar before setup and after
-  // teardown so stale data cannot affect another test using the same filename.
-  void removeVocabularyFiles() {
-    ad_utility::deleteFile(vocabFilename_, false);
-    ad_utility::deleteFile(vocabFilename_ + ".ids", false);
-  }
-
  public:
   explicit VocabularyCreator(std::string filename)
       : vocabFilename_{filename + suffix} {
