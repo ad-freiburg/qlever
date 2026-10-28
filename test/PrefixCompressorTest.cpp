@@ -10,9 +10,12 @@
 
 #include <gmock/gmock.h>
 
+#include <cstddef>
 #include <limits>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "backports/span.h"
 #include "index/vocabulary/PrefixCompressor.h"
@@ -72,7 +75,7 @@ TEST(PrefixCompressor, DecompressIntoMatchesDecompress) {
     const size_t numWritten = p.decompressInto(
         compressed, ql::span<char>{decompressedIntoBuffer.data(),
                                    decompressedIntoBuffer.size()});
-    EXPECT_EQ(numWritten, decompressedWord.size());
+    ASSERT_EQ(numWritten, decompressedWord.size());
     EXPECT_EQ(std::string_view(decompressedIntoBuffer.data(), numWritten),
               decompressedWord);
     EXPECT_EQ(decompressedWord, word);
@@ -86,11 +89,10 @@ TEST(PrefixCompressor, DecompressIntoMatchesDecompress) {
   AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(p.maxDecompressedSize("")),
                                ::testing::HasSubstr("!compressedWord.empty()"));
 
-  std::string emptyInputBuffer(1, '\0');
+  std::string outBuffer(1, '\0');
   AD_EXPECT_THROW_WITH_MESSAGE(
       static_cast<void>(p.decompressInto(
-          "",
-          ql::span<char>{emptyInputBuffer.data(), emptyInputBuffer.size()})),
+          "", ql::span<char>{outBuffer.data(), outBuffer.size()})),
       ::testing::HasSubstr("!compressedWord.empty()"));
   AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(p.decompress("")),
                                ::testing::HasSubstr("!compressedWord.empty()"));
@@ -112,11 +114,14 @@ TEST(PrefixCompressor, PrefixIndexBoundaryMarkers) {
   const std::string compressedAlpha = p.compress("alpha");
   const std::string compressedBeta = p.compress("beta");
 
-  EXPECT_EQ(p.prefixIndex(compressedAlpha), 0u);
-  EXPECT_FALSE(p.prefixIndex(compressedBeta).has_value());
-  EXPECT_FALSE(p.prefixIndex(std::string(1, static_cast<char>(NO_PREFIX_CHAR)))
+  EXPECT_EQ(PrefixCompressor::prefixIndex(compressedAlpha), 0u);
+  EXPECT_FALSE(PrefixCompressor::prefixIndex(compressedBeta).has_value());
+  // The marker for "no prefix" and a byte below `MIN_COMPRESSION_PREFIX` must
+  // not be decoded as prefix codes.
+  EXPECT_FALSE(PrefixCompressor::prefixIndex(
+                   std::string(1, static_cast<char>(NO_PREFIX_CHAR)))
                    .has_value());
-  EXPECT_FALSE(p.prefixIndex(std::string(1, '\0')).has_value());
+  EXPECT_FALSE(PrefixCompressor::prefixIndex(std::string(1, '\0')).has_value());
   EXPECT_EQ(p.maxDecompressedSize(compressedAlpha), 5u);
   EXPECT_EQ(p.maxDecompressedSize(compressedBeta), 4u);
 
@@ -135,14 +140,19 @@ TEST(PrefixCompressor, PrefixIndexBoundaryMarkers) {
                                                        oversizedBuffer.size()}),
       5u);
   EXPECT_EQ(std::string_view(oversizedBuffer.data(), 5), "alpha");
+  // The tail beyond the reported size is untouched.
+  EXPECT_EQ(
+      std::string_view(oversizedBuffer.data() + 5, oversizedBuffer.size() - 5),
+      std::string(oversizedBuffer.size() - 5, 'x'));
 }
 
 // _____________________________________________________________________________
 // Focused boundary coverage for the static `prefixIndex` helper: the exact
 // valid range [MIN_COMPRESSION_PREFIX, MIN_COMPRESSION_PREFIX +
-// NUM_COMPRESSION_PREFIXES) maps to indices [0, NUM_COMPRESSION_PREFIXES),
+// NUM_COMPRESSION_PREFIXES) maps to indices [0, NUM_COMPRESSION_PREFIXES);
 // everything else yields `std::nullopt`.
 TEST(PrefixCompressor, PrefixIndexBoundaries) {
+  // Return a word consisting of the single byte `byte`.
   const auto byteWord = [](unsigned int byte) {
     return std::string(1, static_cast<char>(byte));
   };
@@ -162,9 +172,9 @@ TEST(PrefixCompressor, PrefixIndexBoundaries) {
 }
 
 // _____________________________________________________________________________
-// The private per-word helpers check their preconditions themselves. The public
-// functions establish these preconditions before calling them, so the checks
-// can only be violated by calling the helpers directly.
+// The private per-word helpers check their size preconditions themselves. The
+// public functions establish these preconditions before calling them, so the
+// checks can only be violated by calling the helpers directly.
 TEST(PrefixCompressor, HelperContractChecks) {
   PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alpha"});
@@ -179,26 +189,53 @@ TEST(PrefixCompressor, HelperContractChecks) {
       static_cast<void>(p.decompressedSizeWithIndex(
           std::numeric_limits<size_t>::max(), size_t{0})),
       ::testing::HasSubstr("prefixSize <="));
+  // Prefix "alpha" (5 bytes) plus a rest of 3 bytes.
   EXPECT_EQ(p.decompressedSizeWithIndex(3, size_t{0}), 8u);
+  // The largest `size_t` that does not overflow is accepted.
+  EXPECT_EQ(p.decompressedSizeWithIndex(std::numeric_limits<size_t>::max() - 5,
+                                        size_t{0}),
+            std::numeric_limits<size_t>::max());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      static_cast<void>(p.decompressedSizeWithIndex(
+          std::numeric_limits<size_t>::max() - 4, size_t{0})),
+      ::testing::HasSubstr("prefixSize <="));
+  // The last index of the codebook array is in range; it holds the empty
+  // prefix here.
+  EXPECT_EQ(
+      p.decompressedSizeWithIndex(3, size_t{NUM_COMPRESSION_PREFIXES - 1}), 3u);
   EXPECT_EQ(p.decompressedSizeWithIndex(3, std::nullopt), 3u);
 
   const std::string compressed = p.compress("alphabet");
   const auto prefixIdx = PrefixCompressor::prefixIndex(compressed);
   ASSERT_EQ(prefixIdx, 0u);
-  // The output cannot hold the prefix.
+  // The output cannot hold the prefix ("alpha" has 5 bytes).
   std::string tooSmallForPrefix(4, '\0');
   AD_EXPECT_THROW_WITH_MESSAGE(
       static_cast<void>(p.decompressIntoWithIndex(
           compressed, prefixIdx,
           ql::span<char>{tooSmallForPrefix.data(), tooSmallForPrefix.size()})),
       ::testing::HasSubstr("prefix.size() <= out.size()"));
-  // The output holds the prefix but not the rest.
+  // The output holds the prefix but not the rest ("bet" has 3 bytes).
   std::string tooSmallForRest(6, '\0');
   AD_EXPECT_THROW_WITH_MESSAGE(
       static_cast<void>(p.decompressIntoWithIndex(
           compressed, prefixIdx,
           ql::span<char>{tooSmallForRest.data(), tooSmallForRest.size()})),
       ::testing::HasSubstr("rest.size() <= out.size() - outputSize"));
+}
+
+// _____________________________________________________________________________
+TEST(PrefixCompressor, DecompressIntoWithEmptyPrefix) {
+  PrefixCompressor p;
+  p.buildCodebook(std::vector<std::string>{"", "alpha"});
+  for (std::string_view word : {"", "beta", "alpha", "alphabet"}) {
+    const std::string compressed = p.compress(word);
+    std::string out(p.maxDecompressedSize(compressed), '\0');
+    const size_t numWritten =
+        p.decompressInto(compressed, ql::span<char>{out.data(), out.size()});
+    ASSERT_EQ(numWritten, word.size());
+    EXPECT_EQ(std::string_view(out.data(), numWritten), word);
+  }
 }
 
 // _____________________________________________________________________________
