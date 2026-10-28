@@ -8,3 +8,5 @@
 !CompilationInfo.cmake
 !GitVersion.cmake
 !docker-entrypoint.sh
+!misc/run-test-with-stall-watchdog.sh
+!misc/repeat-tests-until-failure.sh
