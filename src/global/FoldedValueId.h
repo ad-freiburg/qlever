@@ -35,6 +35,10 @@ class ValueId {
   using T = uint64_t;
   static constexpr T numDatatypeBits = 4;
   static constexpr T numDataBits = 64 - numDatatypeBits;
+  // The number of bits of a vocabulary index, including the markers in its
+  // topmost bits (see `SplitVocabulary` and `GeoCellGrid`). For this `Id`, a
+  // vocabulary index uses the whole payload.
+  static constexpr T numVocabIndexBits = numDataBits;
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 

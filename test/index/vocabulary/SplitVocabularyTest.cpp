@@ -54,10 +54,9 @@ using namespace ad_utility;
 
 // The position of the lowest marker bit for a vocabulary with two and with
 // three underlying vocabularies (one and two marker bits). The marker takes the
-// most significant bits of the payload of an `Id`, so the positions are 59 and
-// 58 for the legacy `Id` and 63 and 62 for the split `Id`.
-constexpr uint64_t markerShiftTwo = ValueId::numDataBits - 1;
-constexpr uint64_t markerShiftThree = ValueId::numDataBits - 2;
+// topmost bits of a vocabulary index (`ValueId::numVocabIndexBits`).
+constexpr uint64_t markerShiftTwo = ValueId::numVocabIndexBits - 1;
+constexpr uint64_t markerShiftThree = ValueId::numVocabIndexBits - 2;
 const VocabularyType geoSplitVocabType{
     VocabularyType::Enum::OnDiskCompressedGeoSplit};
 

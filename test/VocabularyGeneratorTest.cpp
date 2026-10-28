@@ -205,7 +205,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
               word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
         geoMergeResult.emplace_back(word, isExternal);
         return (geoMergeResult.size() - 1) |
-               (1ull << (ValueId::numDataBits - 1));
+               (1ull << (ValueId::numVocabIndexBits - 1));
       } else {
         mergeResult.emplace_back(word, isExternal);
         return mergeResult.size() - 1;
