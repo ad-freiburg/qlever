@@ -430,7 +430,7 @@ double doubleFromEnv(const char* name, double defaultValue) {
 class SerializerMicroBenchmark : public BenchmarkInterface {
  private:
   static inline const size_t NUM_TRIPLES =
-      sizeFromEnv("SERIALIZER_BENCH_TRIPLES", 1'000'000);
+      std::max<size_t>(1, sizeFromEnv("SERIALIZER_BENCH_TRIPLES", 1'000'000));
   static inline const size_t NUM_TRIALS =
       std::max<size_t>(1, sizeFromEnv("SERIALIZER_BENCH_TRIALS", 3));
   static inline const double MIN_TRIAL_SECONDS =
@@ -442,10 +442,10 @@ class SerializerMicroBenchmark : public BenchmarkInterface {
 
   static double secondsOf(const Arm& arm,
                           const std::vector<EvaluatedTriple>& triples,
-                          size_t passes, uint64_t& sinkChecksum) {
+                          size_t passes) {
     const auto start = Clock::now();
     for (size_t p = 0; p < passes; ++p) {
-      sinkChecksum ^= arm.run_(triples).checksum_;
+      static_cast<void>(arm.run_(triples));
     }
     return std::chrono::duration<double>(Clock::now() - start).count();
   }
@@ -482,11 +482,10 @@ class SerializerMicroBenchmark : public BenchmarkInterface {
     std::vector<size_t> allocationsPerRun(arms.size());
     std::vector<size_t> bytesPerRun(arms.size());
     std::vector<std::vector<double>> nsPerTriple(arms.size());
-    uint64_t sinkChecksum = 0;
     std::optional<Consumed> reference;
     for (size_t a = 0; a < arms.size(); ++a) {
       // Untimed warm-up and calibration.
-      const double warmUp = secondsOf(arms[a], triples, 1, sinkChecksum);
+      const double warmUp = secondsOf(arms[a], triples, 1);
       passes[a] = std::max<size_t>(
           1, static_cast<size_t>(std::ceil(MIN_TRIAL_SECONDS / warmUp)));
       Consumed consumed;
@@ -508,8 +507,7 @@ class SerializerMicroBenchmark : public BenchmarkInterface {
     }
     for (size_t trial = 0; trial < NUM_TRIALS; ++trial) {
       for (size_t a = 0; a < arms.size(); ++a) {
-        const double seconds =
-            secondsOf(arms[a], triples, passes[a], sinkChecksum);
+        const double seconds = secondsOf(arms[a], triples, passes[a]);
         nsPerTriple[a].push_back(seconds * 1e9 /
                                  static_cast<double>(passes[a] * n));
       }
@@ -526,7 +524,7 @@ class SerializerMicroBenchmark : public BenchmarkInterface {
          "median vs arm 0"});
     table.metadata().addKeyValuePair("triples", n);
     table.metadata().addKeyValuePair("trials", NUM_TRIALS);
-    table.metadata().addKeyValuePair("sink-checksum", sinkChecksum);
+    table.metadata().addKeyValuePair("sink-checksum", reference->checksum_);
     // Deterministic per-arm counts as numeric metadata (for the hosted
     // counters workflow, which reads numeric metadata from the JSON output).
     for (size_t a = 0; a < arms.size(); ++a) {
