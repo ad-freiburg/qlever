@@ -117,8 +117,8 @@ CPP_concept StoresStringOrId =
 // Convert a `LocalVocabEntry` or `IdOrLocalVocabEntry` value into the
 // corresponding `ValueId`. This function also takes `ValueId`s which are simply
 // returned unchanged. This makes the usage of this function easier.
-CPP_template(typename S)(requires StoresStringOrId<S>) Id
-    makeValueId(const S& value, const EvaluationContext* context) {
+CPP_template(typename S)(requires StoresStringOrId<S>)
+Id makeValueId(const S& value, const EvaluationContext* context) {
   if constexpr (ad_utility::isSimilar<S, ValueId>) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, IdOrLocalVocabEntry>) {
