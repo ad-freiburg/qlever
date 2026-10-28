@@ -13,8 +13,10 @@
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+#include "util/Serializer/AllocationLimitedReadSerializer.h"
 #include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/ChunkedReadSerializer.h"
 #include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
@@ -1712,4 +1714,121 @@ TEST(VectorIncrementalSerializer, MoveAssignmentFinishesOverwrittenSerializer) {
     }
   }
   EXPECT_EQ(readIntVector(filenameB), originalB);
+}
+
+namespace {
+// Return the bytes that `values` are serialized to.
+template <typename... Ts>
+std::vector<char> serializeToBytes(const Ts&... values) {
+  ByteBufferWriteSerializer writer;
+  ((writer << values), ...);
+  return std::move(writer).data();
+}
+
+// Split the `bytes` into consecutive chunks of the given `sizes`, followed by a
+// chunk with the remaining bytes.
+std::vector<ql::span<const std::byte>> splitIntoChunks(
+    std::string_view bytes, const std::vector<size_t>& sizes) {
+  auto remaining = ql::as_bytes(ql::span{bytes});
+  std::vector<ql::span<const std::byte>> chunks;
+  for (size_t size : sizes) {
+    chunks.push_back(remaining.first(size));
+    remaining = remaining.subspan(size);
+  }
+  chunks.push_back(remaining);
+  return chunks;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(Serializer, read) {
+  ByteBufferReadSerializer reader{
+      serializeToBytes(42, std::string{"abc"}, 3.5)};
+  EXPECT_EQ(serialization::read<int>(reader), 42);
+  EXPECT_EQ(serialization::read<std::string>(reader), "abc");
+  EXPECT_EQ(serialization::read<double>(reader), 3.5);
+}
+
+// _____________________________________________________________________________
+TEST(ChunkedReadSerializer, readAcrossChunks) {
+  using Chunks = std::vector<ql::span<const std::byte>>;
+  using serialization::ChunkedReadSerializer;
+  static_assert(serialization::ReadSerializer<ChunkedReadSerializer<Chunks>>);
+  // Chunks of non-const bytes (like the body of an HTTP response) are also
+  // supported, but no ranges of other things.
+  static_assert(
+      serialization::RangeOfByteChunks<std::vector<ql::span<std::byte>>>);
+  static_assert(!serialization::RangeOfByteChunks<std::vector<int>>);
+
+  uint64_t value = 0x0123456789ABCDEF;
+  auto bytes = serializeToBytes(value, 'x', 'y');
+  // The value is split across two chunks, and there are empty chunks.
+  auto chunks = splitIntoChunks({bytes.data(), bytes.size()}, {0, 3, 0, 5, 0});
+  ChunkedReadSerializer reader{chunks};
+  EXPECT_FALSE(reader.isExhausted());
+  EXPECT_EQ(serialization::read<uint64_t>(reader), value);
+  EXPECT_EQ(serialization::read<char>(reader), 'x');
+  EXPECT_FALSE(reader.isExhausted());
+  EXPECT_EQ(serialization::read<char>(reader), 'y');
+  EXPECT_TRUE(reader.isExhausted());
+  auto endedUnexpectedly = ::testing::HasSubstr("ended unexpectedly");
+  AD_EXPECT_THROW_WITH_MESSAGE(serialization::read<char>(reader),
+                               endedUnexpectedly);
+
+  // The range ends in the middle of a value.
+  auto shortChunks = splitIntoChunks("abc", {});
+  ChunkedReadSerializer shortReader{shortChunks};
+  AD_EXPECT_THROW_WITH_MESSAGE(serialization::read<uint64_t>(shortReader),
+                               endedUnexpectedly);
+
+  Chunks noChunks;
+  EXPECT_TRUE(ChunkedReadSerializer{noChunks}.isExhausted());
+}
+
+// _____________________________________________________________________________
+TEST(AllocationLimitedReadSerializer, readWithAllocationLimit) {
+  using serialization::readWithAllocationLimit;
+  static_assert(serialization::ChecksAllocation<
+                serialization::AllocationLimitedReadSerializer<
+                    ByteBufferReadSerializer>>);
+  static_assert(!serialization::ChecksAllocation<ByteBufferReadSerializer>);
+
+  std::vector<std::string> strings{"foo", "", "barbaz"};
+  auto bytes = serializeToBytes(strings);
+  auto read = [&bytes](size_t maxNumBytes) {
+    ByteBufferReadSerializer reader{bytes};
+    return readWithAllocationLimit<std::vector<std::string>>(reader,
+                                                             maxNumBytes);
+  };
+
+  // The strings take up 9 bytes, plus the `std::string` objects.
+  size_t numBytes = 3 * sizeof(std::string) + 9;
+  EXPECT_EQ(read(numBytes), strings);
+  auto tooLarge = ::testing::HasSubstr("would allocate more than the maximum");
+  AD_EXPECT_THROW_WITH_MESSAGE(read(numBytes - 1), tooLarge);
+  // There are too many strings, which is detected before reading them.
+  AD_EXPECT_THROW_WITH_MESSAGE(read(2 * sizeof(std::string)), tooLarge);
+
+  // Values that don't allocate are not limited.
+  {
+    ByteBufferReadSerializer reader{serializeToBytes(uint64_t{42})};
+    EXPECT_EQ(readWithAllocationLimit<uint64_t>(reader, 0), 42);
+  }
+
+  // The limit also applies to vectors of trivially serializable values.
+  {
+    ByteBufferReadSerializer reader{
+        serializeToBytes(std::vector<uint32_t>{1, 2, 3})};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        readWithAllocationLimit<std::vector<uint32_t>>(reader, 11), tooLarge);
+  }
+
+  // No memory is allocated for the size of an invalid string, and the size
+  // doesn't overflow when it is multiplied with the size of the elements.
+  for (size_t hugeSize :
+       {size_t{1} << 60, std::numeric_limits<size_t>::max()}) {
+    ByteBufferReadSerializer reader{serializeToBytes(hugeSize)};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        readWithAllocationLimit<std::vector<uint64_t>>(reader, 1000), tooLarge);
+  }
 }
