@@ -87,15 +87,15 @@ class WordBatchBuilder {
   // Signal that no more words will be added, and hand the remaining words
   // (including the word that is still held back, see the class comment) to the
   // `batchCallback`. After a call to `finish()`, no more words may be added.
-  CPP_template(typename F)(requires WordBatchCallback<F>) void finish(
-      const F& batchCallback);
+  CPP_template(typename F)(requires WordBatchCallback<F>)
+  void finish(const F& batchCallback);
 
  private:
   // Hand the current (typically only partially filled) batch to the
   // `batchCallback` and start a new batch. Do nothing if the current batch is
   // empty.
-  CPP_template(typename F)(requires WordBatchCallback<F>) void flush(
-      const F& batchCallback);
+  CPP_template(typename F)(requires WordBatchCallback<F>)
+  void flush(const F& batchCallback);
 
   // Add the `pendingWord_` and its `pendingMappings_` to the `currentBatch_`.
   // This must only be called once it is known that no further occurrence of
