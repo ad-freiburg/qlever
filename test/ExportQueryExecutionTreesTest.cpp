@@ -567,6 +567,9 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Floats) {
+  // The large double is `-42019234865.781e12` with the lowest 4 bits of the
+  // mantissa cleared, so the legacy `Id` (which drops these bits) and the split
+  // `Id` (which keeps them) export it identically.
   std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865780982022144e0 ."
       " <s> <p> 100.0 . <s> <p> 960000.06 ."
