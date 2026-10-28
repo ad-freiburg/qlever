@@ -456,6 +456,11 @@ void IndexImpl::prepareIndexBuild() {
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+  // The normalization of the words of the `ql:has-word` triples is stored so
+  // that the server can later normalize the words of queries and updates in
+  // the same way.
+  configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
+      hasWordNormalization_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1590,6 +1595,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
       ad_utility::VocabularyType::Enum::OnDiskCompressed);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
+
+  // The normalization of the words of the `ql:has-word` triples of this index
+  // (an index built before this key existed uses `Lowercase`).
+  loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
+                 ad_utility::HasWordNormalization::Lowercase);
 
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a

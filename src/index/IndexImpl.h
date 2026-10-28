@@ -930,6 +930,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, writePatternsToFile);
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
   FRIEND_TEST(IndexImpl, dateOfIndexBuild);
+  FRIEND_TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex);
 
   bool isLiteral(std::string_view object) const;
 

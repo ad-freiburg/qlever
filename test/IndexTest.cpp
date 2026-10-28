@@ -1836,6 +1836,40 @@ TEST(IndexImpl, applyConfigurationMissingLocaleKey) {
                   "an old index build that is no longer supported"));
 }
 
+// Test that the normalization of the words of the `ql:has-word` triples is
+// recorded in the configuration of a built index and applied when an index is
+// loaded, with `Lowercase` for an index that was built before the key existed.
+TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex) {
+  using ad_utility::HasWordNormalization;
+  const std::string key{ad_utility::HAS_WORD_NORMALIZATION_KEY};
+
+  // An index built with either normalization records it in its configuration.
+  for (auto normalization : {HasWordNormalization::Lowercase,
+                             HasWordNormalization::LowercaseNoAccents}) {
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
+    config.addHasWordTriples = true;
+    config.hasWordNormalization = normalization;
+    auto index =
+        makeTestIndex(absl::StrCat("hasWordNormalization.", normalization),
+                      std::move(config));
+    EXPECT_EQ(index.getImpl().configurationJson()[key],
+              std::string{normalization.toString()});
+  }
+
+  // Loading a configuration applies the recorded normalization, and a
+  // configuration without the key (an older index) gives `Lowercase`.
+  auto configuration = minimalValidConfiguration();
+  configuration[key] = "lowercase-no-accents";
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordNormalization_,
+            HasWordNormalization::LowercaseNoAccents);
+  configuration.erase(key);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordNormalization_, HasWordNormalization::Lowercase);
+}
+
 // _____________________________________________________________________________
 TEST(IndexImpl, dateOfIndexBuild) {
   auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");
