@@ -203,14 +203,14 @@ void unescapeLiteralWithQuotesRemoved(std::string_view input,
 }
 
 // ________________________________________________________________________
-NormalizedRDFString normalizeRDFLiteral(const std::string_view origLiteral) {
+std::string normalizeRDFLiteral(const std::string_view origLiteral) {
   auto literal = origLiteral;
 
   // always start with one double quote "
   std::string res = "\"";
   unescapeLiteralWithQuotesRemoved(literal, res);
   res.push_back('\"');
-  return NormalizedRDFString{std::move(res)};
+  return res;
 }
 
 // ____________________________________________________________________________

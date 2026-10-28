@@ -5,6 +5,8 @@
 
 #include "engine/StringMapping.h"
 
+#include <utility>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
@@ -12,19 +14,10 @@
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
-std::vector<std::string> StringMapping::flush(const Index& index) {
-  LocalVocab dummy;
-  std::vector<std::string> sortedStrings;
-  sortedStrings.resize(stringMapping_.size());
-  for (const auto& [oldId, newId] : stringMapping_) {
-    auto literalOrIri =
-        ql::exportIds::idToLiteralOrIri(index, oldId, dummy, true);
-    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
-    sortedStrings[newId] =
-        std::move(literalOrIri.value()).toStringRepresentation();
-  }
+std::vector<std::string> StringMapping::takeStrings() {
   stringMapping_.clear();
-  return sortedStrings;
+  numBytes_ = 0;
+  return std::exchange(strings_, {});
 }
 
 // _____________________________________________________________________________
@@ -40,9 +33,9 @@ Id StringMapping::remapId(Id id) {
   AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
 
   // A static assertion that each datatype is either `trivial`, or `allowed`
-  // (see above), or `EncodedVal`, or `BlankNodeIndex` (the latter also requires
-  // special handling and remapping, but cannot be handled by the
-  // `StringMapping`).
+  // (see above), or `EncodedVal`, or `BlankNodeIndex`. The latter two are not
+  // sent as strings: An `EncodedVal` is sent as is (together with the patterns
+  // of its encoding), and a `BlankNodeIndex` is remapped by the importer.
   static constexpr auto checkDatatypes = []() {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||
@@ -57,11 +50,25 @@ Id StringMapping::remapId(Id id) {
     return true;
   };
   static_assert(checkDatatypes());
-  size_t distinctIndex =
-      stringMapping_.try_emplace(id, stringMapping_.size()).first->second;
+
+  // A new ID gets the next free index and is resolved to its string right
+  // away, so that `numBytes()` always accounts for all IDs of the batch.
+  auto [it, inserted] =
+      stringMapping_.try_emplace(id.getBits(), stringMapping_.size());
+  size_t distinctIndex = it->second;
+  if (inserted) {
+    auto literalOrIri =
+        ql::exportIds::idToLiteralOrIri(*index_, id, dummyLocalVocab_, true);
+    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
+    strings_.push_back(
+        std::move(literalOrIri.value()).toStringRepresentation());
+    numBytes_ += strings_.back().size();
+    AD_CORRECTNESS_CHECK(strings_.size() == stringMapping_.size());
+  }
+
   // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
   // are all zero and then performs a right shift. We have to shift the
-  // `dinstinctIndex` left by the same amount to counter this effect.
+  // `distinctIndex` left by the same amount to counter this effect.
   return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
       distinctIndex << Id::numDatatypeBits));
 }

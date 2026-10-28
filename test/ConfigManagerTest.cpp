@@ -1204,7 +1204,8 @@ struct AddValidatorToConfigManager {
   template <typename... Ts>
   void operator()(size_t variant, ConfigManager& m,
                   ConstConfigOptionProxy<Ts>... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // Add the new validator
     addValidatorFunction(
         AdjustVariantArgument{}.template operator()<Ts...>(variant),
@@ -1301,7 +1302,8 @@ struct DoTestNoValidatorInSubManager {
       ConfigManager& m, const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // How many validators are to be added?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 
@@ -1350,7 +1352,8 @@ struct DoTestAlwaysValidatorInSubManager {
       const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // How many validators are to be added to each of the managers?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 

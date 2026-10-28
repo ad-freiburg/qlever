@@ -13,6 +13,7 @@
 #include <cstddef>
 
 #include "backports/asio.h"
+#include "util/Executor.h"
 
 namespace ad_utility {
 
@@ -68,7 +69,7 @@ size_t globalExecutorNumThreads();
 // need: they post tasks that only have to be completed before the process ends.
 // A phase that needs to know when its own work is done therefore has to
 // establish that itself.
-ql::any_io_executor globalExecutor();
+qlever::Executor globalExecutor();
 
 }  // namespace ad_utility
 
