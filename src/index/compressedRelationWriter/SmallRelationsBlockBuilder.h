@@ -49,20 +49,16 @@ class SmallRelationsBlockBuilder {
   }
 
   // Return the number of rows that a single block of small relations may hold
-  // at most.
+  // at most, which is the 1.5-fold of the `blocksize`.
   //
-  // Note: The `blocksize` is only a soft target which blocks may exceed in
-  // two independent ways. First, a block of small relations is filled up to
-  // the 1.5-fold of the `blocksize` (which is exactly the capacity returned
-  // here). Rows are only added to a non-empty block if they fit into it
-  // (otherwise the caller first takes the current block, see `add`), so a
-  // block of small relations exceeds this capacity only if a single batch that
-  // is larger than the capacity is added to an empty block. Second, a block of
-  // a large relation grows beyond the `blocksize` whenever equal triples (when
-  // disregarding the graph and the payload columns) would otherwise be split
-  // across two blocks, see `RelationBlockCutter::addRowsOfCurrentRelation`.
+  // NOTE 1: The `blocksize` is only a soft target. Rows are only added to a
+  // non-empty block if they fit into it (otherwise the caller first takes the
+  // current block, see `add`), so a block of small relations exceeds this
+  // capacity only if a single batch that is larger than the capacity is added
+  // to an empty block. Blocks of large relations exceed the `blocksize` for a
+  // different reason, see `RelationBlockCutter::addRowsOfCurrentRelation`.
   //
-  // NOTE: there are some unit tests that rely on the factor `3 / 2` above.
+  // NOTE 2: Some unit tests rely on the factor `3 / 2`.
   size_t capacity() const { return capacity_; }
 
   // Return the number of rows in the block that is currently being built.

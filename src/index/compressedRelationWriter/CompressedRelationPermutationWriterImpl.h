@@ -263,7 +263,6 @@ struct CompressedRelationWriter::PermutationWriter
 
     AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
-    AD_CORRECTNESS_CHECK(blocksize_ > 0);
 
     writer1_->smallBlocksCallback_ =
         AddBlockOfSmallRelationsToSwitched{*writer2_};
@@ -294,7 +293,6 @@ struct CompressedRelationWriter::PermutationWriter
     // This logic only works for permutations that have the graph as the fourth
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
-    AD_CORRECTNESS_CHECK(blocksize_ > 0);
   }
 
   // Return the `Base` for a `PermutationWriter` that writes with the `writer`

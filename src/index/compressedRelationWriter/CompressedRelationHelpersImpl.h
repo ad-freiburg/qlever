@@ -257,9 +257,8 @@ size_t findFirstDifferent(const Range& range, size_t begin, size_t end,
 // is only called at the end of a (nearly) complete block of a large relation
 // (when cutting a relation into blocks, and at the boundaries between the
 // input blocks in `TripleAlignedBlockBuffer`), and it then typically finds a
-// differing row immediately, so it is not a
-// bottleneck (unless in a very degenerate case) and we keep the simpler
-// implementation.
+// differing row immediately, so it is not a bottleneck (unless in a very
+// degenerate case) and we keep the simpler implementation.
 template <typename Rows, typename Triple>
 size_t findFirstTripleChange(const Rows& rows, size_t begin, size_t end,
                              const Triple& lastTriple) {
