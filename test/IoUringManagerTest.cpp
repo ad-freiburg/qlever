@@ -184,17 +184,21 @@ bool ioUringAvailableAtRuntime() {
 #endif
 
 // Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
-// concrete I/O policy. When io_uring is present the tests run against both the
-// `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not present
-// (at compile time, or blocked at runtime, see `ioUringAvailableAtRuntime`),
-// the tests run against `SyncIoPolicy` only.
+// concrete I/O policy, with and without the page-cache fast path
+// (`PageCacheFirstPolicy`). When io_uring is present the tests run against both
+// the `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not
+// present (at compile time, or blocked at runtime, see
+// `ioUringAvailableAtRuntime`), the tests run against `SyncIoPolicy` only.
 template <typename T>
 class IoUringManagerTest : public ::testing::Test {
  protected:
   void SetUp() override {
 #ifdef QLEVER_HAS_IO_URING
     if constexpr (std::is_same_v<
-                      T, ad_utility::BatchManager<ad_utility::IoUringPolicy>>) {
+                      T, ad_utility::BatchManager<ad_utility::IoUringPolicy>> ||
+                  std::is_same_v<T, ad_utility::BatchManager<
+                                        ad_utility::PageCacheFirstPolicy<
+                                            ad_utility::IoUringPolicy>>>) {
       if (!ioUringAvailableAtRuntime()) {
         GTEST_SKIP() << "io_uring is compiled in, but not available at "
                         "runtime (e.g. blocked by seccomp inside Docker)";
@@ -205,12 +209,18 @@ class IoUringManagerTest : public ::testing::Test {
 };
 
 #ifdef QLEVER_HAS_IO_URING
-using ManagerTypes =
-    ::testing::Types<ad_utility::BatchManager<ad_utility::IoUringPolicy>,
-                     ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
+using ManagerTypes = ::testing::Types<
+    ad_utility::BatchManager<ad_utility::IoUringPolicy>,
+    ad_utility::BatchManager<ad_utility::SyncIoPolicy>,
+    ad_utility::BatchManager<
+        ad_utility::PageCacheFirstPolicy<ad_utility::IoUringPolicy>>,
+    ad_utility::BatchManager<
+        ad_utility::PageCacheFirstPolicy<ad_utility::SyncIoPolicy>>>;
 #else
 using ManagerTypes =
-    ::testing::Types<ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
+    ::testing::Types<ad_utility::BatchManager<ad_utility::SyncIoPolicy>,
+                     ad_utility::BatchManager<ad_utility::PageCacheFirstPolicy<
+                         ad_utility::SyncIoPolicy>>>;
 #endif
 
 TYPED_TEST_SUITE(IoUringManagerTest, ManagerTypes);
@@ -832,5 +842,171 @@ TEST(ReadPageCacheHits, emptyBatchAndContract) {
   std::vector<char*> targets{buffer.data(), buffer.data() + 4};
   EXPECT_ANY_THROW(
       ad_utility::readPageCacheHits(fd, numBytes, offsets, targets));
+}
+
+// A `ReadPolicy` that reads synchronously and records the reads it receives.
+// The records are static because a `BatchManager` owns its policy.
+struct RecordingPolicy {
+  using BatchHandle = uint64_t;
+  // The number of reads of every `addBatch` call.
+  static inline std::vector<size_t> batchSizes;
+  // The file offsets of all reads, in the order of arrival.
+  static inline std::vector<uint64_t> receivedOffsets;
+  static void reset() {
+    batchSizes.clear();
+    receivedOffsets.clear();
+  }
+
+  explicit RecordingPolicy([[maybe_unused]] unsigned ringSize) {}
+  void addBatch(int fd, ql::span<const size_t> numBytes,
+                ql::span<const uint64_t> offsets, ql::span<char*> buffers,
+                [[maybe_unused]] BatchHandle handle) {
+    batchSizes.push_back(numBytes.size());
+    for (size_t i = 0; i < numBytes.size(); ++i) {
+      receivedOffsets.push_back(offsets[i]);
+      ad_utility::SyncIoPolicy::readFullyOrThrow(fd, buffers[i], numBytes[i],
+                                                 offsets[i]);
+    }
+  }
+  void wait([[maybe_unused]] BatchHandle handle) {}
+};
+
+using RecordedManager =
+    ad_utility::BatchManager<ad_utility::PageCacheFirstPolicy<RecordingPolicy>>;
+
+// Only the first run of adjacent reads is "cached", all later runs are not.
+int64_t firstRunCached(int fd, const ::iovec* iov, int iovcnt, int64_t offset) {
+  if (numPageCacheReads++ == 0) {
+    return blockingFill(fd, iov, iovcnt, offset);
+  }
+  return pageCacheReadTestHelpers::nothingCached(fd, iov, iovcnt, offset);
+}
+
+// The reads that the page-cache read serves are not passed on to the decorated
+// policy; the others are, in their original order. The offsets `0, 4` are
+// adjacent and form one run, `12` and `8` are runs of their own.
+TEST(PageCacheFirstPolicy, onlyTheMissesAreForwarded) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  RecordingPolicy::reset();
+  numPageCacheReads = 0;
+  ScopedPageCacheRead inject{&firstRunCached};
+  RecordedManager manager(64);
+  ReadBatchForTesting batch;
+  batch.add({{0, 4}, {4, 4}, {12, 4}, {8, 4}});
+  manager.wait(batch.submitTo(manager, fd));
+  EXPECT_THAT(batch.result(), ElementsAre("AAAA", "BBBB", "DDDD", "CCCC"));
+  EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{2}));
+  EXPECT_THAT(RecordingPolicy::receivedOffsets,
+              ElementsAre(uint64_t{12}, uint64_t{8}));
+  EXPECT_EQ(numPageCacheReads, size_t{3});
+}
+
+// If the page-cache read serves every read, the decorated policy receives an
+// empty batch, and waiting for the batch returns immediately.
+TEST(PageCacheFirstPolicy, aBatchThatIsServedCompletelyHasNothingToWaitFor) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  RecordingPolicy::reset();
+  numPageCacheReads = 0;
+  ScopedPageCacheRead inject{&countedCachedRead};
+  RecordedManager manager(64);
+  ReadBatchForTesting batch;
+  batch.add({{0, 4}, {8, 4}});
+  manager.wait(batch.submitTo(manager, fd));
+  EXPECT_THAT(batch.result(), ElementsAre("AAAA", "CCCC"));
+  EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{0}));
+  EXPECT_TRUE(RecordingPolicy::receivedOffsets.empty());
+  EXPECT_EQ(numPageCacheReads, size_t{2});
+}
+
+// If the page-cache read serves nothing, the decorated policy receives the
+// batch unchanged.
+TEST(PageCacheFirstPolicy, aBatchThatIsNotServedIsPassedOnUnchanged) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  RecordingPolicy::reset();
+  ScopedPageCacheRead inject{&pageCacheReadTestHelpers::nothingCached};
+  RecordedManager manager(64);
+  ReadBatchForTesting batch;
+  batch.add({{8, 4}, {0, 4}, {12, 4}});
+  manager.wait(batch.submitTo(manager, fd));
+  EXPECT_THAT(batch.result(), ElementsAre("CCCC", "AAAA", "DDDD"));
+  EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{3}));
+  EXPECT_THAT(RecordingPolicy::receivedOffsets,
+              ElementsAre(uint64_t{8}, uint64_t{0}, uint64_t{12}));
+}
+
+// With the fast path switched off through the manager, the page-cache read is
+// not called and all reads are passed on; switching it on again restores it.
+TEST(PageCacheFirstPolicy, theFastPathCanBeSwitchedOffAndOn) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  RecordingPolicy::reset();
+  numPageCacheReads = 0;
+  ScopedPageCacheRead inject{&countedCachedRead};
+  RecordedManager manager(64);
+  ad_utility::BatchManagerBase& base = manager;
+  base.setPageCacheFastPath(false);
+  {
+    ReadBatchForTesting batch;
+    batch.add({{0, 4}, {8, 4}});
+    manager.wait(batch.submitTo(manager, fd));
+    EXPECT_THAT(batch.result(), ElementsAre("AAAA", "CCCC"));
+    EXPECT_EQ(numPageCacheReads, size_t{0});
+    EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{2}));
+  }
+  base.setPageCacheFastPath(true);
+  {
+    ReadBatchForTesting batch;
+    batch.add({{0, 4}, {8, 4}});
+    manager.wait(batch.submitTo(manager, fd));
+    EXPECT_THAT(batch.result(), ElementsAre("AAAA", "CCCC"));
+    EXPECT_EQ(numPageCacheReads, size_t{2});
+    EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{2}, size_t{0}));
+  }
+}
+
+// If the kernel or file system rejects `RWF_NOWAIT`, the first batch is passed
+// on completely, and later batches do not even try the page-cache read.
+TEST(PageCacheFirstPolicy, anUnsupportedFastPathIsLeftAlone) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  RecordingPolicy::reset();
+  numPageCacheReads = 0;
+  ScopedPageCacheRead inject{&countedNotSupported};
+  RecordedManager manager(64);
+  for (int round = 0; round < 2; ++round) {
+    ReadBatchForTesting batch;
+    batch.add({{0, 4}, {8, 4}});
+    manager.wait(batch.submitTo(manager, fd));
+    EXPECT_THAT(batch.result(), ElementsAre("AAAA", "CCCC"));
+    EXPECT_FALSE(ad_utility::pageCacheFastPathIsSupported());
+  }
+  EXPECT_EQ(numPageCacheReads, size_t{1});
+  EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{2}, size_t{2}));
+}
+
+// `makeBatchManager` decorates the policy with `PageCacheFirstPolicy` only on
+// request, and only if the fast path is available.
+TEST(MakeBatchManager, pageCacheFirstDecoratesThePolicy) {
+  bool preferIoUring = false;
+  using Plain = ad_utility::BatchManager<ad_utility::SyncIoPolicy>;
+  using Decorated = ad_utility::BatchManager<
+      ad_utility::PageCacheFirstPolicy<ad_utility::SyncIoPolicy>>;
+  auto plain = ad_utility::makeBatchManager(preferIoUring,
+                                            /*pageCacheFirst=*/false);
+  EXPECT_NE(dynamic_cast<Plain*>(plain.get()), nullptr);
+  auto requested = ad_utility::makeBatchManager(preferIoUring,
+                                                /*pageCacheFirst=*/true);
+  if (ad_utility::pageCacheFastPathIsSupported()) {
+    EXPECT_NE(dynamic_cast<Decorated*>(requested.get()), nullptr);
+  } else {
+    EXPECT_NE(dynamic_cast<Plain*>(requested.get()), nullptr);
+  }
+  expectManagerWorks(*requested);
+  // A manager without a page-cache fast path ignores the switch.
+  plain->setPageCacheFastPath(false);
+  expectManagerWorks(*plain);
 }
 }  // namespace
