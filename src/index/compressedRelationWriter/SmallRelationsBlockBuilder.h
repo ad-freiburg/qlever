@@ -54,12 +54,13 @@ class SmallRelationsBlockBuilder {
   // Note: The `blocksize` is only a soft target which blocks may exceed in
   // two independent ways. First, a block of small relations is filled up to
   // the 1.5-fold of the `blocksize` (which is exactly the capacity returned
-  // here), and it is only completed once the rows that are to be added next
-  // don't fit into it anymore, so the last relation that is added to a block
-  // may push it even beyond that capacity. Second, a block of a large relation
-  // grows beyond the `blocksize` whenever equal triples (when disregarding
-  // the graph and the payload columns) would otherwise be split across two
-  // blocks, see `RelationBlockCutter::addRowsOfCurrentRelation`.
+  // here). Rows are only added to a non-empty block if they fit into it
+  // (otherwise the caller first takes the current block, see `add`), so a
+  // block of small relations exceeds this capacity only if a single batch that
+  // is larger than the capacity is added to an empty block. Second, a block of
+  // a large relation grows beyond the `blocksize` whenever equal triples (when
+  // disregarding the graph and the payload columns) would otherwise be split
+  // across two blocks, see `RelationBlockCutter::addRowsOfCurrentRelation`.
   //
   // NOTE: there are some unit tests that rely on the factor `3 / 2` above.
   size_t capacity() const { return capacity_; }
@@ -77,8 +78,9 @@ class SmallRelationsBlockBuilder {
   // Return the number of rows that a batch of consecutive small relations
   // (see `add`) may have at most, if the first relation of the batch has
   // `numRowsOfFirstRelation` rows. If not even that relation fits into the
-  // current block, then a new block is started for the batch in any case, so
-  // the capacity of a complete fresh block is available for it. That way a
+  // current block, then the caller starts a new block for the batch in any
+  // case (see `CompressedRelationWriter::addSmallRelations`), so the capacity
+  // of a complete fresh block is available for it. That way a
   // batch is never cut short just because the current block happens to be
   // almost full, while the resulting blocks are still exactly the same as if
   // the relations were added one by one.

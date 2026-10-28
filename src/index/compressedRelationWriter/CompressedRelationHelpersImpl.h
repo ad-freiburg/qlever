@@ -254,8 +254,10 @@ size_t findFirstDifferent(const Range& range, size_t begin, size_t end,
 // Scanning each of the three columns separately and taking the minimum of
 // the resulting offsets would use the cache more efficiently, but it would
 // also be slower if one of the columns is (almost) constant. This function
-// is only called once a complete block of a large relation has been found,
-// and it then typically finds a differing row immediately, so it is not a
+// is only called at the end of a (nearly) complete block of a large relation
+// (when cutting a relation into blocks, and at the boundaries between the
+// input blocks in `TripleAlignedBlockBuffer`), and it then typically finds a
+// differing row immediately, so it is not a
 // bottleneck (unless in a very degenerate case) and we keep the simpler
 // implementation.
 template <typename Rows, typename Triple>

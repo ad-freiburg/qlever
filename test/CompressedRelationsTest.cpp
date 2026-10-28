@@ -2387,9 +2387,9 @@ void checkBuildResultsAreEqual(const PermutationBuildResult& expected,
 // by the `inputs`, and all the builds yield exactly the same permutation. The
 // latter is the crucial property, because depending on the `inputBlockSize`,
 // a different subset of the relations is written directly as a complete small
-// relation (see `CompressedRelationWriter::PermutationWriter::
-// isCompleteSmallRelation`), while the remaining ones go through the
-// `relation_` buffer. Both paths have to produce an identical result.
+// relation (see `RelationBlockCutter::isCompleteSmallRelation`), while the
+// remaining ones go through the `relation_` buffer. Both paths have to produce
+// an identical result.
 void checkPermutationIsIndependentOfInputBlockSize(
     std::vector<RelationInput> inputs, size_t rowsPerBlock,
     const std::vector<size_t>& inputBlockSizes,

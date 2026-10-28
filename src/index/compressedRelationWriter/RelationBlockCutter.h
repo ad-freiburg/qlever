@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -35,11 +36,15 @@
 // The `Derived` class has to provide the following hooks:
 //
 // * `void addBlockForLargeRelation()`: Write the rows in the `relation_` buffer
-//   as the next block of the current (large) relation, and continue with an
-//   empty `relation_` buffer. Do nothing if the buffer is empty.
+//   as the next block of the current (large) relation, increment the
+//   `numBlocksCurrentRel_`, and continue with an empty `relation_` buffer. Do
+//   nothing if the buffer is empty.
 // * `void addBlockOfLargeRelationWithoutCopying(IdTableView<0> block)`: Write
 //   the `block`, which is a view of rows of the `inputBlock_`, as the next
-//   block of the current (large) relation. The `relation_` buffer is empty.
+//   block of the current (large) relation, and increment the
+//   `numBlocksCurrentRel_`. The `relation_` buffer is empty. The rows of the
+//   `block` have to be kept alive until the block has been written (e.g. by
+//   sharing the ownership of the `inputBlock_`).
 // * `void finishRelation()`: The current relation (whose rows are in the
 //   `relation_` buffer, unless they have already been written as blocks) is
 //   complete. Write what is left of it, and reset the `relation_` buffer and
@@ -166,8 +171,16 @@ class RelationBlockCutter {
   }
 
  private:
-  Derived& derived() { return static_cast<Derived&>(*this); }
-  const Derived& derived() const { return static_cast<const Derived&>(*this); }
+  // Access the `Derived` class (CRTP). The `static_assert`s can't be at the
+  // class scope, because the `Derived` class is incomplete there.
+  Derived& derived() {
+    static_assert(std::is_base_of_v<RelationBlockCutter, Derived>);
+    return static_cast<Derived&>(*this);
+  }
+  const Derived& derived() const {
+    static_assert(std::is_base_of_v<RelationBlockCutter, Derived>);
+    return static_cast<const Derived&>(*this);
+  }
 
   // The special case of `compressedRelationHelpers::findFirstTripleChange`
   // where the rows are compared to the last triple that is currently buffered
@@ -209,16 +222,18 @@ class RelationBlockCutter {
         // If the buffer is empty and the remaining rows suffice for a complete
         // block, then that block can be written directly from the input block,
         // without copying its rows into the buffer first (which for a large
-        // relation is a substantial part of the work of this thread). This
-        // requires that the block can be completed within the current input
-        // block, which is exactly the case if a triple change is found before
-        // the end of the rows; otherwise further equal triples may follow in
-        // the next input block, which then have to end up in the same block.
+        // relation is a substantial part of the work of the calling thread).
+        // This requires that the block can be completed within the current
+        // input block, which is exactly the case if a triple change is found
+        // before the end of the rows; otherwise further equal triples may
+        // follow in the next input block, which then have to end up in the
+        // same block.
         //
         // Note: The `Derived` class may forbid this (see `mayWriteDirectly`).
         // The result of that hook may change inside this loop, because it
         // may depend on the blocks that have been written so far.
-        std::optional<size_t> directBlockEnd = [&]() -> std::optional<size_t> {
+        std::optional<size_t> directBlockEnd =
+            [this, begin, end, &permutedCols]() -> std::optional<size_t> {
           if (!relation_.empty() || end - begin < blocksize_ ||
               !derived().mayWriteDirectly()) {
             return std::nullopt;
@@ -234,8 +249,9 @@ class RelationBlockCutter {
         }();
         if (directBlockEnd.has_value()) {
           size_t blockEnd = directBlockEnd.value();
-          // Note: The rows of this view are kept alive via the `inputBlock_`
-          // member, see `addBlockOfLargeRelationWithoutCopying`.
+          // Note: The `Derived` class has to keep the rows of this view alive
+          // (e.g. by sharing the ownership of the `inputBlock_`), see the
+          // `addBlockOfLargeRelationWithoutCopying` hook.
           derived().addBlockOfLargeRelationWithoutCopying(
               permutedCols.subView(begin, blockEnd - begin));
           derived().increaseTripleCounter(blockEnd - begin);
@@ -294,7 +310,9 @@ class RelationBlockCutter {
   // `[begin, firstRunEnd)`, which the caller has to have checked to be a
   // complete small relation (see `isCompleteSmallRelation` above), plus all
   // directly following complete small relations that still fit into the
-  // current block of small relations (see `smallRelationsBlockBuilder`).
+  // block of small relations that the batch is added to (which is either the
+  // current or a fresh one, see
+  // `SmallRelationsBlockBuilder::capacityForBatch`).
   //
   // Writing the batch has two advantages over writing its relations one by
   // one: All its rows are copied into the buffer of the block of small
@@ -315,11 +333,12 @@ class RelationBlockCutter {
     // Greedily extend the batch by the following relations, as long as they
     // are complete small relations that still fit. Note that the first
     // relation is always part of the batch, even in the (currently impossible,
-    // see `isCompleteSmallRelation`) case that it exceeds the capacity all by
-    // itself. The loop is always left via one of the `break`s, because a run
-    // that reaches the end of the input block is never a complete small
-    // relation, which is exactly what the check at the beginning of the loop
-    // body asserts. That check also guarantees that the indexing of `col0`
+    // see `isCompleteSmallRelation` and
+    // `SmallRelationsBlockBuilder::capacityForBatch`) case that it exceeds the
+    // capacity all by itself. The loop is always left via one of the `break`s,
+    // because a run that reaches the end of the input block is never a complete
+    // small relation, which is exactly what the check at the beginning of the
+    // loop body asserts. That check also guarantees that the indexing of `col0`
     // inside `findEndOfRun` is safe.
     size_t end = firstRunEnd;
     size_t numRelations = 1;

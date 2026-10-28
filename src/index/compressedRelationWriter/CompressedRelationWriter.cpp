@@ -247,10 +247,12 @@ void CompressedRelationWriter::writeLargeRelationBlockInSlices(Id col0Id,
   auto view = owner->asStaticView<0>();
   // Never split rows whose first three columns are equal across two blocks,
   // exactly like the boundaries between the input blocks above.
-  forEachSliceOfLargeBlock(view, blocksize(), [&](size_t begin, size_t end) {
-    addBlockForLargeRelation(
-        col0Id, BlockToWrite{view.subView(begin, end - begin), owner});
-  });
+  forEachSliceOfLargeBlock(
+      view, blocksize(),
+      [this, col0Id, &view, &owner](size_t begin, size_t end) {
+        addBlockForLargeRelation(
+            col0Id, BlockToWrite{view.subView(begin, end - begin), owner});
+      });
 }
 
 // _____________________________________________________________________________

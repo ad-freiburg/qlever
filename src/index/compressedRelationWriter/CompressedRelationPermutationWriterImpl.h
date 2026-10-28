@@ -555,10 +555,11 @@ struct CompressedRelationWriter::PermutationWriter
     // invariant explicit.
     waitForBlocksOfLargeRelation();
     // Note: The distinct `col1` IDs are deliberately not counted here, because
-    // no metadata is stored for small relations (see `addSmallRelations`). The
-    // count is zero for these relations anyway, but reset it, so that a future
-    // relaxation of `isCompleteSmallRelation` cannot silently corrupt the count
-    // of the next large relation.
+    // no metadata is stored for small relations (see
+    // `CompressedRelationWriter::addSmallRelations`). The count is zero for
+    // these relations anyway, but reset it, so that a future relaxation of
+    // `RelationBlockCutter::isCompleteSmallRelation` cannot silently corrupt
+    // the count of the next large relation.
     resetNumDistinctCol1();
     writer1_->addSmallRelations(firstCol0Id, lastCol0Id, permutedCols, begin,
                                 end);

@@ -283,9 +283,10 @@ class CompressedRelationWriter {
     outfile_.wlock()->close();
   }
 
-  // Compress the block of small relations that is currently being built by
-  // `smallRelations_` into a single block and write it to outfile_. Then
-  // start the next block of small relations.
+  // If the block of small relations that is currently being built by
+  // `smallRelations_` is not empty, compress it and write it to the `outfile_`
+  // (asynchronously, see `compressAndWriteBlock`), and start the next block of
+  // small relations.
   void writeBufferedRelationsToSingleBlock();
 
   // Compress the `column` and write it to the `outfile_`. Return the offset and

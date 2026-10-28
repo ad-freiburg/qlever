@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IdTestHelpers.h"
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
@@ -155,8 +156,9 @@ TEST(CompressedRelationWriter, makeLargeRelationMetadata) {
       CompressedRelationWriter::makeLargeRelationMetadata(V(7), 10, 10)
           .multiplicityCol1_,
       1.0f);
-  EXPECT_ANY_THROW(
-      CompressedRelationWriter::makeLargeRelationMetadata(V(7), 0, 0));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      CompressedRelationWriter::makeLargeRelationMetadata(V(7), 0, 0),
+      ::testing::HasSubstr("numRows != 0"));
 }
 
 // _____________________________________________________________________________
@@ -184,12 +186,16 @@ TEST(SmallRelationsBlockBuilder, buildBlocks) {
   EXPECT_EQ(builder.capacityForBatch(3), 3);
   EXPECT_EQ(builder.capacityForBatch(4), 6);
   // The `col0` IDs have to match the rows.
-  EXPECT_ANY_THROW(builder.add(V(2), V(3), relations, 3, 6));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      builder.add(V(2), V(3), relations, 3, 6),
+      ::testing::HasSubstr("firstCol0Id == relations(beginIdx, 0)"));
   // A batch that doesn't fit into a non-empty block is rejected.
-  EXPECT_ANY_THROW(builder.add(
-      V(3), V(3),
-      makeIdTableFromVector({{3, 0, 0}, {3, 1, 0}, {3, 2, 0}, {3, 3, 0}}), 0,
-      4));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      builder.add(
+          V(3), V(3),
+          makeIdTableFromVector({{3, 0, 0}, {3, 1, 0}, {3, 2, 0}, {3, 3, 0}}),
+          0, 4),
+      ::testing::HasSubstr("empty() || fits(endIdx - beginIdx)"));
 
   auto block = builder.takeBlock(freshBuffer());
   EXPECT_EQ(block.firstCol0_, V(1));
@@ -199,7 +205,8 @@ TEST(SmallRelationsBlockBuilder, buildBlocks) {
   EXPECT_TRUE(builder.empty());
   EXPECT_EQ(builder.numRowsUntilFull(), 6);
   // An empty block can't be taken.
-  EXPECT_ANY_THROW(builder.takeBlock(freshBuffer()));
+  AD_EXPECT_THROW_WITH_MESSAGE(builder.takeBlock(freshBuffer()),
+                               ::testing::HasSubstr("!empty()"));
 
   // A batch that exceeds the capacity on its own is allowed into an empty
   // block.
@@ -215,11 +222,15 @@ TEST(SmallRelationsBlockBuilder, buildBlocks) {
 
   // The buffer of the builder and the fresh buffers have to be empty and
   // have to have the right number of columns.
-  EXPECT_ANY_THROW((SmallRelationsBlockBuilder{relations.clone(), 4}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SmallRelationsBlockBuilder{relations.clone(), 4}),
+      ::testing::HasSubstr("buffer_.empty()"));
   smallBuilder.add(V(1), V(1), relations, 0, 1);
-  EXPECT_ANY_THROW(smallBuilder.takeBlock(relations.clone()));
-  EXPECT_ANY_THROW(
-      smallBuilder.takeBlock(IdTable{2, relations.getAllocator()}));
+  AD_EXPECT_THROW_WITH_MESSAGE(smallBuilder.takeBlock(relations.clone()),
+                               ::testing::HasSubstr("freshBuffer.empty()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      smallBuilder.takeBlock(IdTable{2, relations.getAllocator()}),
+      ::testing::HasSubstr("freshBuffer.numColumns()"));
 }
 
 namespace {
