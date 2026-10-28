@@ -522,10 +522,12 @@ TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
   AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(ql::span<const size_t>{}),
                                ::testing::HasSubstr("!indices.empty()"));
 
+  // All indices use marker 1, so this batch takes the single-marker path with
+  // a duplicate and a reordered index.
   const std::array<size_t, 3> oneMarker{
+      static_cast<size_t>(sv.addMarker(1, 1)),
       static_cast<size_t>(sv.addMarker(0, 1)),
-      static_cast<size_t>(sv.addMarker(0, 0)),
-      static_cast<size_t>(sv.addMarker(0, 1)),
+      static_cast<size_t>(sv.addMarker(1, 1)),
   };
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
       sv, sv.lookupBatch(oneMarker), oneMarker);
@@ -629,8 +631,6 @@ TEST(Vocabulary, SplitVocabularyLookupBatchSkipsUnusedMarker) {
       sv, sv.lookupBatch(indices), indices);
   sv.close();
 }
-
-using namespace splitVocabTestHelpers;
 
 // Share common SplitVocabulary setup across multiple tests. Every test gets a
 // two-way split vocabulary with the words `""` and `"xyz"` (marker 0, indices
