@@ -349,6 +349,8 @@ Result LibspatialjoinAlgorithm::run() {
         "num-geoms-dropped-by-prefilter", droppedLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
                                                   invalidSmall + invalidLarge);
+    addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
+                          smallerIsRight ? invalidSmall : invalidLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
@@ -382,7 +384,8 @@ Result LibspatialjoinAlgorithm::run() {
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
   // Collect the results and add them to the result table. For `WITHIN_DIST`,
-  // also add the distance for each pair of objects in the result.
+  // also add the distance for each pair of objects in the result (which
+  // `libspatialjoin` reports in meters).
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
       throwIfCancelled();
@@ -393,7 +396,8 @@ Result LibspatialjoinAlgorithm::run() {
         dist = resultDists[t][i];
       }
       addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
-                          res.second, Id::makeFromDouble(dist), swapBack);
+                          res.second, kilometersToDistanceId(dist / 1000),
+                          swapBack);
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(

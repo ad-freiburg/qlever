@@ -32,8 +32,8 @@ and returns a `nlohmann:json` object.
 */
 CPP_template(typename VectorType, typename TranslationFunction)(
     requires ad_utility::InvocableWithExactReturnType<
-        TranslationFunction, nlohmann::ordered_json,
-        VectorType>) static nlohmann::json
+        TranslationFunction, nlohmann::ordered_json, VectorType>)
+static nlohmann::json
     transformIntoJsonArray(const std::vector<VectorType>& vec,
                            TranslationFunction translationFunction) {
   /*

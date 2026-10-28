@@ -16,6 +16,7 @@
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
@@ -128,15 +129,7 @@ class Row {
 // First the variation of the `RowReference` that can be created by `auto`
 // but has no mutable access for lvalues.
 class RowReferenceImpl {
- private:
-  // The actual implementation is in a private subclass and only the
-  // `RowReference` and the `IdTable` have direct access to it.
-  template <typename Table, ad_utility::IsConst isConst>
-  friend class RowReference;
-
-  template <typename T, int NumCols, typename Allocator, IsView isView>
-  friend class IdTable;
-
+ public:
   // The actual implementation of a reference to a row that allows mutable
   // access only for rvalues. The rather long name is chosen deliberately so
   // that the most likely problem becomes visible from the compiler's error
@@ -182,8 +175,8 @@ class RowReferenceImpl {
     TablePtr table_ = nullptr;
     size_t row_ = 0;
 
-    // The constructor is public, but the whole class is private. the
-    // constructor must be public, because `IdTable` must have access to it.
+    // The constructor is public, because the `RowReference` inherits it, which
+    // is also created for other tables than the `IdTable` (e.g. in tests).
    public:
     explicit RowReferenceWithRestrictedAccess(TablePtr table, size_t row)
         : table_{table}, row_{row} {}
@@ -191,9 +184,9 @@ class RowReferenceImpl {
    protected:
     // The actual implementation of operator[].
     CPP_template(typename SelfType)(
-        requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
-            CPP_and CPP_NOT(isConst)) static reference
-        operatorBracketImpl(SelfType& self, size_t i) {
+        requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>) &&
+        CPP_NOT(isConst))
+    static reference operatorBracketImpl(SelfType& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
     template <typename Self>
@@ -257,10 +250,10 @@ class RowReferenceImpl {
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
     // value or by reference).
-    CPP_template(typename AType, typename BType)(
-        requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
+    CPP_template(typename AType, typename BType)(requires(!isConst))
+    static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+        ql::ranges::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
     }
 
@@ -272,8 +265,8 @@ class RowReferenceImpl {
    public:
     // Swap two `RowReference`s, but only if they are temporaries (rvalues).
     // This modifies the underlying table.
-    CPP_template(typename = void)(requires CPP_NOT(isConst)) friend void swap(
-        This&& a, This&& b) {
+    CPP_template(typename = void)(requires CPP_NOT(isConst))
+    friend void swap(This&& a, This&& b) {
       return swapImpl(a, b);
     }
 
@@ -313,8 +306,8 @@ class RowReferenceImpl {
     }
 
     // Convert from a static `RowReference` to a `std::array` (makes a copy).
-    CPP_template(typename = void)(requires(numStaticColumns != 0)) explicit
-    operator std::array<T, numStaticColumns>() const {
+    CPP_template(typename = void)(requires(numStaticColumns != 0))
+    explicit operator std::array<T, numStaticColumns>() const {
       std::array<T, numStaticColumns> result;
       ql::ranges::copy(*this, result.begin());
       return result;
@@ -420,7 +413,7 @@ class RowReference
 
   // __________________________________________________________________________
   CPP_template_2(typename R)(
-      requires ad_utility::SimilarTo<RowReference, R> CPP_and_2(!isConst))
+      requires ad_utility::SimilarTo<RowReference, R> && (!isConst))
   friend void swap(R&& a, R&& b) {
     return Base::swapImpl(AD_FWD(a), AD_FWD(b));
   }
@@ -477,5 +470,16 @@ class RowReference
 };
 
 }  // namespace columnBasedIdTable
+
+// The above `RowReference` and its base `RowReferenceWithRestrictedAccess` are
+// proxies (value types that behave like references), so we specialize
+// `qlever::isProxy` for them.
+template <typename Table, ad_utility::IsConst isConstTag>
+inline constexpr bool
+    qlever::isProxy<columnBasedIdTable::RowReference<Table, isConstTag>> = true;
+template <typename Table, ad_utility::IsConst isConstTag>
+inline constexpr bool qlever::isProxy<
+    columnBasedIdTable::RowReferenceImpl::RowReferenceWithRestrictedAccess<
+        Table, isConstTag>> = true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

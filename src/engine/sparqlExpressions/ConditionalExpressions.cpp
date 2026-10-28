@@ -18,11 +18,10 @@ namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
 struct IfImpl {
   CPP_template(typename I, typename E)(
-      requires SingleExpressionResult<I>&& SingleExpressionResult<E>&&
-          std::is_rvalue_reference_v<I&&>&& std::is_rvalue_reference_v<E&&>)
-      IdOrLocalVocabEntry
-      operator()(EffectiveBooleanValueGetter::Result condition, I&& i,
-                 E&& e) const {
+      requires SingleExpressionResult<I> && SingleExpressionResult<E> &&
+      std::is_rvalue_reference_v<I &&> && std::is_rvalue_reference_v<E &&>)
+  IdOrLocalVocabEntry operator()(EffectiveBooleanValueGetter::Result condition,
+                                 I&& i, E&& e) const {
     if (condition == EffectiveBooleanValueGetter::Result::True) {
       return AD_FWD(i);
     } else if (condition == EffectiveBooleanValueGetter::Result::False) {

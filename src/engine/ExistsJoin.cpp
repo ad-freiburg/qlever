@@ -36,9 +36,10 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
     // lazy results it ensures that we don't have to compute the whole result,
     // so we consider this a tradeoff worth to make.
     // Defensive copy to avoid modifying other trees that share the same subtree
-    // as `right_`.
+    // as `right_`. The copy is deep, so the children of `right_` are then
+    // exclusively owned.
     right_ = right_->clone();
-    right_->applyLimitOffset({1});
+    right_->applyLimitOffset({1}, true);
   }
 }
 
@@ -221,7 +222,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Run `zipperJoinWithUndef` with the described callbacks and the
     // mentioned optimization in case we know that there are no UNDEF values
     // in the join columns.
-    auto checkCancellationLambda = [this] { checkCancellation(); };
+    auto checkCancellationLambda = cancellationChecker();
     auto runZipperJoin = [&](auto findUndef) {
       [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight,
@@ -329,7 +330,7 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
 
-  IdTable result = leftRes->cloneIdTable();
+  IdTable result = leftRes->cloneIdTable(cancellationChecker());
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
@@ -358,7 +359,8 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
   auto result = nestedLoopJoin.computeRightExistance(
       [this](auto&& idTable, LocalVocab localVocab,
              const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {
-        IdTable resultTable = AD_FWD(idTable).moveOrClone();
+        IdTable resultTable =
+            AD_FWD(idTable).moveOrClone(cancellationChecker());
         addExistsColumn(resultTable, matchingTracker);
         return Result::IdTableVocabPair{std::move(resultTable),
                                         std::move(localVocab)};
@@ -593,5 +595,5 @@ void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
                                  static_cast<bool>(tracker));
                            }),
       idTable.getColumn(idTable.numColumns() - 1).begin(),
-      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+      qlever::joinHelpers::CHUNK_SIZE, cancellationChecker());
 }
