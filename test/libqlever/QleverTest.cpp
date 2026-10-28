@@ -32,31 +32,7 @@
 using namespace qlever;
 using namespace testing;
 
-namespace {
-// Write `turtleContents` to a turtle file, build an index from it with all
-// settings at their default, and return an `EngineConfig` for that index. The
-// base name of both the turtle file and the index is derived from the name of
-// the currently running test and the optional `suffix`, so that a single test
-// can build several distinct indexes. The turtle file is deleted again before
-// this returns; the files of the index itself remain on disk.
-//
-// NOTE: An index that cannot be built throws, which `gtest` reports as a
-// failure of the running test. This is deliberately not an `EXPECT_NO_THROW`,
-// which would let the test continue with a nonexistent index.
-EngineConfig buildTestIndex(std::string_view turtleContents,
-                            std::string_view suffix = "") {
-  std::string basename = absl::StrCat(gtestCurrentTestName(), suffix);
-  std::string filename = absl::StrCat(basename, ".ttl");
-  ad_utility::makeOfstream(filename) << turtleContents;
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-
-  IndexBuilderConfig config;
-  config.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  config.baseName_ = basename;
-  Qlever::buildIndex(config);
-  return EngineConfig{config};
-}
-}  // namespace
+using ad_utility::testing::buildTestEngineConfig;
 
 // _____________________________________________________________________________
 TEST(LibQlever, buildIndexAndRunQuery) {
@@ -326,7 +302,7 @@ TEST(IndexBuilderConfig, validate) {
 // The descriptions from the `EngineConfig` replace the names stored in the
 // index files.
 TEST(LibQlever, indexAndTextDescription) {
-  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
+  EngineConfig ec = buildTestEngineConfig("<s> <p> <o> .");
   ec.indexDescription_ = "Some dataset, version 42";
   ec.textDescription_ = "Some text";
   Qlever engine{ec};
@@ -337,7 +313,8 @@ TEST(LibQlever, indexAndTextDescription) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, loadIndexWithoutPermutations) {
-  EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
+  EngineConfig ec =
+      buildTestEngineConfig("<s> <p> <o>. <s2> <p2> \"literal\".");
 
   // Load the index with `doNotLoadPermutations` set to true.
   ec.doNotLoadPermutations_ = true;
@@ -366,7 +343,7 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 // named result cache is not empty (its entries are only valid for one specific
 // snapshot). Uses `FRIEND_TEST` to reach the otherwise private method.
 TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache) {
-  Qlever qlever{buildTestIndex("<s> <p> <o>.")};
+  Qlever qlever{buildTestEngineConfig("<s> <p> <o>.")};
 
   // With an empty named result cache, swapping (here: with the current
   // snapshot) is allowed.
@@ -384,7 +361,8 @@ TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, disableCaching) {
-  EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
+  EngineConfig ec =
+      buildTestEngineConfig("<s> <p> <o>. <s2> <p2> \"literal\".");
   {
     // Load the index with `disableCaching` set to true.
     ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
@@ -427,9 +405,52 @@ TEST(LibQlever, disableCaching) {
   }
 }
 
+// Test that the runtime parameter `memory-for-queries` mirrors and controls
+// the memory limit of the engine's allocator.
+TEST(LibQlever, memoryForQueriesRuntimeParameter) {
+  using namespace ad_utility::memory_literals;
+  EngineConfig ec = buildTestEngineConfig("<s> <p> <o>.");
+  ec.memoryLimit_ = 50_MB;
+  Qlever engine{ec};
+  // Restore the default state of the parameter for the later tests.
+  absl::Cleanup cleanup = [] {
+    auto runtimeParameters = globalRuntimeParameters.wlock();
+    runtimeParameters->memoryForQueries_.clearOnUpdateAction();
+    runtimeParameters->memoryForQueries_.set(DEFAULT_MEM_FOR_QUERIES);
+  };
+
+  // Constructing the engine has synced the parameter to the configured limit.
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            50_MB);
+  auto initialMemoryLeft = engine.allocator().amountMemoryLeft();
+  EXPECT_LE(initialMemoryLeft, 50_MB);
+
+  // Increasing the limit always works.
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(100_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft + 50_MB);
+
+  // Decreasing works as long as the freed part is currently unused, i.e. not
+  // below the 32 MB allocated here (plus what the engine itself has
+  // allocated).
+  Id* chunk = engine.allocator().allocate(4'000'000);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB),
+      HasSubstr("Cannot reduce the memory limit"));
+  // The rejected decrease left both the parameter and the limit unchanged.
+  EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
+            100_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(),
+            initialMemoryLeft + 50_MB - 32_MB);
+
+  engine.allocator().deallocate(chunk, 4'000'000);
+  setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB);
+  EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft - 30_MB);
+}
+
 // _____________________________________________________________________________
 TEST(LibQlever, externallySpecifiedValues) {
-  EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
+  EngineConfig ec =
+      buildTestEngineConfig("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
   // Caching must be disabled for externally specified values.
   ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
   Qlever engine{ec};
@@ -572,7 +593,8 @@ TEST(Qlever, moveRebuiltIndexIntoPlace) {
 // its `QueryExecutionTree`, and `cloneQetInPlace` gives the copy a tree of its
 // own, which can then be modified without affecting the original.
 TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
-  EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
+  EngineConfig ec =
+      buildTestEngineConfig("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
   // Caching must be disabled for externally specified values.
   ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
   Qlever engine{ec};
@@ -651,7 +673,7 @@ TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
 // Test that `parseAndPlanQuery` is exactly `parseQuery` followed by
 // `planQuery`, and that all the arguments of the former reach the two halves.
 TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
-  Qlever engine{buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .")};
+  Qlever engine{buildTestEngineConfig("<s> <p> <o> . <s2> <p> <o2> .")};
 
   std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
 
@@ -721,8 +743,8 @@ TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
   // Two indexes over the same data and with the same configuration, so their
   // `EncodedIriManager`s are equivalent.
   std::string_view turtle = "<s> <p> <o> . <s2> <p> <o2> .";
-  Qlever first{buildTestIndex(turtle, ".first")};
-  Qlever second{buildTestIndex(turtle, ".second")};
+  Qlever first{buildTestEngineConfig(turtle, std::nullopt, ".first")};
+  Qlever second{buildTestEngineConfig(turtle, std::nullopt, ".second")};
 
   std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
   std::string expected = "?s\n<s>\n<s2>\n";
@@ -750,7 +772,7 @@ TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
 // Test the trivial getters of `ParsedQueryAndContext`, both the `const` and the
 // non-`const` overloads. All of them refer to the same objects.
 TEST(LibQlever, parsedQueryAndContextGetters) {
-  Qlever engine{buildTestIndex("<s> <p> <o> .")};
+  Qlever engine{buildTestEngineConfig("<s> <p> <o> .")};
 
   std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
   ParsedQueryAndContext parsedQuery = engine.parseQuery(query);
@@ -774,7 +796,7 @@ TEST(LibQlever, parsedQueryAndContextGetters) {
 // Test `Qlever::clearCache`, and trivially the `const` getter for the named
 // result cache.
 TEST(LibQlever, clearCache) {
-  Qlever engine{buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .")};
+  Qlever engine{buildTestEngineConfig("<s> <p> <o> . <s2> <p> <o2> .")};
 
   // The cache starts out empty.
   ASSERT_EQ(engine.cache().numPinnedEntries(), 0U);
@@ -806,7 +828,7 @@ TEST(LibQlever, applyUpdate) {
   // Never persist updates to disk in this test (would leave files behind
   // after the test, and pollute a re-run of the same test that reuses the
   // same on-disk base name).
-  auto config = buildTestIndex("<s> <p> <o> .");
+  auto config = buildTestEngineConfig("<s> <p> <o> .");
   config.persistUpdates_ = false;
   Qlever engine{config};
 
@@ -870,7 +892,7 @@ using ad_utility::testing::applyUpdateToEngine;
 // triples via `applyUpdate` and clear them directly through `Qlever`,
 // independent of the HTTP `Server` layer.
 TEST(LibQlever, clearDeltaTriples) {
-  auto config = buildTestIndex("<s> <p> <o> .");
+  auto config = buildTestEngineConfig("<s> <p> <o> .");
   config.persistUpdates_ = false;
   Qlever engine{config};
 
@@ -897,7 +919,7 @@ TEST(LibQlever, clearDeltaTriples) {
 // is already in the index (a redundant insertion that `vacuum` removes) and
 // vacuum directly through `Qlever`, independent of the HTTP `Server` layer.
 TEST(LibQlever, vacuumDeltaTriples) {
-  auto config = buildTestIndex("<a> <b> <c> .");
+  auto config = buildTestEngineConfig("<a> <b> <c> .");
   config.persistUpdates_ = false;
   Qlever engine{config};
 
@@ -925,7 +947,7 @@ TEST(LibQlever, vacuumDeltaTriples) {
 // allocator of the engine, so that memory allocated through it counts towards
 // the engine's memory limit, which the `const` getter observes.
 TEST(LibQlever, allocatorGetter) {
-  Qlever engine{buildTestIndex("<s> <p> <o> .")};
+  Qlever engine{buildTestEngineConfig("<s> <p> <o> .")};
   const Qlever& constEngine = engine;
   ASSERT_EQ(&engine.allocator(), &constEngine.allocator());
 
@@ -945,7 +967,7 @@ TEST(LibQlever, allocatorGetter) {
 // constructor in `Qlever.cpp`) evicts entries from the query result cache when
 // an allocation would otherwise exceed the memory limit.
 TEST(LibQlever, allocatorMakesRoomByClearingTheCache) {
-  EngineConfig config = buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .");
+  EngineConfig config = buildTestEngineConfig("<s> <p> <o> . <s2> <p> <o2> .");
   config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
   Qlever engine{config};
 

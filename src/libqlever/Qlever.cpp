@@ -50,7 +50,29 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numMemoryToAllocate);
                  }),
-             std::move(executor)) {}
+             std::move(executor)) {
+  // Mirror the configured memory limit in the runtime parameter
+  // `memory-for-queries`, and apply later changes of the parameter to the
+  // allocator as the difference to the current limit. Registering triggers
+  // the action once, which is a no-op because the difference is zero.
+  //
+  // NOTE: The action holds a copy of the allocator, which shares the limit
+  // with `allocator_` and keeps it alive, so the action never dangles, also
+  // not after this instance is destroyed.
+  auto memoryLimit = config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES);
+  auto runtimeParameters = globalRuntimeParameters.wlock();
+  runtimeParameters->memoryForQueries_.set(memoryLimit);
+  runtimeParameters->memoryForQueries_.setOnUpdateAction(
+      [allocator = allocator_,
+       currentLimit = memoryLimit](ad_utility::MemorySize newLimit) mutable {
+        if (newLimit >= currentLimit) {
+          allocator.increaseMemoryLimit(newLimit - currentLimit);
+        } else {
+          allocator.decreaseMemoryLimit(currentLimit - newLimit);
+        }
+        currentLimit = newLimit;
+      });
+}
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
@@ -71,6 +93,12 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
+
+  // The memory limit of a caller-provided allocator is unknown, so only the
+  // other constructor binds the runtime parameter `memory-for-queries` to the
+  // allocator. Clear the action of a previous instance, so that the parameter
+  // is bound to nothing.
+  globalRuntimeParameters.wlock()->memoryForQueries_.clearOnUpdateAction();
 
   // If `skipLoading` is set, we do not touch the on-disk index at all; the
   // instance is expected to be populated later from a blob (see

@@ -2641,7 +2641,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     // exposes the `BIND`'s target.
     {
       auto tree = optional(view(), sharesS());
-      tree->applyLimitOffset(LimitOffsetClause{5});
+      tree->applyLimitOffset(LimitOffsetClause{5}, false);
       tree->getRootOperation()->setSelectedVariablesForSubquery(
           {V{"?s"}, V{"?o"}});
       auto result = tree->makeTreeWithBindColumn(bind);
@@ -3041,6 +3041,26 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
 
   EXPECT_THAT(queryOnMainIndex("COUNT(DISTINCT ?o)"), expectCount(4));
   EXPECT_THAT(queryOnView("COUNT(DISTINCT ?o)"), expectCount(1));
+
+  // Test that the optimizations for a `GROUP BY` on a full scan and on a scan
+  // with a fixed first column read the blocks of the materialized view and not
+  // those of the main index.
+  EXPECT_THAT(getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT (COUNT(?p) AS ?c) WHERE {
+      SERVICE view:groupByTestView { [ view:column-s ?s ; view:column-p ?p ] }
+    } GROUP BY ?s
+  )"),
+              expectCount(1));
+  EXPECT_THAT(getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT (COUNT(?o) AS ?c) WHERE {
+      SERVICE view:groupByTestView {
+        [ view:column-s <s1> ; view:column-p ?p ; view:column-o ?o ]
+      }
+    } GROUP BY ?p
+  )"),
+              expectCount(1));
 
   // Test the optimization of a join with an `IndexScan` on a materialized view.
   EXPECT_THAT(

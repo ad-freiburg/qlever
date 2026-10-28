@@ -84,8 +84,8 @@ auto wrapGeneratorWithCache(InputRange generator, AggregatorT aggregator,
 // the elements that are yielded by the created `generator`.
 CPP_template(typename T, typename F)(
     requires ql::concepts::invocable<F, std::function<void(T)>>)
-    InputRangeTypeErased<T> generatorFromActionWithCallback(
-        F functionWithCallback) {
+InputRangeTypeErased<T> generatorFromActionWithCallback(
+    F functionWithCallback) {
   class CallbackToRangeAdapter : public InputRangeFromGet<T> {
     F functionWithCallback_;
     std::mutex mutex_;

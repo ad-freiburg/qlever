@@ -1616,6 +1616,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                    geoCellGridScheme);
     vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
         static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
   }
 
   // Initialize BlankNodeManager
@@ -1648,10 +1655,10 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // count their term frequencies.
     if (addHasWordTriples_ && addWordTriples) {
       std::string_view content = lit.getContent();
-      // Remove the accents before tokenizing: combining marks are not
-      // alphanumeric, so they would otherwise split words.
-      // Owns the content if the accents are removed, so that `content` stays
-      // valid during the tokenization.
+      // With `LowercaseNoAccents`, remove the accents before the tokenization
+      // (combining marks are not alphanumeric and would otherwise split
+      // words). `contentWithoutAccents` owns the result, so that `content`
+      // stays valid during the tokenization.
       std::string contentWithoutAccents;
       if (hasWordNormalization_ ==
           ad_utility::HasWordNormalization::LowercaseNoAccents) {

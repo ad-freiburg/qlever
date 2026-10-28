@@ -276,15 +276,15 @@ int main(int argc, char** argv) {
   add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
       "Add `ql:has-word` triples for each word in each literal. This enables "
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
+  auto hasWordNormalizationDescription = absl::StrCat(
+      "The normalization of the words of the `ql:has-word` triples. Literals "
+      "are always split at non-alphanumeric characters and the words are "
+      "lowercased; with `lowercase-no-accents`, accents are also removed (e.g. "
+      "\"Café\" becomes \"cafe\"). One of ",
+      ad_utility::HasWordNormalization::getListOfSupportedValues(),
+      ", the default is `lowercase`.");
   add("has-word-normalization", po::value(&config.hasWordNormalization_),
-      absl::StrCat("The normalization of the words of the `ql:has-word` "
-                   "triples. Literals are always split at non-alphanumeric "
-                   "characters and the words are lowercased; with "
-                   "`lowercase-no-accents`, accents are also removed (e.g. "
-                   "\"Café\" becomes \"cafe\"). One of ",
-                   ad_utility::HasWordNormalization::getListOfSupportedValues(),
-                   ", the default is `lowercase`.")
-          .c_str());
+      hasWordNormalizationDescription.c_str());
   add("add-normalized-triples", po::bool_switch(&config.addNormalizedTriples_),
       "Add a triple `<literal> ql:normalized \"normalized literal\"` for each "
       "literal. The normalized literal is obtained by removing the matches of "

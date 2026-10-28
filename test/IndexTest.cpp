@@ -551,6 +551,28 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
+namespace {
+// Add the `additionalKeys` to the configuration of the index with the given
+// `base`, load the index, and return the geo cell grid of its vocabulary.
+std::optional<ad_utility::GeoCellGrid> loadGeoCellGridWithConfiguration(
+    const std::string& base, const nlohmann::json& additionalKeys) {
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  nlohmann::json configuration;
+  {
+    std::ifstream in{configFilename};
+    in >> configuration;
+  }
+  configuration.update(additionalKeys);
+  {
+    auto out = ad_utility::makeOfstream(configFilename);
+    out << configuration;
+  }
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.createFromOnDiskIndex(base, false);
+  return index.getVocab().getGeoCellGrid();
+}
+}  // namespace
+
 // Test that the geo cell grid (see `GeoVocabulary`) is read from the index
 // configuration when an index is loaded, with `flat` as the default scheme.
 // NOTE: Building an index with a grid is a follow-up change, so the
@@ -564,21 +586,8 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   const auto& base = qec->getIndex().getOnDiskBase();
   EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
 
-  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
-  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
-    nlohmann::json configuration;
-    {
-      std::ifstream in{configFilename};
-      in >> configuration;
-    }
-    configuration.update(additionalKeys);
-    {
-      auto out = ad_utility::makeOfstream(configFilename);
-      out << configuration;
-    }
-    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-    index.createFromOnDiskIndex(base, false);
-    return index.getVocab().getGeoCellGrid();
+  auto loadWithConfiguration = [&base](const nlohmann::json& additionalKeys) {
+    return loadGeoCellGridWithConfiguration(base, additionalKeys);
   };
   EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
             std::optional{ad_utility::GeoCellGrid{2}});
@@ -590,6 +599,18 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       loadWithConfiguration({{"geo-cell-grid-level", 300}}),
       ::testing::HasSubstr("Invalid value 300"));
+}
+
+// Test that a configuration with a geo cell grid is rejected when the
+// vocabulary type has no `GeoVocabulary` that could hold the grid.
+TEST(IndexTest, geoCellGridFromConfigurationRequiresGeoSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <b> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadGeoCellGridWithConfiguration(base, {{"geo-cell-grid-level", 2}}),
+      ::testing::HasSubstr("requires the vocabulary type"));
 }
 
 // _____________________________________________________________________________
@@ -746,8 +767,13 @@ TEST(IndexTest, processTriple) {
     EXPECT_EQ(Id::makeFromDouble(42.0),
               result.triple_[2].tripleComponent_.getId());
   }
-  // The words for the `ql:has-word` triples with the different
-  // normalizations.
+}
+
+// Test the words of the `ql:has-word` triples with the different
+// normalizations.
+TEST(IndexTest, processTripleHasWordNormalization) {
+  // A literal with "café" composed, decomposed, uppercased and in plural, and
+  // a function that returns its words with the given normalization.
   auto getWords = [](ad_utility::HasWordNormalization normalization) {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.addHasWordTriples() = true;
@@ -759,11 +785,15 @@ TEST(IndexTest, processTriple) {
   };
   using ::testing::Pair;
   using ::testing::UnorderedElementsAre;
-  // Note: Combining marks (as in the decomposed "CAFE\xcc\x81") are not
-  // alphanumeric, so without removing the accents they split words.
+
+  // With `Lowercase`, the composed "é" is kept, and the combining mark of the
+  // decomposed "é" splits the words (it is not alphanumeric).
   EXPECT_THAT(
       getWords(ad_utility::HasWordNormalization::Lowercase),
       UnorderedElementsAre(Pair("café", 1), Pair("cafe", 3), Pair("s", 1)));
+
+  // With `LowercaseNoAccents`, all accents are removed before the
+  // tokenization.
   EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
               UnorderedElementsAre(Pair("cafe", 3), Pair("cafes", 1)));
 }
@@ -828,14 +858,17 @@ TEST(IndexTest, wordTriplePredicates) {
       ::testing::HasSubstr("is not an IRI in angle brackets"));
 }
 
-// _____________________________________________________________________________
 // Test the names of the normalizations in the option of `qlever-index`.
 TEST(IndexTest, hasWordNormalizationNames) {
   using ad_utility::HasWordNormalization;
+
+  // Both names are parsed to their normalization.
   EXPECT_EQ(HasWordNormalization::fromString("lowercase"),
             HasWordNormalization::Lowercase);
   EXPECT_EQ(HasWordNormalization::fromString("lowercase-no-accents"),
             HasWordNormalization::LowercaseNoAccents);
+
+  // An unknown name throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
       HasWordNormalization::fromString("uppercase"),
       ::testing::HasSubstr("is not a valid has-word normalization"));
