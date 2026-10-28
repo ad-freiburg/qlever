@@ -23,10 +23,17 @@ namespace ad_benchmark {
 namespace {
 
 // `measureTimeOfFunction` discards the return value of a measurement, so every
-// measurement stores its result here. The in-place measurements also fold the
-// last decoded byte of every word into their result, so the compiler cannot
+// measurement stores its result here. The in-place measurements additionally
+// pass every decoded buffer through `keepDecodedBytes`, so the compiler cannot
 // drop writes to buffers that are otherwise never read.
 volatile size_t benchmarkSink = 0;
+
+// Tell the compiler that the memory behind `decoded` may be read elsewhere,
+// so that none of the decoded bytes (not only the ones the sink reads) can
+// be optimized away.
+inline void keepDecodedBytes(const char* decoded) {
+  asm volatile("" : : "g"(decoded) : "memory");
+}
 
 // Benchmark the in-place `PrefixCompressor::decompressInto` API against the
 // allocating `PrefixCompressor::decompress` API. The micro group measures
@@ -123,10 +130,8 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
         for (const auto& compressed : compressed_) {
           const size_t written = compressor_.decompressInto(
               compressed, ql::span<char>{output.data(), output.size()});
-          totalBytes +=
-              written + (written > 0
-                             ? static_cast<unsigned char>(output[written - 1])
-                             : 0);
+          keepDecodedBytes(output.data());
+          totalBytes += written;
         }
       }
       benchmarkSink = totalBytes;
@@ -161,11 +166,8 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
               compressed, ql::span<char>{arena.get() + offset,
                                          totalDecompressedSize_ - offset});
           AD_CORRECTNESS_CHECK(written == size);
-          totalBytes +=
-              written +
-              (written > 0
-                   ? static_cast<unsigned char>(arena[offset + written - 1])
-                   : 0);
+          keepDecodedBytes(arena.get() + offset);
+          totalBytes += written;
           offset += written;
         }
         AD_CORRECTNESS_CHECK(offset == totalDecompressedSize_);
