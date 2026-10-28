@@ -23,8 +23,12 @@ enum class HasWordNormalizationEnum : uint8_t { Lowercase, LowercaseNoAccents };
 // The normalization that is applied to the words of the `ql:has-word` triples
 // (option `--has-word-normalization` of `qlever-index`). In all modes, literals
 // are split at non-alphanumeric characters and the words are lowercased. With
-// `LowercaseNoAccents`, additionally all combining accents are removed from the
-// words (e.g. "Café" becomes "cafe").
+// `LowercaseNoAccents`, additionally all combining marks (Unicode category
+// `Mn`) are removed from the words, e.g. "Café" becomes "cafe".
+//
+// NOTE: `LowercaseNoAccents` is meant for text in the Latin, Greek or Cyrillic
+// script. In other scripts, it also removes marks that are not accents, for
+// example the dakuten of Japanese kana or the vowel signs of Thai.
 class HasWordNormalization
     : public EnumWithStrings<HasWordNormalization, HasWordNormalizationEnum> {
  public:
