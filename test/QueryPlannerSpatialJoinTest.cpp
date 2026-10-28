@@ -1499,6 +1499,53 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilterWithBoundMaxDistance) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto sj = h::spatialJoinFilterSubstitute(
+      500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN_DIST,
+      std::nullopt, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"));
+  auto query = [](std::string_view binding) {
+    return absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE {"
+        "?a <p> ?b ."
+        "?x <p> ?y .",
+        binding, " FILTER(geof:metricDistance(?y, ?b) <= ?r) }");
+  };
+
+  // The maximum distance has the same value in every row of the group.
+  h::expect(
+      query("VALUES ?r { 500 }"),
+      h::CartesianProductJoin(sj, h::ValuesClause("VALUES (?r) { (500) }")));
+  h::expect(query("BIND(500 AS ?r)"), h::Bind(sj, "500", V{"?r"}));
+  h::expect(
+      query("{ VALUES ?r { 500 } }"),
+      h::CartesianProductJoin(sj, h::ValuesClause("VALUES (?r) { (500) }")));
+  h::expect(query("VALUES (?r ?s) { (500 1) (500 2) }"),
+            h::CartesianProductJoin(
+                sj, h::ValuesClause("VALUES (?r\t?s) { (500 1) (500 2) }")));
+
+  // The maximum distance may differ between rows or be unbound.
+  auto filter = [&](std::string cacheKey) {
+    return h::Filter("geof:metricDistance(?y, ?b) <= ?r",
+                     h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                             scan("?a", "<p>", "?b"),
+                                             h::ValuesClause(cacheKey)));
+  };
+  h::expect(query("VALUES ?r { 500 600 }"),
+            filter("VALUES (?r) { (500) (600) }"));
+  h::expect(
+      query("OPTIONAL { VALUES ?r { 500 } }"),
+      h::Filter(
+          "geof:metricDistance(?y, ?b) <= ?r",
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"),
+              h::NeutralOptional(h::ValuesClause("VALUES (?r) { (500) }")))));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, FilterIsNotRewritten) {
   auto scan = h::IndexScanFromStrings;
 

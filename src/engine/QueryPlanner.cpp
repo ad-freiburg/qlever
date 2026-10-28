@@ -286,6 +286,7 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
+  substituteConstantMaxDistances(*rootPattern);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
