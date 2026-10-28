@@ -231,6 +231,8 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
 TEST(PolymorphicVocabulary, lookupBatchWithBuilderMatchesIndividualLookups) {
   for (auto vocabType : VocabularyType::all()) {
     auto [filename, cleanup] = ad_utility::testing::filenameForTesting();
+    auto deleteFiles =
+        getFileCleanup(VocabularyType{vocabType}, filename.string());
     PolymorphicVocabulary vocab;
     setupVocab(vocab, vocabType, filename.string());
 

@@ -130,8 +130,8 @@ class Vocabulary {
   // Batch lookup: look up multiple indices at once and return their words.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
-  // Append the words for `indices` to `builder`. Delegate when the underlying
-  // vocabulary supports this protocol. Otherwise copy its owning result.
+  // Append the words for `indices` to `builder`. `UnicodeVocabulary` handles
+  // underlying vocabularies without builder support by copying their result.
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const;
 

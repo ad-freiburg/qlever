@@ -24,13 +24,11 @@
 #include <cstdlib>
 #include <filesystem>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "absl/strings/str_cat.h"
-#include "backports/span.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -43,17 +41,16 @@ namespace {
 
 class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
  private:
-  // Remove the files of a vocabulary basename: the base file itself plus the
-  // auxiliary files of compressed vocabularies (see
-  // `CompressedVocabulary::wordsSuffix` and `decodersSuffix`). Best effort:
-  // failures (e.g. files that were never created) are ignored.
+  // Remove exactly the files that the vocabulary announces via
+  // `PolymorphicVocabulary::fileSuffixes`. Best effort: failures are ignored.
   struct TempFileCleanup {
     std::string basename_;
+    std::vector<std::string> suffixes_;
     ~TempFileCleanup() {
       std::error_code ec;
-      std::filesystem::remove(basename_, ec);
-      std::filesystem::remove(basename_ + ".words", ec);
-      std::filesystem::remove(basename_ + ".codebooks", ec);
+      for (const std::string& suffix : suffixes_) {
+        std::filesystem::remove(basename_ + suffix, ec);
+      }
     }
   };
 
@@ -101,6 +98,12 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
     uncompressedCleanup_.basename_ =
         (std::filesystem::temp_directory_path() / "polyVocabLookupBatchMicroU")
             .string();
+    compressedCleanup_.suffixes_ =
+        PolymorphicVocabulary::fileSuffixes(ad_utility::VocabularyType{
+            ad_utility::VocabularyType::Enum::OnDiskCompressed});
+    uncompressedCleanup_.suffixes_ =
+        PolymorphicVocabulary::fileSuffixes(ad_utility::VocabularyType{
+            ad_utility::VocabularyType::Enum::OnDiskUncompressed});
     buildVocabulary(compressedVocab_,
                     ad_utility::VocabularyType::Enum::OnDiskCompressed,
                     compressedCleanup_.basename_, numWords);

@@ -21,13 +21,11 @@
 #include <cstdlib>
 #include <filesystem>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "absl/strings/str_cat.h"
-#include "backports/span.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"

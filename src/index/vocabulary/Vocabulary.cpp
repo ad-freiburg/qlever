@@ -329,12 +329,7 @@ template <typename S, typename C, typename I>
 void Vocabulary<S, C, I>::lookupBatch(ql::span<const size_t> indices,
                                       ArenaVocabBatchBuilder& builder) const {
   AD_CONTRACT_CHECK(!indices.empty());
-  if constexpr (SupportsBuilderLookupBatch<
-                    std::decay_t<decltype(vocabulary_)>>) {
-    vocabulary_.lookupBatch(indices, builder);
-  } else {
-    appendVocabBatchLookupResult(vocabulary_.lookupBatch(indices), builder);
-  }
+  vocabulary_.lookupBatch(indices, builder);
 }
 
 // _____________________________________________________________________________
