@@ -410,7 +410,7 @@ TEST(PermutationBlockMetadata, withAugmentedBlocks) {
 }
 
 // _____________________________________________________________________________
-TEST(BlockMetadataSpan, iteration) {
+TEST(SubBlockMetadataSpan, iteration) {
   auto permutation = makeTestPermutation();
   PermutationBlockMetadata metadata{permutation};
   auto span = metadata.subBlocks();
@@ -444,19 +444,19 @@ TEST(BlockMetadataSpan, iteration) {
   EXPECT_ANY_THROW(span.subspan(2, 3));
 
   // A span of materialized values.
-  BlockMetadataSpan fromVector{materialized};
+  SubBlockMetadataSpan fromVector{materialized};
   EXPECT_THAT(fromVector, ::testing::ElementsAreArray(materialized));
   EXPECT_THAT(fromVector.subspan(3), ::testing::ElementsAre(materialized[3]));
   // The values of a span of the `PermutationBlockMetadata` point to it.
   EXPECT_EQ(span.front().permutationMetadata_, &metadata);
 
   // A subrange and its conversion back to a span.
-  BlockMetadataRange range{span.begin() + 1, span.end()};
-  BlockMetadataSpan fromRange{range};
+  SubBlockMetadataRange range{span.begin() + 1, span.end()};
+  SubBlockMetadataSpan fromRange{range};
   EXPECT_THAT(fromRange, ::testing::ElementsAreArray(materialized.begin() + 1,
                                                      materialized.end()));
   // The default-constructed span is empty.
-  EXPECT_TRUE(BlockMetadataSpan{}.empty());
+  EXPECT_TRUE(SubBlockMetadataSpan{}.empty());
 }
 
 // _____________________________________________________________________________

@@ -52,7 +52,7 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 // `rebuild-index-scan-num-threads` threads at the same time.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
-    const BlockMetadataRanges& blockMetadataRanges,
+    const SubBlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const LocalVocabMapping& localVocabMapping,
     const InsertionPositions& insertionPositions,
@@ -66,7 +66,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 // patterns, which are currently not updated for index rebuilds. So it doesn't
 // matter if the columns are actually missing, or present but filled with
 // `Id::makeUndefined()`.
-size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges);
+size_t getNumColumns(const SubBlockMetadataRanges& blockMetadataRanges);
 
 // Create a `boost::asio::awaitable<void>` that writes a pair of new
 // permutations according to the settings of `newIndex`, based on the data of
@@ -93,7 +93,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
 // just filled in increasing order starting from `ADDITIONAL_COLUMN_GRAPH_ID`.
 std::pair<size_t, std::vector<ColumnIndex>>
 getNumberOfColumnsAndAdditionalColumns(
-    const BlockMetadataRanges& blockMetadataRanges);
+    const SubBlockMetadataRanges& blockMetadataRanges);
 
 }  // namespace qlever::indexRebuilder
 

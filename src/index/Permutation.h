@@ -167,10 +167,10 @@ class Permutation {
   //   with the `col1Id` if specified), else the behavior is
   //   undefined.
   // - In all other cases, the block metadata (optionally generally prefiltered
-  //   via `PrefilterExpression`) is already contained as `BlockMetadataRanges`
-  //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
-  //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
-  //   join-specific prefiltered block metadata.
+  //   via `PrefilterExpression`) is already contained as
+  //   `SubBlockMetadataRanges` in `ScanSpecAndBlocks`. The `BlockMetadatRanges`
+  //   of the `ScanSpecAndBlocks` are ignored for scanning if `optBlocks`
+  //   contains the join-specific prefiltered block metadata.
   // - The blocks are read and decompressed on the `executor`, see
   //   `CompressedRelationReader::lazyScan` for the requirements.
   //
@@ -207,7 +207,7 @@ class Permutation {
       qlever::Executor executor) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
-  // with relevant `BlockMetadataRanges`.
+  // with relevant `SubBlockMetadataRanges`.
   ScanSpecAndBlocks getScanSpecAndBlocks(
       const ScanSpecification& scanSpec,
       const LocatedTriplesState& locatedTriplesState) const;
@@ -277,7 +277,7 @@ class Permutation {
 
   // From the given snapshot, get the augmented block metadata for this
   // permutation.
-  BlockMetadataRanges getAugmentedMetadataForPermutation(
+  SubBlockMetadataRanges getAugmentedMetadataForPermutation(
       const LocatedTriplesState& locatedTriplesState) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }

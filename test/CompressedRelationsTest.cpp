@@ -69,17 +69,17 @@ ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIdsForIndex(
       scanSpecAndBlocks, ltpb, cancellationHandle, allocator);
 }
 
-// Retrieve the corresponding `BlockMetadataRanges` value for the
-// given `BlockMetadataSpan`.
-BlockMetadataRanges getBlockMetadataRangesfromVec(
-    BlockMetadataSpan blockMetadataSpan) {
+// Retrieve the corresponding `SubBlockMetadataRanges` value for the
+// given `SubBlockMetadataSpan`.
+SubBlockMetadataRanges getBlockMetadataRangesfromVec(
+    SubBlockMetadataSpan blockMetadataSpan) {
   const size_t numBlocks = blockMetadataSpan.size();
   if (numBlocks < 3) {
     return {{blockMetadataSpan.begin(), blockMetadataSpan.end()}};
   }
-  // If the BlockMetadataSpan contains more than three block values, split it
+  // If the SubBlockMetadataSpan contains more than three block values, split it
   // into three random subspans.
-  BlockMetadataRanges ranges;
+  SubBlockMetadataRanges ranges;
   ad_utility::SlowRandomIntGenerator<size_t> gen(0, numBlocks);
   auto split1 = gen();
   auto split2 = gen();
@@ -96,11 +96,11 @@ BlockMetadataRanges getBlockMetadataRangesfromVec(
 
 // The same, but for all the sub-blocks of the `blockMetadata`, which must
 // outlive the result.
-BlockMetadataRanges getBlockMetadataRangesfromVec(
+SubBlockMetadataRanges getBlockMetadataRangesfromVec(
     const PermutationBlockMetadata& blockMetadata) {
   return getBlockMetadataRangesfromVec(blockMetadata.subBlocks());
 }
-BlockMetadataRanges getBlockMetadataRangesfromVec(
+SubBlockMetadataRanges getBlockMetadataRangesfromVec(
     PermutationBlockMetadata&& blockMetadata) = delete;
 
 // Create a `SubBlockMetadata` with the given first and last triple, and the
@@ -2454,8 +2454,8 @@ PermutationBuildResult buildPermutation(std::vector<RelationInput> inputs,
   CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
                                   ad_utility::File{filename, "r"}};
   PermutationBlockMetadata permutationMetadata{result.blocks_};
-  BlockMetadataSpan blockSpan = permutationMetadata.subBlocks();
-  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
+  SubBlockMetadataSpan blockSpan = permutationMetadata.subBlocks();
+  SubBlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
   std::vector<ColumnIndex> additionalColumns;
   for (size_t i = 3; i < numColumns; ++i) {
     additionalColumns.push_back(i);
@@ -2872,8 +2872,8 @@ IdTable scanLargeRelation(const std::string& filename,
   CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
                                   ad_utility::File{filename, "r"}};
   PermutationBlockMetadata permutationMetadata{blocks};
-  BlockMetadataSpan blockSpan = permutationMetadata.subBlocks();
-  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
+  SubBlockMetadataSpan blockSpan = permutationMetadata.subBlocks();
+  SubBlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
   ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
   std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
   return reader.scan(

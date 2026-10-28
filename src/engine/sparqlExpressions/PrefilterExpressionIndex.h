@@ -51,12 +51,12 @@ using Vocab = RdfsVocabulary;
 constexpr size_t maxInfoRecursion = 3;
 
 // `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
-// containerized `BlockMetadataSpan` objects. This
+// containerized `SubBlockMetadataSpan` objects. This
 // (indexable) containerization procedure allows us to efficiently define
 // relevant ranges by indices/iterators, instead of returning the relevant
-// `SubBlockMetadata` values itself. `operator()(BlockMetadataSpan
+// `SubBlockMetadata` values itself. `operator()(SubBlockMetadataSpan
 // randomAccessContainer,uint64_t i)` implements access to the i-th `ValueId`
-// regarding our containerized `BlockMetadataSpan inputSpan`. Each
+// regarding our containerized `SubBlockMetadataSpan inputSpan`. Each
 // `SubBlockMetadata` value holds exactly two bound `ValueId`s (one in
 // `firstTriple_` and `lastTriple_` respectively) over the specified column
 // `evaluationColumn_`. This leads to an valid index range `[0, 2 *
@@ -74,25 +74,26 @@ struct AccessValueIdFromBlockMetadata {
   explicit AccessValueIdFromBlockMetadata(size_t evaluationColumn)
       : evaluationColumn_{evaluationColumn} {}
 
-  ValueId operator()(BlockMetadataSpan randomAccessContainer, uint64_t i) const;
+  ValueId operator()(SubBlockMetadataSpan randomAccessContainer,
+                     uint64_t i) const;
 };
 
 // Specialized `Iterator` with `ValueId` access (retrieve `ValueId`s from
-// corresponding `SubBlockMetadata`) on containerized `BlockMetadataSpan`
+// corresponding `SubBlockMetadata`) on containerized `SubBlockMetadataSpan`
 // objects.
 using ValueIdIt =
-    ad_utility::IteratorForAccessOperator<BlockMetadataSpan,
+    ad_utility::IteratorForAccessOperator<SubBlockMetadataSpan,
                                           AccessValueIdFromBlockMetadata,
                                           ad_utility::IsConst::True>;
 
 // `ValueIdSubrange` represents a (sub) range of relevant `ValueId`s over
-// the containerized `BlockMetadataSpan input`:
+// the containerized `SubBlockMetadataSpan input`:
 using ValueIdSubrange = ql::ranges::subrange<ValueIdIt>;
 
 // Required because `valueIdComparators::getRangesForId` directly returns pairs
 // of `ValueIdIt`s, and not sub ranges (`ValueIdSubrange`).
 // Remark: The pair defines a relevant range of `ValueId`s over containerized
-// `BlockMetadataSpan input` by iterators.
+// `SubBlockMetadataSpan input` by iterators.
 using ValueIdItPair = std::pair<ValueIdIt, ValueIdIt>;
 
 /*
@@ -143,20 +144,21 @@ class PrefilterExpression {
   // potentially incomplete first/last `SubBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
-  BlockMetadataRanges evaluate(const IndexImpl& index,
-                               BlockMetadataSpan blockRange,
-                               size_t evaluationColumn) const;
+  SubBlockMetadataRanges evaluate(const IndexImpl& index,
+                                  SubBlockMetadataSpan blockRange,
+                                  size_t evaluationColumn) const;
 
   // `evaluateImpl` is internally used for the actual pre-filter procedure.
   // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at
-  // column index `evaluationColumn` over the containerized `BlockMetadataSpan
-  // input`. If `getTotalComplement` is set to `true`, the leaf
-  // `RelationalExpression`s return their corresponding complement over ALL
+  // column index `evaluationColumn` over the containerized
+  // `SubBlockMetadataSpan input`. If `getTotalComplement` is set to `true`, the
+  // leaf `RelationalExpression`s return their corresponding complement over ALL
   // datatypes. This is in particular needed for the complement of `IsDatatype`
   // and `InExpression`.
-  virtual BlockMetadataRanges evaluateImpl(
+  virtual SubBlockMetadataRanges evaluateImpl(
       const IndexImpl& index, const ValueIdSubrange& idRange,
-      BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
+      SubBlockMetadataSpan blockRange,
+      bool getTotalComplement = false) const = 0;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -193,10 +195,10 @@ class PrefixRegexExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
-                                   const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange,
-                                   bool getTotalComplement) const override;
+  SubBlockMetadataRanges evaluateImpl(const IndexImpl& index,
+                                      const ValueIdSubrange& idRange,
+                                      SubBlockMetadataSpan blockRange,
+                                      bool getTotalComplement) const override;
 };
 
 // Helper struct for a compact class implementation regarding the logical
@@ -226,10 +228,10 @@ class LogicalExpression : public PrefilterExpression {
   // Declare `PrefixRegexExpression` as a friend because its `evaluateImpl`
   // requires access to the `evaluateImpl` declared here.
   friend class PrefixRegexExpression;
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
-                                   const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange,
-                                   bool getTotalComplement) const override;
+  SubBlockMetadataRanges evaluateImpl(const IndexImpl& index,
+                                      const ValueIdSubrange& idRange,
+                                      SubBlockMetadataSpan blockRange,
+                                      bool getTotalComplement) const override;
 };
 
 // Values to differentiate `PrefilterExpression` for the respective `isDatatype`
@@ -258,10 +260,10 @@ class IsDatatypeExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
-                                   const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange,
-                                   bool getTotalComplement) const override;
+  SubBlockMetadataRanges evaluateImpl(const IndexImpl& index,
+                                      const ValueIdSubrange& idRange,
+                                      SubBlockMetadataSpan blockRange,
+                                      bool getTotalComplement) const override;
 };
 
 // The `PrefilterExpression` associated with the `RelationalExpressions` `IN`,
@@ -287,10 +289,10 @@ class IsInExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
-                                   const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange,
-                                   bool getTotalComplement) const override;
+  SubBlockMetadataRanges evaluateImpl(const IndexImpl& index,
+                                      const ValueIdSubrange& idRange,
+                                      SubBlockMetadataSpan blockRange,
+                                      bool getTotalComplement) const override;
 };
 
 // For the actual comparison of the relevant ValueIds from the metadata triples,
@@ -326,10 +328,10 @@ class RelationalExpression : public PrefilterExpression {
   // If `getTotalComplement` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `SubBlockMetadata` values.
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
-                                   const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange,
-                                   bool getTotalComplement) const override;
+  SubBlockMetadataRanges evaluateImpl(const IndexImpl& index,
+                                      const ValueIdSubrange& idRange,
+                                      SubBlockMetadataSpan blockRange,
+                                      bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -352,10 +354,10 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
-                                   const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange,
-                                   bool getTotalComplement) const override;
+  SubBlockMetadataRanges evaluateImpl(const IndexImpl& index,
+                                      const ValueIdSubrange& idRange,
+                                      SubBlockMetadataSpan blockRange,
+                                      bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -399,12 +401,12 @@ namespace detail {
 //______________________________________________________________________________
 namespace logicalOps {
 
-// Performs a `logical-And` on across two given `BlockMetadataRanges`.
-BlockMetadataRanges getIntersectionOfBlockRanges(const BlockMetadataRanges& r1,
-                                                 const BlockMetadataRanges& r2);
-// Performs a `logical-Or` on across two given `BlockMetadataRanges`.
-BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
-                                          const BlockMetadataRanges& r2);
+// Performs a `logical-And` on across two given `SubBlockMetadataRanges`.
+SubBlockMetadataRanges getIntersectionOfBlockRanges(
+    const SubBlockMetadataRanges& r1, const SubBlockMetadataRanges& r2);
+// Performs a `logical-Or` on across two given `SubBlockMetadataRanges`.
+SubBlockMetadataRanges getUnionOfBlockRanges(const SubBlockMetadataRanges& r1,
+                                             const SubBlockMetadataRanges& r2);
 
 }  // namespace logicalOps
 
@@ -412,22 +414,22 @@ BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
 namespace mapping {
 // `This internal helper function is only exposed for unit tests!`
 // Map the complement of the given `ValueIdItPair`s, which directly refer to the
-// `ValueId`s held by the containerized `BlockMetadataSpan`, to their
-// corresponding `BlockMetadataIt`s. The ranges defined by those
-// `BlockMetadataIt`s directly refer to the (relevant) `SubBlockMetadata` values
-// of `BlockMetadataSpan`.
-BlockMetadataRanges mapValueIdItRangesToBlockItRangesComplemented(
+// `ValueId`s held by the containerized `SubBlockMetadataSpan`, to their
+// corresponding `SubBlockMetadataIt`s. The ranges defined by those
+// `SubBlockMetadataIt`s directly refer to the (relevant) `SubBlockMetadata`
+// values of `SubBlockMetadataSpan`.
+SubBlockMetadataRanges mapValueIdItRangesToBlockItRangesComplemented(
     const std::vector<ValueIdItPair>& relevantIdRanges,
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange);
+    const ValueIdSubrange& idRange, SubBlockMetadataSpan blockRange);
 // `This internal helper function is only exposed for unit tests!`
 // Map the given `ValueIdItPair`s, which directly refer to the
-// `ValueId`s held by the containerized `BlockMetadataSpan`, to their
-// corresponding `BlockMetadataIt`s. The ranges defined by those
-// `BlockMetadataIt`s directly refer to the (relevant) `SubBlockMetadata` values
-// of `BlockMetadataSpan`.
-BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
+// `ValueId`s held by the containerized `SubBlockMetadataSpan`, to their
+// corresponding `SubBlockMetadataIt`s. The ranges defined by those
+// `SubBlockMetadataIt`s directly refer to the (relevant) `SubBlockMetadata`
+// values of `SubBlockMetadataSpan`.
+SubBlockMetadataRanges mapValueIdItRangesToBlockItRanges(
     const std::vector<ValueIdItPair>& relevantIdRanges,
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange);
+    const ValueIdSubrange& idRange, SubBlockMetadataSpan blockRange);
 }  // namespace mapping
 
 // Pair containing a `PrefilterExpression` and its corresponding `Variable`.

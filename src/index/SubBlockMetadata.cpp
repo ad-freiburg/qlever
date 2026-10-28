@@ -486,8 +486,8 @@ SubBlockMetadata PermutationBlockMetadata::subBlock(
 }
 
 // _____________________________________________________________________________
-BlockMetadataSpan PermutationBlockMetadata::subBlocks() const {
-  return BlockMetadataSpan{*this};
+SubBlockMetadataSpan PermutationBlockMetadata::subBlocks() const {
+  return SubBlockMetadataSpan{*this};
 }
 
 // _____________________________________________________________________________

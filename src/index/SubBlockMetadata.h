@@ -366,7 +366,7 @@ struct BlocksAndSubBlocks {
   SubBlockTable subBlocks_;
 };
 
-class BlockMetadataSpan;
+class SubBlockMetadataSpan;
 
 // The metadata of all blocks and sub-blocks of a permutation. This is the
 // interface between the stored metadata (the `CompressedBlockMetadata` of the
@@ -456,7 +456,7 @@ class PermutationBlockMetadata {
   SubBlockMetadata subBlock(size_t subBlockIndex) const;
 
   // Return all the sub-blocks.
-  BlockMetadataSpan subBlocks() const;
+  SubBlockMetadataSpan subBlocks() const;
 
   // Return the (global) index range `[begin, end)` of the sub-blocks of the
   // block with the index `blockIndex`.
@@ -497,7 +497,7 @@ class PermutationBlockMetadata {
 // contiguous array of materialized values (e.g. the result of a join or of a
 // `PrefilterExpression`, or in unit tests). The iterator yields values (and
 // not references).
-class BlockMetadataIterator {
+class SubBlockMetadataIterator {
  public:
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
@@ -518,9 +518,9 @@ class BlockMetadataIterator {
   size_t index_ = 0;
 
  public:
-  BlockMetadataIterator() = default;
-  BlockMetadataIterator(const PermutationBlockMetadata* source,
-                        const SubBlockMetadata* materialized, size_t index)
+  SubBlockMetadataIterator() = default;
+  SubBlockMetadataIterator(const PermutationBlockMetadata* source,
+                           const SubBlockMetadata* materialized, size_t index)
       : source_{source}, materialized_{materialized}, index_{index} {}
 
   SubBlockMetadata operator*() const {
@@ -530,72 +530,72 @@ class BlockMetadataIterator {
   ArrowProxy operator->() const { return {**this}; }
   SubBlockMetadata operator[](difference_type n) const { return *(*this + n); }
 
-  auto compareThreeWay(const BlockMetadataIterator& rhs) const {
+  auto compareThreeWay(const SubBlockMetadataIterator& rhs) const {
     return ql::compareThreeWay(index_, rhs.index_);
   }
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(BlockMetadataIterator)
-  bool operator==(const BlockMetadataIterator& rhs) const {
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(SubBlockMetadataIterator)
+  bool operator==(const SubBlockMetadataIterator& rhs) const {
     return index_ == rhs.index_;
   }
-  bool operator!=(const BlockMetadataIterator& rhs) const {
+  bool operator!=(const SubBlockMetadataIterator& rhs) const {
     return index_ != rhs.index_;
   }
 
-  BlockMetadataIterator& operator+=(difference_type n) {
+  SubBlockMetadataIterator& operator+=(difference_type n) {
     index_ += n;
     return *this;
   }
-  BlockMetadataIterator& operator-=(difference_type n) {
+  SubBlockMetadataIterator& operator-=(difference_type n) {
     index_ -= n;
     return *this;
   }
-  BlockMetadataIterator operator+(difference_type n) const {
+  SubBlockMetadataIterator operator+(difference_type n) const {
     auto result = *this;
     result += n;
     return result;
   }
-  friend BlockMetadataIterator operator+(difference_type n,
-                                         const BlockMetadataIterator& it) {
+  friend SubBlockMetadataIterator operator+(
+      difference_type n, const SubBlockMetadataIterator& it) {
     return it + n;
   }
-  BlockMetadataIterator operator-(difference_type n) const {
+  SubBlockMetadataIterator operator-(difference_type n) const {
     auto result = *this;
     result -= n;
     return result;
   }
-  difference_type operator-(const BlockMetadataIterator& rhs) const {
+  difference_type operator-(const SubBlockMetadataIterator& rhs) const {
     return static_cast<difference_type>(index_) -
            static_cast<difference_type>(rhs.index_);
   }
-  BlockMetadataIterator& operator++() {
+  SubBlockMetadataIterator& operator++() {
     ++index_;
     return *this;
   }
-  BlockMetadataIterator operator++(int) {
+  SubBlockMetadataIterator operator++(int) {
     auto result = *this;
     ++index_;
     return result;
   }
-  BlockMetadataIterator& operator--() {
+  SubBlockMetadataIterator& operator--() {
     --index_;
     return *this;
   }
-  BlockMetadataIterator operator--(int) {
+  SubBlockMetadataIterator operator--(int) {
     auto result = *this;
     --index_;
     return result;
   }
 
-  friend class BlockMetadataSpan;
+  friend class SubBlockMetadataSpan;
 };
 
 // A non-owning random access range of `SubBlockMetadata` values, see
-// `BlockMetadataIterator`. It has the same interface as a `ql::span<const
+// `SubBlockMetadataIterator`. It has the same interface as a `ql::span<const
 // SubBlockMetadata>` (except that it yields values).
-class BlockMetadataSpan {
+class SubBlockMetadataSpan {
  public:
-  using iterator = BlockMetadataIterator;
-  using const_iterator = BlockMetadataIterator;
+  using iterator = SubBlockMetadataIterator;
+  using const_iterator = SubBlockMetadataIterator;
   using value_type = SubBlockMetadata;
   using size_type = size_t;
 
@@ -604,19 +604,20 @@ class BlockMetadataSpan {
   iterator end_;
 
  public:
-  BlockMetadataSpan() = default;
+  SubBlockMetadataSpan() = default;
   // Create a span of all the sub-blocks of the `source`.
-  explicit BlockMetadataSpan(const PermutationBlockMetadata& source)
+  explicit SubBlockMetadataSpan(const PermutationBlockMetadata& source)
       : begin_{&source, nullptr, 0},
         end_{&source, nullptr, source.numSubBlocks()} {}
   // Create a span of materialized values.
-  BlockMetadataSpan(ql::span<const SubBlockMetadata> values)
+  SubBlockMetadataSpan(ql::span<const SubBlockMetadata> values)
       : begin_{nullptr, values.data(), 0},
         end_{nullptr, values.data(), values.size()} {}
-  BlockMetadataSpan(const std::vector<SubBlockMetadata>& values)
-      : BlockMetadataSpan{ql::span<const SubBlockMetadata>{values}} {}
+  SubBlockMetadataSpan(const std::vector<SubBlockMetadata>& values)
+      : SubBlockMetadataSpan{ql::span<const SubBlockMetadata>{values}} {}
   // Create the span `[begin, end)`.
-  BlockMetadataSpan(iterator begin, iterator end) : begin_{begin}, end_{end} {
+  SubBlockMetadataSpan(iterator begin, iterator end)
+      : begin_{begin}, end_{end} {
     AD_EXPENSIVE_CHECK(begin.source_ == end.source_ &&
                        begin.materialized_ == end.materialized_);
   }
@@ -624,8 +625,9 @@ class BlockMetadataSpan {
   CPP_template(typename Range)(
       requires ql::concepts::same_as<
           ql::ranges::iterator_t<const Range>,
-          iterator>) explicit BlockMetadataSpan(const Range& range)
-      : BlockMetadataSpan{ql::ranges::begin(range), ql::ranges::end(range)} {}
+          iterator>) explicit SubBlockMetadataSpan(const Range& range)
+      : SubBlockMetadataSpan{ql::ranges::begin(range), ql::ranges::end(range)} {
+  }
 
   iterator begin() const { return begin_; }
   iterator end() const { return end_; }
@@ -637,8 +639,8 @@ class BlockMetadataSpan {
 
   // Return the subrange of `count` elements starting at `offset` (all the
   // remaining elements if `count` is `ql::dynamic_extent`).
-  BlockMetadataSpan subspan(size_t offset,
-                            size_t count = ql::dynamic_extent) const {
+  SubBlockMetadataSpan subspan(size_t offset,
+                               size_t count = ql::dynamic_extent) const {
     AD_CONTRACT_CHECK(offset <= size());
     auto newBegin = begin_ + offset;
     auto newEnd = count == ql::dynamic_extent ? end_ : newBegin + count;
@@ -647,11 +649,12 @@ class BlockMetadataSpan {
   }
 };
 
-// Iterator with respect to a `SubBlockMetadata` value of a `BlockMetadataSpan`.
-using BlockMetadataIt = BlockMetadataSpan::iterator;
-// Section of relevant blocks as a subrange defined by `BlockMetadataIt`s.
-using BlockMetadataRange = ql::ranges::subrange<BlockMetadataIt>;
-// Vector containing `BlockMetadataRange`s.
-using BlockMetadataRanges = std::vector<BlockMetadataRange>;
+// Iterator with respect to a `SubBlockMetadata` value of a
+// `SubBlockMetadataSpan`.
+using SubBlockMetadataIt = SubBlockMetadataSpan::iterator;
+// Section of relevant blocks as a subrange defined by `SubBlockMetadataIt`s.
+using SubBlockMetadataRange = ql::ranges::subrange<SubBlockMetadataIt>;
+// Vector containing `SubBlockMetadataRange`s.
+using SubBlockMetadataRanges = std::vector<SubBlockMetadataRange>;
 
 #endif  // QLEVER_SRC_INDEX_SUBBLOCKMETADATA_H

@@ -131,9 +131,9 @@ class CompressedRelationReader {
   // Brief explanation of `ScanSpecAndBlocks` constructor logic:
   // (1) The passed `ScanSpecification` remains as it is and is moved into
   // member variable `scanSpec_`.
-  // (2) Member `blockMetadata_` is set to the `BlockMetadataRanges` computed
+  // (2) Member `blockMetadata_` is set to the `SubBlockMetadataRanges` computed
   // via `getRelevantBlocks` for the provided `ScanSpecification` and
-  // `BlockMetadataRanges`.
+  // `SubBlockMetadataRanges`.
   // (3) Compute `sizeBlockMetadata_`, which represents the number of
   // `SubBlockMetadata` values contained over all subranges in member
   // `BlockMetadataRanges_ blockMetadata_`.
@@ -142,11 +142,11 @@ class CompressedRelationReader {
   // to the first free column defined by `scanSpec_`.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
-    BlockMetadataRanges blockMetadata_;
+    SubBlockMetadataRanges blockMetadata_;
     size_t sizeBlockMetadata_;
 
     ScanSpecAndBlocks(ScanSpecification scanSpec,
-                      const BlockMetadataRanges& blockMetadataRanges);
+                      const SubBlockMetadataRanges& blockMetadataRanges);
 
     // Direct view access via `ql::views::join` over all
     // `SubBlockMetadata` values contained in `BlockMetadatatRanges
@@ -155,17 +155,17 @@ class CompressedRelationReader {
       return ql::views::join(blockMetadata_);
     }
 
-    // If `BlockMetadataRanges blockMetadata_` contains exactly one
-    // `BlockMetadataRange` (verified via AD_CONTRACT_CHECK), return the
-    // corresponding `SubBlockMetadata` values as a `BlockMetadataSpan`.
-    BlockMetadataSpan getBlockMetadataSpan() const;
+    // If `SubBlockMetadataRanges blockMetadata_` contains exactly one
+    // `SubBlockMetadataRange` (verified via AD_CONTRACT_CHECK), return the
+    // corresponding `SubBlockMetadata` values as a `SubBlockMetadataSpan`.
+    SubBlockMetadataSpan getBlockMetadataSpan() const;
 
-    // Check the provided `BlockMetadataRange`s for the following invariants:
+    // Check the provided `SubBlockMetadataRange`s for the following invariants:
     //   - All contained `SubBlockMetadata` values must be unique.
     //   - The `SubBlockMetadata` values must adhere to ascending order.
     //   - `firstFreeColIndex` is the column index up to which we expect
     //      constant values in `columns < firstFreeColIndex` over all blocks.
-    static void checkBlockMetadataInvariant(BlockMetadataSpan blocks,
+    static void checkBlockMetadataInvariant(SubBlockMetadataSpan blocks,
                                             size_t firstFreeColIndex);
 
     // Remove the first `numBlocksToRemove` from the `blockMetadata_`. This can
@@ -446,23 +446,23 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock&) const;
 
   // Return the number of `SubBlockMetadata` values contained in given
-  // `BlockMetadataRanges` object.
+  // `SubBlockMetadataRanges` object.
   static size_t getNumberOfBlockMetadataValues(
-      const BlockMetadataRanges& blockMetadata);
+      const SubBlockMetadataRanges& blockMetadata);
 
   // Return the corresponding materialized `SubBlockMetadata` vector
-  // to the given `BlockMetadataRanges blockMetadata`.
+  // to the given `SubBlockMetadataRanges blockMetadata`.
   static std::vector<SubBlockMetadata> convertBlockMetadataRangesToVector(
-      const BlockMetadataRanges& blockMetadata);
+      const SubBlockMetadataRanges& blockMetadata);
 
-  // Get the relevant `BlockMetadataRanges` sections of the given
-  // `BlockMetadataRanges blockMetadata` for the blocks that contain the
+  // Get the relevant `SubBlockMetadataRanges` sections of the given
+  // `SubBlockMetadataRanges blockMetadata` for the blocks that contain the
   // triples that have the relationId/col0Id specified by
   // `ScanSpecification scanSpec`. If the `col1Id` is specified (not `nullopt`),
   // then the blocks are additionally filtered by the given `col1Id`.
-  static BlockMetadataRanges getRelevantBlocks(
+  static SubBlockMetadataRanges getRelevantBlocks(
       const ScanSpecification& scanSpec,
-      const BlockMetadataRanges& blockMetadata);
+      const SubBlockMetadataRanges& blockMetadata);
 
   // Get the first and the last triple that the result of a `scan` with the
   // given arguments would lead to, ignoring any graph filters set for

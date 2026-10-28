@@ -66,24 +66,24 @@ const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
 //______________________________________________________________________________
 using IdxPair = std::pair<size_t, size_t>;
 using IdxPairRanges = std::vector<IdxPair>;
-// Convert `IdxPairRanges` to `BlockMetadataRanges` with respect to
-// `BlockMetadataIt beginBlockSpan` (first possible `BlockMetadataIt` of a
-// `BlockMetadataSpan`).
-static BlockMetadataRanges convertFromSpanIdxToSpanBlockItRanges(
-    const BlockMetadataIt& beginBlockSpan, const IdxPairRanges idxRanges) {
-  BlockMetadataRanges blockItRanges;
+// Convert `IdxPairRanges` to `SubBlockMetadataRanges` with respect to
+// `SubBlockMetadataIt beginBlockSpan` (first possible `SubBlockMetadataIt` of a
+// `SubBlockMetadataSpan`).
+static SubBlockMetadataRanges convertFromSpanIdxToSpanBlockItRanges(
+    const SubBlockMetadataIt& beginBlockSpan, const IdxPairRanges idxRanges) {
+  SubBlockMetadataRanges blockItRanges;
   blockItRanges.reserve(idxRanges.size());
   ql::ranges::for_each(idxRanges, [&](const IdxPair& idxPair) {
     const auto& [beginIdx, endIdx] = idxPair;
-    blockItRanges.emplace_back(BlockMetadataIt{beginBlockSpan + beginIdx},
-                               BlockMetadataIt{beginBlockSpan + endIdx});
+    blockItRanges.emplace_back(SubBlockMetadataIt{beginBlockSpan + beginIdx},
+                               SubBlockMetadataIt{beginBlockSpan + endIdx});
   });
   return blockItRanges;
 }
 
 //______________________________________________________________________________
-// Materialize the given `BlockMetadataRanges` as a `std::vector`.
-auto toVec = [](const BlockMetadataRanges& blocks) {
+// Materialize the given `SubBlockMetadataRanges` as a `std::vector`.
+auto toVec = [](const SubBlockMetadataRanges& blocks) {
   return CompressedRelationReader::convertBlockMetadataRangesToVector(blocks);
 };
 
@@ -526,23 +526,23 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         adjustedExpected);
   }
 
-  // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2` contain
-  // equivalent sub-ranges.
-  bool assertEqRelevantBlockItRanges(const BlockMetadataRanges& r1,
-                                     const BlockMetadataRanges& r2) {
+  // Check if `SubBlockMetadataRanges r1` and `SubBlockMetadataRanges r2`
+  // contain equivalent sub-ranges.
+  bool assertEqRelevantBlockItRanges(const SubBlockMetadataRanges& r1,
+                                     const SubBlockMetadataRanges& r2) {
     return ql::ranges::equal(r1, r2, ql::ranges::equal);
   }
 
   // Test the `mapValueIdItRangesToBlockItRangesComplemented` (if
   // `testComplement = true`) or `mapValueIdItRangesToBlockItRanges` helper
   // function of `PrefilterExpression`s. We assert that the retrieved
-  // relevant iterators with respect to the containerized `BlockMetadataSpan
+  // relevant iterators with respect to the containerized `SubBlockMetadataSpan
   // evalBlocks` are correctly mapped back to
   // `RelevantBlockRange`s (index values regarding `evalBlocks`).
   auto makeTestDetailIndexMapping(CompOp compOp, ValueId referenceId,
                                   IdxPairRanges&& relevantIdxRanges,
                                   bool testComplement) {
-    BlockMetadataSpan evalBlocks(allTestBlocksIsDatatype);
+    SubBlockMetadataSpan evalBlocks(allTestBlocksIsDatatype);
     // Make `ValueId`s of `evalBlocks` accessible by iterators.
     // For the defined `SubBlockMetadata` values above, evaluation column
     // at index 2 is relevant.
@@ -583,17 +583,17 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
   // The `IdxPairRanges` will be mapped to their corresponding
-  // `BlockMetadataRanges`.
+  // `SubBlockMetadataRanges`.
   // (1) Set `TestUnion = true`: test logical union (`OR(||)`) on
-  // `BlockMetadataRange`s.
+  // `SubBlockMetadataRange`s.
   // (2) Set `TestUnion = false`: test logical intersection (`AND(&&)`) on
   // `BlockItRanges`s.
   template <bool TestUnion>
   auto makeTestAndOrOrMergeBlocks(IdxPairRanges&& r1, IdxPairRanges&& r2,
                                   IdxPairRanges&& rExpected) {
-    BlockMetadataSpan blockSpan(allTestBlocksIsDatatype);
+    SubBlockMetadataSpan blockSpan(allTestBlocksIsDatatype);
     auto spanBegin = blockSpan.begin();
-    BlockMetadataRanges mergedBlockItRanges;
+    SubBlockMetadataRanges mergedBlockItRanges;
     const auto& br1 = convertFromSpanIdxToSpanBlockItRanges(spanBegin, r1);
     const auto& br2 = convertFromSpanIdxToSpanBlockItRanges(spanBegin, r2);
     if constexpr (TestUnion) {
@@ -1562,7 +1562,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<true>` over `BlockMetadataRange` values.
+// Test `mergeRelevantBlockItRanges<true>` over `SubBlockMetadataRange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
   // r1 UNION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<true>({}, {}, {});
@@ -1582,7 +1582,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<false>` over `BlockMetadataRange` values.
+// Test `mergeRelevantBlockItRanges<false>` over `SubBlockMetadataRange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndMergeBlockItRanges) {
   // r1 INTERSECTION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<false>({}, {}, {});

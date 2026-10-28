@@ -270,10 +270,10 @@ class IndexScan final : public Operation {
 
   std::string getCacheKeyImpl() const override;
 
-  // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
+  // If `ScanSpecAndBlocks` contains prefiltered `SubBlockMetadataRanges`, the
   // result of this `IndexScan` is only a subset of the result associated with
   // its cache key (which is that of the unfiltered scan). Thus, this method
-  // returns `false` if prefiltered `BlockMetadataRanges` are contained.
+  // returns `false` if prefiltered `SubBlockMetadataRanges` are contained.
   bool resultDoesMatchCacheKey() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

@@ -482,7 +482,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 // _____________________________________________________________________________
 TEST(IndexRebuilder, getNumColumns) {
   EXPECT_EQ(getNumColumns({}), 4);
-  BlockMetadataSpan emptySpan;
+  SubBlockMetadataSpan emptySpan;
   EXPECT_EQ(
       getNumColumns({ql::ranges::subrange{emptySpan.begin(), emptySpan.end()}}),
       4);
@@ -499,7 +499,7 @@ TEST(IndexRebuilder, getNumColumns) {
       CompressedBlockMetadata{C{std::nullopt, 0, C::PermutedTriple{},
                                 C::PermutedTriple{}, std::nullopt, false},
                               0}}};
-  BlockMetadataSpan metaSpan = metadata.subBlocks();
+  SubBlockMetadataSpan metaSpan = metadata.subBlocks();
 
   EXPECT_EQ(getNumColumns(
                 {ql::ranges::subrange{metaSpan.begin(), metaSpan.begin() + 1}}),
@@ -524,7 +524,7 @@ TEST(IndexRebuilder, getNumColumns) {
   std::vector<SubBlockMetadata> subBlocksWithoutPermutation{metaSpan[1],
                                                             metaSpan[2]};
   subBlocksWithoutPermutation.at(0).permutationMetadata_ = nullptr;
-  BlockMetadataSpan spanWithoutPermutation{subBlocksWithoutPermutation};
+  SubBlockMetadataSpan spanWithoutPermutation{subBlocksWithoutPermutation};
   EXPECT_EQ(getNumColumns({ql::ranges::subrange{spanWithoutPermutation.begin(),
                                                 spanWithoutPermutation.end()}}),
             4);
@@ -538,7 +538,7 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
         C::PermutedTriple{}, C::PermutedTriple{}, std::nullopt, false},
       0}}};
 
-  BlockMetadataSpan metaSpan = metadata.subBlocks();
+  SubBlockMetadataSpan metaSpan = metadata.subBlocks();
 
   auto result = getNumberOfColumnsAndAdditionalColumns({});
   EXPECT_EQ(result.first, 4);

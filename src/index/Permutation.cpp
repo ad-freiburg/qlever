@@ -33,7 +33,7 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
 CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
     const ScanSpecification& scanSpec,
     const LocatedTriplesState& locatedTriplesState) const {
-  return {scanSpec, BlockMetadataRanges(getAugmentedMetadataForPermutation(
+  return {scanSpec, SubBlockMetadataRanges(getAugmentedMetadataForPermutation(
                         locatedTriplesState))};
 }
 
@@ -302,10 +302,12 @@ const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
 }
 
 // ______________________________________________________________________
-BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
+SubBlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
     const LocatedTriplesState& locatedTriplesState) const {
-  BlockMetadataSpan blocks(getLocatedTriplesForPermutation(locatedTriplesState)
-                               .getAugmentedMetadata());
+  SubBlockMetadataSpan blocks =
+      getLocatedTriplesForPermutation(locatedTriplesState)
+          .getAugmentedMetadata()
+          .subBlocks();
   return {{blocks.begin(), blocks.end()}};
 }
 
