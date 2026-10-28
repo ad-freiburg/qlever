@@ -33,13 +33,11 @@
 
 // TODO<joka921> Include the relevant constants directly here.
 
-// ____________________________________________________________________________
 /// Compression and decompression of words given a codebook of common prefixes.
 /// The maximum number of prefixes is `NUM_COMPRESSION_PREFIXES` (currently
 /// 126).
 class PrefixCompressor {
  private:
-  // ___________________________________________________________________________
   // Simple class for a prefix and its code as members of the codebook.
   struct PrefixCode {
     PrefixCode() = default;
@@ -54,17 +52,14 @@ class PrefixCompressor {
     }
   };
 
-  // ___________________________________________________________________________
   // List of all prefixes, sorted descending by the length
   // of the prefixes. Used for lookup when compressing.
   std::vector<PrefixCode> codeToPrefix_{};
 
-  // ___________________________________________________________________________
   // maps (numeric) keys to the prefix they encode.
-  // currently NUM_COMPRESSION_PREFIXES prefixes are supported.
+  // currently only 128 prefixes are supported.
   std::array<std::string, NUM_COMPRESSION_PREFIXES> prefixToCode_{""};
 
-  // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(PrefixCompressor) {
     serializer | arg.codeToPrefix_;
     serializer | arg.prefixToCode_;
@@ -144,7 +139,6 @@ class PrefixCompressor {
   FRIEND_TEST(PrefixCompressor, HelperContractChecks);
 
  public:
-  // ___________________________________________________________________________
   // Compress the given `word`. Note: This iterates over all prefixes in the
   // codebook, and it is currently not a bottleneck in the IndexBuilder.
   [[nodiscard]] std::string compress(std::string_view word) const {
@@ -183,7 +177,6 @@ class PrefixCompressor {
     return decompressIntoWithIndex(compressedWord, prefixIdx, out);
   }
 
-  // ___________________________________________________________________________
   // Decompress the given `compressedWord`.
   [[nodiscard]] std::string decompress(std::string_view compressedWord) const {
     AD_CONTRACT_CHECK(!compressedWord.empty());
@@ -195,7 +188,6 @@ class PrefixCompressor {
     }
   }
 
-  // ___________________________________________________________________________
   // From the given list of prefixes, build the internal data structure for
   // efficient lookup. The prefixes do not have to be in any specific order. The
   // type of `prefixes` can be any type for which `for (const string& el :
@@ -228,7 +220,6 @@ class PrefixCompressor {
     std::sort(codeToPrefix_.begin(), codeToPrefix_.end(), pred);
   }
 
-  // ___________________________________________________________________________
   const auto& prefixToCode() const { return prefixToCode_; }
 };
 
