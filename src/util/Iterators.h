@@ -167,20 +167,21 @@ class IteratorForAccessOperator {
 
   decltype(auto) operator*() const { return accessor_(*vector_, index_); }
 
-  CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
+  CPP_template(typename = void)(requires(!isConst))
+  decltype(auto) operator*() {
     return accessor_(*vector_, index_);
   }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
   CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
-      requires HasValidAccessor<A, P> CPP_and(!isConst)) auto
-  operator->() {
+              requires HasValidAccessor<A, P> && (!isConst))
+  auto operator->() {
     return &(*(*this));
   }
 
   CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
-      requires HasValidAccessor<A, P>) auto
-  operator->() const {
+              requires HasValidAccessor<A, P>)
+  auto operator->() const {
     return &(*(*this));
   }
 
@@ -405,9 +406,9 @@ class InputRangeFromGet
 // A simple helper to define an `InputRangeFromGet` where the `get()` function
 // is a simple callable.
 CPP_template(typename T, typename F)(
-    requires ad_utility::InvocableWithConvertibleReturnType<
-        F, std::optional<T>>) struct InputRangeFromGetCallable
-    : public InputRangeFromGet<T> {
+    requires ad_utility::InvocableWithConvertibleReturnType<F,
+                                                            std::optional<T>>)
+struct InputRangeFromGetCallable : public InputRangeFromGet<T> {
  private:
   ::ranges::semiregular_box_t<F> function_;
 
@@ -480,28 +481,27 @@ class InputRangeTypeErased
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
   CPP_template(typename Range)(
-      requires std::is_base_of_v<
-          InputRangeFromGet<ValueType, DetailsType>,
-          Range>) explicit InputRangeTypeErased(Range range)
+      requires std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>,
+                                 Range>)
+  explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
   // Constructor for ranges that are not movable
   CPP_template(typename Range)(
-      requires std::is_base_of_v<
-          InputRangeFromGet<ValueType, DetailsType>,
-          Range>) explicit InputRangeTypeErased(std::unique_ptr<Range> range)
+      requires std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>,
+                                 Range>)
+  explicit InputRangeTypeErased(std::unique_ptr<Range> range)
       : impl_{std::move(range)} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
   CPP_template(typename Range)(
-      requires CPP_NOT(
-          std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>, Range>)
-          CPP_and ql::ranges::range<Range>
-              CPP_and ql::concepts::same_as<
-                  ql::ranges::range_value_t<Range>,
-                  ValueType>) explicit InputRangeTypeErased(Range range)
+      requires CPP_NOT(std::is_base_of_v<
+                       InputRangeFromGet<ValueType, DetailsType>, Range>) &&
+      ql::ranges::range<Range> &&
+      ql::concepts::same_as<ql::ranges::range_value_t<Range>, ValueType>)
+  explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 
@@ -543,8 +543,9 @@ InputRangeTypeErased(std::unique_ptr<InputRangeFromGet<ValueType, DetailsType>>)
 // being iterated over. Currently, the iterators must be random-access and the
 // resulting range thus also is random access.
 CPP_template(typename It, typename End)(
-    requires ql::concepts::random_access_iterator<It> CPP_and
-        ql::concepts::sized_sentinel_for<End, It>) struct IteratorRange
+    requires ql::concepts::random_access_iterator<It> &&
+    ql::concepts::sized_sentinel_for<End, It>)
+struct IteratorRange
     : public ql::ranges::view_interface<IteratorRange<It, End>> {
  private:
   It it_;
@@ -603,8 +604,8 @@ class IteratorForAssigmentOperator {
    public:
     Proxy(Func& func) : func_{func} {}
 
-    CPP_template(typename T)(requires ql::concepts::invocable<Func, T&&>) void
-    operator=(T&& value) const {
+    CPP_template(typename T)(requires ql::concepts::invocable<Func, T &&>)
+    void operator=(T&& value) const {
       std::invoke(func_, AD_FWD(value));
     }
   };

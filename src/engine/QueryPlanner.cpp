@@ -242,7 +242,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     // this is handled in the exporter.
     if (plan._qet->handlesLimitOffset() != LimitOffsetHandling::NONE &&
         !isSubquery) {
-      plan._qet->applyLimitOffset(pq._limitOffset);
+      plan._qet->applyLimitOffset(pq._limitOffset, false);
     }
   }
 
@@ -527,6 +527,13 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
+  // Adding a node takes time linear in the number of nodes so far, so reject
+  // too many nodes before adding them all.
+  auto countNode = [&numNodesInTripleGraph]() {
+    if (++numNodesInTripleGraph > 64) {
+      AD_THROW("At most 64 triples allowed at the moment.");
+    }
+  };
   ad_utility::HashMap<Variable, std::string> optTermForCvar;
   ad_utility::HashMap<Variable, vector<std::string>> potentialTermsForCvar;
   vector<const SparqlTriple*> entityTriples;
@@ -546,18 +553,18 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
               "contains-word is not allowed inside GRAPH clauses or in queries "
               "with FROM/FROM NAMED clauses.");
         }
+        countNode();
         addNodeToTripleGraph(
             TripleGraph::Node{tg._nodeStorage.size(), t.s_.getVariable(), s, t},
             tg);
-        numNodesInTripleGraph++;
       }
     } else if (t.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
+      countNode();
       addNodeToTripleGraph(
           TripleGraph::Node{tg._nodeStorage.size(), t, activeGraphVariable_},
           tg);
-      numNodesInTripleGraph++;
     }
   }
   for (const auto& [cvar, terms] : potentialTermsForCvar) {
@@ -572,13 +579,10 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
           "statement always also needs corresponding ql:contains-word "
           "statement.");
     }
+    countNode();
     addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), currentVar,
                                            optTermForCvar[currentVar], *t),
                          tg);
-    numNodesInTripleGraph++;
-  }
-  if (numNodesInTripleGraph > 64) {
-    AD_THROW("At most 64 triples allowed at the moment.");
   }
   return tg;
 }
@@ -3671,7 +3675,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->applyLimitOffset(arg.get()._limitOffset);
+    plan._qet->applyLimitOffset(arg.get()._limitOffset, false);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }
@@ -3698,7 +3702,7 @@ void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
   auto tree = planner_.createExecutionTree(describe.whereClause_.get(), true);
   // Like for a subquery, LIMIT and OFFSET apply to the WHERE clause.
-  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset);
+  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset, false);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(std::vector{std::move(describeOp)});
