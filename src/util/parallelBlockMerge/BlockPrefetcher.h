@@ -16,6 +16,8 @@
 // is set, see `util/parallelBlockMerge/ParallelMergeState.h`.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/cleanup/cleanup.h>
+
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -33,6 +35,7 @@
 
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
 
@@ -141,8 +144,13 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
                                   net::use_future);
   }
 
-  // Shut the read-ahead down, see `shutDown()`.
-  ~BlockPrefetcher() { shutDown(); }
+  // Shut the read-ahead down, see `shutDown()`, and terminate the program if
+  // that throws.
+  ~BlockPrefetcher() {
+    ad_utility::terminateIfThrows(
+        [this]() { shutDown(); },
+        "Shutting down a `BlockPrefetcher` during its destruction.");
+  }
 
   // Return the next block of the merge, or `std::nullopt` at its end (or after
   // `shutDown()`), and block the calling thread until one of the two is
@@ -226,15 +234,21 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
   //
   // NOTE: The reader of the `block` is also destroyed on the `executor`, which
   // matters, because that may be expensive (e.g. it may delete a file, see
-  // `DeferredBlock::materialize`).
+  // `DeferredBlock::materialize`). It is destroyed before the future becomes
+  // ready, such that `shutDown()`, which waits for these futures, returns only
+  // once every reader (and everything that it holds) has been released. The
+  // function that `runFunctionOnExecutor` runs is only destroyed after the
+  // future has become ready, so the reader must not merely be owned by it.
   static FutureBlock startRead(const net::any_io_executor& executor,
                                std::exception_ptr exception,
                                std::optional<DeferredBlock<Block>> block) {
     if (exception == nullptr && block.has_value() && !block->isInMemory()) {
       return ad_utility::runFunctionOnExecutor(
           executor,
-          [block = std::move(block).value()]() mutable {
-            return std::optional<Block>{std::move(block).materialize()};
+          [block = std::move(block)]() mutable {
+            // Destroy the reader also if it throws.
+            absl::Cleanup destroyReader = [&block] { block.reset(); };
+            return std::optional<Block>{std::move(block).value().materialize()};
           },
           net::use_future);
     }

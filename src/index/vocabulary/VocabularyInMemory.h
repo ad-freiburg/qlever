@@ -43,9 +43,8 @@ class VocabularyInMemory
   // returned vocabulary is only valid as long as the memory backing
   // `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          S>) static VocabularyInMemory
-      fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+  static VocabularyInMemory fromZeroCopyDeserializer(S& serializer) {
     return VocabularyInMemory{Words::fromZeroCopyDeserializer(serializer)};
   }
 
@@ -129,6 +128,21 @@ class VocabularyInMemory
   // later has to be explicitly initialized via `open(filename)`.
   static auto makeDiskWriterPtr(const std::string& filename) {
     return std::make_unique<WordWriter>(filename);
+  }
+
+  // The block writer of this vocabulary simply feeds its `WordWriter` word by
+  // word (see `BlockWriterBase`).
+  static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    return makeBlockWriterFromWordWriter(makeDiskWriterPtr(filename));
+  }
+
+  // The `ParallelWordWriterBase` of this (single) vocabulary, for a
+  // `Vocabulary` that is built directly on it (see `Vocabulary.h`).
+  static std::unique_ptr<ParallelWordWriterBase> makeParallelWriterPtr(
+      const std::string& filename) {
+    return std::make_unique<SingleVocabularyParallelWriter>(
+        makeBlockWriterPtr(filename));
   }
 
   // Clear the vocabulary.

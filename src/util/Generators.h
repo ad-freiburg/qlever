@@ -26,12 +26,10 @@ CPP_template(typename InputRange, typename AggregatorT,
              typename T = ql::ranges::range_value_t<InputRange>,
              typename FullyCachedFuncT = int)(
     requires InvocableWithExactReturnType<AggregatorT, bool, std::optional<T>&,
-                                          const T&>
-        CPP_and InvocableWithExactReturnType<
-            FullyCachedFuncT, void,
-            T>) auto wrapGeneratorWithCache(InputRange generator,
-                                            AggregatorT aggregator,
-                                            FullyCachedFuncT onFullyCached) {
+                                          const T&> &&
+    InvocableWithExactReturnType<FullyCachedFuncT, void, T>)
+auto wrapGeneratorWithCache(InputRange generator, AggregatorT aggregator,
+                            FullyCachedFuncT onFullyCached) {
   struct CachingWrapper : public InputRangeFromGet<T> {
     InputRange generator_;
     AggregatorT aggregator_;
@@ -86,8 +84,8 @@ CPP_template(typename InputRange, typename AggregatorT,
 // the elements that are yielded by the created `generator`.
 CPP_template(typename T, typename F)(
     requires ql::concepts::invocable<F, std::function<void(T)>>)
-    InputRangeTypeErased<T> generatorFromActionWithCallback(
-        F functionWithCallback) {
+InputRangeTypeErased<T> generatorFromActionWithCallback(
+    F functionWithCallback) {
   class CallbackToRangeAdapter : public InputRangeFromGet<T> {
     F functionWithCallback_;
     std::mutex mutex_;

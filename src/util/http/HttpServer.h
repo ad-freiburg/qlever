@@ -8,12 +8,14 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <future>
 #include <thread>
 
 #include "backports/span.h"
+#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
@@ -35,6 +37,92 @@ ad_utility::MemorySize getRequestBodyLimit();
 // while sending the response (Lazy).
 enum class BodyReadMode { Eager, Lazy };
 
+// Sends HTTP messages to the `stream` of a session of the `HttpServer`. This is
+// the `send` argument of the `HttpHandler` (see below).
+class HttpMessageSender {
+ public:
+  using StreamableResponse =
+      http::response<ad_utility::httpUtils::httpStreams::streamable_body>;
+
+ private:
+  beast::tcp_stream& stream_;
+  // Set if a message that was sent requires the closing of the connection.
+  std::atomic<bool>& streamNeedsClosing_;
+
+ public:
+  HttpMessageSender(beast::tcp_stream& stream,
+                    std::atomic<bool>& streamNeedsClosing)
+      : stream_{stream}, streamNeedsClosing_{streamNeedsClosing} {}
+
+  // Send a `message` with a body that is fully materialized (e.g. a
+  // `string_body`). Responses with a `streamable_body` require an executor, see
+  // the overload below.
+  template <typename Message>
+  requires(!std::is_same_v<Message, StreamableResponse>)
+  net::awaitable<void> operator()(Message message) {
+    co_await http::async_write(stream_, message, net::use_awaitable);
+    updateStreamNeedsClosing(message);
+  }
+
+  // Send a `response` with a `streamable_body`. Its body is a generator that is
+  // advanced while the response is being serialized. This serialization runs
+  // on the `bodyExecutor`, only the writing to the `stream_` happens on the
+  // executor of the calling coroutine (the IO threads of the `HttpServer`).
+  //
+  // NOTE: For a body that is expensive to compute (e.g. the result of a query),
+  // the `bodyExecutor` must therefore not be an executor of the IO threads, as
+  // these would otherwise be blocked and unable to serve other connections in
+  // the meantime. For a body that is cheap to compute (e.g. a single string),
+  // the executor of the calling coroutine (`co_await net::this_coro::executor`)
+  // can be used.
+  net::awaitable<void> operator()(StreamableResponse response,
+                                  net::any_io_executor bodyExecutor) {
+    AD_CONTRACT_CHECK(bodyExecutor);
+    http::response_serializer<
+        ad_utility::httpUtils::httpStreams::streamable_body>
+        serializer{response};
+    // The serializer produces a sequence of buffers (e.g. the header, the size
+    // of the next chunk, the data of the chunk, and a trailing CRLF), which it
+    // passes to a callback. We store (non-owning) views of these buffers, s.t.
+    // they can be written after `serializeNext` has returned. The underlying
+    // data remains valid until the call to `serializer.consume`.
+    std::vector<net::const_buffer> buffers;
+    // Get the next buffers to write from the `serializer`. These are empty if
+    // the `serializer` completes without producing any (e.g. at the end of a
+    // body that is not chunked, as for HTTP/1.0).
+    auto serializeNext = [&serializer, &buffers]() {
+      buffers.clear();
+      beast::error_code ec;
+      serializer.next(ec, [&buffers](beast::error_code&, const auto& next) {
+        buffers.assign(net::buffer_sequence_begin(next),
+                       net::buffer_sequence_end(next));
+      });
+      if (ec) {
+        throw beast::system_error{ec};
+      }
+    };
+    while (!serializer.is_done()) {
+      co_await ad_utility::runFunctionOnExecutor(bodyExecutor, serializeNext,
+                                                 net::use_awaitable);
+      if (buffers.empty()) {
+        continue;
+      }
+      serializer.consume(
+          co_await net::async_write(stream_, buffers, net::use_awaitable));
+    }
+    updateStreamNeedsClosing(response);
+  }
+
+ private:
+  // Inform the session if the `message` requires the closing of the
+  // connection.
+  void updateStreamNeedsClosing(const auto& message) {
+    if (message.need_eof()) {
+      streamNeedsClosing_ = true;
+    }
+  }
+};
+
 // A simple `HttpServer`, based on Boost::Beast. It can be configured via
 // the mandatory `HttpHandler` parameter.
 //
@@ -52,9 +140,12 @@ enum class BodyReadMode { Eager, Lazy };
 //   the next call. `co_await bodyGetter()` returns `std::nullopt` when the
 //   body is fully consumed and throws on network errors.
 //
-// In both modes `send` is a callable that takes a `http::message` and returns
-// `net::awaitable<void>`; the handler is responsible for sending the response
-// via `co_await send(response)`.
+// In both modes, `send` is an `HttpMessageSender` (see above); the handler is
+// responsible for sending the response via `co_await send(response)`, or via
+// `co_await send(response, executor)` for a response with a `streamable_body`.
+//
+// NOTE: `BodyReadMode` only concerns the body of the request, not the body of
+// the response.
 //
 // A very basic `HttpHandler`, which simply serves files from a directory, can
 // be obtained via `ad_utility::httpUtils::makeFileServer()`.
@@ -68,8 +159,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
              typename WebSocketHandler)(
     requires ad_utility::InvocableWithExactReturnType<
         WebSocketHandler, net::awaitable<void>,
-        const http::request<http::string_body>&,
-        tcp::socket>) class HttpServer {
+        const http::request<http::string_body>&, tcp::socket>)
+class HttpServer {
  private:
   // Returned by `handleEagerRequest` and `handleLazyRequest` to indicate
   // whether the session loop should close the connection after this request.
@@ -123,24 +214,16 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
       ad_utility::InvocableWithConvertibleReturnType<
           HandlerSupplier, WebSocketHandler, net::any_io_executor&>;
   CPP_template_2(typename HandlerSupplier)(
-      requires isSupplier<
-          HandlerSupplier>) explicit HttpServer(unsigned short port,
-                                                std::string_view ipAddress =
-                                                    "0.0.0.0",
-                                                int numServerThreads = 1,
-                                                HttpHandler handler =
-                                                    HttpHandler{},
-                                                HandlerSupplier
-                                                    webSocketHandlerSupplier =
-                                                        {},
-                                                ad_utility::MemorySize
-                                                    lazyBodyChunkSize =
-                                                        ad_utility::MemorySize::
-                                                            megabytes(1))
+              requires isSupplier<HandlerSupplier>)
+  explicit HttpServer(unsigned short port,
+                      std::string_view ipAddress = "0.0.0.0",
+                      int numServerThreads = 1,
+                      HttpHandler handler = HttpHandler{},
+                      HandlerSupplier webSocketHandlerSupplier = {},
+                      ad_utility::MemorySize lazyBodyChunkSize =
+                          ad_utility::MemorySize::megabytes(1))
       : httpHandler_{std::move(handler)},
-        // We need at least two threads to avoid blocking.
-        // TODO<joka921> why is that?
-        numServerThreads_{std::max(2, numServerThreads)},
+        numServerThreads_{std::max(1, numServerThreads)},
         ioContext_{numServerThreads_},
         instrumentedExec_{ioContext_.get_executor(), ioContextMetrics_},
         executor_{instrumentedExec_},
@@ -248,7 +331,10 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     auto websocketErrorResponse = ad_utility::websocket::WebSocketSession::
         getErrorResponseIfPathIsInvalid(req);
     if (websocketErrorResponse.has_value()) {
-      co_await sendMessage(std::move(websocketErrorResponse.value()));
+      // The body of the error response is a single string, so it can be
+      // serialized on the executor of this coroutine.
+      co_await sendMessage(std::move(websocketErrorResponse.value()),
+                           co_await net::this_coro::executor);
     } else {
       // Prevent cleanup after socket has been moved from.
       releaseConnection.cancel();
@@ -264,7 +350,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   net::awaitable<SessionControl> handleEagerRequest(
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       SendMessage& sendMessage, ReleaseConnection& releaseConnection)
-      requires(bodyReadMode == BodyReadMode::Eager) {
+      requires(bodyReadMode == BodyReadMode::Eager)
+  {
     http::request_parser<http::string_body> requestParser;
     auto bodyLimit = getRequestBodyLimit().getBytes();
     requestParser.body_limit(
@@ -411,7 +498,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   net::awaitable<SessionControl> handleLazyRequest(
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       SendMessage& sendMessage, ReleaseConnection& releaseConnection)
-      requires(bodyReadMode == BodyReadMode::Lazy) {
+      requires(bodyReadMode == BodyReadMode::Lazy)
+  {
     http::request_parser<http::buffer_body> requestParser;
     // Apply the configured body limit (same as eager mode) to guard against
     // excessively large requests.
@@ -518,20 +606,9 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     // request/response pair.
     std::atomic<bool> streamNeedsClosing = false;
 
-    // This lambda sends an http message to the `stream` and sets
-    // `streamNeedsClosing` if the closing of the session is requested by the
-    // session.
-    auto sendMessage = [&stream, &streamNeedsClosing](
-                           auto message) -> boost::asio::awaitable<void> {
-      // Write the response
-      co_await http::async_write(stream, message, boost::asio::use_awaitable);
-
-      // Inform the session if the message requires the closing of the
-      // connection.
-      if (message.need_eof()) {
-        streamNeedsClosing = true;
-      }
-    };
+    // Sends http messages to the `stream` and sets `streamNeedsClosing` if the
+    // closing of the session is requested by a message.
+    HttpMessageSender sendMessage{stream, streamNeedsClosing};
 
     // Sessions might be reused for multiple request/response pairs.
     while (true) {

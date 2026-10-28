@@ -6,10 +6,12 @@
 
 #include <gmock/gmock.h>
 
+#include "./WordsAndDocsFileLineCreator.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -28,14 +30,12 @@ using ::testing::HasSubstr;
 namespace {
 using ad_utility::testing::parseQuery;
 
-// Run the given SPARQL `query` on the given Turtle `kg` and export the result
-// as the `mediaType`. `mediaType` must be TSV or CSV.
+// Run the given SPARQL `query` on the index that is built from the `config` and
+// export the result as the `mediaType`.
 std::string runQueryStreamableResult(
-    const std::string& kg, const std::string& query,
-    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    ad_utility::testing::TestIndexConfig config, const std::string& query,
+    ad_utility::MediaType mediaType,
     std::optional<size_t> exportLimit = std::nullopt) {
-  ad_utility::testing::TestIndexConfig config{kg};
-  config.createTextIndex = useTextIndex;
   auto qec = ad_utility::testing::getQec(std::move(config));
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
@@ -55,6 +55,18 @@ std::string runQueryStreamableResult(
     result += block;
   }
   return result;
+}
+
+// Run the given SPARQL `query` on the given Turtle `kg` and export the result
+// as the `mediaType`.
+std::string runQueryStreamableResult(
+    const std::string& kg, const std::string& query,
+    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    std::optional<size_t> exportLimit = std::nullopt) {
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.createTextIndex = useTextIndex;
+  return runQueryStreamableResult(std::move(config), query, mediaType,
+                                  exportLimit);
 }
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -1420,6 +1432,53 @@ TEST(ExportQueryExecutionTrees, TextIndex) {
   runSelectQueryTestCase(testCaseTextIndex, true);
 }
 
+// Test that a text record of the text index that contains quotes is exported
+// in full. The text records are plain text (not the representation of a
+// literal with quotes), so a quote inside must not be taken as the end of a
+// literal in the SPARQL JSON and XML export.
+TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
+  // A text index with a single text record that contains quotes and mentions
+  // the entity `<s>`.
+  std::string text = "She said \"alpha\" and left";
+  ad_utility::testing::TestIndexConfig config{"<s> <p> <o> ."};
+  config.createTextIndex = true;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{absl::StrCat(createWordsFileLineAsString("alpha", false, 1, 1),
+                             createWordsFileLineAsString("<s>", true, 1, 1)),
+                createDocsFileLineAsString(1, text)};
+  std::string query =
+      "SELECT ?o WHERE { ?o ql:contains-entity <s> . ?o ql:contains-word "
+      "\"alph*\" }";
+  using enum ad_utility::MediaType;
+
+  // The TSV export writes the text verbatim.
+  EXPECT_EQ(runQueryStreamableResult(config, query, tsv),
+            absl::StrCat("?o\n", text, "\n"));
+
+  // The SPARQL JSON and XML exports contain the whole text as a plain literal.
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+  EXPECT_EQ(
+      nlohmann::json::parse(
+          runQueryStreamableResult(config, query, sparqlJson)),
+      makeExpectedSparqlJSON({makeJSONBinding(std::nullopt, "literal", text)}));
+  EXPECT_EQ(runQueryStreamableResult(config, query, sparqlXml),
+            absl::StrCat(makeXMLHeader({"o"}), R"(
+  <result>
+    <binding name="o"><literal>)",
+                         RdfEscaping::escapeForXml(text),
+                         "</literal></binding>\n  </result>", xmlTrailer));
+}
+
+// Test that a SELECT query can be exported in QLever's binary format.
+TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
+  // The format itself is tested in `engine/BinaryExportTest.cpp`.
+  auto result = runQueryStreamableResult(
+      "<s> <p> <o> .", "SELECT ?o WHERE { <s> <p> ?o }",
+      ad_utility::MediaType::binaryQleverExport);
+  EXPECT_THAT(result, HasSubstr("QLEVER.EXPORT"));
+}
+
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
@@ -1508,6 +1567,154 @@ TEST(ExportQueryExecutionTrees, LimitOffset) {
         expectedXml};
     runSelectQueryTestCase(testCaseLimitOffset);
   }
+}
+
+// The trailing `VALUES` clause has to be joined before `DISTINCT` and
+// `ORDER BY` are applied (SPARQL 1.1, sec. 18.2.4.3).
+TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
+  std::string kg = "<a> <p> <c> . <a> <p> <f> . <b> <p> <z> . <d> <p> <y> .";
+  auto tsv = [&kg](const std::string& query) {
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(tsv("SELECT DISTINCT ?s { ?s <p> ?o } VALUES ?o { <f> }"),
+            "?s\n<a>\n");
+  EXPECT_EQ(tsv("SELECT DISTINCT ?s { ?s <p> ?o } VALUES ?s { <a> <a> }"),
+            "?s\n<a>\n");
+  EXPECT_EQ(
+      tsv("SELECT ?s ?o { ?s <p> ?o } ORDER BY ?o VALUES ?s { <a> <b> <d> }"),
+      "?s\t?o\n<a>\t<c>\n<a>\t<f>\n<d>\t<y>\n<b>\t<z>\n");
+  EXPECT_EQ(tsv("SELECT ?s { ?s <p> ?o } ORDER BY DESC(?s) VALUES ?s { <a> <b> "
+                "<d> }"),
+            "?s\n<d>\n<b>\n<a>\n<a>\n");
+  EXPECT_EQ(tsv("SELECT ?x { ?s <p> ?o } ORDER BY ?x VALUES ?x { 2 1 }"),
+            "?x\n1\n1\n1\n1\n2\n2\n2\n2\n");
+  // `ORDER BY` expressions and `SELECT` expressions also see the `VALUES`.
+  EXPECT_EQ(tsv("SELECT ?x { <a> <p> ?o } ORDER BY STR(?x) VALUES ?x { 2 1 }"),
+            "?x\n1\n1\n2\n2\n");
+  EXPECT_EQ(tsv("SELECT ?x (STR(?x) AS ?y) { <b> <p> ?o } VALUES ?x { 1 }"),
+            "?x\t?y\n1\t\"1\"\n");
+  // The `FILTER`s of the `WHERE` clause don't see the `VALUES`.
+  EXPECT_EQ(tsv("SELECT ?s { ?s <p> <z> FILTER(!BOUND(?x)) } VALUES ?x { 1 }"),
+            "?s\n<b>\n");
+  // With `GROUP BY`, the `VALUES` is joined after the grouping.
+  EXPECT_EQ(tsv("SELECT ?s (COUNT(*) AS ?c) { ?s <p> ?o } GROUP BY ?s "
+                "ORDER BY ?v ?s VALUES ?v { 2 1 }"),
+            "?s\t?c\n<a>\t2\n<b>\t1\n<d>\t1\n"
+            "<a>\t2\n<b>\t1\n<d>\t1\n");
+  // With `GROUP BY`, `ORDER BY` expressions and `SELECT` expressions that use
+  // the `VALUES` variables are computed after the join, the aggregates in these
+  // expressions are still computed by the grouping.
+  EXPECT_EQ(tsv("SELECT ?s (COUNT(*) AS ?c) { ?s <p> ?o } GROUP BY ?s "
+                "ORDER BY LCASE(?n) "
+                "VALUES (?s ?n) { (<a> \"b\") (<b> \"C\") (<d> \"a\") }"),
+            "?s\t?c\n<d>\t1\n<a>\t2\n<b>\t1\n");
+  EXPECT_EQ(tsv("SELECT ?s ?v (STR(?v) AS ?w) { ?s <p> ?o } GROUP BY ?s "
+                "ORDER BY ?s VALUES ?v { 1 }"),
+            "?s\t?v\t?w\n<a>\t1\t\"1\"\n<b>\t1\t\"1\"\n<d>\t1\t\"1\"\n");
+  EXPECT_EQ(tsv("SELECT ?s ((COUNT(*) + ?v) AS ?x) (?x * 2 AS ?y) "
+                "{ ?s <p> ?o } GROUP BY ?s ORDER BY DESC(COUNT(*) * ?v) ?s "
+                "VALUES ?v { 10 }"),
+            "?s\t?x\t?y\n<a>\t12\t24\n<b>\t11\t22\n<d>\t11\t22\n");
+  EXPECT_EQ(tsv("SELECT (COUNT(*) + ?v AS ?x) { ?s <p> ?o } ORDER BY ?x "
+                "VALUES ?v { 1 2 }"),
+            "?x\n5\n6\n");
+  // `HAVING` is applied before the join.
+  EXPECT_EQ(tsv("SELECT ?s ?v { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (COUNT(*) > 1) VALUES ?v { 1 }"),
+            "?s\t?v\n<a>\t1\n");
+  EXPECT_EQ(tsv("SELECT ?s (?v AS ?w) { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (BOUND(?w)) VALUES ?v { 1 }"),
+            "?s\t?w\n");
+  EXPECT_EQ(tsv("SELECT ?s (?v AS ?w) { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (!BOUND(?w) && !BOUND(?v)) VALUES ?v { 1 }"),
+            "?s\t?w\n<a>\t1\n<b>\t1\n<d>\t1\n");
+  EXPECT_EQ(tsv("SELECT ?s { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (COUNT(*) > 1 || ?v = 1) VALUES ?v { 1 }"),
+            "?s\n<a>\n");
+  // The `CONSTRUCT` template can also use the `VALUES` variables, and the
+  // `VALUES` can restrict a grouped variable.
+  EXPECT_EQ(runQueryStreamableResult(
+                kg,
+                "CONSTRUCT { ?s <r> ?r } { ?s <p> ?o } GROUP BY ?s "
+                "VALUES (?s ?r) { (<a> 1) (<b> 2) (<e> 4) }",
+                ad_utility::MediaType::turtle),
+            "<a> <r> 1 .\n<b> <r> 2 .\n");
+}
+
+// The trailing `VALUES` clause of a subquery belongs to the subquery, it is
+// joined before the subquery's `DISTINCT`, `LIMIT` and projection.
+TEST(ExportQueryExecutionTrees, TrailingValuesOfSubquery) {
+  std::string kg = "<a> <p> <c> . <b> <p> <d> .";
+  auto tsv = [&kg](const std::string& query) {
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s { ?s <p> ?o } ORDER BY ?s LIMIT 1 "
+                "VALUES ?s { <b> } } }"),
+            "?s\n<b>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT DISTINCT ?s { ?s <p> ?o } "
+                "VALUES ?s { <a> <a> } } }"),
+            "?s\n<a>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s { ?s <p> ?o } VALUES ?x { 1 } } }"),
+            "?s\n<a>\n<b>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT * { ?s <p> ?o } VALUES ?x { 1 } } }"),
+            "?s\t?o\t?x\n<a>\t<c>\t1\n<b>\t<d>\t1\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s { ?s <p> ?o } VALUES ?o { <c> } } }"),
+            "?s\n<a>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s (COUNT(*) + ?v AS ?x) { ?s <p> ?o } "
+                "GROUP BY ?s VALUES ?v { 10 } } } ORDER BY ?s"),
+            "?s\t?x\n<a>\t11\n<b>\t11\n");
+}
+
+// Test that `HAVING` and `ORDER BY` expressions with `GROUP BY` also work for
+// queries without a `SELECT` clause (`CONSTRUCT` and `ASK`), where the internal
+// aliases that compute them are stored in the `ParsedQuery`.
+TEST(ExportQueryExecutionTrees, HavingAndOrderByExpressionsWithoutSelect) {
+  // Two triples with subject `<a>` and one with subject `<b>`.
+  std::string kg = "<a> <p> <c> . <a> <p> <f> . <b> <p> <z> .";
+  auto turtle = [&kg](const std::string& query) {
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle);
+  };
+
+  // `HAVING` and `ORDER BY` expressions in a `CONSTRUCT` query.
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "HAVING (COUNT(*) > 1)"),
+            "<a> <r> <a> .\n");
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY COUNT(*)"),
+            "<b> <r> <b> .\n<a> <r> <a> .\n");
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY DESC(STR(?s))"),
+            "<b> <r> <b> .\n<a> <r> <a> .\n");
+
+  // An `ORDER BY` expression that uses a variable of the trailing `VALUES` is
+  // computed after the join.
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?n } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY LCASE(?n) VALUES (?s ?n) { (<a> \"B\") "
+                   "(<b> \"a\") }"),
+            "<b> <r> \"a\" .\n<a> <r> \"B\" .\n");
+
+  // The pattern trick also reads the aliases (none, or the count of the
+  // `ORDER BY` expression).
+  EXPECT_EQ(turtle("CONSTRUCT { ?p <r> ?p } { ?s ?p ?o } GROUP BY ?p"),
+            "<p> <r> <p> .\n");
+  EXPECT_EQ(runQueryStreamableResult(
+                kg + " <a> <q> <c> .",
+                "CONSTRUCT { ?p <r> ?p } { ?s ?p ?o } GROUP BY ?p "
+                "ORDER BY DESC(COUNT(DISTINCT ?s))",
+                ad_utility::MediaType::turtle),
+            "<p> <r> <p> .\n<q> <r> <q> .\n");
+
+  // `HAVING` and `ORDER BY` expressions in an `ASK` query.
+  auto ask = [&kg](const std::string& query) {
+    return nlohmann::json::parse(
+               runQueryStreamableResult(kg, query,
+                                        ad_utility::MediaType::sparqlJson))
+        .at("boolean")
+        .get<bool>();
+  };
+  EXPECT_TRUE(ask("ASK { ?s <p> ?o } GROUP BY ?s HAVING (COUNT(*) > 1)"));
+  EXPECT_FALSE(ask("ASK { ?s <p> ?o } GROUP BY ?s HAVING (COUNT(*) > 2)"));
+  EXPECT_TRUE(ask("ASK { ?s <p> ?o } GROUP BY ?s ORDER BY STR(?s)"));
 }
 
 // ____________________________________________________________________________
@@ -1912,11 +2119,13 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   EXPECT_EQ(json["resultsize"], 4);
   auto& timingInformation = json["time"];
   EXPECT_GE(toChrono(timingInformation["total"].get<std::string_view>()), 1ms);
-  // Ensure result is not returned in microseconds and subsequently interpreted
-  // in milliseconds
+#ifndef _QLEVER_NO_TIMING_TESTS
+  // Ensure that the result is not returned in microseconds and subsequently
+  // interpreted in milliseconds.
   EXPECT_LT(
       toChrono(timingInformation["computeResult"].get<std::string_view>()),
       100ms);
+#endif
   EXPECT_GE(
       toChrono(timingInformation["total"].get<std::string_view>()),
       toChrono(timingInformation["computeResult"].get<std::string_view>()));
@@ -2274,12 +2483,14 @@ TEST(ExportQueryExecutionTrees, PostQueryValuesWithoutVariables) {
   const std::string kg = "<a> <b> <c> . <d> <e> <f> .";
   auto run = [&kg](std::string_view values) {
     return runQueryStreamableResult(
-        kg, absl::StrCat("SELECT ?s { ?s ?p ?o } VALUES () { ", values, " }"),
+        kg,
+        absl::StrCat("SELECT ?s { ?s ?p ?o } ORDER BY ?s VALUES () { ", values,
+                     " }"),
         ad_utility::MediaType::tsv);
   };
   EXPECT_EQ(run(""), "?s\n");
   EXPECT_EQ(run("()"), "?s\n<a>\n<d>\n");
-  EXPECT_EQ(run("() ()"), "?s\n<a>\n<d>\n<a>\n<d>\n");
+  EXPECT_EQ(run("() ()"), "?s\n<a>\n<a>\n<d>\n<d>\n");
 }
 
 // The trailing `VALUES` clause is joined before the projection, so `SELECT *`

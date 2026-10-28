@@ -83,8 +83,7 @@ QetMatcher RootOperation(M matcher) {
 CPP_template(typename... ChildArgs)(
     requires(...&& ql::concepts::same_as<QetMatcher,
                                          ChildArgs>))  //
-    inline Matcher<const ::Operation&> children(
-        const ChildArgs&... childMatchers) {
+inline Matcher<const ::Operation&> children(const ChildArgs&... childMatchers) {
   return Property("getChildren", &Operation::getChildren,
                   ElementsAre(Pointee(childMatchers)...));
 }
@@ -95,8 +94,8 @@ CPP_template(typename... ChildArgs)(
 template <typename OperationType>
 struct MatchTypeAndUnorderedChildrenImpl {
   CPP_template(typename... ChildArgs)(
-      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
-  operator()(const ChildArgs&... childMatchers) const {
+      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>))
+  auto operator()(const ChildArgs&... childMatchers) const {
     return RootOperation<OperationType>(
         AllOf(Property("getChildren", &Operation::getChildren,
                        UnorderedElementsAre(Pointee(childMatchers)...))));
@@ -112,8 +111,8 @@ auto MatchTypeAndUnorderedChildren =
 template <typename OperationType>
 struct MatchTypeAndOrderedChildrenImpl {
   CPP_template(typename... ChildArgs)(
-      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
-  operator()(const ChildArgs&... childMatchers) const {
+      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>))
+  auto operator()(const ChildArgs&... childMatchers) const {
     return RootOperation<OperationType>(AllOf(children(childMatchers...)));
   }
 };
