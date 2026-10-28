@@ -687,13 +687,6 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
-  // _____________________________________________________________________________
-  size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpecification,
-      const Permutation::Enum& permutation,
-      const LocatedTriplesState& locatedTriplesState,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
-
  protected:
   // Private member functions
 

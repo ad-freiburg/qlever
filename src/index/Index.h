@@ -243,14 +243,6 @@ class Index {
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
-  // Similar to the previous overload of `scan`, but only get the exact size of
-  // the scan result.
-  size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpecification,
-      const Permutation::Enum& permutation,
-      const LocatedTriplesState& locatedTriplesState,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
-
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }

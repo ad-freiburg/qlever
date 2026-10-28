@@ -2022,18 +2022,6 @@ std::vector<float> IndexImpl::getMultiplicities(
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getResultSizeOfScan(
-    const ScanSpecification& scanSpecification,
-    const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  const auto& perm = getPermutation(permutation);
-  return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      locatedTriplesState, cancellationHandle);
-}
-
-// _____________________________________________________________________________
 void IndexImpl::deleteTemporaryFile(const std::string& path) {
   if (!keepTempFiles_) {
     ad_utility::deleteFile(path);

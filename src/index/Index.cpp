@@ -276,16 +276,6 @@ std::vector<float> Index::getMultiplicities(
 }
 
 // ____________________________________________________________________________
-size_t Index::getResultSizeOfScan(
-    const ScanSpecification& scanSpecification,
-    const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->getResultSizeOfScan(scanSpecification, permutation,
-                                     locatedTriplesState, cancellationHandle);
-}
-
-// ____________________________________________________________________________
 void Index::createFromFiles(const std::vector<InputFileSpecification>& files,
                             size_t numThreads) {
   return pimpl_->createFromFiles(files, numThreads);
