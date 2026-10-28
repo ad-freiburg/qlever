@@ -24,6 +24,7 @@
 #include "util/ContainersWithAllocator.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
+#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
@@ -54,7 +55,7 @@ enum class LimitOffsetHandling {
   FULL
 };
 
-class Operation {
+class Operation : public std::enable_shared_from_this<Operation> {
  private:
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using Milliseconds = std::chrono::milliseconds;
@@ -66,10 +67,6 @@ class Operation {
   // default member initializers of the members below use it (via
   // `makeShared`), and data members are initialized in declaration order.
   QueryExecutionContext* _executionContext;
-
-  // Pointer to the cancellation handle of this operation.
-  SharedCancellationHandle cancellationHandle_ =
-      makeShared<SharedCancellationHandle::element_type>();
 
  private:
   // Return the given `executionContext`, or throw if it is `nullptr` (see the
@@ -285,8 +282,10 @@ class Operation {
 
   virtual uint64_t getSizeEstimate() final;
 
-  const SharedCancellationHandle& getCancellationHandle() const {
-    return cancellationHandle_;
+  // The cancellation handle of the query, which is stored in the
+  // `QueryExecutionContext`.
+  const SharedCancellationHandle& cancellationHandle() const {
+    return _executionContext->cancellationHandle();
   }
 
  private:
@@ -377,12 +376,6 @@ class Operation {
       bool isRoot = false,
       ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
 
-  // Use the same cancellation handle for all children of an operation (= query
-  // plan rooted at that operation). As soon as one child is aborted, the whole
-  // operation is aborted out.
-  void recursivelySetCancellationHandle(
-      SharedCancellationHandle cancellationHandle);
-
   // Optimization for lazy operations where the very nature of the operation
   // makes it unlikely to ever fit in cache when completely materialized.
   virtual bool unlikelyToFitInCache(
@@ -399,15 +392,32 @@ class Operation {
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child has to
-  // repair the child afterwards, see the caution note on `applyLimitOffset`.
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
+  // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child should
+  // do so via `applyLimitOffsetToChild`, passing on
+  // `childrenAreExclusivelyOwned` (see `applyLimitOffset`), and has to repair
+  // the child afterwards, see the caution note on `applyLimitOffset`.
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&, bool) {
     // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
     // after the computation of the result. Make sure to also override
     // `handlesLimitOffset()` if this function is overridden, otherwise the
     // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
+ protected:
+  // Push `limitOffset` into `child`, for the overrides of
+  // `onLimitOffsetChanged`. The child is cloned first unless it is exclusively
+  // owned, and the pushdown then continues in place.
+  //
+  // NOTE: A child may be shared with other trees (e.g. other candidate plans of
+  // the query planner), hence the clone. The clone is a deep copy, so from
+  // there on the whole subtree is exclusively owned and needs no further
+  // clones. Cloning at every level made the pushdown quadratic in the depth of
+  // the tree, see #3474.
+  static void applyLimitOffsetToChild(
+      std::shared_ptr<QueryExecutionTree>& child,
+      const LimitOffsetClause& limitOffset, bool childIsExclusivelyOwned);
+
+ private:
   // This function is called when the operation's result is requested to be
   // cached and pinned to a name.
   void storeToNamedResultCache(const Result& result);
@@ -440,7 +450,13 @@ class Operation {
   // Repairing is only possible while the plan is still being assembled. Calling
   // this during result computation is therefore safe only for operations that
   // neither require nor report a sort order (see `CartesianProductJoin`).
-  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause);
+  //
+  // If `childrenAreExclusivelyOwned` is true, the children of this operation
+  // are not shared with any other tree (because this operation is part of a
+  // fresh clone), so the pushdown may modify them in place, see
+  // `applyLimitOffsetToChild`.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause,
+                        bool childrenAreExclusivelyOwned);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
@@ -619,8 +635,16 @@ class Operation {
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
-    cancellationHandle_->throwIfCancelled(location,
-                                          [this]() { return getDescriptor(); });
+    cancellationHandle()->throwIfCancelled(
+        location, [this]() { return getDescriptor(); });
+  }
+
+  // Return a function that calls `checkCancellation` (with the location of the
+  // caller of this function), e.g. as the `chunkOperation` of
+  // `ad_utility::chunkedForLoop`.
+  auto cancellationChecker(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
+    return [this, location]() { checkCancellation(location); };
   }
 
   // Get the mapping from variables to column indices. This mapping may only be
@@ -761,14 +785,6 @@ class Operation {
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.
   virtual VariableToColumnMap computeVariableToColumnMap() const = 0;
-
-  // Recursively call a function on all children.
-  template <typename F>
-  void forAllDescendants(F f);
-
-  // Recursively call a function on all children.
-  template <typename F>
-  void forAllDescendants(F f) const;
 
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren);

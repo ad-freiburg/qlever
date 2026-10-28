@@ -149,6 +149,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
         << parameter.name();
   };
   check(params.stripColumns_);
+  check(params.memoryForQueries_);
   check(params.cacheMaxNumEntries_);
   check(params.cacheMaxSize_);
   check(params.cacheMaxSizeSingleEntry_);
