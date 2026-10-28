@@ -14,6 +14,7 @@
 #include <memory>
 
 #include "backports/functional.h"
+#include "backports/keywords.h"
 #include "util/MemoryLimitTracker.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -110,7 +111,8 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
-      AllocatorWithLimit(const AllocatorWithLimit<U>& other)  // NOLINT
+  QL_EXPLICIT(false)
+  AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : tracker_{other.tracker_} {}
 
   // Defaulted copy operations.

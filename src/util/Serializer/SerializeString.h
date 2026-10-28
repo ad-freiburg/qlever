@@ -24,8 +24,8 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(
 // Unlike `zeroCopyDeserializeToSpan` (see `SerializeVector.h`), this needs no
 // aligned serializer, because the bytes of a string have no alignment
 // requirement.
-CPP_template(typename S)(requires SpanReadSerializer<S>) std::string_view
-    zeroCopyDeserializeToStringView(S& serializer) {
+CPP_template(typename S)(requires SpanReadSerializer<S>)
+std::string_view zeroCopyDeserializeToStringView(S& serializer) {
   std::size_t size;
   serializer >> size;
   auto bytes = serializer.getSpanToBytes(size);

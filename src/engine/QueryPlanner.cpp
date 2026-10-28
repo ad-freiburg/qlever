@@ -245,7 +245,7 @@ SubtreePlanVec QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     // this is handled in the exporter.
     if (plan._qet->handlesLimitOffset() != LimitOffsetHandling::NONE &&
         !isSubquery) {
-      plan._qet->applyLimitOffset(pq._limitOffset);
+      plan._qet->applyLimitOffset(pq._limitOffset, false);
     }
   }
 
@@ -3657,7 +3657,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->applyLimitOffset(arg.get()._limitOffset);
+    plan._qet->applyLimitOffset(arg.get()._limitOffset, false);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }
@@ -3684,7 +3684,7 @@ void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
   auto tree = planner_.createExecutionTree(describe.whereClause_.get(), true);
   // Like for a subquery, LIMIT and OFFSET apply to the WHERE clause.
-  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset);
+  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset, false);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(singlePlanVec(std::move(describeOp)));
