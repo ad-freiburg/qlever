@@ -120,6 +120,15 @@ template <const std::array<bool, 256>& Table>
 // directly into the active chunk buffer.
 class FastExportStreamFormatter {
  public:
+  // `bufferPtr_` points into `managedBuffer_` (in streaming mode), so a copy
+  // would alias or dangle, and a move would have to re-point it. No caller
+  // copies or moves a formatter, so both are deleted.
+  FastExportStreamFormatter(const FastExportStreamFormatter&) = delete;
+  FastExportStreamFormatter& operator=(const FastExportStreamFormatter&) =
+      delete;
+  FastExportStreamFormatter(FastExportStreamFormatter&&) = delete;
+  FastExportStreamFormatter& operator=(FastExportStreamFormatter&&) = delete;
+
   using ChunkSink = std::function<void(std::string_view)>;
   static constexpr size_t DEFAULT_CHUNK_SIZE = 1024 * 1024;  // 1 MB
   static constexpr size_t SAFETY_WATERMARK = 4096;           // 4 KB margin
@@ -209,8 +218,8 @@ class FastExportStreamFormatter {
   // ___________________________________________________________________________
   // Write an integer directly without heap allocation.
   CPP_template(typename IntegerType)(
-      requires std::is_integral_v<IntegerType>) void writeInteger(IntegerType
-                                                                      value) {
+      requires std::is_integral_v<IntegerType>)
+  void writeInteger(IntegerType value) {
     ensureAvailable(32);
     auto [ptr, ec] = std::to_chars(bufferPtr_ + writePos_,
                                    bufferPtr_ + bufferCapacity_, value);
@@ -525,15 +534,16 @@ class FastExportStreamFormatter {
   }
 
   // ___________________________________________________________________________
-  // Flush current chunk to sink in streaming mode.
+  // Flush current chunk to sink in streaming mode. In fixed-span mode this is
+  // a no-op: the bytes stay in the caller's span (a reset of `writePos_` would
+  // make later writes overwrite them) and are counted by `totalBytesWritten()`
+  // and `finalize()`.
   void flush() {
-    if (writePos_ == 0) {
+    if (!isStreaming_ || writePos_ == 0) {
       return;
     }
-    if (isStreaming_ && sink_) {
-      sink_(std::string_view(bufferPtr_, writePos_));
-      ++chunksEmitted_;
-    }
+    sink_(std::string_view(bufferPtr_, writePos_));
+    ++chunksEmitted_;
     totalBytesWritten_ += writePos_;
     writePos_ = 0;
   }
@@ -543,6 +553,10 @@ class FastExportStreamFormatter {
   // Consumes the formatter, flushes remaining content, and returns summary.
   [[nodiscard]] ExportStreamSummary finalize() && {
     flush();
+    if (!isStreaming_) {
+      // Fixed-span mode never flushes; its buffered bytes are the output.
+      totalBytesWritten_ += writePos_;
+    }
     ExportStreamSummary summary{totalTriples_, totalBytesWritten_,
                                 chunksEmitted_};
     // Invalidate buffer

@@ -335,12 +335,14 @@ TEST(FastExportStreamFormatterTest, WriteTripleMatchesLegacyForAllFormats) {
     }
     EXPECT_EQ(fixedFormatter.currentChunk(), legacy);
     EXPECT_EQ(fixedFormatter.bytesBuffered(), legacy.size());
-    // A flush in fixed-span mode has no sink: the bytes only count as
-    // written.
+    // A flush in fixed-span mode is a no-op: the bytes stay in the span and
+    // are counted once.
     fixedFormatter.flush();
-    EXPECT_EQ(fixedFormatter.bytesBuffered(), 0u);
+    EXPECT_EQ(fixedFormatter.bytesBuffered(), legacy.size());
+    EXPECT_EQ(fixedFormatter.currentChunk(), legacy);
     EXPECT_EQ(fixedFormatter.totalBytesWritten(), legacy.size());
     const auto fixedSummary = std::move(fixedFormatter).finalize();
+    EXPECT_EQ(fixedSummary.totalBytesWritten_, legacy.size());
     EXPECT_EQ(fixedSummary.chunksEmitted_, 0u);
   }
 }
