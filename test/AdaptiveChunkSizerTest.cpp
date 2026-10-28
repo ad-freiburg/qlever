@@ -177,13 +177,26 @@ TEST(AdaptiveChunkSizerTest, ZeroRowAndZeroByteHandling) {
   EXPECT_EQ(sizer.currentChunkBytes(), 64 * 1024);
 
   // A chunk with bytes but an unknown row count (0) advances the ramp but
-  // leaves the row estimate unchanged. This is how the chunked HTTP transfer
-  // uses the sizer.
+  // leaves the row estimate unchanged, but the bytes are counted. This is how
+  // the chunked HTTP transfer uses the sizer.
   sizer.recordChunk(64 * 1024, 0);
   EXPECT_EQ(sizer.chunksFlushed(), 3);
-  EXPECT_EQ(sizer.totalBytes(), 0);
+  EXPECT_EQ(sizer.totalBytes(), 64 * 1024);
+  EXPECT_EQ(sizer.totalRows(), 0);
   EXPECT_DOUBLE_EQ(sizer.averageRowBytes(), 120.0);
   EXPECT_EQ(sizer.currentChunkBytes(), 128 * 1024);
+}
+
+// The row count is clamped in `double`, so extreme configurations do not
+// overflow the conversion to `size_t`.
+TEST(AdaptiveChunkSizerTest, TargetRowCountWithExtremeConfiguration) {
+  AdaptiveChunkConfig config;
+  config.initialChunkBytes_ = 1;
+  config.maxChunkBytes_ = std::numeric_limits<size_t>::max();
+  config.initialEstimatedRowBytes_ = 1e-300;
+  config.maxChunkRows_ = std::numeric_limits<size_t>::max();
+  AdaptiveChunkSizer sizer(config);
+  EXPECT_EQ(sizer.targetRowCount(), std::numeric_limits<size_t>::max());
 }
 
 // A growth factor that would overshoot `maxChunkBytes_` (or even the range of

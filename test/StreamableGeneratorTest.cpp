@@ -114,10 +114,41 @@ TEST(StreamableGenerator, ChunkCapacityAppliesFromTheNextChunk) {
   ASSERT_NE(iterator, generator.end());
   EXPECT_EQ(*iterator, "AABBBBBB");
 
+  static_assert(TEST_BUFFER_SIZE >= 8,
+                "The capacities used in this test must fit the buffer");
   generator.setChunkCapacity(TEST_BUFFER_SIZE);
   ++iterator;
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(*iterator, "BBBBC");
+  std::string expectedThirdChunk(TEST_BUFFER_SIZE - 6, 'B');
+  expectedThirdChunk += 'C';
+  EXPECT_EQ(*iterator, expectedThirdChunk);
+  ++iterator;
+  ASSERT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(StreamableGenerator, ChunkCapacityAfterChunkEndingExactlyAtCapacity) {
+  auto generator = []() -> basic_stream_generator<TEST_BUFFER_SIZE> {
+    co_yield std::string(4, 'A');
+    co_yield std::string(5, 'B');
+  }();
+
+  // The first chunk ends exactly at its capacity, so the overflow is empty.
+  generator.setChunkCapacity(4);
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "AAAA");
+
+  generator.setChunkCapacity(2);
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "BB");
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "BB");
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "B");
   ++iterator;
   ASSERT_EQ(iterator, generator.end());
 }
