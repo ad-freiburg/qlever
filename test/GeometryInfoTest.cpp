@@ -641,11 +641,15 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
               parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
                                           CRSType::WEB_MERCATOR}));
 
-  // Test an empty `LINESTRING`, which leads to a `std::runtime_error`.
-  auto parseRes5 = parseWkt(emptyLitLineString);
-  EXPECT_THAT(parseRes5, parseResultNear(ParseResult{
-                             std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
-                             CRSType::UNSUPPORTED}));
+  // Test empty geometries, which lead to a `std::runtime_error`. In
+  // particular, `POINT EMPTY` must not yield a point with sentinel
+  // coordinates.
+  for (auto lit : {emptyLitLineString, litLineStringEmpty, litPointEmpty}) {
+    EXPECT_THAT(parseWkt(lit), parseResultNear(ParseResult{
+                                   std::nullopt, WKTType::NONE,
+                                   CRSType::UNSUPPORTED, CRSType::UNSUPPORTED}))
+        << lit;
+  }
 }
 
 // ____________________________________________________________________________

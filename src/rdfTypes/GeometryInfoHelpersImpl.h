@@ -115,9 +115,16 @@ inline ParseResult parseWktOrThrow(const std::string_view& wkt,
   using enum WKTType;
   try {
     switch (type) {
-      case POINT:
-        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
+      case POINT: {
+        auto point =
+            pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
+        // `POINT EMPTY` yields a point with sentinel coordinates.
+        if (point.empty()) {
+          throw std::runtime_error("Cannot parse point from WKT");
+        }
+        parsed = point;
         break;
+      }
       case LINESTRING: {
         auto line =
             lineFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
