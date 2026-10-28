@@ -57,22 +57,25 @@ TEST(ColumnStrippingHelpers, VarsRequiredFromSubtree) {
 }
 
 // Test that `addVarsFromExpression` collects the variables of an expression
-// and returns true for expressions that need all columns 
+// and returns true for expressions that need all columns
 // (e.g. `COUNT(DISTINCT *)`).
 TEST(ColumnStrippingHelpers, addVarsFromExpression) {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
   std::set<V> vars{V{"?a"}};
   VarsRequiredFromSubtree helper{&vars};
 
   auto expression =
       sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(V{"?b"});
-  EXPECT_FALSE(helper.addVarsFromExpression(expression));
+  EXPECT_EQ(helper.addVarsFromExpression(expression), AddVarsResult::Success);
   EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
 
   sparqlExpression::SparqlExpressionPimpl countDistinctStar{
       std::shared_ptr<sparqlExpression::SparqlExpression>{
           sparqlExpression::makeCountStarExpression(true)},
       "COUNT(DISTINCT *)"};
-  EXPECT_TRUE(helper.addVarsFromExpression(countDistinctStar));
+  EXPECT_EQ(helper.addVarsFromExpression(countDistinctStar),
+            AddVarsResult::NeedAllVarsFromSubtree);
   EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
 }
 
