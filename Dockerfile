@@ -14,6 +14,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev mold liburing-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev libboost-container1.83-dev
+# `gdb` and `procps` are used by `misc/run-test-with-stall-watchdog.sh`, see
+# below.
+RUN apt-get install -y gdb procps
 
 # Copy everything we need to build the binaries.
 #
@@ -29,6 +32,7 @@ COPY .git /qlever/.git/
 COPY CMakeLists.txt /qlever/
 COPY CompilationInfo.cmake /qlever/
 COPY GitVersion.cmake /qlever/
+COPY misc/run-test-with-stall-watchdog.sh /qlever/misc/
 
 # Build and compile. By default, also compile and run all tests. In order not
 # to, build the image with `--build-arg RUN_TESTS=false`.
@@ -44,15 +48,20 @@ COPY GitVersion.cmake /qlever/
 # `-Wno-psabi` silences very frequent notes in the ARM build that inform us that
 # QLever might not be ABI-compatible on ARM with software compiled on a compiler
 # older than GCC10.
+# `CMAKE_TEST_LAUNCHER` runs each test via `run-test-with-stall-watchdog.sh`,
+# which dumps the stacks of all threads of a test that is still running after
+# a minute (and then fails it). Together with the `--timeout` of `ctest`, this
+# diagnoses rare stalls of single tests in the arm64 build, which so far always
+# coincided with a corrupted test index.
 ARG RUN_TESTS=true
 # Link-time optimization for the shipped binaries (see `QLEVER_ENABLE_LTO` in
 # `CMakeLists.txt`). The CI passes `--build-arg QLEVER_ENABLE_LTO=true` only
 # for the image published from `master`.
 ARG QLEVER_ENABLE_LTO=false
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DQLEVER_ENABLE_LTO=${QLEVER_ENABLE_LTO} -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DQLEVER_ENABLE_LTO=${QLEVER_ENABLE_LTO} -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -DCMAKE_TEST_LAUNCHER=/qlever/misc/run-test-with-stall-watchdog.sh -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
-      cmake --build . && ctest --rerun-failed --output-on-failure; \
+      cmake --build . && ctest --rerun-failed --output-on-failure --timeout 900; \
     else \
       cmake --build . --target qlever-index qlever-server qlever-upgrade-index && echo "Skipping tests"; \
     fi

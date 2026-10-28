@@ -137,14 +137,23 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         SCOPED_TRACE(absl::StrCat(
             "permutation ", Permutation::toString(permutation.permutation()),
             ", col0Id ", ::testing::PrintToString(col0Id)));
-        auto scanResult = permutation.scan(
-            permutation.getScanSpecAndBlocks(
-                ScanSpecification{col0Id, std::nullopt, std::nullopt},
-                locatedTriplesSnapshot),
-            std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
-                       ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
+        auto scan = [&]() {
+          return permutation.scan(
+              permutation.getScanSpecAndBlocks(
+                  ScanSpecification{col0Id, std::nullopt, std::nullopt},
+                  locatedTriplesSnapshot),
+              std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
+                         ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
+              cancellationDummy, locatedTriplesSnapshot,
+              singleThreadExecutor());
+        };
+        auto scanResult = scan();
         ASSERT_EQ(scanResult.numColumns(), 4u);
+        // Scan a second time. If the two results differ, then the reading of
+        // the permutation is not deterministic, otherwise a failure of the
+        // checks below means that the corrupted rows are stored on disk.
+        EXPECT_EQ(scan(), scanResult)
+            << "Two scans of the same relation yielded different results";
         for (const auto& row : scanResult) {
           SCOPED_TRACE(absl::StrCat("row ",
                                     ::testing::PrintToString(Id{row[0]}), " ",
@@ -199,16 +208,23 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 [[nodiscard]] auto setGlobalIndexBuildingSettingsForTesting() {
   bool previousIgnoreMemoryLimit =
       EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING.exchange(true);
+  // Check the rows of all permutation pairs via checksums while they are
+  // written (a diagnostic for a rare corruption of the POS permutation in CI).
+  bool previousPermutationWriterChecksums =
+      PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING.exchange(true);
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
   size_t previousProgressBarBatchSize =
       std::exchange(DEFAULT_PROGRESS_BAR_BATCH_SIZE, 2);
-  return absl::Cleanup{
-      [previousIgnoreMemoryLimit, previousProgressBarBatchSize] {
-        EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
-            previousIgnoreMemoryLimit;
-        DEFAULT_PROGRESS_BAR_BATCH_SIZE = previousProgressBarBatchSize;
-      }};
+  return absl::Cleanup{[previousIgnoreMemoryLimit,
+                        previousPermutationWriterChecksums,
+                        previousProgressBarBatchSize] {
+    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousIgnoreMemoryLimit;
+    PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING =
+        previousPermutationWriterChecksums;
+    DEFAULT_PROGRESS_BAR_BATCH_SIZE = previousProgressBarBatchSize;
+  }};
 }
 }  // namespace
 
