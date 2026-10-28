@@ -27,7 +27,7 @@
 // after the function has returned cannot be checked without undefined
 // behavior.
 template <size_t NumBytes = 4096>
-[[gnu::noinline]] char clobberStack(char sentinel = '#') {
+[[gnu::noinline]] char clobberStack(char sentinel = '#') noexcept {
   // `volatile` prevents the compiler from optimizing the stack writes away.
   static_assert(NumBytes > 0, "clobberStack requires a non-empty buffer");
   static_assert(NumBytes <= 65536,

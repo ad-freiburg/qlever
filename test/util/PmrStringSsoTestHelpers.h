@@ -64,7 +64,7 @@ inline size_t SsoCapacityOfPmrString() {
   const std::string sample(sizeof(detail::PmrSsoProbeString), 's');
   for (size_t size = sample.size(); size > 0; --size) {
     CountingMemoryResource resource;
-    detail::PmrSsoProbeString pmrSample{sample.data(), size, &resource};
+    const detail::PmrSsoProbeString pmrSample{sample.data(), size, &resource};
     if (resource.numAllocations() == 0) {
       return size;
     }

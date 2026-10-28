@@ -56,7 +56,7 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
   // Ensure that the discovered capacity is usable: strings up to that size are
   // stored inside the object, and a string with one additional character is
   // not.
-  size_t capacity = SsoCapacityOfPmrString();
+  const size_t capacity = SsoCapacityOfPmrString();
   // A zero capacity means this platform offers no inline string storage at
   // all, so every SSO-dependent assertion below would be meaningless there.
   // All supported STLs provide SSO; this states the premise explicitly
@@ -65,9 +65,9 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
   ASSERT_GT(capacity, 0u) << "This platform offers no inline string storage, "
                              "so the SSO assertions below are meaningless";
   requireSsoCapacityOfPmrStringAtLeast(capacity);
-  detail::PmrSsoProbeString atCapacity(capacity, 'x');
+  const detail::PmrSsoProbeString atCapacity(capacity, 'x');
   EXPECT_TRUE(pointsIntoObject(atCapacity.data(), atCapacity));
-  detail::PmrSsoProbeString aboveCapacity(capacity + 1, 'y');
+  const detail::PmrSsoProbeString aboveCapacity(capacity + 1, 'y');
   EXPECT_FALSE(pointsIntoObject(aboveCapacity.data(), aboveCapacity));
 }
 
@@ -86,18 +86,18 @@ TEST(GTestHelpersTest, RequirePmrStringInlineStorageRejectsInvalidSizes) {
 TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
   // Verify that empty and small strings use inline storage: the data must lie
   // inside the string object itself, not in allocator-provided memory.
-  for (size_t size : {size_t{0}, size_t{7}, size_t{15}}) {
+  for (const size_t size : {size_t{0}, size_t{7}, size_t{15}}) {
     // `maxSize == 0` is a rejected precondition, so probe from 1 on.
     if (size > 0) {
       requireSsoCapacityOfPmrStringAtLeast(size);
     }
-    detail::PmrSsoProbeString shortString(size, 'x');
+    const detail::PmrSsoProbeString shortString(size, 'x');
     EXPECT_TRUE(pointsIntoObject(shortString.data(), shortString));
     EXPECT_EQ(shortString.size(), size);
   }
   // Verify that a string above the SSO threshold is not stored inside the
   // object.
-  detail::PmrSsoProbeString longString(64, 'y');
+  const detail::PmrSsoProbeString longString(64, 'y');
   EXPECT_FALSE(pointsIntoObject(longString.data(), longString));
 }
 
