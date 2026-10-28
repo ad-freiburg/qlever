@@ -22,6 +22,10 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
+using ad_utility::testing::iriLocalVocabEntry;
+using ad_utility::testing::localVocabEntry;
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
+
 struct ValueIdTest : public ::testing::Test {
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
@@ -477,15 +481,12 @@ TEST_F(ValueIdTest, Hashing) {
     LocalVocab lv1;
     LocalVocab lv2;
     Iri iri = Iri::fromIriref("<foo>");
-    LocalVocabEntry lve1 =
-        ad_utility::testing::localVocabEntry(iri, index.getLocalVocabContext());
-    LocalVocabEntry lve2 =
-        ad_utility::testing::localVocabEntry(iri, index.getLocalVocabContext());
-    LocalVocabEntry lve3 =
-        ad_utility::testing::localVocabEntryFromStringRepresentation(
-            "\"foo\"", index.getLocalVocabContext());
-    LocalVocabEntry lve4 = ad_utility::testing::iriLocalVocabEntry(
-        "<x>", index.getLocalVocabContext());
+    LocalVocabEntry lve1 = localVocabEntry(iri, index.getLocalVocabContext());
+    LocalVocabEntry lve2 = localVocabEntry(iri, index.getLocalVocabContext());
+    LocalVocabEntry lve3 = localVocabEntryFromStringRepresentation(
+        "\"foo\"", index.getLocalVocabContext());
+    LocalVocabEntry lve4 =
+        iriLocalVocabEntry("<x>", index.getLocalVocabContext());
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };
@@ -692,10 +693,8 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
   // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
   // `SecondaryVocabIndex`.
-  LocalVocabEntry entryInVocab =
-      ad_utility::testing::iriLocalVocabEntry("<b>", ctx);
-  LocalVocabEntry entryInSecondaryVocab =
-      ad_utility::testing::iriLocalVocabEntry("<zzz>", ctx);
+  LocalVocabEntry entryInVocab = iriLocalVocabEntry("<b>", ctx);
+  LocalVocabEntry entryInSecondaryVocab = iriLocalVocabEntry("<zzz>", ctx);
   ValueId localVocabId = ValueId::makeFromLocalVocabIndex(&entryInVocab);
   ValueId localVocabIdSecondary =
       ValueId::makeFromLocalVocabIndex(&entryInSecondaryVocab);

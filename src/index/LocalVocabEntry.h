@@ -24,6 +24,13 @@
 // in turn requires this header (see the note on `IdProxy` below).
 class LocalVocabContext;
 
+// The only class that may call the private constructors of `LocalVocabEntry`
+// (see there). It is defined in `index/TripleComponentConversions.cpp` and must
+// not be used anywhere else.
+namespace localVocabEntryDetail::onlyForTripleComponentConversions {
+class LocalVocabEntryFactory;
+}
+
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
 // the entry would be in the global vocabulary of the Index. This position is
@@ -106,7 +113,8 @@ class alignas(16) LocalVocabEntry
   // never be stored in a `LocalVocabEntry`. Create such entries via
   // `toIdOrLocalVocabEntry` (see `index/TripleComponentConversions.h`), which
   // checks this and then calls them via `LocalVocabEntryFactory`.
-  friend class LocalVocabEntryFactory;
+  friend class localVocabEntryDetail::onlyForTripleComponentConversions::
+      LocalVocabEntryFactory;
 
   LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
       : Base{std::move(iri)}, context_{&context} {}
@@ -155,7 +163,8 @@ class alignas(16) LocalVocabEntry
   LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
 
   // Convenience functions that delegate to the corresponding static functions
-  // of `LiteralT`.
+  // of `LiteralT`. Unlike the private constructors above, they are public,
+  // because they can only create literals, never IRIs.
   static LocalVocabEntry literalWithoutQuotes(std::string_view view,
                                               const LocalVocabContext& ctx);
 

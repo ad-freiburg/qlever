@@ -21,6 +21,7 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
+using ad_utility::testing::iriLocalVocabEntry;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
@@ -86,9 +87,9 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
   LocalVocab localVocab;
-  [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
-      ad_utility::testing::iriLocalVocabEntry("<http://example.org/test>",
-                                              qec_->getLocalVocabContext()));
+  [[maybe_unused]] auto local =
+      localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
+          "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -200,12 +201,12 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
 
   const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(ad_utility::testing::iriLocalVocabEntry(
-      "<http://example.org/1>", localVocabContext));
+  vocab1.getIndexAndAddIfNotContained(
+      iriLocalVocabEntry("<http://example.org/1>", localVocabContext));
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(ad_utility::testing::iriLocalVocabEntry(
-      "<http://example.org/2>", localVocabContext));
+  vocab2.getIndexAndAddIfNotContained(
+      iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
   cache.store("query-1", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table1.clone()),
@@ -535,9 +536,8 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(
-      ad_utility::testing::iriLocalVocabEntry("<http://example.org/test>",
-                                              qec_->getLocalVocabContext()));
+  localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
+      "<http://example.org/test>", qec_->getLocalVocabContext()));
   ASSERT_EQ(localVocab.size(), 1);
 
   NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),

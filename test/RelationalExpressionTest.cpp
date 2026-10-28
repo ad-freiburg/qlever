@@ -754,14 +754,12 @@ TEST(RelationalExpression, VariableAndConstant) {
   // ?mixed column is `1, -0.1, <x>`
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
-  testWithExplicitIdResult<GT>(
-      IdOrLocalVocabEntry{ad_utility::testing::iriLocalVocabEntry(
-          "<xa>", qec->getLocalVocabContext())},
-      Variable{"?mixed"}, {U, U, B(true)});
-  testWithExplicitIdResult<LT>(
-      IdOrLocalVocabEntry{ad_utility::testing::iriLocalVocabEntry(
-          "<u>", qec->getLocalVocabContext())},
-      Variable{"?mixed"}, {U, U, B(true)});
+  testWithExplicitIdResult<GT>(IdOrLocalVocabEntry{iriLocalVocabEntry(
+                                   "<xa>", qec->getLocalVocabContext())},
+                               Variable{"?mixed"}, {U, U, B(true)});
+  testWithExplicitIdResult<LT>(IdOrLocalVocabEntry{iriLocalVocabEntry(
+                                   "<u>", qec->getLocalVocabContext())},
+                               Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
   // comparison returns false.
@@ -901,11 +899,10 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
                                     std::vector{B(false), B(true), U});
   testSortedVariableAndConstant<GT>(mixed, -inf,
                                     std::vector{B(true), B(true), U});
-  testSortedVariableAndConstant<LE>(
-      mixed,
-      IdOrLocalVocabEntry{ad_utility::testing::iriLocalVocabEntry(
-          "<z>", qec->getLocalVocabContext())},
-      std::vector{U, U, B(true)});
+  testSortedVariableAndConstant<LE>(mixed,
+                                    IdOrLocalVocabEntry{iriLocalVocabEntry(
+                                        "<z>", qec->getLocalVocabContext())},
+                                    std::vector{U, U, B(true)});
 }
 
 // Test that rows for which a comparison with a sorted variable is UNDEF stay

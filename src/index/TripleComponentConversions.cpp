@@ -16,10 +16,11 @@
 #include "index/LocalVocabContext.h"
 #include "rdfTypes/GeoPoint.h"
 
+namespace localVocabEntryDetail::onlyForTripleComponentConversions {
 // Calls the private constructors of `LocalVocabEntry`. It is only used by
 // `toIdOrLocalVocabEntry` and `toValueId` below, which make sure that an IRI
 // that can be encoded directly in an `Id` is never stored in a
-// `LocalVocabEntry`.
+// `LocalVocabEntry`. Do NOT use it anywhere else.
 class LocalVocabEntryFactory {
  public:
   static LocalVocabEntry make(LocalVocabEntry::Base&& word,
@@ -33,6 +34,10 @@ class LocalVocabEntryFactory {
     return LocalVocabEntry{std::move(word), lower, upper, context};
   }
 };
+}  // namespace localVocabEntryDetail::onlyForTripleComponentConversions
+
+using localVocabEntryDetail::onlyForTripleComponentConversions::
+    LocalVocabEntryFactory;
 
 // ____________________________________________________________________________
 std::optional<Id> toValueIdIfNotString(

@@ -252,9 +252,8 @@ TEST(AggregateExpression, minAndMaxForDifferentKindsOfTerms) {
   auto testMinId = testAggregate<MinExpression, Id>;
   auto testMaxId = testAggregate<MaxExpression, Id>;
   auto t = TestContext{};
-  LocalVocabEntry iriEntry =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "<x:1>", t.qec->getLocalVocabContext());
+  LocalVocabEntry iriEntry = localVocabEntryFromStringRepresentation(
+      "<x:1>", t.qec->getLocalVocabContext());
   Id iri = Id::makeFromLocalVocabIndex(&iriEntry);
   Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3));
   Id alpha = t.alpha;

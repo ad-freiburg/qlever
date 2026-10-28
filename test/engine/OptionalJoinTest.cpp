@@ -413,12 +413,10 @@ TEST(OptionalJoin, gallopingJoin) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"b\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -477,12 +475,10 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"b\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
+      "\"a\"", qec->getLocalVocabContext());
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
+      "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
   leftVocab.getIndexAndAddIfNotContained(entryA);
@@ -1196,9 +1192,8 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   std::vector<Result::IdTableVocabPair> tAndV;
 
   auto i = [&qec2](int i) {
-    return ad_utility::testing::localVocabEntry(
-        iri(absl::StrCat("<local-payload-", i, ">")),
-        qec2->getLocalVocabContext());
+    return localVocabEntry(iri(absl::StrCat("<local-payload-", i, ">")),
+                           qec2->getLocalVocabContext());
   };
   LocalVocab v;
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));

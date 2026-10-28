@@ -17,6 +17,7 @@
 #include "index/vocabulary/SecondaryVocabulary.h"
 
 using namespace qlever::binary_export;
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace {
 // An index with a text index, to resolve all datatypes that point to strings.
@@ -48,12 +49,10 @@ TEST(StringMapping, remapId) {
   // IDs of all datatypes that point to strings, where `id5` is a local vocab
   // entry with the same word as the vocabulary entry `id1`.
   const auto& index = qec->getIndex();
-  LocalVocabEntry testWord =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"abc\"", index.getLocalVocabContext());
-  LocalVocabEntry duplicateWord =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "<b>", index.getLocalVocabContext());
+  LocalVocabEntry testWord = localVocabEntryFromStringRepresentation(
+      "\"abc\"", index.getLocalVocabContext());
+  LocalVocabEntry duplicateWord = localVocabEntryFromStringRepresentation(
+      "<b>", index.getLocalVocabContext());
   StringMapping mapping{index};
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);
@@ -115,9 +114,8 @@ TEST(StringMapping, takeStrings) {
   StringMapping mapping{index};
 
   // IDs of all datatypes that point to strings.
-  LocalVocabEntry testWord =
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"abc\"", index.getLocalVocabContext());
+  LocalVocabEntry testWord = localVocabEntryFromStringRepresentation(
+      "\"abc\"", index.getLocalVocabContext());
   Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);

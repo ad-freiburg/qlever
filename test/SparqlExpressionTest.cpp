@@ -37,6 +37,8 @@
 #include "util/IdTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 
+using ad_utility::testing::localVocabEntry;
+
 namespace {
 using ad_utility::source_location;
 // Some useful shortcuts for the tests below.
@@ -81,8 +83,7 @@ auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
 };
 
 auto iriref = [](std::string_view s) {
-  return ad_utility::testing::localVocabEntry(
-      iri(s), testContext().qec->getLocalVocabContext());
+  return localVocabEntry(iri(s), testContext().qec->getLocalVocabContext());
 };
 
 auto idOrLitOrStringVec =
@@ -1284,13 +1285,12 @@ TEST(SparqlExpression, stringOperators) {
       DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
-  checkIriOrUri(
-      IdOrLocalVocabEntryVec{U, U, U, U, U, U, U},
-      std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99), dateDate,
-                                        dateLYear, T, F},
-                 IdOrLocalVocabEntry{ad_utility::testing::localVocabEntry(
-                     ad_utility::triple_component::Iri{},
-                     testContext().qec->getLocalVocabContext())}});
+  checkIriOrUri(IdOrLocalVocabEntryVec{U, U, U, U, U, U, U},
+                std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99),
+                                                  dateDate, dateLYear, T, F},
+                           IdOrLocalVocabEntry{localVocabEntry(
+                               ad_utility::triple_component::Iri{},
+                               testContext().qec->getLocalVocabContext())}});
   // test valid
   checkIriOrUri(
       IdOrLocalVocabEntryVec{
@@ -1313,9 +1313,9 @@ TEST(SparqlExpression, stringOperators) {
               testContext().notInVocabIri, testContext().notInVocabIriLit,
               lit("http://example/"), iriref("<http://\t\t\nexample/>"),
               lit("\t\n\r")},
-          IdOrLocalVocabEntry{ad_utility::testing::localVocabEntry(
-              ad_utility::triple_component::Iri{},
-              testContext().qec->getLocalVocabContext())}});
+          IdOrLocalVocabEntry{
+              localVocabEntry(ad_utility::triple_component::Iri{},
+                              testContext().qec->getLocalVocabContext())}});
 
   // test with base iri
   checkIriOrUri(

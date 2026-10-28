@@ -1396,9 +1396,9 @@ TEST_P(IndexScanWithLazyJoin,
   LocalVocab extraVocab;
   const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      ad_utility::testing::localVocabEntry(iri("<e>"), localVocabContext));
+      localVocabEntry(iri("<e>"), localVocabContext));
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      ad_utility::testing::localVocabEntry(iri("<g>"), localVocabContext));
+      localVocabEntry(iri("<g>"), localVocabContext));
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -2027,9 +2027,9 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
 
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
-    return makePrefilterVec(pr(lt(ad_utility::testing::iriLocalVocabEntry(
-                                   "<s2>", qec->getLocalVocabContext())),
-                               Var{"?x"}));
+    return makePrefilterVec(
+        pr(lt(iriLocalVocabEntry("<s2>", qec->getLocalVocabContext())),
+           Var{"?x"}));
   };
 
   // Test with different variable combinations

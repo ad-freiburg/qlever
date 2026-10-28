@@ -29,6 +29,8 @@
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/TypeTraits.h"
 
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
+
 namespace valueGetterTestHelpers {
 
 const std::string ttl = R"(
@@ -224,8 +226,8 @@ struct AllDatatypesTestContext : TestContextWithGivenTTl {
   // place.
   Id localVocabId(const std::string& word) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        ad_utility::testing::localVocabEntryFromStringRepresentation(
-            word, qec->getLocalVocabContext())));
+        localVocabEntryFromStringRepresentation(word,
+                                                qec->getLocalVocabContext())));
   }
 
  private:
@@ -385,7 +387,7 @@ class ValueGetterTester {
     TestContextWithGivenTTl testContext{""};
     LocalVocab localVocab;
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        ad_utility::testing::localVocabEntryFromStringRepresentation(
+        localVocabEntryFromStringRepresentation(
             std::move(literal), testContext.qec->getLocalVocabContext()));
     checkImpl(testContext, ValueId::makeFromLocalVocabIndex(idx), expected);
   }

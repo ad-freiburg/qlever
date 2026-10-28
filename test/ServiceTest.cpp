@@ -34,6 +34,8 @@
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
+using ad_utility::testing::iriLocalVocabEntry;
+
 // Fixture that sets up a test index and a factory for producing mocks for the
 // `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
@@ -217,8 +219,7 @@ TEST_F(ServiceTest, computeResult) {
                          std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
               auto index = localVocab.getIndexOrNullopt(
-                  ad_utility::testing::iriLocalVocabEntry(
-                      s, testQec->getLocalVocabContext()));
+                  iriLocalVocabEntry(s, testQec->getLocalVocabContext()));
               if (index.has_value()) {
                 return index;
               }
@@ -389,7 +390,7 @@ TEST_F(ServiceTest, computeResult) {
     const auto& localVocabContext = testQec->getLocalVocabContext();
     auto get = [&localVocab, &localVocabContext](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          ad_utility::testing::iriLocalVocabEntry(s, localVocabContext));
+          iriLocalVocabEntry(s, localVocabContext));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");

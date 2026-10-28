@@ -20,6 +20,8 @@
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
+
 namespace {
 auto V = ad_utility::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
@@ -354,18 +356,16 @@ TEST(Union, sortedMergeWithLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
 
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"Test1\"", qec->getLocalVocabContext()));
+  vocab1.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
+      "\"Test1\"", qec->getLocalVocabContext()));
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(
-      ad_utility::testing::localVocabEntryFromStringRepresentation(
-          "\"Test2\"", qec->getLocalVocabContext()));
+  vocab2.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
+      "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
   tables.push_back(makeIdTableFromVector({{3}}));
