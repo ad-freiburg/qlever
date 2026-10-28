@@ -66,7 +66,7 @@ constexpr std::optional<ColumnIndex> graphColumnIfRequested(
 // The classification of the blocks of a full scan by `BlockSelector` below.
 struct SelectedBlocks {
   // The blocks that have to be read from disk.
-  std::vector<CompressedBlockMetadata> toRead_;
+  std::vector<SubBlockMetadata> toRead_;
   // The IDs (and graph IDs, if requested) that are already known from the block
   // metadata alone, in ascending order of the IDs, possibly with duplicates.
   IdTable fromMetadata_;
@@ -95,11 +95,11 @@ class BlockSelector {
  private:
   // Add the given block to `result_`: either to the blocks that have to be
   // read, or (via `addToMetadata`) to the IDs that are already known.
-  void handleBlock(const CompressedBlockMetadata& block);
+  void handleBlock(const SubBlockMetadata& block);
 
   // Return true iff the given block has to be read to determine the IDs (and
   // graph IDs) that it contributes.
-  bool blockNeedsToBeRead(const CompressedBlockMetadata& block) const;
+  bool blockNeedsToBeRead(const SubBlockMetadata& block) const;
 
   // Add the given `id` (together with `graph` if graph IDs are requested) to
   // `result_.fromMetadata_`, unless it duplicates the previously added row.
@@ -109,7 +109,7 @@ class BlockSelector {
   // in ascending order.
   void forEachCandidateBlock(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      absl::FunctionRef<void(const CompressedBlockMetadata&)> action) const;
+      absl::FunctionRef<void(const SubBlockMetadata&)> action) const;
 };
 
 // Hash and compare graph IDs by their bit representation, which is much cheaper

@@ -91,21 +91,22 @@ auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
+    blockNeedsFilteringByGraph(const SubBlockMetadata& metadata) const {
   if (graphFilter_.areAllGraphsAllowed()) {
     return false;
   }
-  if (!metadata.graphInfo_.has_value()) {
+  const auto& optionalGraphInfo = metadata.graphInfo();
+  if (!optionalGraphInfo.has_value()) {
     return true;
   }
-  const auto& graphInfo = metadata.graphInfo_.value();
+  const auto& graphInfo = optionalGraphInfo.value();
   return !ql::ranges::all_of(graphInfo, isGraphAllowedLambda());
 }
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    filterByGraphIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
+    filterByGraphIfNecessary(IdTable& block,
+                             const SubBlockMetadata& blockMetadata) const {
   bool needsFilteringByGraph = blockNeedsFilteringByGraph(blockMetadata);
   auto graphIdFromRow = [graphColumn = graphColumn_](const auto& row) {
     return row[graphColumn];
@@ -129,7 +130,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     filterDuplicatesIfNecessary(IdTable& block,
-                                const CompressedBlockMetadata& blockMetadata) {
+                                const SubBlockMetadata& blockMetadata) {
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
     AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
     return false;
@@ -149,7 +150,7 @@ void CompressedRelationReader::FilterDuplicatesAndGraphs::
 
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
-    IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
+    IdTable& block, const SubBlockMetadata& blockMetadata) const {
   bool filteredByGraph = filterByGraphIfNecessary(block, blockMetadata);
   deleteGraphColumnIfNecessary(block);
   bool filteredByDuplicates = filterDuplicatesIfNecessary(block, blockMetadata);
@@ -158,21 +159,22 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
 
 // ______________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
-    const CompressedBlockMetadata& block) const {
+    const SubBlockMetadata& block) const {
   if (graphFilter_.areAllGraphsAllowed()) {
     return false;
   }
-  if (!block.graphInfo_.has_value()) {
+  const auto& graphInfo = block.graphInfo();
+  if (!graphInfo.has_value()) {
     return false;
   }
-  return ql::ranges::none_of(block.graphInfo_.value(), isGraphAllowedLambda());
+  return ql::ranges::none_of(graphInfo.value(), isGraphAllowedLambda());
 }
 
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange
 CompressedRelationReader::lazyScan(
     const ScanSpecification& scanSpec,
-    std::vector<CompressedBlockMetadata> relevantBlockMetadata,
+    std::vector<SubBlockMetadata> relevantBlockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
@@ -275,7 +277,8 @@ CompressedRelationReader::lazyScan(
 
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::readBlockWithoutLocatedTriples(
-    CompressedBlockMetadata block, ColumnIndices additionalColumns) const {
+    const CompressedBlockMetadata& block,
+    ColumnIndices additionalColumns) const {
   auto config = getScanConfig({std::nullopt, std::nullopt, std::nullopt},
                               std::move(additionalColumns), {});
   CompressedBlock compressedColumns =
@@ -297,7 +300,7 @@ IdTable CompressedRelationReader::scan(
   // Compute an upper bound for the size and reserve enough space in the
   // result.
   auto sizes = scanSpecAndBlocks.getBlockMetadataView() |
-               ql::views::transform(&CompressedBlockMetadata::numRows_);
+               ql::views::transform(&SubBlockMetadata::numRows_);
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
   if (limitOffset._limit.has_value()) {
     upperBoundSize = std::min(upperBoundSize,
@@ -320,7 +323,7 @@ IdTable CompressedRelationReader::scan(
 // ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const ScanSpecification& scanSpec, const ScanImplConfig& scanConfig,
-    const CompressedBlockMetadata& blockMetadata,
+    const SubBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
     const LocatedTriplesPerBlock& locatedTriples) const {
   bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
@@ -454,8 +457,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
               ? 1
               : getRuntimeParameter<
                     &RuntimeParameters::smallIndexScanSizeEstimateDivisor_>();
-      const auto [ins, del] =
-          locatedTriplesPerBlock.numTriples(block.blockIndex_);
+      const auto [ins, del] = locatedTriplesPerBlock.numTriples(block);
       auto trunc = [divisor](size_t num) {
         return std::max<size_t>(std::min<size_t>(num, 1), num / divisor);
       };
@@ -478,8 +480,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 
   ql::ranges::for_each(
       ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
-        const auto [ins, del] =
-            locatedTriplesPerBlock.numTriples(block.blockIndex_);
+        const auto [ins, del] = locatedTriplesPerBlock.numTriples(block);
         if (!exactSize || (ins == 0 && del == 0)) {
           inserted += ins;
           deleted += del;
@@ -591,7 +592,7 @@ CompressedRelationReader::getDistinctCol0Ids(
 
 // ____________________________________________________________________________
 bool CompressedRelationReader::columnValuesAreKnownFromMetadata(
-    const CompressedBlockMetadata& block, size_t numColumns,
+    const SubBlockMetadata& block, size_t numColumns,
     const LocatedTriplesPerBlock& locatedTriples) {
   if (block.containsInconsistentTriples(numColumns)) {
     return false;
@@ -601,16 +602,15 @@ bool CompressedRelationReader::columnValuesAreKnownFromMetadata(
   // its triples remains. Note that `numTriples` only returns an upper bound
   // (which is on the safe side here), and that the block that purely consists
   // of delta triples has `numRows_ == 0` and is thus handled correctly, too.
-  return locatedTriples.numTriples(block.blockIndex_).numDeleted_ <
-         block.numRows_;
+  return locatedTriples.numTriples(block).numDeleted_ < block.numRows_;
 }
 
 // ____________________________________________________________________________
 bool CompressedRelationReader::contentsAreKnownFromMetadata(
-    const CompressedBlockMetadata& block, size_t numColumns,
+    const SubBlockMetadata& block, size_t numColumns,
     const LocatedTriplesPerBlock& locatedTriples) {
   return !block.containsInconsistentTriples(numColumns) &&
-         !locatedTriples.containsTriples(block.blockIndex_);
+         !locatedTriples.containsTriples(block);
 }
 
 // ____________________________________________________________________________
@@ -734,12 +734,22 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData,
     ColumnIndicesRef columnIndices) const {
+  return readColumnsFromFile(
+      columnIndices, [&blockMetaData](ColumnIndex columnIndex) {
+        return blockMetaData.getOffsetAndCompressedSizeForColumn(columnIndex);
+      });
+}
+
+// _____________________________________________________________________________
+template <typename GetOffsetAndCompressedSize>
+CompressedBlock CompressedRelationReader::readColumnsFromFile(
+    ColumnIndicesRef columnIndices,
+    const GetOffsetAndCompressedSize& getOffsetAndCompressedSize) const {
   CompressedBlock compressedBuffer;
   compressedBuffer.resize(columnIndices.size());
   // TODO<C++23> Use `ql::views::zip`
   for (size_t i = 0; i < compressedBuffer.size(); ++i) {
-    const auto& offset =
-        blockMetaData.getOffsetAndCompressedSizeForColumn(columnIndices[i]);
+    const auto& offset = getOffsetAndCompressedSize(columnIndices[i]);
     auto& currentCol = compressedBuffer[i];
     currentCol.resize(offset.compressedSize_);
     file_.read(currentCol.data(), offset.compressedSize_, offset.offsetInFile_);
@@ -764,15 +774,14 @@ DecompressedBlockAndMetadata
 CompressedRelationReader::decompressAndPostprocessBlock(
     const CompressedBlock& compressedBlock, size_t numRowsToRead,
     const CompressedRelationReader::ScanImplConfig& scanConfig,
-    const CompressedBlockMetadata& metadata) const {
+    const SubBlockMetadata& metadata) const {
   auto decompressedBlock = decompressBlock(compressedBlock, numRowsToRead);
   auto [numIndexColumns, includeGraphColumn] =
       prepareLocatedTriples(scanConfig.scanColumns_);
   bool hasUpdates = false;
-  if (scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_)) {
+  if (scanConfig.locatedTriples_.containsTriples(metadata)) {
     decompressedBlock = scanConfig.locatedTriples_.mergeTriples(
-        metadata.blockIndex_, decompressedBlock, numIndexColumns,
-        includeGraphColumn);
+        metadata, decompressedBlock, numIndexColumns, includeGraphColumn);
     hasUpdates = true;
   }
   bool wasPostprocessed = false;
@@ -803,7 +812,7 @@ void CompressedRelationReader::decompressColumn(
 // ____________________________________________________________________________
 std::optional<DecompressedBlockAndMetadata>
 CompressedRelationReader::readAndDecompressBlock(
-    const CompressedBlockMetadata& blockMetaData,
+    const SubBlockMetadata& blockMetaData,
     const ScanImplConfig& scanConfig) const {
   if (scanConfig.graphFilter_.canBlockBeSkipped(blockMetaData)) {
     return std::nullopt;
@@ -831,8 +840,8 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
       getScanConfig(scanSpecForAllColumns,
                     std::array{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}},
                     locatedTriplesPerBlock);
-  auto scanBlock = [this, &scanSpec, &config, &locatedTriplesPerBlock](
-                       const CompressedBlockMetadata& block) {
+  auto scanBlock = [this, &scanSpec, &config,
+                    &locatedTriplesPerBlock](const SubBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
     // matches the `col0` and `col1`.
     return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
@@ -898,11 +907,11 @@ CompressedRelationReader::computeUniqueGraphIds(
                     additionalColumns, locatedTriplesPerBlock);
 
   for (const auto& metadata : scanSpecAndBlocks.getBlockMetadataView()) {
-    bool shouldScan =
-        !metadata.graphInfo_.has_value() ||
-        ql::ranges::any_of(metadata.graphInfo_.value(), [&graphIds](Id id) {
-          return !ad_utility::contains(graphIds, id.getBits());
-        });
+    const auto& graphInfo = metadata.graphInfo();
+    bool shouldScan = !graphInfo.has_value() ||
+                      ql::ranges::any_of(graphInfo.value(), [&graphIds](Id id) {
+                        return !ad_utility::contains(graphIds, id.getBits());
+                      });
     if (shouldScan) {
       auto block = readAndDecompressBlock(metadata, scanConfig);
       cancellationHandle->throwIfCancelled();

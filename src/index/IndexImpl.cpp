@@ -1109,9 +1109,10 @@ bool IndexImpl::mayContainGeoPoints() const {
   // of it. The first and last object of each block include the updates.
   auto locatedTriplesState =
       deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  BlockMetadataSpan blocks =
+  SubBlockMetadataSpan blocks =
       osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
-          .getAugmentedMetadata();
+          .getAugmentedMetadata()
+          .subBlocks();
 
   // Find the first block whose last object is not of a datatype before
   // `GeoPoint`. Return false if there is none or if its first object is of a
@@ -1134,7 +1135,7 @@ bool IndexImpl::mayContainGeoPoints() const {
   // common).
   CompressedRelationReader::ScanSpecAndBlocks blockOnly{
       {std::nullopt, std::nullopt, std::nullopt},
-      {BlockMetadataRange{block, block + 1}}};
+      {SubBlockMetadataRange{block, block + 1}}};
   auto objects = osp_->scan(
       blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
       *locatedTriplesState, ad_utility::globalExecutor());
