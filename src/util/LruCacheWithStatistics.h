@@ -44,9 +44,9 @@ class LRUCacheWithStatistics {
   // Otherwise, compute the value using `computeFunction`, store it, and return
   // it (cache miss).
   CPP_template(typename Func)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, V, const K&>) const V& getOrCompute(const K& key,
-                                                    Func computeFunction) {
+      requires ad_utility::InvocableWithConvertibleReturnType<Func, V,
+                                                              const K&>)
+  const V& getOrCompute(const K& key, Func computeFunction) {
     bool wasMiss = false;
     const V& result =
         cache_.getOrCompute(key, [&wasMiss, &computeFunction](const K& k) {

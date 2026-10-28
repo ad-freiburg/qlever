@@ -919,7 +919,7 @@ TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit) {
             genJsonResult({"x", "y"}, {{"a", "b"}}),
             boost::beast::http::status::ok, "application/sparql-results+json"));
 
-    service->applyLimitOffset(limitOffset);
+    service->applyLimitOffset(limitOffset, false);
 
     auto sibling =
         std::make_shared<AlwaysFailOperation>(testQec, Variable{"?x"});
@@ -1122,7 +1122,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     auto strip = std::make_shared<StripColumns>(
         testQec, makeTree(std::move(op)), std::set<Variable>{Variable{"?x"}});
     if (limitForStripColumns.has_value()) {
-      strip->applyLimitOffset(limitForStripColumns.value());
+      strip->applyLimitOffset(limitForStripColumns.value(), false);
     }
     return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
                                   std::vector<ColumnIndex>{0});
@@ -1193,7 +1193,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     auto sibling = makeValues();
     auto innerSort = std::make_shared<Sort>(testQec, makeTree(service),
                                             std::vector<ColumnIndex>{0});
-    innerSort->applyLimitOffset(LimitOffsetClause{1});
+    innerSort->applyLimitOffset(LimitOffsetClause{1}, false);
     auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
                                             std::vector<ColumnIndex>{0});
     Service::precomputeSiblingResult(sibling, outerSort, true, false);

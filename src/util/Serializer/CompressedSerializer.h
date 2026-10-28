@@ -32,9 +32,9 @@ namespace ad_utility::serialization {
 // a span of chars and a target buffer to store the compressed result in) and
 // writes it (prefixed with the uncompressed size) to the underlying serializer.
 CPP_template(typename CompressionFunction)(
-    requires ql::concepts::invocable<
-        CompressionFunction, ql::span<const char>,
-        UninitializedBuffer&>) class CompressingBlockProcessor {
+    requires ql::concepts::invocable<CompressionFunction, ql::span<const char>,
+                                     UninitializedBuffer&>)
+class CompressingBlockProcessor {
  private:
   CompressionFunction compressionFunction_;
   // We need to temporarily store a single compressed block before flushing it.
