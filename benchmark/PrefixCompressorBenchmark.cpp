@@ -1,4 +1,4 @@
-// Copyright 2026, The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
@@ -7,9 +7,10 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
-#include <cerrno>
-#include <cstdlib>
+#include <array>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -23,31 +24,33 @@ namespace ad_benchmark {
 namespace {
 
 // `measureTimeOfFunction` discards the return value of a measurement, so every
-// measurement stores its result here. The in-place measurements additionally
-// pass every decoded buffer through `keepDecodedBytes`, so the compiler cannot
-// drop writes to buffers that are otherwise never read.
+// measurement stores its result here. Every measurement additionally passes
+// each decoded buffer through `keepDecodedBytes`, so the compiler cannot drop
+// writes to buffers that are otherwise never read.
 volatile size_t benchmarkSink = 0;
 
 // Tell the compiler that the memory behind `decoded` may be read elsewhere,
-// so that none of the decoded bytes (not only the ones the sink reads) can
-// be optimized away.
+// so that none of the decoded bytes can be optimized away (the sink only
+// receives byte counts).
 inline void keepDecodedBytes(const char* decoded) {
   asm volatile("" : : "g"(decoded) : "memory");
 }
 
 // Benchmark the in-place `PrefixCompressor::decompressInto` API against the
-// allocating `PrefixCompressor::decompress` API. The micro group measures
-// per-word decode latency; the end-to-end group measures batch vocabulary
-// resolution of all benchmark words, either into owning strings or into a
-// single preallocated arena (the pattern used by batch vocabulary lookups).
+// allocating `PrefixCompressor::decompress` API. The micro group decodes the
+// benchmark words one at a time, each into an owning string or into one reused
+// buffer. The end-to-end group decodes all benchmark words in one batch, either
+// into owning strings or into a single preallocated arena.
 class PrefixCompressorBenchmark : public BenchmarkInterface {
  private:
+  // The number of benchmark words and the number of passes over them.
+  static constexpr size_t numWords_ = 5'000;
+  static constexpr size_t numRepetitions_ = 5;
+
   PrefixCompressor compressor_;
-  // Owning storage for the compressed words; `compressed_` views into it.
-  std::vector<std::string> compressedStorage_;
-  std::vector<std::string_view> compressed_;
+  std::vector<std::string> compressed_;
   // Maximum exact decompressed size across the benchmark inputs; sizes the
-  // reused output buffer and the end-to-end arena.
+  // reused output buffer of the micro group.
   size_t outputCapacity_ = 0;
   // Sum of the exact decompressed sizes; sizes the end-to-end arena.
   size_t totalDecompressedSize_ = 0;
@@ -56,36 +59,44 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
   std::vector<size_t> decompressedSizes_;
 
  public:
+  // The corpus mixes IRIs of all codebook prefixes with incompressible plain
+  // literals (every fourth word), so that both the prefix and the no-prefix
+  // paths are exercised and the decompressed sizes vary.
   PrefixCompressorBenchmark() {
-    compressor_.buildCodebook(std::vector<std::string>{
+    const std::array<std::string, 6> prefixes{
         "http://www.wikidata.org/entity/",
         "http://www.wikidata.org/prop/direct/",
-        "http://www.wikidata.org/value/", "http://schema.org/",
+        "http://www.wikidata.org/value/",
+        "http://schema.org/",
         "http://www.w3.org/2000/01/rdf-schema#",
-        "<http://example.org/property/"});
+        "<http://example.org/property/"};
+    compressor_.buildCodebook(prefixes);
     constexpr std::string_view alphabet{
         "abcdefghijklmnopqrstuvwxyz0123456789_:/.-#"};
-    compressedStorage_.reserve(5'000);
-    for (size_t i = 0; i < 5'000; ++i) {
+    constexpr size_t suffixLength = 45;
+    compressed_.reserve(numWords_);
+    for (size_t i = 0; i < numWords_; ++i) {
       std::string suffix;
-      suffix.reserve(45);
-      for (size_t character = 0; character < 45; ++character) {
-        suffix += alphabet[(i * 17 + character * 31) % alphabet.size()];
+      suffix.reserve(suffixLength);
+      for (size_t character = 0; character < suffixLength; ++character) {
+        // The `i / alphabet.size()` term keeps the suffixes from repeating
+        // with the period of the alphabet.
+        suffix += alphabet[(i * 17 + character * 31 +
+                            (i / alphabet.size()) * (character + 1)) %
+                           alphabet.size()];
       }
-      // Mix prefix-compressible IRIs with incompressible plain literals so
-      // that both the prefix and the no-prefix paths are exercised.
-      const std::string word =
-          (i % 4 == 3) ? "literal-" + suffix
-                       : "http://www.wikidata.org/entity/Q" + suffix;
-      compressedStorage_.push_back(compressor_.compress(word));
+      const std::string word = (i % 4 == 3)
+                                   ? "literal-" + suffix
+                                   : prefixes[i % prefixes.size()] + suffix;
+      compressed_.push_back(compressor_.compress(word));
     }
-    compressed_.assign(compressedStorage_.begin(), compressedStorage_.end());
     decompressedSizes_.reserve(compressed_.size());
-    for (const std::string_view& compressed : compressed_) {
-      const size_t size = compressor_.maxDecompressedSize(compressed);
-      decompressedSizes_.push_back(size);
-      outputCapacity_ = std::max(outputCapacity_, size);
-      totalDecompressedSize_ += size;
+    for (const std::string& compressed : compressed_) {
+      const size_t decompressedSize =
+          compressor_.maxDecompressedSize(compressed);
+      decompressedSizes_.push_back(decompressedSize);
+      outputCapacity_ = std::max(outputCapacity_, decompressedSize);
+      totalDecompressedSize_ += decompressedSize;
     }
   }
 
@@ -95,34 +106,19 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results;
-    const auto parseEnvironmentSize = [](const char* value,
-                                         size_t defaultValue) {
-      if (value == nullptr) {
-        return defaultValue;
-      }
-      errno = 0;
-      char* end = nullptr;
-      const unsigned long parsed = std::strtoul(value, &end, 10);
-      AD_CONTRACT_CHECK(end != value && *end == '\0' && errno != ERANGE);
-      return static_cast<size_t>(parsed);
-    };
-    // Bound the benchmark workload even when configured through the
-    // environment.
-    constexpr size_t maxRepetitions = 1'000'000;
-    const size_t repetitions = parseEnvironmentSize(
-        std::getenv("PREFIX_INPLACE_INNER_REPETITIONS"), 5);
-    AD_CONTRACT_CHECK(repetitions > 0);
-    AD_CONTRACT_CHECK(repetitions <= maxRepetitions);
+    const size_t repetitions = numRepetitions_;
 
-    // Micro benchmark: per-word decode latency of the allocating API vs the
-    // in-place API with a reused buffer.
-    auto& micro =
-        results.addGroup("Single-word PrefixCompressor decode (5,000 words)");
+    // Micro benchmark: the allocating API vs the in-place API with a reused
+    // buffer, one word at a time.
+    auto& micro = results.addGroup(absl::StrCat(
+        "Single-word PrefixCompressor decode (", numWords_, " words)"));
     micro.addMeasurement("decompress (allocating)", [&] {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         for (const auto& compressed : compressed_) {
-          totalBytes += compressor_.decompress(compressed).size();
+          const std::string decoded = compressor_.decompress(compressed);
+          keepDecodedBytes(decoded.data());
+          totalBytes += decoded.size();
         }
       }
       benchmarkSink = totalBytes;
@@ -158,8 +154,8 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
 
     // End-to-end benchmark: batch resolution of all words, either into
     // owning strings or into a single preallocated arena.
-    auto& endToEnd =
-        results.addGroup("Batch PrefixCompressor resolution (5,000 words)");
+    auto& endToEnd = results.addGroup(absl::StrCat(
+        "Batch PrefixCompressor resolution (", numWords_, " words)"));
     endToEnd.addMeasurement("batch decode into vector<string>", [&] {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
@@ -167,6 +163,7 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
         decoded.reserve(compressed_.size());
         for (const auto& compressed : compressed_) {
           decoded.push_back(compressor_.decompress(compressed));
+          keepDecodedBytes(decoded.back().data());
           totalBytes += decoded.back().size();
         }
       }
