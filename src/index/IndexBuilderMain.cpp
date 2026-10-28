@@ -289,8 +289,10 @@ int main(int argc, char** argv) {
       "Add a triple `<literal> ql:normalized \"normalized literal\"` for each "
       "literal. The normalized literal is obtained by removing the matches of "
       "the `--normalization-regexes`, removing accents, and lowercasing the "
-      "words of the literal, separated by single spaces. This enables "
-      "efficient matching of literals via their normalized form.");
+      "words of the literal, separated by single spaces. Accents are all "
+      "nonspacing marks, which in some scripts (e.g. Devanagari or Thai) "
+      "also include vowel signs. This enables efficient matching of literals "
+      "via their normalized form.");
   add("normalization-regexes",
       po::value(&config.normalizationRegexes_)->composing()->multitoken(),
       "Space-separated list of regexes (RE2 syntax), whose matches are "

@@ -168,6 +168,13 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
 
 #ifndef QLEVER_NO_UNICODE
 namespace detail {
+// Throw if `err` holds an error of an ICU call.
+void throwIfIcuFailure(UErrorCode err) {
+  if (U_FAILURE(err)) {
+    throw std::runtime_error(u_errorName(err));
+  }
+}
+
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
 template <typename F>
@@ -179,9 +186,7 @@ std::string utf8StringTransform(std::string_view s, const char* localeName,
   transformation(localeName, 0,
                  icu::StringPiece{s.data(), static_cast<int32_t>(s.size())},
                  sink, nullptr, err);
-  if (U_FAILURE(err)) {
-    throw std::runtime_error(u_errorName(err));
-  }
+  throwIfIcuFailure(err);
   return result;
 }
 }  // namespace detail
@@ -248,17 +253,12 @@ std::string removeAccentsUtf8(std::string_view s) {
     if (!ql::ranges::all_of(s, [](unsigned char c) { return c < 0x80; })) {
       QLEVER_UNICODE_ONLY("removeAccentsUtf8", {
         // Get the NFD and NFC normalizers (singletons owned by ICU, so this is
-        // cheap) and throw if an ICU call fails.
-        auto raise = [](UErrorCode err) {
-          if (U_FAILURE(err)) {
-            throw std::runtime_error(u_errorName(err));
-          }
-        };
+        // cheap).
         UErrorCode err = U_ZERO_ERROR;
         const icu::Normalizer2* nfd = icu::Normalizer2::getNFDInstance(err);
-        raise(err);
+        detail::throwIfIcuFailure(err);
         const icu::Normalizer2* nfc = icu::Normalizer2::getNFCInstance(err);
-        raise(err);
+        detail::throwIfIcuFailure(err);
 
         // Decompose `s`, so that each accent becomes a separate nonspacing
         // mark, and drop these marks.
@@ -266,7 +266,7 @@ std::string removeAccentsUtf8(std::string_view s) {
             nfd->normalize(icu::UnicodeString::fromUTF8(icu::StringPiece{
                                s.data(), static_cast<int32_t>(s.size())}),
                            err);
-        raise(err);
+        detail::throwIfIcuFailure(err);
         icu::UnicodeString stripped;
         for (int32_t i = 0; i < decomposed.length();) {
           UChar32 c = decomposed.char32At(i);
@@ -279,7 +279,7 @@ std::string removeAccentsUtf8(std::string_view s) {
         // Recompose the remaining characters (otherwise, e.g. Hangul syllables
         // would stay decomposed into their jamo) and convert back to UTF-8.
         icu::UnicodeString recomposed = nfc->normalize(stripped, err);
-        raise(err);
+        detail::throwIfIcuFailure(err);
         std::string result;
         recomposed.toUTF8String(result);
         return result;
