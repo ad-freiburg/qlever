@@ -339,8 +339,9 @@ class CompressedRelationReader {
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
-  // of the relevant blocks, which reads all the blocks that contain located
-  // triples, so the `cancellationHandle` is checked once per block.
+  // of the relevant blocks, which reads the first and the last block of the
+  // scan and all the blocks that contain located triples. The
+  // `cancellationHandle` is checked before each of these reads.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,

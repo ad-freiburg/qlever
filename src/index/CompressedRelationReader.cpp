@@ -441,6 +441,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
     if (exactSize) {
+      cancellationHandle->throwIfCancelled();
       numResults +=
           readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
                                       locatedTriplesPerBlock)
@@ -501,10 +502,11 @@ std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   // Without `exactSize`, no blocks are read, so there is nothing to cancel and
-  // a fresh handle suffices.
-  return getResultSizeImpl<false>(
-      scanSpecAndBlocks, locatedTriplesPerBlock,
-      std::make_shared<ad_utility::CancellationHandle<>>());
+  // a handle that is never cancelled suffices.
+  static const CancellationHandle neverCancelled =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock,
+                                  neverCancelled);
 }
 
 // ____________________________________________________________________________

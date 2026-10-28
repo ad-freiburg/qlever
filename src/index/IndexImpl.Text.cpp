@@ -17,7 +17,7 @@
 #include "backports/algorithm.h"
 #include "global/FileSuffixConstants.h"
 #include "index/FTSAlgorithms.h"
-#include "index/IdTableUtils.h"
+#include "index/SortConfig.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/TransparentFunctors.h"
@@ -101,18 +101,15 @@ IdTable IndexImpl::mergeTextBlockResults(
     cancellationHandle->throwIfCancelled();
     result.insertAtEnd(partialResult);
   }
-  // Sort the table
-  IdTableUtils::sort<3>(
-      &result,
-      [](const auto& a, const auto& b) {
-        return ql::ranges::lexicographical_compare(
-            std::begin(a), std::end(a), std::begin(b), std::end(b),
-            [](const Id& x, const Id& y) {
-              return x.compareWithoutLocalVocab(y) < 0;
-            });
-      },
-      sortConfig);
   auto toSort = std::move(result).toStatic<3>();
+  // Sort the table
+  sortConfig.sort(toSort, [](const auto& a, const auto& b) {
+    return ql::ranges::lexicographical_compare(
+        std::begin(a), std::end(a), std::begin(b), std::end(b),
+        [](const Id& x, const Id& y) {
+          return x.compareWithoutLocalVocab(y) < 0;
+        });
+  });
   // If not entitySearch don't filter duplicates
   if (textScanMode == TextScanMode::WordScan) {
     return std::move(toSort).toDynamic<>();
