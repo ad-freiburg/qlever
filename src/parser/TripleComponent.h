@@ -90,7 +90,7 @@ class TripleComponent {
     checkThatStringIsValid();
   }
 
-  /// Construct from a `LiteralOrIri`, which becomes a `Literal` or an `Iri`.
+  // Construct from a `LiteralOrIri`, which becomes a `Literal` or an `Iri`.
   explicit TripleComponent(
       ad_utility::triple_component::LiteralOrIri literalOrIri)
       : _variant{literalOrIri.isIri()

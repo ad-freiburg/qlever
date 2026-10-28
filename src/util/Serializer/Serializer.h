@@ -196,8 +196,8 @@ void operator>>(S& serializer, T&& t) {
   serializer | t;
 }
 
-/// Read a value of type `T` from the `serializer` and return it. `T` has to be
-/// default-constructible.
+// Read a value of type `T` from the `serializer` and return it. `T` has to be
+// default-constructible.
 CPP_template(typename T, typename S)(requires ReadSerializer<S>)
 T read(S& serializer) {
   T value;
