@@ -12,8 +12,9 @@ namespace sparqlExpression::detail::string_expressions {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
-// Note: This currently requires a copy of a string since the `Literal` class
-// has to add the quotation marks.
+//
+// NOTE: This currently copies the string, because the `Literal` class has to
+// add the quotation marks.
 struct ToLiteral {
   LiteralOrIri operator()(std::string_view normalizedContent,
                           const std::optional<std::variant<Iri, std::string>>&
@@ -26,12 +27,11 @@ struct ToLiteral {
 inline constexpr ToLiteral toLiteral{};
 
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
-// references) and returns an `Id` or `std::string` to a function that takes the
-// same number of `std::optional<std::string>` and returns `Id` or
-// `IdOrLocalVocabEntry`. If any of the optionals is `std::nullopt`, then UNDEF
-// is returned, else the result of the `Function` with the values of the
-// optionals. This is a useful helper function for implementing expressions that
-// work on strings.
+// references) and returns an `Id` or a `LiteralOrIri` to a function that takes
+// the same number of `std::optional<std::string>` and returns an `Id` or an
+// `IdOrLocalVocabEntry`. If any of the optionals is `std::nullopt`, the result
+// is UNDEF, otherwise it is the result of the `Function` applied to the values
+// of the optionals.
 template <typename Function>
 struct LiftStringFunction {
   CPP_template(typename... Arguments)(
