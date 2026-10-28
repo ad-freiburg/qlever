@@ -145,6 +145,7 @@ Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
 Expr makeStrAfterExpression(Expr child1, Expr child2) {
   return make<StrAfterExpression>(child1, child2);
 }
+
 Expr makeStrBeforeExpression(Expr child1, Expr child2) {
   return make<StrBeforeExpression>(child1, child2);
 }

@@ -15,6 +15,7 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
+#include "util/CryptographicHashUtils.h"
 #include "util/StringUtils.h"
 
 namespace sparqlExpression {

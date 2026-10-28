@@ -74,6 +74,7 @@ using Expr = SparqlExpression::Ptr;
 Expr makeMergeRegexPatternAndFlagsExpression(Expr pattern, Expr flags) {
   return make<MergeRegexPatternAndFlagsExpression>(pattern, flags);
 }
+
 Expr makeReplaceExpression(Expr input, Expr pattern, Expr repl, Expr flags) {
   if (flags) {
     pattern = makeMergeRegexPatternAndFlagsExpression(std::move(pattern),
