@@ -30,18 +30,17 @@ namespace ql {
 // throw, and returns the new size. Writing more than `count` bytes is UB
 // (as in the standard) and cannot be checked after the fact; only a returned
 // size larger than `count` is checked with `AD_CONTRACT_CHECK` after the
-// call, and the string is then left empty on the C++23 path (the wrapper
-// clamps the size it reports to the standard member, whose contract would
-// otherwise be violated) resp. at size `count` with the written contents on
-// the fallback path. Before C++23 there is no performance benefit: the
-// fallback zero-fills all `count` bytes with `resize` first.
+// call. On that error the string is left at size `count` with the written
+// contents on both paths (on the C++23 path the wrapper clamps the size it
+// reports to the standard member, whose contract would otherwise be
+// violated). Before C++23 there is no performance benefit: the fallback
+// zero-fills all `count` bytes with `resize` first.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Operation)(
-    requires ad_utility::InvocableWithConvertibleReturnType<
-        Operation, size_t, CharT*,
-        size_t>) void resize_and_overwrite(std::basic_string<CharT, Traits,
-                                                             Allocator>& str,
-                                           size_t count, Operation op) {
+    requires ad_utility::InvocableWithConvertibleReturnType<Operation, size_t,
+                                                            CharT*, size_t>)
+void resize_and_overwrite(std::basic_string<CharT, Traits, Allocator>& str,
+                          size_t count, Operation op) {
   // Forward to the standard member when `__cpp_lib_string_resize_and_overwrite
   // >= 202110L` (C++23, P1072R10); otherwise `resize` (zero-fills), overwrite,
   // then shrink.
@@ -58,7 +57,7 @@ CPP_template(typename CharT, typename Traits, typename Allocator,
   str.resize_and_overwrite(
       count, [&newSize, op = std::move(op)](CharT* data, size_t n) mutable {
         newSize = std::move(op)(data, n);
-        return newSize <= n ? newSize : size_t{0};
+        return newSize <= n ? newSize : n;
       });
   AD_CONTRACT_CHECK(newSize <= count);
 #else

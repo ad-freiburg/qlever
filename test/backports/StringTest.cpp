@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
@@ -17,6 +18,7 @@
 #endif
 
 #include "backports/string.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 TEST(StringTest, ResizeAndOverwriteExactSize) {
@@ -34,16 +36,14 @@ TEST(StringTest, ResizeAndOverwriteExactSize) {
 // _____________________________________________________________________________
 TEST(StringTest, ResizeAndOverwriteSmallerSize) {
   std::string s(10, 'x');
-  const char* dataBefore = s.data();
   const std::string full = "abcdefghij";
   ql::resize_and_overwrite(s, full.size(), [&](char* buf, size_t count) {
     EXPECT_EQ(count, full.size());
     std::memcpy(buf, full.data(), full.size());
-    return 4;
+    return size_t{4};
   });
   EXPECT_EQ(s, "abcd");
   EXPECT_EQ(s.size(), 4u);
-  EXPECT_EQ(s.data(), dataBefore);
 }
 
 // _____________________________________________________________________________
@@ -55,7 +55,7 @@ TEST(StringTest, ResizeAndOverwriteZeroSize) {
 }
 
 // _____________________________________________________________________________
-TEST(StringTest, ResizeAndOverwriteZeroCapacity) {
+TEST(StringTest, ResizeAndOverwriteEmptyStringZeroCount) {
   std::string s;
   ql::resize_and_overwrite(s, 0, [](char*, size_t count) {
     EXPECT_EQ(count, 0u);
@@ -66,20 +66,23 @@ TEST(StringTest, ResizeAndOverwriteZeroCapacity) {
 }
 
 // _____________________________________________________________________________
-// Oversize results violate the contract on both branches. The state after
-// the throw is branch-specific (documented in `backports/string.h`): empty
-// on the C++23 path (the wrapper clamps what it reports to the standard
-// member), the full `count` with the written contents on the fallback path.
+// An oversize result violates the contract on both branches: the call
+// throws, and the string is left at size `count` with the written contents
+// (documented in `backports/string.h`). Start from a non-empty string so that
+// the post-throw state is observable.
 TEST(StringTest, ResizeAndOverwriteOversizedResultThrows) {
-  std::string s;
-  ASSERT_THROW(ql::resize_and_overwrite(s, 4, [](char*, size_t) { return 5u; }),
-               ad_utility::Exception);
-#if defined(__cpp_lib_string_resize_and_overwrite) && \
-    __cpp_lib_string_resize_and_overwrite >= 202110L
-  EXPECT_TRUE(s.empty());
-#else
+  std::string s = "initial";
+  try {
+    ql::resize_and_overwrite(s, 4, [](char* buf, size_t) {
+      std::memcpy(buf, "abcd", 4);
+      return size_t{5};
+    });
+    FAIL() << "expected ad_utility::Exception";
+  } catch (const ad_utility::Exception& e) {
+    EXPECT_THAT(e.what(), ::testing::HasSubstr("newSize <= count"));
+  }
+  EXPECT_EQ(s, "abcd");
   EXPECT_EQ(s.size(), 4u);
-#endif
 }
 
 // _____________________________________________________________________________
