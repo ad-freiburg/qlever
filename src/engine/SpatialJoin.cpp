@@ -45,6 +45,7 @@
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -507,7 +508,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // taken into account. Also note that here `childLeft_` not `childLeft` is
   // used, because `leftSelectedCols` and `rightSelectedCols` are applied after
   // swapping tables back in case of a `WITHIN` join.
-  std::vector<ColumnIndex> leftSelectedCols;
+  qlm::vector<ColumnIndex> leftSelectedCols{allocator()};
   for (auto [var, colInfo] :
        copySortedByColumnIndex(childLeft_->getVariableColumns())) {
     leftSelectedCols.push_back(colInfo.columnIndex_);
@@ -515,7 +516,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  std::vector<ColumnIndex> rightSelectedCols;
+  qlm::vector<ColumnIndex> rightSelectedCols{allocator()};
   for (const auto& [var, colInfo] : varsAndColInfo) {
     rightSelectedCols.push_back(colInfo.columnIndex_);
   }
