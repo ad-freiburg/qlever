@@ -245,8 +245,13 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
-  // Filled by `libspatialjoin` threads, which can't handle the exception of a
-  // memory-limited allocator, so these can't be `qlm::vector`s.
+  // The per-thread result buffers are plain `std::vector`s, so their memory is
+  // not counted against the memory limit (the pairs are counted when they are
+  // copied into `result` below).
+  //
+  // NOTE: The buffers are filled by the callbacks below on the worker threads
+  // of `libspatialjoin`, which do not forward exceptions, so an allocation that
+  // exceeds the memory limit there would terminate the server.
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());

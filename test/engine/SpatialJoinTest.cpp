@@ -1535,11 +1535,13 @@ TEST(SpatialJoin, SkippedRowsWarning) {
 }  // namespace invalidGeometries
 
 // Test that a `libspatialjoin` join whose result pairs exceed the memory limit
-// fails with the memory limit exception on the calling thread. The pairs are
-// collected by threads of `libspatialjoin`, which can't handle this exception.
+// fails with the memory limit exception on the calling thread (the pairs are
+// collected on the worker threads of `libspatialjoin`, which do not forward
+// exceptions, so an exception there would terminate the process).
 TEST(SpatialJoin, libspatialjoinResultExceedsMemoryLimit) {
   auto* qec = ad_utility::testing::getQec();
-  // A grid of points that all lie within the maximum distance of each other.
+
+  // A grid of 2500 points that all lie within 1000 km of each other.
   VectorTable points;
   for (size_t i = 0; i < 2500; ++i) {
     points.push_back({ValueId::makeFromGeoPoint(
@@ -1550,6 +1552,9 @@ TEST(SpatialJoin, libspatialjoinResultExceedsMemoryLimit) {
         qec, makeIdTableFromVector(points),
         std::vector<std::optional<Variable>>{var});
   };
+
+  // The `WITHIN_DIST` self join of the points has 6.25 million result pairs,
+  // whose two columns of `Id`s exceed the 100 MB memory limit of `getQec`.
   auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
