@@ -36,9 +36,10 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
     // lazy results it ensures that we don't have to compute the whole result,
     // so we consider this a tradeoff worth to make.
     // Defensive copy to avoid modifying other trees that share the same subtree
-    // as `right_`.
+    // as `right_`. The copy is deep, so the children of `right_` are then
+    // exclusively owned.
     right_ = right_->clone();
-    right_->applyLimitOffset({1});
+    right_->applyLimitOffset({1}, true);
   }
 }
 
@@ -80,6 +81,22 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   }
   // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
+}
+
+// ____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {left_, right_}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> ExistsJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<ExistsJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)),
+      existsVariable_);
 }
 
 // ____________________________________________________________________________
@@ -176,10 +193,10 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
   bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
-        return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
-                                   &Id::isUndefined)) ||
-               (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
-                                   &Id::isUndefined));
+        return ql::ranges::any_of(joinColumnsRight.getColumn(col),
+                                  Id::isUndefinedL) ||
+               ql::ranges::any_of(joinColumnsLeft.getColumn(col),
+                                  Id::isUndefinedL);
       });
 
   // Nothing to do for the actual matches.
@@ -205,7 +222,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Run `zipperJoinWithUndef` with the described callbacks and the
     // mentioned optimization in case we know that there are no UNDEF values
     // in the join columns.
-    auto checkCancellationLambda = [this] { checkCancellation(); };
+    auto checkCancellationLambda = cancellationChecker();
     auto runZipperJoin = [&](auto findUndef) {
       [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight,
@@ -313,7 +330,7 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
 
-  IdTable result = leftRes->cloneIdTable();
+  IdTable result = leftRes->cloneIdTable(cancellationChecker());
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
@@ -342,7 +359,8 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
   auto result = nestedLoopJoin.computeRightExistance(
       [this](auto&& idTable, LocalVocab localVocab,
              const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {
-        IdTable resultTable = AD_FWD(idTable).moveOrClone();
+        IdTable resultTable =
+            AD_FWD(idTable).moveOrClone(cancellationChecker());
         addExistsColumn(resultTable, matchingTracker);
         return Result::IdTableVocabPair{std::move(resultTable),
                                         std::move(localVocab)};
@@ -566,11 +584,9 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
 
 // _____________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
-        ql::concepts::convertible_to<
-            ql::ranges::range_value_t<Range>,
-            bool>) void ExistsJoin::addExistsColumn(IdTable& idTable,
-                                                    Range&& range) const {
+    requires ql::ranges::input_range<Range> && ql::ranges::sized_range<Range> &&
+    ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
+void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
   idTable.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(AD_FWD(range),
@@ -579,5 +595,5 @@ CPP_template_def(typename Range)(
                                  static_cast<bool>(tracker));
                            }),
       idTable.getColumn(idTable.numColumns() - 1).begin(),
-      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+      qlever::joinHelpers::CHUNK_SIZE, cancellationChecker());
 }

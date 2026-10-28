@@ -20,7 +20,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/Forward.h"
@@ -121,8 +121,8 @@ static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
 // workaround for GMock/GTest.
 struct MatchesIdTable {
   CPP_template(typename... Ts)(
-      requires(ql::concepts::constructible_from<IdTable, Ts&&...>)) auto
-  operator()(Ts&&... ts) const {
+      requires(ql::concepts::constructible_from<IdTable, Ts&&...>))
+  auto operator()(Ts&&... ts) const {
     return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
   }
 

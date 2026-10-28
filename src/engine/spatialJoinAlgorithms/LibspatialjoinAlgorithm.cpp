@@ -20,6 +20,7 @@
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
 
@@ -232,7 +233,8 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
-  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads};
+  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped,
+          parser.getNumInvalid(), numThreads};
 }
 
 // ____________________________________________________________________________
@@ -243,6 +245,13 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
+  // The per-thread result buffers are plain `std::vector`s, so their memory is
+  // not counted against the memory limit (the pairs are counted when they are
+  // copied into `result` below).
+  //
+  // NOTE: The buffers are filled by the callbacks below on the worker threads
+  // of `libspatialjoin`, which do not forward exceptions, so an allocation that
+  // exceeds the memory limit there would terminate the server.
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
@@ -315,7 +324,7 @@ Result LibspatialjoinAlgorithm::run() {
   auto runParser = [&](ParseInput smaller, ParseInput larger,
                        bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
-    auto [boxSmall, countSmall, droppedSmall, threadsSmall] =
+    auto [boxSmall, countSmall, droppedSmall, invalidSmall, threadsSmall] =
         parse(smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
@@ -331,7 +340,7 @@ Result LibspatialjoinAlgorithm::run() {
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
-    auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
+    auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge] =
         parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
               sweeper.getPaddedBoundingBox(boxSmall));
     auto numValidGeomsTotal = sweeper.numElements();
@@ -346,6 +355,10 @@ Result LibspatialjoinAlgorithm::run() {
                                                   numValidGeomsTotal);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", droppedLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
+                                                  invalidSmall + invalidLarge);
+    addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
+                          smallerIsRight ? invalidSmall : invalidLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
@@ -379,7 +392,8 @@ Result LibspatialjoinAlgorithm::run() {
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
   // Collect the results and add them to the result table. For `WITHIN_DIST`,
-  // also add the distance for each pair of objects in the result.
+  // also add the distance for each pair of objects in the result (which
+  // `libspatialjoin` reports in meters).
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
       throwIfCancelled();
@@ -390,13 +404,15 @@ Result LibspatialjoinAlgorithm::run() {
         dist = resultDists[t][i];
       }
       addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
-                          res.second, Id::makeFromDouble(dist), swapBack);
+                          res.second, kilometersToDistanceId(dist / 1000),
+                          swapBack);
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
       "time-for-collecting-results-from-threads", tCollect.msecs().count());
 
   // Return the result.
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }

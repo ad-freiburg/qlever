@@ -29,14 +29,12 @@ void expectIdsAreConcatenatedTo(
   VariableToColumnMap map{
       {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
-  EvaluationContext context{
-      *qec,
-      map,
-      idTable.asStaticView<0>(),
-      idTable.getAllocator(),
-      localVocab,
-      std::move(cancellationHandle),
-      std::chrono::time_point<std::chrono::steady_clock>::max()};
+  EvaluationContext context{*qec,
+                            map,
+                            idTable.asStaticView<0>(),
+                            idTable.getAllocator(),
+                            localVocab,
+                            std::move(cancellationHandle)};
 
   GroupConcatExpression expression{
       distinct, std::make_unique<VariableExpression>(var), ";"};
