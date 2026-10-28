@@ -20,6 +20,7 @@
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
 
@@ -244,12 +245,10 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
-  qlm::vector<qlm::vector<std::pair<size_t, size_t>>> results(
-      NUM_THREADS, qlm::vector<std::pair<size_t, size_t>>{qec_->getAllocator()},
-      qec_->getAllocator());
-  qlm::vector<qlm::vector<double>> resultDists(
-      NUM_THREADS, qlm::vector<double>{qec_->getAllocator()},
-      qec_->getAllocator());
+  // Filled by `libspatialjoin` threads, which can't handle the exception of a
+  // memory-limited allocator, so these can't be `qlm::vector`s.
+  std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
+  std::vector<std::vector<double>> resultDists(NUM_THREADS);
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
   auto joinTypeVal = config_.getJoinType().value();
   // Within should be replaced by contains on swapped tables.

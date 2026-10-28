@@ -1534,4 +1534,34 @@ TEST(SpatialJoin, SkippedRowsWarning) {
 
 }  // namespace invalidGeometries
 
+// Test that a `libspatialjoin` join whose result pairs exceed the memory limit
+// fails with the memory limit exception on the calling thread. The pairs are
+// collected by threads of `libspatialjoin`, which can't handle this exception.
+TEST(SpatialJoin, libspatialjoinResultExceedsMemoryLimit) {
+  auto* qec = ad_utility::testing::getQec();
+  // A grid of points that all lie within the maximum distance of each other.
+  VectorTable points;
+  for (size_t i = 0; i < 2500; ++i) {
+    points.push_back({ValueId::makeFromGeoPoint(
+        {static_cast<double>(i % 50) / 10, static_cast<double>(i / 50) / 10})});
+  }
+  auto makeChild = [&](const Variable& var) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector(points),
+        std::vector<std::optional<Variable>>{var});
+  };
+  auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{
+          LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST,
+                               std::optional<double>{1'000'000}, std::nullopt},
+          Variable{"?a"}, Variable{"?b"}, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN},
+      makeChild(Variable{"?a"}), makeChild(Variable{"?b"}));
+  auto spatialJoin =
+      std::dynamic_pointer_cast<SpatialJoin>(tree->getRootOperation());
+  EXPECT_THROW(spatialJoin->computeResult(false),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
+
 }  // anonymous namespace
