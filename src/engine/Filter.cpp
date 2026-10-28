@@ -293,13 +293,17 @@ Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Filter::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
   // The subtree has to provide the requested variables and all variables that
   // the `Filter` operation filters on.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
-  bool isAggregate = varsRequiredFromSubtree.addVarsFromExpression(_expression);
-  // Aggregate functions are not allowed in a `Filer` clause
-  AD_CORRECTNESS_CHECK(!isAggregate);
+  auto addVarsResult =
+      varsRequiredFromSubtree.addVarsFromExpression(_expression);
+  AD_CORRECTNESS_CHECK(
+      addVarsResult == AddVarsResult::Success,
+      "Aggregate functions are not allowed in a `Filter` clause");
 
   // Strip the subtree.
   auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);

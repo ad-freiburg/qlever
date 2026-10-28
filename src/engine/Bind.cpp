@@ -274,15 +274,19 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Bind::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
   // The subtree has to provide the requested variables and the variables that
   // are required by `Bind` to build its target.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
   bool bindTargetRequested = requestedVariables.contains(_bind._target);
   if (bindTargetRequested) {
-    bool isAggregate = varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
-    // Aggregate functions are not allowed in a `Bind` clause
-    AD_CORRECTNESS_CHECK(!isAggregate);
+    auto addVarsResult =
+        varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
+    AD_CORRECTNESS_CHECK(
+        addVarsResult == AddVarsResult::Success,
+        "Aggregate functions are not allowed in a `Bind` clause");
   }
 
   // Strip the subtree and only keep `Bind` operation in the

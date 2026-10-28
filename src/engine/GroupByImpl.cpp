@@ -482,6 +482,8 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 GroupByImpl::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
   // Keep the aliases whose target is requested, and the aliases whose target
   // is read by a kept alias. The subtree must provide the requested variables,
   // the variables read by the kept aliases, and the variables that the
@@ -498,7 +500,9 @@ GroupByImpl::makeTreeWithStrippedColumns(
     }
     // A `COUNT(DISTINCT *)` reads all columns of the subtree, so nothing may
     // be stripped below it (the caller then adds a `StripColumns` on top).
-    if (varsRequiredFromSubtree.addVarsFromExpression(alias._expression)) {
+    auto addVarsResult =
+        varsRequiredFromSubtree.addVarsFromExpression(alias._expression);
+    if (addVarsResult == AddVarsResult::NeedAllVarsFromSubtree) {
       return std::nullopt;
     }
     keptAliases.push_back(alias);
