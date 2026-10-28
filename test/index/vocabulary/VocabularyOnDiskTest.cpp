@@ -369,8 +369,8 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
   });
 }
 
-// The read-ahead must not change the results of `operator[]`, for any order of
-// the lookups.
+// Test that the read-ahead does not change the results of `operator[]`, for
+// any order of the lookups.
 TEST(VocabularyOnDisk, AccessOperatorReadAhead) {
   // More words than the maximal window, so that the window is limited.
   auto words = makeWords(3 * VOCABULARY_READ_AHEAD_MAX_WORDS + 17);
@@ -400,8 +400,8 @@ TEST(VocabularyOnDisk, AccessOperatorReadAhead) {
   EXPECT_ANY_THROW((*vocab)[numWords]);
 }
 
-// A thread caches the words of only one vocabulary at a time, so alternating
-// between two vocabularies must not mix up their words.
+// Test that alternating between two vocabularies does not mix up their words
+// (a thread caches the words of only one vocabulary at a time).
 TEST(VocabularyOnDisk, AccessOperatorReadAheadAlternatingVocabularies) {
   auto wordsA = makeWords(1000, "a");
   auto wordsB = makeWords(1000, "b");
@@ -419,8 +419,8 @@ TEST(VocabularyOnDisk, AccessOperatorReadAheadAlternatingVocabularies) {
   }
 }
 
-// A vocabulary at the address of a previous one must not get the cached words
-// of the previous one.
+// Test that a vocabulary at the address of a previous one does not get the
+// cached words of the previous one.
 TEST(VocabularyOnDisk, AccessOperatorReadAheadReusedAddress) {
   auto wordsA = makeWords(1000, "a");
   auto wordsB = makeWords(1000, "b");
@@ -436,8 +436,8 @@ TEST(VocabularyOnDisk, AccessOperatorReadAheadReusedAddress) {
   expectLookupsYieldWords(*vocab, wordsB, stridedIndices(400, 1000, 1));
 }
 
-// Words above `VOCABULARY_READ_AHEAD_MAX_WORD_DATA` are read individually, also
-// next to small words.
+// Test that words above `VOCABULARY_READ_AHEAD_MAX_WORD_DATA` are read
+// correctly (they are read individually), also next to small words.
 TEST(VocabularyOnDisk, AccessOperatorReadAheadLargeWords) {
   size_t maxBytes = VOCABULARY_READ_AHEAD_MAX_WORD_DATA.getBytes();
   std::vector<std::string> words;
@@ -452,8 +452,8 @@ TEST(VocabularyOnDisk, AccessOperatorReadAheadLargeWords) {
   expectLookupsYieldWords(*vocab, words, stridedIndices(1, words.size(), 3));
 }
 
-// Each thread has its own read-ahead state, so concurrent sequential lookups on
-// the same vocabulary must not interfere.
+// Test that concurrent sequential lookups on the same vocabulary do not
+// interfere (each thread has its own read-ahead state).
 TEST(VocabularyOnDisk, AccessOperatorReadAheadConcurrentThreads) {
   auto words = makeWords(20'000);
   auto vocab = createVocabularyFromWords(words);
