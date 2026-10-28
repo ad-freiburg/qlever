@@ -28,8 +28,9 @@ using valueIdComparators::Comparison;
 
 // For the various `SingleExpressionResult`s the `idGenerator` function returns
 // a generator that yields `targetSize` many `ValueId`s.
-CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
-    S&& input, size_t targetSize, const EvaluationContext* context) {
+CPP_template(typename S)(requires SingleExpressionResult<S>)
+auto idGenerator(S&& input, size_t targetSize,
+                 const EvaluationContext* context) {
   [[maybe_unused]] auto makeId = [context](const auto& el) {
     return makeValueId(el, context);
   };
