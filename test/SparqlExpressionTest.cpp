@@ -120,8 +120,8 @@ concept VectorOrExpressionResult =
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
-CPP_template(typename T)(
-    requires VectorOrExpressionResult<T>) auto toExpressionResult(T vec) {
+CPP_template(typename T)(requires VectorOrExpressionResult<T>)
+auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
   } else if constexpr (ranges::convertible_to<T, std::string_view>) {
@@ -1777,6 +1777,81 @@ TEST(SparqlExpression, isSomethingFunctions) {
   auto expression = makeBoundExpression(
       std::make_unique<IdExpression>(ValueId::makeUndefined()));
   EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+}
+
+// Test that `isBlank`, `isNumeric`, `ql:isGeoPoint` and `BOUND` are evaluated
+// with binary search (result `SetOfIntervals`) if the input is sorted by their
+// argument, and row by row otherwise.
+TEST(SparqlExpression, isSomethingFunctionsOnSortedInput) {
+  using SetOfIntervals = ad_utility::SetOfIntervals;
+  Variable var{"?x"};
+  TestContext testContext;
+  auto& ctx = testContext.context;
+  // In sorted order: UNDEF, bool, int, doubles, strings, date, point, blanks.
+  std::vector<Id> ids{
+      U,
+      Id::makeFromBool(false),
+      I(42),
+      D(1),
+      D(-2),
+      testContext.x,
+      testContext.notInVocabA,
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-06-13")),
+      Id::makeFromGeoPoint(GeoPoint{0, 0}),
+      testContext.blank,
+      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12))};
+  ql::ranges::sort(ids);
+  testContext.table = IdTable{1, ctx._allocator};
+  for (Id id : ids) {
+    testContext.table.push_back({id});
+  }
+  ctx._inputTable = testContext.table.asStaticView<0>();
+  ctx._endIndex = ids.size();
+  testContext.varToColMap.clear();
+  testContext.varToColMap[var] = makePossiblyUndefinedColumn(0);
+  ctx._columnsByWhichResultIsSorted = {0};
+
+  auto evaluate = [&](auto makeExpression) {
+    return makeExpression(std::make_unique<VariableExpression>(var))
+        ->evaluate(&ctx);
+  };
+  auto test = [&](auto makeExpression, SetOfIntervals expected,
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    EXPECT_THAT(evaluate(makeExpression),
+                ::testing::VariantWith<SetOfIntervals>(expected));
+  };
+  using Vec = VectorWithMemoryLimit<Id>;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  // `BOUND` is false for UNDEF, the other functions are UNDEF, which a
+  // `SetOfIntervals` can't represent, so the result is computed row by row.
+  test(&makeBoundExpression, {{{1, 11}}, 11});
+  EXPECT_THAT(evaluate(&makeIsBlankExpression),
+              ::testing::VariantWith<Vec>(
+                  ::testing::ElementsAre(U, F, F, F, F, F, F, F, F, T, T)));
+
+  // Only evaluate on a subrange of the input without UNDEF.
+  ctx._beginIndex = 1;
+  test(&makeIsBlankExpression, {{{8, 10}}, 10});
+  test(&makeIsNumericExpression, {{{1, 4}}, 10});
+  test(&makeIsGeoPointExpression, {{{7, 8}}, 10});
+  test(&makeBoundExpression, {{{0, 10}}, 10});
+  ctx._endIndex = 8;
+  test(&makeIsBlankExpression, {{}, 7});
+  ctx._endIndex = 1;
+  test(&makeIsBlankExpression, {{}, 0});
+
+  // Without the sortedness or for a grouped variable, the result is computed
+  // row by row.
+  ctx._endIndex = ids.size();
+  auto rowByRow = ::testing::VariantWith<Vec>(
+      ::testing::ElementsAre(F, F, F, F, F, F, F, F, T, T));
+  ctx._groupedVariables.insert(var);
+  EXPECT_THAT(evaluate(&makeIsBlankExpression), rowByRow);
+  ctx._groupedVariables.clear();
+  ctx._columnsByWhichResultIsSorted.clear();
+  EXPECT_THAT(evaluate(&makeIsBlankExpression), rowByRow);
 }
 
 // ____________________________________________________________________________

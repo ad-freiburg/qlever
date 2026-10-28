@@ -65,8 +65,9 @@ CPP_concept ValueAsNumericId =
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
 // point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
-CPP_template(bool NanOrInfToUndef = false,
-             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+CPP_template(bool NanOrInfToUndef = false, typename T)(
+    requires ValueAsNumericId<T>)
+Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
   } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
@@ -458,12 +459,12 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
-  using Value = IdOrLocalVocabEntry;
+  using Value = IdOrLiteralOrIri;
   using Mixin<IriOrUriValueGetter>::operator();
-  IdOrLocalVocabEntry operator()(ValueId id,
-                                 const EvaluationContext* context) const;
-  IdOrLocalVocabEntry operator()(const LiteralOrIri& litOrIri,
-                                 const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(ValueId id,
+                              const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
+                              const EvaluationContext* context) const;
 };
 
 // Value getter similar to `IriOrUriValueGetter`. Parses the base IRI once so
@@ -487,9 +488,8 @@ struct ParsedUriGetter : Mixin<ParsedUriGetter> {
 // calculated, when requesting the centroid).
 
 CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
-        RequestedInfo>) struct GeometryInfoValueGetter
-    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Value = std::optional<RequestedInfo>;
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(

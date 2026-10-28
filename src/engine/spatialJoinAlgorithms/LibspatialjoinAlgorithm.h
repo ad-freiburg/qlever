@@ -110,15 +110,6 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   // can be overridden via the `spatial-join-tmp-dir` runtime parameter.
   SweeperTempPath getSweeperTempPath() const;
 
-  // Add a warning to the `SpatialJoin` operation if rows of the left and/or
-  // right input were skipped because their geometry literal is invalid or
-  // unsupported (e.g. an unsupported CRS).
-  //
-  // TODO<ullingerc>: Replace by
-  // `SpatialJoinAlgorithmBase::addSkippedRowsWarning` once #3774 is merged.
-  void addInvalidGeometriesWarning(size_t numInvalidLeft,
-                                   size_t numInvalidRight) const;
-
   // Maximum area of bounding box in square coordinates for prefiltering
   // libspatialjoin input by bounding box. If exceeded, prefiltering is
   // disabled. See `parse`.

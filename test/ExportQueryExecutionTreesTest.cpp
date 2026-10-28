@@ -1470,6 +1470,15 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
                          "</literal></binding>\n  </result>", xmlTrailer));
 }
 
+// Test that a SELECT query can be exported in QLever's binary format.
+TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
+  // The format itself is tested in `engine/BinaryExportTest.cpp`.
+  auto result = runQueryStreamableResult(
+      "<s> <p> <o> .", "SELECT ?o WHERE { <s> <p> ?o }",
+      ad_utility::MediaType::binaryQleverExport);
+  EXPECT_THAT(result, HasSubstr("QLEVER.EXPORT"));
+}
+
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
