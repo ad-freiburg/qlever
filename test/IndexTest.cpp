@@ -772,12 +772,13 @@ TEST(IndexTest, processTriple) {
 // Test the words of the `ql:has-word` triples with the different
 // normalizations.
 TEST(IndexTest, processTripleHasWordNormalization) {
-  // A literal with "café" composed, decomposed, uppercased and in plural, and
-  // a function that returns its words with the given normalization.
+  // A literal with "café" composed, without accent, uppercase and decomposed,
+  // and decomposed in plural, and a function that returns its words with the
+  // given normalization.
   auto getWords = [](ad_utility::HasWordNormalization normalization) {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.addHasWordTriples() = true;
-    index.setHasWordNormalization(normalization);
+    index.setHasWordNormalizationForIndexBuilding(normalization);
     TurtleTriple turtleTriple{
         iri("<subject>"), iri("<predicate>"),
         lit("\"Café cafe, CAFE\xcc\x81! cafe\xcc\x81s\"")};
@@ -868,11 +869,13 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
   }
 }
 
-// _____________________________________________________________________________
-// The normalization of the `ql:has-word` triples is stored in the configuration
-// of the index, so that `getHasWordWords` (used by `ql:normalize`) also applies
-// it after the index has been loaded.
+// Test that the normalization of the `ql:has-word` triples is stored in the
+// configuration of the index, so that `getHasWordWords` (used by
+// `ql:normalize`) also applies it after the index has been loaded.
 TEST(IndexTest, hasWordNormalizationIsStored) {
+  // A function that builds and loads an index with the given normalization and
+  // returns the words of a string with "café" composed and decomposed in
+  // uppercase plural.
   auto getWords = [](ad_utility::HasWordNormalization normalization) {
     TestIndexConfig config{"<a> <b> \"Café\" ."};
     config.addHasWordTriples = true;
@@ -882,6 +885,9 @@ TEST(IndexTest, hasWordNormalizationIsStored) {
         .getImpl()
         .getHasWordWords("Café CAFE\xcc\x81s!");
   };
+
+  // With `Lowercase`, the accents are kept and the combining mark splits the
+  // decomposed word; with `LowercaseNoAccents`, they are removed.
   EXPECT_THAT(getWords(ad_utility::HasWordNormalization::Lowercase),
               ::testing::ElementsAre("café", "cafe", "s"));
   EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),

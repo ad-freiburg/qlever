@@ -449,7 +449,8 @@ class IndexImpl {
 
   // Set the normalization of the words of the `ql:has-word` triples; see
   // `ad_utility::HasWordNormalization` for details.
-  void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
+  void setHasWordNormalizationForIndexBuilding(
+      ad_utility::HasWordNormalization normalization) {
     hasWordNormalization_ = normalization;
   }
 

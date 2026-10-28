@@ -280,7 +280,10 @@ int main(int argc, char** argv) {
       "The normalization of the words of the `ql:has-word` triples. Literals "
       "are always split at non-alphanumeric characters and the words are "
       "lowercased; with `lowercase-no-accents`, accents are also removed (e.g. "
-      "\"Café\" becomes \"cafe\"). One of ",
+      "\"Café\" becomes \"cafe\"). Accents are all nonspacing marks, which "
+      "in some scripts (e.g. Devanagari or Thai) also include vowel signs. "
+      "Words in queries can be normalized the same way with `ql:normalize`. "
+      "One of ",
       ad_utility::HasWordNormalization::getListOfSupportedValues(),
       ", the default is `lowercase`.");
   add("has-word-normalization", po::value(&config.hasWordNormalization_),
