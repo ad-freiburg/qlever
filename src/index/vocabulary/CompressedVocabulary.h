@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressionWrappers.h"

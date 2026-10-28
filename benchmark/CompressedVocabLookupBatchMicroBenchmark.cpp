@@ -55,8 +55,13 @@ class CompressedVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
   std::vector<std::string> words_;
   // Batch of lookups in non-ascending order with duplicates.
   std::vector<size_t> batch_;
-  Vocab vocab_;
-  TempFileCleanup cleanup_;
+  // The order of the members matters: `cleanup` is declared first, so it is
+  // destroyed last and the files are removed only after `vocab` is gone.
+  struct VocabWithFiles {
+    TempFileCleanup cleanup;
+    Vocab vocab;
+  };
+  VocabWithFiles vocabWithFiles_;
 
  public:
   CompressedVocabLookupBatchMicroBenchmark() {
@@ -71,6 +76,8 @@ class CompressedVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
       for (size_t character = 0; character < 32; ++character) {
         word += alphabet[(i * 17 + character * 31) % alphabet.size()];
       }
+      // Make the words unique (`i * 17 % 42` alone has period 42).
+      word += "Q" + std::to_string(i);
       words_.push_back(std::move(word));
     }
     std::sort(words_.begin(), words_.end());
@@ -80,17 +87,19 @@ class CompressedVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
       batch_.push_back((i * 2654435761u) % words_.size());
     }
 
-    cleanup_.basename_ = (std::filesystem::temp_directory_path() /
-                          "compressedVocabLookupBatchMicro")
-                             .string();
+    vocabWithFiles_.cleanup.basename_ =
+        (std::filesystem::temp_directory_path() /
+         "compressedVocabLookupBatchMicro")
+            .string();
     {
-      auto writerPtr = vocab_.makeDiskWriterPtr(cleanup_.basename_);
+      auto writerPtr = vocabWithFiles_.vocab.makeDiskWriterPtr(
+          vocabWithFiles_.cleanup.basename_);
       for (const auto& word : words_) {
         (*writerPtr)(word, false);
       }
       writerPtr->finish();
     }
-    vocab_.open(cleanup_.basename_);
+    vocabWithFiles_.vocab.open(vocabWithFiles_.cleanup.basename_);
   }
 
   std::string name() const final {
@@ -125,7 +134,7 @@ class CompressedVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         for (size_t idx : batch_) {
-          totalBytes += vocab_[idx].size();
+          totalBytes += vocabWithFiles_.vocab[idx].size();
         }
       }
       return totalBytes;
@@ -133,7 +142,7 @@ class CompressedVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
     group.addMeasurement("lookupBatch (PMR arena)", [&] {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-        const auto result = vocab_.lookupBatch(
+        const auto result = vocabWithFiles_.vocab.lookupBatch(
             ql::span<const size_t>{batch_.data(), batch_.size()});
         for (size_t i = 0; i < result.size(); ++i) {
           totalBytes += result[i].size();
