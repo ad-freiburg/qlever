@@ -79,7 +79,8 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 // Project geometry contained in `wkt` to CRS defined in `iri` and return as
 // WKT.
-std::optional<std::string> transformAsWkt(GeoPointOrWkt wkt, std::string iri);
+std::optional<std::string> transformAsWkt(GeoPointOrWkt wkt,
+                                          const std::string& iri);
 
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
 // quotation marks nor a datatype yet.
@@ -282,13 +283,17 @@ class WktTransform {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& wkt,
-      const std::optional<Iri>& iri) const {
+      const std::optional<triple_component::Iri>& iri) const {
     using namespace triple_component;
     if (!wkt.has_value() || !iri.has_value()) {
       return ValueId::makeUndefined();
     }
 
-    auto resultWkt = detail::transformAsWkt(wkt.value(), iri.value());
+    // TODO<yarox-1> The function should rais an error if a transformation is
+    // not mathematically possible. (Currently every transformation/projection
+    // is possible)
+    auto resultWkt = detail::transformAsWkt(
+        wkt.value(), iri.value().toStringRepresentation());
 
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
