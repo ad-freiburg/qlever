@@ -85,11 +85,9 @@ constexpr uint64_t encodeDigitsAsNibbles(std::string_view digits,
 // `numBits` bits of `encoded`. The `encoded` value must be the result of such
 // a call to `encodeDigitsAsNibbles`, in particular it must fit into `numBits`
 // bits.
-CPP_template(typename F)(
-    requires ql::concepts::invocable<
-        F, uint64_t>) void forEachNibbleEncodedDigit(F processDigit,
-                                                     uint64_t encoded,
-                                                     size_t numBits) {
+CPP_template(typename F)(requires ql::concepts::invocable<F, uint64_t>)
+void forEachNibbleEncodedDigit(F processDigit, uint64_t encoded,
+                               size_t numBits) {
   AD_CORRECTNESS_CHECK(numBits >= NibbleSize && numBits <= 64);
   AD_CORRECTNESS_CHECK(encoded <= ad_utility::bitMaskForLowerBits(numBits));
   size_t shift = numBits - NibbleSize;

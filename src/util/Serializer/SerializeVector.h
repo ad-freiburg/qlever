@@ -86,9 +86,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
 // buffer. Can only be called if a `span` or `vector` of the same type was
 // written to the serializer at its current position using a serializer
 // that implements aligned serialization.
-CPP_template(typename T, typename S)(
-    requires ZeroCopyReadSerializer<S> CPP_and TriviallySerializable<T>)
-    ql::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
+CPP_template(typename T, typename S)(requires ZeroCopyReadSerializer<S> &&
+                                           TriviallySerializable<T>)
+ql::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
   std::size_t size;
   serializer >> size;
   alignSerializerForType<T>(serializer);
@@ -106,8 +106,8 @@ CPP_template(typename T, typename S)(
 /// Incrementally serialize a std::vector to disk without materializing it.
 /// Call `push` for each of the elements that will become part of the vector.
 CPP_template(typename T, typename Serializer)(
-    requires WriteSerializer<Serializer>) class VectorIncrementalSerializer
-    : public ad_utility::NoCopy {
+    requires WriteSerializer<Serializer>)
+class VectorIncrementalSerializer : public ad_utility::NoCopy {
  private:
   using SizeType = typename std::vector<T>::size_type;
   struct State {

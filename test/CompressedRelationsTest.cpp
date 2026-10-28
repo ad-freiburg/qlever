@@ -390,7 +390,11 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
         false};
   };
 
-  AD_EXPECT_NULLOPT(getMetadataFromId(V(Id::maxIndex - 1)).first);
+  // Not via `V`, because `Id::maxIndex - 1` does not fit into an `int64_t` for
+  // the split `Id`.
+  const auto almostMaxId =
+      Id::makeFromVocabIndex(VocabIndex::make(Id::maxIndex - 1));
+  AD_EXPECT_NULLOPT(getMetadataFromId(almostMaxId).first);
 
   // return a `pair<RelationMetadata, bool>` (see above), but for the `i`-th
   // relation specified by the `inputs`.
