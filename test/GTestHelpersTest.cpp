@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -17,18 +18,24 @@
 #include "util/GTestHelpers.h"
 #include "util/PmrStringSsoTestHelpers.h"
 
+// _____________________________________________________________________________
 TEST(GTestHelpersTest, CurrentTestSuiteAndTestName) {
   EXPECT_EQ(gtestCurrentTestSuiteName(), "GTestHelpersTest");
   EXPECT_EQ(gtestCurrentTestName(),
             "GTestHelpersTest_CurrentTestSuiteAndTestName");
+  // Inside a running test the flag `assertInGtestEnvironment` makes no
+  // difference, because the gtest environment is always present here.
   EXPECT_EQ(gtestCurrentTestSuiteName(false), "GTestHelpersTest");
   EXPECT_EQ(gtestCurrentTestName(false),
             "GTestHelpersTest_CurrentTestSuiteAndTestName");
 }
 
 // _____________________________________________________________________________
+// A parameterized fixture whose gtest names contain a '/'. The parameter itself
+// is irrelevant.
 class GTestHelpersParameterizedTest : public ::testing::TestWithParam<int> {};
 
+// _____________________________________________________________________________
 TEST_P(GTestHelpersParameterizedTest, SlashesAreReplaced) {
   // The raw gtest names of this instantiation contain a '/' (from the
   // `CustomInstantiation/` prefix and the parameter index), so the checks below
@@ -39,10 +46,11 @@ TEST_P(GTestHelpersParameterizedTest, SlashesAreReplaced) {
               ::testing::HasSubstr("/"));
   const std::string suiteName = gtestCurrentTestSuiteName();
   const std::string testName = gtestCurrentTestName();
-  EXPECT_THAT(suiteName, ::testing::Not(::testing::HasSubstr("/")));
-  EXPECT_THAT(testName, ::testing::Not(::testing::HasSubstr("/")));
-  EXPECT_THAT(testName,
-              ::testing::StartsWith(gtestCurrentTestSuiteName() + "_"));
+  // Each '/' is replaced by '_', not deleted: the raw names are
+  // `CustomInstantiation/GTestHelpersParameterizedTest` and
+  // `SlashesAreReplaced/0`.
+  EXPECT_EQ(suiteName, "CustomInstantiation_GTestHelpersParameterizedTest");
+  EXPECT_EQ(testName, suiteName + "_SlashesAreReplaced_0");
 }
 
 INSTANTIATE_TEST_SUITE_P(CustomInstantiation, GTestHelpersParameterizedTest,
@@ -51,8 +59,10 @@ INSTANTIATE_TEST_SUITE_P(CustomInstantiation, GTestHelpersParameterizedTest,
 // _____________________________________________________________________________
 // Return true iff `pointer` points inside the object storage of `object`. A
 // string keeps its characters inline (SSO) iff `data()` points into the string
-// object itself; this address check complements the allocation counting in
-// `SsoCapacityOfPmrString`.
+// object itself. This address check observes the actual storage location and
+// thereby independently confirms the capacity that `SsoCapacityOfPmrString`
+// derives from counting allocations. `pointer` must come from `object`; the
+// negative checks below rely on that.
 template <typename T>
 static bool pointsIntoObject(const void* pointer, const T& object) {
   const auto start = reinterpret_cast<std::uintptr_t>(&object);
@@ -73,7 +83,7 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
   // `requireSsoCapacityOfPmrStringAtLeast` with a confusing message.
   ASSERT_GT(capacity, 0u) << "This platform offers no inline string storage, "
                              "so the SSO assertions below are meaningless";
-  requireSsoCapacityOfPmrStringAtLeast(capacity);
+  EXPECT_NO_THROW(requireSsoCapacityOfPmrStringAtLeast(capacity));
   const detail::PmrSsoProbeString atCapacity(capacity, 'x');
   EXPECT_TRUE(pointsIntoObject(atCapacity.data(), atCapacity));
   const detail::PmrSsoProbeString aboveCapacity(capacity + 1, 'y');
@@ -81,7 +91,7 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
 }
 
 // _____________________________________________________________________________
-TEST(GTestHelpersTest, RequirePmrStringInlineStorageRejectsInvalidSizes) {
+TEST(GTestHelpersTest, RequireSsoCapacityRejectsInvalidArguments) {
   // `minCapacity == 0` violates the precondition, and a size above the probed
   // capacity violates the platform premise.
   AD_EXPECT_THROW_WITH_MESSAGE(requireSsoCapacityOfPmrStringAtLeast(0),
@@ -92,7 +102,7 @@ TEST(GTestHelpersTest, RequirePmrStringInlineStorageRejectsInvalidSizes) {
 }
 
 // _____________________________________________________________________________
-TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
+TEST(GTestHelpersTest, PmrStringUsesSsoUpToCapacity) {
   // Verify that empty and small strings use inline storage: the data must lie
   // inside the string object itself, not in allocator-provided memory.
   for (const size_t size : {size_t{0}, size_t{7}, size_t{15}}) {
@@ -104,10 +114,11 @@ TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
     EXPECT_TRUE(pointsIntoObject(shortString.data(), shortString));
     EXPECT_EQ(shortString.size(), size);
   }
-  // 64 characters exceed the SSO capacity of every supported STL (22 for
-  // libc++, 15 for libstdc++), so this string must live in allocator-provided
-  // memory.
-  const detail::PmrSsoProbeString longString(64, 'y');
+  // The inline storage is part of the string object, so a string with
+  // `sizeof(PmrSsoProbeString)` characters cannot fit into it and must live in
+  // allocator-provided memory.
+  const detail::PmrSsoProbeString longString(sizeof(detail::PmrSsoProbeString),
+                                             'y');
   EXPECT_FALSE(pointsIntoObject(longString.data(), longString));
 }
 
