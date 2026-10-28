@@ -2632,7 +2632,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)jcs;
   (void)leftSideTransitivePath;
-  return TransitivePathJoinCols(std::nullopt, std::nullopt);
+  return TransitivePathJoinCols{std::nullopt, std::nullopt};
 #else
   // The index in a pair of join columns from `jcs` of the transitive path side
   // and the other side.

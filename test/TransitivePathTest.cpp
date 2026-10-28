@@ -910,6 +910,120 @@ TEST_P(TransitivePathTest, bothBoundToVar) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsAdditoinalCol) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 10},
+      {2, 3, 10},
+      {1, 3, 20},
+  });
+  TransitivePathSide left(std::nullopt, 0, Variable{"?s"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?o"}, 1);
+
+  auto bindPathAndCompareResult = [&](auto& opTable, const auto& expected) {
+    runTestWithForcedSideTableScenarios(
+        [&](auto tableVariant, bool forceFullyMaterialized) {
+          auto T = makePathBoundOnBothSides(
+              sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
+              std::move(tableVariant), 0, 1,
+              {Variable{"?s"}, Variable{"?o"}, Variable{"?g"}}, left, right, 1,
+              std::numeric_limits<size_t>::max(), forceFullyMaterialized,
+              Variable{"?g"});
+
+          auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+          assertResultMatchesIdTable(resultTable, expected);
+        },
+        std::move(opTable));
+  };
+  auto expected = makeIdTableFromVector({
+      {1, 3, 10},
+      {1, 3, 20},
+  });
+
+  {
+    auto opTable = makeIdTableFromVector({
+        {1, 2, 20},
+        {1, 3, 10},
+        {1, 3, 20},
+    });
+    bindPathAndCompareResult(opTable, expected);
+  }
+  {
+    auto opTable = makeIdTableFromVector({
+        {1, 3, Id::makeUndefined()},
+    });
+    bindPathAndCompareResult(opTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsStartCol) {
+  std::string index =
+      "<g1> <p> <b> <g1> ."
+      "<g1> <p> <c> <g2> .";
+  auto sub = makeIdTableFromVector({
+      {10, 2, 10},
+      {10, 3, 20},
+  });
+  TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?o"}, 1);
+  auto expected = makeIdTableFromVector({{10, 2, 10}});
+
+  auto opTable = makeIdTableFromVector({
+      {10, 2},
+      {10, 3},
+  });
+
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBoundOnBothSides(
+            sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
+            std::move(tableVariant), 0, 1, {Variable{"?g"}, Variable{"?o"}},
+            left, right, 1, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized, Variable{"?g"}, index);
+
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      std::move(opTable));
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsTargetCol) {
+  std::string index =
+      "<a> <p> <g1> <g1> . "
+      "<g2> <q> <z> <g1> . "
+      "<a> <q> <z> <g2> .";
+
+  // Simulate different predicates with multiple sub tables.
+  auto sub = makeIdTableFromVector({
+      {1, 10, 10},
+  });
+
+  auto opTable = makeIdTableFromVector({
+      {1, 10},
+      {1, 20},
+  });
+
+  auto expected = makeIdTableFromVector({{1, 10, 10}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?x"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
+
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBoundOnBothSides(
+            sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
+            std::move(tableVariant), 0, 1, {Variable{"?x"}, Variable{"?g"}},
+            left, right, 1, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized, Variable{"?g"}, index);
+
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      std::move(opTable));
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, bothBoundToVarFlippedOrder) {
   // Test that the binding (index shifting therein) also works if the target
   // column is located before the start column in the `opTable`.
@@ -1277,6 +1391,48 @@ TEST_P(TransitivePathTest, zeroLength) {
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, zeroLengthBothSidesBound) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {2, 3},
+      {1, 4},
+  });
+  TransitivePathSide left(std::nullopt, 0, Variable{"?s"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?o"}, 1);
+
+  auto bindPathAndCompareResult = [&](auto& opTable, const auto& expected) {
+    runTestWithForcedSideTableScenarios(
+        [&](auto tableVariant, bool forceFullyMaterialized) {
+          auto T = makePathBoundOnBothSides(
+              sub.clone(), {Variable{"?i1"}, Variable{"?i2"}},
+              std::move(tableVariant), 0, 1, {Variable{"?s"}, Variable{"?o"}},
+              left, right, 0, std::numeric_limits<size_t>::max(),
+              forceFullyMaterialized);
+
+          auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+          assertResultMatchesIdTable(resultTable, expected);
+        },
+        std::move(opTable));
+  };
+
+  {
+    auto opTable = makeIdTableFromVector({
+        {1, 1},
+        {2, 1},
+    });
+    auto expected = makeIdTableFromVector({{1, 1}});
+    bindPathAndCompareResult(opTable, expected);
+  }
+  {
+    auto opTable = makeIdTableFromVector({
+        {10, 10},
+    });
+    auto expected = makeIdTableFromVector({});
+    bindPathAndCompareResult(opTable, expected);
+  }
 }
 
 // _____________________________________________________________________________
