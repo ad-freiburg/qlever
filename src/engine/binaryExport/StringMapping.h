@@ -1,14 +1,15 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2025 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+// 2025        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_STRING_MAPPING_H
-#define QLEVER_SRC_ENGINE_STRING_MAPPING_H
+#ifndef QLEVER_SRC_ENGINE_BINARYEXPORT_STRINGMAPPING_H
+#define QLEVER_SRC_ENGINE_BINARYEXPORT_STRINGMAPPING_H
 
 #include <string>
 #include <vector>
@@ -70,4 +71,4 @@ class StringMapping {
 };
 }  // namespace qlever::binary_export
 
-#endif  // QLEVER_SRC_ENGINE_STRING_MAPPING_H
+#endif  // QLEVER_SRC_ENGINE_BINARYEXPORT_STRINGMAPPING_H

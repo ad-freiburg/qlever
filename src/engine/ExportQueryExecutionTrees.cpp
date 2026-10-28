@@ -21,8 +21,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "engine/BinaryExport.h"
 #include "engine/ConstructTripleGenerator.h"
+#include "engine/binaryExport/BinaryExport.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "rdfTypes/RdfEscaping.h"
