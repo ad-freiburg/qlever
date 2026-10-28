@@ -20,7 +20,9 @@
 // `VOCAB_LOOKUP` line. `VOCAB_LOOKUP_ORDER=batch-first` measures
 // `lookupBatch` first.
 
+#include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -32,6 +34,7 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "util/Exception.h"
 
 namespace ad_benchmark {
 namespace {
@@ -76,6 +79,23 @@ VocabularyInternalExternal buildHybridVocabulary(
   vocab.open(filename);
   return vocab;
 }
+
+// Parse a positive, finite number of seconds from `VOCAB_LOOKUP_MIN_SECONDS`;
+// `defaultValue` if it is unset. A malformed or non-positive value is
+// a contract violation with a clear message.
+double parseMinSecondsFromEnvironment(double defaultValue) {
+  const char* value = std::getenv("VOCAB_LOOKUP_MIN_SECONDS");
+  if (value == nullptr) {
+    return defaultValue;
+  }
+  errno = 0;
+  char* end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  AD_CONTRACT_CHECK(end != value && *end == '\0' && errno != ERANGE &&
+                        std::isfinite(parsed) && parsed > 0,
+                    "VOCAB_LOOKUP_MIN_SECONDS must be a positive number");
+  return parsed;
+}
 }  // namespace
 
 class BMVocabBatchLookupEndToEnd : public BenchmarkInterface {
@@ -95,9 +115,7 @@ class BMVocabBatchLookupEndToEnd : public BenchmarkInterface {
     constexpr size_t numQueries = 50'000;
     // Minimum duration of one measurement: `VOCAB_LOOKUP_MIN_SECONDS`,
     // default 10 (so a measurement is never a single short sample).
-    const char* minSecondsValue = std::getenv("VOCAB_LOOKUP_MIN_SECONDS");
-    const double minSeconds =
-        minSecondsValue != nullptr ? std::stod(minSecondsValue) : 10.0;
+    const double minSeconds = parseMinSecondsFromEnvironment(10.0);
     const auto words = makeWords(numWords);
     auto vocab = buildHybridVocabulary(
         (benchmarkDir / "endtoend.hybrid").string(), words);

@@ -25,7 +25,9 @@
 // `VOCAB_LOOKUP <group> <measurement> <ns/word> <batches> <seconds>` for
 // scripts.
 
+#include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -38,6 +40,7 @@
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
+#include "util/Exception.h"
 
 namespace ad_benchmark {
 namespace {
@@ -152,10 +155,26 @@ LongMeasurement measureLong(const std::string& group,
   return result;
 }
 
+// Parse a positive, finite number of seconds from `VOCAB_LOOKUP_MIN_SECONDS`;
+// `defaultValue` if it is unset. A malformed or non-positive value is
+// a contract violation with a clear message.
+double parseMinSecondsFromEnvironment(double defaultValue) {
+  const char* value = std::getenv("VOCAB_LOOKUP_MIN_SECONDS");
+  if (value == nullptr) {
+    return defaultValue;
+  }
+  errno = 0;
+  char* end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  AD_CONTRACT_CHECK(end != value && *end == '\0' && errno != ERANGE &&
+                        std::isfinite(parsed) && parsed > 0,
+                    "VOCAB_LOOKUP_MIN_SECONDS must be a positive number");
+  return parsed;
+}
+
 // Minimum duration of one measurement: `VOCAB_LOOKUP_MIN_SECONDS`, default 10.
 double minSecondsFromEnvironment() {
-  const char* value = std::getenv("VOCAB_LOOKUP_MIN_SECONDS");
-  return value != nullptr ? std::stod(value) : 10.0;
+  return parseMinSecondsFromEnvironment(10.0);
 }
 }  // namespace
 
