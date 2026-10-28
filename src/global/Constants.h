@@ -56,11 +56,12 @@ constexpr inline ad_utility::MemorySize
 // (nearly) sequentially, the following words are read together with the
 // requested one and cached (one window per thread).
 //
-// A lookup is sequential if it is at most this many words after the previous
-// lookup of the same thread in the same vocabulary.
+// A lookup is considered to be sequential if it is at most this many words
+// after the previous lookup of the same thread in the same vocabulary.
 constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_GAP = 64;
-// The window starts with one word and doubles with every sequential lookup that
-// is not in it, up to this many words (8 bytes of offset each).
+// The window of the read-ahead starts with one word and doubles with every
+// sequential lookup that is not in it, up to this many words (8 bytes of offset
+// each).
 constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_WORDS = 4096;
 // The maximum size of the word data in a window, which bounds the memory per
 // thread.

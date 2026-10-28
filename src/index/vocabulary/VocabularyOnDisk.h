@@ -184,7 +184,8 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
 
-  // Read the offsets of the words `first, first + 1, ...` into `offsetsOut`
+  // Read the offsets of the words
+  // `first, first + 1, ..., first + offsetsOut.size() - 1` into `offsetsOut`
   // with a single read.
   void readConsecutiveOffsets(uint64_t first,
                               ql::span<Offset> offsetsOut) const;
@@ -199,7 +200,11 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   std::string readWord(uint64_t idx) const;
 
   // The read-ahead state of `operator[]` for a single thread, defined in the
-  // `.cpp` file.
+  // `.cpp` file. It is declared here as a nested class (and not just in an
+  // anonymous namespace in the `.cpp` file), because a nested class is a member
+  // of `VocabularyOnDisk` and can therefore use its private members (`id_`,
+  // `readWord`, `readConsecutiveOffsets`, `readConsecutiveWordBatch`). It is
+  // not used outside of `operator[]`.
   struct ReadAheadState;
 
   // Helper for `scanAll`: return a lazy input range that reads the word offsets
