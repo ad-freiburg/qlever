@@ -70,8 +70,9 @@ inline constexpr auto pickFirstThreeColumnsOfIdsWithoutLocalVocab =
 // `Function` to each batch. For the last batch (which might be smaller)  the
 // function is applied in the destructor.
 CPP_template(typename T, typename Function)(
-    requires ad_utility::InvocableWithExactReturnType<
-        Function, void, std::vector<T>&&>) struct Batcher {
+    requires ad_utility::InvocableWithExactReturnType<Function, void,
+                                                      std::vector<T> &&>)
+struct Batcher {
   Function function_;
   size_t blocksize_;
   std::vector<T> vec_;
@@ -186,7 +187,13 @@ class DistinctIdCounter {
     if (column.empty()) {
       return;
     }
-    DistinctIdCountOfBlock countOfBlock = countDistinctIds(column);
+    addCountOfBlock(countDistinctIds(column));
+  }
+
+  // Like `addBlock`, but for a block whose `DistinctIdCountOfBlock` has
+  // already been computed (e.g. concurrently, see
+  // `CompressedRelationWriter::addCompleteLargeRelation`).
+  void addCountOfBlock(const DistinctIdCountOfBlock& countOfBlock) {
     count_ += countOfBlock.count_;
     if (lastBitsOfPreviousBlock_ ==
         bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {

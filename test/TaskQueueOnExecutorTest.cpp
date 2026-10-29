@@ -21,6 +21,7 @@
 #include <thread>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/jthread.h"
 
@@ -70,16 +71,6 @@ bool becomesReady(const std::future<T>& future) {
   return future.wait_for(timeout) == std::future_status::ready;
 }
 
-// Block until the `predicate` is true, but at most for the `timeout`. Return
-// the final value of the `predicate`.
-template <typename Predicate>
-bool waitUntil(const Predicate& predicate) {
-  auto deadline = std::chrono::steady_clock::now() + timeout;
-  while (!predicate() && std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(1ms);
-  }
-  return predicate();
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -148,9 +139,9 @@ TEST(TaskQueueOnExecutor, inFlightBoundIsRespected) {
     latch.wait();
   });
   queue.push([&numStartedTasks]() { ++numStartedTasks; });
-  ASSERT_TRUE(waitUntil([&numStartedTasks]() {
-    return numStartedTasks.load() == 1u;
-  })) << "The first task was not started by the pool";
+  ASSERT_TRUE(waitUntil(
+      [&numStartedTasks]() { return numStartedTasks.load() == 1u; }, timeout))
+      << "The first task was not started by the pool";
 
   // The third `push` has to block, because two tasks are already in flight.
   std::atomic<bool> thirdPushHasReturned = false;
@@ -186,6 +177,38 @@ TEST(TaskQueueOnExecutor, submitPropagatesValuesAndExceptions) {
   EXPECT_NO_THROW(voidFuture.get());
   ASSERT_TRUE(becomesReady(throwingFuture));
   EXPECT_THROW(throwingFuture.get(), std::runtime_error);
+  queue.finish();
+}
+
+// Test that a task pushed with `pushAsync` keeps its slot in the queue until
+// it calls its `done` callback, also after it has returned.
+TEST(TaskQueueOnExecutor, pushAsyncKeepsTheTaskInFlightUntilDone) {
+  net::thread_pool pool{2};
+  TaskQueueOnExecutor queue{pool.get_executor(), 1, "pushAsync"};
+
+  // The task returns right away, but hands its `done` callback out instead of
+  // calling it.
+  std::promise<TaskQueueOnExecutor::Done> donePromise;
+  auto doneFuture = donePromise.get_future();
+  queue.pushAsync([&donePromise](TaskQueueOnExecutor::Done done) {
+    donePromise.set_value(std::move(done));
+  });
+  ASSERT_TRUE(becomesReady(doneFuture));
+  auto done = doneFuture.get();
+
+  // The task is still in flight, so the next push (the bound is one) blocks.
+  std::atomic<bool> secondPushHasReturned = false;
+  ad_utility::JThread pusher{[&queue, &secondPushHasReturned]() {
+    queue.push([]() {});
+    secondPushHasReturned = true;
+  }};
+  std::this_thread::sleep_for(shortTimeout);
+  EXPECT_FALSE(secondPushHasReturned.load());
+
+  // Calling `done` (from another thread) releases the slot.
+  std::move(done)();
+  pusher.join();
+  EXPECT_TRUE(secondPushHasReturned.load());
   queue.finish();
 }
 
@@ -355,11 +378,13 @@ TEST(TaskQueueOnExecutor, aPushThatIsBlockedWhenFinishStartsIsRejected) {
   std::this_thread::sleep_for(shortTimeout);
   EXPECT_FALSE(pushHasReturned.load());
   ad_utility::JThread finisher{[&queue]() { queue.finish(); }};
-  // The finisher has now started finishing and waits for the first task.
-  std::this_thread::sleep_for(shortTimeout);
-  latch.release();
+  // `finish()` wakes up the blocked push, which then reports the violation
+  // right away. The slot is still taken, so the push cannot have enqueued its
+  // task, no matter when the two threads actually started. If the push were
+  // not woken up, this `join` would block forever.
   pusher.join();
-  finisher.join();
   EXPECT_TRUE(pushHasThrown.load());
+  latch.release();
+  finisher.join();
   queue.waitUntilFinished();
 }

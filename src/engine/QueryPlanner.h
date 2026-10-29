@@ -13,6 +13,8 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <vector>
 
@@ -23,6 +25,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
+#include "util/ContainersWithAllocator.h"
 
 class QueryPlanner {
   using TextLimitMap =
@@ -30,8 +33,6 @@ class QueryPlanner {
   using TextLimitVec =
       std::vector<std::pair<Variable, parsedQuery::TextLimitMetaObject>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-  template <typename T>
-  using vector = std::vector<T>;
 
   ParsedQuery::DatasetClauses activeDatasetClauses_;
   // The variable of the innermost `GRAPH ?var` clause that the planner
@@ -60,13 +61,13 @@ class QueryPlanner {
 
   class TripleGraph {
    public:
-    TripleGraph();
+    explicit TripleGraph(qlever::Allocator<size_t> allocator);
 
     TripleGraph(const TripleGraph& other);
 
     TripleGraph& operator=(const TripleGraph& other);
 
-    TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
+    TripleGraph(const TripleGraph& other, qlm::vector<size_t> keepNodes);
 
     struct Node {
       Node(size_t id, SparqlTriple t,
@@ -121,28 +122,31 @@ class QueryPlanner {
     };
 
     // Allows for manually building triple graphs for testing
-    explicit TripleGraph(
-        const std::vector<std::pair<Node, std::vector<size_t>>>& init);
+    TripleGraph(const std::vector<std::pair<Node, std::vector<size_t>>>& init,
+                qlever::Allocator<size_t> allocator);
 
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;
     std::string asString() const;
 
-    vector<vector<size_t>> _adjLists;
+    qlm::vector<qlm::vector<size_t>> _adjLists;
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    vector<size_t> bfsLeaveOut(size_t startNode,
-                               ad_utility::HashSet<size_t> leaveOut) const;
+    qlm::vector<size_t> bfsLeaveOut(size_t startNode,
+                                    ad_utility::HashSet<size_t> leaveOut) const;
 
    private:
-    vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
-        const vector<SparqlFilter>& origFilters,
-        ad_utility::HashMap<std::string, vector<size_t>>& contextVarTotextNodes)
-        const;
+    FRIEND_TEST(QueryPlanner, splitAtContextVars);
 
-    vector<SparqlFilter> pickFilters(const vector<SparqlFilter>& origFilters,
-                                     const vector<size_t>& nodes) const;
+    qlm::vector<std::pair<TripleGraph, qlm::vector<SparqlFilter>>>
+    splitAtContextVars(const qlm::vector<SparqlFilter>& origFilters,
+                       ad_utility::HashMap<std::string, qlm::vector<size_t>>&
+                           contextVarTotextNodes) const;
+
+    qlm::vector<SparqlFilter> pickFilters(
+        const qlm::vector<SparqlFilter>& origFilters,
+        const qlm::vector<size_t>& nodes) const;
   };
 
   class SubtreePlan {
@@ -155,8 +159,8 @@ class QueryPlanner {
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
                 std::shared_ptr<Operation> operation)
-        : _qet{std::make_shared<QueryExecutionTree>(qec,
-                                                    std::move(operation))} {}
+        : _qet{qec->makeShared<QueryExecutionTree>(qec, std::move(operation))} {
+    }
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<Result> _cachedResult;
@@ -171,6 +175,9 @@ class QueryPlanner {
 
     size_t getSizeEstimate() const;
   };
+
+  using SubtreePlanVec = qlm::vector<SubtreePlan>;
+  using SubtreePlanMatrix = qlm::vector<SubtreePlanVec>;
 
   // This struct represents a single SPARQL FILTER. Additionally, it has the
   // option to also store a subtree plan, which is semantically equivalent to
@@ -221,7 +228,7 @@ class QueryPlanner {
     // `result[i]` will be the index of the connected component of `nodes[i]`.
     // The connected components will be contiguous and start at 0.
     static std::vector<size_t> computeConnectedComponents(
-        const std::vector<SubtreePlan>& nodes,
+        const SubtreePlanVec& nodes,
         const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes) {
       QueryGraph graph;
       graph.setupGraph(nodes, filtersAndOptionalSubstitutes);
@@ -232,7 +239,7 @@ class QueryPlanner {
     // The actual implementation of `setupGraph`. First build a
     // graph from the `leafOperations` and then run DFS and return the result.
     void setupGraph(
-        const std::vector<SubtreePlan>& leafOperations,
+        const SubtreePlanVec& leafOperations,
         const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes);
 
     // Run a single DFS startint at the `startNode`. All nodes that are
@@ -269,14 +276,19 @@ class QueryPlanner {
   // result. This is relevant for subqueries, which are currently optimized
   // independently of the rest of the query, but where it depends on the rest
   // of the query, which ordering of the result is best.
-  std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq,
-                                                bool isSubquery = false);
+  SubtreePlanVec createExecutionTrees(ParsedQuery& pq, bool isSubquery = false);
 
  protected:
   QueryExecutionContext* getQec() const { return _qec; }
 
  private:
   QueryExecutionContext* _qec;
+
+  auto allocator() const { return _qec->getAllocator(); }
+
+  SubtreePlanVec singlePlanVec(SubtreePlan plan) const {
+    return SubtreePlanVec{{std::move(plan)}, allocator()};
+  }
 
   // Used to count the number of unique variables created using
   // generateUniqueVarName
@@ -301,8 +313,7 @@ class QueryPlanner {
   // and the functions that call it are `const`.
   mutable size_t numCandidatePlans_ = 0;
 
-  std::vector<QueryPlanner::SubtreePlan> optimize(
-      ParsedQuery::GraphPattern* rootPattern);
+  SubtreePlanVec optimize(ParsedQuery::GraphPattern* rootPattern);
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
@@ -334,14 +345,13 @@ class QueryPlanner {
    * node in the triple graph (e.g. IndexScans).
    */
   struct PlansAndFilters {
-    std::vector<SubtreePlan> plans_;
+    SubtreePlanVec plans_;
     std::vector<SparqlFilter> filters_;
   };
 
-  PlansAndFilters seedWithScansAndText(
-      const TripleGraph& tg,
-      const vector<vector<QueryPlanner::SubtreePlan>>& children,
-      TextLimitMap& textLimits);
+  PlansAndFilters seedWithScansAndText(const TripleGraph& tg,
+                                       const SubtreePlanMatrix& children,
+                                       TextLimitMap& textLimits);
 
   // Function for optimization query rewrites: The function returns pairs of
   // filters with the corresponding substitute subtree plan. This is currently
@@ -407,33 +417,34 @@ class QueryPlanner {
    * @return A new row for the dp table that contains plans created by joining
    * the result of a plan in a and a plan in b.
    */
-  vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
-                            const vector<SubtreePlan>& b,
-                            const TripleGraph& tg) const;
+  SubtreePlanVec merge(const SubtreePlanVec& a, const SubtreePlanVec& b,
+                       const TripleGraph& tg) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // computed automatically.
-  std::vector<SubtreePlan> createJoinCandidates(
+  SubtreePlanVec createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
       boost::optional<const TripleGraph&> tg) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // configured by `jcs`.
-  std::vector<SubtreePlan> createJoinCandidates(const SubtreePlan& a,
-                                                const SubtreePlan& b,
-                                                const JoinColumns& jcs) const;
+  SubtreePlanVec createJoinCandidates(const SubtreePlan& a,
+                                      const SubtreePlan& b,
+                                      const JoinColumns& jcs) const;
 
   // Same as `createJoinCandidates(SubtreePlan, SubtreePlan, JoinColumns)`, but
   // creates a cartesian product when `jcs` is empty.
-  std::vector<SubtreePlan> createJoinCandidatesAllowEmpty(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+  SubtreePlanVec createJoinCandidatesAllowEmpty(const SubtreePlan& a,
+                                                const SubtreePlan& b,
+                                                const JoinColumns& jcs) const;
 
   // Whenever a join is applied to a `Union`, add candidates that try applying
   // join to the children of the union directly, which can be more efficient if
   // one of the children has an optimized join, which can happen for
   // `TransitivePath` for example.
-  std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+  SubtreePlanVec applyJoinDistributivelyToUnion(const SubtreePlan& a,
+                                                const SubtreePlan& b,
+                                                const JoinColumns& jcs) const;
 
   // Return a pair of join columns (the first from the transitive path
   // operation, the second from the other operation with which the result of the
@@ -486,42 +497,38 @@ class QueryPlanner {
   // added in round 1 of the dynamic programming algorithm. For the greedy
   // algorithm, the `prepareReplacementPlansForGreedyPlanner` helper handles the
   // necessary steps.
-  using ReplacementPlans = std::vector<std::vector<SubtreePlan>>;
+  using ReplacementPlans = SubtreePlanMatrix;
   ReplacementPlans createMaterializedViewJoinReplacements(
       const parsedQuery::BasicGraphPattern& triples) const;
 
-  vector<SubtreePlan> getOrderByRow(
-      const ParsedQuery& pq,
-      const std::vector<std::vector<SubtreePlan>>& dpTab) const;
+  SubtreePlanVec getOrderByRow(const ParsedQuery& pq,
+                               const SubtreePlanMatrix& dpTab) const;
 
-  vector<SubtreePlan> getGroupByRow(
-      const ParsedQuery& pq,
-      const std::vector<std::vector<SubtreePlan>>& dpTab) const;
+  SubtreePlanVec getGroupByRow(const ParsedQuery& pq,
+                               const SubtreePlanMatrix& dpTab) const;
 
-  vector<SubtreePlan> getDistinctRow(
-      const parsedQuery::SelectClause& selectClause,
-      const vector<vector<SubtreePlan>>& dpTab) const;
+  SubtreePlanVec getDistinctRow(const parsedQuery::SelectClause& selectClause,
+                                const SubtreePlanMatrix& dpTab) const;
 
-  vector<SubtreePlan> getPatternTrickRow(
-      const parsedQuery::SelectClause& selectClause,
-      const vector<vector<SubtreePlan>>& dpTab,
+  SubtreePlanVec getPatternTrickRow(
+      const std::vector<Alias>& aliases, const SubtreePlanMatrix& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
-  vector<SubtreePlan> getHavingRow(
-      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+  SubtreePlanVec getHavingRow(const ParsedQuery& pq,
+                              const SubtreePlanMatrix& dpTab) const;
 
   // Apply the passed `VALUES` clause to the current plans.
-  std::vector<SubtreePlan> applyPostQueryValues(
-      const parsedQuery::Values& values,
-      const std::vector<SubtreePlan>& currentPlans) const;
+  SubtreePlanVec applyPostQueryValues(const parsedQuery::Values& values,
+                                      const SubtreePlanVec& currentPlans) const;
 
   JoinColumns connected(const SubtreePlan& a, const SubtreePlan& b,
                         boost::optional<const TripleGraph&> tg) const;
 
   static JoinColumns getJoinColumns(const SubtreePlan& a, const SubtreePlan& b);
 
-  std::string getPruningKey(const SubtreePlan& plan,
-                            const vector<ColumnIndex>& orderedOnColumns) const;
+  std::string getPruningKey(
+      const SubtreePlan& plan,
+      const std::vector<ColumnIndex>& orderedOnColumns) const;
 
   // Configure the behavior of the `applyFiltersIfPossible` function below.
   enum class FilterMode {
@@ -550,14 +557,13 @@ class QueryPlanner {
   };
   template <FilterMode mode = FilterMode::KeepUnfiltered>
   void applyFiltersIfPossible(
-      std::vector<SubtreePlan>& row,
-      const FiltersAndOptionalSubstitutes& filters) const;
+      SubtreePlanVec& row, const FiltersAndOptionalSubstitutes& filters) const;
 
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
   // 1) There is no text operation for the text record column left.
   // 2) The text limit has not already been applied to the plan.
-  void applyTextLimitsIfPossible(std::vector<SubtreePlan>& row,
+  void applyTextLimitsIfPossible(SubtreePlanVec& row,
                                  const TextLimitVec& textLimits,
                                  bool replaceInsteadOfAddPlans) const;
 
@@ -618,17 +624,17 @@ class QueryPlanner {
    * Cycles have to be avoided (by previously removing a triple and using
    * it as a filter later on).
    */
-  vector<vector<SubtreePlan>> fillDpTab(
-      const TripleGraph& graph, std::vector<SparqlFilter> fs,
-      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
-      ReplacementPlans replacementPlans);
+  SubtreePlanMatrix fillDpTab(const TripleGraph& graph,
+                              std::vector<SparqlFilter> fs,
+                              TextLimitMap& textLimits,
+                              const SubtreePlanMatrix& children,
+                              ReplacementPlans replacementPlans);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
   // are not in fact connected (via their variables).
-  std::vector<QueryPlanner::SubtreePlan>
-  runDynamicProgrammingOnConnectedComponent(
-      std::vector<SubtreePlan> connectedComponent,
+  SubtreePlanVec runDynamicProgrammingOnConnectedComponent(
+      SubtreePlanVec connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
       ReplacementPlans&& replacementPlans) const;
@@ -636,8 +642,8 @@ class QueryPlanner {
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
   // join operations using the "Greedy Operator Ordering (GOO)" algorithm.
-  std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
-      std::vector<SubtreePlan> connectedComponent,
+  SubtreePlanVec runGreedyPlanningOnConnectedComponent(
+      SubtreePlanVec connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
       ReplacementPlans&& replacementPlans) const;
@@ -673,20 +679,28 @@ class QueryPlanner {
     ParsedQuery::GraphPattern* rootPattern_;
     QueryExecutionContext* qec_;
 
+    auto allocator() const { return qec_->getAllocator(); }
+
+    SubtreePlanVec singlePlanVec(SubtreePlan plan) const {
+      return SubtreePlanVec{{std::move(plan)}, allocator()};
+    }
+
     // Used to store the set of candidate plans for the already processed parts
     // of the graph pattern. Each row stores different plans for the same graph
     // pattern, and plans from different rows can be joined in an arbitrary
     // order.
-    std::vector<std::vector<SubtreePlan>> candidatePlans_{};
+    SubtreePlanMatrix candidatePlans_;
 
     // Triples from BasicGraphPatterns that can be joined arbitrarily
     // with each other and with the contents of  `candidatePlans_`
     parsedQuery::BasicGraphPattern candidateTriples_{};
 
-    // The variables that have been bound by the children of the `rootPattern_`
-    // which we have dealt with so far.
-    // TODO<joka921> verify that we get no false positives with plans that
-    // create no single binding for a variable "by accident".
+    // The variables that have been used by the children of the `rootPattern_`
+    // which we have dealt with so far. They must not be the target of a later
+    // BIND.
+    //
+    // NOTE: This includes the variables of MINUS clauses, which are not part
+    // of the result, see `getVariablesOfPreviousPatterns` for those.
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // The filters of the `rootPattern_`, wrapped for `applyFiltersIfPossible`.
@@ -702,6 +716,7 @@ class QueryPlanner {
         : planner_{planner},
           rootPattern_{rootPattern},
           qec_{planner._qec},
+          candidatePlans_{allocator()},
           filtersAndSubst_{
               wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
@@ -729,20 +744,35 @@ class QueryPlanner {
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
 
+    // Return the variables of the results of the children of the
+    // `rootPattern_` which we have dealt with so far. Such a variable might be
+    // undefined in all rows of the result, which is fine, as only the absence
+    // of shared variables leads to a special case.
+    ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
+
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    // For the meaning of `isGraphVariableInScopeOnBothSidesOfMinus` see
+    // `visitGroupOptionalOrMinus`.
     template <typename Variables>
-    bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
-                                          const Variables& variables);
+    bool handleUnconnectedMinusOrOptional(
+        SubtreePlanVec& candidates, const Variables& variables,
+        bool isGraphVariableInScopeOnBothSidesOfMinus);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
     // braces. This leads to all of those clauses currently being an
     // optimization border (The braces are planned individually).
     // The distinction between "normal" groups, OPTIONALs and MINUS clauses
-    // is made via the type member of the `SubtreePlan`s.
-    void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
+    // is made via the type member of the `SubtreePlan`s. For a MINUS clause
+    // inside a `GRAPH ?g {...}` clause,
+    // `isGraphVariableInScopeOnBothSidesOfMinus` has to be true iff `?g` is in
+    // scope in the MINUS clause and in the patterns before it. For all other
+    // clauses it is ignored.
+    void visitGroupOptionalOrMinus(
+        SubtreePlanVec&& candidates,
+        bool isGraphVariableInScopeOnBothSidesOfMinus = false);
 
     // Helper function for `graphPatternOperationVisitor`. For a
     // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in
@@ -750,7 +780,7 @@ class QueryPlanner {
     // `graphVar`, cross-join it with all graphs that could possibly match (see
     // `DistinctGraphs::makeAllGraphs`).
     void bindGraphVariableIfUnbound(const Variable& graphVar,
-                                    std::vector<SubtreePlan>& candidates);
+                                    SubtreePlanVec& candidates);
 
     // This function finds a set of candidates that unite all the different
     // `candidatePlans_` and `candidateTriples_`. It then replaces the contents
@@ -776,13 +806,10 @@ class QueryPlanner {
    * sorting by the cache key when comparing equally cheap indices, else the
    * first element that has the minimum index is returned.
    */
-  size_t findCheapestExecutionTree(
-      const std::vector<SubtreePlan>& lastRow) const;
-  static size_t findSmallestExecutionTree(
-      const std::vector<SubtreePlan>& lastRow);
-  static size_t findUniqueNodeIds(
-      const std::vector<SubtreePlan>& connectedComponent,
-      bool allowReplacementPlans = false);
+  size_t findCheapestExecutionTree(const SubtreePlanVec& lastRow) const;
+  static size_t findSmallestExecutionTree(const SubtreePlanVec& lastRow);
+  static size_t findUniqueNodeIds(const SubtreePlanVec& connectedComponent,
+                                  bool allowReplacementPlans = false);
 
   // Helper for `fillDpTab` that extracts a subset of possible
   // `ReplacementPlans` that is applicable to a connected component given by the
@@ -800,6 +827,8 @@ class QueryPlanner {
   static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
       ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
       bool useGreedyPlanning);
+  FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
+              findApplicableReplacementPlansGreedyOverlap);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples
@@ -810,11 +839,7 @@ class QueryPlanner {
   // must be disjunctive.
   static void prepareReplacementPlansForGreedyPlanner(
       ReplacementPlans& applicableReplacementPlans,
-      std::vector<SubtreePlan>& connectedComponent);
-
-  /// if this Planner is not associated with a queryExecutionContext we are only
-  /// in the unit test mode
-  bool isInTestMode() const { return _qec == nullptr; }
+      SubtreePlanVec& connectedComponent);
 
   /// Helper function to check if the assigned `cancellationHandle_` has
   /// been cancelled yet and throw an exception if this is the case.

@@ -32,12 +32,12 @@
 #include "../util/AsyncTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/ParallelBlockMergeTestHelpers.h"
-#include "./InMemoryBlockStorage.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/SourceLocation.h"
+#include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/parallelBlockMerge/ParallelMergeRange.h"
 
@@ -1436,7 +1436,7 @@ ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
       },
       options);
   SizeVec result;
-  while (auto block = co_await sink->asyncGetNextBlock(net::use_awaitable)) {
+  while (auto block = co_await asyncGetNextBlock(*sink)) {
     result.insert(result.end(), block->begin(), block->end());
   }
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -1449,13 +1449,16 @@ namespace {
 struct DummyMergeState {
   using Block = SizeVec;
   void stop() {}
-  std::future<void> asyncWaitForCompletion() { return {}; }
+  template <typename Token>
+  std::future<void> asyncWaitForCompletion([[maybe_unused]] Token&& token) {
+    return {};
+  }
 };
 struct DummySink {
   template <typename Token>
   auto asyncGetNextBlock(Token&& token) {
-    return net::async_initiate<Token, void(std::exception_ptr,
-                                           std::optional<SizeVec>)>(
+    return net::async_initiate<
+        Token, void(std::exception_ptr, std::optional<DeferredBlock<SizeVec>>)>(
         []([[maybe_unused]] auto handler) {}, token);
   }
   template <typename Token>

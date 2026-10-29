@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -18,6 +19,7 @@
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/SpatialJoinParser.h"
+#include "index/LocalVocab.h"
 #include "rdfTypes/GeometryInfo.h"
 
 // _____________________________________________________________________________
@@ -143,6 +145,61 @@ TEST(SpatialJoinParser, DestroyWithoutDone) {
     }
     // The parser goes out of scope here without `done()`.
   }
+}
+
+// Test that invalid WKT literals from the index and from the local vocabulary
+// are skipped by the strict parsing and counted by `getNumInvalid`.
+TEST(SpatialJoinParser, InvalidWktIsSkipped) {
+  auto lit = [](std::string_view wkt) {
+    return absl::StrCat("\"", wkt, "\"^^<", GEO_WKT_LITERAL, ">");
+  };
+  // Literals from the index (`VocabIndex`). Not points, as they would be
+  // folded into `GeoPoint` IDs.
+  std::vector<std::string> indexWkts{"LINESTRING(1 1, 3 3)",
+                                     "LINESTRING(1 1, 3 3, 4 a)"};
+  std::string kg;
+  for (const auto& wkt : indexWkts) {
+    absl::StrAppend(&kg, "<s> <p> ", lit(wkt), " .\n");
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  SweeperResult results;
+  SweeperDistResult resultDists;
+  auto cfg =
+      makeSweeperCfg(LibSpatialJoinConfig{SpatialJoinType::Enum::INTERSECTS},
+                     results, resultDists, -1);
+  std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
+  sj::Sweeper sweeper{cfg, ".", sweeperPath};
+  WKTParser parser{&sweeper, 2, false, std::nullopt, qec->getIndex()};
+
+  size_t row = 0;
+  for (const auto& wkt : indexWkts) {
+    auto id = getId(lit(wkt));
+    ASSERT_EQ(id.getDatatype(), Datatype::VocabIndex);
+    parser.addValueIdToQueue(id, row++, false, std::nullopt);
+  }
+  // Literals from the query (`LocalVocabIndex`): The first two are valid
+  // (exponent notation and a leading `+` are allowed in the strict mode). The
+  // last one has an unsupported CRS.
+  LocalVocab localVocab;
+  for (auto wkt : {"POINT(1 2)", "POINT(1e1 +2)", "POINT(1 2, 3 4)",
+                   "LINESTRING(1 1, 3 3, 4 a)", "not wkt",
+                   "<http://example.com/crs> POINT(1 2)"}) {
+    auto idx = localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::fromStringRepresentation(lit(wkt),
+                                                  qec->getLocalVocabContext()));
+    parser.addValueIdToQueue(Id::makeFromLocalVocabIndex(idx), row++, false,
+                             std::nullopt);
+  }
+  parser.done();
+
+  EXPECT_EQ(parser.getParseCounter(), 8);
+  EXPECT_EQ(parser.getNumInvalid(), 5);
+  EXPECT_EQ(sweeper.numElements(), 3);
+
+  // See `AddValueIdToQueue` above.
+  sweeper.flush();
 }
 
 // _____________________________________________________________________________

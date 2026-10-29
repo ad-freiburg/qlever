@@ -16,6 +16,7 @@
 #include <boost/asio/post.hpp>
 #include <condition_variable>
 #include <cstddef>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <string>
@@ -74,6 +75,12 @@ namespace ad_utility {
 class TaskQueueOnExecutor {
  public:
   using Task = absl::AnyInvocable<void()>;
+  // The callback that an asynchronous task (see `pushAsync`) has to call
+  // exactly once when it has completed.
+  using Done = absl::AnyInvocable<void() &&>;
+  // An asynchronous task (see `pushAsync`), which is invoked with the `Done`
+  // callback and keeps its slot in the queue until it has called it.
+  using AsyncTask = absl::AnyInvocable<void(Done)>;
 
  private:
   ql::any_io_executor executor_;
@@ -107,7 +114,7 @@ class TaskQueueOnExecutor {
   // average the executor is at least as fast as the "pusher", but the pusher
   // is faster sometimes (which the queue can then accommodate).
   TaskQueueOnExecutor(ql::any_io_executor executor, size_t maxNumTasksInFlight,
-                      std::string name = "")
+                      const std::string& name = "")
       : executor_{std::move(executor)},
         maxNumTasksInFlight_{maxNumTasksInFlight},
         errorMessage_{
@@ -126,16 +133,42 @@ class TaskQueueOnExecutor {
   // instead be propagated to the pushing thread. The *scheduling* of the task
   // also terminates if it throws, see below.
   void push(Task task) {
-    std::unique_lock lock{mutex_};
-    cv_.wait(lock, [this]() {
-      return startedFinishing_ || numTasksInFlight_ < maxNumTasksInFlight_;
+    pushAsync([task = std::move(task)](Done done) mutable {
+      task();
+      std::invoke(std::move(done));
     });
-    // NOTE: This is checked after the wait and not before it, because another
-    // thread may call `finish()` while this push waits for a free slot. A task
-    // that is enqueued afterwards would not be waited for by that `finish()`.
-    AD_CONTRACT_CHECK(!startedFinishing_);
-    ++numTasksInFlight_;
-    lock.unlock();
+  }
+
+  // Add an asynchronous task to the queue. This is like `push`, but the task
+  // is invoked with a `done` callback, and it stays in flight until it calls
+  // that callback (exactly once, from any thread), not only until it returns.
+  //
+  // This lets a task start an asynchronous operation (for example a
+  // `boost::asio::post` or an operation on another queue) and return
+  // immediately, so that it does not occupy a thread of the executor while
+  // waiting for the completion of that operation. The properties of the queue
+  // are nevertheless kept: the slot of the task counts against
+  // `maxNumTasksInFlight()` until `done` is called, so `pushAsync` blocks the
+  // pusher just like `push` does, and at most `maxNumTasksInFlight()` tasks
+  // (including those that have returned but not called `done` yet) are in
+  // flight at any time. Everything else (the termination if the task throws or
+  // cannot be scheduled) is as for `push`.
+  //
+  // IMPORTANT: A task that never calls `done` keeps its slot forever, so
+  // `finish()` and the destructor then never return.
+  void pushAsync(AsyncTask task) {
+    {
+      std::unique_lock lock{mutex_};
+      cv_.wait(lock, [this]() {
+        return startedFinishing_ || numTasksInFlight_ < maxNumTasksInFlight_;
+      });
+      // NOTE: This is checked after the wait and not before it, because
+      // another thread may call `finish()` while this push waits for a free
+      // slot. A task that is enqueued afterwards would not be waited for by
+      // that `finish()`.
+      AD_CONTRACT_CHECK(!startedFinishing_);
+      ++numTasksInFlight_;
+    }
     // NOTE: The only way in which `boost::asio::post` can fail is that the
     // executor runs out of resources while scheduling the task (in practice,
     // one of the allocations for the queued operation throws `std::bad_alloc`;
@@ -145,11 +178,12 @@ class TaskQueueOnExecutor {
     // occupied by a task that will never be run.
     ad_utility::terminateIfThrows(
         [this, &task]() {
-          boost::asio::post(executor_, [this,
-                                        task = std::move(task)]() mutable {
-            ad_utility::terminateIfThrows([&task]() { task(); }, errorMessage_);
-            taskIsDone();
-          });
+          boost::asio::post(
+              executor_, [this, task = std::move(task)]() mutable {
+                ad_utility::terminateIfThrows(
+                    [this, &task]() { task(Done{[this]() { taskIsDone(); }}); },
+                    errorMessage_);
+              });
         },
         errorMessage_);
   }

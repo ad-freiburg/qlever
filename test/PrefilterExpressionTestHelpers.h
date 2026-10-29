@@ -98,6 +98,8 @@ constexpr inline auto isNum = isDtypeExpr<IsNumericExpression>;
 constexpr inline auto isBlank = isDtypeExpr<IsBlankExpression>;
 // IS ENCODED IRI
 constexpr inline auto isEncodedIri = isDtypeExpr<IsEncodedIriExpression>;
+// IS GEO POINT
+constexpr inline auto isGeoPoint = isDtypeExpr<IsGeoPointExpression>;
 // AND (`&&`)
 constexpr inline auto andExpr = logExpr<AndExpression>;
 // OR (`||`)
@@ -241,6 +243,8 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     return makeIsLiteralExpression(std::move(childExpr));
   } else if constexpr (Datatype == NUMERIC) {
     return makeIsNumericExpression(std::move(childExpr));
+  } else if constexpr (Datatype == GEO_POINT) {
+    return makeIsGeoPointExpression(std::move(childExpr));
   } else {
     static_assert(Datatype == BLANK);
     return makeIsBlankExpression(std::move(childExpr));
@@ -251,8 +255,8 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
 //______________________________________________________________________________
 CPP_template(typename... Args)(
     requires(ql::concepts::convertible_to<Args, VariantArgs>&&...))
-    std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
-                                                  Args&&... argList) {
+std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
+                                              Args&&... argList) {
   std::vector<std::unique_ptr<SparqlExpression>> childrenSparql;
   childrenSparql.reserve(sizeof...(argList));
   (childrenSparql.push_back(
@@ -309,6 +313,9 @@ constexpr inline auto isNumericSprql = &makeIsDatatypeStartsWithExpression<
 // Create SparqlExpression `isBlank`
 constexpr inline auto isBlankSprql = &makeIsDatatypeStartsWithExpression<
     prefilterExpressions::IsDatatype::BLANK>;
+// Create SparqlExpression `ql:isGeoPoint`
+constexpr inline auto isGeoPointSprql = &makeIsDatatypeStartsWithExpression<
+    prefilterExpressions::IsDatatype::GEO_POINT>;
 // Create SparqlExpression `YEAR`.
 constexpr inline auto yearSprqlExpr = &makeYearSparqlExpression;
 

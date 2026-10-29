@@ -52,18 +52,18 @@ bool BasicLiteral<isOwning>::hasDatatype() const {
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteral<isOwning>::getContent() const {
+std::string_view BasicLiteral<isOwning>::getContent() const {
   return content().substr(1, beginOfSuffix() - 2);
 }
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteral<isOwning>::getDatatype() const {
+std::string_view BasicLiteral<isOwning>::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
   // We don't return the enclosing <angle brackets>
-  NormalizedStringView result = content();
+  std::string_view result = content();
   result.remove_prefix(beginOfSuffix() + 3);
   result.remove_suffix(1);
   return result;
@@ -71,7 +71,7 @@ NormalizedStringView BasicLiteral<isOwning>::getDatatype() const {
 
 // __________________________________________
 template <bool isOwning>
-NormalizedStringView BasicLiteral<isOwning>::getLanguageTag() const {
+std::string_view BasicLiteral<isOwning>::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
@@ -91,8 +91,7 @@ BasicLiteral<isOwning> BasicLiteral<isOwning>::fromStringRepresentation(
   // Remove redundant `XSD_STRING` datatype. If vocabularies normalize strings
   // like this in the future, this could get replaced by an assertion if all the
   // other callers are updated accordingly.
-  if (literal.hasDatatype() &&
-      asStringViewUnsafe(literal.getDatatype()) == XSD_STRING) {
+  if (literal.hasDatatype() && literal.getDatatype() == XSD_STRING) {
     literal.removeDatatypeOrLanguageTag();
   }
   return literal;
@@ -187,14 +186,13 @@ Literal Literal::fromEscapedRdfLiteral(
 
 // ____________________________________________________________________________
 Literal Literal::literalWithNormalizedContent(
-    NormalizedStringView normalizedRdfContent,
+    std::string_view normalizedRdfContent,
     std::optional<std::variant<Iri, std::string>> descriptor) {
-  auto content = asStringViewUnsafe(normalizedRdfContent);
   std::string storage;
   // Reserve instead of `absl::StrCat` to require only a single allocation.
-  storage.reserve(content.size() + 2 + maxSuffixSize(descriptor));
+  storage.reserve(normalizedRdfContent.size() + 2 + maxSuffixSize(descriptor));
   storage.push_back(quote);
-  storage.append(content);
+  storage.append(normalizedRdfContent);
   storage.push_back(quote);
   return withDescriptor(std::move(storage), std::move(descriptor));
 }
@@ -230,7 +228,7 @@ void Literal::addDatatype(const Iri& datatype) {
   AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
   // Trim the default string datatype.
   using namespace std::string_view_literals;
-  if (asStringViewUnsafe(datatype.getContent()) != XSD_STRING) {
+  if (datatype.getContent() != XSD_STRING) {
     absl::StrAppend(&storage(), "^^"sv, datatype.toStringRepresentation());
   }
 }
@@ -269,7 +267,7 @@ void Literal::concat(const Literal& other) {
          getDatatype() == other.getDatatype()))) {
     removeDatatypeOrLanguageTag();
   }
-  const auto& otherContent = asStringViewUnsafe(other.getContent());
+  const auto& otherContent = other.getContent();
   storage().insert(beginOfSuffix() - 1, otherContent);
   beginOfSuffix() += otherContent.size();
 }
