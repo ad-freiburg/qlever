@@ -37,7 +37,7 @@ namespace ql {
 // value-initializes the newly appended characters with `resize` first. The
 // buffer handed to `op` must be treated as uninitialized on both paths: the
 // C++23 member passes indeterminate values, so `op` must not read it before
-// writing.
+// writing. The pointer handed to `op` is valid only during the call.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Operation)(
     requires ad_utility::InvocableWithConvertibleReturnType<Operation, size_t,

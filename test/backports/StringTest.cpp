@@ -58,10 +58,13 @@ TEST(StringTest, ResizeAndOverwriteOperationReturnsZero) {
 // _____________________________________________________________________________
 TEST(StringTest, ResizeAndOverwriteEmptyStringZeroCount) {
   std::string s;
-  ql::resize_and_overwrite(s, 0, [](char*, size_t count) {
+  bool called = false;
+  ql::resize_and_overwrite(s, 0, [&called](char*, size_t count) {
+    called = true;
     EXPECT_EQ(count, 0u);
     return size_t{0};
   });
+  EXPECT_TRUE(called);
   EXPECT_TRUE(s.empty());
   EXPECT_EQ(s.size(), 0u);
 }
@@ -84,6 +87,35 @@ TEST(StringTest, ResizeAndOverwriteOversizedResultThrows) {
   }
   EXPECT_EQ(s, "abcd");
   EXPECT_EQ(s.size(), 4u);
+}
+
+// _____________________________________________________________________________
+// Write more characters than fit into the small string buffer, so that the
+// string has to grow.
+TEST(StringTest, ResizeAndOverwriteGrowsBeyondSmallStringBuffer) {
+  std::string s = "abc";
+  const std::string text(100, 'z');
+  ql::resize_and_overwrite(s, text.size(), [&](char* buf, size_t count) {
+    EXPECT_EQ(count, text.size());
+    std::memcpy(buf, text.data(), text.size());
+    return text.size();
+  });
+  EXPECT_EQ(s, text);
+}
+
+// _____________________________________________________________________________
+// The operation is invoked as an rvalue, so an operation whose call operator
+// is only rvalue-qualified is accepted.
+TEST(StringTest, ResizeAndOverwriteRvalueOnlyOperation) {
+  struct RvalueOnly {
+    size_t operator()(char* buf, size_t count) && {
+      std::memset(buf, 'r', count);
+      return count;
+    }
+  };
+  std::string s;
+  ql::resize_and_overwrite(s, 3, RvalueOnly{});
+  EXPECT_EQ(s, "rrr");
 }
 
 // _____________________________________________________________________________
