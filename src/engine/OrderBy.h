@@ -103,27 +103,26 @@ class OrderBy : public Operation {
 
   // Fast path for a single sort column, where the `input` is already sorted by
   // that column in the internal order and the column contains only integers or
-  // only doubles (possibly preceded by `Undefined` values). The internal order
-  // then differs from the order required by `ORDER BY` only in the placement of
-  // a few contiguous ranges (e.g. the negative numbers), so the result is
-  // obtained by copying these ranges in the right order, in linear time and
-  // without any comparisons. Return `std::nullopt` if the fast path does not
-  // apply.
+  // only doubles (see `OrderByOnSortedNumericInput.h`). Return `std::nullopt`
+  // if the fast path does not apply.
   std::optional<IdTable> computeResultForSortedInput(
       const IdTableView<0>& input) const;
 
   // If the input is an `IndexScan` and the fast path above applies according
   // to the block metadata of the scan, replace the scan by a copy that only
   // reads the blocks which can contain the rows selected by the
-  // `LIMIT`/`OFFSET` (see `selectBlocksForSortedNumericLimit` in the `.cpp`).
+  // `LIMIT`/`OFFSET` (see `orderByOnSortedNumericInput::selectBlocksForLimit`).
   // The scan is replaced, not modified, so it may be shared.
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
                             bool childrenAreExclusivelyOwned) override;
 
-  // If the `LIMIT`/`OFFSET` was pushed into an `IndexScan`, the number of
-  // blocks that the scan reads now, and its total number of blocks. Only used
-  // for the runtime information.
-  std::optional<std::pair<size_t, size_t>> numBlocksAfterAndBeforeLimit_;
+  // Set if the `LIMIT`/`OFFSET` was pushed into an `IndexScan`. Only used for
+  // the runtime information.
+  struct NumBlocksReadForLimit {
+    size_t numBlocksRead_;
+    size_t numBlocksTotal_;
+  };
+  std::optional<NumBlocksReadForLimit> blocksReadForLimit_;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();
