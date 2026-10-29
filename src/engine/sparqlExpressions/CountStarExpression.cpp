@@ -57,12 +57,12 @@ ExpressionResult CountStarExpression::evaluate(
     ++targetColIdx;
     checkCancellation();
   }
-  ctx->_qec.getSortPerformanceEstimator().throwIfEstimateTooLong(
-      table.numRows(), table.numColumns(), ctx->deadline_,
-      "Sort for COUNT(DISTINCT *)");
-  ad_utility::callFixedSizeVi(table.numColumns(), [&table](auto i) {
-    IdTableUtils::sort<i>(&table, ql::ranges::lexicographical_compare);
-  });
+  ad_utility::callFixedSizeVi(
+      table.numColumns(),
+      [&table, &sortConfig = ctx->_qec.sortConfig(), ctx](auto i) {
+        IdTableUtils::sort<i>(&table, ql::ranges::lexicographical_compare,
+                              sortConfig, ctx->cancellationHandle_);
+      });
   return Id::makeFromInt(static_cast<int64_t>(
       IdTableUtils::countDistinct(table, checkCancellation)));
 }

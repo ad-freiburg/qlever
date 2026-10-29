@@ -70,9 +70,8 @@ class VocabularyInMemoryBinSearch
   // buffer is valid and unchanged. The layout read here exactly matches the one
   // written by the generic serialization function below.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          S>) static VocabularyInMemoryBinSearch
-      fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+  static VocabularyInMemoryBinSearch fromZeroCopyDeserializer(S& serializer) {
     VocabularyInMemoryBinSearch result;
     result.words_ = Words::fromZeroCopyDeserializer(serializer);
     result.indices_ = IndexStorage::fromZeroCopyDeserializer(serializer);
@@ -182,6 +181,12 @@ class VocabularyInMemoryBinSearch
   // always throws. Use the nested `WordWriter` above instead.
   [[noreturn]] static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename);
+
+  // The same holds for the block writer, see `BlockWriterBase`.
+  [[noreturn]] static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    makeDiskWriterPtr(filename);
+  }
 
   // Clear the vocabulary.
   void close();

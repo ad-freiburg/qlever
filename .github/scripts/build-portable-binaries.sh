@@ -2,7 +2,7 @@
 # Build portable Linux binaries of `qlever-index` and `qlever-server`, whose
 # only dynamic dependency is glibc (libc, libm, ld-linux, vdso). All other
 # libraries — Boost, ICU (including its Unicode data), OpenSSL, zstd, zlib,
-# bzip2, jemalloc, libgomp, libstdc++, libgcc — are linked statically. Such
+# bzip2, jemalloc, libstdc++, libgcc — are linked statically. Such
 # binaries run on any Linux distribution and architecture-matching machine
 # whose glibc is at least as new as the one of the build machine (glibc is
 # backward compatible), which is why the CI builds them on the oldest
@@ -30,8 +30,12 @@ NUM_THREADS=$(nproc)
 # crashes with an internal compiler error on QLever's C++20 code).
 GCC="${CC:-gcc}"
 
+# Link-time optimization (see `QLEVER_ENABLE_LTO` in `CMakeLists.txt`). The CI
+# sets it only for the binaries published from `master`.
+QLEVER_ENABLE_LTO="${QLEVER_ENABLE_LTO:-false}"
+
 # A directory that contains ONLY static archives and is put first in the
-# linker search path. This forces `-ljemalloc`/`-lgomp`/`-lstdc++` to resolve
+# linker search path. This forces `-ljemalloc`/`-lstdc++` to resolve
 # to the `.a` instead of the `.so`. This is needed because an explicit
 # `-lstdc++` (injected by conan's package configs) bypasses
 # `-static-libstdc++`, and because QLever's CMake links jemalloc by name.
@@ -49,7 +53,6 @@ link_static_lib() {
     ln -sf "$source" "$STATIC_LIBS/$name"
 }
 link_static_lib "$MULTIARCH_LIBDIR/libjemalloc.a" libjemalloc.a
-link_static_lib "$($GCC -print-file-name=libgomp.a)" libgomp.a
 link_static_lib "$($GCC -print-file-name=libstdc++.a)" libstdc++.a
 
 # Build the third-party libraries as static libraries via conan (using the
@@ -64,14 +67,19 @@ cd "$BUILD_DIR"
 conan install "$REPO_DIR" -pr:b=default -of=. \
     -o 'icu/*:data_packaging=static' --build=missing
 
+# `-DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE` prevents fsst from compiling with
+# `-march=native`. Otherwise, the binaries use the instruction set of the build
+# machine (for example, AVX-512) and crash with "Illegal instruction" on
+# machines without it.
 cmake -B "$BUILD_DIR" -S "$REPO_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
     -DLOGLEVEL=INFO \
     -DCMAKE_TOOLCHAIN_FILE="$BUILD_DIR/conan_toolchain.cmake" \
     -DCMAKE_POLICY_DEFAULT_CMP0091=NEW \
-    -DUSE_PARALLEL=true \
     -DRUN_EXPENSIVE_TESTS=false \
+    -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE \
     -DJEMALLOC_MANUALLY_INSTALLED=True \
+    -DQLEVER_ENABLE_LTO="$QLEVER_ENABLE_LTO" \
     -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc -L$STATIC_LIBS"
 
 cmake --build "$BUILD_DIR" --target qlever-index qlever-server -- -j "$NUM_THREADS"

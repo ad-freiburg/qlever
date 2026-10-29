@@ -8,7 +8,7 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
@@ -373,4 +373,40 @@ TEST(TripleComponent, toString) {
   EXPECT_THAT(true, match("true"));
   EXPECT_THAT(false, match("false"));
   EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
+}
+
+// Test that `toIdOrLocalVocabEntry` returns the encoded `Id` of an encodable
+// IRI and a `LocalVocabEntry` for everything else.
+TEST(TripleComponent, toIdOrLocalVocabEntry) {
+  using ad_utility::triple_component::Iri;
+  using ad_utility::triple_component::Literal;
+  using ad_utility::triple_component::LiteralOrIri;
+  TestIndexConfig config{"<subject> <predicate> <http://example.org/42>"};
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+
+  // An encodable IRI yields its encoded `Id`.
+  auto encodable = Iri::fromIriref("<http://example.org/69>");
+  auto expectedId = qec->getIndex()
+                        .encodedIriManager()
+                        .encode(encodable.toStringRepresentation())
+                        .value();
+  auto result = toIdOrLocalVocabEntry(LiteralOrIri{encodable}, context);
+  ASSERT_TRUE(std::holds_alternative<Id>(result));
+  // Compare the bits, as `Id::operator==` also matches a `LocalVocabIndex`.
+  EXPECT_EQ(std::get<Id>(result).getBits(), expectedId.getBits());
+
+  // Everything else becomes a `LocalVocabEntry`, including IRIs from the
+  // vocabulary and literals that look like an encodable IRI.
+  auto expectEntry = [&context](LiteralOrIri word) {
+    auto result = toIdOrLocalVocabEntry(word, context);
+    ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(result));
+    const auto& entry = std::get<LocalVocabEntry>(result);
+    EXPECT_EQ(entry, word);
+  };
+  expectEntry(LiteralOrIri{Iri::fromIriref("<subject>")});
+  expectEntry(LiteralOrIri{Iri::fromIriref("<http://example.org/5a>")});
+  expectEntry(
+      LiteralOrIri{Literal::literalWithoutQuotes("<http://example.org/69>")});
 }
