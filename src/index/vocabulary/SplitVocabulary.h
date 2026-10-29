@@ -276,13 +276,16 @@ class SplitVocabulary {
   // allowed) and return them in the order of `indices`. `indices` must not be
   // empty. Three cases, from the cheapest to the most general one:
   //
-  // 1. All underlying vocabularies keep their words in memory (see
-  //    `allUnderlyingKeepWordsInMemory`): batching cannot save any I/O, so each
-  //    word is looked up via `operator[]` and copied, in input order, into one
-  //    arena. No partitioning, no sub-batches, no `std::string` per word.
+  // 1. The `operator[]` of every underlying vocabulary returns a
+  //    `std::string_view` (see `allUnderlyingKeepWordsInMemory`): batching
+  //    cannot save any I/O, so each word is looked up via `operator[]` and
+  //    copied, in input order, into one arena. No partitioning, no
+  //    sub-batches, no `std::string` per word.
   // 2. All `indices` have the same marker: they are forwarded to the
   //    `lookupBatch` of that underlying vocabulary, whose result is returned
-  //    unchanged. For marker 0 the indices are forwarded without a copy.
+  //    unchanged. The indices are forwarded without a copy if they carry no
+  //    marker bits (marker 0), and otherwise as a copy with the marker bits
+  //    removed.
   // 3. Mixed markers: partition by marker, one `lookupBatch` per participating
   //    underlying vocabulary, and scatter the sub-batches back into input
   //    order (without copying the word bytes).
@@ -308,7 +311,7 @@ class SplitVocabulary {
       }
       for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
         if (numIndicesPerMarker[marker] == indices.size()) {
-          auto unmarkedIndices = ::ranges::to_vector(
+          const auto unmarkedIndices = ::ranges::to_vector(
               indices | ql::views::transform([](size_t index) {
                 return static_cast<size_t>(getVocabIndex(index));
               }));
@@ -321,17 +324,19 @@ class SplitVocabulary {
 
  private:
   // True iff the `operator[]` of every underlying vocabulary returns a
-  // `std::string_view` into memory that the vocabulary owns (for example
-  // `VocabularyInMemory`). A batched lookup then has no I/O to save, see case
-  // 1 of `lookupBatch`.
+  // `std::string_view` (this is a pure type check). This is the case for
+  // vocabularies that keep their words in memory, for example
+  // `VocabularyInMemory`. A batched lookup then has no I/O to save, see case 1
+  // of `lookupBatch`.
   static constexpr bool allUnderlyingKeepWordsInMemory =
       (std::is_same_v<
            decltype(std::declval<const UnderlyingVocabularies&>()[uint64_t{0}]),
            std::string_view> &&
        ...);
 
-  // The `lookupBatch` of the underlying vocabulary with the given `marker`,
-  // for unmarked `indices`.
+  // Return the `lookupBatch` result of the underlying vocabulary with the given
+  // `marker` for `indices`, which must be non-empty and must not carry marker
+  // bits. The result has one entry per index, in the order of `indices`.
   VocabBatchLookupResult lookupBatchInUnderlying(
       uint8_t marker, ql::span<const size_t> indices) const {
     auto result = std::visit(
@@ -342,9 +347,10 @@ class SplitVocabulary {
   }
 
   // Case 3 of `lookupBatch`: `indices` has at least two different markers.
+  // Return one entry per index, in the order of `indices`.
   VocabBatchLookupResult lookupBatchWithMixedMarkers(
       ql::span<const size_t> indices) const {
-    auto markerIndicesAndPositions =
+    const auto markerIndicesAndPositions =
         partitionMarkerIndicesAndPositions<numberOfVocabs>(
             indices, [](uint64_t markedIndex) {
               return std::pair{getMarker(markedIndex),
