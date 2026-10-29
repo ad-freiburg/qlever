@@ -27,7 +27,6 @@
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
-#include "backports/string.h"
 #include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -53,18 +52,15 @@ constexpr CastToUnsignedPtr castToUnsignedPtr{};
 // _____________________________________________________________________________
 // Return a new string of the size that `decode` reports. `decode` receives a
 // span of `bound` bytes, writes into it, and returns the number of bytes
-// written, which must be at most `bound` (this is checked). `decode` must not
-// throw, because it runs inside `ql::resize_and_overwrite`. The bytes of the
-// span are uninitialized where the standard library provides
-// `resize_and_overwrite`.
+// written, which must be at most `bound` (this is checked).
 CPP_template(typename Decode)(
     requires ad_utility::InvocableWithConvertibleReturnType<Decode&, size_t,
                                                             ql::span<char>>)
 [[nodiscard]] std::string decompressToOwnedString(size_t bound, Decode decode) {
-  std::string result;
-  ql::resize_and_overwrite(result, bound, [&decode](char* buf, size_t count) {
-    return decode(ql::span<char>{buf, count});
-  });
+  std::string result(bound, '\0');
+  const size_t written = decode(ql::span<char>{result.data(), bound});
+  AD_CONTRACT_CHECK(written <= bound);
+  result.resize(written);
   return result;
 }
 }  // namespace detail
@@ -172,10 +168,8 @@ class FsstDecoder {
   [[nodiscard]] std::string decompress(std::string_view str) const {
     // Decode into a stack buffer and copy the exact bytes into the result.
     // This allocates the decoded size (nothing for strings that fit the small
-    // string buffer) instead of the 8x bound, and does not zero-fill a bound
-    // where the standard library provides `resize_and_overwrite`. Longer
-    // strings decode a second time into a heap buffer of the now known size
-    // plus one spare byte.
+    // string buffer) instead of the 8x bound. Longer strings decode a second
+    // time into a heap buffer of the now known size plus one spare byte.
     std::array<char, decodeStackBufferSize> buffer;
     const size_t size = decompressPossiblyTruncated(
         str, ql::span<char>{buffer.data(), buffer.size()});
@@ -187,8 +181,6 @@ class FsstDecoder {
     if (size < buffer.size()) {
       return std::string(buffer.data(), size);
     }
-    // The operation passed to `resize_and_overwrite` must not throw, so the
-    // size is checked after the string is built.
     std::string result = detail::decompressToOwnedString(
         size + 1, [this, str](ql::span<char> out) {
           return decompressPossiblyTruncated(str, out);
