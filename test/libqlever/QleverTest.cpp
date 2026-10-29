@@ -969,6 +969,9 @@ TEST(LibQlever, allocatorGetter) {
 TEST(LibQlever, allocatorMakesRoomByClearingTheCache) {
   EngineConfig config = buildTestEngineConfig("<s> <p> <o> . <s2> <p> <o2> .");
   config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
+  // The engine sets `memory-for-queries` to its memory limit.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Qlever engine{config};
 
   // Run a query, the result of which is then stored in the cache as an unpinned

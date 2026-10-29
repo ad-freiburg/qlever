@@ -85,6 +85,9 @@ TEST(ServerTest, chooseBestFittingMediaType) {
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
 
+  // The `Server` sets `memory-for-queries` to the memory limit of its config.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   reqWithExplicitQueryId.set("Query-Id", "100");
@@ -116,6 +119,9 @@ TEST(ServerTest, getQueryId) {
 // if it is cancelled before.
 TEST(ServerTest, cancelAfterDeadline) {
   using namespace std::chrono_literals;
+  // The `Server` sets `memory-for-queries` to the memory limit of its config.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
 
   // The deadline is reached, so the handle is cancelled.
@@ -146,6 +152,9 @@ TEST(ServerTest, cancelAfterDeadline) {
 // be reused and rejects overlapping waits.
 TEST(ServerTest, makeWatchDogRunAfter) {
   using namespace std::chrono_literals;
+  // The `Server` sets `memory-for-queries` to the memory limit of its config.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto runAfter = server.makeWatchDogRunAfter();
 
@@ -168,6 +177,9 @@ TEST(ServerTest, makeWatchDogRunAfter) {
 TEST(ServerTest, createMessageSender) {
   using namespace ad_utility::websocket;
 
+  // The `Server` sets `memory-for-queries` to the memory limit of its config.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
@@ -333,6 +345,9 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
+  // The `Server` sets `memory-for-queries` to the memory limit of its config.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   auto config = serverTestHelpers::getDefaultConfig();
   Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
@@ -803,6 +818,9 @@ TEST(ServerTest, handleHttpRequest) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, makeWebSocketSessionSupplier) {
+  // The `Server` sets `memory-for-queries` to the memory limit of its config.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Server server{4511, 1, "accessToken", getDefaultConfig()};
   boost::asio::any_io_executor ioExecutor;
 
