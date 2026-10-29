@@ -9,7 +9,6 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
 #include <memory>
-#include <range/v3/view/enumerate.hpp>
 #include <string_view>
 #include <vector>
 
