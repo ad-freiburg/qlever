@@ -65,7 +65,7 @@ Server::Server(
     std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
     std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker,
     const std::optional<std::string>& compressedBlobFilename)
-    : qlever_(config, compressedBlobFilename.has_value()),
+    : qlever_(config, /*skipLoading=*/compressedBlobFilename.has_value()),
       numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -85,9 +85,10 @@ Server::Server(
                 << compressedBlobFilename.value() << "\" ..." << std::endl;
     ad_utility::File file{compressedBlobFilename.value(), "r"};
     std::vector<char> compressedBlob(file.sizeOfFile());
-    AD_CORRECTNESS_CHECK(static_cast<size_t>(file.read(
-                             compressedBlob.data(), compressedBlob.size(),
-                             0)) == compressedBlob.size());
+    auto numBytesRead =
+        file.read(compressedBlob.data(), compressedBlob.size(), 0);
+    AD_CORRECTNESS_CHECK(static_cast<size_t>(numBytesRead) ==
+                         compressedBlob.size());
     qlever_.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob);
   }
 
