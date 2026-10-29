@@ -550,7 +550,7 @@ class FsstRepeatedDecoderTest : public ::testing::Test {
             (void)repeated.decompressInto(
                 compressed[i],
                 ql::span<char>{undersized.data(), undersized.size()}, scratch),
-            ::testing::HasSubstr("out.size() >= maxDecompressedSize(str)"));
+            ::testing::HasSubstr("out.size() >= bound"));
       }
     }
 
