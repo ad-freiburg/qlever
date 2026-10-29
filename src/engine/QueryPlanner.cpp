@@ -52,6 +52,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
+#include "engine/RowNumber.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -3337,6 +3338,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitTextSearch(arg);
   } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
     visitExternalValues(arg);
+  } else if constexpr (std::is_same_v<T, p::RowNumberQuery>) {
+    visitRowNumber(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3566,6 +3569,20 @@ void QueryPlanner::GraphPatternPlanner::visitExternalValues(
   auto externalValues =
       qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
+  visitGroupOptionalOrMinus(singlePlanVec(std::move(candidate)));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitRowNumber(
+    parsedQuery::RowNumberQuery& rowNumberQuery) {
+  // Plan the sorted subquery (see `RowNumberQuery::validate`) and add the row
+  // numbers on top of its cheapest plan.
+  AD_CORRECTNESS_CHECK(rowNumberQuery.childGraphPattern_.has_value());
+  SubtreePlan child =
+      optimizeSingle(&rowNumberQuery.childGraphPattern_.value());
+  auto candidate = makeSubtreePlan<RowNumber>(
+      qec_, std::move(child._qet), rowNumberQuery.rowNumberVariable_.value(),
+      rowNumberQuery.offset_);
   visitGroupOptionalOrMinus(singlePlanVec(std::move(candidate)));
 }
 

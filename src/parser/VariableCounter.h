@@ -87,6 +87,7 @@ struct VariableCounter {
   void operator()(const NamedCachedResult& op);
   void operator()(const MaterializedViewQuery& op);
   void operator()(const ExternalValuesQuery& op);
+  void operator()(const RowNumberQuery& op);
 };
 
 }  // namespace parsedQuery

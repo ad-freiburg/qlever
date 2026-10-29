@@ -970,6 +970,57 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
+// Test that two row number services on the same sorted subquery with different
+// offsets (the equivalent of the SQL window function `LEAD`) are joined without
+// sorting, and that invalid configurations are rejected.
+TEST(QueryPlanner, RowNumber) {
+  // A relation `<p>` with two objects for `<x>`.
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <x> <p> <z>");
+  auto rowNumberService = [](std::string_view config, std::string_view y,
+                             std::string_view orderBy) {
+    return absl::StrCat(
+        "SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> { ", config,
+        " { SELECT ?x ", y, " { ?x <p> ", y, " } ", orderBy, " } }");
+  };
+
+  // The result of each service is sorted by `?n` and `?x`, so the multi-column
+  // join on `?n` and `?x` needs no `Sort`.
+  auto rowNumber = h::RootOperation<::RowNumber>(::testing::_);
+  h::expect(
+      absl::StrCat("SELECT * { ",
+                   rowNumberService("[] <bind> ?n .", "?y", "ORDER BY ?x ?y"),
+                   rowNumberService("[] <bind> ?n ; <offset> 1 .", "?y2",
+                                    "INTERNAL SORT BY ?x ?y2"),
+                   " }"),
+      h::MultiColumnJoin(rowNumber, rowNumber), qec);
+
+  // The row number variable is required.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ", rowNumberService("", "?y", "ORDER BY ?y"),
+                       " }"),
+          qec),
+      HasSubstr("requires a `<bind>` parameter"));
+
+  // The subquery must have an `ORDER BY` or `INTERNAL SORT BY` clause.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ",
+                       rowNumberService("[] <bind> ?n .", "?y", ""), " }"),
+          qec),
+      HasSubstr("`ORDER BY` or `INTERNAL SORT BY`"));
+
+  // The offset must be a non-negative integer.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ",
+                       rowNumberService("[] <bind> ?n ; <offset> -1 .", "?y",
+                                        "ORDER BY ?y"),
+                       " }"),
+          qec),
+      HasSubstr("non-negative integer"));
+}
+
 TEST(QueryPlanner, PathSearchSingleTarget) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
