@@ -42,9 +42,11 @@ class ChunkedReadSerializer : public NoCopyNoMove {
  private:
   ql::ranges::iterator_t<Range> it_;
   ql::ranges::sentinel_t<Range> end_;
-  // The part of `*it_` that has not been read yet. NOTE: `it_` is only
-  // advanced when `*it_` has been read completely, as the chunk might point
-  // into a buffer that is reused for the next chunk (as for a generator).
+  // The part of `*it_` that has not been read yet.
+  //
+  // NOTE: `it_` is only advanced when `*it_` has been read completely, as the
+  // chunk might point into a buffer that is reused for the next chunk (as for
+  // a generator).
   ql::span<const std::byte> current_;
 
   // Advance to the next non-empty chunk if `current_` has been read

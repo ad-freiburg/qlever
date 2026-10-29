@@ -37,7 +37,7 @@ class AllocationLimitedReadSerializer : public NoCopyNoMove {
   // This class doesn't opt into aligned serialization (and doesn't forward
   // `getCurrentPosition` and `skip`), so `alignSerializerForType` is a no-op
   // for it. Wrapping a serializer that uses aligned serialization would thus
-  // silently skip the padding bytes and read garbage.
+  // not skip the padding bytes, but silently read them as data.
   static_assert(!usesAlignedSerialization<UnderlyingSerializer>);
 
  private:
