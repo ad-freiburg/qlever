@@ -244,7 +244,8 @@ struct SplitLayoutIdTest : public ::testing::Test {
 
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that a `double` is stored without any loss of precision, including the
+// special values like the infinities, the NaNs, and the subnormal numbers.
 TEST_F(SplitLayoutIdTest, makeFromDouble) {
   // The payload has 64 bits, so all bits of a `double` fit into it and the
   // conversion is lossless. (The legacy `ValueId` drops the lowest
@@ -300,7 +301,7 @@ TEST_F(SplitLayoutIdTest, makeFromDouble) {
       SplitLayoutId::makeFromDouble(Limits::signaling_NaN()).getDouble()));
 }
 
-// _____________________________________________________________________________
+// Test that every `int64_t` is stored without an overflow.
 TEST_F(SplitLayoutIdTest, makeFromInt) {
   // The payload has 64 bits, so every `int64_t` can be represented and there
   // is no overflow. (The legacy `ValueId` has 60 bits for an integer.)
@@ -327,7 +328,8 @@ TEST_F(SplitLayoutIdTest, makeFromInt) {
   }
 }
 
-// _____________________________________________________________________________
+// Test `makeFromBool` and `makeBoolFromZeroOrOne` together with `getBool` and
+// `getBoolLiteral`.
 TEST_F(SplitLayoutIdTest, makeFromBool) {
   EXPECT_TRUE(SplitLayoutId::makeBoolFromZeroOrOne(true).getBool());
   EXPECT_TRUE(SplitLayoutId::makeFromBool(true).getBool());
@@ -340,10 +342,10 @@ TEST_F(SplitLayoutIdTest, makeFromBool) {
   EXPECT_EQ(SplitLayoutId::makeFromBool(false).getBoolLiteral(), "false");
 }
 
-// _____________________________________________________________________________
+// Test that the index types store every 64-bit value and return it unchanged.
+// Unlike for the legacy `ValueId`, no value is too large.
 TEST_F(SplitLayoutIdTest, Indices) {
-  // Test an index type: random values and the boundaries of the range must
-  // work. The index types use the whole payload, so no value is too large.
+  // Random values and the boundaries of the range.
   auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
     auto testSingle = [&](uint64_t value) {
       auto id = makeId(value);
@@ -377,7 +379,7 @@ TEST_F(SplitLayoutIdTest, Indices) {
                 Datatype::SecondaryVocabIndex);
 }
 
-// _____________________________________________________________________________
+// Test `makeUndefined` and `getUndefined`.
 TEST_F(SplitLayoutIdTest, Undefined) {
   auto id = SplitLayoutId::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
@@ -396,7 +398,8 @@ TEST_F(SplitLayoutIdTest, Undefined) {
   EXPECT_FALSE(SplitLayoutId::makeFromInt(42).visit(isUndefinedType));
 }
 
-// _____________________________________________________________________________
+// Test `getDatatypeBits` and `getPayloadBits`, the two parts of the bits of
+// an `Id`.
 TEST_F(SplitLayoutIdTest, getDatatypeBitsAndGetPayloadBits) {
   // The layout: a full 64 bit payload word and one byte for the datatype.
   static_assert(std::is_same_v<SplitLayoutId::PayloadType, uint64_t>);
@@ -423,9 +426,8 @@ TEST_F(SplitLayoutIdTest, getDatatypeBitsAndGetPayloadBits) {
   }
 }
 
-// _____________________________________________________________________________
-// `fromBits(bits)` is the counterpart of `getBits()`. It accepts every byte as
-// the datatype, see `fromBitsChecksThatTheDatatypeExists`.
+// Test `fromBits(bits)`, the counterpart of `getBits()`. It accepts every byte
+// as the datatype, see `fromBitsChecksThatTheDatatypeExists`.
 TEST_F(SplitLayoutIdTest, fromBitsWithBitRepresentation) {
   for (auto id : makeRandomIds()) {
     EXPECT_EQ(SplitLayoutId::fromBits(id.getBits()).getBits(), id.getBits());
@@ -433,8 +435,7 @@ TEST_F(SplitLayoutIdTest, fromBitsWithBitRepresentation) {
   testFromBits(fromBitRepresentation, numDatatypeByteValues);
 }
 
-// _____________________________________________________________________________
-// `fromBits(datatype, payload)` with the datatype as a number is the
+// Test `fromBits(datatype, payload)` with the number of the datatype, the
 // counterpart of `getDatatypeBits` and `getPayloadBits`.
 TEST_F(SplitLayoutIdTest, fromBitsWithDatatypeBitsAndPayload) {
   for (auto id : makeRandomIds()) {
@@ -450,8 +451,8 @@ TEST_F(SplitLayoutIdTest, fromBitsWithDatatypeBitsAndPayload) {
             SplitLayoutId::fromBits(Datatype::Int, 5));
 }
 
-// _____________________________________________________________________________
-// `fromBits(datatype, payload)` with the `Datatype`.
+// Test the overload `fromBits(Datatype, payload)`, which takes the `Datatype`
+// directly instead of its number.
 TEST_F(SplitLayoutIdTest, fromBitsWithDatatype) {
   for (auto id : makeRandomIds()) {
     EXPECT_EQ(SplitLayoutId::fromBits(id.getDatatype(), id.getPayloadBits())
@@ -461,10 +462,9 @@ TEST_F(SplitLayoutIdTest, fromBitsWithDatatype) {
   testFromBits(fromDatatype, numDatatypes);
 }
 
-// _____________________________________________________________________________
-// The overload that takes a single integer creates an `Id` of type `Undefined`
-// with this payload. It is used for the special `Id`s (see `SpecialIds.h`),
-// which are not `UNDEF`.
+// Test the overload of `fromBits` that takes a single integer. It creates an
+// `Id` of type `Undefined` with this payload, as for the special `Id`s (see
+// `SpecialIds.h`), which are not `UNDEF`.
 TEST_F(SplitLayoutIdTest, fromBitsWithSingleInteger) {
   auto special = SplitLayoutId::fromBits(uint64_t{3});
   EXPECT_EQ(special.getDatatype(), Datatype::Undefined);
@@ -474,12 +474,11 @@ TEST_F(SplitLayoutIdTest, fromBitsWithSingleInteger) {
             SplitLayoutId::makeUndefined());
 }
 
-// _____________________________________________________________________________
-// The datatype byte can hold more values than there are datatypes, so the
-// overloads that take a datatype reject one that does not exist. Like all
-// expensive checks, this only happens if they are enabled (in `Debug` builds or
-// via `ENABLE_EXPENSIVE_CHECKS`). The functions are `noexcept`, so a failed
-// check terminates the process.
+// Test that the overloads of `fromBits` that take a datatype reject one that
+// does not exist (the datatype byte can hold more values than there are
+// datatypes). Like all expensive checks, this only happens if they are enabled
+// (in `Debug` builds or via `ENABLE_EXPENSIVE_CHECKS`). The functions are
+// `noexcept`, so a failed check terminates the process.
 TEST(SplitLayoutId, fromBitsChecksThatTheDatatypeExists) {
   const auto largest = static_cast<uint8_t>(Datatype::MaxValue);
   const auto invalid = static_cast<uint8_t>(largest + 1);
@@ -508,7 +507,8 @@ TEST(SplitLayoutId, fromBitsChecksThatTheDatatypeExists) {
   EXPECT_EQ(SplitLayoutId::fromBits(maxBits).getBits(), maxBits);
 }
 
-// _____________________________________________________________________________
+// Test that sorted `Id`s are ordered by their datatype, except for the string
+// types, whose `Id`s are ordered by their words.
 TEST_F(SplitLayoutIdTest, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());
@@ -526,11 +526,9 @@ TEST_F(SplitLayoutIdTest, OrderingDifferentDatatypes) {
       std::is_sorted(ids.begin(), ids.end(), compareByDatatypeAndIndexTypes));
 }
 
-// _____________________________________________________________________________
+// Test that the `Id`s of an index type are ordered like their indices. With the
+// full 64-bit payload this includes the indices that have the highest bit set.
 TEST_F(SplitLayoutIdTest, IndexOrdering) {
-  // The ordering of the `Id`s of an index type is the ordering of the indices.
-  // With the full 64 bit payload this includes indices that have the highest
-  // bit set.
   auto testOrder = [](auto& generator, auto makeIdFromIndex,
                       auto getIndexFromId) {
     std::vector<SplitLayoutId> ids;
@@ -565,7 +563,9 @@ TEST_F(SplitLayoutIdTest, IndexOrdering) {
   EXPECT_LT(VocabId(uint64_t{1} << 63), VocabId(SplitLayoutId::maxIndex));
 }
 
-// _____________________________________________________________________________
+// Test that the `Id`s of `double`s are ordered like their bit patterns: first
+// the positive `double`s in ascending order (followed by the NaNs), and then
+// the negative ones in descending order.
 TEST_F(SplitLayoutIdTest, DoubleOrdering) {
   auto ids = makeRandomDoubleIds();
   std::vector<double> doubles;
@@ -620,7 +620,9 @@ TEST_F(SplitLayoutIdTest, DoubleOrdering) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the `Id`s of integers are ordered like their bit patterns: first
+// the non-negative integers and then the negative ones, both in ascending
+// order.
 TEST_F(SplitLayoutIdTest, SignedIntegerOrdering) {
   std::vector<SplitLayoutId> ids;
   addIdsFromGenerator(integerGenerator, &SplitLayoutId::makeFromInt, ids);
@@ -645,7 +647,8 @@ TEST_F(SplitLayoutIdTest, SignedIntegerOrdering) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that an `Id` is serialized by copying its bytes, and that it is the same
+// `Id` again after the deserialization.
 TEST_F(SplitLayoutIdTest, Serialization) {
   auto serializedBytes = [](SplitLayoutId id) {
     ad_utility::serialization::ByteBufferWriteSerializer writer;
@@ -677,20 +680,20 @@ TEST_F(SplitLayoutIdTest, Serialization) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a `HashSet` of `Id`s contains each `Id` exactly once.
 TEST_F(SplitLayoutIdTest, HashingInHashSet) {
   auto ids = makeRandomIds();
   ad_utility::HashSet<SplitLayoutId> idSet(ids.begin(), ids.end());
   std::vector<SplitLayoutId> idsFromSet(idSet.begin(), idSet.end());
 
-  // The `HashSet` contains each `Id` exactly once.
   std::sort(idsFromSet.begin(), idsFromSet.end());
   std::sort(ids.begin(), ids.end());
   ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
   ASSERT_EQ(ids, idsFromSet);
 }
 
-// _____________________________________________________________________________
+// Test that the hash of an `Id` is consistent with `operator==`, also for an
+// `Id` of type `LocalVocabIndex`, which is hashed by its word.
 TEST_F(SplitLayoutIdTest, HashingIsConsistentWithEquality) {
   using namespace ad_utility::triple_component;
   using namespace ad_utility::testing;
@@ -726,7 +729,8 @@ TEST_F(SplitLayoutIdTest, HashingIsConsistentWithEquality) {
        SplitLayoutId::makeFromBool(false), SplitLayoutId::makeUndefined()}));
 }
 
-// _____________________________________________________________________________
+// Test the human-readable representation of an `Id` (see `operator<<`), for
+// all datatypes.
 TEST_F(SplitLayoutIdTest, toDebugString) {
   auto test = [](SplitLayoutId id, std::string_view expected) {
     std::stringstream stream;
@@ -740,6 +744,7 @@ TEST_F(SplitLayoutIdTest, toDebugString) {
   test(SplitLayoutId::fromBits(Datatype::Undefined, 100), "U:100");
   test(SplitLayoutId::fromBits(uint64_t{100}), "U:100");
   test(SplitLayoutId::makeFromDouble(42.0), "D:42.000000");
+  test(SplitLayoutId::makeFromInt(-42), "I:-42");
   test(SplitLayoutId::makeFromBool(false), "B:false");
   test(SplitLayoutId::makeFromBool(true), "B:true");
   test(SplitLayoutId::makeBoolFromZeroOrOne(false), "B:false");
@@ -751,6 +756,8 @@ TEST_F(SplitLayoutIdTest, toDebugString) {
   test(TextRecordId(37), "T:37");
   test(WordVocabId(42), "W:42");
   test(BlankNodeId(27), "B:27");
+  test(SplitLayoutId::makeFromEncodedVal(12), "E:12");
+  test(makeSecondaryVocabId(13), "S:13");
   test(SplitLayoutId::makeFromDate(
            DateYearOrDuration{123456, DateYearOrDuration::Type::Year}),
        "D:123456");
@@ -758,19 +765,20 @@ TEST_F(SplitLayoutIdTest, toDebugString) {
        "G:POINT(50.000000 50.000000)");
   // The payload is printed as an unsigned number, also if it uses all bits.
   test(VocabId(SplitLayoutId::maxIndex), "V:18446744073709551615");
-  // The largest `Id` has a datatype that does not exist.
+  // The largest `Id` has a datatype that does not exist, which neither the
+  // representation nor `visit` accept.
   ASSERT_ANY_THROW(test(SplitLayoutId::max(), "blim"));
+  ASSERT_ANY_THROW(SplitLayoutId::max().visit([](const auto&) {}));
 }
 
-// _____________________________________________________________________________
+// Test that an `Id` is trivially copyable.
 TEST_F(SplitLayoutIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<SplitLayoutId>);
 }
 
-// _____________________________________________________________________________
-// The split layout stores the payload (8 bytes) and the datatype (1 byte) next
-// to explicit padding bytes. Test that the bytes of an `Id` are completely
-// determined by its payload and datatype, because the raw bytes are serialized.
+// Test that the bytes of an `Id` are completely determined by its payload and
+// datatype, because the raw bytes are serialized. The split layout stores the
+// payload (8 bytes) and the datatype (1 byte) next to explicit padding bytes.
 TEST_F(SplitLayoutIdTest, byteRepresentation) {
   // 8 bytes payload + 1 byte datatype + 7 bytes explicit padding.
   static_assert(sizeof(SplitLayoutId) == 16);
@@ -808,10 +816,9 @@ TEST_F(SplitLayoutIdTest, byteRepresentation) {
       bytesEqual(SplitLayoutId::makeFromInt(0), SplitLayoutId::makeFromInt(1)));
 }
 
-// _____________________________________________________________________________
-// `incremented` is the next bit pattern. The result is hence the smallest `Id`
-// that is greater than the original one, and the overflow of the payload
-// carries into the datatype.
+// Test that `incremented` returns the next bit pattern, that is, the smallest
+// `Id` that is greater than the original one, with the overflow of the payload
+// carrying into the datatype.
 TEST_F(SplitLayoutIdTest, incremented) {
   // Without an overflow, only the payload changes.
   EXPECT_EQ(VocabId(17).incremented(), VocabId(18));
@@ -936,11 +943,9 @@ static_assert(SplitLayoutId::makeUndefined().compareWithoutLocalVocab(
 #endif
 }  // namespace constexprSplitLayoutId
 
-// _____________________________________________________________________________
+// Test that an `Id` of an encoded IRI compares equal to an `Id` of a
+// `LocalVocabEntry` with the same IRI, and that they are ordered consistently.
 TEST_F(SplitLayoutIdTest, EncodedIriEqualityWithLocalVocabEntry) {
-  // Test that an ID storing an encoded IRI compares equal to a LocalVocabEntry
-  // with the same IRI value.
-
   // Create an EncodedIriManager with some test prefixes
   std::vector<std::string> prefixes = {"http://example.org/",
                                        "http://test.com/"};
@@ -1007,10 +1012,9 @@ TEST_F(SplitLayoutIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   }
 }
 
-// _____________________________________________________________________________
-// Note: the `isTrivial` functionality is also tested using `static_assert`s
-// across the codebase, hence we don't test it exhaustively here, but only
-// please the coverage tool.
+// Test `isTrivial` for a trivial and two non-trivial datatypes. It is also
+// tested by `static_assert`s across the codebase, so it is not tested
+// exhaustively here.
 TEST(SplitLayoutId, isTrivial) {
   EXPECT_TRUE(SplitLayoutId::makeUndefined().isTrivial());
   EXPECT_FALSE(SplitLayoutId::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
@@ -1018,7 +1022,8 @@ TEST(SplitLayoutId, isTrivial) {
   EXPECT_FALSE(SplitLayoutId::makeFromEncodedVal(738).isTrivial());
 }
 
-// _____________________________________________________________________________
+// Test that the `Id`s of all datatypes except `LocalVocabIndex` can be compared
+// bitwise.
 TEST(SplitLayoutId, canBeComparedBitwise) {
   EXPECT_TRUE(SplitLayoutId::makeUndefined().canBeComparedBitwise());
   EXPECT_TRUE(SplitLayoutId::makeFromBool(true).canBeComparedBitwise());
@@ -1041,7 +1046,35 @@ TEST(SplitLayoutId, canBeComparedBitwise) {
   EXPECT_TRUE(SplitLayoutId::makeFromEncodedVal(738).canBeComparedBitwise());
 }
 
-// _____________________________________________________________________________
+// Test that `compareWithoutLocalVocab` yields the same order as
+// `compareThreeWay` for `Id`s of all datatypes except `LocalVocabIndex`, and
+// that it rejects an `Id` of type `LocalVocabIndex` if the expensive checks are
+// enabled.
+TEST_F(SplitLayoutIdTest, compareWithoutLocalVocab) {
+  auto ids = makeRandomIds();
+  ql::erase_if(ids, [](SplitLayoutId id) {
+    return id.getDatatype() == Datatype::LocalVocabIndex;
+  });
+  ad_utility::SlowRandomIntGenerator<size_t> indexOfId(0, ids.size() - 1);
+  for (size_t i = 0; i < numRandomChecks; ++i) {
+    auto a = ids.at(indexOfId());
+    auto b = ids.at(indexOfId());
+    EXPECT_TRUE(a.compareWithoutLocalVocab(b) == a.compareThreeWay(b))
+        << a << ' ' << b;
+  }
+  EXPECT_TRUE(SplitLayoutId::makeFromInt(-1).compareWithoutLocalVocab(
+                  SplitLayoutId::makeFromDouble(0.0)) < 0);
+  EXPECT_TRUE(VocabId(3).compareWithoutLocalVocab(VocabId(3)) == 0);
+
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    auto localVocabId = LocalVocabId(3);
+    EXPECT_ANY_THROW(localVocabId.compareWithoutLocalVocab(VocabId(3)));
+    EXPECT_ANY_THROW(VocabId(3).compareWithoutLocalVocab(localVocabId));
+  }
+}
+
+// Test all the branches of `compareThreeWay` in which an `Id` of type
+// `LocalVocabIndex` is compared to an `Id` of another datatype.
 TEST(SplitLayoutId, compareThreeWayWithLocalVocabIndex) {
   using namespace ad_utility::testing;
   // Use a fresh index (and not the shared one of `getQec`), because the
@@ -1120,7 +1153,6 @@ TEST(SplitLayoutId, compareThreeWayWithLocalVocabIndex) {
   // of `intId` and `dateId` above.
 }
 
-// _____________________________________________________________________________
 // Test that the forwarding lambdas `Id::isUndefinedL`, `Id::isDefinedL`,
 // `Id::getBitsL` and `Id::getDatatypeL` behave like the member functions they
 // forward to, both for an `Id` and for a proxy type that is not an `Id` but
@@ -1165,7 +1197,6 @@ TEST(SplitLayoutId, forwardingLambdas) {
       proxies.begin() + 2);
 }
 
-// _____________________________________________________________________________
 // Test that the lambda `Id::fromBitsL` forwards to the `fromBits` overload that
 // takes all bits at once. In contrast to `fromBits`, which is overloaded, it
 // can be passed to generic algorithms.
