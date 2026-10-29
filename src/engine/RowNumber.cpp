@@ -87,7 +87,7 @@ std::unique_ptr<Operation> RowNumber::cloneImpl() const {
 std::optional<std::shared_ptr<QueryExecutionTree>> RowNumber::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
-  if (sortColumns.empty() || sortColumns[0] != 0) {
+  if (sortColumns[0] != 0) {
     return std::nullopt;
   }
   return ad_utility::makeExecutionTree<RowNumber>(

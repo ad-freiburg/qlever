@@ -1002,13 +1002,32 @@ TEST(QueryPlanner, RowNumber) {
           qec),
       HasSubstr("requires a `<bind>` parameter"));
 
-  // The subquery must have an `ORDER BY` or `INTERNAL SORT BY` clause.
+  // The child graph pattern must be present and consist of a single subquery
+  // with an `ORDER BY` or `INTERNAL SORT BY` clause and no filter.
+  std::string_view sorted = "{ SELECT ?x ?y { ?x <p> ?y } ORDER BY ?y }";
+  for (const std::string& child :
+       {std::string{}, std::string{"{ ?x <p> ?y }"},
+        std::string{"{ SELECT ?x ?y { ?x <p> ?y } }"},
+        absl::StrCat("{ ", sorted, " FILTER (?y != <y>) }"),
+        absl::StrCat("{ ", sorted, " ?x <p> ?y }")}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::parseAndPlan(
+            absl::StrCat("SELECT * { SERVICE "
+                         "<https://qlever.cs.uni-freiburg.de/rowNumber/> { "
+                         "[] <bind> ?n . ",
+                         child, " } }"),
+            qec),
+        HasSubstr("`ORDER BY` or `INTERNAL SORT BY`"));
+  }
+
+  // Unknown parameters are rejected.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::parseAndPlan(
-          absl::StrCat("SELECT * { ",
-                       rowNumberService("[] <bind> ?n .", "?y", ""), " }"),
-          qec),
-      HasSubstr("`ORDER BY` or `INTERNAL SORT BY`"));
+      h::parseAndPlan(absl::StrCat("SELECT * { ",
+                                   rowNumberService("[] <bind> ?n ; <typo> 1 .",
+                                                    "?y", "ORDER BY ?y"),
+                                   " }"),
+                      qec),
+      HasSubstr("Unknown parameter for row number query: `<typo>`"));
 
   // Each variable of the `ORDER BY` must be bound by the subquery.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1020,14 +1039,18 @@ TEST(QueryPlanner, RowNumber) {
       HasSubstr("Variable ?typo is used in the ORDER BY clause"));
 
   // The offset must be a non-negative integer.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::parseAndPlan(
-          absl::StrCat("SELECT * { ",
-                       rowNumberService("[] <bind> ?n ; <offset> -1 .", "?y",
-                                        "ORDER BY ?y"),
-                       " }"),
-          qec),
-      HasSubstr("non-negative integer"));
+  for (std::string_view offset : {"-1", "\"1\""}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::parseAndPlan(
+            absl::StrCat(
+                "SELECT * { ",
+                rowNumberService(
+                    absl::StrCat("[] <bind> ?n ; <offset> ", offset, " ."),
+                    "?y", "ORDER BY ?y"),
+                " }"),
+            qec),
+        HasSubstr("non-negative integer"));
+  }
 }
 
 TEST(QueryPlanner, PathSearchSingleTarget) {

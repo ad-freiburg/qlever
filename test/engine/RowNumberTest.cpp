@@ -91,6 +91,19 @@ TEST(RowNumber, makeSortedTree) {
 
   // An order that does not start with the row number column requires a `Sort`.
   EXPECT_FALSE(rowNumber.makeSortedTree({1, 0}).has_value());
+
+  // Requesting an order that the result already has is a contract violation.
+  EXPECT_ANY_THROW(rowNumber.makeSortedTree({0, 2}));
+}
+
+// Test that a negative offset and sort columns that do not start with the row
+// number column are rejected.
+TEST(RowNumber, invalidArguments) {
+  auto qec = getQec();
+  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}, IntId), Vars{Variable{"?a"}});
+  EXPECT_ANY_THROW(RowNumber(qec, child, Variable{"?n"}, -1));
+  EXPECT_ANY_THROW(RowNumber(qec, child, Variable{"?n"}, 0, {1}));
 }
 
 // Test that cloning yields a deep copy.
