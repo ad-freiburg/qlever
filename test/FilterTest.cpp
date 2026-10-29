@@ -361,7 +361,7 @@ TEST(Filter, makeTreeWithStrippedColumns) {
                 {{I(6), I(1), I(3), I(6)}, {I(2), I(2), I(3), I(5)}}));
 
   auto strip = [&](std::set<V> requestedVariables) {
-    Filter filter(qec, values, {ltSprql(Variable{"?b"}, I(3)), "!?b < 3"});
+    Filter filter(qec, values, {ltSprql(Variable{"?b"}, I(3)), "?b < 3"});
     auto tree = filter.makeTreeWithStrippedColumns(requestedVariables);
     AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
     return std::move(tree).value();

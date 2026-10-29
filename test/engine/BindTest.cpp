@@ -351,7 +351,7 @@ TEST(Bind, makeTreeWithStrippedColumns) {
   };
 
   // `Bind` `?a` AS `?additionalA`, `?a` and `?additionalA` requested: the
-  // result has `a` and `?additionalA`.
+  // result has `?a` and `?additionalA`.
   {
     auto tree = strip({V{"?a"}, V{"?additionalA"}});
     EXPECT_THAT(tree.get(),

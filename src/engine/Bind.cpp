@@ -290,8 +290,8 @@ Bind::makeTreeWithStrippedColumns(
         "Aggregate functions are not allowed in a `Bind` clause");
   }
 
-  // Strip the subtree and only keep `Bind` operation in the
-  // `QueryExecutionTree` if its target is requested by the parent.
+  // Strip the subtree. The `Bind` itself is only kept if the parent requests
+  // its target.
   auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
   if (!bindTargetRequested) {
     return subtree;
