@@ -23,41 +23,25 @@
 
 namespace ql {
 
-// C++17-compatible backport of C++23's
-// `std::basic_string::resize_and_overwrite` as a free function taking the
-// string first. Like the standard, `op` is taken by value, called once as an
-// rvalue with `(data, count)`, must write at most `count` characters, must not
-// throw, and returns the new size. Writing more than `count` characters is UB
-// (as in the standard) and cannot be checked after the fact; only a returned
-// size larger than `count` is checked with `AD_CONTRACT_CHECK` after the
-// call. On that error the string is left at size `count` with the written
-// contents on both paths (on the C++23 path the wrapper clamps the size it
-// reports to the standard member, whose contract would otherwise be
-// violated). Before C++23 there is no performance benefit: the fallback
-// value-initializes the newly appended characters with `resize` first. The
-// buffer handed to `op` must be treated as uninitialized on both paths: the
-// C++23 member passes indeterminate values, so `op` must not read it before
-// writing. The pointer handed to `op` is valid only during the call.
+// Backport of C++23 `std::basic_string::resize_and_overwrite` as a free
+// function (C++17 and C++20). `op` is called once as an rvalue with
+// `(data, count)`, must not throw, and returns the new size (at most `count`,
+// checked after the call; on a violation the string keeps size `count` with
+// the written contents). Treat the buffer as uninitialized and use the pointer
+// only during the call. Before C++23 the fallback `resize` value-initializes
+// the characters first, so there is no performance benefit there.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Operation)(
     requires ad_utility::InvocableWithConvertibleReturnType<Operation, size_t,
                                                             CharT*, size_t>)
 void resize_and_overwrite(std::basic_string<CharT, Traits, Allocator>& str,
                           size_t count, Operation op) {
-  // Forward to the standard member when
-  // `__cpp_lib_string_resize_and_overwrite >= 202110L` (C++23, P1072R10);
-  // otherwise `resize` (value-initializes the newly appended characters),
-  // overwrite, then shrink.
-  // P1072R10 (`basic_string::resize_and_overwrite`):
-  // https://web.archive.org/web/20260102024635/https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2021/p1072r10.html
-  // Feature-test macro value 202110L in [version.syn] of the C++ draft:
-  // https://web.archive.org/web/20251223023007/http://eel.is/c++draft/version.syn
+  // Feature-test macro from P1072R10 (`[version.syn]`).
 #if defined(__cpp_lib_string_resize_and_overwrite) && \
     __cpp_lib_string_resize_and_overwrite >= 202110L
-  // Throwing inside the operation passed to the standard member is UB, so the
-  // raw result is recorded in `newSize`, the value reported back to the
-  // standard member is clamped to `n`, and `newSize` is checked after the call
-  // returns.
+  // The result reported to the standard member is clamped to `n` (an
+  // oversize result would violate its contract); the raw value is checked
+  // after the call, because throwing inside the member's operation is UB.
   size_t newSize = 0;
   str.resize_and_overwrite(
       count, [&newSize, op = std::move(op)](CharT* data, size_t n) mutable {
