@@ -130,10 +130,10 @@ TEST(ExceptionCollector, asCompletionHandler) {
   } catch (...) {
     collector(std::current_exception());
   }
-  EXPECT_THAT(
-      logStream.str(),
-      ::testing::AllOf(::testing::HasSubstr("Additional exception captured"),
-                       ::testing::HasSubstr("second")));
+  EXPECT_THAT(logStream.str(),
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::AllOf(
+                  ::testing::HasSubstr("Additional exception captured"),
+                  ::testing::HasSubstr("second"))));
 
   // Reset stream.
   logStream.str("");
@@ -145,9 +145,9 @@ TEST(ExceptionCollector, asCompletionHandler) {
   } catch (...) {
     collector(std::current_exception());
   }
-  EXPECT_THAT(
-      logStream.str(),
-      ::testing::HasSubstr("Additional exception of unknown type captured"));
+  EXPECT_THAT(logStream.str(),
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::HasSubstr(
+                  "Additional exception of unknown type captured")));
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
                                         ::testing::StrEq("first"),

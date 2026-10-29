@@ -65,7 +65,8 @@ TEST(ResourceMonitor, StartIsANoOpOnUnsupportedPlatforms) {
   }
   EXPECT_FALSE(fs::exists(path));
   EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr("not supported on this platform"));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+                  ::testing::HasSubstr("not supported on this platform")));
 }
 #endif
 
@@ -541,7 +542,8 @@ TEST(ResourceMonitor, AppendModeWritesASecondHeaderWhenRotationFails) {
   EXPECT_EQ(lines[0], oldHeader);
   EXPECT_EQ(lines[1], oldRow);
   EXPECT_EQ(lines[2], rm::tsvHeader);
-  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("could not move"));
+  EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+                                   ::testing::HasSubstr("could not move")));
 }
 
 // _____________________________________________________________________________
@@ -788,7 +790,8 @@ TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
     const std::string expectedMessage = stdException
                                             ? "sampling stopped: boom"
                                             : "sampling stopped: unknown error";
-    EXPECT_THAT(logStream.str(), ::testing::HasSubstr(expectedMessage));
+    EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                                     ::testing::HasSubstr(expectedMessage)));
   }
 }
 

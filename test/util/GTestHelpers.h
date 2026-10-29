@@ -130,6 +130,20 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
     ad_utility::LogLevel::Enum::level                                         \
   }
 
+// Return `matcher` if messages with the given `level` are compiled in (see
+// `ad_utility::compileTimeLogLevel`), and a matcher that matches anything
+// otherwise. Use this for the log checks of a test that also checks other
+// things, which `ENFORCE_LOG_LEVEL_OR_SKIP` would skip as well. Note: Don't
+// negate the result, `Not(_)` matches nothing.
+template <ad_utility::LogLevel::Enum level, typename Matcher>
+auto ifLogLevelIsCompiledIn(Matcher matcher) {
+  if constexpr (ad_utility::compileTimeLogLevel >= level) {
+    return matcher;
+  } else {
+    return ::testing::_;
+  }
+}
+
 // _____________________________________________________________________________
 // Skip the enclosing test if the `_NO_TIMING_TESTS` CMake option is set. Use
 // this in tests that depend on the actual duration of `sleep` or on similar

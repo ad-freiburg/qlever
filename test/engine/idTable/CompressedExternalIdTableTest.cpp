@@ -1492,7 +1492,8 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   const std::string warning =
       "merge phase of the external sorter can only merge 1 chunks "
       "concurrently instead of the 8 chunks";
-  EXPECT_THAT(logOutput, ::testing::HasSubstr(warning));
+  EXPECT_THAT(logOutput, ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+                             ::testing::HasSubstr(warning)));
   EXPECT_EQ(logOutput.find(warning), logOutput.rfind(warning));
   for (const auto& result : results) {
     EXPECT_EQ(result.numRows(), numRows);
