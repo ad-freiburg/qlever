@@ -1954,6 +1954,46 @@ TEST(SpatialJoin, DistanceUnit) {
   }
 }
 
+// Compute a `libspatialjoin` `within-dist` join with the given `maxDist`
+// between all `<asWKT>` geometries of `kg`. Return the distance (in meters) for
+// each pair of different subjects in the result, keyed by "<a> <b>" with
+// `a < b`.
+std::map<std::string, double> computeLibspatialjoinDistances(std::string kg,
+                                                             double maxDist) {
+  auto qec = buildQec(std::move(kg));
+  Variable distVar{"?dist"};
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, maxDist, std::nullopt},
+      Variable{"?obj1"},
+      Variable{"?obj2"},
+      distVar,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN};
+  config.distanceUnit_ = UnitOfMeasurement::METERS;
+  auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, std::move(config),
+      buildIndexScan(qec, {"?s1", std::string{"<asWKT>"}, "?obj1"}),
+      buildIndexScan(qec, {"?s2", std::string{"<asWKT>"}, "?obj2"}));
+  auto result = spatialJoinTree->getResult();
+  auto toString = [&](Id id) {
+    return ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
+        .value()
+        .first;
+  };
+  auto col1 = spatialJoinTree->getVariableColumn(Variable{"?s1"});
+  auto col2 = spatialJoinTree->getVariableColumn(Variable{"?s2"});
+  auto colDist = spatialJoinTree->getVariableColumn(distVar);
+  std::map<std::string, double> dists;
+  for (const auto& row : result->idTableView()) {
+    auto a = toString(row[col1]);
+    auto b = toString(row[col2]);
+    if (a < b) {
+      dists[absl::StrCat(a, " ", b)] = row[colDist].getDouble();
+    }
+  }
+  return dists;
+}
+
 // Test that the distance reported by a `libspatialjoin` `within-dist` join to
 // a line with only two points does not depend on the maximum distance of the
 // join (regression test for ad-freiburg/spatialjoin#34).
@@ -1978,43 +2018,8 @@ TEST(SpatialJoin, LibspatialJoinDistanceToLineWithTwoPoints) {
       " .\n<river> <asWKT> ",
       makeLineLiteral("6.329887 49.8359132,6.3298461 49.8362461"),
       " .\n<point> <asWKT> ", makePointLiteral("6.32982", "49.8368"), " .\n");
-  auto qec = buildQec(kg);
-  Variable distVar{"?dist"};
-
-  // Return the distance (in meters) for each pair of different geometries in
-  // the result, keyed by "<a> <b>" with `a < b`.
   auto run = [&](double maxDist) {
-    SpatialJoinConfiguration config{
-        LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, maxDist,
-                             std::nullopt},
-        Variable{"?obj1"},
-        Variable{"?obj2"},
-        distVar,
-        PayloadVariables::all(),
-        SpatialJoinAlgorithm::LIBSPATIALJOIN};
-    config.distanceUnit_ = UnitOfMeasurement::METERS;
-    auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
-        qec, std::move(config),
-        buildIndexScan(qec, {"?s1", std::string{"<asWKT>"}, "?obj1"}),
-        buildIndexScan(qec, {"?s2", std::string{"<asWKT>"}, "?obj2"}));
-    auto result = spatialJoinTree->getResult();
-    auto toString = [&](Id id) {
-      return ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
-          .value()
-          .first;
-    };
-    auto col1 = spatialJoinTree->getVariableColumn(Variable{"?s1"});
-    auto col2 = spatialJoinTree->getVariableColumn(Variable{"?s2"});
-    auto colDist = spatialJoinTree->getVariableColumn(distVar);
-    std::map<std::string, double> dists;
-    for (const auto& row : result->idTableView()) {
-      auto a = toString(row[col1]);
-      auto b = toString(row[col2]);
-      if (a < b) {
-        dists[absl::StrCat(a, " ", b)] = row[colDist].getDouble();
-      }
-    }
-    return dists;
+    return computeLibspatialjoinDistances(kg, maxDist);
   };
 
   // `libspatialjoin` approximates the distances with a precision of about half
@@ -2028,6 +2033,32 @@ TEST(SpatialJoin, LibspatialJoinDistanceToLineWithTwoPoints) {
   EXPECT_THAT(run(150), UnorderedElementsAre(pointRiver, parkRiver));
   EXPECT_THAT(run(1000),
               UnorderedElementsAre(pointRiver, parkRiver, parkPoint));
+}
+
+// Test that the distance reported by a `libspatialjoin` `within-dist` join to
+// an axis-aligned rectangle does not depend on the maximum distance of the join
+// (regression test for ad-freiburg/spatialjoin#35).
+TEST(SpatialJoin, LibspatialJoinDistanceToRectangle) {
+  using ::testing::DoubleNear;
+  using ::testing::IsEmpty;
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // An axis-aligned rectangle and a point about 1 km north of it.
+  std::string kg = absl::StrCat(
+      "<box> <asWKT> ",
+      makeAreaLiteral("6.1 49.6,6.101 49.6,6.101 49.601,6.1 49.601,6.1 49.6"),
+      " .\n<point> <asWKT> ", makePointLiteral("6.1005", "49.61"), " .\n");
+  auto run = [&](double maxDist) {
+    return computeLibspatialjoinDistances(kg, maxDist);
+  };
+
+  // The pair is found with the same distance for each maximum distance above
+  // it.
+  auto boxPoint = Pair("<box> <point>", DoubleNear(1001.9, 0.5));
+  EXPECT_THAT(run(500), IsEmpty());
+  EXPECT_THAT(run(2000), UnorderedElementsAre(boxPoint));
+  EXPECT_THAT(run(5000), UnorderedElementsAre(boxPoint));
 }
 
 // _____________________________________________________________________________
