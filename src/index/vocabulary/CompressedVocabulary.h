@@ -165,19 +165,27 @@ class CompressedVocabulary {
 
   //____________________________________________________________________________
   // Look up the words for `indices` and append them to `builder` in the
-  // order of `indices`. `indices` must not be empty. The compressed words of
-  // the whole batch are fetched with one `lookupBatch` call on the underlying
-  // vocabulary; each word is then decoded by the decoder of its block with
-  // the existing `decompress` and copied into the arena of `builder`.
+  // order of `indices`. `indices` must not be empty. For an underlying
+  // vocabulary without holes, the compressed words of the whole batch are
+  // fetched with one `lookupBatch` call on the underlying vocabulary; each word
+  // is then decoded by the decoder of its block with the existing `decompress`
+  // and copied into the arena of `builder`.
   //
   // For an underlying vocabulary with holes, a hole index has no stored word:
   // like `operator[]`, append the placeholder for it instead of feeding the
-  // plain-text placeholder to the decoder.
+  // plain-text placeholder to the decoder. There, each position is resolved
+  // once and the compressed word is read directly (no batch fetch).
   //
   // Memory: the arena holds exactly the decoded bytes. When `builder` was
   // constructed with the query's `AllocatorWithLimit`, these allocations are
   // charged against the memory limit and throw
   // `AllocationExceedsLimitException` instead of growing the process heap.
+  // The compressed batch fetched from the underlying vocabulary, the
+  // temporaries of `decompress`, and the views vector of `builder` are not
+  // charged.
+  //
+  // Exception safety: only the basic guarantee. If this function throws,
+  // `builder` may contain a prefix of the words and must not be finalized.
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const {
     AD_CONTRACT_CHECK(!indices.empty());
@@ -187,7 +195,7 @@ class CompressedVocabulary {
       // each index exactly once, like `operator[]` does, and read the
       // compressed word directly.
       for (size_t idx : indices) {
-        auto position = underlyingVocabulary_.positionOfIndex(idx);
+        const auto position = underlyingVocabulary_.positionOfIndex(idx);
         if (!position.has_value()) {
           builder.appendWord(
               ad_utility::vocabulary::placeholderForMissingVocabIndex(idx));
@@ -198,12 +206,12 @@ class CompressedVocabulary {
             getDecoderIdxFromPosition(position.value())));
       }
     } else {
-      auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
+      const auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
       AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
 
       for (const auto& [idx, compressedWord] :
            ::ranges::views::zip(indices, compressedWords)) {
-        size_t decoderIdx = getDecoderIdx(idx);
+        const size_t decoderIdx = getDecoderIdx(idx);
         AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
         builder.appendWord(
             compressionWrapper_.decompress(compressedWord, decoderIdx));

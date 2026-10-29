@@ -20,13 +20,15 @@
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "global/Id.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/Exception.h"
+#include "util/MemoryLimitTracker.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
@@ -161,29 +163,25 @@ TYPED_TEST(CompressedVocabularyF, AccessOperator) {
 
 // _____________________________________________________________________________
 // `lookupBatch` must agree with the per-word `operator[]` for arbitrary index
-// combinations: same words, same order as requested (duplicates included), with
-// the returned batch owning the lifetime of all decompressed string views. An
-// empty index list is a contract violation and must throw.
+// combinations: same words, same order as requested (duplicates included).
 TYPED_TEST(CompressedVocabularyF, LookupBatchMatchesAccessOperator) {
   const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
                                        "epsilon"};
-  auto vocab = this->createCompressedVocabulary()(words);
+  const auto vocab = this->createCompressedVocabulary()(words);
   const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
   const auto result = vocab.lookupBatch(indices);
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
-  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
-                               ::testing::HasSubstr("!indices.empty()"));
 }
 
 // _____________________________________________________________________________
 // The builder overload charges the decoded words against the memory limit of
 // the builder's allocator: a limit that is too small throws, a sufficient one
-// yields the same words as the convenience overload.
+// yields the expected words.
 TYPED_TEST(CompressedVocabularyF, LookupBatchRespectsMemoryLimit) {
   using namespace ad_utility::memory_literals;
   const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
                                        "epsilon"};
-  auto vocab = this->createCompressedVocabulary()(words);
+  const auto vocab = this->createCompressedVocabulary()(words);
   const std::array<size_t, 5> indices{4, 1, 0, 3, 2};
 
   ArenaVocabBatchBuilder tooSmall(indices.size(),
@@ -201,9 +199,9 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchRespectsMemoryLimit) {
 // _____________________________________________________________________________
 // Both `lookupBatch` overloads reject an empty batch.
 TYPED_TEST(CompressedVocabularyF, LookupBatchRejectsEmptyIndices) {
-  auto vocab = this->createCompressedVocabulary()(
+  const auto vocab = this->createCompressedVocabulary()(
       std::vector<std::string>{"alpha", "beta"});
-  ql::span<const size_t> noIndices{};
+  const ql::span<const size_t> noIndices{};
   ArenaVocabBatchBuilder builder(1);
   AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(noIndices, builder),
                                ::testing::HasSubstr("!indices.empty()"));
@@ -212,11 +210,11 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchRejectsEmptyIndices) {
 }
 
 // _____________________________________________________________________________
-// A vocabulary containing the empty string word ("") must decompress correctly
-// through `lookupBatch` without crashes across all compressors.
+// A vocabulary containing the empty string word (`""`) must decompress
+// correctly through `lookupBatch` without crashes across all compressors.
 TYPED_TEST(CompressedVocabularyF, LookupBatchEmptyWordInVocabulary) {
   const std::vector<std::string> words{"alpha", "", "beta", "", "gamma"};
-  auto vocab = this->createCompressedVocabulary()(words);
+  const auto vocab = this->createCompressedVocabulary()(words);
   const std::array<size_t, 6> indices{1, 0, 3, 2, 4, 1};
   const auto result = vocab.lookupBatch(indices);
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
@@ -229,15 +227,16 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchEmptyWordInVocabulary) {
 }
 
 // _____________________________________________________________________________
-// The generic framework's empty-vocabulary contract: lookups, iteration, and
-// size must all behave on a vocabulary with zero words.
+// The generic framework's empty-vocabulary contract: `size` and the bound
+// lookups must behave on a vocabulary with zero words.
 TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
   testEmptyVocabulary(this->createCompressedVocabulary());
 }
 
 // _____________________________________________________________________________
-// Serialization round trip: write the compressed vocabulary to disk with the
-// serializer, read it back, and verify every word survives identically.
+// Serialization round trip: write the compressed vocabulary into an in-memory
+// buffer with the serializer, read it back, and verify every word survives
+// identically.
 TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
@@ -337,32 +336,29 @@ TYPED_TEST(CompressedVocabularyF, ScanAll) {
 // regardless of its allocator, so for short words a saved `string_view`
 // pointed into the destroyed local object instead of the arena.
 //
-// Detection strength:
-//  - Under AddressSanitizer builds (CMAKE_BUILD_TYPE=Asan) this test is a
-//    DETERMINISTIC detector: ASan poisons returned stack frames, so any read
-//    through the dangling view is reported as stack-use-after-return.
+// This test has the following detection strength.
+//  - Under AddressSanitizer builds (`CMAKE_BUILD_TYPE=Asan`) with
+//    stack-use-after-return detection enabled (the default for recent Clang,
+//    otherwise `ASAN_OPTIONS=detect_stack_use_after_return=1`), a read through
+//    the dangling view is reported.
 //  - In normal builds it is a practical tripwire, not a proof: reading a
 //    dangling view is UB, so we clobber the stack with sentinel bytes and
 //    verify content byte-for-byte, which makes corruption overwhelmingly
 //    likely but not formally guaranteed.
 TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
-  // Verify that this platform uses inline storage for `std::pmr::string`;
-  // short words therefore use the Small String Optimization (SSO) and would
-  // otherwise end up inside a destroyed stack object rather than the arena.
+  // Require inline storage for at least 15 characters in `std::pmr::string`
+  // (the capacity of libstdc++; other implementations have more). Short words
+  // then use the Small String Optimization (SSO), so a view into such a string
+  // points into the (stack) string object itself rather than into the arena.
   requireSsoCapacityOfPmrStringAtLeast(15);
 
-  // All words deliberately short (<= 15 chars): every one takes the SSO
-  // path in a `pmr::string`-based implementation, and none would end up in
-  // the monotonic buffer that owns the result's storage.
+  // All words are deliberately short (at most 3 characters, well below the
+  // required SSO capacity).
   std::vector<std::string> words;
   words.reserve(64);
   for (int i = 0; i < 64; ++i) {
     words.push_back(absl::StrCat("s", i));
   }
-  // Enforce the test premise: all words must fit within standard library SSO
-  // capacity (<= 15 bytes on 64-bit platforms).
-  ASSERT_TRUE(ql::ranges::all_of(
-      words, [](const auto& word) { return word.size() <= 15; }));
   auto vocab = this->createCompressedVocabulary()(words);
 
   const auto indices =
@@ -372,7 +368,7 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
 
   // Clobber the stack region a dangling SSO view would point into with
   // sentinel bytes, so no plausible intact copy is left behind.
-  clobberStack();
+  EXPECT_EQ(clobberStack(), '#');
 
   for (size_t i = 0; i < indices.size(); ++i) {
     ASSERT_EQ(result[i], words[i]);
@@ -498,13 +494,13 @@ TEST(CompressedVocabularyWithHoles, accessOperator) {
 // words in the requested order, with the placeholder for hole indices. The
 // batch must not feed the plain-text placeholder to the decoder.
 TEST(CompressedVocabularyWithHoles, lookupBatchMatchesAccessOperator) {
-  std::string filename = gtestCurrentTestName();
+  const std::string filename = gtestCurrentTestName();
   auto cleanup = getFileCleanup(filename);
   auto vocab =
       createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
   // Mix contained indices, holes, duplicates, and an index past the end.
   const std::vector<size_t> indices{0, 1, 2, 4, 5, 7, 1, 31, 32, 35};
-  const auto result = vocab.lookupBatch(ql::span<const size_t>{indices});
+  const auto result = vocab.lookupBatch(indices);
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
 }
 
@@ -657,10 +653,8 @@ TEST(CompressedVocabularyWithHoles, nonAscendingIndicesThrow) {
 // _____________________________________________________________________________
 // `lookupBatch` with several decoder blocks: a small block size (2 words per
 // block) forces multiple decoders, exercising the per-request decoder
-// selection. Covers a single-element batch, a batch with repeated indices,
-// and a mixed batch crossing block boundaries; results must match
-// `operator[]` exactly and appear in request order, with all views staying
-// valid while the returned result object lives.
+// selection. Results must match `operator[]` exactly and appear in request
+// order.
 TYPED_TEST(CompressedVocabularyF, LookupBatchAcrossDecoderBlocks) {
   const std::vector<std::string> words{"alpha", "beta",  "gamma", "delta",
                                        "epsi",  "zeta",  "eta",   "theta",
@@ -677,8 +671,8 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchAcrossDecoderBlocks) {
   ASSERT_EQ(vocab.size(), words.size());
 
   // Single-element batch: boundary case with exactly one requested index.
-  const std::array<size_t, 1> singleIdx{7};
-  auto single = vocab.lookupBatch(singleIdx);
+  const std::array<size_t, 1> singleIndices{7};
+  const auto single = vocab.lookupBatch(singleIndices);
   ASSERT_EQ(single.size(), 1u);
   EXPECT_EQ(single[0], "theta");
 
@@ -688,13 +682,4 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchAcrossDecoderBlocks) {
   const auto result = vocab.lookupBatch(indices);
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
   EXPECT_TRUE(result[0].empty());
-  EXPECT_EQ(result[6], "");
-
-  // All views yielded by the result must stay intact while the result object
-  // is alive (see `LookupBatchShortWordViewsStayValid` for the stack clobbering
-  // variant of this check).
-  for (size_t i = 0; i < indices.size(); ++i) {
-    const size_t idx = indices[i];
-    EXPECT_EQ(result[i], vocab[idx]) << "at vocabulary index " << idx;
-  }
 }
