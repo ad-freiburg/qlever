@@ -22,7 +22,13 @@
 
 namespace prefilterExpressions {
 
-using LVE = LocalVocabEntry;
+// Return the smallest possible IRI `<>`.
+static IdOrLocalVocabEntry smallestIri(const IndexImpl& index) {
+  return toIdOrLocalVocabEntry(
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          "<>"),
+      index.getLocalVocabContext());
+}
 
 // HELPER FUNCTIONS
 
@@ -488,16 +494,14 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
   LocalVocab localVocab{};
-  auto prefixQuoted =
-      absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
+  auto prefixQuoted = absl::StrCat("\"", prefixLiteral_.getContent());
   auto [lowerVocabIndex, upperVocabIndex] =
       index.getVocab().prefixRanges(prefixQuoted).ranges().front();
 
   // Set lower reference.
   const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
-  const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
-      LVE::fromStringRepresentation("<>", index.getLocalVocabContext()),
-      localVocab);
+  const auto& beginIdIri =
+      getValueIdFromIdOrLocalVocabEntry(smallestIri(index), localVocab);
 
   // The `vocab.prefixRanges` returns the correct bounds only for preindexed
   // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,
@@ -672,10 +676,9 @@ std::string IsDatatypeExpression<Datatype>::asString(
 }
 
 //______________________________________________________________________________
-static BlockMetadataRanges getRangesForDatatypes(const ValueIdSubrange& idRange,
-                                                 BlockMetadataSpan blockRange,
-                                                 const bool isNegated,
-                                                 ql::span<Datatype> datatypes) {
+static BlockMetadataRanges getRangesForDatatypes(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+    const bool isNegated, ql::span<const Datatype> datatypes) {
   std::vector<ValueIdItPair> relevantRanges;
   for (Datatype datatype : datatypes) {
     relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
@@ -692,23 +695,17 @@ static BlockMetadataRanges getRangesForDatatypes(const ValueIdSubrange& idRange,
 }
 
 //______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::BLANK>::evaluateImpl(
+// `BLANK`, `NUMERIC`, `ENCODED_IRI`, and `GEO_POINT` hold for exactly the
+// `Id`s of their datatypes (for `GEO_POINT`, the WKT literals of the vocabulary
+// are not points), see `getDatatypes`. `IRI` and `LITERAL` are specialized
+// below.
+template <IsDatatype Datatype>
+BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
     [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  std::array datatypes{Datatype::BlankNodeIndex};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
-}
-
-//______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::NUMERIC>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  std::array datatypes{Datatype::Int, Datatype::Double};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  return getRangesForDatatypes(idRange, blockRange, isNegated_,
+                               getDatatypes<Datatype>());
 }
 
 //______________________________________________________________________________
@@ -727,55 +724,29 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
   // ranges below, so neither the `> <>` prefilter nor the datatype range of
   // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is deliberate for now, because
-  // nothing but a unit test can currently create a secondary vocabulary, but
-  // it has to be fixed *before* anything else does, together with the semantic
-  // comparison of those `Id`s (see the detailed note at
+  // of such IRIs are incorrectly pruned. This is a known limitation for now,
+  // because apart from unit tests, a secondary vocabulary is only created when
+  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
+  // but it has to be fixed before it is used more widely, together with the
+  // semantic comparison of those `Id`s (see the detailed note at
   // `valueIdComparators::detail::compareIdsImpl`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we use its
   // corresponding ValueId later on as a lower bound.
   auto vocabIriRanges =
-      make<GreaterThanExpression>(
-          LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))
+      make<GreaterThanExpression>(smallestIri(index))
           ->evaluateImpl(index, idRange, blockRange, isNegated_);
   // (2) Encoded IRIs: These sort *after* all vocabulary IRIs, so the `> <>`
   // prefilter above does not cover them and we have to add their datatype range
   // explicitly. Otherwise, blocks that consist entirely of encoded IRIs would
   // be incorrectly pruned.
-  std::array datatypes{Datatype::EncodedVal};
-  auto encodedIriRanges =
-      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  auto encodedIriRanges = getRangesForDatatypes(
+      idRange, blockRange, isNegated_, getDatatypes<IsDatatype::IRI>());
   // `IRI = vocabIri || encodedIri` (an intersection under negation, see the
   // helper for details).
   return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
       vocabIriRanges, encodedIriRanges, isNegated_);
-}
-
-//______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
-  std::array datatypes{Datatype::EncodedVal};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
-}
-
-//______________________________________________________________________________
-template <>
-BlockMetadataRanges IsDatatypeExpression<IsDatatype::GEO_POINT>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
-    [[maybe_unused]] bool getTotalComplement) const {
-  // The geo points that are encoded in the `Id` are exactly the `ValueId`s of
-  // datatype `GeoPoint` (the WKT literals of the vocabulary are not points).
-  // They sort in one contiguous range, so only the blocks of points are kept,
-  // or, for the negation, only the other blocks.
-  std::array datatypes{Datatype::GeoPoint};
-  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
 //______________________________________________________________________________
@@ -791,13 +762,10 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   // TODO<joka921> Just as for `IsDatatype::IRI` above, the literals of a
   // secondary vocabulary are not covered, because their `Id`s sort after the
   // `< <>` bound that is used here. See the note there.
-  std::array datatypes{Datatype::Int, Datatype::Double, Datatype::Date,
-                       Datatype::Bool, Datatype::GeoPoint};
-  auto inlinedRanges =
-      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  auto inlinedRanges = getRangesForDatatypes(
+      idRange, blockRange, isNegated_, getDatatypes<IsDatatype::LITERAL>());
   auto nonInlinedRanges =
-      make<LessThanExpression>(
-          LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))
+      make<LessThanExpression>(smallestIri(index))
           ->evaluateImpl(index, idRange, blockRange, isNegated_);
 
   // `LITERAL = inlined || nonInlined` (an intersection under negation, see the
@@ -1017,9 +985,9 @@ void checkPropertiesForPrefilterConstruction(
 
 //______________________________________________________________________________
 CPP_template_def(typename T)(requires(std::is_same_v<T, int64_t> ||
-                                      std::is_same_v<T, double>))
-    std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-        CompOp comparison, T year) {
+                                        std::is_same_v<T, double>))
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, T year) {
   // Derive integer bounds `yearFloor` and `yearCeil` from the reference `year`.
   // When the `year` is an `int64_t`, they coincide. When it is a non-integer
   // `double`, they differ by 1 so that the code below does the right thing for

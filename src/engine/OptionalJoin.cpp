@@ -93,7 +93,8 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&,
+                                        bool childrenAreExclusivelyOwned) {
   // Note that we use the merged `getLimitOffset()` and not the clause that was
   // passed in, which only holds the increment that was just added. The bound
   // below depends on the total limit and offset, so for nested subqueries the
@@ -113,8 +114,8 @@ void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
     // the left side. This can significantly speed up the query if the left side
     // is large and the limit is small. The right side is optional, so reducing
     // it can drop matches; we leave it untouched.
-    _left = _left->clone();
-    _left->applyLimitOffset(LimitOffsetClause{safeLimit});
+    applyLimitOffsetToChild(_left, LimitOffsetClause{safeLimit},
+                            childrenAreExclusivelyOwned);
 
     // The pushdown may have un-sorted `_left`, which our join algorithms
     // require to be sorted on the join columns, so restore that order (see the
@@ -172,8 +173,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
       _joinColumns.size() == 2;
   if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>() &&
       (_joinColumns.size() == 1 || isTwoColumnSpecialOptionalJoin)) {
-    if (auto indexScan =
-            std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
+    if (auto indexScan = IndexScan::getIfSupportsPrefilteredJoin(*_right)) {
       return optionalJoinWithIndexScan(_left->getResult(true),
                                        std::move(indexScan), requestLaziness);
     }
@@ -354,7 +354,7 @@ auto OptionalJoin::computeImplementationFromIdTables(
     -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
-    return ql::ranges::any_of(column, &Id::isUndefined);
+    return ql::ranges::any_of(column, Id::isUndefinedL);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);
@@ -427,7 +427,7 @@ void OptionalJoin::optionalJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_, keepJoinColumns_);
+      cancellationHandle(), keepJoinColumns_);
   auto rowAdderOnIterators = [&]() {
     auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
                    beginRight = joinColumnsRight.begin()](const auto& itLeft,
@@ -460,7 +460,7 @@ void OptionalJoin::optionalJoin(
   };
 
   const size_t numOutOfOrder = [&]() {
-    auto checkCancellationLambda = [this] { checkCancellation(); };
+    auto checkCancellationLambda = cancellationChecker();
     if (implementation == Implementation::OnlyUndefInLastJoinColumnOfLeft) {
       ad_utility::specialOptionalJoin(joinColumns.size(), joinColumnsLeft,
                                       joinColumnsRight, rowAdderOnIterators,
@@ -505,7 +505,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols);
+    IdTableUtils::sort(*result, cols, sortConfig(), cancellationHandle());
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
@@ -671,7 +671,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto lazyResult =
       std::move(nestedLoopJoin)
           .computeOptionalJoin(!requestLaziness, getResultWidth(),
-                               cancellationHandle_, _right->getResultWidth(),
+                               cancellationHandle(), _right->getResultWidth(),
                                keepJoinColumns_);
   return requestLaziness
              ? Result{std::move(lazyResult), resultSortedOn()}
@@ -709,4 +709,25 @@ OptionalJoin::makeTreeWithStrippedColumns(
   return ad_utility::makeExecutionTree<OptionalJoin>(
       getExecutionContext(), std::move(left), std::move(right),
       keepJoinColumns);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left (non-optional) child.
+  //
+  // NOTE: For left rows without a match, `OptionalJoin` fills all columns of
+  // the right child with `UNDEF`, including a pushed-down `BIND` column,
+  // instead of evaluating the `BIND` expression on the unbound input. This
+  // silently changes the result for any expression that isn't `UNDEF` itself
+  // on `UNDEF` input, e.g. `COALESCE`.
+  return pushDownBindToChild(bind, {_left, _right}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> OptionalJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<OptionalJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)),
+      keepJoinColumns_);
 }

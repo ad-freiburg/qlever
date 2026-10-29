@@ -11,9 +11,11 @@
 #include <deque>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "util/Allocator.h"
@@ -39,6 +41,11 @@ namespace qlm {
 
 template <typename T>
 using Allocator = qlever::Allocator<T>;
+
+template <typename T, typename... Args>
+std::shared_ptr<T> makeShared(const Allocator<T>& allocator, Args&&... args) {
+  return std::allocate_shared<T>(allocator, std::forward<Args>(args)...);
+}
 
 template <typename T>
 using vector = std::vector<T, Allocator<T>>;
