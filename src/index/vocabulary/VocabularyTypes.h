@@ -14,7 +14,9 @@
 #include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -22,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <range/v3/view/enumerate.hpp>
+#include <range/v3/view/zip.hpp>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -46,8 +49,8 @@
 // move the populated views and the backing storage into a derived class;
 // the result is observed as a `VocabBatchLookupResult` holding a
 // `shared_ptr<const VocabBatchStorage>` with no mutators. `viewSpan()` is not
-// virtual: it always returns this object's `views_`, which only a builder may
-// fill via a derived constructor.
+// virtual: it always returns this object's `views_`, which a derived class
+// fills only during its construction.
 class VocabBatchStorage {
   std::vector<std::string_view> views_;
 
@@ -81,8 +84,10 @@ using VocabBatchOwner = std::shared_ptr<const VocabBatchStorage>;
 class MultiSourceVocabBatchAssembler;
 
 // _____________________________________________________________________________
-// Batch lookup result: views are always `storage_->viewSpan()`. There is no
-// constructor that takes an owner and a span independently. Copies share the
+// Batch lookup result: for a non-empty result, the views are always
+// `storage_->viewSpan()`. A default-constructed or moved-from result is empty
+// and holds no storage. There is no constructor that takes an owner and a span
+// independently. Copies share the
 // storage. A view stays valid as long as any copy of the result lives, with
 // one documented exception: a view that the producing vocabulary placed via
 // `MultiSourceVocabBatchAssembler::assignUnownedViewAtPosition` points into
@@ -213,7 +218,8 @@ class ContiguousVocabBatchBuilder {
     AD_CONTRACT_CHECK(!wordSizes.empty());
     size_t totalBytes = 0;
     for (size_t size : wordSizes) {
-      AD_CONTRACT_CHECK(size <= SIZE_MAX - totalBytes);
+      AD_CONTRACT_CHECK(size <= SIZE_MAX - totalBytes, "Word size ", size,
+                        " overflows the total of ", totalBytes, " bytes");
       totalBytes += size;
     }
     buffer_.resize(totalBytes == 0 ? 1 : totalBytes);
@@ -229,32 +235,38 @@ class ContiguousVocabBatchBuilder {
     }
   }
 
-  // Return an owning pointer array with one destination per requested word.
-  // The array can safely outlive this builder's metadata. Its pointers remain
-  // valid after `finalize()` because the result takes ownership of `buffer_`.
-  // They become invalid when that result is destroyed. Multiple zero-sized
-  // words may share an address, but no bytes are written through those entries.
-  [[nodiscard]] std::vector<char*> targets() noexcept {
-    std::vector<char*> result;
-    result.reserve(targetOffsets_.size());
+  // Return one non-owning destination pointer per requested word. The array
+  // owns only the pointer values; the bytes they point to belong to this
+  // builder's `buffer_` and, after `finalize()`, to the returned result. The
+  // pointers are therefore valid from this call until that result is
+  // destroyed. If the builder is destroyed without calling `finalize()`, they
+  // become invalid with it. Multiple zero-sized words may share an address, but
+  // no bytes are written through those entries.
+  [[nodiscard]] std::vector<char*> targets() {
+    std::vector<char*> targetPointers;
+    targetPointers.reserve(targetOffsets_.size());
     for (size_t offset : targetOffsets_) {
-      result.push_back(buffer_.data() + offset);
+      targetPointers.push_back(buffer_.data() + offset);
     }
-    return result;
+    return targetPointers;
   }
 
   [[nodiscard]] VocabBatchLookupResult finalize() && {
     AD_CONTRACT_CHECK(!views_.empty());
-    auto data = std::make_shared<ContiguousVocabBatchLookupData>(
+    auto lookupData = std::make_shared<ContiguousVocabBatchLookupData>(
         ContiguousVocabBatchLookupData::Passkey{}, std::move(buffer_),
         std::move(views_));
-    return ContiguousVocabBatchLookupData::asResult(std::move(data));
+    // The destinations are now owned by the result; a later `targets()` call
+    // must not compute pointers from the moved-from buffer.
+    targetOffsets_.clear();
+    return ContiguousVocabBatchLookupData::asResult(std::move(lookupData));
   }
 };
 
 // _____________________________________________________________________________
-// PMR `memory_resource` that charges an `AllocatorWithLimit`. Copies of the
-// allocator share the same `MemoryLimitTracker` as query `IdTable`s.
+// Provide a PMR `memory_resource` that charges an `AllocatorWithLimit`. Copies
+// of the allocator share the same `MemoryLimitTracker` as the query's
+// `IdTable`s.
 class AllocatorAsMemoryResource : public ql::pmr::memory_resource {
   ad_utility::AllocatorWithLimit<std::byte> alloc_;
 
@@ -322,7 +334,7 @@ class StringVectorVocabBatchLookupData : public VocabBatchStorage {
   std::vector<std::string> words_;
 
   static std::vector<std::string_view> viewsInto(
-      const std::vector<std::string>& words) {
+      ql::span<const std::string> words) {
     return ::ranges::to_vector(
         words | ql::views::transform(ad_utility::staticCast<std::string_view>));
   }
@@ -360,8 +372,10 @@ class StringVectorVocabBatchLookupData : public VocabBatchStorage {
 };
 
 // _____________________________________________________________________________
-// Strong, self-contained batch-lookup result that owns multiple independent
-// storage owners.
+// Strong, self-contained batch-lookup result that keeps the storage of
+// multiple independent sub-batches alive. The owner list is empty if all views
+// point into storage that the result does not own (see
+// `MultiSourceVocabBatchAssembler::assignUnownedViewAtPosition`).
 class MultiOwnerVocabBatchLookupData : public VocabBatchStorage {
  public:
   class Passkey {
@@ -405,19 +419,21 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 
 // _____________________________________________________________________________
 // Decompress a single word into `destination` using `decompress(span)`.
-// `destination` must hold exactly the first `bound` bytes passed to
-// `decompress`. A `bound` of 0 returns an empty view without calling
-// `decompress`. Returns a string_view to the decompressed word.
+// `destination` must hold at least `bound` bytes; only the first `bound` bytes
+// are passed to `decompress`. If `bound` is 0, return an empty view without
+// calling `decompress`. Return a `string_view` to the decompressed word.
 template <typename DecompressFunc>
-std::string_view decompressIntoSpan(ql::span<char> destination, size_t bound,
-                                    DecompressFunc&& decompress) {
+[[nodiscard]] std::string_view decompressIntoSpan(ql::span<char> destination,
+                                                  size_t bound,
+                                                  DecompressFunc&& decompress) {
   if (bound == 0) {
     return "";
   }
   AD_CORRECTNESS_CHECK(destination.size() >= bound);
   const size_t bytesWritten =
       decompress(ql::span<char>{destination.data(), bound});
-  AD_CORRECTNESS_CHECK(bytesWritten <= bound);
+  AD_CORRECTNESS_CHECK(bytesWritten <= bound, "Decompressor wrote ",
+                       bytesWritten, " bytes, but the bound is ", bound);
   return bytesWritten == 0 ? ""
                            : std::string_view{destination.data(), bytesWritten};
 }
@@ -428,38 +444,49 @@ std::string_view decompressIntoSpan(ql::span<char> destination, size_t bound,
 // memory-limit tracker. Vocabularies only append decompressed bytes.
 class ArenaVocabBatchBuilder {
  private:
+  // The declaration order is load-bearing: `buffer_` deallocates through
+  // `upstream_` when it is destroyed, so it must be declared after `upstream_`
+  // (members are destroyed in reverse order). The same holds for
+  // `PmrVocabBatchLookupData`.
   std::unique_ptr<ql::pmr::memory_resource> upstream_;
   std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_;
   std::vector<std::string_view> views_;
 
-  void initBuffer(ql::pmr::memory_resource* resource) {
-    buffer_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(resource);
+  void initBuffer(ql::pmr::memory_resource& resource) {
+    buffer_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(&resource);
   }
 
  public:
-  // Default PMR resource (tests and vocabs that do not see a query
-  // allocator).
-  explicit ArenaVocabBatchBuilder(size_t expectedSize) {
-    AD_CONTRACT_CHECK(expectedSize > 0);
-    views_.reserve(expectedSize);
-    initBuffer(ql::pmr::get_default_resource());
+  // Move-assignment would destroy `upstream_` before the old `buffer_` that
+  // still deallocates through it, so only move-construction is supported.
+  ArenaVocabBatchBuilder(ArenaVocabBatchBuilder&&) = default;
+  ArenaVocabBatchBuilder& operator=(ArenaVocabBatchBuilder&&) = delete;
+
+  // Use the default PMR resource (tests and vocabs that do not see a query
+  // allocator). `expectedNumWords` is the number of words that will be
+  // appended; it is used to reserve the view table.
+  explicit ArenaVocabBatchBuilder(size_t expectedNumWords) {
+    AD_CONTRACT_CHECK(expectedNumWords > 0);
+    views_.reserve(expectedNumWords);
+    initBuffer(*ql::pmr::get_default_resource());
   }
 
-  // Charge `allocator`'s shared memory tracker (same object as the Index /
-  // query `AllocatorWithLimit`).
+  // Charge the `MemoryLimitTracker` that `allocator` shares with the Index /
+  // query `AllocatorWithLimit`.
   explicit ArenaVocabBatchBuilder(
-      size_t expectedSize,
+      size_t expectedNumWords,
       const ad_utility::AllocatorWithLimit<Id>& allocator) {
-    AD_CONTRACT_CHECK(expectedSize > 0);
-    views_.reserve(expectedSize);
+    AD_CONTRACT_CHECK(expectedNumWords > 0);
+    views_.reserve(expectedNumWords);
     upstream_ =
         std::make_unique<AllocatorAsMemoryResource>(allocator.as<std::byte>());
-    initBuffer(upstream_.get());
+    initBuffer(*upstream_);
   }
 
   // Allocate storage inside the arena for `bound` bytes, invoke
   // `decompress(destinationSpan)` to write the bytes (up to `bound`), and
-  // register the view.
+  // register the view. If `bound` is 0, register an empty view without
+  // allocating and without calling `decompress`.
   template <typename DecompressFunc>
   void appendDecompressedWord(size_t bound, DecompressFunc&& decompress) {
     if (bound == 0) {
@@ -468,9 +495,9 @@ class ArenaVocabBatchBuilder {
     }
 
     ql::pmr::polymorphic_allocator<char> allocator{buffer_.get()};
-    char* mem = allocator.allocate(bound);
+    char* destination = allocator.allocate(bound);
     views_.push_back(
-        decompressIntoSpan(ql::span<char>{mem, bound}, bound,
+        decompressIntoSpan(ql::span<char>{destination, bound}, bound,
                            std::forward<DecompressFunc>(decompress)));
   }
 
@@ -481,26 +508,28 @@ class ArenaVocabBatchBuilder {
       return;
     }
     ql::pmr::polymorphic_allocator<char> allocator{buffer_.get()};
-    char* mem = allocator.allocate(word.size());
-    ql::ranges::copy(word, mem);
-    views_.emplace_back(mem, word.size());
+    char* destination = allocator.allocate(word.size());
+    ql::ranges::copy(word, destination);
+    views_.emplace_back(destination, word.size());
   }
 
   // ___________________________________________________________________________
-  // Finalize and return the immutable batch result.
+  // Finalize and return the immutable batch result. At least one word must
+  // have been appended.
   [[nodiscard]] VocabBatchLookupResult finalize() && {
     AD_CONTRACT_CHECK(!views_.empty());
-    auto data = std::make_shared<PmrVocabBatchLookupData>(
+    auto lookupData = std::make_shared<PmrVocabBatchLookupData>(
         PmrVocabBatchLookupData::Passkey{}, std::move(upstream_),
         std::move(buffer_), std::move(views_));
-    return PmrVocabBatchLookupData::asResult(std::move(data));
+    return PmrVocabBatchLookupData::asResult(std::move(lookupData));
   }
 };
 
 // _____________________________________________________________________________
 // Construct a PMR arena-backed `VocabBatchLookupResult` by copying words into a
-// monotonic buffer arena.
-inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
+// monotonic buffer arena. The arena uses the default PMR resource, so its
+// memory is not charged to a query's memory limit.
+[[nodiscard]] inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
     ql::span<const std::string_view> words) {
   AD_CONTRACT_CHECK(!words.empty());
   ArenaVocabBatchBuilder builder(words.size());
@@ -510,7 +539,8 @@ inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
   return std::move(builder).finalize();
 }
 
-inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
+// Same as the overload above, for an initializer list of words.
+[[nodiscard]] inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
     std::initializer_list<std::string_view> words) {
   return makePmrVocabBatchLookupResult(
       ql::span<const std::string_view>{words.begin(), words.size()});
@@ -541,8 +571,12 @@ class MultiSourceVocabBatchAssembler {
   // Fill one output position (shared by the two public placement functions,
   // which differ only in how the storage behind `word` is kept alive).
   void assignWordAtPosition(size_t resultPosition, std::string_view word) {
-    AD_CORRECTNESS_CHECK(resultPosition < assembledWordViews_.size());
-    AD_CORRECTNESS_CHECK(!slotFilledTracking_[resultPosition]);
+    AD_CONTRACT_CHECK(resultPosition < assembledWordViews_.size(),
+                      "Result position ", resultPosition,
+                      " is out of range for an output of ",
+                      assembledWordViews_.size(), " words");
+    AD_CONTRACT_CHECK(!slotFilledTracking_[resultPosition], "Result position ",
+                      resultPosition, " was already assigned");
     slotFilledTracking_[resultPosition] = true;
     assembledWordViews_[resultPosition] = word;
   }
@@ -569,15 +603,21 @@ class MultiSourceVocabBatchAssembler {
   void scatterSubBatchResultAtPositions(
       VocabBatchLookupResult subBatchResult,
       ql::span<const size_t> resultPositions) {
-    AD_CONTRACT_CHECK(subBatchResult.size() == resultPositions.size());
+    AD_CONTRACT_CHECK(subBatchResult.size() == resultPositions.size(),
+                      "Sub-batch has ", subBatchResult.size(), " words but ",
+                      resultPositions.size(), " target positions were given");
 
+    // Retain the owner first (stealing it from the by-value argument instead
+    // of copying it), so that no view is ever recorded without its owner, even
+    // if a position check below throws. The moved-from `subBatchResult` keeps
+    // its span, which stays valid because the owner now lives in
+    // `storageOwners_`.
+    if (subBatchResult.storage_ != nullptr) {
+      storageOwners_.push_back(std::move(subBatchResult.storage_));
+    }
     for (auto [resultPosition, word] :
          ::ranges::views::zip(resultPositions, subBatchResult)) {
       assignWordAtPosition(resultPosition, word);
-    }
-    // Steal the owner of the (by-value) argument instead of copying it.
-    if (subBatchResult.storage_ != nullptr) {
-      storageOwners_.push_back(std::move(subBatchResult.storage_));
     }
   }
 
@@ -606,10 +646,12 @@ class MultiSourceVocabBatchAssembler {
     AD_CORRECTNESS_CHECK(assembledWordViews_.size() ==
                          slotFilledTracking_.size());
     AD_CORRECTNESS_CHECK(!assembledWordViews_.empty());
+    // Every output position must have been filled by the caller.
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
+        slotFilledTracking_, [](bool isFilled) { return isFilled; }));
+
     // `storageOwners_` is empty iff all words were placed via
     // `assignUnownedViewAtPosition`, which is valid.
-    AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-        slotFilledTracking_, [](bool isFilled) { return isFilled; }));
 
     auto multiOwnerData = std::make_shared<MultiOwnerVocabBatchLookupData>(
         MultiOwnerVocabBatchLookupData::Passkey{}, std::move(storageOwners_),
@@ -683,16 +725,21 @@ using IndicesAndPositionsByMarker =
 // lists per marker. For each input index, `getMarkerAndVocabIndex` extracts
 // the marker that identifies the underlying vocabulary and the unmarked vocab
 // index; the index is paired with its position in the input, and both are
-// grouped by marker.
+// grouped by marker. `getMarkerAndVocabIndex` takes a `size_t` and returns a
+// pair (`marker`, `vocabIndex`), where `marker` must be smaller than
+// `NumVocabs`.
 template <size_t NumVocabs, typename GetMarkerAndVocabIndex>
-IndicesAndPositionsByMarker<NumVocabs> partitionMarkerIndicesAndPositions(
+[[nodiscard]] IndicesAndPositionsByMarker<NumVocabs>
+partitionMarkerIndicesAndPositions(
     ql::span<const size_t> indices,
     GetMarkerAndVocabIndex getMarkerAndVocabIndex) {
   IndicesAndPositionsByMarker<NumVocabs> out;
   for (const auto& [resultPosition, markedIndex] :
        ::ranges::views::enumerate(indices)) {
     auto [marker, underlyingIndex] = getMarkerAndVocabIndex(markedIndex);
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " of marked index ", markedIndex, " is not smaller than ",
+                      NumVocabs);
     out[marker].addPair(underlyingIndex, resultPosition);
   }
   return out;
@@ -715,18 +762,23 @@ class MarkerBatchLookups {
 
   // Return the lookup result for the given vocabulary marker.
   std::optional<VocabBatchLookupResult>& operator[](size_t marker) {
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " is not smaller than ", NumVocabs);
     return results_[marker];
   }
-  const std::optional<VocabBatchLookupResult>& operator[](size_t marker) const {
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
+  [[nodiscard]] const std::optional<VocabBatchLookupResult>& operator[](
+      size_t marker) const {
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " is not smaller than ", NumVocabs);
     return results_[marker];
   }
 
   // Release the lookup result for the given vocabulary marker exactly once.
-  VocabBatchLookupResult release(size_t marker) {
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
-    AD_CORRECTNESS_CHECK(results_[marker].has_value());
+  [[nodiscard]] VocabBatchLookupResult release(size_t marker) {
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " is not smaller than ", NumVocabs);
+    AD_CONTRACT_CHECK(results_[marker].has_value(), "The result of marker ",
+                      marker, " is missing or was already released");
     auto result = std::move(results_[marker].value());
     results_[marker].reset();
     return result;
@@ -738,12 +790,14 @@ class MarkerBatchLookups {
 // `VocabBatchLookupResult` where each word is at the position of its original
 // input index.
 template <size_t NumVocabs, typename ReleaseLookupResultForMarker>
-VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
+[[nodiscard]] VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
     const IndicesAndPositionsByMarker<NumVocabs>& markerIndicesAndPositions,
     ReleaseLookupResultForMarker releaseLookupResult) {
   size_t totalPositions = 0;
   for (const auto& markerIndices : markerIndicesAndPositions) {
-    AD_CONTRACT_CHECK(markerIndices.size() <= SIZE_MAX - totalPositions);
+    AD_CONTRACT_CHECK(markerIndices.size() <= SIZE_MAX - totalPositions,
+                      "Marker batch of ", markerIndices.size(),
+                      " positions overflows the total of ", totalPositions);
     totalPositions += markerIndices.size();
   }
   MultiSourceVocabBatchAssembler assembler(totalPositions);
@@ -761,9 +815,10 @@ VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
 }
 
 // _____________________________________________________________________________
-// Convenient overload accepting `MarkerBatchLookups`.
+// Provide a convenience overload that releases the per-marker results from a
+// `MarkerBatchLookups`.
 template <size_t NumVocabs>
-VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
+[[nodiscard]] VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
     MarkerBatchLookups<NumVocabs> markerLookups,
     const IndicesAndPositionsByMarker<NumVocabs>& markerIndicesAndPositions) {
   return mergeMarkerBatchesInInputOrder(markerIndicesAndPositions,
@@ -883,7 +938,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
     if constexpr (ad_utility::similarToInstantiation<decltype(word),
                                                      std::optional>) {
       if (word.has_value()) {
-        words.emplace_back(word.value());
+        words.emplace_back(std::move(word).value());
       } else {
         words.push_back(wordAsStringOrPlaceholder(vocab, index));
       }
