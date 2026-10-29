@@ -491,12 +491,10 @@ Result::LazyResult Union::computeResultKeepOrder(
   Range leftRange = toRange(result1);
   Range rightRange = toRange(result2);
 
-  auto end = ql::ranges::find_if(targetOrder_, [this](ColumnIndex index) {
-    const auto& [left, right] = _columnOrigins.at(index);
-    return left == NO_COLUMN || right == NO_COLUMN;
-  });
-  ql::span trimmedTargetOrder{targetOrder_.begin(),
-                              end == targetOrder_.end() ? end : end + 1};
+  // Note: The comparison must not stop at a column that is missing in one of
+  // the inputs: such a column is UNDEF, which can be equal to an UNDEF in the
+  // other input, so the following columns can still be relevant.
+  ql::span<const ColumnIndex> comparatorOrder{targetOrder_};
 
   auto applyPermutation = [this](IdTable idTable,
                                  const std::vector<ColumnIndex>& permutation) {
@@ -504,12 +502,12 @@ Result::LazyResult Union::computeResultKeepOrder(
   };
 
   return std::visit(
-      [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
+      [this, requestLaziness, &result1, &result2, &comparatorOrder,
        &applyPermutation](auto left, auto right) {
         return ad_utility::callFixedSizeVi(
-            trimmedTargetOrder.size(),
+            comparatorOrder.size(),
             [this, requestLaziness, &result1, &result2, &left, &right,
-             &trimmedTargetOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
+             &comparatorOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
               constexpr size_t extent =
                   COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),
@@ -521,7 +519,7 @@ Result::LazyResult Union::computeResultKeepOrder(
               return Result::LazyResult{sortedUnion::SortedUnionImpl{
                   std::move(leftData), std::move(rightData), requestLaziness,
                   _columnOrigins, allocator(),
-                  ql::span<const ColumnIndex, extent>{trimmedTargetOrder},
+                  ql::span<const ColumnIndex, extent>{comparatorOrder},
                   std::move(applyPermutation)}};
             });
       },

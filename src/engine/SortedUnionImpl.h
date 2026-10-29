@@ -141,15 +141,17 @@ struct SortedUnionImpl
   template <typename T1, typename T2>
   AD_ALWAYS_INLINE bool isSmaller(const T1& row1, const T2& row2) const {
     using StaticRange = ql::span<const std::array<size_t, 2>, SPAN_SIZE>;
+    // A column that is missing in one of the inputs is UNDEF for all of its
+    // rows. UNDEF is the smallest `Id`, but it is equal to an UNDEF in the
+    // other row, in which case the next column has to decide.
+    auto get = [](const auto& row, size_t index) {
+      return index == Union::NO_COLUMN ? Id::makeUndefined() : row[index];
+    };
     for (auto [index1, index2] : StaticRange{targetOrder_}) {
-      if (index1 == Union::NO_COLUMN) {
-        return true;
-      }
-      if (index2 == Union::NO_COLUMN) {
-        return false;
-      }
-      if (row1[index1] != row2[index2]) {
-        return row1[index1] < row2[index2];
+      Id id1 = get(row1, index1);
+      Id id2 = get(row2, index2);
+      if (id1 != id2) {
+        return id1 < id2;
       }
     }
     return false;
