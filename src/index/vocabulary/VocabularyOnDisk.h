@@ -196,11 +196,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t offset_;
     uint64_t nextOffset_;
 
-    [[nodiscard]] uint64_t offset() const noexcept { return offset_; }
-    // The word's size in bytes (`nextOffset_ - offset_`); the offsets must
-    // be well-formed, which is checked.
+    // Return the word's size in bytes (`nextOffset_ - offset_`). Check that
+    // the offsets are well-formed.
     [[nodiscard]] size_t wordSize() const {
-      AD_CORRECTNESS_CHECK(nextOffset_ >= offset_);
+      AD_CORRECTNESS_CHECK(nextOffset_ >= offset_, offset_, nextOffset_);
       return nextOffset_ - offset_;
     }
   };

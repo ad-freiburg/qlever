@@ -36,20 +36,21 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
 
-  // One pass over `indices`: a word of the internal vocabulary is placed as a
-  // view into that vocabulary (no copy); all other indices are collected, with
+  // Make one pass over `indices`: place a word of the internal vocabulary as a
+  // view into that vocabulary (no copy), and collect all other indices, with
   // their positions in `indices`, for one batched lookup in the external
   // vocabulary. The internal vocabulary has "holes", so each index needs one
   // membership probe (an allocation-free binary search); indices at or past
   // `internalVocab_.endIndex()` are known misses and skip the search.
-  // Created on the first internal hit, so a batch without any internal word
-  // (the common case) does not allocate it.
+  // Create the `assembler` on the first internal hit, so that a batch without
+  // any internal word (the common case) does not allocate it.
   std::optional<MultiSourceVocabBatchAssembler> assembler;
   MarkerIndicesAndPositions externalSlots;
   const uint64_t internalEnd = internalVocab_.endIndex();
   for (const auto& [position, index] : ::ranges::views::enumerate(indices)) {
-    auto internalWord = index < internalEnd ? internalVocab_[index]
-                                            : std::optional<std::string_view>{};
+    const auto internalWord = index < internalEnd
+                                  ? internalVocab_[index]
+                                  : std::optional<std::string_view>{};
     if (internalWord.has_value()) {
       if (!assembler.has_value()) {
         assembler.emplace(indices.size());
@@ -61,17 +62,18 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   }
 
   if (externalSlots.empty()) {
-    // All indices were internal, so the assembler exists.
+    // All indices were internal, so the `assembler` exists.
+    AD_CORRECTNESS_CHECK(assembler.has_value());
     return std::move(assembler).value().finalizeVocabBatchLookupResult();
   }
   auto external =
       externalVocab_.lookupBatch(externalSlots.getUnderlyingIndices());
   if (externalSlots.size() == indices.size()) {
-    // No internal hit: the positions are `0, 1, ...`, so the external batch
-    // already is the result.
+    // There was no internal hit, so the positions are `0, 1, ...` and the
+    // external batch already is the result.
     return external;
   }
-  // Some, but not all, indices were internal, so the assembler exists.
+  // Some, but not all, indices were internal, so the `assembler` exists.
   AD_CORRECTNESS_CHECK(assembler.has_value());
   assembler->scatterSubBatchResultAtPositions(
       std::move(external), externalSlots.getResultPositions());

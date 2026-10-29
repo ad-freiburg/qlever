@@ -73,11 +73,12 @@ class VocabularyInternalExternal {
   //____________________________________________________________________________
   // Look up the words for `indices` and return them in the order of
   // `indices`. `indices` must not be empty. Words of the internal vocabulary
-  // are returned as views into this vocabulary (no copy), all other words are
-  // read with one batched lookup in the external vocabulary, whose buffer is
-  // owned by the result. Lifetime: the result must not be used after this
-  // vocabulary is closed or destroyed (the index outlives every query, so
-  // this holds for lookups during query processing).
+  // are returned as views into this vocabulary (no copy). All other words are
+  // read with one batched lookup in the external vocabulary; the buffer that
+  // holds them is owned by the result. Lifetime: the views into the internal
+  // vocabulary are only valid while this vocabulary is open, so the result
+  // must not be used after this vocabulary is closed or destroyed (the index
+  // outlives every query, so this holds for lookups during query processing).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________

@@ -190,7 +190,7 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
   for (auto&& [size, fileOffset, offsetPair] :
        ::ranges::views::zip(sizes, fileOffsets, offsetPairs)) {
     size = offsetPair.wordSize();
-    fileOffset = offsetPair.offset();
+    fileOffset = offsetPair.offset_;
   }
 
   // `lookupBatch` rejects empty input, so `sizes` is non-empty here, as the
