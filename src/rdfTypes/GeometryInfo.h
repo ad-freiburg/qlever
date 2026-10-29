@@ -200,8 +200,8 @@ CPP_concept WithSourceCrsT = SameAsAny<T, Centroid, BoundingBox>;
 // geometry it was computed from. This is needed by functions that return a
 // geometry in the CRS of their input, such as `geof:centroid` or
 // `geof:envelope`.
-CPP_template(typename Info)(
-    requires WithSourceCrsT<Info>) struct WithSourceCrs {
+CPP_template(typename Info)(requires WithSourceCrsT<Info>)
+struct WithSourceCrs {
   Info info_;
   SourceCrsType crs_;
 };

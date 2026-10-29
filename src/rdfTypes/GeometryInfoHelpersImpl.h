@@ -280,9 +280,9 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
 // Helper for `getRequestedInfo()` that constructs the result `WithSourceCrs<T>`
 // with T = `Centroid` or `BoundingBox`. This is supposed to be used with
 // `getCentroid/BoundingBox` and `getSourceCrsType` as inputs.
-CPP_template(typename T)(requires WithSourceCrsT<T>) inline std::optional<
-    WithSourceCrs<T>> getWithSourceCrs(T info,
-                                       std::optional<SourceCrsType> crs) {
+CPP_template(typename T)(requires WithSourceCrsT<T>)
+inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
+    T info, std::optional<SourceCrsType> crs) {
   if (!crs.has_value()) {
     return std::nullopt;
   }
@@ -291,8 +291,8 @@ CPP_template(typename T)(requires WithSourceCrsT<T>) inline std::optional<
 
 // Helper for `getRequestedInfo(std::string_view wkt)` to construct a
 // `WithSourceCrs<T>` with T = `Centroid` or `BoundingBox`.
-CPP_template(typename T)(requires WithSourceCrsT<T>) inline std::optional<
-    WithSourceCrs<T>> getWithSourceCrs(std::string_view wkt) {
+CPP_template(typename T)(requires WithSourceCrsT<T>)
+inline std::optional<WithSourceCrs<T>> getWithSourceCrs(std::string_view wkt) {
   auto parseResult = detail::parseWkt(wkt);
   if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
