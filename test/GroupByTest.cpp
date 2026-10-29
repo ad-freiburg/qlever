@@ -6,6 +6,7 @@
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -18,6 +19,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -44,6 +46,7 @@ static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 using namespace ad_utility::testing;
 using ::testing::Eq;
 using ::testing::Optional;
+using V = Variable;
 
 namespace {
 auto I = IntId;
@@ -1626,7 +1629,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // The join cannot have a `LIMIT` or `OFFSET` for this optimization.
     auto join =
         makeExecutionTree<Join>(qec, xyzScanSortedByX, xyzScanSortedByX, 0, 0);
-    join->applyLimitOffset({1});
+    join->applyLimitOffset({1}, false);
     GroupByImpl joinHasLimitAndOffset{qec, variablesOnlyX, aliasesCountX,
                                       std::move(join)};
     EXPECT_EQ(std::nullopt,
@@ -1755,21 +1758,21 @@ TEST_F(GroupByOptimizations,
   // LIMIT OR OFFSET should prevent this optimization.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({3});
+    clone->applyLimitOffset({3}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({std::nullopt, 1});
+    clone->applyLimitOffset({std::nullopt, 1}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({3, 1});
+    clone->applyLimitOffset({3, 1}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountDistinctX,
                         std::move(clone)};
     EXPECT_EQ(groupBy.computeGroupByForSingleIndexScan(), std::nullopt);
@@ -1777,7 +1780,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({1, 2});
+    clone->applyLimitOffset({1, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1786,7 +1789,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({100, 2});
+    clone->applyLimitOffset({100, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The 15 elements should be reduced by 2.
@@ -1794,7 +1797,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -1804,7 +1807,7 @@ TEST_F(GroupByOptimizations,
   // `LIMIT` and `OFFSET` should be regarded in the result.
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({1, 2});
+    clone->applyLimitOffset({1, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1813,7 +1816,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({100, 2});
+    clone->applyLimitOffset({100, 2}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
@@ -1822,7 +1825,7 @@ TEST_F(GroupByOptimizations,
   }
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({std::nullopt, 1000});
+    clone->applyLimitOffset({std::nullopt, 1000}, false);
     GroupByImpl groupBy{qec, emptyVariables, aliasesCountX, std::move(clone)};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The value should never be reduced below 0.
@@ -1946,7 +1949,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   auto getId = makeGetId(qec->getIndex());
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({1, 3});
+    clone->applyLimitOffset({1, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable({{getId("<x>"), I(1)}}));
@@ -1955,7 +1958,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // Group by object.
   {
     auto clone = yxScan->clone();
-    clone->applyLimitOffset({2, 2});
+    clone->applyLimitOffset({2, 2}, false);
     GroupByImpl groupBy{qec, variablesOnlyY, aliasesCountY, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable(
@@ -1965,7 +1968,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
   // LIMIT 0 edge case
   {
     auto clone = xyScan->clone();
-    clone->applyLimitOffset({0, 1});
+    clone->applyLimitOffset({0, 1}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
     EXPECT_THAT(groupBy.computeGroupByObjectWithCount(), optionalHasTable({}));
   }
@@ -2297,7 +2300,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   auto V = VocabId;
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({8, 3});
+    clone->applyLimitOffset({8, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2306,7 +2309,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({0, 1});
+    clone->applyLimitOffset({0, 1}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, std::move(clone)};
 
     auto optional = groupBy.computeGroupByForFullIndexScan();
@@ -2314,7 +2317,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScanWithLimitAndOffset) {
   }
   {
     auto clone = xyzScanSortedByX->clone();
-    clone->applyLimitOffset({8, 3});
+    clone->applyLimitOffset({8, 3}, false);
     GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountNotExisting,
                         std::move(clone)};
 
@@ -3584,6 +3587,185 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(0, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables that the `GroupBy` groups by or that its
+// aliases read, drops the aliases whose target is not requested, and adds a
+// `StripColumns` operation for the variables that the parent did not request.
+TEST(GroupBy, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::hasRootOperation;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::ElementsAre;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{I(6), I(6), I(3), I(6)},
+                             {I(6), I(6), I(3), I(5)},
+                             {I(3), I(5), I(5), I(4)},
+                             {I(1), I(2), I(5), I(1)}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<Variable> groupByVariables,
+                   std::vector<Alias> aliases, std::set<V> requestedVariables) {
+    GroupBy groupBy(qec, groupByVariables, aliases, values);
+    auto tree = groupBy.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+  Alias alias(
+      SparqlExpressionPimpl{
+          std::make_unique<SumExpression>(
+              false, std::make_unique<VariableExpression>(Variable{"?b"})),
+          "SUM(?b)"},
+      Variable{"?sumB"});
+
+  // `GroupBy` `?a` and compute alias `?sumB` from `?b`. `?a` and `?sumB`
+  // requested: the result has `?a` and `?sumB`.
+  {
+    auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}},
+                    matchesIdTableFromVector(
+                        {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}})));
+  }
+
+  // `GroupBy` `?b` and `?c` and compute alias `?sumB` from `?b`. `?b`, `?c` and
+  // `?sumB` requested: `?a` and `?d` are stripped and the columns are
+  // renumbered.
+  {
+    auto tree =
+        strip({V{"?b"}, V{"?c"}}, {alias}, {V{"?b"}, V{"?c"}, V{"?sumB"}});
+    auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
+    ASSERT_TRUE(groupBy);
+    EXPECT_THAT(groupBy->resultSortedOn(), ElementsAre(0, 1));
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?c"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?sumB"}), 2u);
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree =
+        strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}, V{"?notValid"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
+  }
+
+  // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?sumB` and
+  // `?c` requested: the result has `?sumB` and `?c`, a `StripColumns` on top
+  // removes `?a`.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?c"}, V{"?sumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?c"}, V{"?sumB"}},
+                    matchesIdTableFromVector(
+                        {{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}})));
+
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?c"}, V{"?sumB"}},
+                    matchesIdTableFromVector({{I(1), I(5), I(2)},
+                                              {I(3), I(5), I(5)},
+                                              {I(6), I(3), I(12)}})));
+  }
+
+  // All variables requested: nothing is stripped and the result has the
+  // additional column `?sumB`.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, {alias},
+                      {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}});
+    EXPECT_THAT(
+        tree.get(),
+        isStrippedColumns<GroupBy>(
+            {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}},
+            matchesIdTableFromVector({{I(1), I(2), I(5), I(1), I(2)},
+                                      {I(3), I(5), I(5), I(4), I(5)},
+                                      {I(6), I(6), I(3), I(5), I(6)},
+                                      {I(6), I(6), I(3), I(6), I(6)}})));
+  }
+
+  // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?a` and `?c`
+  // requested: the result has `?a` and `?c`, the alias is erased from the
+  // `GroupBy` operation, as its target is not requested.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?a"}, V{"?c"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?c"}},
+                    matchesIdTableFromVector(
+                        {{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}})));
+    auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
+    ASSERT_TRUE(groupBy);
+    EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});
+  }
+
+  // The alias `?twiceSumB` reads the target of the alias `?sumB`. Only
+  // `?twiceSumB` requested: both aliases are kept, a `StripColumns` on top
+  // removes `?a` and `?sumB`.
+  {
+    Alias twiceSumB(
+        SparqlExpressionPimpl{
+            makeMultiplyExpression(
+                std::make_unique<VariableExpression>(Variable{"?sumB"}),
+                std::make_unique<IdExpression>(I(2))),
+            "?sumB * 2"},
+        Variable{"?twiceSumB"});
+    auto tree = strip({V{"?a"}}, {alias, twiceSumB}, {V{"?twiceSumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?twiceSumB"}},
+                    matchesIdTableFromVector({{I(4)}, {I(10)}, {I(24)}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}, V{"?twiceSumB"}},
+                    matchesIdTableFromVector({{I(1), I(2), I(4)},
+                                              {I(3), I(5), I(10)},
+                                              {I(6), I(12), I(24)}})));
+  }
+
+  // A `COUNT(DISTINCT *)` alias reads all columns of the subtree. If it is
+  // requested, nothing can be stripped (`std::nullopt`), if it is not
+  // requested, it is dropped like any other alias.
+  {
+    Alias countDistinctStar(SparqlExpressionPimpl{makeCountStarExpression(true),
+                                                  "COUNT(DISTINCT *)"},
+                            Variable{"?count"});
+    GroupBy groupBy(qec, {V{"?a"}}, {countDistinctStar}, values);
+    EXPECT_EQ(groupBy.makeTreeWithStrippedColumns({V{"?count"}}), std::nullopt);
+    auto tree =
+        strip({V{"?a"}}, {countDistinctStar, alias}, {V{"?a"}, V{"?sumB"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<GroupBy>(
+                    {V{"?a"}, V{"?sumB"}},
+                    matchesIdTableFromVector(
+                        {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}})));
+  }
+
+  // A `GroupBy` on a variable that the subtree does not have groups by nothing,
+  // but unlike an implicit `GroupBy` has no group for an empty input. This is
+  // preserved by the stripping.
+  {
+    auto emptyValues = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{4, qec->getAllocator()},
+        std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    Alias sumC(
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(V{"?c"})),
+            "SUM(?c)"},
+        Variable{"?sumC"});
+    GroupBy groupBy(qec, {V{"?notInSubtree"}}, {alias, sumC}, emptyValues);
+    auto tree = groupBy.makeTreeWithStrippedColumns({V{"?sumB"}}).value();
+    EXPECT_THAT(tree.get(), hasRootOperation<GroupBy>());
+    EXPECT_EQ(tree->getRootOperation()->getDescriptor(),
+              "GroupBy on unbound variables");
+    EXPECT_EQ(tree->getResult(false)->idTableView().numRows(), 0u);
+  }
 }
 
 // Test that a `GROUP BY` on unbound variables has one group for a non-empty

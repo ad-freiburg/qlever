@@ -50,9 +50,9 @@ namespace ad_utility {
 // compile time
 struct EnumWithStringsBaseTag {};
 
-CPP_template(typename Derived,
-             typename Enum)(requires std::is_enum_v<Enum>) class EnumWithStrings
-    : public EnumWithStringsBaseTag {
+CPP_template(typename Derived, typename Enum)(
+    requires std::is_enum_v<Enum>)
+class EnumWithStrings : public EnumWithStringsBaseTag {
  private:
   Enum value_{};
 

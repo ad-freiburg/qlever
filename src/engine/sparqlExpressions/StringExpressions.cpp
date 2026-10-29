@@ -84,9 +84,9 @@ using NormalizeExpression = NARY<1, FV<StrImpl, NormalizedStringGetter>>;
 // work on strings.
 template <typename Function>
 struct LiftStringFunction {
-  CPP_template(typename... Arguments)(requires(
-      concepts::same_as<Arguments, std::optional<std::string>>&&...)) auto
-  operator()(Arguments... arguments) const {
+  CPP_template(typename... Arguments)(
+      requires(concepts::same_as<Arguments, std::optional<std::string>>&&...))
+  auto operator()(Arguments... arguments) const {
     using ResultOfFunction =
         decltype(std::invoke(Function{}, std::move(arguments.value())...));
     static_assert(concepts::same_as<ResultOfFunction, Id> ||
@@ -253,9 +253,8 @@ struct StrStartsImpl {
 
 namespace {
 
-CPP_template(typename NaryOperation)(
-    requires isOperation<NaryOperation>) class StrStartsExpressionImpl
-    : public NaryExpression<NaryOperation> {
+CPP_template(typename NaryOperation)(requires isOperation<NaryOperation>)
+class StrStartsExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
@@ -656,9 +655,9 @@ using std::make_unique;
 using std::move;
 using Expr = SparqlExpression::Ptr;
 
-CPP_template(typename T,
-             typename... C)(requires(concepts::same_as<Expr, C>&&...)) Expr
-    make(C&... children) {
+CPP_template(typename T, typename... C)(
+    requires(concepts::same_as<Expr, C>&&...))
+Expr make(C&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }

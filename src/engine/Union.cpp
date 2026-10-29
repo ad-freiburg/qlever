@@ -280,13 +280,13 @@ IdTable Union::computeUnion(
     if (inputColumnIndex != NO_COLUMN) {
       decltype(auto) input = inputTable.getColumn(inputColumnIndex);
       ad_utility::chunkedCopy(input, targetColumn.begin() + offset, chunkSize,
-                              [this]() { checkCancellation(); });
+                              cancellationChecker());
     } else {
       ad_utility::chunkedFill(
           ql::ranges::subrange{
               targetColumn.begin() + offset,
               targetColumn.begin() + offset + inputTable.size()},
-          Id::makeUndefined(), chunkSize, [this]() { checkCancellation(); });
+          Id::makeUndefined(), chunkSize, cancellationChecker());
     }
   };
 
@@ -338,7 +338,7 @@ IdTable Union::transformToCorrectColumnFormat(
     idTable.addEmptyColumn();
     ad_utility::chunkedFill(idTable.getColumn(idTable.numColumns() - 1),
                             Id::makeUndefined(), chunkSize,
-                            [this]() { checkCancellation(); });
+                            cancellationChecker());
   }
 
   idTable.setColumnSubset(permutation);
@@ -357,15 +357,15 @@ Result::LazyResult Union::computeResultLazily(
     };
   };
 
-  auto rangeFactory = [transformFactory = std::move(transformFactory)](
+  auto rangeFactory = [this, transformFactory = std::move(transformFactory)](
                           std::shared_ptr<const Result> result,
                           std::vector<ColumnIndex> permutation) {
     using namespace ad_utility;
     if (result->isFullyMaterialized()) {
       return InputRangeTypeErased(
-          lazySingleValueRange([transform = transformFactory(permutation),
+          lazySingleValueRange([this, transform = transformFactory(permutation),
                                 result = std::move(result)]() {
-            return transform(result->cloneIdTable(),
+            return transform(result->cloneIdTable(cancellationChecker()),
                              result->getCopyOfLocalVocab());
           }));
     }
@@ -432,7 +432,8 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 }
 
 // _____________________________________________________________________________
-void Union::onLimitOffsetChanged(const LimitOffsetClause&) {
+void Union::onLimitOffsetChanged(const LimitOffsetClause&,
+                                 bool childrenAreExclusivelyOwned) {
   // Note that we use the merged `getLimitOffset()` and not the clause that was
   // passed in, which only holds the increment that was just added. The bound
   // below depends on the total limit and offset, so for nested subqueries the
@@ -453,8 +454,8 @@ void Union::onLimitOffsetChanged(const LimitOffsetClause&) {
   // matter whether they are concatenated or merged according to `targetOrder_`.
   for (size_t i = 0; i < _subtrees.size(); ++i) {
     auto& subtree = _subtrees.at(i);
-    subtree = subtree->clone();
-    subtree->applyLimitOffset(LimitOffsetClause{limit + offset});
+    applyLimitOffsetToChild(subtree, LimitOffsetClause{limit + offset},
+                            childrenAreExclusivelyOwned);
 
     // The pushdown may have un-sorted `subtree`, while both the merging
     // implementation and our `resultSortedOn()` require the subtrees to be
