@@ -66,12 +66,11 @@ class VocabularyInternalExternal {
 
   //____________________________________________________________________________
   // Look up the words for `indices` and return them in the order of
-  // `indices`. `indices` must not be empty and every index must be less than
-  // `size()` (both checked). A word of the internal (RAM) vocabulary is
-  // returned as a view into that vocabulary, without a copy. All other words
-  // are read with one `lookupBatch` call on the external vocabulary (batched
-  // reads, via `io_uring` where available); the buffer that holds them is
-  // owned by the result.
+  // `indices`. A word of the internal (RAM) vocabulary is returned as a view
+  // into that vocabulary, without a copy. All other words are read with one
+  // `lookupBatch` call on the external vocabulary (batched reads, via
+  // `io_uring` where available); the buffer that holds them is owned by the
+  // result.
   //
   // Lifetime: the views into the internal vocabulary are valid only while
   // this vocabulary is open, so the result must not be used after this
