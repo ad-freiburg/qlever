@@ -936,7 +936,7 @@ class IndexImpl {
   // Return the words of `text` as they are stored in the `ql:has-word` triples
   // (in order and with duplicates). Also used by the SPARQL function
   // `ql:normalize`, so that strings in queries can be normalized the same way.
-  std::vector<std::string> getHasWordWords(std::string_view text) const;
+  std::vector<std::string> getNormalizedWords(std::string_view text) const;
 
  protected:
   /**

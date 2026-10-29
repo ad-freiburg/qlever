@@ -188,7 +188,7 @@ std::optional<std::string> normalizeString(std::optional<std::string> s,
     return std::nullopt;
   }
   return absl::StrJoin(
-      context->_qec.getIndex().getImpl().getHasWordWords(s.value()), " ");
+      context->_qec.getIndex().getImpl().getNormalizedWords(s.value()), " ");
 }
 }  // namespace
 
