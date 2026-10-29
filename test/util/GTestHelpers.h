@@ -130,15 +130,34 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
     ad_utility::LogLevel::Enum::level                                         \
   }
 
+// Match the captured log with `matcher`, but fail with a readable message if
+// the runtime log level suppresses messages with the given `level`, for example
+// because an earlier test did not restore it. See `ifLogLevelIsCompiledIn`.
+MATCHER_P2(LogLevelIsEnabledAndLogMatches, level, matcher,
+           absl::StrCat("(with ", ad_utility::LogLevel{level}.toString(),
+                        " messages enabled at runtime) ",
+                        ::testing::DescribeMatcher<std::string>(matcher,
+                                                                negation))) {
+  if (!ad_utility::detail::logLevelIsEnabled(level)) {
+    *result_listener << "which was not checked, because the runtime log level "
+                     << ad_utility::getRuntimeLogLevel().toString()
+                     << " suppresses " << ad_utility::LogLevel{level}.toString()
+                     << " messages (did an earlier test not restore it?)";
+    return false;
+  }
+  return ::testing::ExplainMatchResult(matcher, arg, result_listener);
+}
+
 // Return `matcher` if messages with the given `level` are compiled in (see
 // `ad_utility::compileTimeLogLevel`), and a matcher that matches anything
-// otherwise. Use this for the log checks of a test that also checks other
-// things, which `ENFORCE_LOG_LEVEL_OR_SKIP` would skip as well. Note: Don't
-// negate the result, `Not(_)` matches nothing.
+// otherwise. The returned matcher also checks that the runtime log level does
+// not suppress messages with `level`. Use this for the log checks of a test
+// that also checks other things, which `ENFORCE_LOG_LEVEL_OR_SKIP` would skip
+// as well. Note: Don't negate the result, `Not(_)` matches nothing.
 template <ad_utility::LogLevel::Enum level, typename Matcher>
 auto ifLogLevelIsCompiledIn(Matcher matcher) {
   if constexpr (ad_utility::compileTimeLogLevel >= level) {
-    return matcher;
+    return LogLevelIsEnabledAndLogMatches(level, std::move(matcher));
   } else {
     return ::testing::_;
   }
