@@ -1,6 +1,12 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (kalmbach@cs.uni-freiburg.de)
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
@@ -8,6 +14,11 @@
 
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
+#include <optional>
+#include <range/v3/view/enumerate.hpp>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #include "util/GlobalExecutor.h"
 
@@ -18,6 +29,55 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
     return std::string{fromInternal.value()};
   }
   return externalVocab_[i];
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+
+  // Make one pass over `indices`: place a word of the internal vocabulary as a
+  // view into that vocabulary (no copy), and collect all other indices, with
+  // their positions in `indices`, for one batched lookup in the external
+  // vocabulary. The internal vocabulary has "holes", so each index needs one
+  // membership probe (an allocation-free binary search); indices at or past
+  // `internalVocab_.endIndex()` are known misses and skip the search.
+  // Create the `assembler` on the first internal hit, so that a batch without
+  // any internal word (the common case) does not allocate it.
+  std::optional<MultiSourceVocabBatchAssembler> assembler;
+  MarkerIndicesAndPositions externalSlots;
+  const uint64_t internalEnd = internalVocab_.endIndex();
+  for (const auto& [position, index] : ::ranges::views::enumerate(indices)) {
+    const auto internalWord = index < internalEnd
+                                  ? internalVocab_[index]
+                                  : std::optional<std::string_view>{};
+    if (internalWord.has_value()) {
+      if (!assembler.has_value()) {
+        assembler.emplace(indices.size());
+      }
+      assembler->assignUnownedViewAtPosition(position, internalWord.value());
+    } else {
+      externalSlots.addPair(index, position);
+    }
+  }
+
+  if (externalSlots.empty()) {
+    // All indices were internal, so the `assembler` exists.
+    AD_CORRECTNESS_CHECK(assembler.has_value());
+    return std::move(assembler).value().finalizeVocabBatchLookupResult();
+  }
+  auto external =
+      externalVocab_.lookupBatch(externalSlots.getUnderlyingIndices());
+  if (externalSlots.size() == indices.size()) {
+    // There was no internal hit, so the positions are `0, 1, ...` and the
+    // external batch already is the result.
+    return external;
+  }
+  // Some, but not all, indices were internal, so the `assembler` exists.
+  AD_CORRECTNESS_CHECK(assembler.has_value());
+  assembler->scatterSubBatchResultAtPositions(
+      std::move(external), externalSlots.getResultPositions());
+  return std::move(assembler).value().finalizeVocabBatchLookupResult();
 }
 
 // _____________________________________________________________________________

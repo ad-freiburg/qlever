@@ -195,6 +195,13 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   struct OffsetPair {
     uint64_t offset_;
     uint64_t nextOffset_;
+
+    // Return the word's size in bytes (`nextOffset_ - offset_`). Check that
+    // the offsets are well-formed.
+    [[nodiscard]] size_t wordSize() const {
+      AD_CORRECTNESS_CHECK(nextOffset_ >= offset_, offset_, nextOffset_);
+      return nextOffset_ - offset_;
+    }
   };
 
   // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`

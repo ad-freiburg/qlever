@@ -5,6 +5,8 @@
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
@@ -127,6 +129,63 @@ TEST(VocabularyInMemoryBinSearch, AccessOperatorWithNonContiguousIds) {
       createVocabulary("AccessOperatorWithNonContiguousIds1"));
   testAccessOperatorForUnorderedVocabulary(
       createVocabularyFromDisk("AccessOperatorWithNonContiguousIds2"));
+}
+
+TEST(VocabularyInMemoryBinSearch, LookupBatchOutlivesClose) {
+  auto vocab = createVocabulary("LookupBatchOutlivesClose")(
+      std::vector<std::string>{"alpha", "beta", "gamma"});
+  const std::array<size_t, 4> indices{2, 0, 2, 1};
+  auto result = vocab.lookupBatch(indices);
+  vocab.close();
+
+  EXPECT_THAT(result,
+              ::testing::ElementsAre("gamma", "alpha", "gamma", "beta"));
+}
+
+TEST(VocabularyInMemoryBinSearch,
+     LookupBatchReportsPlaceholderForMissingIndex) {
+  const auto vocab = createVocabulary("LookupBatchPlaceholderForMissingIndex")(
+      std::vector<std::string>{"alpha", "beta"});
+  const std::array<size_t, 1> missingIndex{2};
+
+  // An index past the end of the vocabulary yields a placeholder rather than
+  // an exception (see `replaceOptionalByPlaceholderOnExport` in
+  // `VocabularyTypes.h`).
+  EXPECT_THAT(vocab.lookupBatch(missingIndex),
+              ::testing::ElementsAre(
+                  ad_utility::vocabulary::placeholderForMissingVocabIndex(2)));
+}
+
+TEST(VocabularyInMemoryBinSearch, LookupBatchRejectsEmptyBatch) {
+  const auto vocab = createVocabulary("LookupBatchRejectsEmptyBatch")(
+      std::vector<std::string>{"alpha", "beta"});
+  const std::array<size_t, 0> indices{};
+
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(indices),
+                               ::testing::HasSubstr("!indices.empty()"));
+}
+
+TEST(VocabularyInMemoryBinSearch, LookupBatchOfSizeOneAndDuplicates) {
+  const auto vocab = createVocabulary("LookupBatchOfSizeOneAndDuplicates")(
+      std::vector<std::string>{"alpha", "beta", "gamma"});
+  const std::array<size_t, 1> single{1};
+  EXPECT_THAT(vocab.lookupBatch(single), ::testing::ElementsAre("beta"));
+  const std::array<size_t, 3> duplicates{2, 2, 2};
+  EXPECT_THAT(vocab.lookupBatch(duplicates),
+              ::testing::ElementsAre("gamma", "gamma", "gamma"));
+}
+
+TEST(VocabularyInMemoryBinSearch, LookupBatchOutlivesVocabulary) {
+  VocabBatchLookupResult result;
+  {
+    const auto vocab = createVocabulary("LookupBatchOutlivesVocabularyOnly")(
+        std::vector<std::string>{"alpha", "beta", "gamma"});
+    const std::array<size_t, 4> indices{2, 0, 2, 1};
+    result = vocab.lookupBatch(indices);
+  }
+
+  EXPECT_THAT(result,
+              ::testing::ElementsAre("gamma", "alpha", "gamma", "beta"));
 }
 
 TEST(VocabularyInMemoryBinSearch, ErrorOnNonAscendingIds) {
