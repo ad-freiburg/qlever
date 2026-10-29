@@ -28,10 +28,9 @@ struct CallStdTerminate {
 // has to perform actions that might throw, but when handling these exceptions
 // is not important.
 CPP_template(typename F)(
-    requires ql::concepts::invocable<ql::remove_cvref_t<
-        F>>) void ignoreExceptionIfThrows(F&& f,
-                                          std::string_view additionalNote =
-                                              "") noexcept {
+    requires ql::concepts::invocable<ql::remove_cvref_t<F>>)
+void ignoreExceptionIfThrows(F&& f,
+                             std::string_view additionalNote = "") noexcept {
   if constexpr (std::is_nothrow_invocable_v<ql::remove_cvref_t<F>>) {
     std::invoke(AD_FWD(f));
     return;
@@ -56,14 +55,11 @@ CPP_template(typename F)(
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
 CPP_template(typename F, typename TerminateAction = detail::CallStdTerminate)(
-    requires ql::concepts::invocable<ql::remove_cvref_t<F>> CPP_and
-        std::is_nothrow_invocable_v<
-            TerminateAction>) void terminateIfThrows(F&& f,
-                                                     std::string_view message,
-                                                     TerminateAction
-                                                         terminateAction = {},
-                                                     ad_utility::source_location l =
-                                                         AD_CURRENT_SOURCE_LOC()) noexcept {
+    requires ql::concepts::invocable<ql::remove_cvref_t<F>> &&
+    std::is_nothrow_invocable_v<TerminateAction>)
+void terminateIfThrows(
+    F&& f, std::string_view message, TerminateAction terminateAction = {},
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) noexcept {
   auto getErrorMessage =
       [&message, &l](const auto&... additionalMessages) -> std::string {
     return absl::StrCat(
@@ -117,9 +113,9 @@ class ThrowInDestructorIfSafe {
 
  public:
   CPP_template(typename FuncType, typename... Args)(
-      requires ql::concepts::invocable<FuncType> CPP_and(
-          ...&& ql::concepts::convertible_to<Args, std::string_view>)) void
-  operator()(FuncType f, const Args&... additionalMessages) const {
+      requires ql::concepts::invocable<FuncType> &&
+      (... && ql::concepts::convertible_to<Args, std::string_view>))
+  void operator()(FuncType f, const Args&... additionalMessages) const {
     auto logIgnoredException = [&additionalMessages...](std::string_view what) {
       std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";
       AD_LOG_WARN

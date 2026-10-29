@@ -36,9 +36,10 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
     // lazy results it ensures that we don't have to compute the whole result,
     // so we consider this a tradeoff worth to make.
     // Defensive copy to avoid modifying other trees that share the same subtree
-    // as `right_`.
+    // as `right_`. The copy is deep, so the children of `right_` are then
+    // exclusively owned.
     right_ = right_->clone();
-    right_->applyLimitOffset({1});
+    right_->applyLimitOffset({1}, true);
   }
 }
 

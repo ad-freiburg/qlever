@@ -12,6 +12,7 @@
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
+#include "util/Log.h"
 #include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
