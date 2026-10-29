@@ -31,6 +31,7 @@ using ::testing::HasSubstr;
 namespace {
 using ad_utility::testing::parseQuery;
 
+// The empty sort order for the `Result`s constructed in the tests below.
 const qlm::vector<ColumnIndex> noSortedColumns{
     ad_utility::testing::makeAllocator()};
 
