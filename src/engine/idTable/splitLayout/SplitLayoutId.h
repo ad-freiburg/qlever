@@ -44,15 +44,13 @@ class SplitLayoutId {
   static constexpr PayloadType maxIndex =
       std::numeric_limits<PayloadType>::max();
 
-  // The smallest double > 0 that will not be rounded to zero by the precision
-  // loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
-  // double < 0 that will not be rounded to zero.
-  // Note: This constant is currently only used in unit tests, and cannot be
-  // computed at compile time in C++17.
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // The smallest double > 0 that will not be rounded to zero. As the payload
+  // stores all bits of a `double`, this is the smallest subnormal `double`.
+  // Symmetrically, `-minPositiveDouble` is the largest double < 0 that will not
+  // be rounded to zero.
+  // Note: This constant is currently only used in unit tests.
   static constexpr double minPositiveDouble =
-      std::numeric_limits<double>::lowest();
-#endif
+      std::numeric_limits<double>::denorm_min();
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
@@ -111,10 +109,8 @@ class SplitLayoutId {
 
  private:
   // The actual data: a full 64-bit word of payload and a single byte for the
-  // datatype. Together with the explicitly stored `padding_` this makes a
-  // `Id` occupy 16 bytes when stored directly. The `IdTable` therefore
-  // stores the payload and datatype in separate columns to avoid wasting
-  // memory for the padding.
+  // datatype. Together with the explicitly stored `padding_` an `Id` occupies
+  // 16 bytes.
   PayloadType payload_;
   DatatypeType datatype_;
 
@@ -176,23 +172,26 @@ class SplitLayoutId {
     return {payload, datatype};
   }
 
-  // Overload of fromBits to directly use it with Datatype
+  // The same with the `Datatype` instead of its bits.
   static constexpr SplitLayoutId fromBits(const Datatype datatype,
                                           const PayloadType payload) noexcept {
-    AD_EXPENSIVE_CHECK(datatype <= Datatype::MaxValue,
-                       "The datatype does not exist");
-    return {payload, static_cast<DatatypeType>(datatype)};
+    return fromBits(static_cast<DatatypeType>(datatype), payload);
   }
 
-  // Construct from the underlying bit representation with bits only.
-  static constexpr SplitLayoutId fromBits(uint64_t bits) noexcept {
-    return {bits, Datatype::Undefined};
+  // Create an `Id` of type `Undefined` with the given `payload`. Unlike the
+  // `fromBits` of the legacy `ValueId`, the argument contains no datatype bits.
+  // This is used for the special `Id`s, which are not `UNDEF` (see
+  // `SpecialIds.h`).
+  static constexpr SplitLayoutId fromBits(uint64_t payload) noexcept {
+    return {payload, Datatype::Undefined};
   }
 
   // Create a `SplitLayoutId` of the `Undefined` type. There is only one such ID
   // and it is guaranteed to be smaller than all IDs of other types. This helps
   // implementing the correct join behavior in presence of undefined values.
-  constexpr static SplitLayoutId makeUndefined() noexcept { return {0, 0}; }
+  constexpr static SplitLayoutId makeUndefined() noexcept {
+    return {0, Datatype::Undefined};
+  }
 
   // Returns an object of `UndefinedType`. In many scenarios this function is
   // unnecessary because `getDatatype() == Undefined` already identifies the
@@ -475,7 +474,8 @@ class SplitLayoutId {
       return ostr << id.getPayloadBits();
     }
 
-    auto visitor = [&ostr]<typename ValueType>(ValueType&& value) {
+    auto visitor = [&ostr](auto&& value) {
+      using ValueType = decltype(value);
       if constexpr (ad_utility::isSimilar<ValueType, UndefinedType>) {
         // already handled above
         AD_FAIL();
@@ -603,8 +603,7 @@ class SplitLayoutId {
     return compareBitwiseImpl(other);
   }
 
-  // Return the bit representation of the smallest `Id` that is greater
-  // than the `Id` of this bit representation. The overflow of the
+  // Return the smallest `Id` that is greater than this one. The overflow of the
   // payload carries into the datatype byte, analogously to the increment of
   // the single integer in the packed 64-bit representation of the legacy
   // `ValueId`.

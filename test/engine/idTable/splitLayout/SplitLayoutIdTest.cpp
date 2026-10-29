@@ -299,6 +299,16 @@ TEST_F(SplitLayoutIdTest, makeFromDouble) {
       SplitLayoutId::makeFromDouble(Limits::quiet_NaN()).getDouble()));
   ASSERT_TRUE(std::isnan(
       SplitLayoutId::makeFromDouble(Limits::signaling_NaN()).getDouble()));
+
+  // Test that the value of `minPositiveDouble` is correct: it is stored
+  // exactly, and there is no `double` between it and zero.
+  auto testSmallestNumber = [](double d) {
+    ASSERT_EQ(SplitLayoutId::makeFromDouble(d).getDouble(), d);
+    ASSERT_NE(d, 0.0);
+    ASSERT_EQ(d / 2, 0.0);
+  };
+  testSmallestNumber(SplitLayoutId::minPositiveDouble);
+  testSmallestNumber(-SplitLayoutId::minPositiveDouble);
 }
 
 // Test that every `int64_t` is stored without an overflow.
