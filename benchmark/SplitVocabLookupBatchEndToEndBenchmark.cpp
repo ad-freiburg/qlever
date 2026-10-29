@@ -15,44 +15,50 @@
 // generic fallback `sequentialLookupBatch`, and `SplitVocabulary::lookupBatch`
 // are compared, for `VocabularyInMemory` and for
 // `CompressedVocabulary<VocabularyInMemory>` as underlying vocabularies. Every
-// measurement repeats the batch until `SPLIT_VOCAB_MIN_SECONDS` (default 10)
-// have passed, after one untimed warm-up pass; the time per word is the
-// measured time divided by the `words` in the measurement's metadata.
+// measurement repeats the batch until `SPLIT_VOCAB_MIN_SECONDS` (default 10; a
+// positive integer of at most 3600) seconds have passed, after one untimed
+// warm-up pass; the time per word is the measured time divided by the `words`
+// in the measurement's metadata.
 
 #include <absl/strings/str_cat.h>
 
-#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "backports/StartsWithAndEndsWith.h"
-#include "backports/span.h"
+#include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 
 namespace ad_benchmark {
 namespace {
 
+// Route words that start with `"a` to vocabulary 1 and all other words to
+// vocabulary 0.
 struct EndToEndSplitFunc {
   uint8_t operator()(std::string_view word) const {
     return ql::starts_with(word, "\"a");
   }
 };
 
-// Vocabulary 0 is stored under the base filename, vocabulary 1 with suffix
-// ".a".
+// Vocabulary 0 is stored under the base filename, vocabulary 1 with the suffix
+// `.a`.
 constexpr std::array<std::string_view, 2> endToEndFilenameSuffixes{"", ".a"};
 
+// A split vocabulary with `Underlying` for both vocabulary 0 and vocabulary 1.
 template <typename Underlying>
 using EndToEndSplitVocab =
     SplitVocabulary<EndToEndSplitFunc, endToEndFilenameSuffixes, Underlying,
@@ -61,17 +67,19 @@ using EndToEndSplitVocab =
 constexpr size_t numWords = 50'000;
 constexpr size_t batchSize = 100'000;
 
-// Remove a whole directory tree. Best effort: failures are ignored.
+// Remove the directory tree `dir_` on destruction and ignore failures.
 struct TempDirCleanup {
-  std::filesystem::path dir_;
+  ql::filesystem::path dir_;
   ~TempDirCleanup() {
-    std::error_code ec;
-    std::filesystem::remove_all(dir_, ec);
+    ql::error_code ec;
+    ql::filesystem::remove_all(dir_, ec);
   }
 };
 
 // Parse a positive size from the environment variable `name`, or return
-// `defaultValue` if it is not set.
+// `defaultValue` if it is not set. A value that is set but not a positive
+// integer of at most `maxValue` fails a contract check instead of falling back
+// to `defaultValue`.
 size_t sizeFromEnvironment(const char* name, size_t defaultValue,
                            size_t maxValue) {
   const char* value = std::getenv(name);
@@ -89,8 +97,9 @@ size_t sizeFromEnvironment(const char* name, size_t defaultValue,
 // Add the measurement `name` to `group`: call `lookupOnce` (one pass over a
 // batch of `wordsPerCall` words, returning the number of bytes looked up)
 // again and again until at least `minSeconds` have passed. The number of
-// calls, the number of words, and the bytes per call are recorded as metadata,
-// so the time per word is the measured time divided by `words`.
+// calls, the number of words, and the mean number of bytes per call (rounded
+// down) are recorded as metadata, so the time per word is the measured time
+// divided by `words`.
 template <typename LookupOnce>
 void addTimedMeasurement(ResultGroup& group, const std::string& name,
                          double minSeconds, size_t wordsPerCall,
@@ -111,8 +120,9 @@ void addTimedMeasurement(ResultGroup& group, const std::string& name,
   entry.metadata().addKeyValuePair("bytes-per-call", totalBytes / calls);
 }
 
-// Deterministic Wikidata-like IRIs, every third one routed to marker 1 via
-// the `"a` prefix. Sorted, as the vocabulary writers require sorted input.
+// Generate deterministic Wikidata-like IRIs (as string literals), every third
+// one routed to marker 1 via the `"a` prefix. Sort the words, as the
+// vocabulary writers require sorted input.
 std::vector<std::string> makeWords() {
   constexpr std::string_view alphabet{
       "abcdefghijklmnopqrstuvwxyz0123456789_:/.-#"};
@@ -129,7 +139,7 @@ std::vector<std::string> makeWords() {
     word += '"';
     words.push_back(std::move(word));
   }
-  std::sort(words.begin(), words.end());
+  ql::ranges::sort(words);
   return words;
 }
 
@@ -140,11 +150,11 @@ std::vector<std::string> makeWords() {
 template <typename Underlying>
 void measureUnderlying(BenchmarkResults& results, const std::string& label,
                        const std::vector<std::string>& words,
-                       const std::filesystem::path& basename,
+                       const ql::filesystem::path& basename,
                        double minSeconds) {
   EndToEndSplitVocab<Underlying> vocab;
   {
-    auto writerPtr = vocab.makeDiskWriterPtr(basename.string());
+    const auto writerPtr = vocab.makeDiskWriterPtr(basename.string());
     for (const auto& word : words) {
       (*writerPtr)(word, false);
     }
@@ -156,6 +166,7 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
   for (const IndexAndWord& indexAndWord : vocab.scanAll()) {
     marked.push_back(static_cast<size_t>(indexAndWord.index_));
   }
+  AD_CONTRACT_CHECK(!marked.empty());
   std::vector<size_t> batch;
   batch.reserve(batchSize);
   for (size_t i = 0; i < batchSize; ++i) {
@@ -168,12 +179,12 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
     const auto batched = vocab.lookupBatch(batch);
     const auto fallback =
         ad_utility::vocabulary::sequentialLookupBatch(vocab, batch);
-    AD_CONTRACT_CHECK(batched.size() == batch.size());
-    AD_CONTRACT_CHECK(fallback.size() == batch.size());
+    AD_CORRECTNESS_CHECK(batched.size() == batch.size());
+    AD_CORRECTNESS_CHECK(fallback.size() == batch.size());
     for (size_t i = 0; i < batch.size(); ++i) {
       const std::string expected{vocab[batch[i]]};
-      AD_CONTRACT_CHECK(batched[i] == expected);
-      AD_CONTRACT_CHECK(fallback[i] == expected);
+      AD_CORRECTNESS_CHECK(batched[i] == expected);
+      AD_CORRECTNESS_CHECK(fallback[i] == expected);
     }
   };
   checkBatch(batch);
@@ -185,46 +196,36 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
     }
     return totalBytes;
   };
-  const auto runSequential = [&](size_t numRepetitions) {
+  // Each of the following three lambdas looks up all words of `batch` once with
+  // one strategy and returns the total number of bytes of the words.
+  const auto runItemAt = [&] {
     size_t totalBytes = 0;
-    for (size_t repetition = 0; repetition < numRepetitions; ++repetition) {
-      for (size_t index : batch) {
-        std::string word{vocab[index]};
-        totalBytes += word.size();
-      }
+    for (size_t index : batch) {
+      const std::string word{vocab[index]};
+      totalBytes += word.size();
     }
     return totalBytes;
   };
-  const auto runFallback = [&](size_t numRepetitions) {
-    size_t totalBytes = 0;
-    for (size_t repetition = 0; repetition < numRepetitions; ++repetition) {
-      totalBytes +=
-          sumSizes(ad_utility::vocabulary::sequentialLookupBatch(vocab, batch));
-    }
-    return totalBytes;
+  const auto runSequentialLookupBatch = [&] {
+    return sumSizes(
+        ad_utility::vocabulary::sequentialLookupBatch(vocab, batch));
   };
-  const auto runBatched = [&](size_t numRepetitions) {
-    size_t totalBytes = 0;
-    for (size_t repetition = 0; repetition < numRepetitions; ++repetition) {
-      totalBytes += sumSizes(vocab.lookupBatch(batch));
-    }
-    return totalBytes;
-  };
+  const auto runBatched = [&] { return sumSizes(vocab.lookupBatch(batch)); };
 
-  // One untimed warm-up repetition of every strategy (caches, allocator).
-  runSequential(1);
-  runFallback(1);
-  runBatched(1);
+  // Run every strategy once, untimed, to warm up caches and the allocator.
+  runItemAt();
+  runSequentialLookupBatch();
+  runBatched();
 
   auto& group =
       results.addGroup(absl::StrCat(label, ": ", batchSize, " lookups into ",
                                     words.size(), " words in two markers"));
   addTimedMeasurement(group, "sequential operator[]", minSeconds, batchSize,
-                      [&] { return runSequential(1); });
+                      runItemAt);
   addTimedMeasurement(group, "fallback sequentialLookupBatch", minSeconds,
-                      batchSize, [&] { return runFallback(1); });
+                      batchSize, runSequentialLookupBatch);
   addTimedMeasurement(group, "batched lookupBatch", minSeconds, batchSize,
-                      [&] { return runBatched(1); });
+                      runBatched);
   vocab.close();
 }
 
@@ -239,11 +240,11 @@ class SplitVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
     const double minSeconds = static_cast<double>(
         sizeFromEnvironment("SPLIT_VOCAB_MIN_SECONDS", 10, 3600));
     const auto words = makeWords();
-    TempDirCleanup cleanup{std::filesystem::temp_directory_path() /
-                           "splitVocabLookupBatchEndToEnd"};
-    std::error_code ec;
-    std::filesystem::remove_all(cleanup.dir_, ec);
-    std::filesystem::create_directories(cleanup.dir_);
+    const TempDirCleanup cleanup{ql::filesystem::temp_directory_path() /
+                                 "splitVocabLookupBatchEndToEnd"};
+    ql::error_code ec;
+    ql::filesystem::remove_all(cleanup.dir_, ec);
+    ql::filesystem::create_directories(cleanup.dir_);
     measureUnderlying<VocabularyInMemory>(results, "VocabularyInMemory", words,
                                           cleanup.dir_ / "inMemory",
                                           minSeconds);
