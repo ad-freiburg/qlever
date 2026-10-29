@@ -20,9 +20,9 @@ add_library(engine
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
         ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp
         MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp ExternalValues.cpp
-        DistinctGraphs.cpp binaryExport/StringMapping.cpp
-        binaryExport/BinaryFormat.cpp binaryExport/BinaryExport.cpp)
+        DistinctGraphs.cpp)
 add_subdirectory(spatialJoinAlgorithms)
+add_subdirectory(binaryExport)
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers
