@@ -25,9 +25,13 @@ namespace parsedQuery {
 // }
 // The `<offset>` is optional and defaults to zero.
 //
-// NOTE: Joining the result with itself on `?rowNumber` and another variable,
+// NOTE 1: Joining the result with itself on `?rowNumber` and another variable,
 // using different offsets, is the equivalent of the SQL window functions
 // `LEAD` and `LAG`.
+//
+// NOTE 2: A simple SPARQL function to be used with `BIND` is unsuitable for
+// this, because the value of a `BIND` expression may only depend on the
+// bindings of its own row and not on the position of that row in the result.
 struct RowNumberQuery : MagicServiceQuery {
   std::optional<Variable> rowNumberVariable_;
   int64_t offset_ = 0;

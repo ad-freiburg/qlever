@@ -1010,6 +1010,15 @@ TEST(QueryPlanner, RowNumber) {
           qec),
       HasSubstr("`ORDER BY` or `INTERNAL SORT BY`"));
 
+  // Each variable of the `ORDER BY` must be bound by the subquery.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(absl::StrCat("SELECT * { ",
+                                   rowNumberService("[] <bind> ?n .", "?y",
+                                                    "ORDER BY ?x ?typo"),
+                                   " }"),
+                      qec),
+      HasSubstr("Variable ?typo is used in the ORDER BY clause"));
+
   // The offset must be a non-negative integer.
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::parseAndPlan(

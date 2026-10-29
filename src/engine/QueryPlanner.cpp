@@ -78,6 +78,7 @@
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/ParseException.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -464,6 +465,13 @@ SubtreePlanVec QueryPlanner::getOrderByRow(
     for (auto& ord : pq._orderBy) {
       auto idx = parent._qet->getVariableColumnOrNullopt(ord.variable_);
       if (!idx.has_value()) {
+        if (pq.orderByVariablesMustBeBound_) {
+          throw InvalidSparqlQueryException(absl::StrCat(
+              "Variable ", ord.variable_.name(),
+              " is used in the ORDER BY clause of the subquery of a row number "
+              "SERVICE, but is not bound, so the row numbers would not follow "
+              "the requested order."));
+        }
         continue;
       }
       sortIndices.emplace_back(idx.value(), ord.isDescending_);
@@ -3576,8 +3584,13 @@ void QueryPlanner::GraphPatternPlanner::visitExternalValues(
 void QueryPlanner::GraphPatternPlanner::visitRowNumber(
     parsedQuery::RowNumberQuery& rowNumberQuery) {
   // Plan the sorted subquery (see `RowNumberQuery::validate`) and add the row
-  // numbers on top of its cheapest plan.
+  // numbers on top of its cheapest plan. The variables of its `ORDER BY` must
+  // all be bound, because the row numbers depend on the order.
   AD_CORRECTNESS_CHECK(rowNumberQuery.childGraphPattern_.has_value());
+  std::get<parsedQuery::Subquery>(
+      rowNumberQuery.childGraphPattern_->_graphPatterns.at(0))
+      .get()
+      .orderByVariablesMustBeBound_ = true;
   SubtreePlan child =
       optimizeSingle(&rowNumberQuery.childGraphPattern_.value());
   auto candidate = makeSubtreePlan<RowNumber>(
