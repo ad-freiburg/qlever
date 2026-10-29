@@ -120,6 +120,8 @@ size_t Union::getResultWidth() const {
 }
 
 qlm::vector<ColumnIndex> Union::resultSortedOn() const {
+  // TODO<vrbommireddy>: Make `targetOrder_` a `qlm::vector<ColumnIndex>` and
+  // remove this conversion.
   return {targetOrder_.begin(), targetOrder_.end(), allocator()};
 }
 

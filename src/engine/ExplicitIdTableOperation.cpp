@@ -106,6 +106,8 @@ std::unique_ptr<Operation> ExplicitIdTableOperation::cloneImpl() const {
 
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> ExplicitIdTableOperation::resultSortedOn() const {
+  // TODO<vrbommireddy>: Make `sortedColumns_` a `qlm::vector<ColumnIndex>` and
+  // remove this conversion.
   return {sortedColumns_.begin(), sortedColumns_.end(), allocator()};
 }
 

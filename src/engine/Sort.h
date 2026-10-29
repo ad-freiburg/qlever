@@ -44,6 +44,8 @@ class Sort : public Operation {
   virtual std::string getDescriptor() const override;
 
   virtual qlm::vector<ColumnIndex> resultSortedOn() const override {
+    // TODO<vrbommireddy>: Make `sortColumnIndices_` a
+    // `qlm::vector<ColumnIndex>` and remove this conversion.
     return {sortColumnIndices_.begin(), sortColumnIndices_.end(), allocator()};
   }
 

@@ -188,6 +188,8 @@ class ValuesForTesting : public Operation {
   }
 
   qlm::vector<ColumnIndex> resultSortedOn() const override {
+    // TODO<vrbommireddy>: Make `resultSortedColumns_` a
+    // `qlm::vector<ColumnIndex>` and remove this conversion.
     return {resultSortedColumns_.begin(), resultSortedColumns_.end(),
             allocator()};
   }

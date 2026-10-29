@@ -462,7 +462,8 @@ void Operation::storeToNamedResultCache(const Result& result) {
       std::make_shared<const IdTable>(
           result.cloneIdTable(cancellationChecker())),
       getExternallyVisibleVariableColumns(),
-      // The cache stores the sort order as a plain `std::vector`.
+      // TODO<vrbommireddy>: Make `NamedResultCache::Value::resultSortedOn_` a
+      // `qlm::vector<ColumnIndex>` and remove this conversion.
       std::vector<ColumnIndex>{result.sortedBy().begin(),
                                result.sortedBy().end()},
       result.localVocab().clone(), getCacheKey(), geoIndex()};
