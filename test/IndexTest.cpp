@@ -870,7 +870,7 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
 }
 
 // Test that the normalization of the `ql:has-word` triples is stored in the
-// configuration of the index, so that `getHasWordWords` (used by
+// configuration of the index, so that `getNormalizedWords` (used by
 // `ql:normalize`) also applies it after the index has been loaded.
 TEST(IndexTest, hasWordNormalizationIsStored) {
   // A function that builds and loads an index with the given normalization and
@@ -883,7 +883,7 @@ TEST(IndexTest, hasWordNormalizationIsStored) {
     return getQec(std::move(config))
         ->getIndex()
         .getImpl()
-        .getHasWordWords("Café CAFE\xcc\x81s!");
+        .getNormalizedWords("Café CAFE\xcc\x81s!");
   };
 
   // With `Lowercase`, the accents are kept and the combining mark splits the
