@@ -394,7 +394,8 @@ template <typename Vocab, typename Indices>
 void assertLookupResultMatchesVocabularyAtIndices(
     const Vocab& vocab, const VocabBatchLookupResult& lookupResult,
     const Indices& indices) {
-  ASSERT_EQ(lookupResult.size(), ql::ranges::distance(indices));
+  ASSERT_EQ(lookupResult.size(),
+            static_cast<size_t>(ql::ranges::distance(indices)));
 
   auto at = [&](size_t i) -> decltype(auto) {
     if constexpr (requires { vocab[i]; }) {

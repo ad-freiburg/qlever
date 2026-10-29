@@ -48,4 +48,5 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(SplitVocabLookupBatchEndToEndBenchmark vocabulary)
 
+
 endif()
