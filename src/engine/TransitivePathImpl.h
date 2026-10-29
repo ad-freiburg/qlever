@@ -86,7 +86,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
   /**
    * @brief Compute the transitive hull with one or two bound sides.
-   * This function is called when alt least the startSide is bound and
+   * This function is called when at least the startSide is bound and
    * it is a variable. The other IdTable contains the result
    * of the start side and will be used to get the start nodes.
    *
@@ -207,12 +207,12 @@ class TransitivePathImpl : public TransitivePathBase {
   }
 
   // Compute the transitive Hull starting at the nodes given in the range
-  // `startNodes` with optional targets given in `targetNodes`, using the map
-  // given in `edges`. If no `targetNodes` are given, all nodes connected to the
-  // current start node are returned. The `TripleComponent`s `start` and
-  // `target` are used to specify the variables for the starting and target
-  // side, which, if present, will be matched.
-  // Yields matching results in `NodeWithGraph` objects.
+  // `startNodes` with optional targets given in `startNodes.targetNodes_`,
+  // using the map given in `edges`. If no target nodes are given, all nodes
+  // connected to the current start node are returned. The `TripleComponent`s
+  // `start` and `target` are used to specify the variables for the starting and
+  // target side, which, if present, will be matched. Yields matching results in
+  // `NodeWithGraph` objects.
   CPP_template(typename Node)(requires ql::ranges::range<Node>)
   NodeGenerator transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                                TripleComponent start, TripleComponent target,
@@ -341,16 +341,11 @@ class TransitivePathImpl : public TransitivePathBase {
     return result;
   }
 
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @param startSide The TransitivePathSide where the edges start
-   * @param startSideResult A `Result` wrapping an `IdTable` containing the
-   * Ids for the startSide
-   * @return ad_utility::InputRangeTypeErased<TableColumnWithVocab> A range
-   * for the transitive hull computation
-   */
+  // Prepare a Map and a nodes vector for the transitive hull
+  // computation. The start and target sides are given in `startSide` and
+  //`targetSide` respectively. The `Result` object for the operation is given
+  // as `startSideResult.Returns a range for the transitive hull computation as
+  // used in `transitiveHull`.
   ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide, const TransitivePathSide& targetSide,
       std::shared_ptr<const Result> startSideResult) const {

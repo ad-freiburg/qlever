@@ -295,6 +295,7 @@ class ValuesForTestingCountClones : public ValuesForTesting {
   std::vector<std::optional<Variable>> vars_;
 
  public:
+  // Clone counter, must be resetted.
   static inline size_t numClones = 0;
 
   ValuesForTestingCountClones(QueryExecutionContext* ctx, IdTable table,

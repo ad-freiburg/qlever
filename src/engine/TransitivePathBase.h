@@ -81,7 +81,7 @@ struct TransitivePathSide {
     return copy;
   }
 
-  // Override of `clone()`, but instead of creating a new tree, use a given
+  // Overload of `clone()`, but instead of creating a new tree, use a given
   // one to slot in. Requires side to be bound.
   TransitivePathSide clone(
       std::shared_ptr<QueryExecutionTree> foreignTree) const {
@@ -183,11 +183,13 @@ class TransitivePathBase : public Operation {
 
   ~TransitivePathBase() override = 0;
 
-  // Return a new Transitive Path `Operation` that uses the fact that either
-  // the left, right or both input operations generate all possible values of
-  // their corresponding side. This may result in a faster transitive path
-  // operation if the amount of those values is smaller than all possible values
-  // (as the transitive path has to be computed for fewer elements).
+  // Return a new transitive Path `Operation` that uses the fact that either
+  // the left, right or both input columns (each given by their index) generate
+  // all possible values of their corresponding side. If they are
+  // `std::nullopt`,this side is not bound. This may result in a faster
+  // transitive path operation if the amount of those values is smaller than all
+  // possible values (as the transitive path has to be computed for fewer
+  // elements).
   std::shared_ptr<TransitivePathBase> bindSides(
       std::shared_ptr<QueryExecutionTree> op, std::optional<size_t> leftCol,
       std::optional<size_t> rightCol = std::nullopt) const;
@@ -251,7 +253,7 @@ class TransitivePathBase : public Operation {
   std::optional<ColumnIndex> getActualGraphColumnIndex(
       const std::shared_ptr<QueryExecutionTree>& tree) const;
 
-  // Return the amount of distinctive non-payload columns (start, target, graph)
+  // Return the number of distinct non-payload columns (start, target, graph)
   // that are present in the input and will be joined given the passed `tree`.
   // Depending on how many are given and if some are identical, return either 1,
   // 2 or 3.
@@ -298,9 +300,9 @@ class TransitivePathBase : public Operation {
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
 
-  // Calculate their correct offsets and set the payload columns' indices  in
+  // Calculate the payload columns' correct offsets and set their indices in
   // the `plan`. `leftCol` and/or `rightCol` are the sides to which the
-  // transitive path is bound to. This method is called from within `bindSides`.
+  // transitive path is bound. This method is called from within `bindSides`.
   void computePayloadColumnOffsets(
       const std::shared_ptr<QueryExecutionTree>& op,
       const std::shared_ptr<TransitivePathBase>& plan,
@@ -309,7 +311,9 @@ class TransitivePathBase : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  // Get a list of indices of all payload columns (no side, no graph).
+  // Get a list of indices of all payload columns (no side, no graph). The
+  // `leftCol` and `rightCol` indicate the columns that are actually used in the
+  // transitive Path and are not payload.
   std::vector<ColumnIndex> computePayloadColumns(
       const std::shared_ptr<QueryExecutionTree>& op,
       const std::optional<ColumnIndex>& leftCol,

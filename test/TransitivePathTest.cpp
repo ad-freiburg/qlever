@@ -123,7 +123,8 @@ class TransitivePathTest
     return boundPath;
   }
 
-  // Get the `operation` element for a side of a transitive path.
+  // Get the `operation` element for a side of a transitive path in form of a
+  // `ValuesForTesting` tree. Its `cols` are sorted.
   [[nodiscard]] static std::shared_ptr<QueryExecutionTree> getOperation(
       QueryExecutionContext* qec,
       std::variant<IdTable, std::vector<IdTable>>& sideTable, Vars sideVars,
@@ -910,7 +911,7 @@ TEST_P(TransitivePathTest, bothBoundToVar) {
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsAdditoinalCol) {
+TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsAdditionalCol) {
   auto sub = makeIdTableFromVector({
       {1, 2, 10},
       {2, 3, 10},
@@ -994,7 +995,6 @@ TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsTargetCol) {
       "<g2> <q> <z> <g1> . "
       "<a> <q> <z> <g2> .";
 
-  // Simulate different predicates with multiple sub tables.
   auto sub = makeIdTableFromVector({
       {1, 10, 10},
   });
@@ -2696,7 +2696,7 @@ TEST_P(TransitivePathTest, cloneKeepsSameTreeWhenBothSidesBound) {
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
 
-  // We need to manually bind the path in order to obtain the  `qec` here.
+  // We need to manually bind the path in order to obtain the `qec` here.
   auto [T, qec] = makePath(sub.clone(), {Variable{"?i1"}, Variable{"?i2"}},
                            left, right, 1, std::numeric_limits<size_t>::max());
   auto tree = ad_utility::makeExecutionTree<ValuesForTestingCountClones>(

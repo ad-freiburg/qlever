@@ -25,7 +25,6 @@
 #include "global/RuntimeParameters.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
-#include "util/Log.h"
 
 namespace {
 auto makeInternalVariable(std::string_view string) {
@@ -488,12 +487,11 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
                            bool resetPlaceholder) {
     if (col.has_value()) {
       // Update this side column's index which might get messed up by
-      // `EmptyPath` operations added by `matchWithKnowedgeGraph`.
+      // `EmptyPath` operations added by `matchWithKnowledgeGraph`.
       col = op->getVariableColumn(var.value());
       side.treeAndCol_ = {op, col.value()};
-    }
-    // Remove placeholder tree if binding actual tree.
-    else if (resetPlaceholder || !side.isVariable()) {
+    } else if (resetPlaceholder || !side.isVariable()) {
+      // Clear its `TreeAndCol` if the side is unbound.
       side.treeAndCol_ = std::nullopt;
     }
   };

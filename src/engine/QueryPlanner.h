@@ -446,8 +446,9 @@ class QueryPlanner {
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs) const;
 
-  // Store the join columns for a transitive path operation. If the target
-  // sides' columns exist, the start side's must also exist.
+  // Store the join columns for a transitive path operation (transitive path
+  // side, other side). If the target sides' columns exist, the start side's
+  // must also exist.
   using SideTuple = std::optional<std::tuple<size_t, size_t>>;
   // Store both sides for a transitive path by left and right.
   struct TransitivePathJoinCols {
@@ -458,12 +459,13 @@ class QueryPlanner {
   // Return join columns for the transitive path's left and right side, packaged
   // in the `TransitivePathJoinCols` helper. Each side consists of a join column
   // for the transitive path operation and one from the other operation with
-  // which the result of the transitive path operation is joined. If a side is
-  // not bound to a variable, it will be `std::nullopt`, indicating that the
-  // full transitive path  will be computed; if the Boolean
-  // `leftSideTransitivePath` is true, the column indices of the transitive path
-  // are on the "left side" of the pairs from `jcs`, otherwise they are on the
-  // "right side"
+  // which the result of the transitive path operation is joined.
+  // A side that is not bound to a variable will be `std::nullopt`. If that is
+  // the case for both side, it indicates that the full transitive path will be
+  // computed. If the Boolean `leftSideTransitivePath` is true, the column
+  // indices of the transitive path are on the "left side" of the pairs from
+  // `jcs`, otherwise they are on the "right side". The join pairs for the graph
+  // variable are ignored here.
   static TransitivePathJoinCols getJoinColumnsForTransitivePath(
       const JoinColumns& jcs, bool leftSideTransitivePath);
 
