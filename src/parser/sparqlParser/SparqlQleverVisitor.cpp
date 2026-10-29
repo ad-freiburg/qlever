@@ -415,6 +415,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(&makePrefixMatchExpression);
     } else if (functionName == "simplifyGeometry") {
       return createBinary(&makeSimplifyGeometryExpression);
+    } else if (functionName == "stdev") {
+      // Alias for the non-standard `STDEV` aggregate.
+      return createUnary([](Ptr child) -> Ptr {
+        return std::make_unique<StdevExpression>(false, std::move(child));
+      });
     }
   }
 

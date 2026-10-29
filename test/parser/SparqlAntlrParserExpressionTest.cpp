@@ -733,5 +733,10 @@ TEST(SparqlParser, aggregateExpressions) {
   // A distinct stdev is probably not very useful, but should be possible anyway
   expectAggregate("STDEV(DISTINCT ?x)",
                   matchAggregateWithoutChild<StdevExpression>(true));
+
+  // `ql:stdev` is a standard-conforming alias for `STDEV`.
+  auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
+  expectFunctionCall(absl::StrCat("<", QL_PREFIX.second, "stdev>(?x)"),
+                     matchAggregateWithoutChild<StdevExpression>(false));
 }
 }  // namespace
