@@ -357,23 +357,25 @@ CPP_concept SupportsZeroCopyDeserialization =
 // allocating memory for `numElements` elements of `elementSize` bytes each is
 // not acceptable.
 template <typename S>
-CPP_requires(checksAllocationRequires,
+CPP_requires(allocationCheckingReadSerializerRequires,
              requires(S& s, size_t numElements,
                       size_t elementSize)(s.checkAllocation(numElements,
                                                             elementSize)));
 
 template <typename S>
-CPP_concept ChecksAllocation =
-    ReadSerializer<S> && CPP_requires_ref(checksAllocationRequires, S);
+CPP_concept AllocationCheckingReadSerializer =
+    ReadSerializer<S> &&
+    CPP_requires_ref(allocationCheckingReadSerializerRequires, S);
 
 // Has to be called by the `serialize` functions of read serializers before
 // they allocate memory for `numElements` elements of `elementSize` bytes each,
 // the number of which was read from the `serializer` (like the size of a
 // `std::vector`). This protects against allocating huge amounts of memory for
-// invalid input. It is a no-op unless the serializer `ChecksAllocation`.
+// invalid input. It is a no-op unless `S` is an
+// `AllocationCheckingReadSerializer`.
 CPP_template(typename S)(requires ReadSerializer<S>)
 void checkAllocation(S& serializer, size_t numElements, size_t elementSize) {
-  if constexpr (ChecksAllocation<S>) {
+  if constexpr (AllocationCheckingReadSerializer<S>) {
     serializer.checkAllocation(numElements, elementSize);
   }
 }

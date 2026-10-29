@@ -27,16 +27,26 @@ namespace ad_utility::serialization {
 // network response. The check happens before the memory is allocated.
 //
 // NOTE: Only the allocations of the `serialize` functions that call
-// `checkAllocation` (currently those of `std::vector` and `std::string`) are
-// counted.
+// `checkAllocation` (currently those of `std::vector`, `std::string`, and
+// `ad_utility::HashMap`) are counted.
 CPP_template(typename UnderlyingSerializer)(
     requires ReadSerializer<UnderlyingSerializer>)
 class AllocationLimitedReadSerializer : public NoCopyNoMove {
  public:
   using SerializerType = ReadSerializerTag;
+  // This class doesn't opt into aligned serialization (and doesn't forward
+  // `getCurrentPosition` and `skip`), so `alignSerializerForType` is a no-op
+  // for it. Wrapping a serializer that uses aligned serialization would thus
+  // silently skip the padding bytes and read garbage.
   static_assert(!usesAlignedSerialization<UnderlyingSerializer>);
 
  private:
+  // The underlying serializer is only borrowed, not owned: This class is a
+  // short-lived adapter that limits the allocations of a single value (see
+  // `readWithAllocationLimit` below), while the underlying serializer is
+  // typically a long-lived stream from which other values are read before and
+  // after, each limited value with its own budget. Owning it would require
+  // moving the serializer in and out for every limited value.
   UnderlyingSerializer& underlyingSerializer_;
   size_t maxNumBytes_;
   size_t remainingNumBytes_;

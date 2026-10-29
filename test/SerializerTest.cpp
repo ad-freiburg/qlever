@@ -1788,10 +1788,11 @@ TEST(ChunkedReadSerializer, readAcrossChunks) {
 // _____________________________________________________________________________
 TEST(AllocationLimitedReadSerializer, readWithAllocationLimit) {
   using serialization::readWithAllocationLimit;
-  static_assert(serialization::ChecksAllocation<
+  static_assert(serialization::AllocationCheckingReadSerializer<
                 serialization::AllocationLimitedReadSerializer<
                     ByteBufferReadSerializer>>);
-  static_assert(!serialization::ChecksAllocation<ByteBufferReadSerializer>);
+  static_assert(!serialization::AllocationCheckingReadSerializer<
+                ByteBufferReadSerializer>);
 
   std::vector<std::string> strings{"foo", "", "barbaz"};
   auto bytes = serializeToBytes(strings);
@@ -1821,6 +1822,22 @@ TEST(AllocationLimitedReadSerializer, readWithAllocationLimit) {
         serializeToBytes(std::vector<uint32_t>{1, 2, 3})};
     AD_EXPECT_THROW_WITH_MESSAGE(
         readWithAllocationLimit<std::vector<uint32_t>>(reader, 11), tooLarge);
+  }
+
+  // The limit also applies to hash maps.
+  {
+    using Map = ad_utility::HashMap<uint64_t, std::string>;
+    Map map{{1, "a"}, {2, "bc"}};
+    auto mapBytes = serializeToBytes(map);
+    auto readMap = [&mapBytes](size_t maxNumBytes) {
+      ByteBufferReadSerializer reader{mapBytes};
+      return readWithAllocationLimit<Map>(reader, maxNumBytes);
+    };
+    size_t numMapBytes = 2 * sizeof(std::pair<uint64_t, std::string>) + 3;
+    EXPECT_EQ(readMap(numMapBytes), map);
+    AD_EXPECT_THROW_WITH_MESSAGE(readMap(numMapBytes - 1), tooLarge);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        readMap(sizeof(std::pair<uint64_t, std::string>)), tooLarge);
   }
 
   // No memory is allocated for the size of an invalid string, and the size
