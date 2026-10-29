@@ -1054,3 +1054,33 @@ TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
       PlannedQuery(std::move(parsedQuery), nullptr, *qec),
       HasSubstr("Assertion `queryExecutionTree_ != nullptr` failed."));
 }
+
+// Test that a `Qlever` instance with `EngineConfig::compressedBlobFilename_`
+// set is populated from that blob file instead of from the on-disk index.
+TEST(LibQlever, loadFromCompressedBlobFile) {
+  std::string filename = gtestCurrentTestName() + ".blob";
+  ad_utility::testing::writeTestBlobFile(filename);
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  // The index basename deliberately does not exist, to verify that nothing is
+  // loaded from disk.
+  EngineConfig config;
+  config.baseName_ = "nonExistingIndexBasename";
+  config.compressedBlobFilename_ = filename;
+  Qlever qlever{config};
+  EXPECT_EQ(qlever.query(std::string{ad_utility::testing::testBlobFileQuery},
+                         ad_utility::MediaType::tsv),
+            ad_utility::testing::testBlobFileQueryResult);
+
+  // A blob file that does not exist, or that is a directory, is reported
+  // with a readable error message.
+  config.compressedBlobFilename_ = "nonExistingBlobFile";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever{config},
+      HasSubstr("\"nonExistingBlobFile\" does not exist or is not a regular "
+                "file"));
+  config.compressedBlobFilename_ = ".";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever{config},
+      HasSubstr("\".\" does not exist or is not a regular file"));
+}

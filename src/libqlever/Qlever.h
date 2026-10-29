@@ -266,6 +266,18 @@ struct EngineConfig : CommonConfig {
   // separately).
   bool doNotLoadPermutations_ = false;
 
+  // If set, do not load the index from the files with the `baseName_`, but
+  // from the compressed blob in the given file (as written by
+  // `Qlever::serializeVocabAndNamedCacheToCompressedBlob`, see
+  // `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob` for the
+  // details). The blob contains only the vocabulary and the named result
+  // cache, but no permutations. Such an instance can therefore only answer
+  // queries that read from the named result cache (via `SERVICE
+  // ql:cached-result-with-name-...`) or that need no triples at all; it does
+  // not support updates or index rebuilds. All other options for loading the
+  // index (like `loadTextIndex_`) are ignored.
+  std::optional<std::string> compressedBlobFilename_;
+
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
   // IRIs that do not start with any of the given prefixes are rejected.
@@ -361,7 +373,10 @@ class Qlever {
   // (in particular, none of the on-disk index files, not even the vocabulary
   // or the `.meta-data.json`, need to exist); the instance must then be
   // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
-  // before it can answer queries. The memory limit from `config` is enforced
+  // before it can answer queries. If `config.compressedBlobFilename_` is set,
+  // the instance is populated from that blob file instead of from the on-disk
+  // index, independent of `skipLoading`. The memory limit from `config` is
+  // enforced
   // and cache eviction is wired into the allocator. The queries and index
   // rebuilds of this instance run their parallel work on the `executor`.
   //

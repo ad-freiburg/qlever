@@ -37,7 +37,6 @@
 #include "util/AsioHelpers.h"
 #include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
-#include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/ParseableDuration.h"
@@ -63,9 +62,8 @@ Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
     std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
-    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker,
-    const std::optional<std::string>& compressedBlobFilename)
-    : qlever_(config, /*skipLoading=*/compressedBlobFilename.has_value()),
+    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker)
+    : qlever_(config),
       numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -80,16 +78,20 @@ Server::Server(
               : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
-  if (compressedBlobFilename.has_value()) {
-    AD_LOG_INFO << "Loading the index from the blob file \""
-                << compressedBlobFilename.value() << "\" ..." << std::endl;
-    ad_utility::File file{compressedBlobFilename.value(), "r"};
-    std::vector<char> compressedBlob(file.sizeOfFile());
-    auto numBytesRead =
-        file.read(compressedBlob.data(), compressedBlob.size(), 0);
-    AD_CORRECTNESS_CHECK(static_cast<size_t>(numBytesRead) ==
-                         compressedBlob.size());
-    qlever_.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob);
+  if (config.compressedBlobFilename_.has_value()) {
+    if (config.persistUpdates_) {
+      throw std::runtime_error{
+          "A server that is loaded from a blob does not support persisting "
+          "updates, so `--read-from-blob-file` cannot be combined with "
+          "`--persist-updates`"};
+    }
+    if (config.rebuildIndexStrategy_.has_value()) {
+      throw std::runtime_error{
+          "A server that is loaded from a blob does not support index "
+          "rebuilds, so `--read-from-blob-file` cannot be combined with an "
+          "automatic `--rebuild-index-strategy`"};
+    }
+    loadedFromBlob_ = true;
   }
 
   initializeServerMetrics(config.memoryLimit_);
@@ -1761,6 +1763,11 @@ CPP_template_def(typename RequestT)(
 Awaitable<Server::ResponseT> Server::processRebuildIndex(
     const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
+  if (loadedFromBlob_) {
+    throw HttpError(boost::beast::http::status::bad_request,
+                    "The index of this server was loaded from a blob and has "
+                    "no files on disk, so it cannot be rebuilt");
+  }
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
                                              std::nullopt),

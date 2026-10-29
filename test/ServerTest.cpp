@@ -1251,47 +1251,49 @@ TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
   EXPECT_THAT(lines, testing::IsEmpty());
 }
 
-// Test that a `Server` that is given a blob file does not load the index from
-// disk, but from the blob, and can then answer the named cached queries from
-// the blob.
+// Test that a `Server` can be loaded from a blob file, but rejects the options
+// and commands that it does not support in that mode.
 TEST(ServerTest, readFromBlobFile) {
-  // The serialization of blobs requires the `InMemoryUncompressed`
-  // vocabulary.
-  auto indexConfig =
-      buildTestIndex("<s> <p> \"blob literal\" .",
-                     ad_utility::VocabularyType::InMemoryUncompressed);
-  std::vector<char> compressedBlob = [&indexConfig]() {
-    qlever::Qlever source{qlever::EngineConfig{indexConfig}};
-    source.queryAndPinResultWithName("blobPin",
-                                     "SELECT ?s ?o WHERE { ?s <p> ?o }");
-    return source.serializeVocabAndNamedCacheToCompressedBlob();
-  }();
-
   std::string filename = gtestCurrentTestName() + ".blob";
-  {
-    ad_utility::File file{filename, "w"};
-    file.write(compressedBlob.data(), compressedBlob.size());
-  }
+  writeTestBlobFile(filename);
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
 
   // The index basename deliberately does not exist, to verify that nothing is
   // loaded from disk.
-  qlever::EngineConfig config;
-  config.baseName_ = "nonExistingIndexBasename";
-  Server server{4321,
-                1,
-                "accessToken",
-                config,
-                /*noAccessCheck=*/false,
-                /*metricsReader=*/nullptr,
-                /*indexRebuildIdTracker=*/nullptr,
-                filename};
-  EXPECT_EQ(server.qlever().query("SELECT ?s ?o WHERE { SERVICE "
-                                  "ql:cached-result-with-name-blobPin {}}",
-                                  ad_utility::MediaType::tsv),
-            "?s\t?o\n<s>\t\"blob literal\"\n");
+  auto config =
+      serverTestHelpers::getDefaultConfigWithName("nonExistingIndexBasename");
+  config.compressedBlobFilename_ = filename;
 
-  // A blob file that does not exist throws.
-  EXPECT_ANY_THROW((Server{4321, 1, "accessToken", config, false, nullptr,
-                           nullptr, std::string{"nonExistingBlobFile"}}));
+  // Persisting updates and automatic index rebuilds are not supported.
+  auto configWithPersistUpdates = config;
+  configWithPersistUpdates.persistUpdates_ = true;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (Server{4321, 1, "accessToken", configWithPersistUpdates}),
+      testing::HasSubstr("cannot be combined with `--persist-updates`"));
+  auto configWithRebuildStrategy = config;
+  configWithRebuildStrategy.rebuildIndexStrategy_ =
+      qlever::RebuildIndexStrategy::parse("automatic:1:2:0.5");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (Server{4321, 1, "accessToken", configWithRebuildStrategy}),
+      testing::HasSubstr("cannot be combined with an automatic "
+                         "`--rebuild-index-strategy`"));
+
+  // The named cached query from the blob can be answered.
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+  auto response = server.process(
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-query"},
+                   {http::field::accept, "text/tab-separated-values"}},
+                  std::string{testBlobFileQuery}));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_EQ(serverTestHelpers::responseBodyToString(std::move(response.body())),
+            testBlobFileQueryResult);
+
+  // A manual index rebuild is rejected.
+  expectHttpError(
+      [&] {
+        server.process(makeGetRequest("/?cmd=rebuild-index", "accessToken"));
+      },
+      boost::beast::http::status::bad_request,
+      testing::HasSubstr("was loaded from a blob and has no files on disk"));
 }

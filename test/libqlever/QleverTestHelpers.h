@@ -140,6 +140,30 @@ decompressOrFail(ql::span<const char> compressedBlob,
   return std::get<std::vector<char, Manager::BlobAllocator>>(std::move(result));
 }
 
+// Build a small index with the single triple `<s> <p> "blob literal"`, pin
+// the result of `SELECT ?s ?o WHERE { ?s <p> ?o }` on it under the name
+// `blobPin`, and write the resulting compressed blob (see
+// `Qlever::serializeVocabAndNamedCacheToCompressedBlob`) to the file with the
+// given `filename`. The result of querying the pinned result is
+// `testBlobFileQueryResult` below.
+inline void writeTestBlobFile(const std::string& filename) {
+  qlever::Qlever source{qlever::EngineConfig{
+      buildTestIndex("<s> <p> \"blob literal\" .",
+                     ad_utility::VocabularyType::InMemoryUncompressed)}};
+  source.queryAndPinResultWithName("blobPin",
+                                   "SELECT ?s ?o WHERE { ?s <p> ?o }");
+  auto compressedBlob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  ad_utility::File file{filename, "w"};
+  file.write(compressedBlob.data(), compressedBlob.size());
+}
+
+// The query for the result pinned in the blob of `writeTestBlobFile`, and its
+// result in TSV format.
+constexpr std::string_view testBlobFileQuery =
+    "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}";
+constexpr std::string_view testBlobFileQueryResult =
+    "?s\t?o\n<s>\t\"blob literal\"\n";
+
 }  // namespace ad_utility::testing
 
 #endif  // QLEVER_TEST_LIBQLEVER_QLEVERTESTHELPERS_H

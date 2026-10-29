@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -61,7 +60,6 @@ int main(int argc, char** argv) {
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
   std::string rebuildIndexStrategy;
-  std::optional<std::string> blobFilename;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -182,16 +180,22 @@ int main(int argc, char** argv) {
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
   add("read-from-blob-file",
-      po::value<std::string>()->notifier(
-          [&blobFilename](const std::string& f) { blobFilename = f; }),
+      po::value<std::string>()->notifier([&config](const std::string& f) {
+        config.compressedBlobFilename_ = f;
+      }),
       "Do not load the index from the files with the given index basename, but "
       "from the compressed blob in the given file (which contains the "
       "vocabulary and the named result cache, see "
-      "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`). Only the named "
-      "cached queries from the blob can then be answered, and the options for "
-      "loading the index from disk (like `--text` or `--persist-updates`) are "
-      "ignored. The `--index-basename` is still required, it determines the "
-      "names of the log files.");
+      "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`). This mode is "
+      "only meant for serving a fixed set of precomputed results: the blob "
+      "contains no permutations, so only queries that read from the named "
+      "result cache (`SERVICE ql:cached-result-with-name-...`) or that need no "
+      "triples at all can be answered. Updates and index rebuilds are not "
+      "supported, so this option cannot be combined with `--persist-updates` "
+      "or an automatic `--rebuild-index-strategy`. The other options for "
+      "loading the index from disk (like `--text`) are ignored. The "
+      "`--index-basename` is still required, it determines the names of the "
+      "log files.");
   add("rebuild-index-strategy",
       po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
       "When to rebuild the index from the current data (including updates). "
@@ -439,7 +443,7 @@ int main(int argc, char** argv) {
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
                   noAccessCheck, std::move(metricsReader),
-                  resourceMonitor.indexRebuildIdTracker(), blobFilename);
+                  resourceMonitor.indexRebuildIdTracker());
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {
