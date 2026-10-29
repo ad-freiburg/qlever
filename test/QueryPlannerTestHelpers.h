@@ -13,6 +13,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -666,13 +667,9 @@ void expectWithGivenBudget(std::string query, MatcherT matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
                            source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto budgetBackup =
-      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
-  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
-      queryPlanningBudget);
-  auto cleanup = absl::Cleanup{[budgetBackup]() {
-    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(budgetBackup);
-  }};
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+          queryPlanningBudget);
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
   // Note: we cannot use `value_or` here, because it eagerly evaluates `getQec`
