@@ -246,7 +246,9 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
   };
 
   // One untimed warm-up repetition of every strategy (caches, allocator).
-  for (const auto* batch : {&mixedBatch, &markerZeroBatch, &markerOneBatch}) {
+  using BatchPtr = const std::vector<size_t>*;
+  for (BatchPtr batch : {BatchPtr{&mixedBatch}, BatchPtr{&markerZeroBatch},
+                         BatchPtr{&markerOneBatch}}) {
     runSequential(*batch, 1);
     runFallback(*batch, 1);
     runBatched(*batch, 1);
@@ -254,10 +256,11 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
 
   auto& group = results.addGroup(absl::StrCat(
       label, ": ", batchSize, " lookups into ", words.size(), " words"));
+  using LabeledBatch = std::pair<BatchPtr, const char*>;
   for (const auto& [batch, suffix] :
-       {std::pair{&mixedBatch, ", mixed markers"},
-        std::pair{&markerZeroBatch, ", single marker 0"},
-        std::pair{&markerOneBatch, ", single marker 1"}}) {
+       {LabeledBatch{&mixedBatch, ", mixed markers"},
+        LabeledBatch{&markerZeroBatch, ", single marker 0"},
+        LabeledBatch{&markerOneBatch, ", single marker 1"}}) {
     const auto& b = *batch;
     addTimedMeasurement(group, absl::StrCat("sequential operator[]", suffix),
                         minSeconds, batchSize,
