@@ -34,7 +34,10 @@ namespace ql {
 // contents on both paths (on the C++23 path the wrapper clamps the size it
 // reports to the standard member, whose contract would otherwise be
 // violated). Before C++23 there is no performance benefit: the fallback
-// value-initializes the newly appended characters with `resize` first.
+// value-initializes the newly appended characters with `resize` first. The
+// buffer handed to `op` must be treated as uninitialized on both paths: the
+// C++23 member passes indeterminate values, so `op` must not read it before
+// writing.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Operation)(
     requires ad_utility::InvocableWithConvertibleReturnType<Operation, size_t,
