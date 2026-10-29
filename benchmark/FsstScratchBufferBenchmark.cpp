@@ -1,4 +1,4 @@
-// Copyright 2026, The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
@@ -9,13 +9,16 @@
 
 // Compare the decode APIs of `FsstRepeatedDecoder` on the same workload: every
 // arm decodes the same 5,000 compressed words through the same three FSST
-// stages, `FSST_BENCH_REPETITIONS` times. The arms differ only in where the
-// decoded bytes go (owning strings or caller-provided buffers) and how the
-// scratch buffer is provided. Environment variables:
-//   FSST_BENCH_ARM          run only this arm (0..6, default: all arms)
-//   FSST_BENCH_REPETITIONS  passes over the 5,000 words (default 1)
+// stages, `FSST_BENCH_REPETITIONS` times. The arms differ in how they obtain
+// their buffers: owning strings per word or stage (arms 0 and 1) or
+// caller-provided buffers with different scratch provisioning (arms 2 to 6).
+// Arms 4 to 6 use the local `decodeRepeatedIntoSpans`, not
+// `FsstRepeatedDecoder`. Set the following environment variables to configure
+// the run.
+//   `FSST_BENCH_ARM`          Run only this arm (0..6, default: all arms).
+//   `FSST_BENCH_REPETITIONS`  Set the passes over the 5,000 words (default 1).
 // One untimed warm-up pass runs before each timed measurement. The
-// constructor checks that all arms decode every word to the original bytes.
+// constructor checks that every arm decodes every word to the original bytes.
 
 #include <dlfcn.h>
 
@@ -43,13 +46,14 @@ using RepeatedDecoder = FsstRepeatedDecoder<numberOfStages>;
 using Decoders = std::array<FsstDecoder, numberOfStages>;
 
 // _____________________________________________________________________________
-// The body of `FsstDecoder::decompress` before `decompressInto` existed: size
-// an owning string to the 8x bound with `resize` (which zero-fills it),
-// decode, shrink. `decompressInto` performs the same `fsst_decompress` call
-// plus two bound checks.
+// Decode `str` as `FsstDecoder::decompress` did before `decompressInto`
+// existed: size an owning string to the 8x bound with `resize` (which
+// zero-fills it), decode, shrink. Return the decoded word as a new string.
+// `decompressInto` performs the same `fsst_decompress` call plus two bound
+// checks.
 std::string legacyDecompress(const FsstDecoder& decoder, std::string_view str) {
   std::string output;
-  output.resize(FsstDecoder::maxExpansionFactor * str.size());
+  output.resize(FsstDecoder::maxDecompressedSize(str));
   const size_t size =
       decoder.decompressInto(str, ql::span<char>{output.data(), output.size()});
   output.resize(size);
@@ -57,89 +61,116 @@ std::string legacyDecompress(const FsstDecoder& decoder, std::string_view str) {
 }
 
 // _____________________________________________________________________________
-// `FsstRepeatedDecoder::decompress` before `decompressInto` existed: one
-// owning string per stage, each built by `legacyDecompress`.
+// Decode `str` as `FsstRepeatedDecoder::decompress` did before `decompressInto`
+// existed: one owning string per stage, each built by `legacyDecompress`.
+// Return the decoded word as a new string.
 std::string legacyRepeatedDecompress(const Decoders& decoders,
                                      std::string_view str) {
-  std::string current = legacyDecompress(decoders[numberOfStages - 1], str);
+  std::string decoded = legacyDecompress(decoders[numberOfStages - 1], str);
   for (size_t stage = 1; stage < numberOfStages; ++stage) {
-    current = legacyDecompress(decoders[numberOfStages - 1 - stage], current);
+    decoded = legacyDecompress(decoders[numberOfStages - 1 - stage], decoded);
   }
-  return current;
+  return decoded;
 }
 
 // _____________________________________________________________________________
 // Decode through all stages into `output`, alternating with `scratch` (the
 // parity scheme of `FsstRepeatedDecoder::decompressInto`), with caller-provided
-// spans so that the scratch provisioning can be varied.
+// spans so that the scratch provisioning can be varied. `output` must hold
+// `RepeatedDecoder::maxDecompressedSize(compressed)` bytes and `scratch` the
+// largest intermediate bound, which is that size divided by the expansion
+// factor. Return the number of decoded bytes written to `output`.
 size_t decodeRepeatedIntoSpans(const Decoders& decoders,
                                std::string_view compressed,
                                ql::span<char> output, ql::span<char> scratch) {
-  size_t destination = (numberOfStages % 2 == 0) ? 1 : 0;
-  std::array<ql::span<char>, 2> buffers{output, scratch};
+  size_t targetBufferIdx = (numberOfStages % 2 == 0) ? 1 : 0;
+  const std::array<ql::span<char>, 2> buffers{output, scratch};
   std::string_view input = compressed;
   size_t bytesWritten = 0;
   for (size_t stage = 0; stage < numberOfStages; ++stage) {
     bytesWritten = decoders[numberOfStages - 1 - stage].decompressInto(
-        input, buffers[destination]);
-    input = {buffers[destination].data(), bytesWritten};
-    destination ^= 1;
+        input, buffers[targetBufferIdx]);
+    input = {buffers[targetBufferIdx].data(), bytesWritten};
+    targetBufferIdx ^= 1;
   }
   return bytesWritten;
 }
 
 // _____________________________________________________________________________
-// Allocation statistics of the calling thread, read from jemalloc (which
-// QLever links when it is installed) via `mallctl`. The function is looked up
-// at runtime, so the benchmark also links without jemalloc (e.g. on macOS,
-// where a weak reference to an undefined symbol does not link); then
-// `available()` is false and no statistics are recorded. All reads happen
-// outside the timed region.
+// Read allocation statistics from jemalloc (which QLever links when it is
+// installed) via `mallctl`. The request counters cover all threads, the other
+// values the calling thread. The function is looked up at runtime, so the
+// benchmark also links without jemalloc (e.g. on macOS, where a weak reference
+// to an undefined symbol does not link); then `available()` is false and no
+// statistics are recorded. All reads happen outside the timed region.
+//
+// Signature of `mallctl(name, oldp, oldlenp, newp, newlen)`: it reads the value
+// of `name` into `oldp` (whose size is `*oldlenp`), or writes `newp` (of size
+// `newlen`) to it, and returns 0 on success.
 using MallctlFunction = int (*)(const char* name, void* oldp, size_t* oldlenp,
                                 void* newp, size_t newlen);
+// _____________________________________________________________________________
+// Return the `mallctl` function of the linked jemalloc, or `nullptr` if there
+// is none. The lookup happens once.
 MallctlFunction mallctlFunction() {
-  static const MallctlFunction function =
+  static const MallctlFunction mallctlSymbol =
       reinterpret_cast<MallctlFunction>(dlsym(RTLD_DEFAULT, "mallctl"));
-  return function;
+  return mallctlSymbol;
 }
 
 class JemallocThreadStats {
  public:
   struct Snapshot {
-    uint64_t requests = 0;  // Number of allocation requests (all threads).
-    uint64_t allocatedBytes = 0;  // Bytes allocated by this thread.
+    // Number of allocation requests of all threads.
+    uint64_t requests = 0;
+    // Bytes allocated by this thread.
+    uint64_t allocatedBytes = 0;
   };
 
+  // Return whether `mallctl` was found. Controls that are newer than
+  // jemalloc 5.0, like `thread.peak.reset`, can still be missing.
   static bool available() { return mallctlFunction() != nullptr; }
 
+  // ___________________________________________________________________________
   // Flush this thread's cache so that the arena counters include all its
-  // requests, then read the counters.
+  // requests, advance the statistics epoch, then read the counters. The arena
+  // index 4096 is jemalloc's `MALLCTL_ARENAS_ALL`, which merges all arenas.
   static Snapshot read() {
-    Snapshot snapshot;
+    Snapshot stats;
     if (!available()) {
-      return snapshot;
+      return stats;
     }
     mallctlFunction()("thread.tcache.flush", nullptr, nullptr, nullptr, 0);
     uint64_t epoch = 1;
     size_t length = sizeof(epoch);
     mallctlFunction()("epoch", &epoch, &length, &epoch, length);
-    snapshot.requests = readUint64("stats.arenas.4096.small.nrequests") +
-                        readUint64("stats.arenas.4096.large.nrequests");
-    snapshot.allocatedBytes = readUint64("thread.allocated");
-    return snapshot;
+    stats.requests = readUint64("stats.arenas.4096.small.nrequests") +
+                     readUint64("stats.arenas.4096.large.nrequests");
+    stats.allocatedBytes = readUint64("thread.allocated");
+    return stats;
   }
 
-  // Reset and read the high-water mark of this thread's live heap bytes.
-  static void resetPeak() {
-    if (available()) {
-      mallctlFunction()("thread.peak.reset", nullptr, nullptr, nullptr, 0);
-    }
+  // ___________________________________________________________________________
+  // Reset the high-water mark of this thread's live heap bytes to the current
+  // live bytes. Return whether the reset worked, which is not the case if
+  // jemalloc is missing or older than 5.3. Only then is `peakBytes()` valid.
+  [[nodiscard]] static bool resetPeak() {
+    return available() && mallctlFunction()("thread.peak.reset", nullptr,
+                                            nullptr, nullptr, 0) == 0;
   }
+
+  // ___________________________________________________________________________
+  // Return the high-water mark of this thread's live heap bytes since the last
+  // successful `resetPeak()`. It is an absolute value, not relative to the
+  // live bytes at the reset.
   static uint64_t peakBytes() {
     return available() ? readUint64("thread.peak.read") : 0;
   }
 
  private:
+  // ___________________________________________________________________________
+  // Return the `uint64_t` value of the `mallctl` control `name`, or 0 if the
+  // control cannot be read.
   static uint64_t readUint64(const char* name) {
     uint64_t value = 0;
     size_t length = sizeof(value);
@@ -149,16 +180,19 @@ class JemallocThreadStats {
 };
 
 // _____________________________________________________________________________
-size_t parseEnvironmentSize(const char* varName, size_t defaultValue) {
-  const char* value = std::getenv(varName);
-  if (value == nullptr) {
+// Return the unsigned integer in the environment variable `varName`, or
+// `defaultValue` if it is not set. Throw a contract violation if the value is
+// not a valid unsigned integer.
+size_t parseEnvironmentCount(const char* varName, size_t defaultValue) {
+  const char* rawValue = std::getenv(varName);
+  if (rawValue == nullptr) {
     return defaultValue;
   }
   errno = 0;
   char* end = nullptr;
-  const unsigned long parsed = std::strtoul(value, &end, 10);
-  AD_CONTRACT_CHECK(end != value && *end == '\0' && errno != ERANGE,
-                    "Invalid value `", value, "` for environment variable ",
+  const unsigned long parsed = std::strtoul(rawValue, &end, 10);
+  AD_CONTRACT_CHECK(end != rawValue && *end == '\0' && errno != ERANGE,
+                    "Invalid value `", rawValue, "` for environment variable ",
                     varName);
   return static_cast<size_t>(parsed);
 }
@@ -166,15 +200,23 @@ size_t parseEnvironmentSize(const char* varName, size_t defaultValue) {
 class FsstScratchBufferBenchmark : public BenchmarkInterface {
  private:
   static constexpr size_t numberOfWords = 5'000;
+  // The number of arms. As the value of `FSST_BENCH_ARM`, it selects all arms.
   static constexpr size_t allArms = 7;
-  // Views into the three times compressed words.
+  // The upper limit of `FSST_BENCH_REPETITIONS`.
+  static constexpr size_t maxRepetitions = 1'000'000;
+  // The length of the synthetic suffix of each word.
+  static constexpr size_t suffixLength = 45;
+  // The three times compressed words, as views into `compressedStorage_`.
   std::vector<std::string_view> compressed_;
   // Owns the original words, which the first `compressAll` call reads.
   std::vector<std::string> wordsStorage_;
-  Decoders decoders_;
-  RepeatedDecoder repeatedDecoder_;
+  Decoders decoders_{};
+  RepeatedDecoder repeatedDecoder_{};
   // Owns the compressed strings behind the views in `compressed_`.
-  std::vector<std::shared_ptr<std::string>> decoderStorage_;
+  std::vector<std::shared_ptr<std::string>> compressedStorage_;
+  // Largest word, which the final stage of `FsstRepeatedDecoder::decompress`
+  // allocates as its only heap buffer.
+  size_t maxWordBytes_ = 0;
   // Largest `RepeatedDecoder::maxDecompressedSize` over all words: sizes the
   // output buffer of the `decompressInto` arms.
   size_t outputCapacity_ = 0;
@@ -185,33 +227,35 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
   // at the same time in the pre-API `decompress` (the previous and the
   // current stage's string), over all words and stages.
   size_t maxLiveOwnedStringBytes_ = 0;
-  // Largest one-shot scratch that `decompressInto(out)` allocates per word.
+  // Largest scratch that a per-word (one-shot) scratch string allocates.
   size_t maxOneShotScratchBytes_ = 0;
 
  public:
   FsstScratchBufferBenchmark() {
-    // The `0` characters are literal characters of the synthetic alphabet,
-    // not numeric values; the modulo below indexes into this string.
+    // Characters of the synthetic alphabet; the modulo below indexes into this
+    // string. The suffix depends on `i` only through `i * 17 mod 42`, and 17
+    // and 42 are coprime, so the workload consists of 42 distinct words that
+    // repeat.
     constexpr std::string_view alphabet{
         "abcdefghijklmnopqrstuvwxyz0123456789_:/.-#"};
     wordsStorage_.reserve(numberOfWords);
     for (size_t i = 0; i < numberOfWords; ++i) {
       std::string suffix;
-      suffix.reserve(45);
-      for (size_t character = 0; character < 45; ++character) {
+      suffix.reserve(suffixLength);
+      for (size_t character = 0; character < suffixLength; ++character) {
         suffix += alphabet[(i * 17 + character * 31) % alphabet.size()];
       }
       wordsStorage_.push_back("http://www.wikidata.org/entity/Q" + suffix);
     }
 
     compressed_.assign(wordsStorage_.begin(), wordsStorage_.end());
-    decoderStorage_.reserve(numberOfStages);
+    compressedStorage_.reserve(numberOfStages);
     for (size_t stage = 0; stage < numberOfStages; ++stage) {
-      auto [storage, compressed, decoder] =
+      auto [compressedBytes, compressed, decoder] =
           FsstEncoder::compressAll(compressed_);
       compressed_ = std::move(compressed);
       decoders_[stage] = std::move(decoder);
-      decoderStorage_.push_back(std::move(storage));
+      compressedStorage_.push_back(std::move(compressedBytes));
     }
     repeatedDecoder_ = RepeatedDecoder{decoders_};
 
@@ -223,24 +267,28 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
     for (const std::string_view& compressed : compressed_) {
       constexpr size_t factor = FsstDecoder::maxExpansionFactor;
       size_t previousRequest = 0;
-      std::string current{compressed};
+      std::string stageOutput{compressed};
       for (size_t stage = 0; stage < numberOfStages; ++stage) {
-        const size_t request = factor * current.size();
+        const size_t request = factor * stageOutput.size();
         maxLiveOwnedStringBytes_ =
             std::max(maxLiveOwnedStringBytes_, previousRequest + request);
-        current =
-            legacyDecompress(decoders_[numberOfStages - 1 - stage], current);
+        stageOutput = legacyDecompress(decoders_[numberOfStages - 1 - stage],
+                                       stageOutput);
         previousRequest = request;
       }
+      maxWordBytes_ = std::max(maxWordBytes_, stageOutput.size());
       maxOneShotScratchBytes_ =
           std::max(maxOneShotScratchBytes_,
                    RepeatedDecoder::maxDecompressedSize(compressed) / factor);
     }
 
-    // All arms must reproduce the original words.
+    // All arms must reproduce the original words. Arms 4 to 6 differ from each
+    // other only in the size and provisioning of the scratch span, so the
+    // smallest one (arm 6) is checked for all of them.
     std::string output(outputCapacity_, '\0');
     const ql::span<char> outputSpan{output.data(), output.size()};
     std::string scratch;
+    std::string spanScratch(intermediateCapacity_, '\0');
     for (size_t i = 0; i < numberOfWords; ++i) {
       const std::string& word = wordsStorage_[i];
       AD_CORRECTNESS_CHECK(
@@ -249,7 +297,13 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
       size_t size =
           repeatedDecoder_.decompressInto(compressed_[i], outputSpan, scratch);
       AD_CORRECTNESS_CHECK(std::string_view(output.data(), size) == word);
-      size = repeatedDecoder_.decompressInto(compressed_[i], outputSpan);
+      std::string oneShotScratch;
+      size = repeatedDecoder_.decompressInto(compressed_[i], outputSpan,
+                                             oneShotScratch);
+      AD_CORRECTNESS_CHECK(std::string_view(output.data(), size) == word);
+      size = decodeRepeatedIntoSpans(
+          decoders_, compressed_[i], outputSpan,
+          ql::span<char>{spanScratch.data(), spanScratch.size()});
       AD_CORRECTNESS_CHECK(std::string_view(output.data(), size) == word);
     }
   }
@@ -258,23 +312,25 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results;
-    const size_t selectedArm = parseEnvironmentSize("FSST_BENCH_ARM", allArms);
+    const size_t selectedArm = parseEnvironmentCount("FSST_BENCH_ARM", allArms);
     const size_t repetitions =
-        parseEnvironmentSize("FSST_BENCH_REPETITIONS", 1);
+        parseEnvironmentCount("FSST_BENCH_REPETITIONS", 1);
     AD_CONTRACT_CHECK(selectedArm <= allArms);
-    AD_CONTRACT_CHECK(repetitions > 0 && repetitions <= 1'000'000);
+    AD_CONTRACT_CHECK(repetitions > 0 && repetitions <= maxRepetitions);
     auto& group = results.addGroup(
         "Three-stage FSST decode of 5,000 words x FSST_BENCH_REPETITIONS");
 
-    // Buffers of the span and `decompressInto` arms, provisioned once, outside
+    // Provision the buffers of the span and `decompressInto` arms once, outside
     // the timed region. `std::string(n, '\0')` zero-fills; `new char[n]` does
-    // not.
+    // not. `reusedScratch` stays empty here and grows to
+    // `intermediateCapacity_` during the warm-up pass of arm 2.
     std::string reusedOutput(outputCapacity_, '\0');
     std::string reusedScratch;
     std::string stringScratch(outputCapacity_, '\0');
-    std::unique_ptr<char[]> rawOutput{new char[outputCapacity_]};
-    std::unique_ptr<char[]> rawScratch{new char[outputCapacity_]};
-    std::unique_ptr<char[]> stagedScratch{new char[intermediateCapacity_]};
+    const std::unique_ptr<char[]> rawOutput{new char[outputCapacity_]};
+    const std::unique_ptr<char[]> rawScratch{new char[outputCapacity_]};
+    const std::unique_ptr<char[]> stagedScratch{
+        new char[intermediateCapacity_]};
     const ql::span<char> reusedOutputSpan{reusedOutput.data(), outputCapacity_};
     const ql::span<char> rawOutputSpan{rawOutput.get(), outputCapacity_};
 
@@ -286,7 +342,8 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
          [&](std::string_view c) {
            return legacyRepeatedDecompress(decoders_, c).size();
          }},
-        {"1 decompress (this PR): owning string per stage",
+        {"1 decompress (this PR): stack buffers for the intermediate stages, "
+         "one owning string",
          [&](std::string_view c) {
            return repeatedDecoder_.decompress(c).size();
          }},
@@ -295,9 +352,11 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
            return repeatedDecoder_.decompressInto(c, reusedOutputSpan,
                                                   reusedScratch);
          }},
-        {"3 decompressInto(out): one-shot scratch per word",
+        {"3 decompressInto(out, scratch): one-shot scratch per word",
          [&](std::string_view c) {
-           return repeatedDecoder_.decompressInto(c, reusedOutputSpan);
+           std::string oneShotScratch;
+           return repeatedDecoder_.decompressInto(c, reusedOutputSpan,
+                                                  oneShotScratch);
          }},
         {"4 spans, full-size std::string scratch (allocated once)",
          [&](std::string_view c) {
@@ -323,7 +382,7 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
         continue;
       }
       const auto& decodeOne = arms[arm].second;
-      auto run = [&](size_t passes) {
+      const auto run = [&](size_t passes) {
         size_t totalBytes = 0;
         for (size_t pass = 0; pass < passes; ++pass) {
           for (const auto& compressed : compressed_) {
@@ -334,32 +393,39 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
       };
       // Untimed warm-up pass.
       AD_CORRECTNESS_CHECK(run(1) > 0);
-      const auto before = JemallocThreadStats::read();
-      JemallocThreadStats::resetPeak();
+      const auto statsBefore = JemallocThreadStats::read();
+      const bool peakIsTracked = JemallocThreadStats::resetPeak();
       auto& entry = group.addMeasurement(arms[arm].first,
                                          [&]() { return run(repetitions); });
       const uint64_t peak = JemallocThreadStats::peakBytes();
-      const auto after = JemallocThreadStats::read();
+      const auto statsAfter = JemallocThreadStats::read();
       if (JemallocThreadStats::available()) {
         // The counters include the benchmark infrastructure's own few
         // allocations while it times the lambda.
-        entry.metadata().addKeyValuePair("allocationRequests",
-                                         after.requests - before.requests);
         entry.metadata().addKeyValuePair(
-            "allocatedBytes", after.allocatedBytes - before.allocatedBytes);
-        entry.metadata().addKeyValuePair("peakLiveHeapBytesAboveStart", peak);
+            "allocationRequests", statsAfter.requests - statsBefore.requests);
+        entry.metadata().addKeyValuePair(
+            "allocatedBytes",
+            statsAfter.allocatedBytes - statsBefore.allocatedBytes);
+      }
+      if (peakIsTracked) {
+        // `thread.peak.reset` starts the high-water mark at the thread's live
+        // bytes at that moment, so this is an absolute peak of live heap
+        // bytes, not the growth above the start.
+        entry.metadata().addKeyValuePair("peakLiveHeapBytes", peak);
       }
       entry.metadata().addKeyValuePair("decodes", numberOfWords * repetitions);
       entry.metadata().addKeyValuePair("outputCapacity", outputCapacity_);
       entry.metadata().addKeyValuePair("intermediateCapacity",
                                        intermediateCapacity_);
-      // Decode buffers by arm: owning strings per word (arms 0, 1), a
-      // one-shot scratch per word (arm 3), or buffers provisioned once
-      // before the timed region (arms 2, 4, 5, 6; arm 2's scratch grows to
-      // `intermediateCapacity_` during the warm-up).
+      // Heap buffers by arm that are allocated per word: owning strings per
+      // stage (arm 0), only the owning result string (arm 1), a one-shot
+      // scratch per word (arm 3), or none because the buffers are provisioned
+      // once before the timed region (arms 2, 4, 5, 6; arm 2's scratch grows
+      // to `intermediateCapacity_` during the warm-up).
       const std::array<size_t, allArms> perWordBufferBytes{
           maxLiveOwnedStringBytes_,
-          maxLiveOwnedStringBytes_,
+          maxWordBytes_,
           0,
           maxOneShotScratchBytes_,
           0,
