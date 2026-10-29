@@ -1,11 +1,23 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
+#include <range/v3/view/zip.hpp>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
@@ -152,8 +164,70 @@ class CompressedVocabulary {
   }
 
   //____________________________________________________________________________
+  // Look up the words for `indices` and append them to `builder` in the
+  // order of `indices`. `indices` must not be empty. For an underlying
+  // vocabulary without holes, the compressed words of the whole batch are
+  // fetched with one `lookupBatch` call on the underlying vocabulary; each word
+  // is then decoded by the decoder of its block with the existing `decompress`
+  // and copied into the arena of `builder`.
+  //
+  // For an underlying vocabulary with holes, a hole index has no stored word:
+  // like `operator[]`, append the placeholder for it instead of feeding the
+  // plain-text placeholder to the decoder. There, each position is resolved
+  // once and the compressed word is read directly (no batch fetch).
+  //
+  // Memory: the arena holds exactly the decoded bytes. When `builder` was
+  // constructed with the query's `AllocatorWithLimit`, these allocations are
+  // charged against the memory limit and throw
+  // `AllocationExceedsLimitException` instead of growing the process heap.
+  // The compressed batch fetched from the underlying vocabulary, the
+  // temporaries of `decompress`, and the views vector of `builder` are not
+  // charged.
+  //
+  // Exception safety: only the basic guarantee. If this function throws,
+  // `builder` may contain a prefix of the words and must not be finalized.
+  void lookupBatch(ql::span<const size_t> indices,
+                   ArenaVocabBatchBuilder& builder) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    if constexpr (underlyingHasHoles) {
+      // The vocabulary with holes has no real batch implementation (its
+      // `lookupBatch` is the per-word fallback), so we resolve the position of
+      // each index exactly once, like `operator[]` does, and read the
+      // compressed word directly.
+      for (size_t idx : indices) {
+        const auto position = underlyingVocabulary_.positionOfIndex(idx);
+        if (!position.has_value()) {
+          builder.appendWord(
+              ad_utility::vocabulary::placeholderForMissingVocabIndex(idx));
+          continue;
+        }
+        builder.appendWord(compressionWrapper_.decompress(
+            underlyingVocabulary_.wordAtPosition(position.value()),
+            getDecoderIdxFromPosition(position.value())));
+      }
+    } else {
+      const auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
+      AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
+
+      for (const auto& [idx, compressedWord] :
+           ::ranges::views::zip(indices, compressedWords)) {
+        const size_t decoderIdx = getDecoderIdx(idx);
+        AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
+        builder.appendWord(
+            compressionWrapper_.decompress(compressedWord, decoderIdx));
+      }
+    }
+  }
+
+  // Convenience overload that decodes into a builder on the default
+  // (untracked) PMR resource and returns the finalized result. Callers that
+  // must charge the decoded bytes against a memory limit have to use the
+  // overload above with a builder that uses the query's `AllocatorWithLimit`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+    ArenaVocabBatchBuilder builder(indices.size());
+    lookupBatch(indices, builder);
+    return std::move(builder).finalize();
   }
 
   //____________________________________________________________________________
