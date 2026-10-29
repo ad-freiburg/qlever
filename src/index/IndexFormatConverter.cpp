@@ -316,47 +316,37 @@ size_t batchSizeFor(size_t total) {
 
 // Return a lazy full scan of `permutation` in which all `Id`s are converted to
 // the current index format, reporting the number of triples of each block to
-// `progress`. The returned range has to be consumed before `permutation` is
-// destroyed.
+// `progress`. The blocks are read on the `executor`. The returned range has to
+// be consumed before `permutation` is destroyed.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
-    const Permutation& permutation, std::function<void(size_t)> progress) {
+    const Permutation& permutation, std::function<void(size_t)> progress,
+    qlever::Executor executor) {
   auto locatedTriplesState = makeEmptyLocatedTriplesState(permutation);
   auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       *locatedTriplesState);
   auto additionalColumns = getAdditionalColumns(getNumColumns(permutation));
   // The cancellation handle of the scan, which never cancels anything.
-  //
-  // NOTE: The scan stores a *reference* to this `SharedCancellationHandle` (see
-  // the `Generator` in `CompressedRelationReader::lazyScan`), not a copy of it.
-  // It is therefore not enough that the `CancellationHandle` stays alive, the
-  // `shared_ptr` that holds it has to stay alive as well, and at an address
-  // that does not change. That is what this extra indirection is for: the
-  // `unique_ptr` is moved into the lambda below (which keeps everything alive
-  // that the scan borrows), and moving it does not move its pointee. Note that
-  // a scan only touches the handle if the permutation has more than one block,
-  // so getting this wrong is not caught by a test with a tiny permutation.
   auto cancellationHandle =
-      std::make_unique<ad_utility::SharedCancellationHandle>(
-          std::make_shared<ad_utility::CancellationHandle<>>());
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // NOTE: Deliberately no structured binding, because the members are captured
   // by the lambda below, which is only valid in C++20.
   auto scanWithReader = permutation.lazyScanWithUnlimitedReader(
-      scanSpecAndBlocks, additionalColumns, *cancellationHandle,
-      *locatedTriplesState);
+      scanSpecAndBlocks, additionalColumns, cancellationHandle,
+      *locatedTriplesState, std::move(executor));
 
-  // NOTE: The scan borrows the `reader`, the `locatedTriplesState` and the
-  // `cancellationHandle`, so all of them are moved into the transformation
-  // below to keep them alive for as long as the returned range is.
+  // NOTE: The scan borrows the `reader` and the `locatedTriplesState`, so both
+  // of them are moved into the transformation below to keep them alive for as
+  // long as the returned range is.
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
           std::move(scanWithReader.blocks_),
           [reader = std::move(scanWithReader.reader_),
            locatedTriplesState = std::move(locatedTriplesState),
-           cancellationHandle = std::move(cancellationHandle),
            progress = std::move(progress)](IdTable& idTable) {
             for (auto column : idTable.getColumns()) {
-              ql::ranges::for_each(column, [](Id& id) { id = convertId(id); });
+              ql::ranges::for_each(column,
+                                   [](IdRef id) { id = convertId(id); });
             }
             progress(idTable.numRows());
             return IdTableStatic<0>{std::move(idTable)};
@@ -381,11 +371,15 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
 // blocks, the `numRows_` and the multiplicities of the converted permutation
 // can therefore differ from those of the permutation that it was converted
 // from; they are exactly those that a freshly built index would have.
+//
+// The blocks are compressed and written on the `executor`.
 IndexMetaData writePermutation(
     const std::string& filename, size_t numColumns, size_t rowsPerBlock,
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks) {
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks,
+    qlever::Executor executor) {
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File{filename, "w"}, rowsPerBlock);
+      numColumns, ad_utility::File{filename, "w"}, rowsPerBlock,
+      std::move(executor));
   IndexMetaData metaData;
   auto callback =
       [&metaData](ql::span<const CompressedRelationMetadata> metadata) {
@@ -508,12 +502,13 @@ Index::NumNormalAndInternal numPermutationsOfIndex(
 IndexMetaData convertPermutation(const Permutation& oldPermutation,
                                  const std::string& newBasename,
                                  bool isInternal, size_t rowsPerBlock,
-                                 const std::function<void(size_t)>& progress) {
+                                 const std::function<void(size_t)>& progress,
+                                 const qlever::Executor& executor) {
   std::string newFilename =
       filenameForPermutation(newBasename, oldPermutation, isInternal);
-  auto newMetaData =
-      writePermutation(newFilename, getNumColumns(oldPermutation), rowsPerBlock,
-                       scanAndConvertIds(oldPermutation, progress));
+  auto newMetaData = writePermutation(
+      newFilename, getNumColumns(oldPermutation), rowsPerBlock,
+      scanAndConvertIds(oldPermutation, progress, executor), executor);
   newMetaData.setName(oldPermutation.metaData().getName());
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
                              newFilename);
@@ -524,11 +519,13 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
 // write them to the index with the base name `newBasename`. The `numTriples`
 // are the numbers of triples from the configuration of that index, which are
 // the total for the progress bar below, and `rowsPerBlock` is its block size.
+// The permutations are read and written on the `executor`.
 void convertPermutations(const std::string& oldBasename,
                          const std::string& newBasename,
                          const Index::NumNormalAndInternal& numTriples,
                          size_t rowsPerBlock,
-                         std::vector<fs::path>& handledFiles) {
+                         std::vector<fs::path>& handledFiles,
+                         const qlever::Executor& executor) {
   // Each triple is written once per permutation, which gives the total number
   // of triples that the conversion of the permutations writes.
   auto numPermutations = numPermutationsOfIndex(oldBasename);
@@ -580,20 +577,20 @@ void convertPermutations(const std::string& oldBasename,
 
     // Convert the two permutations of the pair concurrently. They are
     // independent of each other (each has its own reader, its own writer, and
-    // its own metadata), and a single conversion uses only few threads
-    // (`lazy-index-scan-num-threads` for reading and
-    // `permutation-writer-num-threads` for writing), so there are cores to
-    // spare. One of the two conversions runs on this thread, so that only one
-    // additional thread is needed.
+    // its own metadata), and a single conversion keeps only few tasks in
+    // flight on the `executor` (`lazy-index-scan-num-blocks-in-flight` for
+    // reading and `permutation-writer-num-blocks-in-flight` for writing), so
+    // there are cores to spare. One of the two conversions runs on this
+    // thread, so that only one additional thread is needed.
     //
     // NOTE: If the conversion on this thread throws, the destructor of
     // `futureB` waits for the other conversion to finish before the exception
     // leaves this function. That is exactly what we want: no thread must still
     // be writing to the incomplete index when the caller handles the error.
-    auto convert = [&newBasename, isInternal, rowsPerBlock,
-                    &progress](const Permutation& permutation) {
+    auto convert = [&newBasename, isInternal, rowsPerBlock, &progress,
+                    &executor](const Permutation& permutation) {
       return convertPermutation(permutation, newBasename, isInternal,
-                                rowsPerBlock, progress);
+                                rowsPerBlock, progress, executor);
     };
     auto futureB =
         std::async(std::launch::async, convert, std::cref(*permutationB));
@@ -635,10 +632,12 @@ void convertPatterns(const std::string& oldBasename,
 
 // Convert the materialized view with the given `name` of the index with the
 // base name `oldBasename` and write it to the index with the base name
-// `newBasename`, with the block size `rowsPerBlock` of that index.
+// `newBasename`, with the block size `rowsPerBlock` of that index. The
+// permutation of the view is read and written on the `executor`.
 void convertMaterializedView(const std::string& oldBasename,
                              const std::string& newBasename,
-                             const std::string& name, size_t rowsPerBlock) {
+                             const std::string& name, size_t rowsPerBlock,
+                             const qlever::Executor& executor) {
   AD_LOG_INFO << "Converting the materialized view \"" << name << "\" ..."
               << std::endl;
   std::string oldViewBasename = materializedViewFilenameBase(oldBasename, name);
@@ -658,7 +657,9 @@ void convertMaterializedView(const std::string& oldBasename,
       "Triples converted: ", numTriples, batchSizeFor(numTriples)};
   auto newMetaData = writePermutation(
       newFilename, getNumColumns(oldPermutation), rowsPerBlock,
-      scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar)));
+      scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar),
+                        executor),
+      executor);
   progressBar.logFinalProgressString();
   newMetaData.setName(newViewBasename);
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
@@ -689,10 +690,11 @@ void convertMaterializedView(const std::string& oldBasename,
 
 // Convert all materialized views of the index with the base name `oldBasename`
 // and write them to the index with the base name `newBasename`, with the block
-// size `rowsPerBlock` of that index.
+// size `rowsPerBlock` of that index, on the `executor`.
 void convertMaterializedViews(const std::string& oldBasename,
                               const std::string& newBasename,
-                              size_t rowsPerBlock) {
+                              size_t rowsPerBlock,
+                              const qlever::Executor& executor) {
   // Each view has exactly one info file, so the names of the views are exactly
   // the infixes of those files (`<basename>.view.<name><suffix>`).
   auto viewFiles =
@@ -721,7 +723,8 @@ void convertMaterializedViews(const std::string& oldBasename,
         "view, or delete the incomplete views.")};
   }
   for (const auto& name : names) {
-    convertMaterializedView(oldBasename, newBasename, name, rowsPerBlock);
+    convertMaterializedView(oldBasename, newBasename, name, rowsPerBlock,
+                            executor);
   }
 }
 
@@ -807,7 +810,7 @@ std::string conversionDescription() {
 
 // _____________________________________________________________________________
 Id convertId(Id id) {
-  auto datatypeBits = id.getBits() >> ValueId::numDataBits;
+  auto datatypeBits = id.getDatatypeBits();
   if (datatypeBits >= datatypesOfSourceFormat.size()) {
     throw std::runtime_error{absl::StrCat(
         "Encountered an `Id` with the invalid datatype ", datatypeBits,
@@ -820,15 +823,13 @@ Id convertId(Id id) {
         "stored on disk (it holds a pointer into the memory of the process "
         "that created it), so the index that is converted is corrupted"};
   }
-  auto valueBits =
-      id.getBits() & ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
-  return Id::fromBits(
-      valueBits | (static_cast<uint64_t>(datatype) << ValueId::numDataBits));
+  return Id::fromBits(datatype, id.getPayloadBits());
 }
 
 // _____________________________________________________________________________
 void convertIndexToCurrentFormat(const std::string& oldBasename,
-                                 const std::string& newBasename) {
+                                 const std::string& newBasename,
+                                 qlever::Executor executor) {
   AD_CONTRACT_CHECK(!oldBasename.empty() && !newBasename.empty(),
                     "The base names of the indexes must not be empty");
   // NOTE: This is a user-facing error and not a requirement violation, because
@@ -875,11 +876,11 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   convertPermutations(
       oldBasename, newBasename,
       static_cast<Index::NumNormalAndInternal>(configuration.at("num-triples")),
-      rowsPerBlock, handledFiles);
+      rowsPerBlock, handledFiles, executor);
   convertPatterns(oldBasename, newBasename, handledFiles);
   copyFilesThatNeedNoConversion(oldBasename, newBasename, handledFiles);
   checkAllFilesWereHandled(oldBasename, handledFiles);
-  convertMaterializedViews(oldBasename, newBasename, rowsPerBlock);
+  convertMaterializedViews(oldBasename, newBasename, rowsPerBlock, executor);
 
   // Write the configuration last, with the version of the target format. An
   // index without its configuration file cannot be loaded at all, so if the
@@ -954,7 +955,8 @@ void checkUpgradedIndex(const std::string& newBasename,
 }  // namespace
 
 // _____________________________________________________________________________
-void upgradeIndexInPlace(const std::string& basename) {
+void upgradeIndexInPlace(const std::string& basename,
+                         qlever::Executor executor) {
   // Read the configuration of the index that is to be upgraded; this also
   // checks that the index exists and is exactly in the source format.
   auto configuration = readAndCheckConfiguration(basename);
@@ -970,7 +972,8 @@ void upgradeIndexInPlace(const std::string& basename) {
   IndexSwapConfig config =
       makeIndexSwapConfig(basename, naming, std::nullopt, std::nullopt);
 
-  convertIndexToCurrentFormat(basename, config.newIndexSource());
+  convertIndexToCurrentFormat(basename, config.newIndexSource(),
+                              std::move(executor));
   checkUpgradedIndex(config.newIndexSource(),
                      static_cast<Index::NumNormalAndInternal>(
                          configuration.at("num-triples")));

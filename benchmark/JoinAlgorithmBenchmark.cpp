@@ -42,7 +42,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
@@ -67,10 +67,8 @@ namespace ad_benchmark {
 `Target`
 */
 CPP_template(typename Target, typename Source)(
-    requires ql::concepts::convertible_to<
-        Source,
-        Target>) static constexpr bool isValuePreservingCast(const Source&
-                                                                 source) {
+    requires ql::concepts::convertible_to<Source, Target>)
+static constexpr bool isValuePreservingCast(const Source& source) {
   return static_cast<Source>(static_cast<Target>(source)) == source;
 }
 
@@ -78,7 +76,7 @@ CPP_template(typename Target, typename Source)(
 @brief Return biggest possible value for the given arithmetic type.
 */
 CPP_template(typename Type)(requires ad_utility::Arithmetic<Type>)
-    QL_CONSTEVAL Type getMaxValue() {
+QL_CONSTEVAL Type getMaxValue() {
   return std::numeric_limits<Type>::max();
 }
 
@@ -113,14 +111,14 @@ struct SetOfIdTableColumnElements {
   However, accessing a hash map entry based on index position takes linear time,
   instead of constant.
   */
-  std::vector<std::reference_wrapper<const ValueId>> uniqueElements_{};
+  std::vector<ValueId> uniqueElements_{};
   ad_utility::HashMap<ValueId, size_t> numOccurrences_{};
 
   /*
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const ql::span<const ValueId>& idTableColumnRef) {
+      const ConstIdColumnRef& idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -194,13 +192,12 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
 
   // Create the overlap.
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnSet](auto& id) {
+       &newOverlapMatches, &biggerTableJoinColumnSet](IdRef id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -299,8 +296,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   randomShuffle(smallerTableJoinColumnSet.uniqueElements_.begin(),
                 smallerTableJoinColumnSet.uniqueElements_.end(), seeds.at(1));
   size_t newOverlapMatches{0};
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnSet.uniqueElements_,
       [&randomBiggerTableElement, &wantedNumNewOverlapMatches,
@@ -333,7 +329,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // Overwrite the designated values in the smaller table.
   ql::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto& id) {
+      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](IdRef id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
           id = newValueIterator->second;
@@ -371,8 +367,8 @@ enum struct GeneratedTableColumn : uint64_t {
 /*
 Convert the given enum value into the underlying type.
 */
-CPP_template(typename Enum)(requires std::is_enum_v<Enum>) auto toUnderlying(
-    const Enum& e) {
+CPP_template(typename Enum)(requires std::is_enum_v<Enum>)
+auto toUnderlying(const Enum& e) {
   return static_cast<std::underlying_type_t<Enum>>(e);
 }
 
@@ -416,12 +412,9 @@ struct IsGrowthFunction {
 @brief Calculates the smallest whole exponent $n$, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
 */
-CPP_template(typename T)(
-    requires ql::concepts::convertible_to<
-        T,
-        double>) static double calculateNextWholeExponent(const T& base,
-                                                          const T&
-                                                              startingPoint) {
+CPP_template(typename T)(requires ql::concepts::convertible_to<T, double>)
+static double calculateNextWholeExponent(const T& base,
+                                         const T& startingPoint) {
   // This is a rather simple calculation: We calculate
   // $log_(base)(startingPoint)$ and round up.
   AD_CONTRACT_CHECK(isValuePreservingCast<double>(startingPoint));
@@ -434,11 +427,10 @@ CPP_template(typename T)(
 @brief Generate a sorted, inclusive interval of exponents $base^x$, with $x$
 always a natural number.
 */
-CPP_template(typename T)(
-    requires ad_utility::Arithmetic<T> CPP_and
-        ql::concepts::convertible_to<T, double>) static std::
-    vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
-                                       T inclusiveUpperBound) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T> &&
+                               ql::concepts::convertible_to<T, double>)
+static std::vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
+                                               T inclusiveUpperBound) {
   std::vector<T> elements{};
 
   /*
@@ -467,9 +459,9 @@ CPP_template(typename T)(
 @brief Generate a sorted,inclusive interval of all natural numbers inside
 `[inclusiveLowerBound, inclusiveUpperBound]`.
 */
-CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
-    T> generateNaturalNumberSequenceInterval(T inclusiveLowerBound,
-                                             T inclusiveUpperBound) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T>)
+static std::vector<T> generateNaturalNumberSequenceInterval(
+    T inclusiveLowerBound, T inclusiveUpperBound) {
   if constexpr (ql::concepts::floating_point<T>) {
     inclusiveLowerBound = std::ceil(inclusiveLowerBound);
     inclusiveUpperBound = std::floor(inclusiveUpperBound);
@@ -486,8 +478,9 @@ CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
 
 // Merge multiple sorted vectors into one sorted vector, where every element is
 // unique.
-CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
-    T> mergeSortedVectors(const std::vector<std::vector<T>>& intervals) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T>)
+static std::vector<T> mergeSortedVectors(
+    const std::vector<std::vector<T>>& intervals) {
   std::vector<T> mergedVector{};
 
   // Merge.
@@ -1210,17 +1203,17 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           && isTypeOrGrowthFunction<T6, float>
           && isTypeOrGrowthFunction<T7, float>
           && exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>))
-      // clang-format on
-      ResultTable& makeGrowingBenchmarkTable(
-          BenchmarkResults* results, const std::string& tableDescriptor,
-          std::string parameterName, StopFunction stopFunction,
-          const T1& overlap, const std::optional<size_t>& resultTableNumRows,
-          ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
-          const bool biggerTableSorted, const T2& ratioRows,
-          const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
-          const T5& biggerTableNumColumns,
-          const T6& smallerTableJoinColumnSampleSizeRatio,
-          const T7& biggerTableJoinColumnSampleSizeRatio) const {
+  // clang-format on
+  ResultTable& makeGrowingBenchmarkTable(
+      BenchmarkResults* results, const std::string& tableDescriptor,
+      std::string parameterName, StopFunction stopFunction, const T1& overlap,
+      const std::optional<size_t>& resultTableNumRows,
+      ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
+      const bool biggerTableSorted, const T2& ratioRows,
+      const T3& smallerTableNumRows, const T4& smallerTableNumColumns,
+      const T5& biggerTableNumColumns,
+      const T6& smallerTableJoinColumnSampleSizeRatio,
+      const T7& biggerTableJoinColumnSampleSizeRatio) const {
     constexpr IsGrowthFunction isGrowthFunction;
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =
@@ -1652,11 +1645,11 @@ argument of the function and $x$ being $log_base(startingPoint)$ rounded up.
 // clang-format off
 CPP_template(typename ReturnType)(requires
     ql::concepts::convertible_to<ReturnType, double>
-    CPP_and ql::concepts::convertible_to<double, ReturnType>)
-    // clang-format on
-    auto createDefaultGrowthLambda(const ReturnType& base,
-                                   const ReturnType& startingPoint,
-                                   std::vector<ReturnType> prefixValues = {}) {
+    && ql::concepts::convertible_to<double, ReturnType>)
+// clang-format on
+auto createDefaultGrowthLambda(const ReturnType& base,
+                               const ReturnType& startingPoint,
+                               std::vector<ReturnType> prefixValues = {}) {
   return [base, prefixValues = std::move(prefixValues),
           startingExponent{calculateNextWholeExponent(base, startingPoint)}](
              const size_t& rowIdx) {
@@ -2205,12 +2198,13 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
   given benchmarking table row?
   @param biggerTableNumRows Number of rows in the bigger table.
   */
-  CPP_template(typename Function)(requires(growthFunction<Function, size_t>))
-      ResultTable& makeSmallerTableGrowsAndBiggerTableSameSizeBenchmarkTable(
-          BenchmarkResults* results, const std::string& tableDescriptor,
-          const bool smallerTableSorted, const bool biggerTableSorted,
-          const Function& smallerTableNumRows,
-          const size_t biggerTableNumRows) const {
+  CPP_template(typename Function)(
+      requires(growthFunction<Function, size_t>))
+  ResultTable& makeSmallerTableGrowsAndBiggerTableSameSizeBenchmarkTable(
+      BenchmarkResults* results, const std::string& tableDescriptor,
+      const bool smallerTableSorted, const bool biggerTableSorted,
+      const Function& smallerTableNumRows,
+      const size_t biggerTableNumRows) const {
     // For creating a new random seed for every new row.
     RandomSeedGenerator seedGenerator{getConfigVariables().randomSeed()};
 

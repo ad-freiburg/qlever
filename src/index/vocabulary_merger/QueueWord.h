@@ -15,7 +15,6 @@
 #include <utility>
 
 #include "index/IndexBuilderTypes.h"
-#include "util/MemorySize/MemorySize.h"
 
 // The words that the vocabulary merger (see `index/VocabularyMerger.h`) reads
 // from the partial vocabularies and merges. This is not part of the public
@@ -45,16 +44,6 @@ struct QueueWord {
 
   [[nodiscard]] const auto& id() const { return entry_.index_; }
 };
-
-// Compute the memory footprint of a `QueueWord`, which the parallel merging
-// needs to limit its memory consumption.
-struct SizeOfQueueWord {
-  ad_utility::MemorySize operator()(const QueueWord& q) const {
-    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                         q.entry_.iriOrLiteral().size());
-  }
-};
-inline constexpr SizeOfQueueWord sizeOfQueueWord{};
 }  // namespace ad_utility::vocabulary_merger::detail
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_QUEUEWORD_H
