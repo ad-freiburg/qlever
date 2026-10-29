@@ -44,15 +44,14 @@ const std::string partialVocabBasename = "vocab-";
 // them as not external.
 template <typename Range>
 void writePartialVocabularyFile(const std::string& path, const Range& words) {
-  ad_utility::serialization::FileWriteSerializer partialVocab(path);
-  partialVocab << words.size();
+  ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{path};
   size_t localIdx = 0;
   for (const auto& word : words) {
-    partialVocab << std::string_view{word};
-    partialVocab << false;
-    partialVocab << localIdx;
+    partialVocab(std::string_view{word},
+                 PartialVocabIndexWithExternalFlag{localIdx, false});
     ++localIdx;
   }
+  partialVocab.finish();
 }
 }  // namespace
 
@@ -128,19 +127,19 @@ class MergeVocabularyTest : public ::testing::Test {
          true}};
 
     // open files for partial Vocabularies
-    ad_utility::serialization::FileWriteSerializer partial0(path0_);
-    ad_utility::serialization::FileWriteSerializer partial1(path1_);
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partial0{path0_};
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partial1{path1_};
 
     auto writePartialVocabulary = [](auto& partialVocab,
                                      const auto& tripleComponents,
                                      IdMap* idMap) {
       // write first partial vocabulary
-      partialVocab << tripleComponents.size();
       size_t localIdx = 0;
       for (auto w : tripleComponents) {
         auto globalId = w.index_;
         w.index_ = localIdx;
-        partialVocab << w;
+        partialVocab(w.iriOrLiteral(), PartialVocabIndexWithExternalFlag{
+                                           w.index_, w.isExternal()});
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -330,13 +329,13 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   input.emplace_back("xenon", S{0, false});
 
   auto res = createInternalMapping(input);
-  ASSERT_EQ(0u, input[0].second.id());
-  ASSERT_EQ(1u, input[1].second.id());
-  ASSERT_EQ(1u, input[2].second.id());
-  ASSERT_EQ(2u, input[3].second.id());
-  ASSERT_EQ(3u, input[4].second.id());
-  ASSERT_EQ(3u, input[5].second.id());
-  ASSERT_EQ(4u, input[6].second.id());
+  ASSERT_EQ(0u, input[0].indexAndFlag_.index());
+  ASSERT_EQ(1u, input[1].indexAndFlag_.index());
+  ASSERT_EQ(1u, input[2].indexAndFlag_.index());
+  ASSERT_EQ(2u, input[3].indexAndFlag_.index());
+  ASSERT_EQ(3u, input[4].indexAndFlag_.index());
+  ASSERT_EQ(3u, input[5].indexAndFlag_.index());
+  ASSERT_EQ(4u, input[6].indexAndFlag_.index());
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);
@@ -367,12 +366,12 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
 
   auto res = createInternalMapping(input);
   // All three "alpha"s must collapse to the same id (0).
-  EXPECT_EQ(0u, input[0].second.id());
-  EXPECT_EQ(0u, input[1].second.id());
-  EXPECT_EQ(0u, input[2].second.id());
+  EXPECT_EQ(0u, input[0].indexAndFlag_.index());
+  EXPECT_EQ(0u, input[1].indexAndFlag_.index());
+  EXPECT_EQ(0u, input[2].indexAndFlag_.index());
   // Both "beta"s must collapse to the next id (1).
-  EXPECT_EQ(1u, input[3].second.id());
-  EXPECT_EQ(1u, input[4].second.id());
+  EXPECT_EQ(1u, input[3].indexAndFlag_.index());
+  EXPECT_EQ(1u, input[4].indexAndFlag_.index());
 
   EXPECT_EQ(0u, res[7]);
   EXPECT_EQ(0u, res[12]);
@@ -447,25 +446,19 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   // which is the only word of the second partial vocabulary, there marked as
   // external.
   {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[0]};
-    partialVocab << numWords;
     for (size_t i = 0; i + 1 < numWords; ++i) {
-      partialVocab << absl::StrFormat("\"word%08d\"", i);
-      partialVocab << false;
-      partialVocab << i;
+      partialVocab(absl::StrFormat("\"word%08d\"", i),
+                   PartialVocabIndexWithExternalFlag{i, false});
     }
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << false;
-    partialVocab << numWords - 1;
+    partialVocab("\"zzz\"",
+                 PartialVocabIndexWithExternalFlag{numWords - 1, false});
   }
   {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[1]};
-    partialVocab << size_t{1};
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << true;
-    partialVocab << size_t{0};
+    partialVocab("\"zzz\"", PartialVocabIndexWithExternalFlag{0, true});
   }
 
   std::vector<std::pair<std::string, bool>> vocabulary;

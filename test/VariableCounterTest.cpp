@@ -116,6 +116,12 @@ TEST(VariableCounterTest, VariableCounts) {
   EXPECT_THAT(
       parseAndCount("SELECT * { ?x <p> ?y . { SELECT * { ?y <q> ?z } } }"),
       counts({{V{"?x"}, 1}, {V{"?y"}, 2}, {V{"?z"}, 1}}));
+  EXPECT_THAT(parseAndCount("SELECT * { ?x <p> ?y . { SELECT * { ?y <q> ?z } "
+                            "VALUES ?x { 1 } } }"),
+              counts({{V{"?x"}, 2}, {V{"?y"}, 2}, {V{"?z"}, 1}}));
+  EXPECT_THAT(parseAndCount("SELECT * { ?x <p> ?y . { SELECT ?y { ?y <q> ?z } "
+                            "GROUP BY ?y VALUES ?x { 1 } } }"),
+              counts({{V{"?x"}, 2}, {V{"?y"}, 2}, {V{"?z"}, 1}}));
 
   // Describe.
   EXPECT_THAT(parseAndCount("DESCRIBE <x>"), counts({}));
@@ -214,6 +220,7 @@ TEST(VariableCounterTest, MagicServices) {
           "qlss:right ?z ;"
           "qlss:maxDistance 500 ;"
           "qlss:algorithm qlss:s2 ;"
+          "qlss:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
           "qlss:bindDistance ?dist . } }"),
       counts({{V{"?e"}, 1}, {V{"?z"}, 1}, {V{"?dist"}, 1}}));
   EXPECT_THAT(

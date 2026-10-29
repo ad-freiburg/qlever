@@ -6,7 +6,7 @@
 #define QLEVER_VALUEIDTESTHELPERS_H
 
 #include "./util/IdTestHelpers.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Random.h"
 
 // Enabling cheaper unit tests when building in Debug mode
@@ -65,7 +65,7 @@ inline uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
 // TODO<joka921> Make the tests more precise for the localVocabIndices.
 inline std::string getLocalVocabIndex(ValueId id) {
   AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::LocalVocabIndex);
-  return std::string{asStringViewUnsafe(id.getLocalVocabIndex()->getContent())};
+  return std::string{id.getLocalVocabIndex()->getContent()};
 }
 inline uint64_t getTextRecordIndex(ValueId id) {
   return id.getTextRecordIndex().get();
