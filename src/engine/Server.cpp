@@ -37,6 +37,7 @@
 #include "util/AsioHelpers.h"
 #include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
+#include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/ParseableDuration.h"
@@ -62,8 +63,9 @@ Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
     std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
-    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker)
-    : qlever_(config),
+    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker,
+    const std::optional<std::string>& compressedBlobFilename)
+    : qlever_(config, compressedBlobFilename.has_value()),
       numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -77,6 +79,17 @@ Server::Server(
               ? std::move(indexRebuildIdTracker)
               : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
+
+  if (compressedBlobFilename.has_value()) {
+    AD_LOG_INFO << "Loading the index from the blob file \""
+                << compressedBlobFilename.value() << "\" ..." << std::endl;
+    ad_utility::File file{compressedBlobFilename.value(), "r"};
+    std::vector<char> compressedBlob(file.sizeOfFile());
+    AD_CORRECTNESS_CHECK(static_cast<size_t>(file.read(
+                             compressedBlob.data(), compressedBlob.size(),
+                             0)) == compressedBlob.size());
+    qlever_.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob);
+  }
 
   initializeServerMetrics(config.memoryLimit_);
 

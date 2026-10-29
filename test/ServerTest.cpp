@@ -10,6 +10,7 @@
 #include <optional>
 #include <thread>
 
+#include "./libqlever/QleverTestHelpers.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
@@ -21,6 +22,7 @@
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
 #include "parser/SparqlParser.h"
+#include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -1247,4 +1249,49 @@ TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
   });
 
   EXPECT_THAT(lines, testing::IsEmpty());
+}
+
+// Test that a `Server` that is given a blob file does not load the index from
+// disk, but from the blob, and can then answer the named cached queries from
+// the blob.
+TEST(ServerTest, readFromBlobFile) {
+  // The serialization of blobs requires the `InMemoryUncompressed`
+  // vocabulary.
+  auto indexConfig =
+      buildTestIndex("<s> <p> \"blob literal\" .",
+                     ad_utility::VocabularyType::InMemoryUncompressed);
+  std::vector<char> compressedBlob = [&indexConfig]() {
+    qlever::Qlever source{qlever::EngineConfig{indexConfig}};
+    source.queryAndPinResultWithName("blobPin",
+                                     "SELECT ?s ?o WHERE { ?s <p> ?o }");
+    return source.serializeVocabAndNamedCacheToCompressedBlob();
+  }();
+
+  std::string filename = gtestCurrentTestName() + ".blob";
+  {
+    ad_utility::File file{filename, "w"};
+    file.write(compressedBlob.data(), compressedBlob.size());
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  // The index basename deliberately does not exist, to verify that nothing is
+  // loaded from disk.
+  qlever::EngineConfig config;
+  config.baseName_ = "nonExistingIndexBasename";
+  Server server{4321,
+                1,
+                "accessToken",
+                config,
+                /*noAccessCheck=*/false,
+                /*metricsReader=*/nullptr,
+                /*indexRebuildIdTracker=*/nullptr,
+                filename};
+  EXPECT_EQ(server.qlever().query("SELECT ?s ?o WHERE { SERVICE "
+                                  "ql:cached-result-with-name-blobPin {}}",
+                                  ad_utility::MediaType::tsv),
+            "?s\t?o\n<s>\t\"blob literal\"\n");
+
+  // A blob file that does not exist throws.
+  EXPECT_ANY_THROW((Server{4321, 1, "accessToken", config, false, nullptr,
+                           nullptr, std::string{"nonExistingBlobFile"}}));
 }

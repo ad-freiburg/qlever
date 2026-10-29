@@ -72,6 +72,7 @@ class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
+  FRIEND_TEST(ServerTest, readFromBlobFile);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
   FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
   FRIEND_TEST(IndexRebuilder, serverIntegrationAutomaticRebuild);
@@ -79,13 +80,18 @@ class Server {
   friend serverTestHelpers::ServerForTesting;
 
  public:
+  // If `compressedBlobFilename` is set, do not load the index from disk, but
+  // from the compressed blob in that file (as written by
+  // `Qlever::serializeVocabAndNamedCacheToCompressedBlob`). For the details
+  // see `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`.
   explicit Server(
       unsigned short port, size_t numThreads, std::string accessToken,
       const qlever::EngineConfig& config, bool noAccessCheck = false,
       std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
           nullptr,
       std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker =
-          nullptr);
+          nullptr,
+      const std::optional<std::string>& compressedBlobFilename = std::nullopt);
 
   virtual ~Server() = default;
 
