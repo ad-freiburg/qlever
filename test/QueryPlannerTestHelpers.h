@@ -37,7 +37,6 @@
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
-#include "engine/RowNumber.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
 #include "engine/TextIndexScanForEntity.h"
