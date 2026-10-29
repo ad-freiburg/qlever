@@ -145,6 +145,10 @@ TEST(SpatialJoinParser, DestroyWithoutDone) {
     }
     // The parser goes out of scope here without `done()`.
   }
+
+  // Work around a leak in libspatialjoin: The `Sweeper` frees its output
+  // buffer only in `flush()`, not in its destructor.
+  sweeper.flush();
 }
 
 // Test that invalid WKT literals from the index and from the local vocabulary

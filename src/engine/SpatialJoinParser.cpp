@@ -7,6 +7,7 @@
 #include <range/v3/numeric/accumulate.hpp>
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
+#include "util/ExceptionHandling.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -29,14 +30,18 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
 
 // _____________________________________________________________________________
 WKTParser::~WKTParser() {
-  _cancelled = true;
-  // An empty batch is the end event of the job queue (see `done()`).
-  _jobs.add({});
-  for (auto& thread : _thrds) {
-    if (thread.joinable()) {
-      thread.join();
-    }
-  }
+  ad_utility::terminateIfThrows(
+      [this]() {
+        _cancelled = true;
+        // An empty batch is the end event of the job queue (see `done()`).
+        _jobs.add({});
+        for (auto& thread : _thrds) {
+          if (thread.joinable()) {
+            thread.join();
+          }
+        }
+      },
+      "Stopping the worker threads in the destructor of `WKTParser`");
 }
 
 // _____________________________________________________________________________
