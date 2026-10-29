@@ -218,30 +218,32 @@ std::optional<std::pair<Datatype, size_t>> getRun(Id id) {
   }
 }
 
-// The runs of a column with the given datatype in the order required by
-// `ORDER BY`, each with the information whether its rows are traversed
-// backwards. This must match the ranges of `getRowRangesForSortedNumericColumn`
-// above.
-std::vector<std::pair<size_t, bool>> getRunsInOrderByOrder(Datatype type,
-                                                           bool isDescending) {
+// A run (see `getRun`) and whether `ORDER BY` reads it backwards.
+struct RunToTraverse {
+  size_t run_;
+  bool backwards_;
+};
+
+// The runs of the given datatype in the order of `ORDER BY`. Must match
+// `getRowRangesForSortedNumericColumn`.
+std::vector<RunToTraverse> getRunsInOrderByOrder(Datatype type,
+                                                 bool isDescending) {
   AD_CORRECTNESS_CHECK(type == Datatype::Int || type == Datatype::Double);
-  std::vector<std::pair<size_t, bool>> runs =
-      type == Datatype::Int
-          ? std::vector<std::pair<size_t, bool>>{{1, false}, {0, false}}
-          : std::vector<std::pair<size_t, bool>>{
-                {2, true}, {0, false}, {1, false}, {3, false}};
+  using Runs = std::vector<RunToTraverse>;
+  auto runs = type == Datatype::Int
+                  ? Runs{{1, false}, {0, false}}
+                  : Runs{{2, true}, {0, false}, {1, false}, {3, false}};
   if (isDescending) {
     ql::ranges::reverse(runs);
     for (auto& run : runs) {
-      run.second = !run.second;
+      run.backwards_ = !run.backwards_;
     }
   }
   return runs;
 }
 
-// If the scan consists of rows of a single numeric datatype, return that
-// datatype, otherwise `std::nullopt`. Since the datatype bits are the most
-// significant bits of an `Id`, it suffices to check the first and the last row.
+// Return the datatype of the scan if it is a single numeric one. The datatype
+// bits are the most significant ones, so the first and last row suffice.
 std::optional<Datatype> getSingleNumericDatatype(
     const IndexScan::BlocksOfSortedVariable& blocks) {
   auto firstRun = getRun(blocks.firstIdOfScan_);
@@ -253,12 +255,9 @@ std::optional<Datatype> getSingleNumericDatatype(
   return firstRun->first;
 }
 
-// Return the run of each "pure" block, and `std::nullopt` for all other
-// blocks. A block is pure if all its rows belong to the scan and lie in a
-// single run. Then its position in the order of `ORDER BY` is known from its
-// metadata. For a block at the border of the relation, the `first_` and
-// `last_` may belong to another relation, and a block that straddles two runs
-// has rows at two places in that order.
+// Return the run of each "pure" block, `std::nullopt` for the others. A block
+// is pure if it lies completely inside the scan and inside a single run, so
+// its position in the `ORDER BY` order is known from its metadata.
 std::vector<std::optional<size_t>> getRunOfEachPureBlock(
     const IndexScan::BlocksOfSortedVariable& blocks, Datatype type) {
   std::vector<std::optional<size_t>> runOfEachPureBlock(blocks.blocks_.size());
@@ -269,8 +268,7 @@ std::vector<std::optional<size_t>> getRunOfEachPureBlock(
     }
     auto runOfFirst = getRun(block.first_);
     auto runOfLast = getRun(block.last_);
-    // The datatype has been checked via the bounds of the scan, this only
-    // guards against inconsistent metadata.
+    // Only guards against inconsistent metadata.
     AD_CORRECTNESS_CHECK(runOfFirst.has_value() && runOfLast.has_value() &&
                          runOfFirst->first == type &&
                          runOfLast->first == type &&
@@ -282,9 +280,8 @@ std::vector<std::optional<size_t>> getRunOfEachPureBlock(
   return runOfEachPureBlock;
 }
 
-// Return the pure blocks that `ORDER BY` traverses first, run by run (see
-// `getRunsInOrderByOrder`), until they alone guarantee `numRows` rows. Return
-// `std::nullopt` if all pure blocks together do not guarantee that many rows.
+// Return the pure blocks that `ORDER BY` reaches first, until they guarantee
+// `numRows` rows, or `std::nullopt` if all of them together do not.
 std::optional<std::vector<size_t>> getFirstPureBlocks(
     const IndexScan::BlocksOfSortedVariable& blocks,
     const std::vector<std::optional<size_t>>& runOfEachPureBlock, Datatype type,
@@ -312,17 +309,11 @@ std::optional<std::vector<size_t>> getFirstPureBlocks(
   return std::nullopt;
 }
 
-// For an `ORDER BY` on the sorted variable of an `IndexScan` whose first
-// `numRows` rows (in the order given by `isDescending`) are needed: select the
-// blocks that can contain these rows, if the scan consists of a single numeric
-// datatype. Return `std::nullopt` if this is not the case, or if all blocks
-// are needed anyway.
-//
-// The rows of the scan are sorted by the bits of the `Id`, so they form the
-// runs described above, which `ORDER BY` traverses in the order and direction
-// given by `getRunsInOrderByOrder`. The selected blocks are the pure blocks
-// that are traversed first (see `getFirstPureBlocks`), and all blocks that are
-// not pure, because their position in that order is unknown.
+// Select the blocks of an `IndexScan` that can contain the first `numRows`
+// rows of an `ORDER BY` on its sorted variable: the pure blocks that come first
+// (see `getFirstPureBlocks`), and all others, whose position in the order is
+// unknown. Return `std::nullopt` if the scan is not of a single numeric
+// datatype, or if all blocks are needed.
 std::optional<std::vector<size_t>> selectBlocksForSortedNumericLimit(
     const IndexScan::BlocksOfSortedVariable& blocks, size_t numRows,
     bool isDescending) {
@@ -337,22 +328,17 @@ std::optional<std::vector<size_t>> selectBlocksForSortedNumericLimit(
     return std::nullopt;
   }
 
-  std::vector<bool> keep(blocks.blocks_.size(), false);
-  for (size_t i = 0; i < keep.size(); ++i) {
-    keep[i] = !runOfEachPureBlock[i].has_value();
-  }
-  for (size_t i : firstPureBlocks.value()) {
-    keep[i] = true;
-  }
-  std::vector<size_t> selected;
-  for (size_t i = 0; i < keep.size(); ++i) {
-    if (keep[i]) {
+  // Add the blocks that are not pure.
+  auto selected = std::move(firstPureBlocks).value();
+  for (size_t i = 0; i < runOfEachPureBlock.size(); ++i) {
+    if (!runOfEachPureBlock[i].has_value()) {
       selected.push_back(i);
     }
   }
-  if (selected.size() == keep.size()) {
+  if (selected.size() == blocks.blocks_.size()) {
     return std::nullopt;
   }
+  ql::ranges::sort(selected);
   return selected;
 }
 }  // namespace
@@ -581,7 +567,7 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 std::unique_ptr<Operation> OrderBy::cloneImpl() const {
   auto result = std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
                                           sortIndices_);
-  // The cloned subtree is still restricted to the selected blocks.
+  // The cloned subtree keeps the selected blocks.
   result->numBlocksAfterAndBeforeLimit_ = numBlocksAfterAndBeforeLimit_;
   return result;
 }

@@ -5,7 +5,8 @@
 #ifndef QLEVER_SRC_ENGINE_INDEXSCAN_H
 #define QLEVER_SRC_ENGINE_INDEXSCAN_H
 
-#include <functional>
+#include <absl/functional/function_ref.h>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -125,8 +126,8 @@ class IndexScan final : public Operation {
   };
   // Given the metadata of all blocks of this scan in scan order, return the
   // indices of the blocks to keep (sorted, unique), or `std::nullopt` to keep
-  // all blocks.
-  using BlockSelector = std::function<std::optional<std::vector<size_t>>(
+  // all blocks. Not stored beyond the call.
+  using BlockSelector = absl::FunctionRef<std::optional<std::vector<size_t>>(
       const BlocksOfSortedVariable&)>;
 
   // Return a copy of this scan that only reads the blocks chosen by
@@ -137,7 +138,7 @@ class IndexScan final : public Operation {
   // caller is responsible for the correctness of the selection, i.e. that the
   // rows it needs are contained in the kept blocks.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeCopyWithSelectedBlocks(
-      const BlockSelector& selectBlocks) const;
+      BlockSelector selectBlocks) const;
 
   // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
   // none of the prefilters in `prefilterVariablePairs` applies, return

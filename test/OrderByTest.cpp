@@ -535,11 +535,9 @@ TEST(OrderBy, limitOffsetOnSortedInput) {
 }
 
 namespace {
-// Run the query on the `qec` and return the result as TSV together with the
-// runtime details of the root operation, which must be an `OrderBy`. The cache
-// is cleared first, because a scan that is restricted to some blocks can read
-// the result of the complete scan from the cache, which would hide a wrong
-// selection of blocks.
+// Run the query and return the TSV result and the runtime details of the root
+// `OrderBy`. The cache is cleared first: a restricted scan can read the full
+// scan's cached result, which would hide a wrong block selection.
 std::pair<std::string, nlohmann::json> queryWithOrderByAtRoot(
     QueryExecutionContext* qec, const std::string& queryString) {
   qec->clearCacheUnpinnedOnly();
@@ -558,6 +556,41 @@ std::pair<std::string, nlohmann::json> queryWithOrderByAtRoot(
   auto rootOperation = tree->getRootOperation();
   EXPECT_NE(dynamic_cast<const OrderBy*>(rootOperation.get()), nullptr);
   return {std::move(result), rootOperation->runtimeInfo().details_};
+}
+
+// Check that the results of the `query` (which has an `ORDER BY`, but no
+// `LIMIT`) with various `LIMIT`s and `OFFSET`s are slices of its complete
+// result.
+void expectLimitedResultsAreSlices(
+    QueryExecutionContext* qec, const std::string& query,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  // Return the result rows (without header) of the `query` with the given
+  // `LIMIT` and `OFFSET`.
+  auto rows = [qec, &query](std::optional<size_t> limit, size_t offset) {
+    std::string queryString = query;
+    if (limit.has_value()) {
+      absl::StrAppend(&queryString, " LIMIT ", limit.value(), " OFFSET ",
+                      offset);
+    }
+    auto result = queryWithOrderByAtRoot(qec, queryString).first;
+    std::vector<std::string> lines = absl::StrSplit(result, '\n');
+    lines.erase(lines.begin());
+    lines.pop_back();
+    return lines;
+  };
+  auto complete = rows(std::nullopt, 0);
+  for (size_t offset : {0, 1, 2, 4}) {
+    for (size_t limit : {1, 2, 3, 5, 20}) {
+      std::vector<std::string> expected;
+      for (size_t i = offset; i < std::min(complete.size(), offset + limit);
+           ++i) {
+        expected.push_back(complete[i]);
+      }
+      EXPECT_EQ(rows(limit, offset), expected)
+          << query << " LIMIT " << limit << " OFFSET " << offset;
+    }
+  }
 }
 }  // namespace
 
@@ -635,11 +668,44 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
   EXPECT_FALSE(details.contains("num-blocks-read-for-limit"));
 }
 
-// Test the pushdown of a `LIMIT` into an `IndexScan` on an index with named
-// graphs, where the scan can return fewer rows than the blocks contain: rows
-// from other graphs are filtered out, and rows that only differ in their graph
-// are merged. The triples `<s1> <p> 1`, `<s2> <p> 2`, and `<s7> <p> 7` are in
-// both graphs.
+// Test the `LIMIT` pushdown for relations whose block metadata does not allow
+// it: `<i>` (IRIs), `<m>` (ints and doubles), `<n>` (ints and an IRI), and
+// `<k>`, whose only block also holds the row of `<j>` (a block at the border
+// of the relation).
+TEST(OrderBy, limitPushedIntoIndexScanSpecialCases) {
+  std::string turtle;
+  for (int i = 1; i <= 7; ++i) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . ");
+  }
+  absl::StrAppend(&turtle, "<a> <i> <x> . <b> <i> <y> . <c> <i> <z> . ",
+                  "<a> <j> 5 . <a> <k> 1 . <b> <k> 2 . ",
+                  "<a> <m> 1 . <b> <m> 2.5 . <c> <m> 3 . <d> <m> -4.5 . ",
+                  "<a> <n> 1 . <b> <n> 2 . <c> <n> <x> . ");
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  for (std::string_view predicate : {"p", "i", "k", "m", "n"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      expectLimitedResultsAreSlices(
+          qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate, "> ?x } ",
+                            "ORDER BY ", direction, "(?x)"));
+    }
+  }
+
+  // Without a single numeric datatype, no blocks are skipped.
+  for (std::string_view predicate : {"i", "m", "n"}) {
+    auto details = queryWithOrderByAtRoot(
+                       qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                                         "> ?x } ORDER BY ?x LIMIT 1"))
+                       .second;
+    EXPECT_FALSE(details.contains("num-blocks-read-for-limit")) << predicate;
+  }
+}
+
+// Test the `LIMIT` pushdown with named graphs, where a scan can yield fewer
+// rows than its blocks hold (graph filter, merged duplicates). `<s1> <p> 1`,
+// `<s2> <p> 2`, and `<s7> <p> 7` are in both graphs.
 TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
   std::string nquads;
   auto addQuad = [&nquads](int i, std::string_view graph) {
@@ -658,46 +724,16 @@ TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
   config.rowsPerBlock = 3;
   auto* qec = ad_utility::testing::getQec(std::move(config));
 
-  // Return the rows of the result of the `query` with the given `LIMIT` and
-  // `OFFSET` (without the header row).
-  auto rows = [qec](const std::string& query, std::optional<size_t> limit,
-                    size_t offset) {
-    std::string queryString = query;
-    if (limit.has_value()) {
-      absl::StrAppend(&queryString, " LIMIT ", limit.value(), " OFFSET ",
-                      offset);
-    }
-    auto result = queryWithOrderByAtRoot(qec, queryString).first;
-    std::vector<std::string> lines = absl::StrSplit(result, '\n');
-    lines.erase(lines.begin());
-    lines.pop_back();
-    return lines;
-  };
-
-  // Compare with the slices of the result without a `LIMIT`, which reads all
-  // blocks.
   for (std::string_view dataset :
        {"", "FROM <g1>", "FROM <g2>", "FROM <g1> FROM <g2>"}) {
     for (std::string_view direction : {"ASC", "DESC"}) {
-      auto query = absl::StrCat("SELECT ?s ", dataset, " WHERE { ?s <p> ?x } ",
-                                "ORDER BY ", direction, "(?x)");
-      auto complete = rows(query, std::nullopt, 0);
-      for (size_t offset : {0, 1, 2, 4}) {
-        for (size_t limit : {1, 2, 3, 5, 20}) {
-          std::vector<std::string> expected;
-          for (size_t i = offset; i < std::min(complete.size(), offset + limit);
-               ++i) {
-            expected.push_back(complete[i]);
-          }
-          EXPECT_EQ(rows(query, limit, offset), expected)
-              << query << " LIMIT " << limit << " OFFSET " << offset;
-        }
-      }
+      expectLimitedResultsAreSlices(
+          qec, absl::StrCat("SELECT ?s ", dataset, " WHERE { ?s <p> ?x } ",
+                            "ORDER BY ", direction, "(?x)"));
     }
   }
 
-  // The blocks with only triples from `<g1>` and no duplicates still count, so
-  // the pushdown still applies to the largest values.
+  // Blocks with only `<g1>` triples and no duplicates still count.
   auto [result, details] = queryWithOrderByAtRoot(
       qec, "SELECT ?s FROM <g1> WHERE { ?s <p> ?x } ORDER BY DESC(?x) LIMIT 1");
   EXPECT_EQ(result, "?s\n<s12>\n");

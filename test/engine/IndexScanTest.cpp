@@ -462,6 +462,41 @@ TEST(IndexScan, additionalColumn) {
 
 // Test that the graphs by which an `IndexScan` is to be filtered is correctly
 // reflected in its cache key and its `ScanSpecification`.
+// Test the cases in which `makeCopyWithSelectedBlocks` does not restrict the
+// scan. Only in the last case is the selector called (and declines).
+TEST(IndexScan, makeCopyWithSelectedBlocksWithoutRestriction) {
+  TestIndexConfig config{"<a> <p> 1 . <b> <p> 2 . <c> <p> 4 . <d> <p> 5 ."};
+  config.rowsPerBlock = 4;
+  auto* qec = getQec(std::move(config));
+  size_t numCalls = 0;
+  auto selector = [&numCalls](const IndexScan::BlocksOfSortedVariable&)
+      -> std::optional<std::vector<size_t>> {
+    ++numCalls;
+    return std::nullopt;
+  };
+  auto makeCopy = [qec, &selector](const SparqlTripleSimple& triple,
+                                   const LimitOffsetClause& limitOffset = {}) {
+    IndexScan scan{qec, Permutation::POS, triple};
+    scan.applyLimitOffset(limitOffset, true);
+    return scan.makeCopyWithSelectedBlocks(selector);
+  };
+
+  // The scan has a `LIMIT` of its own.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}},
+                        LimitOffsetClause{._limit = 1})
+                   .has_value());
+  // No blocks, because `<a>` is not a predicate.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<a>"), Var{"?x"}}).has_value());
+  // No variable.
+  EXPECT_FALSE(makeCopy({iri("<a>"), iri("<p>"), Tc{int64_t{1}}}).has_value());
+  // An empty result, although the block of `<p>` covers the value `3`.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Tc{int64_t{3}}}).has_value());
+  EXPECT_EQ(numCalls, 0);
+
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}}).has_value());
+  EXPECT_EQ(numCalls, 1);
+}
+
 TEST(IndexScan, namedGraphs) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;

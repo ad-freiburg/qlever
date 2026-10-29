@@ -339,8 +339,8 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   return variableToColumnMap;
 }
 
-// Return the ranges of the blocks with the given `indices` (sorted and
-// unique) into the `blocks`, merging adjacent blocks into a single range.
+// Turn the sorted, unique `indices` into `blocks` into ranges, merging
+// adjacent blocks.
 static BlockMetadataRanges getRangesOfSelectedBlocks(
     const std::vector<BlockMetadataIt>& blocks,
     const std::vector<size_t>& indices) {
@@ -361,7 +361,7 @@ static BlockMetadataRanges getRangesOfSelectedBlocks(
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-IndexScan::makeCopyWithSelectedBlocks(const BlockSelector& selectBlocks) const {
+IndexScan::makeCopyWithSelectedBlocks(BlockSelector selectBlocks) const {
   // The same preconditions as for
   // `getUpdatedQueryExecutionTreeWithPrefilterApplied` above: a
   // `LIMIT`/`OFFSET` of the scan itself is applied while scanning all blocks
@@ -382,8 +382,8 @@ IndexScan::makeCopyWithSelectedBlocks(const BlockSelector& selectBlocks) const {
     return std::nullopt;
   }
 
-  // Describe each block by its metadata for the sorted variable, and remember
-  // its iterator, so that the selection can be turned back into ranges.
+  // Describe each block for the selector, and keep its iterator to turn the
+  // selection back into ranges.
   const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
   const auto& locatedTriples =
       permutation().getLocatedTriplesForPermutation(locatedTriplesState());

@@ -116,7 +116,7 @@ class OrderBy : public Operation {
   // to the block metadata of the scan, replace the scan by a copy that only
   // reads the blocks which can contain the rows selected by the
   // `LIMIT`/`OFFSET` (see `selectBlocksForSortedNumericLimit` in the `.cpp`).
-  // The scan is replaced, not modified, so it may be shared with other trees.
+  // The scan is replaced, not modified, so it may be shared.
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
                             bool childrenAreExclusivelyOwned) override;
 

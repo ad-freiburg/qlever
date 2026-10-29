@@ -421,16 +421,15 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& block, size_t numColumns,
       const LocatedTriplesPerBlock& locatedTriples);
 
-  // Return true iff all triples of the `block` match the `scanSpec`, which is
-  // the case iff its first and its last triple do.
+  // Return true iff all triples of the `block` match the `scanSpec` (iff its
+  // first and last triple do).
   static bool isBlockCompletelyInScan(const ScanSpecification& scanSpec,
                                       const CompressedBlockMetadata& block);
 
-  // Return a lower bound on the number of rows that a scan with the `scanSpec`
-  // yields for the `block`. It accounts for deleted delta triples (each of
-  // which deletes at most one row), and is zero if the block is not completely
-  // in the scan, or if the scan may filter rows of the block by graph or as
-  // duplicates from different graphs (see `FilterDuplicatesAndGraphs`).
+  // Return a lower bound on the rows that a scan with the `scanSpec` yields
+  // for the `block`: its rows minus the deleted delta triples, or zero if the
+  // block is not completely in the scan or may lose rows to the graph filter
+  // or duplicate removal (see `FilterDuplicatesAndGraphs`).
   static size_t getNumRowsLowerBound(
       const ScanSpecification& scanSpec, const CompressedBlockMetadata& block,
       const LocatedTriplesPerBlock& locatedTriples);

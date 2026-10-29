@@ -89,8 +89,8 @@ auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
   return [this](Id graph) { return graphFilter_.isGraphAllowed(graph); };
 }
 
-// Return true iff the block may contain triples from graphs that the
-// `graphFilter` does not allow, as far as its metadata tells.
+// Return true iff, by its metadata, the block may contain graphs that the
+// `graphFilter` does not allow.
 static bool blockMayContainDisallowedGraphs(
     const ScanSpecification::GraphFilter& graphFilter,
     const CompressedBlockMetadata& metadata) {
