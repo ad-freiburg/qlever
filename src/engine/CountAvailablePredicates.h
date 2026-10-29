@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/CompactStringVector.h"
 #include "util/ContainersWithAllocator.h"
+#include "util/Executor.h"
 
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
@@ -95,13 +96,16 @@ class CountAvailablePredicates : public Operation {
    *                      relations should be counted.
    * @param patternColumnIdx The column containing the pattern IDs (previously
    * obtained via a scan of the `ql:has-pattern` predicate.
+   * @param executor The executor on which the counting runs in parallel (see
+   *                 `ad_utility::computeInParallelChunks`).
    */
   template <size_t I>
   static void computePatternTrick(const IdTableView<0>& input, IdTable* result,
                                   const CompactVectorOfStrings<Id>& patterns,
                                   size_t subjectColumnIdx,
                                   size_t patternColumnIdx,
-                                  RuntimeInformation& runtimeInfo);
+                                  RuntimeInformation& runtimeInfo,
+                                  const qlever::Executor& executor);
 
   // Special implementation for the full pattern trick. Count and expand the
   // patterns in the `patternColumn` of the `subresult`, which is the (possibly

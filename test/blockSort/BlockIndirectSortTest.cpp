@@ -20,7 +20,6 @@
 #include <boost/asio/use_future.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <future>
 #include <memory>
@@ -33,6 +32,7 @@
 
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/TestException.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "backports/span.h"
@@ -62,19 +62,6 @@ boost::asio::thread_pool& threadPool() {
   static boost::asio::thread_pool pool{numPoolThreads};
   return pool;
 }
-
-// The exception that the tests throw. Its message is a string literal, so that
-// it owns no memory besides the exception object itself. The freeing of a
-// message that is owned by the exception (e.g. by a `std::runtime_error`) would
-// be reported as a false positive by TSAN, see `misc/tsan-suppressions.txt`.
-class TestException : public std::exception {
- private:
-  const char* message_;
-
- public:
-  explicit TestException(const char* message) : message_{message} {}
-  const char* what() const noexcept override { return message_; }
-};
 
 // The message of the exception that a `FuzzCompare` throws.
 constexpr const char* comparisonFailed = "comparison failed";
@@ -276,7 +263,7 @@ void runSortOn(typename Values::Container& values,
                uint32_t numThreads, SortParams params) {
   auto range = Values::range(values);
   runSort(range.begin(), range.end(), comp, numThreads,
-          threadPool().get_executor(), params);
+          threadPool().get_executor(), params, ad_utility::noop);
 }
 
 // Sort `numIterations` random inputs of `Values` with random tuning
@@ -383,22 +370,18 @@ void testValueType(size_t numIterations, size_t maxBlockSize) {
 
 }  // namespace
 
-// _____________________________________________________________________________
 // Small elements that are cheap to move.
 TEST(BlockIndirectSort, uint32) { testValueType<Uint32Values>(400, 16); }
 
-// _____________________________________________________________________________
 // Elements that are not trivially copyable.
 TEST(BlockIndirectSort, strings) { testValueType<StringValues>(200, 8); }
 
-// _____________________________________________________________________________
 // The rows of an `IdTable` with a static and a dynamic number of columns.
 TEST(BlockIndirectSort, idTableRows) {
   testValueType<IdTableValues<3>>(150, 4);
   testValueType<IdTableValues<0>>(150, 4);
 }
 
-// _____________________________________________________________________________
 // The public interface with its default tuning parameters and an input that is
 // big enough for all of its phases.
 TEST(BlockIndirectSort, defaultParameters) {
@@ -416,7 +399,6 @@ TEST(BlockIndirectSort, defaultParameters) {
   EXPECT_EQ(Uint32Values::toKeys(values), expected);
 }
 
-// _____________________________________________________________________________
 // Both functions of the public interface accept lvalue containers as well as
 // views like `ql::span`.
 namespace {
@@ -436,7 +418,6 @@ static_assert(canSortAsync<std::vector<uint32_t>&>);
 static_assert(canSortAsync<ql::span<uint32_t>>);
 }  // namespace
 
-// _____________________________________________________________________________
 // Concurrent sorts on the same executor don't interfere.
 TEST(BlockIndirectSort, concurrentSortsOnTheSameExecutor) {
   constexpr size_t numSorts = 4;
@@ -462,7 +443,71 @@ TEST(BlockIndirectSort, concurrentSortsOnTheSameExecutor) {
   }
 }
 
-// _____________________________________________________________________________
+// The cancellable overloads sort like the others, and throw a
+// `CancellationException` when the handle is cancelled before or during the
+// sort, for every way of sorting: in a single task, with the parallel
+// quicksort, and with blocks.
+TEST(BlockIndirectSort, cancellation) {
+  using ad_utility::CancellationException;
+  using ad_utility::CancellationHandle;
+  using ad_utility::CancellationState;
+  auto executor = threadPool().get_executor();
+  // Big enough for blocks with the default tuning parameters, and for many
+  // checks of the comparisons in a single task.
+  size_t numKeys =
+      size_t{numPoolThreads} * blockSizeFor<uint32_t>() * BLOCKS_PER_TASK;
+  std::vector<Key> expected(numKeys);
+  std::iota(expected.begin(), expected.end(), Key{0});
+  auto shuffled = Uint32Values::fromKeys(expected);
+  ql::ranges::shuffle(shuffled, std::mt19937_64{13});
+
+  for (uint32_t numThreads : {1u, 2u, numPoolThreads}) {
+    SCOPED_TRACE(absl::StrCat("numThreads=", numThreads));
+    // Not cancelled.
+    auto handle = std::make_shared<CancellationHandle<>>();
+    auto values = shuffled;
+    blockIndirectSort(values, std::less<>{}, numThreads, executor, handle);
+    EXPECT_EQ(Uint32Values::toKeys(values), expected);
+    values = shuffled;
+    runOnPool(blockIndirectSortAsync(values, std::less<>{}, numThreads,
+                                     executor, handle));
+    EXPECT_EQ(Uint32Values::toKeys(values), expected);
+
+    // Cancelled before the sort.
+    handle->cancel(CancellationState::MANUAL);
+    values = shuffled;
+    EXPECT_THROW(
+        blockIndirectSort(values, std::less<>{}, numThreads, executor, handle),
+        CancellationException);
+    values = shuffled;
+    EXPECT_THROW(runOnPool(blockIndirectSortAsync(
+                     values, std::less<>{}, numThreads, executor, handle)),
+                 CancellationException);
+
+    // Cancelled during the sort, by the comparator after some comparisons.
+    handle = std::make_shared<CancellationHandle<>>();
+    auto numComparisons = std::make_shared<std::atomic<size_t>>(0);
+    auto cancellingLess = [handle = handle.get(), numComparisons](uint32_t a,
+                                                                  uint32_t b) {
+      if (++*numComparisons == 1'000) {
+        handle->cancel(CancellationState::TIMEOUT);
+      }
+      return a < b;
+    };
+    values = shuffled;
+    EXPECT_THROW(
+        blockIndirectSort(values, cancellingLess, numThreads, executor, handle),
+        CancellationException);
+  }
+
+  // The handle must not be `nullptr`.
+  auto values = shuffled;
+  EXPECT_ANY_THROW(blockIndirectSort(values, std::less<>{}, numPoolThreads,
+                                     executor, nullptr));
+  EXPECT_ANY_THROW(runOnPool(blockIndirectSortAsync(
+      values, std::less<>{}, numPoolThreads, executor, nullptr)));
+}
+
 // `ScratchBuffers` allocates a new buffer if all are taken, and reuses a buffer
 // once it has been returned.
 TEST(BlockIndirectSort, scratchBuffers) {

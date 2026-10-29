@@ -38,7 +38,7 @@ sparqlExpression::GroupConcatExpression::evaluate(
           result.append(separator_);
         }
         if (literal.has_value()) {
-          result.append(asStringViewUnsafe(literal.value().getContent()));
+          result.append(literal.value().getContent());
         } else {
           undefined = true;
           return;
@@ -59,7 +59,7 @@ sparqlExpression::GroupConcatExpression::evaluate(
       return Id::makeUndefined();
     }
     return IdOrLocalVocabEntry{LocalVocabEntry::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(result), context->getLocalVocabContext())};
+        result, context->getLocalVocabContext())};
   };
 
   auto childRes = child_->evaluate(context);

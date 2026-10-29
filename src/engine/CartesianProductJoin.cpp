@@ -200,8 +200,9 @@ VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
-    IdTable CartesianProductJoin::writeAllColumns(
-        R idTables, size_t offset, size_t limit, size_t lastTableOffset) const {
+IdTable CartesianProductJoin::writeAllColumns(R idTables, size_t offset,
+                                              size_t limit,
+                                              size_t lastTableOffset) const {
   AD_CORRECTNESS_CHECK(offset >= lastTableOffset);
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
@@ -279,7 +280,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() &&
         childTree->handlesLimitOffset() != LimitOffsetHandling::NONE) {
-      childTree->applyLimitOffset(limitIfPresent.value());
+      childTree->applyLimitOffset(limitIfPresent.value(), false);
       forbiddenToRecompute_ = true;
     }
     auto& child = *childTree->getRootOperation();
@@ -327,11 +328,10 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
-    CartesianProductJoin::produceTablesLazily(LocalVocab mergedVocab,
-                                              R idTables, size_t offset,
-                                              size_t limit,
-                                              size_t lastTableOffset) const {
+CPP_template_def(typename R)(requires ql::ranges::range<R>)
+Result::LazyResult CartesianProductJoin::produceTablesLazily(
+    LocalVocab mergedVocab, R idTables, size_t offset, size_t limit,
+    size_t lastTableOffset) const {
   using Lc = Result::IdTableLoopControl;
   auto get = [self = this, mergedVocab = std::move(mergedVocab),
               idTables = std::move(idTables), offset, limit,
@@ -504,6 +504,22 @@ std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   for (const auto& operation : children_) {
     copy.push_back(operation->clone());
   }
-  return std::make_unique<CartesianProductJoin>(_executionContext,
-                                                std::move(copy), chunkSize_);
+  return cloneWithNewChildren(std::move(copy));
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> CartesianProductJoin::cloneWithNewChildren(
+    Children children) const {
+  return std::make_unique<CartesianProductJoin>(
+      _executionContext, std::move(children), chunkSize_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+CartesianProductJoin::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // Since the variables covered by the children of a `CartesianProductJoin` are
+  // disjoint, we can simply use the generic push down into any child and it
+  // will select the correct one.
+  return pushDownBindToAnyChild(bind, children_);
 }

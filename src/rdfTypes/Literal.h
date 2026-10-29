@@ -21,7 +21,6 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/Iri.h"
 
 namespace ad_utility::triple_component {
@@ -67,14 +66,12 @@ class BasicLiteral {
     return result;
   }
 
-  NormalizedStringView content() const {
-    return asNormalizedStringViewUnsafe(storage_);
-  }
+  std::string_view content() const { return storage_; }
 
  public:
   CPP_template(typename H, typename L)(
-      requires ql::concepts::same_as<L, BasicLiteral>) friend H
-      AbslHashValue(H h, const L& literal) {
+      requires ql::concepts::same_as<L, BasicLiteral>)
+  friend H AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.storage_);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,
@@ -102,15 +99,15 @@ class BasicLiteral {
 
   // Return the value of the literal without quotation marks and without any
   // datatype or language tag.
-  NormalizedStringView getContent() const;
+  std::string_view getContent() const;
 
   // Return the language tag of the literal, if available, without leading @
   // character. Throws an exception if the literal has no language tag.
-  NormalizedStringView getLanguageTag() const;
+  std::string_view getLanguageTag() const;
 
   // Return the datatype of the literal, if available, without leading ^^
   // prefix. Throws an exception if the literal has no datatype.
-  NormalizedStringView getDatatype() const;
+  std::string_view getDatatype() const;
 
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
@@ -156,9 +153,10 @@ class Literal : public BasicLiteral<true> {
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
-  // already be normalized.
+  // already be normalized, i.e. without the surrounding quotes and with all
+  // escape sequences already resolved. This is not checked.
   static Literal literalWithNormalizedContent(
-      NormalizedStringView normalizedRdfContent,
+      std::string_view normalizedRdfContent,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   void addLanguageTag(std::string_view languageTag);

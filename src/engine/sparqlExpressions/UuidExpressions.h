@@ -18,8 +18,7 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 inline constexpr auto fromLiteral = [](std::string_view str) {
   return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(str))};
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(str)};
 };
 
 inline constexpr auto fromIri = [](std::string_view str) {
@@ -56,15 +55,15 @@ class UuidExpressionImpl : public SparqlExpression {
     // value per group. Inside an aggregate we must still produce one value per
     // row, so that e.g. `COUNT(STRUUID())` counts the rows in the group.
     if (worksOnAggregatedData(context)) {
-      return LocalVocabEntry{FuncConv(uuidGen()),
-                             context->getLocalVocabContext()};
+      return toIdOrLocalVocabEntry(FuncConv(uuidGen()),
+                                   context->getLocalVocabContext());
     }
 
     ad_utility::chunkedForLoop<1000>(
         0, numElements,
         [&result, &uuidGen, context](size_t) {
-          result.push_back(LocalVocabEntry{FuncConv(uuidGen()),
-                                           context->getLocalVocabContext()});
+          result.push_back(toIdOrLocalVocabEntry(
+              FuncConv(uuidGen()), context->getLocalVocabContext()));
         },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
