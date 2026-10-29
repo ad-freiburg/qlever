@@ -181,7 +181,7 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 
 // The string value (see `StringValueGetter`), split into words that are
 // normalized like the words of the `ql:has-word` triples of the index (see
-// `IndexImpl::getHasWordWords`), joined by a single space. Used by
+// `IndexImpl::getNormalizedWords`), joined by a single space. Used by
 // `ql:normalize`.
 struct NormalizedStringGetter : Mixin<NormalizedStringGetter> {
   using Value = std::optional<std::string>;
