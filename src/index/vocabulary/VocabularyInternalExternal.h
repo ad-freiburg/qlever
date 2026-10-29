@@ -67,22 +67,11 @@ class VocabularyInternalExternal {
   //____________________________________________________________________________
   // Look up the words for `indices` and return them in the order of
   // `indices`. A word of the internal (RAM) vocabulary is returned as a view
-  // into that vocabulary, without a copy. All other words are read with one
-  // `lookupBatch` call on the external vocabulary (batched reads, via
-  // `io_uring` where available); the buffer that holds them is owned by the
-  // result.
-  //
-  // Lifetime: the views into the internal vocabulary are valid only while
-  // this vocabulary is open, so the result must not be used after this
-  // vocabulary is closed or destroyed (the views into the external words
-  // stay valid, as the result owns them). This cannot be checked at runtime:
-  // using such a result afterwards reads through dangling views, which is
-  // undefined behavior and fails non-gracefully (it is caught only under
-  // AddressSanitizer). The precondition holds for lookups during query
-  // processing, because the index (and thus this vocabulary) outlives every
-  // query. A caller that must keep a result beyond the vocabulary has to copy
-  // the words. The same holds for the results of `lookupBatchesStreamed`
-  // below, which are produced by this function.
+  // into the word storage of that vocabulary, whose ownership the result
+  // shares, without a copy. All other words are read with one `lookupBatch`
+  // call on the external vocabulary (batched reads, via `io_uring` where
+  // available); the result owns the buffer that holds them. So a result stays
+  // valid as long as it lives, also after this vocabulary was closed.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________

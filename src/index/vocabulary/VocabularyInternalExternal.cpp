@@ -114,16 +114,16 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     return externalVocab_.lookupBatch(indices);
   }
 
-  // Read the remaining words from the external vocabulary in one batch; the
-  // returned batch keeps that sub-batch result alive as its buffer. The views
-  // into the internal vocabulary are subject to the lifetime note on the
-  // declaration.
+  // Read the remaining words from the external vocabulary in one batch. The
+  // returned batch owns a share of the internal words and that sub-batch
+  // result, so all its views stay valid as long as it lives.
   auto data = std::make_shared<SubBatchVocabBatchLookupData>();
+  data->buffer().internalWords = internalVocab_.sharedWords();
   ql::span<const std::string_view> externalWords;
   if (const auto indicesToRead = externalIndices(indices, internalWords);
       !indicesToRead.empty()) {
-    data->buffer() = externalVocab_.lookupBatch(indicesToRead);
-    externalWords = *data->buffer();
+    data->buffer().externalWords = externalVocab_.lookupBatch(indicesToRead);
+    externalWords = *data->buffer().externalWords;
   }
   data->views() = mergeWords(indices.size(), internalWords, externalWords);
   return SubBatchVocabBatchLookupData::asResult(std::move(data));

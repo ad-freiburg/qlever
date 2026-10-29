@@ -210,12 +210,12 @@ TEST(VocabularyInternalExternal, LookupBatchRejectsInvalidBatches) {
 // _____________________________________________________________________________
 // Test that a result of a mixed batch (so that the external words come from
 // a sub-batch result that the result keeps alive) stays valid after a later
-// lookup whose result has already been destroyed: the external words are
-// owned by the result itself, not by a buffer of the vocabulary.
+// lookup whose result has already been destroyed, and after the vocabulary
+// was closed: the result owns a share of the internal words and the external
+// sub-batch result, nothing depends on a buffer of the vocabulary.
 TEST(VocabularyInternalExternal, LookupBatchResultOutlivesLaterLookups) {
   const auto words = makeWords(20);
-  const auto vocab =
-      createVocabulary("LookupBatchResultOutlivesLaterLookups")(words);
+  auto vocab = createVocabulary("LookupBatchResultOutlivesLaterLookups")(words);
   // Mixed batches (see `createVocabulary` for the split).
   const std::vector<size_t> first{2, 1, 4};
   const std::vector<size_t> second{8, 3, 10};
@@ -234,6 +234,11 @@ TEST(VocabularyInternalExternal, LookupBatchResultOutlivesLaterLookups) {
   }
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
       vocab, firstResult, first);
+
+  vocab.close();
+  for (const auto& [index, word] : ::ranges::views::zip(first, *firstResult)) {
+    EXPECT_EQ(word, words[index]);
+  }
 }
 
 TEST(VocabularyInternalExternal, ScanAll) {

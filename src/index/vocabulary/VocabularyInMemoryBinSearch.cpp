@@ -6,16 +6,21 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <memory>
+
 using std::string;
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
   AD_CORRECTNESS_CHECK(
-      words_.size() == 0 && indices().empty(),
+      words().size() == 0 && indices().empty(),
       "Calling open on the same vocabulary twice is probably a bug");
   {
+    // Never modify words that a batch-lookup result might share.
+    auto words = std::make_shared<Words>();
     ad_utility::serialization::FileReadSerializer file(fileName);
-    file >> words_;
+    file >> *words;
+    words_ = std::move(words);
   }
   {
     ad_utility::serialization::FileReadSerializer idFile(
@@ -51,8 +56,8 @@ uint64_t VocabularyInMemoryBinSearch::endIndex() const {
 // _____________________________________________________________________________
 std::string_view VocabularyInMemoryBinSearch::wordAtPosition(
     size_t position) const {
-  AD_CORRECTNESS_CHECK(position < words_.size());
-  return words_[position];
+  AD_CORRECTNESS_CHECK(position < words().size());
+  return words()[position];
 }
 
 // _____________________________________________________________________________
@@ -68,12 +73,12 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
 // _____________________________________________________________________________
 WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
     ql::ranges::iterator_t<Words> it) const {
-  if (it == words_.end()) {
+  if (it == words().end()) {
     return WordAndIndex::end();
   }
-  auto idx = static_cast<uint64_t>(it - words_.begin());
+  auto idx = static_cast<uint64_t>(it - words().begin());
   auto indices = this->indices();
-  WordAndIndex result{words_[idx], indices[idx]};
+  WordAndIndex result{words()[idx], indices[idx]};
   if (idx > 0) {
     result.previousIndex() = indices[idx - 1];
   }
@@ -92,7 +97,8 @@ VocabularyInMemoryBinSearch::makeDiskWriterPtr(
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
-  words_.clear();
+  // Batch-lookup results that are still alive keep the previous words.
+  words_ = std::make_shared<Words>();
   indices_ = {};
 }
 
