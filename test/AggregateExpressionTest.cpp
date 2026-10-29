@@ -14,6 +14,7 @@
 #include "backports/type_traits.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/ArgMinMaxExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
@@ -422,4 +423,44 @@ TEST(AggregateExpression, SampleExpressionSimpleMembers) {
   auto sample2 = makeSample(I(3478), true);
   EXPECT_EQ(sample->getCacheKey({}), sample2->getCacheKey({}));
   EXPECT_EQ(sample2->isAggregate(), NonDistinctAggregate);
+}
+
+// Evaluate an `ArgMinMaxExpressionT` on the given `values` and `keys` (one per
+// row, so both have the same size).
+template <typename ArgMinMaxExpressionT>
+Id evaluateArgMinMax(const std::vector<Id>& values,
+                     const std::vector<Id>& keys) {
+  auto makeChild = [](const std::vector<Id>& ids) {
+    return std::make_unique<SingleUseExpression>(
+        VectorWithMemoryLimit<Id>(ids.begin(), ids.end(), makeAllocator()));
+  };
+  TestContext t;
+  t.context._endIndex = keys.size();
+  ArgMinMaxExpressionT expression{makeChild(values), makeChild(keys)};
+  return std::get<Id>(expression.evaluate(&t.context));
+}
+
+// Test that `ql:argmin` and `ql:argmax` return the value of the first row with
+// the minimal resp. maximal key.
+TEST(AggregateExpression, argMinMax) {
+  auto argMin = evaluateArgMinMax<ArgMinExpression>;
+  auto argMax = evaluateArgMinMax<ArgMaxExpression>;
+
+  // Ties are resolved in favor of the first row.
+  std::vector values{I(10), I(11), I(12), I(13), I(14)};
+  std::vector keys{I(3), I(1), I(5), I(1), I(5)};
+  EXPECT_EQ(argMin(values, keys), I(11));
+  EXPECT_EQ(argMax(values, keys), I(12));
+
+  // UNDEF keys are skipped (unlike for `MIN` and `MAX`).
+  keys = {I(3), U, I(5), I(1), U};
+  EXPECT_EQ(argMin(values, keys), I(13));
+  EXPECT_EQ(argMax(values, keys), I(12));
+
+  // A group without a bound key, in particular an empty group, has neither an
+  // argmin nor an argmax.
+  EXPECT_EQ(argMin({I(10), I(11)}, {U, U}), U);
+  EXPECT_EQ(argMax({I(10), I(11)}, {U, U}), U);
+  EXPECT_EQ(argMin({}, {}), U);
+  EXPECT_EQ(argMax({}, {}), U);
 }
