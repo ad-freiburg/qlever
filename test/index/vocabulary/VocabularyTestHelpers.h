@@ -10,8 +10,14 @@
 #include <gmock/gmock.h>
 
 #include <array>
+#include <functional>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "../../util/GTestHelpers.h"
+#include "backports/algorithm.h"
+#include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
@@ -394,7 +400,8 @@ template <typename Vocab, typename Indices>
 void assertLookupResultMatchesVocabularyAtIndices(
     const Vocab& vocab, const VocabBatchLookupResult& lookupResult,
     const Indices& indices) {
-  ASSERT_EQ(lookupResult->size(), ql::ranges::distance(indices));
+  ASSERT_EQ(lookupResult.size(),
+            static_cast<size_t>(ql::ranges::distance(indices)));
 
   auto at = [&](size_t i) -> decltype(auto) {
     if constexpr (requires { vocab[i]; }) {
@@ -406,7 +413,7 @@ void assertLookupResultMatchesVocabularyAtIndices(
   };
 
   for (const auto& [resultWord, idx] :
-       ::ranges::views::zip(*lookupResult, indices)) {
+       ::ranges::views::zip(lookupResult, indices)) {
     EXPECT_EQ(resultWord, at(idx)) << " at  vocabulary index " << idx;
   }
 }
@@ -477,6 +484,45 @@ template <typename Vocabulary>
 auto makeVocabFileCleanup(std::string filename) {
   return makeVocabFileCleanup(std::move(filename), Vocabulary::fileSuffixes());
 }
+
+// _____________________________________________________________________________
+// A PMR resource that records every block it hands out. A test gives it to an
+// `ArenaVocabBatchBuilder` and then checks with `contains` that every returned
+// view points into one of those blocks: a view into a destroyed temporary
+// (e.g. a short `std::pmr::string` that kept its characters inline) fails the
+// check deterministically, without reading through the dangling view.
+class RecordingMemoryResource : public ql::pmr::memory_resource {
+ private:
+  ql::pmr::memory_resource* upstream_ = ql::pmr::get_default_resource();
+  std::vector<std::pair<const char*, size_t>> blocks_;
+
+  void* do_allocate(size_t bytes, size_t alignment) override {
+    void* block = upstream_->allocate(bytes, alignment);
+    blocks_.emplace_back(static_cast<const char*>(block), bytes);
+    return block;
+  }
+  void do_deallocate(void* block, size_t bytes, size_t alignment) override {
+    upstream_->deallocate(block, bytes, alignment);
+  }
+  bool do_is_equal(
+      const ql::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+
+ public:
+  // Return true iff all bytes of `view` lie inside one recorded block.
+  // `std::less` gives a total order on pointers, so the comparison is
+  // well-defined for pointers into different allocations.
+  bool contains(std::string_view view) const {
+    const std::less<const char*> less;
+    return ql::ranges::any_of(blocks_, [&](const auto& block) {
+      const char* begin = block.first;
+      const char* end = block.first + block.second;
+      return !less(view.data(), begin) && !less(end, view.data() + view.size());
+    });
+  }
+  size_t numBlocks() const { return blocks_.size(); }
+};
 
 }  // namespace vocabulary_test
 

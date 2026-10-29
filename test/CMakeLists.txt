@@ -174,6 +174,7 @@ add_compile_definitions(QLEVER_TEST_DATA_DIR="${QLEVER_TEST_DATA_DIR}")
 add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
+
 add_subdirectory(backports)
 add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
