@@ -1,6 +1,7 @@
 # Suppressions for ThreadSanitizer (TSAN). Pass this file to a TSAN-instrumented
 # binary via `TSAN_OPTIONS=suppressions=<path-to-this-file>`. The CI does this
-# in `.github/workflows/native-build.yml`. For the format of this file see
+# in `.github/workflows/native-build-only-if-complete-ci.yml`. For the format of
+# this file see
 # https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
 
 # False positive in Boost.Asio (up to and including Boost 1.91). The function
@@ -40,5 +41,5 @@ race:boost::asio::execution::detail::shared_target_executor::~shared_target_exec
 # exception, which `_M_release` calls from within `libstdc++.so`, so
 # `_M_release` does not appear in the reported stacks. The tests that pass
 # exceptions between threads therefore throw exceptions that own no memory
-# (see `TestException` in `test/blockSort/ParallelQuicksortTest.cpp`).
+# (see `TestException` in `test/util/TestException.h`).
 race:std::__exception_ptr::exception_ptr::_M_release

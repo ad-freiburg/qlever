@@ -11,15 +11,20 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <optional>
 #include <range/v3/view/enumerate.hpp>
+#include <range/v3/view/zip.hpp>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -31,6 +36,7 @@
 #include "backports/span.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
@@ -43,8 +49,8 @@
 // move the populated views and the backing storage into a derived class;
 // the result is observed as a `VocabBatchLookupResult` holding a
 // `shared_ptr<const VocabBatchStorage>` with no mutators. `viewSpan()` is not
-// virtual: it always returns this object's `views_`, which only a builder may
-// fill via a derived constructor.
+// virtual: it always returns this object's `views_`, which a derived class
+// fills only during its construction.
 class VocabBatchStorage {
   std::vector<std::string_view> views_;
 
@@ -78,8 +84,10 @@ using VocabBatchOwner = std::shared_ptr<const VocabBatchStorage>;
 class MultiSourceVocabBatchAssembler;
 
 // _____________________________________________________________________________
-// Batch lookup result: views are always `storage_->viewSpan()`. There is no
-// constructor that takes an owner and a span independently. Copies share the
+// Batch lookup result: for a non-empty result, the views are always
+// `storage_->viewSpan()`. A default-constructed or moved-from result is empty
+// and holds no storage. There is no constructor that takes an owner and a span
+// independently. Copies share the
 // storage. A view stays valid as long as any copy of the result lives, with
 // one documented exception: a view that the producing vocabulary placed via
 // `MultiSourceVocabBatchAssembler::assignUnownedViewAtPosition` points into
@@ -210,7 +218,8 @@ class ContiguousVocabBatchBuilder {
     AD_CONTRACT_CHECK(!wordSizes.empty());
     size_t totalBytes = 0;
     for (size_t size : wordSizes) {
-      AD_CONTRACT_CHECK(size <= SIZE_MAX - totalBytes);
+      AD_CONTRACT_CHECK(size <= SIZE_MAX - totalBytes, "Word size ", size,
+                        " overflows the total of ", totalBytes, " bytes");
       totalBytes += size;
     }
     buffer_.resize(totalBytes == 0 ? 1 : totalBytes);
@@ -226,32 +235,38 @@ class ContiguousVocabBatchBuilder {
     }
   }
 
-  // Return an owning pointer array with one destination per requested word.
-  // The array can safely outlive this builder's metadata. Its pointers remain
-  // valid after `finalize()` because the result takes ownership of `buffer_`.
-  // They become invalid when that result is destroyed. Multiple zero-sized
-  // words may share an address, but no bytes are written through those entries.
-  [[nodiscard]] std::vector<char*> targets() noexcept {
-    std::vector<char*> result;
-    result.reserve(targetOffsets_.size());
+  // Return one non-owning destination pointer per requested word. The array
+  // owns only the pointer values; the bytes they point to belong to this
+  // builder's `buffer_` and, after `finalize()`, to the returned result. The
+  // pointers are therefore valid from this call until that result is
+  // destroyed. If the builder is destroyed without calling `finalize()`, they
+  // become invalid with it. Multiple zero-sized words may share an address, but
+  // no bytes are written through those entries.
+  [[nodiscard]] std::vector<char*> targets() {
+    std::vector<char*> targetPointers;
+    targetPointers.reserve(targetOffsets_.size());
     for (size_t offset : targetOffsets_) {
-      result.push_back(buffer_.data() + offset);
+      targetPointers.push_back(buffer_.data() + offset);
     }
-    return result;
+    return targetPointers;
   }
 
   [[nodiscard]] VocabBatchLookupResult finalize() && {
     AD_CONTRACT_CHECK(!views_.empty());
-    auto data = std::make_shared<ContiguousVocabBatchLookupData>(
+    auto lookupData = std::make_shared<ContiguousVocabBatchLookupData>(
         ContiguousVocabBatchLookupData::Passkey{}, std::move(buffer_),
         std::move(views_));
-    return ContiguousVocabBatchLookupData::asResult(std::move(data));
+    // The destinations are now owned by the result; a later `targets()` call
+    // must not compute pointers from the moved-from buffer.
+    targetOffsets_.clear();
+    return ContiguousVocabBatchLookupData::asResult(std::move(lookupData));
   }
 };
 
 // _____________________________________________________________________________
-// PMR `memory_resource` that charges an `AllocatorWithLimit`. Copies of the
-// allocator share the same `MemoryLimitTracker` as query `IdTable`s.
+// Provide a PMR `memory_resource` that charges an `AllocatorWithLimit`. Copies
+// of the allocator share the same `MemoryLimitTracker` as the query's
+// `IdTable`s.
 class AllocatorAsMemoryResource : public ql::pmr::memory_resource {
   ad_utility::AllocatorWithLimit<std::byte> alloc_;
 
@@ -319,7 +334,7 @@ class StringVectorVocabBatchLookupData : public VocabBatchStorage {
   std::vector<std::string> words_;
 
   static std::vector<std::string_view> viewsInto(
-      const std::vector<std::string>& words) {
+      ql::span<const std::string> words) {
     return ::ranges::to_vector(
         words | ql::views::transform(ad_utility::staticCast<std::string_view>));
   }
@@ -357,8 +372,10 @@ class StringVectorVocabBatchLookupData : public VocabBatchStorage {
 };
 
 // _____________________________________________________________________________
-// Strong, self-contained batch-lookup result that owns multiple independent
-// storage owners.
+// Strong, self-contained batch-lookup result that keeps the storage of
+// multiple independent sub-batches alive. The owner list is empty if all views
+// point into storage that the result does not own (see
+// `MultiSourceVocabBatchAssembler::assignUnownedViewAtPosition`).
 class MultiOwnerVocabBatchLookupData : public VocabBatchStorage {
  public:
   class Passkey {
@@ -402,19 +419,21 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 
 // _____________________________________________________________________________
 // Decompress a single word into `destination` using `decompress(span)`.
-// `destination` must hold exactly the first `bound` bytes passed to
-// `decompress`. A `bound` of 0 returns an empty view without calling
-// `decompress`. Returns a string_view to the decompressed word.
+// `destination` must hold at least `bound` bytes; only the first `bound` bytes
+// are passed to `decompress`. If `bound` is 0, return an empty view without
+// calling `decompress`. Return a `string_view` to the decompressed word.
 template <typename DecompressFunc>
-std::string_view decompressIntoSpan(ql::span<char> destination, size_t bound,
-                                    DecompressFunc&& decompress) {
+[[nodiscard]] std::string_view decompressIntoSpan(ql::span<char> destination,
+                                                  size_t bound,
+                                                  DecompressFunc&& decompress) {
   if (bound == 0) {
     return "";
   }
   AD_CORRECTNESS_CHECK(destination.size() >= bound);
   const size_t bytesWritten =
       decompress(ql::span<char>{destination.data(), bound});
-  AD_CORRECTNESS_CHECK(bytesWritten <= bound);
+  AD_CORRECTNESS_CHECK(bytesWritten <= bound, "Decompressor wrote ",
+                       bytesWritten, " bytes, but the bound is ", bound);
   return bytesWritten == 0 ? ""
                            : std::string_view{destination.data(), bytesWritten};
 }
@@ -425,38 +444,49 @@ std::string_view decompressIntoSpan(ql::span<char> destination, size_t bound,
 // memory-limit tracker. Vocabularies only append decompressed bytes.
 class ArenaVocabBatchBuilder {
  private:
+  // The declaration order is load-bearing: `buffer_` deallocates through
+  // `upstream_` when it is destroyed, so it must be declared after `upstream_`
+  // (members are destroyed in reverse order). The same holds for
+  // `PmrVocabBatchLookupData`.
   std::unique_ptr<ql::pmr::memory_resource> upstream_;
   std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_;
   std::vector<std::string_view> views_;
 
-  void initBuffer(ql::pmr::memory_resource* resource) {
-    buffer_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(resource);
+  void initBuffer(ql::pmr::memory_resource& resource) {
+    buffer_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(&resource);
   }
 
  public:
-  // Default PMR resource (tests and vocabs that do not see a query
-  // allocator).
-  explicit ArenaVocabBatchBuilder(size_t expectedSize) {
-    AD_CONTRACT_CHECK(expectedSize > 0);
-    views_.reserve(expectedSize);
-    initBuffer(ql::pmr::get_default_resource());
+  // Move-assignment would destroy `upstream_` before the old `buffer_` that
+  // still deallocates through it, so only move-construction is supported.
+  ArenaVocabBatchBuilder(ArenaVocabBatchBuilder&&) = default;
+  ArenaVocabBatchBuilder& operator=(ArenaVocabBatchBuilder&&) = delete;
+
+  // Use the default PMR resource (tests and vocabs that do not see a query
+  // allocator). `expectedNumWords` is the number of words that will be
+  // appended; it is used to reserve the view table.
+  explicit ArenaVocabBatchBuilder(size_t expectedNumWords) {
+    AD_CONTRACT_CHECK(expectedNumWords > 0);
+    views_.reserve(expectedNumWords);
+    initBuffer(*ql::pmr::get_default_resource());
   }
 
-  // Charge `allocator`'s shared memory tracker (same object as the Index /
-  // query `AllocatorWithLimit`).
+  // Charge the `MemoryLimitTracker` that `allocator` shares with the Index /
+  // query `AllocatorWithLimit`.
   explicit ArenaVocabBatchBuilder(
-      size_t expectedSize,
+      size_t expectedNumWords,
       const ad_utility::AllocatorWithLimit<Id>& allocator) {
-    AD_CONTRACT_CHECK(expectedSize > 0);
-    views_.reserve(expectedSize);
+    AD_CONTRACT_CHECK(expectedNumWords > 0);
+    views_.reserve(expectedNumWords);
     upstream_ =
         std::make_unique<AllocatorAsMemoryResource>(allocator.as<std::byte>());
-    initBuffer(upstream_.get());
+    initBuffer(*upstream_);
   }
 
   // Allocate storage inside the arena for `bound` bytes, invoke
   // `decompress(destinationSpan)` to write the bytes (up to `bound`), and
-  // register the view.
+  // register the view. If `bound` is 0, register an empty view without
+  // allocating and without calling `decompress`.
   template <typename DecompressFunc>
   void appendDecompressedWord(size_t bound, DecompressFunc&& decompress) {
     if (bound == 0) {
@@ -465,9 +495,9 @@ class ArenaVocabBatchBuilder {
     }
 
     ql::pmr::polymorphic_allocator<char> allocator{buffer_.get()};
-    char* mem = allocator.allocate(bound);
+    char* destination = allocator.allocate(bound);
     views_.push_back(
-        decompressIntoSpan(ql::span<char>{mem, bound}, bound,
+        decompressIntoSpan(ql::span<char>{destination, bound}, bound,
                            std::forward<DecompressFunc>(decompress)));
   }
 
@@ -478,26 +508,28 @@ class ArenaVocabBatchBuilder {
       return;
     }
     ql::pmr::polymorphic_allocator<char> allocator{buffer_.get()};
-    char* mem = allocator.allocate(word.size());
-    ql::ranges::copy(word, mem);
-    views_.emplace_back(mem, word.size());
+    char* destination = allocator.allocate(word.size());
+    ql::ranges::copy(word, destination);
+    views_.emplace_back(destination, word.size());
   }
 
   // ___________________________________________________________________________
-  // Finalize and return the immutable batch result.
+  // Finalize and return the immutable batch result. At least one word must
+  // have been appended.
   [[nodiscard]] VocabBatchLookupResult finalize() && {
     AD_CONTRACT_CHECK(!views_.empty());
-    auto data = std::make_shared<PmrVocabBatchLookupData>(
+    auto lookupData = std::make_shared<PmrVocabBatchLookupData>(
         PmrVocabBatchLookupData::Passkey{}, std::move(upstream_),
         std::move(buffer_), std::move(views_));
-    return PmrVocabBatchLookupData::asResult(std::move(data));
+    return PmrVocabBatchLookupData::asResult(std::move(lookupData));
   }
 };
 
 // _____________________________________________________________________________
 // Construct a PMR arena-backed `VocabBatchLookupResult` by copying words into a
-// monotonic buffer arena.
-inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
+// monotonic buffer arena. The arena uses the default PMR resource, so its
+// memory is not charged to a query's memory limit.
+[[nodiscard]] inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
     ql::span<const std::string_view> words) {
   AD_CONTRACT_CHECK(!words.empty());
   ArenaVocabBatchBuilder builder(words.size());
@@ -507,7 +539,8 @@ inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
   return std::move(builder).finalize();
 }
 
-inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
+// Same as the overload above, for an initializer list of words.
+[[nodiscard]] inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
     std::initializer_list<std::string_view> words) {
   return makePmrVocabBatchLookupResult(
       ql::span<const std::string_view>{words.begin(), words.size()});
@@ -538,8 +571,12 @@ class MultiSourceVocabBatchAssembler {
   // Fill one output position (shared by the two public placement functions,
   // which differ only in how the storage behind `word` is kept alive).
   void assignWordAtPosition(size_t resultPosition, std::string_view word) {
-    AD_CORRECTNESS_CHECK(resultPosition < assembledWordViews_.size());
-    AD_CORRECTNESS_CHECK(!slotFilledTracking_[resultPosition]);
+    AD_CONTRACT_CHECK(resultPosition < assembledWordViews_.size(),
+                      "Result position ", resultPosition,
+                      " is out of range for an output of ",
+                      assembledWordViews_.size(), " words");
+    AD_CONTRACT_CHECK(!slotFilledTracking_[resultPosition], "Result position ",
+                      resultPosition, " was already assigned");
     slotFilledTracking_[resultPosition] = true;
     assembledWordViews_[resultPosition] = word;
   }
@@ -566,15 +603,21 @@ class MultiSourceVocabBatchAssembler {
   void scatterSubBatchResultAtPositions(
       VocabBatchLookupResult subBatchResult,
       ql::span<const size_t> resultPositions) {
-    AD_CONTRACT_CHECK(subBatchResult.size() == resultPositions.size());
+    AD_CONTRACT_CHECK(subBatchResult.size() == resultPositions.size(),
+                      "Sub-batch has ", subBatchResult.size(), " words but ",
+                      resultPositions.size(), " target positions were given");
 
+    // Retain the owner first (stealing it from the by-value argument instead
+    // of copying it), so that no view is ever recorded without its owner, even
+    // if a position check below throws. The moved-from `subBatchResult` keeps
+    // its span, which stays valid because the owner now lives in
+    // `storageOwners_`.
+    if (subBatchResult.storage_ != nullptr) {
+      storageOwners_.push_back(std::move(subBatchResult.storage_));
+    }
     for (auto [resultPosition, word] :
          ::ranges::views::zip(resultPositions, subBatchResult)) {
       assignWordAtPosition(resultPosition, word);
-    }
-    // Steal the owner of the (by-value) argument instead of copying it.
-    if (subBatchResult.storage_ != nullptr) {
-      storageOwners_.push_back(std::move(subBatchResult.storage_));
     }
   }
 
@@ -603,10 +646,12 @@ class MultiSourceVocabBatchAssembler {
     AD_CORRECTNESS_CHECK(assembledWordViews_.size() ==
                          slotFilledTracking_.size());
     AD_CORRECTNESS_CHECK(!assembledWordViews_.empty());
+    // Every output position must have been filled by the caller.
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
+        slotFilledTracking_, [](bool isFilled) { return isFilled; }));
+
     // `storageOwners_` is empty iff all words were placed via
     // `assignUnownedViewAtPosition`, which is valid.
-    AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-        slotFilledTracking_, [](bool isFilled) { return isFilled; }));
 
     auto multiOwnerData = std::make_shared<MultiOwnerVocabBatchLookupData>(
         MultiOwnerVocabBatchLookupData::Passkey{}, std::move(storageOwners_),
@@ -680,16 +725,21 @@ using IndicesAndPositionsByMarker =
 // lists per marker. For each input index, `getMarkerAndVocabIndex` extracts
 // the marker that identifies the underlying vocabulary and the unmarked vocab
 // index; the index is paired with its position in the input, and both are
-// grouped by marker.
+// grouped by marker. `getMarkerAndVocabIndex` takes a `size_t` and returns a
+// pair (`marker`, `vocabIndex`), where `marker` must be smaller than
+// `NumVocabs`.
 template <size_t NumVocabs, typename GetMarkerAndVocabIndex>
-IndicesAndPositionsByMarker<NumVocabs> partitionMarkerIndicesAndPositions(
+[[nodiscard]] IndicesAndPositionsByMarker<NumVocabs>
+partitionMarkerIndicesAndPositions(
     ql::span<const size_t> indices,
     GetMarkerAndVocabIndex getMarkerAndVocabIndex) {
   IndicesAndPositionsByMarker<NumVocabs> out;
   for (const auto& [resultPosition, markedIndex] :
        ::ranges::views::enumerate(indices)) {
     auto [marker, underlyingIndex] = getMarkerAndVocabIndex(markedIndex);
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " of marked index ", markedIndex, " is not smaller than ",
+                      NumVocabs);
     out[marker].addPair(underlyingIndex, resultPosition);
   }
   return out;
@@ -712,18 +762,23 @@ class MarkerBatchLookups {
 
   // Return the lookup result for the given vocabulary marker.
   std::optional<VocabBatchLookupResult>& operator[](size_t marker) {
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " is not smaller than ", NumVocabs);
     return results_[marker];
   }
-  const std::optional<VocabBatchLookupResult>& operator[](size_t marker) const {
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
+  [[nodiscard]] const std::optional<VocabBatchLookupResult>& operator[](
+      size_t marker) const {
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " is not smaller than ", NumVocabs);
     return results_[marker];
   }
 
   // Release the lookup result for the given vocabulary marker exactly once.
-  VocabBatchLookupResult release(size_t marker) {
-    AD_CORRECTNESS_CHECK(marker < NumVocabs);
-    AD_CORRECTNESS_CHECK(results_[marker].has_value());
+  [[nodiscard]] VocabBatchLookupResult release(size_t marker) {
+    AD_CONTRACT_CHECK(marker < NumVocabs, "Marker ", marker,
+                      " is not smaller than ", NumVocabs);
+    AD_CONTRACT_CHECK(results_[marker].has_value(), "The result of marker ",
+                      marker, " is missing or was already released");
     auto result = std::move(results_[marker].value());
     results_[marker].reset();
     return result;
@@ -735,12 +790,14 @@ class MarkerBatchLookups {
 // `VocabBatchLookupResult` where each word is at the position of its original
 // input index.
 template <size_t NumVocabs, typename ReleaseLookupResultForMarker>
-VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
+[[nodiscard]] VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
     const IndicesAndPositionsByMarker<NumVocabs>& markerIndicesAndPositions,
     ReleaseLookupResultForMarker releaseLookupResult) {
   size_t totalPositions = 0;
   for (const auto& markerIndices : markerIndicesAndPositions) {
-    AD_CONTRACT_CHECK(markerIndices.size() <= SIZE_MAX - totalPositions);
+    AD_CONTRACT_CHECK(markerIndices.size() <= SIZE_MAX - totalPositions,
+                      "Marker batch of ", markerIndices.size(),
+                      " positions overflows the total of ", totalPositions);
     totalPositions += markerIndices.size();
   }
   MultiSourceVocabBatchAssembler assembler(totalPositions);
@@ -758,9 +815,10 @@ VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
 }
 
 // _____________________________________________________________________________
-// Convenient overload accepting `MarkerBatchLookups`.
+// Provide a convenience overload that releases the per-marker results from a
+// `MarkerBatchLookups`.
 template <size_t NumVocabs>
-VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
+[[nodiscard]] VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
     MarkerBatchLookups<NumVocabs> markerLookups,
     const IndicesAndPositionsByMarker<NumVocabs>& markerIndicesAndPositions) {
   return mergeMarkerBatchesInInputOrder(markerIndicesAndPositions,
@@ -880,7 +938,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
     if constexpr (ad_utility::similarToInstantiation<decltype(word),
                                                      std::optional>) {
       if (word.has_value()) {
-        words.emplace_back(word.value());
+        words.emplace_back(std::move(word).value());
       } else {
         words.push_back(wordAsStringOrPlaceholder(vocab, index));
       }
@@ -1064,5 +1122,306 @@ class WordWriterBase {
   // The base classes have to implement the actual logic for `finish` here.
   virtual void finishImpl() = 0;
 };
+
+// The parallel writers of a vocabulary. A `WordWriterBase` (see above) is fed
+// one word at a time by a single thread. A `BlockWriterBase` is fed blocks of
+// consecutive words and splits the writing of a block into two steps:
+//
+// 1. The `prepare` step runs on any thread and concurrently for different
+// blocks (the compression of the words, the geometry info of WKT literals).
+//
+// 2. The append step (the `AppendBlock` that `prepare` returns) appends the
+// prepared block to the files. It runs on a single thread, in the order of the
+// blocks.
+//
+// NOTE: This lets the vocabulary merger (see `index/VocabularyMerger.h`, in a
+// follow-up PR) do the expensive per-word work of the writing on all its
+// threads.
+
+// A block of consecutive words of a vocabulary, the unit in which a
+// `BlockWriterBase` works: the words, whether each word is to be externalized
+// (see `WordWriterBase::operator()`), and the position of the first word in the
+// vocabulary. The concatenated bytes of the words and their offsets (see
+// `data()` and `offsets()`) are directly what `VocabularyOnDisk` writes to
+// disk.
+struct WordBlock {
+  CompactVectorOfStrings<char> words_;
+  std::vector<bool> isExternal_;
+  uint64_t firstPosition_ = 0;
+  // The precomputed payload of the words, `payloadSize_` bytes per word (see
+  // `BlockWriterBase::precomputePayload`), empty if the vocabulary has none.
+  std::string payload_;
+  size_t payloadSize_ = 0;
+
+  // Append a word, with its precomputed `payload` (of `payloadSize_` bytes,
+  // empty if the vocabulary has none).
+  void push(std::string_view word, bool isExternal,
+            std::string_view payload = {}) {
+    AD_CORRECTNESS_CHECK(payload.size() == payloadSize_);
+    words_.push_back(word);
+    isExternal_.push_back(isExternal);
+    payload_.append(payload);
+  }
+
+  // Append a word whose payload (`payloadSize_` bytes) is not computed yet,
+  // and return the bytes of its payload inside this block, for the caller to
+  // compute it into (see `BlockWriterBase::precomputePayload`). The returned
+  // span is only valid until the next `push` or `pushWithPayloadSlot`.
+  ql::span<char> pushWithPayloadSlot(std::string_view word, bool isExternal) {
+    words_.push_back(word);
+    isExternal_.push_back(isExternal);
+    size_t offset = payload_.size();
+    payload_.resize(offset + payloadSize_);
+    return {payload_.data() + offset, payloadSize_};
+  }
+
+  // The payload of the `i`-th word.
+  std::string_view payload(size_t i) const {
+    return std::string_view{payload_}.substr(i * payloadSize_, payloadSize_);
+  }
+
+  size_t numWords() const { return isExternal_.size(); }
+  bool empty() const { return numWords() == 0; }
+
+  // The `i`-th word of the block.
+  std::string_view word(size_t i) const { return words_[i]; }
+
+  // The words of the block as views into `words_`.
+  std::vector<std::string_view> words() const {
+    return {words_.begin(), words_.end()};
+  }
+
+  // The concatenated bytes of all the words.
+  ql::span<const char> data() const { return words_.dataSpan(); }
+
+  // The offset of each word in `data()`, plus the end of the last word. Empty
+  // if the block is empty.
+  ql::span<const uint64_t> offsets() const { return words_.offsetsSpan(); }
+};
+
+// The append step of a block that `BlockWriterBase::prepare` returns, see the
+// comment above. It has to be called exactly once.
+using AppendBlock = absl::AnyInvocable<void() &&>;
+
+// The default number of words per block for a vocabulary that has no
+// requirement of its own (see `BlockWriterBase::blockSize`).
+inline constexpr size_t DEFAULT_WORDS_PER_VOCABULARY_BLOCK = 100'000;
+
+// The block-wise counterpart of a `WordWriterBase`, see the comment above. The
+// blocks have to be appended in the order of their positions, and every block
+// but the last has to consist of exactly `blockSize()` words, with the first
+// block starting at position `0`.
+class BlockWriterBase {
+ private:
+  std::string readableName_;
+  std::atomic_bool finishWasCalled_ = false;
+
+ public:
+  // NOTE: The destructor is `noexcept(false)` like the one of
+  // `WordWriterBase`, because the block writers hold word writers. It is
+  // deliberately not `= default`, which GCC 8 rejects (it deletes a defaulted
+  // destructor whose exception specification differs from the implicit one).
+  virtual ~BlockWriterBase() noexcept(false) {}
+
+  // The number of words per block that this vocabulary requires, for example
+  // because it creates one codebook per block. A vocabulary without such a
+  // requirement returns `DEFAULT_WORDS_PER_VOCABULARY_BLOCK`.
+  virtual size_t blockSize() const = 0;
+
+  // The index of the `word` at the given `position` (the number of words
+  // before it), which for most vocabularies is the position itself. This is
+  // what the corresponding `WordWriterBase::operator()` would return. This
+  // function must be thread-safe (for all overrides), because it may be called
+  // from any thread.
+  virtual uint64_t indexOf(uint64_t position,
+                           [[maybe_unused]] std::string_view word) const {
+    return position;
+  }
+
+  // The number of bytes that `precomputePayload` produces per word, `0` if the
+  // vocabulary precomputes nothing.
+  virtual size_t precomputedPayloadSize() const { return 0; }
+
+  // Compute the payload of a `word` (see `precomputedPayloadSize`) into
+  // `payload`, which has that many bytes. This is the expensive per-word work
+  // of a vocabulary (the geometry info of a WKT literal), which the caller can
+  // do wherever it has the words and idle threads; the block then carries the
+  // payload (see `WordBlock::payload_`), and `prepare` uses it instead of
+  // computing it. Never called if the size is `0`. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
+  virtual void precomputePayload(
+      [[maybe_unused]] std::string_view word,
+      [[maybe_unused]] ql::span<char> payload) const {}
+
+  // Do the part of the writing of the `block` that does not depend on any
+  // other block. The block carries the precomputed payload of its words if
+  // `precomputedPayloadSize()` is not `0`. This function must be thread-safe
+  // (for all overrides), because it may be called from any thread and
+  // concurrently for different blocks. Return the step that appends the
+  // prepared block to the vocabulary, which has to be called from a single
+  // thread, in the order of the blocks, and before `finish()`.
+  virtual AppendBlock prepare(WordBlock block) = 0;
+
+  // Signal that the last block has been appended (flush and close the files).
+  // No further block may be prepared or appended afterwards.
+  void finish() {
+    if (finishWasCalled_.exchange(true)) {
+      return;
+    }
+    finishImpl();
+  }
+  bool finishWasCalled() const { return finishWasCalled_; }
+
+  // A readable name of the vocabulary that is written, for log messages.
+  std::string& readableName() { return readableName_; }
+
+ private:
+  virtual void finishImpl() = 0;
+};
+
+// The writer of a vocabulary that may consist of several sub-vocabularies (see
+// `SplitVocabulary`), each of which is written by a `BlockWriterBase` of its
+// own. The user first asks for the sub-vocabulary of a word, then for the index
+// that the word gets at a given position in that sub-vocabulary, and writes
+// the words of each sub-vocabulary in blocks via its block writer.
+class ParallelWordWriterBase {
+ private:
+  std::atomic_bool finishWasCalled_ = false;
+
+ public:
+  // NOTE: Not `= default`, see `~BlockWriterBase`.
+  virtual ~ParallelWordWriterBase() noexcept(false) {}
+
+  // The number of sub-vocabularies, at least one.
+  virtual uint8_t numSubVocabularies() const = 0;
+
+  // The sub-vocabulary to which the `word` belongs. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
+  virtual uint8_t subVocabularyOf(std::string_view word) const = 0;
+
+  // The index in the whole vocabulary of the `word` at the given `position` in
+  // the sub-vocabulary `sub`. This function must be thread-safe (for all
+  // overrides), because it may be called from any thread.
+  virtual uint64_t indexOf(uint8_t sub, uint64_t position,
+                           std::string_view word) const = 0;
+
+  // The block writer of the sub-vocabulary `sub`.
+  virtual BlockWriterBase& blockWriter(uint8_t sub) = 0;
+  const BlockWriterBase& blockWriter(uint8_t sub) const {
+    return const_cast<ParallelWordWriterBase*>(this)->blockWriter(sub);
+  }
+
+  // Finish all the block writers.
+  void finish() {
+    if (finishWasCalled_.exchange(true)) {
+      return;
+    }
+    for (uint8_t sub = 0; sub < numSubVocabularies(); ++sub) {
+      blockWriter(sub).finish();
+    }
+  }
+
+  // The readable name of the (first) sub-vocabulary, see
+  // `BlockWriterBase::readableName`.
+  std::string& readableName() { return blockWriter(0).readableName(); }
+};
+
+// The `ParallelWordWriterBase` of a vocabulary with a single sub-vocabulary.
+class SingleVocabularyParallelWriter : public ParallelWordWriterBase {
+ private:
+  std::unique_ptr<BlockWriterBase> blockWriter_;
+
+ public:
+  explicit SingleVocabularyParallelWriter(
+      std::unique_ptr<BlockWriterBase> blockWriter)
+      : blockWriter_{std::move(blockWriter)} {
+    AD_CONTRACT_CHECK(blockWriter_ != nullptr);
+  }
+  uint8_t numSubVocabularies() const override { return 1; }
+  uint8_t subVocabularyOf(std::string_view) const override { return 0; }
+  uint64_t indexOf(uint8_t sub, uint64_t position,
+                   std::string_view word) const override {
+    AD_CORRECTNESS_CHECK(sub == 0);
+    return blockWriter_->indexOf(position, word);
+  }
+  BlockWriterBase& blockWriter(uint8_t sub) override {
+    AD_CORRECTNESS_CHECK(sub == 0);
+    return *blockWriter_;
+  }
+};
+
+namespace detail {
+// Whether `T` has a member function `finish()`, see `BlockWriterFromCallback`.
+template <typename T, typename = void>
+struct HasFinish : std::false_type {};
+template <typename T>
+struct HasFinish<T, std::void_t<decltype(std::declval<T&>().finish())>>
+    : std::true_type {};
+}  // namespace detail
+
+// A `BlockWriterBase` for a vocabulary that has no block writer of its own:
+// the words of a block are handed one by one to the `callback`, which has the
+// signature of `WordWriterBase::operator()` and which has to return the
+// position of the word (the block writer checks that). If the callback has a
+// `finish()`, it is called by `finishImpl`. The `prepare` step does nothing,
+// so all the work of such a writer happens in the append step.
+template <typename Callback>
+class BlockWriterFromCallback : public BlockWriterBase {
+ private:
+  Callback callback_;
+
+ public:
+  explicit BlockWriterFromCallback(Callback callback)
+      : callback_{std::move(callback)} {}
+
+  // Direct access to the callback.
+  Callback& callback() { return callback_; }
+
+  size_t blockSize() const override {
+    return DEFAULT_WORDS_PER_VOCABULARY_BLOCK;
+  }
+
+  AppendBlock prepare(WordBlock block) override {
+    return [this, block = std::move(block)]() {
+      for (size_t i = 0; i < block.numWords(); ++i) {
+        uint64_t position = std::invoke(
+            callback_, block.word(i), static_cast<bool>(block.isExternal_[i]));
+        AD_CORRECTNESS_CHECK(position == block.firstPosition_ + i);
+      }
+    };
+  }
+
+ private:
+  void finishImpl() override {
+    if constexpr (detail::HasFinish<Callback>::value) {
+      callback_.finish();
+    }
+  }
+};
+
+// The callback for `BlockWriterFromCallback` that writes into a
+// `WordWriterBase` (which it owns).
+class WordWriterCallback {
+ private:
+  std::unique_ptr<WordWriterBase> writer_;
+
+ public:
+  explicit WordWriterCallback(std::unique_ptr<WordWriterBase> writer)
+      : writer_{std::move(writer)} {
+    AD_CONTRACT_CHECK(writer_ != nullptr);
+  }
+  uint64_t operator()(std::string_view word, bool isExternal) {
+    return (*writer_)(word, isExternal);
+  }
+  void finish() { writer_->finish(); }
+};
+
+// Make the `BlockWriterBase` that writes word by word into the given
+// `WordWriterBase`, for the vocabularies without a block writer of their own.
+inline std::unique_ptr<BlockWriterBase> makeBlockWriterFromWordWriter(
+    std::unique_ptr<WordWriterBase> writer) {
+  return std::make_unique<BlockWriterFromCallback<WordWriterCallback>>(
+      WordWriterCallback{std::move(writer)});
+}
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H

@@ -17,6 +17,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 namespace {
 using namespace deltaTriplesTestHelpers;
 using ad_utility::testing::encodedIriManager;
@@ -81,8 +83,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager);
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         expectExecuteUpdateHelper(update, qec, *index);
         index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -103,8 +105,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager);
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };

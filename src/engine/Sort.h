@@ -22,10 +22,10 @@
 // order is cheap to compute (just a bitwise compare of integers), but is
 // different from the `semantic` order that is computed by ORDER BY. For
 // example, in the internal Order `Int(0) < Int(-3)`. For details on the
-// different orderings see `ValueId.h` and `ValueIdComparators.h`. The `Sort`
-// class has to be used when an operation requires a presorted input (e.g. JOIN,
-// GROUP BY). To compute an `ORDER BY` clause at the end of the query
-// processing, the `OrderBy` class from `OrderBy.h/.cpp` has to be used.
+// different orderings see `FoldedValueId.h` and `ValueIdComparators.h`. The
+// `Sort` class has to be used when an operation requires a presorted input
+// (e.g. JOIN, GROUP BY). To compute an `ORDER BY` clause at the end of the
+// query processing, the `OrderBy` class from `OrderBy.h/.cpp` has to be used.
 class Sort : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
@@ -52,7 +52,8 @@ class Sort : public Operation {
     return subtree_->getSizeEstimate();
   }
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   virtual float getMultiplicity(size_t col) override {
@@ -101,7 +102,7 @@ class Sort : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const std::set<Variable>& variables) const override;
+      const std::set<Variable>& requestedVariables) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
