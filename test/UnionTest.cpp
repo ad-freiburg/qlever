@@ -336,21 +336,21 @@ TEST(Union, sortedMergeWithColumnMissingOnOneSide) {
   // The columns of the result are those of `left`, followed by the remaining
   // ones of `right`, so `targetOrder` sorts by `?a ?b ?c` in both cases.
   auto test = [&](auto left, auto right, std::vector<ColumnIndex> targetOrder,
-                  const IdTable& expected) {
+                  const IdTable& expected,
+                  ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
     Union unionOperation{qec, std::move(left), std::move(right),
                          std::move(targetOrder)};
     for (auto mode : {ComputationMode::FULLY_MATERIALIZED,
                       ComputationMode::LAZY_IF_SUPPORTED}) {
+      SCOPED_TRACE(mode == ComputationMode::FULLY_MATERIALIZED
+                       ? "fully materialized"
+                       : "lazy if supported");
       qec->getQueryTreeCache().clearAll();
       auto result = unionOperation.getResult(true, mode);
-      IdTable actual{3, ad_utility::testing::makeAllocator()};
-      if (result->isFullyMaterialized()) {
-        actual = result->idTableView().clone();
-      } else {
-        for (const auto& [idTable, localVocab] : result->idTables()) {
-          actual.insertAtEnd(idTable);
-        }
-      }
+      auto actual = result->isFullyMaterialized()
+                        ? result->idTableView().clone()
+                        : aggregateTables(result->idTables(), 3).first;
       EXPECT_EQ(actual, expected);
     }
   };

@@ -491,23 +491,18 @@ Result::LazyResult Union::computeResultKeepOrder(
   Range leftRange = toRange(result1);
   Range rightRange = toRange(result2);
 
-  // Note: The comparison must not stop at a column that is missing in one of
-  // the inputs: such a column is UNDEF, which can be equal to an UNDEF in the
-  // other input, so the following columns can still be relevant.
-  ql::span<const ColumnIndex> comparatorOrder{targetOrder_};
-
   auto applyPermutation = [this](IdTable idTable,
                                  const std::vector<ColumnIndex>& permutation) {
     return transformToCorrectColumnFormat(std::move(idTable), permutation);
   };
 
   return std::visit(
-      [this, requestLaziness, &result1, &result2, &comparatorOrder,
-       &applyPermutation](auto left, auto right) {
+      [this, requestLaziness, &result1, &result2, &applyPermutation](
+          auto left, auto right) {
         return ad_utility::callFixedSizeVi(
-            comparatorOrder.size(),
+            targetOrder_.size(),
             [this, requestLaziness, &result1, &result2, &left, &right,
-             &comparatorOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
+             &applyPermutation](auto COMPARATOR_WIDTH) {
               constexpr size_t extent =
                   COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),
@@ -516,10 +511,14 @@ Result::LazyResult Union::computeResultKeepOrder(
               sortedUnion::IterationData rightData{std::move(result2),
                                                    std::move(right),
                                                    computePermutation<false>()};
+              // Note: The comparison must not stop at a column that is
+              // missing in one of the inputs: such a column is UNDEF, which
+              // can be equal to an UNDEF in the other input, so the following
+              // columns can still be relevant.
               return Result::LazyResult{sortedUnion::SortedUnionImpl{
                   std::move(leftData), std::move(rightData), requestLaziness,
                   _columnOrigins, allocator(),
-                  ql::span<const ColumnIndex, extent>{comparatorOrder},
+                  ql::span<const ColumnIndex, extent>{targetOrder_},
                   std::move(applyPermutation)}};
             });
       },
