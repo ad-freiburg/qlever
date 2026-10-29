@@ -281,7 +281,7 @@ Bind::makeTreeWithStrippedColumns(
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
   bool bindTargetRequested =
-      ad_util::contains(requestedVariables, _bind._target);
+      ad_utility::contains(requestedVariables, _bind._target);
   if (bindTargetRequested) {
     auto addVarsResult =
         varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
