@@ -10,13 +10,15 @@
 // Benchmarks for the batch vocabulary lookup API introduced in
 // `src/index/vocabulary/VocabularyTypes.h` (`VocabBatchLookupResult` and the
 // contiguous/arena builders):
-// * `VocabBatchLookupMicroBenchmark` (synthetic): assembling a batch from
-//   precomputed word sizes with `ContiguousVocabBatchBuilder` or
-//   `ArenaVocabBatchBuilder` vs. the old per-word `vector<string>`-by-value
-//   cost.
-// * `VocabBatchLookupEndToEndBenchmark`: resolving shuffled index batches
+// * `VocabBatchLookupMicroBenchmark` (synthetic): assembling a batch with
+//   `ContiguousVocabBatchBuilder` (from precomputed word sizes) or
+//   `ArenaVocabBatchBuilder` (appending the words one by one) vs. the old
+//   per-word `vector<string>`-by-value cost.
+// * `VocabBatchLookupEndToEndBenchmark`: resolving a shuffled index batch
 //   against a real `VocabularyInMemoryBinSearch` via a single `lookupBatch`
-//   call vs. the old per-word `operator[]` loop.
+//   call vs. the old per-word `operator[]` loop. For this vocabulary,
+//   `lookupBatch` is the sequential fallback, so the comparison measures the
+//   overhead of the result type, not batched I/O.
 
 #include <absl/strings/str_cat.h>
 
@@ -41,8 +43,11 @@ namespace ad_benchmark {
 namespace {
 
 // _____________________________________________________________________________
+// Parse the unsigned integer in the environment variable value `value`.
+// Return `defaultValue` if the variable is unset or empty, and fail on
+// malformed or out-of-range input.
 size_t parseEnvironmentSize(const char* value, size_t defaultValue) {
-  if (value == nullptr) {
+  if (value == nullptr || value[0] == '\0') {
     return defaultValue;
   }
   errno = 0;
@@ -53,8 +58,9 @@ size_t parseEnvironmentSize(const char* value, size_t defaultValue) {
 }
 
 // _____________________________________________________________________________
-// Deterministic synthetic vocabulary words: Wikidata-style IRIs of varying
-// length. Every word is unique because the zero-padded index is encoded into
+// Deterministic synthetic vocabulary words of varying length: a third each are
+// Wikidata entity IRIs, language-tagged literals, and property IRIs in angle
+// brackets. Every word is unique because the zero-padded index is encoded into
 // it (a real vocabulary has no duplicate words); only word 0 is empty, to cover
 // the zero-size path.
 std::string makeSyntheticWord(size_t index) {
@@ -71,17 +77,24 @@ std::string makeSyntheticWord(size_t index) {
   }
   if (index % 3 == 0) {
     return "http://www.wikidata.org/entity/Q" + suffix;
-  } else if (index % 3 == 1) {
+  }
+  if (index % 3 == 1) {
     return "\"literal value " + suffix + "\"@en";
   }
   return "<http://example.org/property/" + suffix + ">";
 }
 
 // _____________________________________________________________________________
-// Cheap checksum over the looked-up words. Returned (not discarded) by every
-// measured lambda so the optimizer cannot eliminate the looked-up data. It
-// folds only the size and the first and last byte of each word (XOR), so its
-// cost does not dominate the timed region.
+// Sink for the checksums of the measured lambdas. The benchmark framework
+// discards the return value of a measured lambda, so every lambda stores its
+// checksum here instead; the volatile store keeps the optimizer from
+// eliminating the looked-up data.
+volatile size_t checksumSink = 0;
+
+// _____________________________________________________________________________
+// Cheap checksum over the looked-up words. It folds only the size and the
+// first and last byte of each word (XOR), so its cost does not dominate the
+// timed region.
 size_t foldWord(size_t hash, std::string_view word) {
   hash += word.size();
   if (!word.empty()) {
@@ -149,10 +162,10 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
         std::getenv("VOCAB_BATCH_MICRO_INNER_REPETITIONS"), 5);
     AD_CONTRACT_CHECK(repetitions > 0 && repetitions <= maxRepetitions);
     // Profiling: run a single variant so a profiler attributes all samples
-    // to one code path. Unset or empty runs all three measurements.
-    // One of `baseline`, `contiguous`, `arena`.
+    // to one code path. The value is one of `baseline`, `contiguous`, `arena`.
+    // If the variable is unset or empty, all three measurements run.
     const char* onlyVariant = std::getenv("VOCAB_BATCH_MICRO_ONLY");
-    auto runVariant = [onlyVariant](std::string_view variant) {
+    const auto runVariant = [onlyVariant](std::string_view variant) {
       return onlyVariant == nullptr || onlyVariant[0] == '\0' ||
              std::string_view{onlyVariant} == variant;
     };
@@ -169,7 +182,7 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
           }
           checksum += checksumStrings(copies);
         }
-        return checksum;
+        checksumSink = checksum;
       });
     }  // if (runVariant("baseline"))
 
@@ -179,19 +192,19 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
         size_t checksum = 0;
         for (size_t repetition = 0; repetition < repetitions; ++repetition) {
           ContiguousVocabBatchBuilder builder{sizes_};
-          auto targets = builder.targets();
+          const auto targets = builder.targets();
           AD_CORRECTNESS_CHECK(targets.size() == words_.size());
           for (size_t i = 0; i < words_.size(); ++i) {
             std::memcpy(targets[i], words_[i].data(), words_[i].size());
           }
-          auto result = std::move(builder).finalize();
+          const auto result = std::move(builder).finalize();
           checksum += checksumViews({result.data(), result.size()});
         }
-        return checksum;
+        checksumSink = checksum;
       });
     }  // if (runVariant("contiguous"))
 
-    // New API: PMR monotonic arena decode path.
+    // New API: PMR monotonic arena, appending the words one by one.
     if (runVariant("arena")) {
       group.addMeasurement("ArenaVocabBatchBuilder::appendWord", [&] {
         size_t checksum = 0;
@@ -200,10 +213,10 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
           for (std::string_view word : words_) {
             builder.appendWord(word);
           }
-          auto result = std::move(builder).finalize();
+          const auto result = std::move(builder).finalize();
           checksum += checksumViews({result.data(), result.size()});
         }
-        return checksum;
+        checksumSink = checksum;
       });
     }  // if (runVariant("arena"))
 
@@ -214,11 +227,13 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
 AD_REGISTER_BENCHMARK(VocabBatchLookupMicroBenchmark);
 
 // _____________________________________________________________________________
-// End-to-end benchmark: resolve shuffled index batches against a real
+// End-to-end benchmark: resolve a shuffled index batch against a real
 // on-heap `VocabularyInMemoryBinSearch` (50,000 words), comparing the old
 // per-word `operator[]` loop with a single `lookupBatch` call.
 class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
  private:
+  // The vocabulary file; it and its `.ids` companion are removed again in the
+  // destructor.
   std::string filename_ = "VocabBatchLookupBenchmark.vocab.tmp";
   VocabularyInMemoryBinSearch vocabulary_;
   // Shuffled batch of vocabulary indices, resolved by every measurement.
@@ -234,8 +249,11 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
     constexpr size_t numWords = 50'000;
     constexpr size_t batchSize = 4'096;
     ad_utility::deleteFile(filename_, false);
-    ad_utility::deleteFile(filename_ + ".ids", false);
+    ad_utility::deleteFile(
+        absl::StrCat(filename_, VocabularyInMemoryBinSearch::idsSuffix), false);
     {
+      // The synthetic words are not sorted. That is fine, because the
+      // benchmark only performs lookups by index, never a binary search.
       VocabularyInMemoryBinSearch::WordWriter writer{filename_};
       for (size_t i = 0; i < numWords; ++i) {
         writer(makeSyntheticWord(i), i);
@@ -243,11 +261,13 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
       writer.finish();
     }
     vocabulary_.open(filename_);
-    AD_CONTRACT_CHECK(vocabulary_.size() == numWords);
+    AD_CORRECTNESS_CHECK(vocabulary_.size() == numWords);
 
     batch_.resize(batchSize);
     std::iota(batch_.begin(), batch_.end(), 0);
-    // Deterministic shuffle with a fixed seed for reproducible batches.
+    // Shuffle the indices deterministically with a fixed seed, then spread
+    // them over the whole vocabulary by multiplying with a prime, so that the
+    // batch does not only touch the first 4,096 words.
     std::mt19937_64 randomEngine{42};
     std::shuffle(batch_.begin(), batch_.end(), randomEngine);
     for (size_t& index : batch_) {
@@ -255,13 +275,13 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
     }
 
     // Validate the benchmark once: batch lookup must agree with `operator[]`.
-    auto expected = vocabulary_.lookupBatch(
+    const auto expected = vocabulary_.lookupBatch(
         ql::span<const size_t>{batch_.data(), batch_.size()});
-    AD_CONTRACT_CHECK(expected.size() == batch_.size());
+    AD_CORRECTNESS_CHECK(expected.size() == batch_.size());
     for (size_t i = 0; i < batch_.size(); ++i) {
-      auto single = vocabulary_[batch_[i]];
-      AD_CONTRACT_CHECK(single.has_value());
-      AD_CONTRACT_CHECK(expected[i] == *single);
+      const auto singleWord = vocabulary_[batch_[i]];
+      AD_CORRECTNESS_CHECK(singleWord.has_value());
+      AD_CORRECTNESS_CHECK(expected[i] == *singleWord);
     }
     isSetUp_ = true;
   }
@@ -269,7 +289,8 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
  public:
   ~VocabBatchLookupEndToEndBenchmark() override {
     ad_utility::deleteFile(filename_, false);
-    ad_utility::deleteFile(filename_ + ".ids", false);
+    ad_utility::deleteFile(
+        absl::StrCat(filename_, VocabularyInMemoryBinSearch::idsSuffix), false);
   }
 
   std::string name() const final {
@@ -296,23 +317,23 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
         std::vector<std::string> copies;
         copies.reserve(batch.size());
         for (size_t index : batch) {
-          auto word = vocabulary_[index];
+          const auto word = vocabulary_[index];
           AD_CORRECTNESS_CHECK(word.has_value());
           copies.emplace_back(*word);
         }
         checksum += checksumStrings(copies);
       }
-      return checksum;
+      checksumSink = checksum;
     });
 
     // New path: a single batched lookup returning an owning result.
     group.addMeasurement("single lookupBatch", [&] {
       size_t checksum = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-        auto result = vocabulary_.lookupBatch(batch);
+        const auto result = vocabulary_.lookupBatch(batch);
         checksum += checksumViews({result.data(), result.size()});
       }
-      return checksum;
+      checksumSink = checksum;
     });
 
     return results;
