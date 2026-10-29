@@ -477,9 +477,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto leftVar = getVar(leftCol);
   auto rightVar = getVar(rightCol);
 
-  // Match the operation with the start side (left if bound, right oterwise).
-  // Since it is the same on all bound sides, we can compute it independently of
-  // the sides which are to bind.
+  // Match the operation with the start side (left if bound, right otherwise).
+  // Since it is the same on all bound sides, we only need to compute it once.
   size_t matchCol = leftCol.has_value() ? leftCol.value() : rightCol.value();
   op = matchWithKnowledgeGraph(matchCol, std::move(op));
 
