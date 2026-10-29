@@ -377,6 +377,10 @@ class Qlever {
   Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
          qlever::Executor executor = ad_utility::globalExecutor());
 
+  // Remove the actions that the constructors registered on the global runtime
+  // parameters, as they refer to this instance.
+  ~Qlever();
+
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work (unless a different one is passed to
   // `createQueryExecutionContext`).
