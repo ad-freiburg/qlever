@@ -511,10 +511,11 @@ Result::LazyResult Union::computeResultKeepOrder(
               sortedUnion::IterationData rightData{std::move(result2),
                                                    std::move(right),
                                                    computePermutation<false>()};
-              // Note: The comparison must not stop at a column that is
-              // missing in one of the inputs: such a column is UNDEF, which
-              // can be equal to an UNDEF in the other input, so the following
-              // columns can still be relevant.
+              // NOTE: The comparison has to consider all columns of
+              // `targetOrder_`, also those after a column that is missing in
+              // one of the inputs. Such a column is UNDEF, which can be equal
+              // to an UNDEF in the other input, so the following columns can
+              // still decide.
               return Result::LazyResult{sortedUnion::SortedUnionImpl{
                   std::move(leftData), std::move(rightData), requestLaziness,
                   _columnOrigins, allocator(),
