@@ -52,7 +52,7 @@ class JoinImpl : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   uint64_t getSizeEstimateBeforeLimit() override {
     if (!sizeEstimateComputed_) {

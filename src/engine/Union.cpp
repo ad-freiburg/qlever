@@ -119,7 +119,9 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-std::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
+qlm::vector<ColumnIndex> Union::resultSortedOn() const {
+  return {targetOrder_.begin(), targetOrder_.end(), allocator()};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {

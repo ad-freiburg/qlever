@@ -1359,7 +1359,7 @@ QueryPlanner::JoinColumns QueryPlanner::getJoinColumns(const SubtreePlan& a,
 // _____________________________________________________________________________
 std::string QueryPlanner::getPruningKey(
     const SubtreePlan& plan,
-    const std::vector<ColumnIndex>& orderedOnColumns) const {
+    const qlm::vector<ColumnIndex>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();

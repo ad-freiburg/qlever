@@ -12,6 +12,7 @@
 #include "index/ExportIds.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/RdfEscaping.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -1883,7 +1884,9 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   auto idTable = makeIdTableFromVector({{42}, {1337}});
 
-  Result result{idTable.clone(), {}, LocalVocab{}};
+  Result result{idTable.clone(),
+                qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+                LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)), matchesIdTables(idTable));
@@ -1900,7 +1903,8 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
     co_yield {std::move(idTableB), LocalVocab{}};
   }(idTable1.clone(), idTable2.clone());
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator),
+                qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)),
@@ -1915,7 +1919,8 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
     co_yield pair1;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator),
+                qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 1, ._offset = 1}, result, resultSizeTotal);
@@ -1939,7 +1944,8 @@ TEST(ExportQueryExecutionTrees,
     co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator),
+                qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result,
@@ -1965,7 +1971,8 @@ TEST(ExportQueryExecutionTrees,
     co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator),
+                qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3}, result, resultSizeTotal);
@@ -1990,7 +1997,8 @@ TEST(ExportQueryExecutionTrees,
     co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator),
+                qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3, ._offset = 1}, result, resultSizeTotal);
@@ -2020,7 +2028,8 @@ TEST(ExportQueryExecutionTrees,
     co_yield pair3;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator),
+                qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 5, ._offset = 2}, result, resultSizeTotal);
@@ -2044,7 +2053,9 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
       co_return;
     }();
 
-    Result result{std::move(throwingGenerator), {}};
+    Result result{
+        std::move(throwingGenerator),
+        qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
     uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 0, ._offset = 0}, result, resultSizeTotal);
@@ -2064,7 +2075,9 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
       throw std::runtime_error(message);
     }();
 
-    Result result{std::move(throwAfterYieldGenerator), {}};
+    Result result{
+        std::move(throwAfterYieldGenerator),
+        qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()}};
     uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 1, ._offset = 0}, result, resultSizeTotal);

@@ -89,7 +89,7 @@ VariableToColumnMap Minus::computeVariableToColumnMap() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Minus::resultSortedOn() const {
+qlm::vector<ColumnIndex> Minus::resultSortedOn() const {
   if (rightIndexNestedLoopJoinIsPossible()) {
     return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }

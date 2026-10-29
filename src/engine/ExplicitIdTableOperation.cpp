@@ -105,8 +105,8 @@ std::unique_ptr<Operation> ExplicitIdTableOperation::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> ExplicitIdTableOperation::resultSortedOn() const {
-  return sortedColumns_;
+qlm::vector<ColumnIndex> ExplicitIdTableOperation::resultSortedOn() const {
+  return {sortedColumns_.begin(), sortedColumns_.end(), allocator()};
 }
 
 // _____________________________________________________________________________

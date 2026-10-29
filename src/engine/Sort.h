@@ -43,8 +43,8 @@ class Sort : public Operation {
  public:
   virtual std::string getDescriptor() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override {
-    return sortColumnIndices_;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return {sortColumnIndices_.begin(), sortColumnIndices_.end(), allocator()};
   }
 
  private:

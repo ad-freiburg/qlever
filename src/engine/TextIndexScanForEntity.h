@@ -63,7 +63,7 @@ class TextIndexScanForEntity : public Operation {
 
   bool knownEmptyResult() override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

@@ -127,7 +127,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
-  mutable std::optional<std::vector<ColumnIndex>> _resultSortedColumns =
+  mutable std::optional<qlm::vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
 
   // True if this operation does not handle limits/offsets itself and the
@@ -192,7 +192,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const std::vector<ColumnIndex>& getResultSortedOn() const;
+  const qlm::vector<ColumnIndex>& getResultSortedOn() const;
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
@@ -624,7 +624,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
    * @brief Compute and return the columns on which the result will be sorted
    * @return The columns on which the result will be sorted.
    */
-  [[nodiscard]] virtual std::vector<ColumnIndex> resultSortedOn() const = 0;
+  [[nodiscard]] virtual qlm::vector<ColumnIndex> resultSortedOn() const = 0;
 
   // get access to the generated warnings of this operation.
   const ThreadsafeWarnings& getWarnings() const { return warnings_; }

@@ -35,7 +35,7 @@ class Filter : public Operation {
  public:
   std::string getDescriptor() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override {
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 

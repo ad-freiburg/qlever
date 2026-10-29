@@ -106,8 +106,8 @@ size_t MultiColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
-  std::vector<ColumnIndex> sortedOn;
+qlm::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // The result is sorted on all join columns from the left subtree.
   for (const auto& a : _joinColumns) {
     sortedOn.push_back(a[0]);

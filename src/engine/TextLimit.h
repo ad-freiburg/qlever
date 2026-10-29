@@ -59,7 +59,7 @@ class TextLimit : public Operation {
     return limit_ == 0 || child_->knownEmptyResult();
   }
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

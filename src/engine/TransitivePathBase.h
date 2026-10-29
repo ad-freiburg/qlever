@@ -58,7 +58,7 @@ struct TransitivePathSide {
     }
 
     auto [tree, col] = treeAndCol_.value();
-    const std::vector<ColumnIndex>& sortedOn =
+    const qlm::vector<ColumnIndex>& sortedOn =
         tree->getRootOperation()->getResultSortedOn();
 
     // If the column contains undef values, we can't guarantee the output order.
@@ -253,7 +253,7 @@ class TransitivePathBase : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 

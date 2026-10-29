@@ -129,7 +129,7 @@ class EmptyPath : public Operation {
       const Variable& variable) const override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;

@@ -528,7 +528,7 @@ class QueryPlanner {
 
   std::string getPruningKey(
       const SubtreePlan& plan,
-      const std::vector<ColumnIndex>& orderedOnColumns) const;
+      const qlm::vector<ColumnIndex>& orderedOnColumns) const;
 
   // Configure the behavior of the `applyFiltersIfPossible` function below.
   enum class FilterMode {

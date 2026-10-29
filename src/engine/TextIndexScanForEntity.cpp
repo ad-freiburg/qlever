@@ -123,8 +123,8 @@ bool TextIndexScanForEntity::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
-  return {ColumnIndex(0)};
+qlm::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
+  return {{ColumnIndex(0)}, allocator()};
 }
 
 // _____________________________________________________________________________
