@@ -71,7 +71,7 @@ class VarsRequiredFromSubtree {
   }
 
   // Strip all columns from `qet` that are not in `varsRequiredFromSubtree_`.
-  std::shared_ptr<QueryExecutionTree> stripSubtree(
+  std::shared_ptr<QueryExecutionTree> stripSubtree const(
       std::shared_ptr<QueryExecutionTree> qet) {
     return QueryExecutionTree::makeTreeWithStrippedColumns(
         std::move(qet), *varsRequiredFromSubtree_);
