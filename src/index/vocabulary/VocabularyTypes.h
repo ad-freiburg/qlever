@@ -18,7 +18,6 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "backports/memory_resource.h"
@@ -45,10 +44,12 @@ using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
 // Base class for a vocabulary batch-lookup result, shared by the different
-// vocabulary implementations. Owns the materialized string data (`buffer()`,
-// whose concrete type `BufferType` depends on the implementation) and one
-// `string_view` per looked-up term (`views()`, each pointing into `buffer()`).
-// The vocabulary implementation that performs the lookup fills `buffer()` and
+// vocabulary implementations. Owns the storage of the words (`buffer()`,
+// whose concrete type `BufferType` depends on the implementation: a byte
+// buffer, a vector of strings, or a shared handle on the word storage of a
+// vocabulary that keeps its words in RAM) and one `string_view` per looked-up
+// term (`views()`, each pointing into storage that `buffer()` owns). The
+// vocabulary implementation that performs the lookup fills `buffer()` and
 // `views()`, then calls `asResult()` to hand out a `VocabBatchLookupResult`
 // that keeps this object (and thus the storage the views point into) alive for
 // as long as the `VocabBatchLookupResult` is used.
@@ -63,8 +64,8 @@ class VocabLookupDataCommonBase {
   BufferType& buffer() { return buffer_; }
 
   // Mutable access to the views (one `string_view` per looked-up index, each
-  // pointing into `buffer()` or into storage that outlives the result), for
-  // the producer to fill before calling `asResult`.
+  // pointing into storage that `buffer()` owns), for the producer to fill
+  // before calling `asResult`.
   std::vector<std::string_view>& views() { return views_; }
 
   // Convert a filled lookup-data object into the public result type
@@ -85,7 +86,8 @@ class VocabLookupDataCommonBase {
   // Buffer for the materialized string data (used by disk-based vocabularies).
   BufferType buffer_;
 
-  // One `string_view` per looked-up index, each pointing into `buffer_`.
+  // One `string_view` per looked-up index, each pointing into storage that
+  // `buffer_` owns.
   std::vector<std::string_view> views_;
 
   // The span over `views_`, populated by `finalize()` and exposed by
@@ -97,16 +99,21 @@ class VocabLookupDataCommonBase {
   void finalize() { span_ = ql::span<std::string_view>{views_}; }
 };
 
-// Lookup data of a vocabulary whose `operator[]` returns a view into storage
-// that outlives the result (`VocabularyInMemory`): the views point into the
-// vocabulary itself, so there is nothing to own (see the lifetime note at
-// `VocabularyInMemory::lookupBatch`).
-struct ViewsIntoVocabularyBatchLookupData
-    : VocabLookupDataCommonBase<std::monostate> {
+// Lookup data of a vocabulary that keeps its words in RAM
+// (`VocabularyInMemory`): the result shares the ownership of the word storage
+// with the vocabulary, so the views point into storage that `buffer()` owns
+// and no word is copied. Closing or reopening the vocabulary does not
+// invalidate a result.
+struct SharedWordsVocabBatchLookupData
+    : VocabLookupDataCommonBase<
+          std::shared_ptr<const CompactVectorOfStrings<char>>> {
   // Return the batch-lookup result for `views` (one per looked-up index, in
-  // order), which point into the vocabulary.
-  static VocabBatchLookupResult fromViews(std::vector<std::string_view> views) {
-    auto data = std::make_shared<ViewsIntoVocabularyBatchLookupData>();
+  // order), which point into `words`.
+  static VocabBatchLookupResult fromViews(
+      std::shared_ptr<const CompactVectorOfStrings<char>> words,
+      std::vector<std::string_view> views) {
+    auto data = std::make_shared<SharedWordsVocabBatchLookupData>();
+    data->buffer() = std::move(words);
     data->views() = std::move(views);
     return asResult(std::move(data));
   }

@@ -62,12 +62,13 @@ TEST(VocabularyInMemory, AccessOperator) {
 
 // _____________________________________________________________________________
 // Test that `lookupBatch` returns views into the vocabulary (no copy), in the
-// order of the indices, also for duplicates, and that it rejects the empty
-// batch and an index that is out of range.
+// order of the indices, also for duplicates, that it rejects the empty batch
+// and an index that is out of range, and that a result stays valid after the
+// vocabulary is closed (the result shares the ownership of the words).
 TEST(VocabularyInMemory, LookupBatch) {
   auto cleanup = getFileCleanup();
   const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
-  const auto vocab = createVocabulary(words);
+  auto vocab = createVocabulary(words);
   const std::vector<size_t> indices{3, 0, 2, 0};
   const auto result = vocab.lookupBatch(indices);
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
@@ -79,6 +80,12 @@ TEST(VocabularyInMemory, LookupBatch) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       vocab.lookupBatch(std::vector<size_t>{0, words.size()}),
       ::testing::HasSubstr("idx < size()"));
+
+  vocab.close();
+  ASSERT_EQ(vocab.size(), 0u);
+  for (const auto& [index, word] : ::ranges::views::zip(indices, *result)) {
+    EXPECT_EQ(word, words[index]);
+  }
 }
 
 TEST(VocabularyInMemory, ReadAndWriteFromFile) {

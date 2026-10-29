@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -28,15 +29,21 @@ class VocabularyInMemory
   using Words = CompactVectorOfStrings<CharType>;
 
  private:
-  // The actual storage.
-  Words _words;
+  // The actual storage. It is shared with the batch-lookup results (see
+  // `lookupBatch`), which is why it is never modified in place: `open()` and
+  // deserialization replace it by a new one, `close()` by an empty one.
+  std::shared_ptr<Words> words_ = std::make_shared<Words>();
+
+  // Const access to the words.
+  const Words& words() const { return *words_; }
 
  public:
   // Construct an empty vocabulary
   VocabularyInMemory() = default;
 
   // Construct the vocabulary from `Words`
-  explicit VocabularyInMemory(Words words) : _words{std::move(words)} {}
+  explicit VocabularyInMemory(Words words)
+      : words_{std::make_shared<Words>(std::move(words))} {}
 
   // Build a vocabulary as a non-owning, zero-copy view directly into the
   // buffer of `serializer`, which must support zero-copy deserialization
@@ -61,10 +68,10 @@ class VocabularyInMemory
   void writeToFile(const std::string& fileName) const;
 
   // Return the total number of words
-  [[nodiscard]] size_t size() const { return _words.size(); }
+  [[nodiscard]] size_t size() const { return words().size(); }
 
   // Return the `i-th` word. The behavior is undefined if `i >= size()`
-  auto operator[](uint64_t i) const { return _words[i]; }
+  auto operator[](uint64_t i) const { return words()[i]; }
 
   // Default fallback iteration over all words.
   auto scanAll() const {
@@ -76,11 +83,9 @@ class VocabularyInMemory
 
   //____________________________________________________________________________
   // Return the words for `indices` (not empty, every index less than
-  // `size()`; both checked) in that order, as views into this vocabulary; no
-  // word is copied. Lifetime: the views are invalidated when the words of
-  // this vocabulary are released, that is by `close()`, `open()` and the
-  // destructor; a result must not be used after that (not checked at
-  // runtime; the index, and thus its vocabulary, outlives every query).
+  // `size()`; both checked) in that order, as views into the word storage of
+  // this vocabulary, whose ownership the result shares; no word is copied,
+  // and the result stays valid when this vocabulary is closed or reopened.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
@@ -92,11 +97,11 @@ class VocabularyInMemory
   // Conversion function that is used by the Mixin base class.
   template <typename It>
   WordAndIndex iteratorToWordAndIndex(It it) const {
-    if (it == _words.end()) {
+    if (it == words().end()) {
       return WordAndIndex::end();
     }
-    size_t idx = it - _words.begin();
-    return {_words[idx], idx};
+    size_t idx = it - words().begin();
+    return {words()[idx], idx};
   }
 
   // A helper type that can be used to directly write a vocabulary to disk
@@ -150,15 +155,22 @@ class VocabularyInMemory
         makeBlockWriterPtr(filename));
   }
 
-  // Clear the vocabulary.
-  void close() { _words.clear(); }
+  // Clear the vocabulary. Batch-lookup results that are still alive keep the
+  // previous words.
+  void close() { words_ = std::make_shared<Words>(); }
 
   // Const access to the underlying words.
-  auto begin() const { return _words.begin(); }
-  auto end() const { return _words.end(); }
+  auto begin() const { return words().begin(); }
+  auto end() const { return words().end(); }
 
   // Generic serialization support.
-  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) { serializer | arg._words; }
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) {
+    if constexpr (ad_utility::serialization::ReadSerializer<S>) {
+      // Never modify words that a batch-lookup result might share.
+      arg.words_ = std::make_shared<Words>();
+    }
+    serializer | *arg.words_;
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
