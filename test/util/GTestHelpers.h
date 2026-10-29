@@ -22,6 +22,8 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -333,12 +335,13 @@ MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
 }
 
 // _____________________________________________________________________________
-// Sanitizes the given raw gtest name by replacing every '/' with '_'.
-// Parameterized tests embed '/' in their names (e.g. "Suite/Test/0"), and
-// tests use these names as names of temporary files; a '/' would turn them
-// into paths into (non-existent) subdirectories. Shared implementation of
-// `gtestCurrentTestName` and `gtestCurrentTestSuiteName`.
-inline std::string sanitizeGtestName(const std::string& name) {
+// Sanitize the given raw gtest name by replacing every `/` with `_`.
+// Parameterized tests embed `/` in their names (e.g. the test name `Test/0` or
+// the suite name `Instantiation/Suite`), and tests use these names as names of
+// temporary files; a `/` would turn them into paths into (non-existent)
+// subdirectories. This is the shared implementation of `gtestCurrentTestName`
+// and `gtestCurrentTestSuiteName`.
+[[nodiscard]] inline std::string sanitizeGtestName(std::string_view name) {
   return absl::StrReplaceAll(name, {{"/", "_"}});
 }
 
@@ -362,11 +365,12 @@ inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
 }
 
 // _____________________________________________________________________________
-// Return the name of the currently running test suite, with any '/' replaced
-// by '_' (parameterized test suites embed '/' in their names).
-// Can be called inside `SetUpTestSuite()` / `TearDownTestSuite()` or during a
-// test.
-inline std::string gtestCurrentTestSuiteName(
+// Return the name of the currently running test suite, with any `/` replaced
+// by `_` (parameterized test suites embed `/` in their names). Call it inside
+// `SetUpTestSuite()` / `TearDownTestSuite()` or during a test. If
+// `assertInGtestEnvironment` is true, it is a correctness error to call this
+// outside of a running test suite; otherwise the empty string is returned then.
+[[nodiscard]] inline std::string gtestCurrentTestSuiteName(
     bool assertInGtestEnvironment = true) {
   const auto* testSuite =
       ::testing::UnitTest::GetInstance()->current_test_suite();

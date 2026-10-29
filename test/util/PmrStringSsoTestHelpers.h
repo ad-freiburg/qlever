@@ -13,17 +13,16 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstddef>
-#include <memory_resource>
 #include <string>
 
 #include "backports/memory_resource.h"
-#include "util/Log.h"
+#include "util/Exception.h"
 
-// There is no `ql::pmr::string`: under the C++17 backports `ql::pmr` aliases
-// `boost::container::pmr`, which provides no `string` member. Spelling the
-// type via `ql::pmr::polymorphic_allocator` (which exists in both modes) keeps
-// this helper compilable with and without the backports. The SSO behavior is
-// the STL's in both modes, only the allocator type differs.
+// `ql::pmr::string` is not available in every mode: under the C++17 backports
+// `ql::pmr` aliases `boost::container::pmr`, which provides no `string` member.
+// Spelling the type via `ql::pmr::polymorphic_allocator` (which exists in both
+// modes) keeps this helper compilable with and without the backports. In both
+// modes the SSO behavior comes from the STL; only the allocator type differs.
 namespace detail {
 using PmrSsoProbeString =
     std::basic_string<char, std::char_traits<char>,
@@ -31,19 +30,20 @@ using PmrSsoProbeString =
 }  // namespace detail
 
 // _____________________________________________________________________________
-// Return the largest number of characters that a `PmrSsoProbeString` is
-// guaranteed by this helper to store inside its own object storage (SSO).
-// See also `clobberStack` in `util/DanglingViewTestHelpers.h`. The SSO
-// capacity of `std::basic_string` is implementation-defined (e.g. 15 characters
-// for libstdc++ and 22 for libc++), so it is determined here by probing rather
-// than hardcoded.
-inline size_t SsoCapacityOfPmrString() {
+// Return the largest number of characters that a `PmrSsoProbeString` stores
+// inside its own object storage (SSO), or 0 if it stores none. The SSO capacity
+// of `std::basic_string` is unspecified by the standard (e.g. 15 characters for
+// libstdc++ and 22 for libc++), so it is probed rather than hardcoded.
+[[nodiscard]] inline size_t SsoCapacityOfPmrString() {
   // A counting memory resource lets us detect an allocation directly instead of
   // guessing from pointer addresses: a string uses SSO exactly when
   // constructing it performs no allocation through its allocator.
+  // Forward all requests to the default resource and count the calls to
+  // `allocate`. It is not thread safe and only meant for this probe.
   struct CountingMemoryResource : public ql::pmr::memory_resource {
    private:
     ql::pmr::memory_resource* upstream_ = ql::pmr::get_default_resource();
+    // The number of calls to `do_allocate` so far (deallocations do not count).
     size_t numAllocations_ = 0;
 
     void* do_allocate(size_t bytes, size_t alignment) override {
@@ -61,10 +61,13 @@ inline size_t SsoCapacityOfPmrString() {
    public:
     size_t numAllocations() const { return numAllocations_; }
   };
+  // The inline storage is part of the string object, so the SSO capacity is
+  // smaller than `sizeof(PmrSsoProbeString)`, which is thus an upper bound for
+  // the sizes that have to be probed.
   const std::string sample(sizeof(detail::PmrSsoProbeString), 's');
   for (size_t size = sample.size(); size > 0; --size) {
     CountingMemoryResource resource;
-    detail::PmrSsoProbeString pmrSample{sample.data(), size, &resource};
+    const detail::PmrSsoProbeString pmrSample{sample.data(), size, &resource};
     if (resource.numAllocations() == 0) {
       return size;
     }
@@ -80,16 +83,18 @@ inline size_t SsoCapacityOfPmrString() {
 // their content inline (e.g. dangling-view regression tests) should state
 // exactly the sizes they rely on by passing `minCapacity`; the failure message
 // then points at the platform premise rather than at the test's own logic.
-// Preconditions:
-// - `minCapacity > 0`: there are callers only for non-empty test words.
-// NOTE: There is deliberately no default for `minCapacity`: the SSO capacity of
-// `std::pmr::string` is implementation-defined (e.g. 15 characters for
-// libstdc++ and 22 for libc++), so every caller must state exactly the size
-// it relies on instead of silently depending on one STL's limit.
+// Precondition: `minCapacity > 0`. Asking for the inline storage of zero
+// characters is a caller bug, because there is no test word it could stand for.
+// NOTE: There is deliberately no default for `minCapacity`: the SSO capacity is
+// unspecified by the standard (see `SsoCapacityOfPmrString`), so every caller
+// must state exactly the size it relies on instead of silently depending on
+// one STL's limit.
 inline void requireSsoCapacityOfPmrStringAtLeast(size_t minCapacity) {
   AD_CONTRACT_CHECK(minCapacity > 0);
   const size_t capacity = SsoCapacityOfPmrString();
-  AD_CORRECTNESS_CHECK(
+  // A platform that is too small for the caller's premise is a violation by
+  // the caller, not an impossible internal state, hence a contract check.
+  AD_CONTRACT_CHECK(
       capacity >= minCapacity,
       absl::StrCat("Platform premise violated: PmrSsoProbeString does not "
                    "store ",

@@ -17,8 +17,8 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <initializer_list>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <range/v3/view/enumerate.hpp>
