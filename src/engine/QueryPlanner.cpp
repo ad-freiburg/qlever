@@ -3583,14 +3583,16 @@ void QueryPlanner::GraphPatternPlanner::visitExternalValues(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitRowNumber(
     parsedQuery::RowNumberQuery& rowNumberQuery) {
-  // Plan the sorted subquery (see `RowNumberQuery::validate`) and add the row
-  // numbers on top of its cheapest plan. The variables of its `ORDER BY` must
-  // all be bound, because the row numbers depend on the order.
+  // Require all variables of the `ORDER BY` of the sorted subquery (see
+  // `RowNumberQuery::validate`) to be bound (the row numbers depend on the
+  // order).
   AD_CORRECTNESS_CHECK(rowNumberQuery.childGraphPattern_.has_value());
   std::get<parsedQuery::Subquery>(
       rowNumberQuery.childGraphPattern_->_graphPatterns.at(0))
       .get()
       .orderByVariablesMustBeBound_ = true;
+
+  // Plan the subquery and add the row numbers on top of its cheapest plan.
   SubtreePlan child =
       optimizeSingle(&rowNumberQuery.childGraphPattern_.value());
   auto candidate = makeSubtreePlan<RowNumber>(

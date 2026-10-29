@@ -39,8 +39,9 @@ struct RowNumberQuery : MagicServiceQuery {
   // See `MagicServiceQuery`, processes the configuration triples.
   void addParameter(const SparqlTriple& triple) override;
 
-  // Throw if the `<bind>` parameter is missing or if the child graph pattern
-  // is not a single subquery with an `ORDER BY` or `INTERNAL SORT BY` clause.
+  // Throw if the `<bind>` parameter is missing, if the child graph pattern is
+  // not a single subquery with an `ORDER BY` or `INTERNAL SORT BY` clause, or
+  // if the subquery selects the `<bind>` variable.
   void validate() const override;
 
   std::string_view name() const override { return "row number"; }

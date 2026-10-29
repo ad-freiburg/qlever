@@ -972,7 +972,7 @@ TEST(QueryPlanner, TransitivePathBindRight) {
 }
 
 // Test that two row number services on the same sorted subquery with different
-// offsets (the equivalent of the SQL window function `LEAD`) are joined without
+// offsets (the equivalent of the SQL window function `LAG`) are joined without
 // sorting, and that invalid configurations are rejected.
 TEST(QueryPlanner, RowNumber) {
   // A relation `<p>` with two objects for `<x>`.
@@ -984,16 +984,23 @@ TEST(QueryPlanner, RowNumber) {
         " { SELECT ?x ", y, " { ?x <p> ", y, " } ", orderBy, " } }");
   };
 
-  // The result of each service is sorted by `?n` and `?x`, so the multi-column
-  // join on `?n` and `?x` needs no `Sort`.
-  auto rowNumber = h::RootOperation<::RowNumber>(::testing::_);
+  // The row numbers are added on top of the sorted subqueries (the second one
+  // is sorted by the index scan). The result of each service is sorted by `?n`
+  // and `?x`, so the multi-column join on `?n` and `?x` needs no `Sort`.
+  using enum ::OrderBy::AscOrDesc;
+  auto rowNumber = h::MatchTypeAndOrderedChildren<::RowNumber>;
   h::expect(
-      absl::StrCat("SELECT * { ",
-                   rowNumberService("[] <bind> ?n .", "?y", "ORDER BY ?x ?y"),
-                   rowNumberService("[] <bind> ?n ; <offset> 1 .", "?y2",
-                                    "INTERNAL SORT BY ?x ?y2"),
-                   " }"),
-      h::MultiColumnJoin(rowNumber, rowNumber), qec);
+      absl::StrCat(
+          "SELECT * { ",
+          rowNumberService("[] <bind> ?n .", "?y", "ORDER BY ?x DESC(?y)"),
+          rowNumberService("[] <bind> ?n ; <offset> 1 .", "?y2",
+                           "INTERNAL SORT BY ?x ?y2"),
+          " }"),
+      h::MultiColumnJoin(
+          rowNumber(h::OrderBy({{Variable{"?x"}, Asc}, {Variable{"?y"}, Desc}},
+                               h::IndexScanFromStrings("?x", "<p>", "?y"))),
+          rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y2"))),
+      qec);
 
   // The row number variable is required.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1020,6 +1027,15 @@ TEST(QueryPlanner, RowNumber) {
             qec),
         HasSubstr("`ORDER BY` or `INTERNAL SORT BY`"));
   }
+
+  // The row number variable must not be selected by the subquery.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ",
+                       rowNumberService("[] <bind> ?y .", "?y", "ORDER BY ?y"),
+                       " }"),
+          qec),
+      HasSubstr("must not be selected by the subquery"));
 
   // Unknown parameters are rejected.
   AD_EXPECT_THROW_WITH_MESSAGE(

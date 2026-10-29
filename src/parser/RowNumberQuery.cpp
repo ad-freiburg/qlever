@@ -13,6 +13,7 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
+#include "util/Algorithm.h"
 
 namespace parsedQuery {
 
@@ -59,6 +60,16 @@ void RowNumberQuery::validate() const {
         "A row number query requires exactly one group graph pattern that "
         "consists of a single subquery with an `ORDER BY` or `INTERNAL SORT "
         "BY` clause");
+  }
+
+  // The row number variable must not shadow a variable of the subquery.
+  const auto& subquery =
+      std::get<Subquery>(childGraphPattern_->_graphPatterns[0]).get();
+  if (ad_utility::contains(subquery.selectClause().getSelectedVariables(),
+                           rowNumberVariable_.value())) {
+    throw MagicServiceException(absl::StrCat(
+        "The variable ", rowNumberVariable_->name(),
+        " of the `<bind>` parameter must not be selected by the subquery"));
   }
 }
 

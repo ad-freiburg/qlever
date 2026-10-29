@@ -27,6 +27,9 @@ RowNumber::RowNumber(QueryExecutionContext* qec,
   // because `Id`s of integers are compared by their bits.
   AD_CONTRACT_CHECK(offset_ >= 0);
 
+  // The row number variable must not shadow a variable of the child.
+  AD_CONTRACT_CHECK(!child_->getVariableColumns().contains(rowNumberVariable_));
+
   // By default, sort by the row number column and then by the sort columns of
   // the child.
   if (sortedOn_.empty()) {
@@ -45,6 +48,8 @@ qlm::vector<QueryExecutionTree*> RowNumber::getChildrenImpl() const {
 
 // _____________________________________________________________________________
 std::string RowNumber::getCacheKeyImpl() const {
+  // The `sortedOn_` columns are not part of the key, because they don't change
+  // the result.
   return absl::StrCat("ROW NUMBER (offset ", offset_, ") ",
                       child_->getCacheKey());
 }
@@ -115,18 +120,28 @@ Result RowNumber::computeResult(bool requestLaziness) {
 
   // Append a column with the row numbers starting at `nextRowNumber` to an
   // `IdTable` and move it to the front. Advance `nextRowNumber` accordingly
-  // (it persists between the blocks of a lazy result).
+  // (it persists between the blocks of a lazy result). Throw if a row number
+  // exceeds the range of integer `Id`s (it would wrap around and break the
+  // sort order).
   std::vector<ColumnIndex> permutation(getResultWidth());
   permutation[0] = permutation.size() - 1;
   std::iota(permutation.begin() + 1, permutation.end(), 0);
   auto addRowNumbers = [permutation = std::move(permutation)](
                            IdTable& idTable, int64_t& nextRowNumber) {
+    if (static_cast<int64_t>(idTable.numRows()) >
+        Id::maxInt - nextRowNumber + 1) {
+      throw std::runtime_error(absl::StrCat(
+          "The row numbers of a row number SERVICE exceed the maximum integer "
+          "value ",
+          Id::maxInt, ", choose a smaller `<offset>`"));
+    }
     idTable.addEmptyColumn();
     ql::ranges::generate(idTable.getColumn(idTable.numColumns() - 1),
                          [&]() { return Id::makeFromInt(nextRowNumber++); });
     idTable.setColumnSubset(permutation);
   };
 
+  // Number a copy of the materialized result.
   if (childResult->isFullyMaterialized()) {
     IdTable idTable = childResult->cloneIdTable(cancellationChecker());
     int64_t nextRowNumber = offset_;
@@ -134,6 +149,8 @@ Result RowNumber::computeResult(bool requestLaziness) {
     return {std::move(idTable), resultSortedOn(),
             childResult->getSharedLocalVocab()};
   }
+
+  // Number the blocks of the lazy result one after the other.
   return {Result::LazyResult{ad_utility::CachingTransformInputRange(
               childResult->idTables(),
               [addRowNumbers = std::move(addRowNumbers),
