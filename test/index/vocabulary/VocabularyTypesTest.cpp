@@ -82,6 +82,22 @@ TEST(VocabBatchLookupData, AsResultExposesViewsAndKeepsDataAlive) {
 }
 
 // An empty lookup result is valid: no views, empty span.
+// _____________________________________________________________________________
+// Test that `fromWords` returns a result with one view per word, in order,
+// that the views point at the moved-in strings (no copy), and that the result
+// stays valid after the input vector has been moved from.
+TEST(StringVectorVocabBatchLookupData, FromWords) {
+  std::vector<std::string> words{"a", std::string(100, 'b'), ""};
+  const char* longWordData = words[1].data();
+  const auto result =
+      StringVectorVocabBatchLookupData::fromWords(std::move(words));
+  ASSERT_EQ(result->size(), 3u);
+  EXPECT_EQ((*result)[0], "a");
+  EXPECT_EQ((*result)[1], std::string(100, 'b'));
+  EXPECT_EQ((*result)[1].data(), longWordData);
+  EXPECT_EQ((*result)[2], "");
+}
+
 TEST(VocabBatchLookupData, AsResultEmpty) {
   auto data = std::make_shared<VocabBatchLookupData>();
   VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);

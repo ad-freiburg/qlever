@@ -261,6 +261,15 @@ TEST(VocabularyOnDisk, ScanAllSingleWordExceedsLimit) {
 
 // A `lookupBatch` result must equal the individual `vocab[]` lookups for the
 // same indices, including for reordered and duplicated indices.
+// _____________________________________________________________________________
+// Test that `lookupBatch` on a vocabulary that was never opened fails with a
+// contract violation that names `open()`.
+TEST(VocabularyOnDisk, LookupBatchRequiresOpen) {
+  const VocabularyOnDisk vocab;
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(std::vector<size_t>{0}),
+                               ::testing::HasSubstr("open()"));
+}
+
 TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};

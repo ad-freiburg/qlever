@@ -4,6 +4,12 @@
 
 #include "index/vocabulary/VocabularyInMemory.h"
 
+#include <string_view>
+#include <vector>
+
+#include "backports/algorithm.h"
+#include "util/Exception.h"
+
 using std::string;
 
 // _____________________________________________________________________________
@@ -23,4 +29,16 @@ void VocabularyInMemory::writeToFile(const string& fileName) const {
   ad_utility::serialization::FileWriteSerializer file{fileName};
   file << _words;
   AD_LOG_INFO << "Done, number of words: " << _words.size() << std::endl;
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInMemory::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+
+  return ViewsIntoVocabularyBatchLookupData::fromViews(::ranges::to_vector(
+      indices | ql::views::transform([this](size_t idx) -> std::string_view {
+        AD_CONTRACT_CHECK(idx < size());
+        return _words[idx];
+      })));
 }

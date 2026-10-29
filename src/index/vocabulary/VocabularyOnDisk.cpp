@@ -213,6 +213,8 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
 VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
+  AD_CONTRACT_CHECK(ioManagers_ != nullptr,
+                    "`open()` must be called before `lookupBatch()`");
 
   auto manager = ioManagers_->pop().value();
   // Return the `manager` to the pool on every exit path (including exceptions,

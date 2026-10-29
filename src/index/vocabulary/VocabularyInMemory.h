@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+#include "backports/algorithm.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -74,9 +75,13 @@ class VocabularyInMemory
   }
 
   //____________________________________________________________________________
-  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
-  }
+  // Return the words for `indices` (not empty, every index less than
+  // `size()`; both checked) in that order, as views into this vocabulary; no
+  // word is copied. Lifetime: the views are invalidated when the words of
+  // this vocabulary are released, that is by `close()`, `open()` and the
+  // destructor; a result must not be used after that (not checked at
+  // runtime; the index, and thus its vocabulary, outlives every query).
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
