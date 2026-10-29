@@ -82,13 +82,12 @@ struct TransitivePathSide {
   }
 
   // Override of `clone()`, but instead of creating a new tree, use a given
-  // one to slot in.
+  // one to slot in. Requires side to be bound.
   TransitivePathSide clone(
       std::shared_ptr<QueryExecutionTree> foreignTree) const {
+    AD_CORRECTNESS_CHECK(isBoundVariable());
     TransitivePathSide copy = *this;
-    if (treeAndCol_.has_value()) {
-      copy.treeAndCol_->first = std::move(foreignTree);
-    }
+    copy.treeAndCol_->first = std::move(foreignTree);
     return copy;
   }
 };
@@ -211,10 +210,10 @@ class TransitivePathBase : public Operation {
    * start and where it should end. The start and target side are chosen by
    * the following criteria:
    *
-   * 1. If a side is bound, then this side will be the start side.
-   * 2. If a side is an id, then this side will be the start side.
-   * 3. If both sides are variables, the left side is chosen as start
-   * (arbitrarily).
+   * 1. If one side is bound, then this side will be the start side.
+   * 2. If one side is an id, then this side will be the start side.
+   * 3. If both sides are variables and optionally bound, the left side is
+   * chosen as start (arbitrarily).
    *
    * @return std::pair<TransitivePathSide&, TransitivePathSide&> The first entry
    * of the pair is the start side, the second entry is the target side.
@@ -330,7 +329,7 @@ class TransitivePathBase : public Operation {
    * @param maxDist Maximum distance a resulting path may have (distance =
    * number of nodes)
    * @param useBinSearch If true, the returned object will be a
-   * TransitivePathBinSearch. Else it will be a TransitivePathFallback
+   * TransitivePathBinSearch. Else it will be a TransitivePathHashMap
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
    * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
@@ -343,7 +342,7 @@ class TransitivePathBase : public Operation {
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathFallback or
+   * The concrete object will either be TransitivePathHashMap or
    * TransitivePathBinSearch, depending on the runtime constant "use-binsearch".
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation

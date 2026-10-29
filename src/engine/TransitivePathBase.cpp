@@ -68,7 +68,7 @@ TransitivePathBase::TransitivePathBase(
     } else if (lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
       // Both sides are unbound, so the starting point for the empty path is the
       // set of all entities of the knowledge graph. This can be re-bound to
-      // something cheaper later on (see `bindLeftOrRightSide`).
+      // something cheaper later on (see `bindSides`).
       boundVariableIsForEmptyPath_ = true;
       lhs_.treeAndCol_.emplace(
           ad_utility::makeExecutionTree<EmptyPath>(
@@ -467,46 +467,44 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto lhs = lhs_;
   auto rhs = rhs_;
 
+  // Obtain the variable of both columns.
+  auto getVar = [&op](const std::optional<size_t>& col) {
+    return col.has_value()
+               ? std::optional<Variable>(
+                     op->getVariableAndInfoByColumnIndex(col.value()).first)
+               : std::nullopt;
+  };
+  auto leftVar = getVar(leftCol);
+  auto rightVar = getVar(rightCol);
+
+  // Match the operation with the start side (left if bound, right oterwise).
+  // Since it is the same on all bound sides, we can compute it independently of
+  // the sides which are to bind.
+  size_t matchCol = leftCol.has_value() ? leftCol.value() : rightCol.value();
+  op = matchWithKnowledgeGraph(matchCol, std::move(op));
+
   // Set `op` and the corresponding binding column to each side's
   // `treeAndCol_` member.
-  auto assignTreeAndColToSide = [this, &op, &leftCol, &rightCol, &lhs, &rhs](
-                                    auto& col, auto& side,
-                                    bool resetPlaceholder) {
-    // Obtain the variable of a column.
-    auto getVar = [&op](const std::optional<size_t>& col) {
-      return col.has_value()
-                 ? std::optional<Variable>(
-                       op->getVariableAndInfoByColumnIndex(col.value()).first)
-                 : std::nullopt;
-    };
-    // Set a new column for a side (since they might get mixed up by
-    // `matchWithKnowledgeGraph`).
-    auto updateCol = [&op](auto& col, const auto& var, auto& side) {
-      if (col.has_value()) {
-        col = op->getVariableColumn(var.value());
-        side.treeAndCol_ = {op, col.value()};
-      }
-    };
+  auto bindOneSide = [&op](auto& col, auto& var, auto& side,
+                           bool resetPlaceholder) {
     if (col.has_value()) {
-      auto leftVar = getVar(leftCol);
-      auto rightVar = getVar(rightCol);
-      // Only match the operation with the start column of the transitive path.
-      if (col == leftCol || (!leftCol.has_value() && col == rightCol)) {
-        op = matchWithKnowledgeGraph(col.value(), op);
-      }
-      // Update the side columns indices which might get messed up by
+      // Update this side column's index which might get messed up by
       // `EmptyPath` operations added by `matchWithKnowedgeGraph`.
-      updateCol(leftCol, leftVar, lhs);
-      updateCol(rightCol, rightVar, rhs);
+      col = op->getVariableColumn(var.value());
+      side.treeAndCol_ = {op, col.value()};
     }
     // Remove placeholder tree if binding actual tree.
     else if (resetPlaceholder || !side.isVariable()) {
       side.treeAndCol_ = std::nullopt;
     }
   };
-  assignTreeAndColToSide(leftCol, lhs, boundVariableIsForEmptyPath_);
-  assignTreeAndColToSide(rightCol, rhs, false);
+  bindOneSide(leftCol, leftVar, lhs, boundVariableIsForEmptyPath_);
+  bindOneSide(rightCol, rightVar, rhs, false);
 
+  // We use the cheapest tree that can be created using any of the alternative
+  // subtrees. This has the effect that the `TransitivePathBinSearch` will
+  // never re-sort an index scan (which should not happen because we can just
+  // take the appropriate index scan in the first place).
   bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
   candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,

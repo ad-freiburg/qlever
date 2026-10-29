@@ -85,8 +85,8 @@ class TransitivePathImpl : public TransitivePathBase {
   using TransitivePathBase::TransitivePathBase;
 
   /**
-   * @brief Compute the transitive hull with a bound side.
-   * This function is called when the startSide is bound and
+   * @brief Compute the transitive hull with one or two bound sides.
+   * This function is called when alt least the startSide is bound and
    * it is a variable. The other IdTable contains the result
    * of the start side and will be used to get the start nodes.
    *
