@@ -91,6 +91,28 @@ std::vector<ColumnIndex> Union::sortOrderForSubtree(size_t subtreeIndex) const {
   return specificSortOrder;
 }
 
+// _____________________________________________________________________________
+bool Union::isSortedByConcatenation() const {
+  if (targetOrder_.empty()) {
+    return false;
+  }
+  auto [leftColumn, rightColumn] = _columnOrigins.at(targetOrder_.at(0));
+  if (leftColumn != NO_COLUMN) {
+    return false;
+  }
+  // The first sort column is UNDEF for all rows of the left child. If it can
+  // also be UNDEF in the right child, those rows would have to be merged with
+  // the rows of the left child, so the concatenation is not sorted then.
+  const auto& rightVariableColumns = _subtrees.at(1)->getVariableColumns();
+  auto it = ql::ranges::find_if(
+      rightVariableColumns, [rightColumn](const auto& entry) {
+        return entry.second.columnIndex_ == rightColumn;
+      });
+  AD_CORRECTNESS_CHECK(it != rightVariableColumns.end());
+  return it->second.mightContainUndef_ ==
+         ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+}
+
 std::string Union::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "{\n";
@@ -214,8 +236,7 @@ size_t Union::getCostEstimate() {
   // Magic value that is empirically determined (using commit 59391af) such that
   // costs of distributively applied joins roughly match the actual time.
   uint64_t timeEstimate = std::max(uint64_t{1}, elementsToCopy / 10);
-  if (!targetOrder_.empty() &&
-      _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
+  if (!targetOrder_.empty() && !isSortedByConcatenation()) {
     // A sorted UNION is rather expensive the factor 63 is an empirically
     // determined average factor (using commit 59391af) under the assumption
     // that the left and right side are equivalent and thus the whole range
@@ -235,10 +256,9 @@ Result Union::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> subRes2 =
       _subtrees[1]->getResult(requestLaziness);
 
-  // If first sort column is not present in left child, we can fall back to the
-  // cheap computation because it orders the left child first.
-  if (!targetOrder_.empty() &&
-      _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
+  // Merge the two sorted children, unless their concatenation is already
+  // sorted (then the cheap computation below is enough).
+  if (!targetOrder_.empty() && !isSortedByConcatenation()) {
     auto generator = computeResultKeepOrder(requestLaziness, std::move(subRes1),
                                             std::move(subRes2));
     return requestLaziness ? Result{std::move(generator), resultSortedOn()}

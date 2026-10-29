@@ -376,6 +376,35 @@ TEST(Union, sortedMergeWithColumnMissingOnOneSide) {
                   makeIdTableFromVector({{1, U, 5}, {1, U, 7}}));
 }
 
+// Test the sorted merge when the FIRST sort column is missing in one of the
+// children and can be UNDEF in the other child. The children must then be
+// merged, a simple concatenation is not sorted.
+TEST(Union, sortedMergeWithFirstSortColumnMissingOnOneSide) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto U = Id::makeUndefined();
+
+  // A child with the columns `?a ?c`, where `?a` is UNDEF in the first row,
+  // and a child with the column `?c` only.
+  auto withA = [&]() {
+    auto table = makeIdTableFromVector({{0, 5}, {1, 2}});
+    table(0, 0) = U;
+    return makeSortedValues(qec, std::move(table), Vars{Var{"?a"}, Var{"?c"}});
+  };
+  auto withoutA = [&](int64_t c) {
+    return makeSortedValues(qec, makeIdTableFromVector({{c}}), Vars{Var{"?c"}});
+  };
+
+  // The column `?a` is missing in the left child (result columns `?c ?a`), the
+  // sort order is `?a ?c`.
+  testSortedUnion(qec, withoutA(7), withA(), {1, 0},
+                  makeIdTableFromVector({{5, U}, {7, U}, {2, 1}}));
+
+  // The column `?a` is missing in the right child (result columns `?a ?c`).
+  testSortedUnion(qec, withA(), withoutA(7), {0, 1},
+                  makeIdTableFromVector({{U, 5}, {U, 7}, {1, 2}}));
+}
+
 // _____________________________________________________________________________
 TEST(Union, sortedMergeWithOneSideNonLazy) {
   using Var = Variable;
@@ -785,10 +814,12 @@ TEST(Union, getCostEstimate) {
   IdTable oneColumn{1, qec->getAllocator()};
   oneColumn.resize(100);
   ql::ranges::fill(oneColumn.getColumn(0), Id::makeUndefined());
+  // The two columns are always defined, so that a sorted `UNION` whose first
+  // sort column is missing in the other child can skip the merge.
   IdTable twoColumns{2, qec->getAllocator()};
   twoColumns.resize(100);
-  ql::ranges::fill(twoColumns.getColumn(0), Id::makeUndefined());
-  ql::ranges::fill(twoColumns.getColumn(1), Id::makeUndefined());
+  ql::ranges::fill(twoColumns.getColumn(0), Id::makeFromInt(1));
+  ql::ranges::fill(twoColumns.getColumn(1), Id::makeFromInt(1));
 
   auto valuesA = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, oneColumn.clone(), Vars{Var{"?a"}}, false,
