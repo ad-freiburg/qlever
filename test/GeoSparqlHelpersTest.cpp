@@ -186,6 +186,9 @@ TEST(GeoSparqlHelpers, WktTypeIri) {
   EXPECT_EQ(WktCrsType{}(SourceCrsType{4}), undef);
 }
 
+// Test that a `GeoPoint` or a WKT literal is projected to the CRS specified by
+// an IRI and returned as a new WKT literal with the transformed coordinates.
+// Also test that an unsupported CRS IRI yields `UNDEF`.
 TEST(GeoSparqlHelpers, WktTransform) {
   using namespace ad_utility::triple_component;
   using ad_utility::GeoPointOrWkt;
@@ -230,12 +233,27 @@ TEST(GeoSparqlHelpers, WktTransform) {
             anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
                    "POINT(111319.490793 222684.208506)"));
 
-  // Unsupported CRS.
   sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
+  // Invalid WKT.
+  std::string invalidWkt{
+      "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{invalidWkt},
+                           Iri::fromStringRepresentation(
+                               "<http://www.opengis.net/def/unsupported>")),
+            undef);
+
+  // Unsupported CRS.
   EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint},
                            Iri::fromStringRepresentation(
                                "<http://www.opengis.net/def/unsupported>")),
             undef);
+
+  // UNDEF from `wkt` or `iri` without value.
+  EXPECT_EQ(WktTransform{}(std::nullopt,
+                           Iri::fromStringRepresentation(
+                               "<http://www.opengis.net/def/crs/EPSG/0/3857>")),
+            undef);
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint}, std::nullopt), undef);
 }
 
 }  // namespace

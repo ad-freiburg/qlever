@@ -559,6 +559,33 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
+// Helper to extract a source CRS type from the `GeoPointOrWkt` variant.
+// Returns default CRS for a `GeoPoint`. For a WKT literal extract the source
+// CRS type from the string.
+struct SourceCrsFromGeoPointOrWktVisitor {
+  CRSType operator()(const GeoPoint& point) const { return defaultCrs; }
+
+  CRSType operator()(const std::string& wkt) const { return getCRSType(wkt); }
+
+  CRSType operator()(const GeoPointOrWkt& geoPointOrWkt) const {
+    return std::visit(
+        [](const auto& value) {
+          return SourceCrsFromGeoPointOrWktVisitor{}(value);
+        },
+        geoPointOrWkt);
+  }
+
+  template <typename T>
+  CRSType operator()(const std::optional<T>& geoPointOrWkt) const {
+    if (!geoPointOrWkt.has_value()) {
+      return CRSType::UNSUPPORTED;
+    }
+    return SourceCrsFromGeoPointOrWktVisitor{}(geoPointOrWkt.value());
+  }
+};
+
+static constexpr SourceCrsFromGeoPointOrWktVisitor sourceCrsFromGeoPointOrWkt;
+
 // Helper to convert a geometry from `pb_util` to a WKT string.
 struct UtilGeomToWktVisitor {
   // Visitor for `std::optional` inputs.
@@ -590,6 +617,36 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to extract a WKT literal from `GeoPointOrWkt` variant.
+struct WktFromGeoPointOrWktVisitor {
+  std::optional<std::string> operator()(const GeoPoint& point) const {
+    auto utilPoint = geoPointToUtilPoint(point);
+    return utilGeomToWkt(utilPoint);
+  }
+
+  std::optional<std::string> operator()(const std::string& wkt) const {
+    return wkt;
+  }
+
+  std::optional<std::string> operator()(
+      const GeoPointOrWkt& geoPointOrWkt) const {
+    return std::visit(
+        [](const auto& value) { return WktFromGeoPointOrWktVisitor{}(value); },
+        geoPointOrWkt);
+  }
+
+  template <typename T>
+  std::optional<std::string> operator()(
+      const std::optional<T>& geoPointOrWkt) const {
+    if (!geoPointOrWkt.has_value()) {
+      return std::nullopt;
+    }
+    return WktFromGeoPointOrWktVisitor{}(geoPointOrWkt.value());
+  }
+};
+
+static constexpr WktFromGeoPointOrWktVisitor wktFromGeoPointOrWktVisitor;
 
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
 // 7946). The input is expected to be in CRS84, as GeoJSON only supports this

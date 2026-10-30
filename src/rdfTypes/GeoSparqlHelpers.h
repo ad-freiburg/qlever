@@ -78,8 +78,9 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 // Project geometry contained in `wkt` to CRS defined in `iri` and return as
-// WKT.
-std::optional<std::string> transformAsWkt(GeoPointOrWkt wkt,
+// WKT. Returns `std::nullopt` for invalid `wkt` or invalid/unsupported CRS
+// `iri`.
+std::optional<std::string> transformAsWkt(const GeoPointOrWkt& wkt,
                                           const std::string& iri);
 
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
@@ -289,9 +290,10 @@ class WktTransform {
       return ValueId::makeUndefined();
     }
 
-    // TODO<yarox-1> The function should rais an error if a transformation is
-    // not mathematically possible. (Currently every transformation/projection
-    // is possible)
+    // TODO<yarox-1> The function should return UNDEF if a transformation is
+    // not mathematically possible. (Currently, all transformations between the
+    // supported coordinate reference systems are possible, so this case cannot
+    // occur yet.)
     auto resultWkt = detail::transformAsWkt(
         wkt.value(), iri.value().toStringRepresentation());
 
