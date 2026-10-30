@@ -1207,14 +1207,17 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
         .get();
     EXPECT_THAT(
         logStream.str(),
-        ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
-                             "started concurrently"));
+        ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::HasSubstr(
+            "Automatic index rebuild skipped, another rebuild "
+            "started concurrently")));
     server.server().rebuildInProgress_.store(false);
 
     Server::logAutomaticRebuildFailure(
         std::make_exception_ptr(std::runtime_error{"boom"}));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("Automatic index rebuild failed: boom"));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+            ::testing::HasSubstr("Automatic index rebuild failed: boom")));
     Server::logAutomaticRebuildFailure(nullptr);
   }
 }

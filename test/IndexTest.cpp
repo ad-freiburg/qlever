@@ -963,7 +963,6 @@ TEST(IndexTest, destructorLogsUnloading) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
@@ -972,41 +971,39 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
 
-  // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
-  // that the assertion is only active when the compile-time log level is at
-  // least `INFO`. At `LOGLEVEL=WARN` the INFO output is suppressed, but the
-  // test still runs to cover the WARN-level `"deprecated"` assertions; the
-  // wrapper degrades to `testing::_` (match anything) in that case.
-  auto onlyAtInfoOrAbove = [](auto matcher) {
-    if constexpr (ad_utility::compileTimeLogLevel <
-                  ad_utility::LogLevel::Enum::INFO) {
-      return testing::_;
-    } else {
-      return matcher;
-    }
-  };
+  // Call `updateInputFileSpecificationsAndLog` and return its log output.
+  auto updateAndGetLog =
+      [](std::vector<qlever::InputFileSpecification>& spec,
+         std::optional<bool> parallelParsingSpecifiedViaJson) {
+        auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+        IndexImpl::updateInputFileSpecificationsAndLog(
+            spec, parallelParsingSpecifiedViaJson);
+        return logStream.str();
+      };
+  // The input streams are logged at `INFO`, the deprecation at `WARN`.
+  auto logsSingleFile =
+      ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(HasSubstr("singleFile.ttl"));
+  auto logsTwoFiles = ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+      HasSubstr("from 2 input streams"));
+  auto warnsDeprecated =
+      ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(HasSubstr("deprecated"));
+  auto doesNotWarn = Not(HasSubstr("deprecated"));
+
   // Parallel parsing not specified anywhere. For a single input stream, we then
   // default to `true` for reasons of backwards compatibility, but this is
   // deprecated. For multiple input streams, we default to `false` and this is
   // normal behavior.
   {
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
-                                                   std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
-                      HasSubstr("deprecated")));
+    EXPECT_THAT(updateAndGetLog(singleFileSpec, std::nullopt),
+                AllOf(logsSingleFile, warnsDeprecated));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
     twoFilesSpec.at(0).parseInParallelSetExplicitly_ = false;
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
-                      Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(updateAndGetLog(twoFilesSpec, std::nullopt),
+                AllOf(logsTwoFiles, doesNotWarn));
     EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -1016,12 +1013,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   for (auto parallelParsing : {true, false}) {
     singleFileSpec.at(0).parseInParallel_ = parallelParsing;
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = true;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
-                                                   std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
-                      Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(updateAndGetLog(singleFileSpec, std::nullopt),
+                AllOf(logsSingleFile, doesNotWarn));
     EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
@@ -1029,11 +1022,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallel_ = false;
     twoFilesSpec.at(0).parseInParallelSetExplicitly_ = true;
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
-                      Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(updateAndGetLog(twoFilesSpec, std::nullopt),
+                AllOf(logsTwoFiles, doesNotWarn));
     EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -1043,11 +1033,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   // stream and forbidden for multiple input streams.
   {
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
-                      HasSubstr("deprecated")));
+    EXPECT_THAT(updateAndGetLog(singleFileSpec, true),
+                AllOf(logsSingleFile, warnsDeprecated));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -1457,9 +1444,10 @@ TEST(IndexImpl, applyConfigurationGitHash) {
     IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     ASSERT_NO_THROW(indexImpl.applyConfiguration(minimalValidConfiguration()));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr(
-                    "The git hash used to build this index was \"f00ba4\""));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::HasSubstr(
+            "The git hash used to build this index was \"f00ba4\"")));
     EXPECT_EQ(indexImpl.getGitShortHash(), "f00ba4");
   }
 
@@ -1475,10 +1463,12 @@ TEST(IndexImpl, applyConfigurationGitHash) {
         indexImpl.applyConfiguration(configuration),
         ::testing::HasSubstr("The required key \"git-hash\" was not found in "
                              "the `meta-data.json`"));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("The index was built before git commit "
-                                     "hashes were stored in the index meta "
-                                     "data"));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+            ::testing::HasSubstr("The index was built before git commit "
+                                 "hashes were stored in the index meta "
+                                 "data")));
   }
 }
 
@@ -1643,8 +1633,10 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
     ad_utility::makeIfstream(basename + CONFIGURATION_FILE) >> configuration;
     return configuration;
   };
-  auto warning =
-      ::testing::HasSubstr("which is deprecated and will not be supported");
+  auto noWarning = ::testing::Not(
+      ::testing::HasSubstr("which is deprecated and will not be supported"));
+  auto warning = ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+      ::testing::HasSubstr("which is deprecated and will not be supported"));
 
   // Load the index with the given `basename` (without its permutations if
   // `loadPermutations` is false, with its persisted updates if
@@ -1682,7 +1674,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
     if (encoding == GeoPointEncoding::LatMajor) {
       EXPECT_THAT(load(basename), warning);
     } else {
-      EXPECT_THAT(load(basename), ::testing::Not(warning));
+      EXPECT_THAT(load(basename), noWarning);
     }
   }
 
@@ -1730,7 +1722,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
     if (hasPoint) {
       EXPECT_THAT(log, warning);
     } else {
-      EXPECT_THAT(log, ::testing::Not(warning));
+      EXPECT_THAT(log, noWarning);
     }
   }
 
@@ -1769,8 +1761,10 @@ TEST(IndexImpl, applyConfigurationDeprecatedIgnoreCaseKey) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       indexImpl.applyConfiguration(configuration),
       ::testing::HasSubstr("Deprecated key \"ignore-case\" in index build"));
-  EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr(std::string{ERROR_IGNORE_CASE_UNSUPPORTED}));
+  EXPECT_THAT(
+      logStream.str(),
+      ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+          ::testing::HasSubstr(std::string{ERROR_IGNORE_CASE_UNSUPPORTED})));
 }
 
 // _____________________________________________________________________________
@@ -1785,10 +1779,11 @@ TEST(IndexImpl, applyConfigurationMissingLocaleKey) {
       indexImpl.applyConfiguration(configuration),
       ::testing::HasSubstr(
           "Missing required key \"locale\" in index build's metadata"));
-  EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr(
-                  "Key \"locale\" is missing in the metadata. This is probably "
-                  "an old index build that is no longer supported"));
+  EXPECT_THAT(
+      logStream.str(),
+      ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(::testing::HasSubstr(
+          "Key \"locale\" is missing in the metadata. This is probably "
+          "an old index build that is no longer supported")));
 }
 
 // _____________________________________________________________________________

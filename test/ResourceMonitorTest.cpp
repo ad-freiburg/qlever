@@ -65,7 +65,8 @@ TEST(ResourceMonitor, StartIsANoOpOnUnsupportedPlatforms) {
   }
   EXPECT_FALSE(fs::exists(path));
   EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr("not supported on this platform"));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+                  ::testing::HasSubstr("not supported on this platform")));
 }
 #endif
 
@@ -541,7 +542,8 @@ TEST(ResourceMonitor, AppendModeWritesASecondHeaderWhenRotationFails) {
   EXPECT_EQ(lines[0], oldHeader);
   EXPECT_EQ(lines[1], oldRow);
   EXPECT_EQ(lines[2], rm::tsvHeader);
-  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("could not move"));
+  EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+                                   ::testing::HasSubstr("could not move")));
 }
 
 // _____________________________________________________________________________
@@ -788,13 +790,15 @@ TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
     const std::string expectedMessage = stdException
                                             ? "sampling stopped: boom"
                                             : "sampling stopped: unknown error";
-    EXPECT_THAT(logStream.str(), ::testing::HasSubstr(expectedMessage));
+    EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                                     ::testing::HasSubstr(expectedMessage)));
   }
 }
 
 #if defined(__linux__)
 // _____________________________________________________________________________
 TEST(ResourceMonitor, WriteFailureWarnsOnceAndStopsSampling) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   // `/dev/full` opens successfully but fails every write (it simulates a
   // full disk), which is exactly the failure the sampler must warn about.
   if (!fs::exists("/dev/full")) {
