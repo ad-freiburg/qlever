@@ -798,6 +798,7 @@ TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
 #if defined(__linux__)
 // _____________________________________________________________________________
 TEST(ResourceMonitor, WriteFailureWarnsOnceAndStopsSampling) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   // `/dev/full` opens successfully but fails every write (it simulates a
   // full disk), which is exactly the failure the sampler must warn about.
   if (!fs::exists("/dev/full")) {
