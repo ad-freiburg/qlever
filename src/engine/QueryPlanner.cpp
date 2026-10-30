@@ -63,6 +63,7 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
@@ -1819,6 +1820,20 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     auto sj = rewriteFilterToSpatialJoin(
         filterExpression, _qec, [this] { return generateUniqueVarName(); });
     if (!sj) {
+      // A `geof:distance` filter with a fixed value on one side is evaluated
+      // row by row over all geometries on the other side. This also applies if
+      // the other side is not a variable (e.g. `geof:centroid(?x)`), even
+      // though such a filter could not be rewritten in any form. Filters with
+      // two variables are only reported if they lead to a Cartesian product
+      // (see `fillDpTab`).
+      //
+      // TODO<ullingerc> Filters like `geof:distance(?a, <fixed>) > constant`
+      // can never be rewritten to a `SpatialJoin`, so the warning cannot be
+      // acted upon. Consider not reporting them.
+      if (sparqlExpression::containsGeoDistanceExpressionWithOneFixedGeometry(
+              *filterExpression.expression_.getPimpl())) {
+        addNonRewritableGeoDistanceFilterWarning(filterExpression);
+      }
       plans.push_back({filterExpression, std::nullopt});
     } else {
       // Substitution of a `SpatialJoin` plan may be forced only if attaching
@@ -1832,6 +1847,21 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     }
   }
   return plans;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::addNonRewritableGeoDistanceFilterWarning(
+    const SparqlFilter& filter) {
+  auto warning = absl::StrCat(
+      "The filter ", filter.expression_.getDescriptor(),
+      " uses geof:distance or geof:metricDistance, but could not be evaluated "
+      "using an efficient spatial join. Only certain filter patterns, for "
+      "example geof:distance(?a, ?b) <= constant, can be optimized. See "
+      "https://docs.qlever.dev/geosparql/ for the supported patterns.");
+  // The same filter may be seeded more than once (see
+  // `optimizeCommutatively`), but `Operation::addWarning` (to which
+  // `warnings_` are forwarded in `createExecutionTree`) ignores duplicates.
+  warnings_.push_back(std::move(warning));
 }
 
 // _____________________________________________________________________________
@@ -1985,6 +2015,20 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   plan.containsBindSubstitute_ = containsBindSubstitute;
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
       result.at(0), filtersAndOptSubstitutes);
+  // Filters that cannot be substituted don't connect components (see
+  // `QueryGraph::setupGraph`), so a `geof:distance` filter between two
+  // components is evaluated on top of the Cartesian product.
+  for (const auto& [i, filterAndSubst] :
+       ::ranges::views::enumerate(filtersAndOptSubstitutes)) {
+    bool appliedOnCartesianProduct =
+        ((filterIds >> i) & 1) == 0 &&
+        ((result.at(0).front()._idsOfIncludedFilters >> i) & 1) != 0;
+    if (appliedOnCartesianProduct &&
+        sparqlExpression::containsGeoDistanceExpression(
+            *filterAndSubst.filter_.expression_.getPimpl())) {
+      addNonRewritableGeoDistanceFilterWarning(filterAndSubst.filter_);
+    }
+  }
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
   return result;
 }

@@ -359,6 +359,14 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+  // Add a warning that `filter`, which uses `geof:distance` or
+  // `geof:metricDistance`, could not be evaluated using a `SpatialJoin`. This
+  // is called if the filter could have been rewritten except for its form (one
+  // side of the distance function is a fixed value, see
+  // `seedFilterSubstitutes`) or if it is evaluated on top of a Cartesian
+  // product (see `fillDpTab`).
+  void addNonRewritableGeoDistanceFilterWarning(const SparqlFilter& filter);
+
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which

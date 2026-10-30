@@ -1652,6 +1652,70 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, WarningForNonRewritableGeofDistanceFilter) {
+  // `?a <p> ?b` and `?x <p> ?y` are two connected components, `?y` and `?z`
+  // are connected.
+  auto query = [](std::string_view filter) {
+    return absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE { ?a <p> ?b . ?x <p> ?y . ?x <q> ?z . FILTER(",
+        filter, ") }");
+  };
+  auto warn = "could not be evaluated using an efficient spatial join";
+  std::string point =
+      "\"POINT(1 1)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto expectWarnings =
+      [&](std::string_view filter, std::vector<std::string> warnings,
+          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+        auto t = generateLocationTrace(l);
+        h::expect(query(filter), h::QetWithWarnings(warnings, ::testing::_));
+      };
+
+  // Rewritable: no warning.
+  expectWarnings("geof:distance(?y, ?b) <= 0.5", {});
+  expectWarnings(absl::StrCat("geof:distance(?y, ", point, ") <= 0.5"), {});
+
+  // Two variables in different components: Cartesian product, warning.
+  // Unsupported comparison, nested call, metric distance inside a disjunction,
+  // complex geometry argument.
+  expectWarnings("geof:distance(?y, ?b) < 0.5", {warn});
+  expectWarnings("2 * geof:distance(?y, ?b) <= 1", {warn});
+  expectWarnings("?a = <x> || geof:metricDistance(?y, ?b) <= 500", {warn});
+  expectWarnings("geof:distance(geof:centroid(?y), ?b) <= 1", {warn});
+
+  // Two variables in the same component: evaluated on top of a join, no
+  // warning.
+  expectWarnings("geof:distance(?y, ?z) < 0.5", {});
+
+  // One variable and one fixed value: warning regardless of the plan.
+  expectWarnings(absl::StrCat("geof:distance(?y, ", point, ") < 0.5"), {warn});
+  expectWarnings(absl::StrCat("geof:distance(", point, ", ?y) * 2 <= 1"),
+                 {warn});
+
+  // A complex geometry argument next to a fixed value: warning, even though
+  // the filter cannot be rewritten in any form.
+  expectWarnings(
+      absl::StrCat("geof:distance(geof:centroid(?y), ", point, ") <= 0.5"),
+      {warn});
+
+  // Two fixed values: no warning.
+  expectWarnings(absl::StrCat("geof:distance(", point, ", ", point, ") < 0.5"),
+                 {});
+
+  // Unrelated filter, also between two components: no warning.
+  expectWarnings("?y < ?b", {});
+
+  // The filter is seeded once per commutative block (here two because of the
+  // OPTIONAL), but the warning is only reported once.
+  h::expect(absl::StrCat(
+                "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+                "SELECT * WHERE { ?x <p> ?y . OPTIONAL { ?x <q> ?c } ?x <r> ?d "
+                ". FILTER(geof:distance(?y, ",
+                point, ") < 0.5) }"),
+            h::QetWithWarnings({warn}, ::testing::_));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, FilterIsNotRewritten) {
   auto scan = h::IndexScanFromStrings;
 
