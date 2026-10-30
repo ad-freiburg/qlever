@@ -769,6 +769,52 @@ TEST(IndexTest, processTriple) {
   }
 }
 
+// Test the words of the `ql:has-word` triples with the different
+// normalizations.
+TEST(IndexTest, processTripleHasWordNormalization) {
+  // A literal with "café" composed, without accent, uppercase and decomposed,
+  // and decomposed in plural, and a function that returns its words with the
+  // given normalization.
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.addHasWordTriples() = true;
+    index.setHasWordNormalizationForIndexBuilding(normalization);
+    TurtleTriple turtleTriple{
+        iri("<subject>"), iri("<predicate>"),
+        lit("\"Café cafe, CAFE\xcc\x81! cafe\xcc\x81s\"")};
+    return index.processTriple(std::move(turtleTriple)).wordFrequencies_;
+  };
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // With `Lowercase`, the composed "é" is kept, and the combining mark of the
+  // decomposed "é" splits the words (it is not alphanumeric).
+  EXPECT_THAT(
+      getWords(ad_utility::HasWordNormalization::Lowercase),
+      UnorderedElementsAre(Pair("café", 1), Pair("cafe", 3), Pair("s", 1)));
+
+  // With `LowercaseNoAccents`, all accents are removed before the
+  // tokenization.
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              UnorderedElementsAre(Pair("cafe", 3), Pair("cafes", 1)));
+}
+
+// Test the names of the normalizations in the option of `qlever-index`.
+TEST(IndexTest, hasWordNormalizationNames) {
+  using ad_utility::HasWordNormalization;
+
+  // Both names are parsed to their normalization.
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase"),
+            HasWordNormalization::Lowercase);
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase-no-accents"),
+            HasWordNormalization::LowercaseNoAccents);
+
+  // An unknown name throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HasWordNormalization::fromString("uppercase"),
+      ::testing::HasSubstr("is not a valid has-word normalization"));
+}
+
 // _____________________________________________________________________________
 // The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
 // therefore have to start with `<`) and must be valid regular expressions;
@@ -821,6 +867,31 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
   for (size_t i = 0; i < vocab.size(); ++i) {
     EXPECT_EQ(vocab[VocabIndex::make(i)], readVocab[VocabIndex::make(i)]);
   }
+}
+
+// Test that the normalization of the `ql:has-word` triples is stored in the
+// configuration of the index, so that `getNormalizedWords` (used by
+// `ql:normalize`) also applies it after the index has been loaded.
+TEST(IndexTest, hasWordNormalizationIsStored) {
+  // A function that builds and loads an index with the given normalization and
+  // returns the words of a string with "café" composed and decomposed in
+  // uppercase plural.
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
+    config.addHasWordTriples = true;
+    config.hasWordNormalization = normalization;
+    return getQec(std::move(config))
+        ->getIndex()
+        .getImpl()
+        .getNormalizedWords("Café CAFE\xcc\x81s!");
+  };
+
+  // With `Lowercase`, the accents are kept and the combining mark splits the
+  // decomposed word; with `LowercaseNoAccents`, they are removed.
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::Lowercase),
+              ::testing::ElementsAre("café", "cafe", "s"));
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              ::testing::ElementsAre("cafe", "cafes"));
 }
 
 TEST(IndexTest, NumDistinctEntities) {

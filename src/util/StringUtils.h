@@ -57,6 +57,15 @@ std::string utf8ToLower(std::string_view s, const char* localeName = "");
 template <bool useICU = useICUDefault>
 std::string utf8ToUpper(std::string_view s, const char* localeName = "");
 
+// Remove all accents from a UTF-8 string, e.g. "Café" becomes "Cafe". This
+// decomposes `s` (NFD), drops all nonspacing marks (Unicode category `Mn`) and
+// recomposes the result (NFC). If `useICU == false`, `s` is returned unchanged.
+//
+// NOTE: In some scripts (e.g. Devanagari or Thai), the nonspacing marks also
+// include vowel signs, which are removed as well.
+template <bool useICU = useICUDefault>
+std::string removeAccentsUtf8(std::string_view s);
+
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th
  * codepoint as has a length of size codepoints. If start >= the number of

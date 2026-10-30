@@ -30,6 +30,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "index/GeoPointEncoding.h"
 #include "index/GraphNameManager.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -143,6 +144,11 @@ class IndexImpl {
 
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -439,6 +445,13 @@ class IndexImpl {
   void setGeoPointEncodingForIndexBuilding(
       ad_utility::GeoPointEncoding encoding) {
     geoPointEncodingForIndexBuilding_ = encoding;
+  }
+
+  // Set the normalization of the words of the `ql:has-word` triples; see
+  // `ad_utility::HasWordNormalization` for details.
+  void setHasWordNormalizationForIndexBuilding(
+      ad_utility::HasWordNormalization normalization) {
+    hasWordNormalization_ = normalization;
   }
 
   // __________________________________________________________________________
@@ -929,6 +942,11 @@ class IndexImpl {
   //    together with their term frequencies
   // 3. If the IRI or literal can be encoded directly into an `Id`, do so
   ProcessedTriple processTriple(TurtleTriple&& triple) const;
+
+  // Return the words of `text` as they are stored in the `ql:has-word` triples
+  // (in order and with duplicates). Also used by the SPARQL function
+  // `ql:normalize`, so that strings in queries can be normalized the same way.
+  std::vector<std::string> getNormalizedWords(std::string_view text) const;
 
  protected:
   /**

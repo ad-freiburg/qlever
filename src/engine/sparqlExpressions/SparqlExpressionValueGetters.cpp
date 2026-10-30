@@ -5,6 +5,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 #include <absl/strings/str_format.h>
+#include <absl/strings/str_join.h>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
@@ -12,6 +13,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ExportIds.h"
+#include "index/IndexImpl.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -176,6 +178,30 @@ std::optional<std::string> StringValueGetter::operator()(
   } else {
     return std::nullopt;
   }
+}
+
+// ____________________________________________________________________________
+namespace {
+std::optional<std::string> normalizeString(std::optional<std::string> s,
+                                           EvaluationContextPtr context) {
+  if (!s.has_value()) {
+    return std::nullopt;
+  }
+  return absl::StrJoin(
+      context->_qec.getIndex().getImpl().getNormalizedWords(s.value()), " ");
+}
+}  // namespace
+
+// ____________________________________________________________________________
+std::optional<std::string> NormalizedStringGetter::operator()(
+    Id id, const EvaluationContext* context) const {
+  return normalizeString(StringValueGetter{}(id, context), context);
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> NormalizedStringGetter::operator()(
+    const LiteralOrIri& s, const EvaluationContext* context) const {
+  return normalizeString(StringValueGetter{}(s, context), context);
 }
 
 // ____________________________________________________________________________
@@ -710,6 +736,7 @@ template struct TypeErasedValueGetter<NumericValueGetter>;
 template struct TypeErasedValueGetter<IsValidValueGetter>;
 template struct TypeErasedValueGetter<EffectiveBooleanValueGetter>;
 template struct TypeErasedValueGetter<StringValueGetter>;
+template struct TypeErasedValueGetter<NormalizedStringGetter>;
 template struct TypeErasedValueGetter<LiteralValueGetterWithStrFunction>;
 template struct TypeErasedValueGetter<LiteralValueGetterWithoutStrFunction>;
 template struct TypeErasedValueGetter<

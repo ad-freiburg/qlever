@@ -456,6 +456,10 @@ void IndexImpl::prepareIndexBuild() {
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+  // The normalization of the `ql:has-word` triples is stored so that
+  // `ql:normalize` can apply the same normalization at query time.
+  configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
+      hasWordNormalization_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1505,6 +1509,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 
   applyGeoPointEncoding();
 
+  // Indexes built before the normalization was recorded use `Lowercase`.
+  hasWordNormalization_ = configurationJson_.value(
+      std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY},
+      ad_utility::HasWordNormalization::Lowercase);
+
   // The index and the current binary must agree on whether ICU (Unicode)
   // support is available: the two use different string collations, so mixing
   // them would silently produce a wrong sort order. Indexes built before this
@@ -1637,6 +1646,23 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 }
 
 // ___________________________________________________________________________
+std::vector<std::string> IndexImpl::getNormalizedWords(
+    std::string_view text) const {
+  // With `LowercaseNoAccents`, remove the accents before the tokenization
+  // (combining marks are not alphanumeric and would otherwise split words).
+  // `textWithoutAccents` owns the result, so that `text` stays valid during
+  // the tokenization.
+  std::string textWithoutAccents;
+  if (hasWordNormalization_ ==
+      ad_utility::HasWordNormalization::LowercaseNoAccents) {
+    textWithoutAccents = ad_utility::removeAccentsUtf8(text);
+    text = textWithoutAccents;
+  }
+  return ::ranges::to<std::vector<std::string>>(
+      tokenizeAndNormalizeText(text, vocab_.getLocaleManager()));
+}
+
+// ___________________________________________________________________________
 ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   ProcessedTriple result;
   auto& resultTriple = result.triple_;
@@ -1648,9 +1674,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = lit.getContent();
-      for (auto&& word :
-           tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+      for (auto& word : getNormalizedWords(lit.getContent())) {
         ++result.wordFrequencies_[std::move(word)];
       }
     }

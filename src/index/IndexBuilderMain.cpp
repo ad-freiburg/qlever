@@ -276,6 +276,18 @@ int main(int argc, char** argv) {
   add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
       "Add `ql:has-word` triples for each word in each literal. This enables "
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
+  auto hasWordNormalizationDescription = absl::StrCat(
+      "The normalization of the words of the `ql:has-word` triples. Literals "
+      "are always split at non-alphanumeric characters and the words are "
+      "lowercased; with `lowercase-no-accents`, accents are also removed (e.g. "
+      "\"Café\" becomes \"cafe\"). Accents are all nonspacing marks, which "
+      "in some scripts (e.g. Devanagari or Thai) also include vowel signs. "
+      "Words in queries can be normalized the same way with `ql:normalize`. "
+      "One of ",
+      ad_utility::HasWordNormalization::getListOfSupportedValues(),
+      ", the default is `lowercase`.");
+  add("has-word-normalization", po::value(&config.hasWordNormalization_),
+      hasWordNormalizationDescription.c_str());
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
