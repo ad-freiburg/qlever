@@ -1,13 +1,47 @@
-   Copyright 2017 Björn Buchhold, University of Freiburg, Germany
+QLever gratefully makes use of the following open-source projects, see
+https://github.com/ad-freiburg/qlever/blob/master/CMakeLists.txt for details.
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+1. [Gtest and GMock](https://github.com/google/googletest)
 
-       http://www.apache.org/licenses/LICENSE-2.0
+BSD 3-Clause "New" or "Revised" License
+TODO: Must retain copyright, conditions, and disclaimer from LICENSE file
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+2. [JSON for Modern C++](https://github.com/nlohmann/json)
+
+MIT License
+
+3. [ANTLR](https://github.com/antlr/antlr4) 
+
+BSD 3-Clause "New" or "Revised" License
+TODO: Must retain copyright, conditions, and disclaimer from LICENSE file
+
+4. [Range V3](https://github.com/ericniebler/range-v3)
+
+Boost Software License - Version 1.0 - August 17th, 2003
+TODO: Must retain copyright, conditions, and disclaimer from LICENSE file
+
+5. [CTRE](https://github.com/hanickadot/compile-time-regular-expressions)
+
+Apache 2.0 License
+
+6. [Abseil](https://github.com/abseil/abseil-cpp)
+
+Apache License 2.0
+
+7. [S2 Geometry](https://github.com/google/s2geometry)
+
+Apache License 2.0
+
+8. [FSST](https://github.com/cwida/fsst)
+
+MIT License
+
+9. [RE2](https://github.com/google/re2)
+
+BSD-3-Clause license
+TODO: Must retain copyright, conditions, and disclaimer from LICENSE file
+
+
+TODO: What about the code that is included as compiled libraries, notably:
+Threads, ICU, jemalloc, ZSTD, Boost, OpenSSL? Do we need a special
+acknowledgment for them in this NOTICE file? (Except for thanking them.)
