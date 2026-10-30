@@ -44,10 +44,12 @@ using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
 // Base class for a vocabulary batch-lookup result, shared by the different
-// vocabulary implementations. Owns the materialized string data (`buffer()`,
-// whose concrete type `BufferType` depends on the implementation) and one
-// `string_view` per looked-up term (`views()`, each pointing into `buffer()`).
-// The vocabulary implementation that performs the lookup fills `buffer()` and
+// vocabulary implementations. Owns the storage of the words (`buffer()`,
+// whose concrete type `BufferType` depends on the implementation: a byte
+// buffer, a vector of strings, or a shared handle on the word storage of a
+// vocabulary that keeps its words in RAM) and one `string_view` per looked-up
+// term (`views()`, each pointing into storage that `buffer()` owns). The
+// vocabulary implementation that performs the lookup fills `buffer()` and
 // `views()`, then calls `asResult()` to hand out a `VocabBatchLookupResult`
 // that keeps this object (and thus the storage the views point into) alive for
 // as long as the `VocabBatchLookupResult` is used.
@@ -62,8 +64,8 @@ class VocabLookupDataCommonBase {
   BufferType& buffer() { return buffer_; }
 
   // Mutable access to the views (one `string_view` per looked-up index, each
-  // pointing into `buffer()`), for the producer to fill before calling
-  // `asResult`.
+  // pointing into storage that `buffer()` owns), for the producer to fill
+  // before calling `asResult`.
   std::vector<std::string_view>& views() { return views_; }
 
   // Convert a filled lookup-data object into the public result type
@@ -81,10 +83,13 @@ class VocabLookupDataCommonBase {
   }
 
  private:
-  // Buffer for the materialized string data (used by disk-based vocabularies).
+  // The storage owned by the result: the materialized string data, or
+  // handles on the storage of other owners (see
+  // `SubBatchVocabBatchLookupData`).
   BufferType buffer_;
 
-  // One `string_view` per looked-up index, each pointing into `buffer_`.
+  // One `string_view` per looked-up index, each pointing into storage that
+  // `buffer_` owns.
   std::vector<std::string_view> views_;
 
   // The span over `views_`, populated by `finalize()` and exposed by
@@ -137,6 +142,40 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 // `std::vector<std::string>` buffer and the `views()` point at those strings.
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
+
+// The two owners that a `SubBatchVocabBatchLookupData` holds on to: the word
+// storage of a vocabulary that keeps its words in RAM (shared with that
+// vocabulary), and the result of one batch lookup in another vocabulary (null
+// if no word came from there).
+struct SubBatchSources {
+  std::shared_ptr<const CompactVectorOfStrings<char>> internalWords_;
+  VocabBatchLookupResult externalWords_;
+};
+
+// A vocabulary batch-lookup result whose words come from up to two sources
+// (see `SubBatchSources`): for example the words that
+// `VocabularyInternalExternal` keeps in RAM, and the on-disk words of the
+// same batch. The result owns a share of both, so the views stay valid as
+// long as the result lives, also after the vocabulary was closed; only the
+// views are copied into the result, no word data.
+struct SubBatchVocabBatchLookupData
+    : VocabLookupDataCommonBase<SubBatchSources> {};
+
+// The storage that a `SharedWordsWithPlaceholdersVocabBatchLookupData` owns:
+// a share of the word storage of a vocabulary with holes (see
+// `VocabularyInMemoryBinSearch`), and the placeholders for the indices of the
+// batch that are holes.
+struct SharedWordsAndPlaceholders {
+  std::shared_ptr<const CompactVectorOfStrings<char>> words_;
+  std::vector<std::string> placeholders_;
+};
+
+// A vocabulary batch-lookup result of a vocabulary with holes that keeps its
+// words in RAM (`VocabularyInMemoryBinSearch`): a contained index yields a
+// view into the shared word storage, a hole yields a view into one of the
+// owned placeholders.
+struct SharedWordsWithPlaceholdersVocabBatchLookupData
+    : VocabLookupDataCommonBase<SharedWordsAndPlaceholders> {};
 
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)

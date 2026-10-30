@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -47,12 +48,18 @@ class VocabularyInMemoryBinSearch
   static constexpr bool replaceOptionalByPlaceholderOnExport = true;
 
  private:
-  // The actual storage. The indices are stored either as an owned vector
-  // (after `open()`, or after reading from a regular, non-zero-copy
-  // serializer), or as a non-owning view into externally-owned memory (after
-  // `fromZeroCopyDeserializer`).
-  Words words_;
+  // The actual storage. The words are shared with the batch-lookup results
+  // (see `lookupBatch` and `sharedWords`), which is why they are immutable:
+  // `open()` and deserialization replace them by new ones, `close()` by empty
+  // ones. The indices are stored
+  // either as an owned vector (after `open()`, or after reading from a
+  // regular, non-zero-copy serializer), or as a non-owning view into
+  // externally-owned memory (after `fromZeroCopyDeserializer`).
+  std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
   IndexStorage indices_;
+
+  // Const access to the words.
+  const Words& words() const { return *words_; }
 
  public:
   // Construct an empty vocabulary
@@ -73,7 +80,8 @@ class VocabularyInMemoryBinSearch
       requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
   static VocabularyInMemoryBinSearch fromZeroCopyDeserializer(S& serializer) {
     VocabularyInMemoryBinSearch result;
-    result.words_ = Words::fromZeroCopyDeserializer(serializer);
+    result.words_ = std::make_shared<const Words>(
+        Words::fromZeroCopyDeserializer(serializer));
     result.indices_ = IndexStorage::fromZeroCopyDeserializer(serializer);
     return result;
   }
@@ -82,14 +90,19 @@ class VocabularyInMemoryBinSearch
   // only viewed.
   IndicesView indices() const { return indices_.view(); }
 
+  // A share of the ownership of the words, for a batch-lookup result that
+  // returns views into them (see `lookupBatch` below and
+  // `VocabularyInternalExternal::lookupBatch`).
+  std::shared_ptr<const Words> sharedWords() const { return words_; }
+
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
   void open(const std::string& fileName);
 
   // Return the total number of words
   [[nodiscard]] size_t size() const {
-    AD_CORRECTNESS_CHECK(indices().size() == words_.size());
-    return words_.size();
+    AD_CORRECTNESS_CHECK(indices().size() == words().size());
+    return words().size();
   }
 
   // Return the position (i.e. the offset into the words) of the word with the
@@ -132,7 +145,7 @@ class VocabularyInMemoryBinSearch
   // Iterate over all words of the vocabulary in order, together with their
   // (because of the holes, not necessarily contiguous) vocabulary index.
   auto scanAll() const {
-    return ::ranges::views::zip(indices(), words_) |
+    return ::ranges::views::zip(indices(), words()) |
            ql::views::transform([](const auto& indexAndWord) {
              const auto& [index, word] = indexAndWord;
              return IndexAndWord{index, word};
@@ -140,9 +153,12 @@ class VocabularyInMemoryBinSearch
   }
 
   //____________________________________________________________________________
-  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
-  }
+  // Return the words for `indices` (not empty) in that order: a contained
+  // index yields a view into the word storage of this vocabulary, whose
+  // ownership the result shares (no copy), an index that is a hole yields
+  // the placeholder of `operator[]`, owned by the result. A result stays
+  // valid when this vocabulary is closed.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
@@ -192,14 +208,20 @@ class VocabularyInMemoryBinSearch
   void close();
 
   // Const access to the underlying words.
-  auto begin() const { return words_.begin(); }
-  auto end() const { return words_.end(); }
+  auto begin() const { return words().begin(); }
+  auto end() const { return words().end(); }
 
   // Generic serialization support. Note: Reading always produces a vocabulary
   // that owns its indices; use `fromZeroCopyDeserializer` (see above) to obtain
   // a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {
-    serializer | arg.words_;
+    if constexpr (ad_utility::serialization::ReadSerializer<S>) {
+      Words words;
+      serializer | words;
+      arg.words_ = std::make_shared<const Words>(std::move(words));
+    } else {
+      serializer | *arg.words_;
+    }
     serializer | arg.indices_;
   }
 };
