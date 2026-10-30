@@ -50,12 +50,12 @@ SelectedBlocks BlockSelector::select(
     const ScanSpecAndBlocks& scanSpecAndBlocks) && {
   forEachCandidateBlock(
       scanSpecAndBlocks,
-      [this](const CompressedBlockMetadata& block) { handleBlock(block); });
+      [this](const SubBlockMetadata& block) { handleBlock(block); });
   return std::move(result_);
 }
 
 // _____________________________________________________________________________
-void BlockSelector::handleBlock(const CompressedBlockMetadata& block) {
+void BlockSelector::handleBlock(const SubBlockMetadata& block) {
   if (filter_.canBlockBeSkipped(block)) {
     return;
   }
@@ -68,18 +68,18 @@ void BlockSelector::handleBlock(const CompressedBlockMetadata& block) {
     addToMetadata(id, Id::makeUndefined());
     return;
   }
-  AD_CORRECTNESS_CHECK(block.graphInfo_.has_value());
+  const auto& graphInfo = block.graphInfo();
+  AD_CORRECTNESS_CHECK(graphInfo.has_value());
   const auto& graphFilter = filter_.graphFilter_;
   ql::ranges::for_each(
-      block.graphInfo_.value() | ql::views::filter([&graphFilter](Id graph) {
+      graphInfo.value() | ql::views::filter([&graphFilter](Id graph) {
         return graphFilter.isGraphAllowed(graph);
       }),
       [this, id](Id graph) { addToMetadata(id, graph); });
 }
 
 // _____________________________________________________________________________
-bool BlockSelector::blockNeedsToBeRead(
-    const CompressedBlockMetadata& block) const {
+bool BlockSelector::blockNeedsToBeRead(const SubBlockMetadata& block) const {
   // We take the single `col0Id` of the block from its metadata, so the block
   // has to be read if it holds several `col0Id`s (we would miss the ones in
   // between), or if we cannot rule out that all of its triples were deleted by
@@ -95,7 +95,7 @@ bool BlockSelector::blockNeedsToBeRead(
   // the graph info of a block with delta triples is only an upper bound (the
   // graph of a deleted triple is still listed there), so it cannot be used to
   // determine the graphs that actually remain.
-  bool graphsAreKnown = block.graphInfo_.has_value() &&
+  bool graphsAreKnown = block.graphInfo().has_value() &&
                         !locatedTriples_.containsTriples(block.blockIndex_);
   return !graphsAreKnown &&
          (addGraphColumn_ || !filter_.graphFilter_.areAllGraphsAllowed());
@@ -119,15 +119,15 @@ void BlockSelector::addToMetadata(Id id, Id graph) {
 // _____________________________________________________________________________
 void BlockSelector::forEachCandidateBlock(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    absl::FunctionRef<void(const CompressedBlockMetadata&)> action) const {
+    absl::FunctionRef<void(const SubBlockMetadata&)> action) const {
   if (!idFilter_.has_value()) {
     ql::ranges::for_each(scanSpecAndBlocks.getBlockMetadataView(), action);
     return;
   }
-  auto firstCol0Id = [](const CompressedBlockMetadata& metadata) {
+  auto firstCol0Id = [](const SubBlockMetadata& metadata) {
     return metadata.firstTriple_.col0Id_;
   };
-  auto lastCol0Id = [](const CompressedBlockMetadata& metadata) {
+  auto lastCol0Id = [](const SubBlockMetadata& metadata) {
     return metadata.lastTriple_.col0Id_;
   };
   const auto& ids = idFilter_.value();

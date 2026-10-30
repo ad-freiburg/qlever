@@ -470,7 +470,7 @@ bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::setOriginalMetadata(
-    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
+    PermutationBlockMetadata metadata) {
   originalMetadata_ = std::move(metadata);
 }
 
@@ -508,15 +508,15 @@ void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
-  // Copy to preserve originalMetadata_.
   if (!originalMetadata_.has_value()) {
     AD_LOG_WARN << "The original metadata has not been set, but updates are "
                    "being performed. This should only happen in unit tests\n";
-    augmentedMetadata_.emplace();
-  } else {
-    augmentedMetadata_ = *originalMetadata_.value();
   }
-  for (auto& blockMetadata : augmentedMetadata_.value()) {
+  auto originalMetadata =
+      originalMetadata_.value_or(PermutationBlockMetadata{});
+  // Copy to preserve `originalMetadata_`.
+  auto augmentedBlocks = originalMetadata.blocks();
+  for (auto& blockMetadata : augmentedBlocks) {
     if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
       blockMetadata.firstTriple_ =
           std::min(blockMetadata.firstTriple_,
@@ -541,12 +541,14 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     lastBlockN.graphInfo_.emplace();
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, *blockUpdates);
-    augmentedMetadata_->push_back(lastBlock);
+    augmentedBlocks.push_back(lastBlock);
 
     AD_CORRECTNESS_CHECK(
         CompressedBlockMetadata::checkInvariantsForSortedBlocks(
-            *augmentedMetadata_));
+            augmentedBlocks));
   }
+  augmentedMetadata_ =
+      originalMetadata.withAugmentedBlocks(std::move(augmentedBlocks));
 }
 
 // ____________________________________________________________________________

@@ -24,9 +24,9 @@ static auto getBeginAndEnd(T& range) {
 }
 
 // TODO @realHannes:
-// Move `ScanSpecAndBlocks` (containing the `BlockMetadataRanges`) and the
-// helper functions below into `CompressedRelationMetadata.h`, next to the
-// other metadata related structs.
+// Move `ScanSpecAndBlocks` (containing the `SubBlockMetadataRanges`) and the
+// helper functions below into `SubBlockMetadata.h`, next to the other
+// metadata related structs.
 
 // _____________________________________________________________________________
 Id CompressedRelationReader::getRelevantIdFromTriple(
@@ -99,18 +99,18 @@ auto CompressedRelationReader::getBlocksForJoin(
   }
 
   // `id < block` iff `id < block.firstTriple`
-  auto idLessThanBlock = [&metadataAndBlocks](
-                             Id id, const CompressedBlockMetadata& block) {
+  auto idLessThanBlock = [&metadataAndBlocks](Id id,
+                                              const SubBlockMetadata& block) {
     return id < getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks);
   };
 
   // `block < id` iff `block.lastTriple < id`
-  auto blockLessThanId = [&metadataAndBlocks](
-                             const CompressedBlockMetadata& block, Id id) {
+  auto blockLessThanId = [&metadataAndBlocks](const SubBlockMetadata& block,
+                                              Id id) {
     return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
   };
 
-  std::vector<CompressedBlockMetadata> result;
+  std::vector<SubBlockMetadata> result;
   const auto& mdView = metadataAndBlocks.getBlockMetadataView();
 
   auto [colIt, colEnd] = getBeginAndEnd(joinColumn);
@@ -158,14 +158,14 @@ auto CompressedRelationReader::getBlocksForJoin(
 }
 
 // _____________________________________________________________________________
-std::array<std::vector<CompressedBlockMetadata>, 2>
+std::array<std::vector<SubBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks1,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks2) {
   // Associate a block together with the relevant ID (col1 or col2) for this
   // join from the first and last triple.
   struct BlockWithFirstAndLastId {
-    const CompressedBlockMetadata& block_;
+    const SubBlockMetadata& block_;
     Id first_;
     Id last_;
   };
@@ -181,8 +181,8 @@ CompressedRelationReader::getBlocksForJoin(
       [&blockLessThanBlock](
           const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
         auto getSingleBlock =
-            [&metadataAndBlocks](const CompressedBlockMetadata& block)
-            -> BlockWithFirstAndLastId {
+            [&metadataAndBlocks](
+                const SubBlockMetadata& block) -> BlockWithFirstAndLastId {
           return {
               block,
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
@@ -212,7 +212,7 @@ CompressedRelationReader::getBlocksForJoin(
   // !lessThan(b, a)` is not transitive.
   auto findMatchingBlocks = [&blockLessThanBlock](const auto& blocks,
                                                   const auto& otherBlocks) {
-    std::vector<CompressedBlockMetadata> result;
+    std::vector<SubBlockMetadata> result;
     auto [it, end] = getBeginAndEnd(otherBlocks);
     for (const auto& a : blocks) {
       it = ql::ranges::find_if_not(it, end,
@@ -235,7 +235,7 @@ CompressedRelationReader::getBlocksForJoin(
 }
 // _____________________________________________________________________________
 size_t CompressedRelationReader::getNumberOfBlockMetadataValues(
-    const BlockMetadataRanges& blockMetadata) {
+    const SubBlockMetadataRanges& blockMetadata) {
   return ::ranges::accumulate(blockMetadata, 0ULL,
                               [](auto acc, const auto& block) {
                                 return acc + ql::ranges::size(block);
@@ -243,10 +243,10 @@ size_t CompressedRelationReader::getNumberOfBlockMetadataValues(
 }
 
 // _____________________________________________________________________________
-std::vector<CompressedBlockMetadata>
+std::vector<SubBlockMetadata>
 CompressedRelationReader::convertBlockMetadataRangesToVector(
-    const BlockMetadataRanges& blockMetadata) {
-  std::vector<CompressedBlockMetadata> blocksMaterialized;
+    const SubBlockMetadataRanges& blockMetadata) {
+  std::vector<SubBlockMetadata> blocksMaterialized;
   blocksMaterialized.reserve(getNumberOfBlockMetadataValues(blockMetadata));
   ql::ranges::copy(blockMetadata | ql::views::join,
                    std::back_inserter(blocksMaterialized));
@@ -254,12 +254,12 @@ CompressedRelationReader::convertBlockMetadataRangesToVector(
 }
 
 // _____________________________________________________________________________
-BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
+SubBlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
     const ScanSpecification& scanSpec,
-    const BlockMetadataRanges& blockMetadata) {
+    const SubBlockMetadataRanges& blockMetadata) {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
-  CompressedBlockMetadata key;
+  SubBlockMetadata key;
 
   auto setOrDefault = [&scanSpec](auto getterA, auto getterB, auto& triple,
                                   auto defaultValue) {
@@ -292,10 +292,10 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
   // search on the inner blocks with respect to the first and
   //     last triple.
   // (2) Perform binary search regarding the outer blocks.
-  BlockMetadataRanges resultBlocks;
+  SubBlockMetadataRanges resultBlocks;
   ql::ranges::for_each(
-      blockMetadata, [&resultBlocks, &key,
-                      &comp](const BlockMetadataRange& blockMetadataSubrange) {
+      blockMetadata, [&resultBlocks, &key, &comp](
+                         const SubBlockMetadataRange& blockMetadataSubrange) {
         auto result = ql::ranges::equal_range(blockMetadataSubrange, key, comp);
         if (result.begin() != result.end()) {
           resultBlocks.emplace_back(result.begin(), result.end());
@@ -318,7 +318,7 @@ static auto createErrorMessage = [](const auto& b1, const auto& b2,
 };
 
 // _____________________________________________________________________________
-// Check if the provided `Range` holds less than two `CompressedBlockMetadata`
+// Check if the provided `Range` holds less than two `SubBlockMetadata`
 // values.
 CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
 static bool checkBlockRangeSizeLessThanTwo(const Range& blockMetadataRange) {
@@ -392,7 +392,8 @@ static void checkBlockMetadataInvariantBlockConsistencyImpl(
 
 // _____________________________________________________________________________
 CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
-    ScanSpecification scanSpec, const BlockMetadataRanges& blockMetadataRanges)
+    ScanSpecification scanSpec,
+    const SubBlockMetadataRanges& blockMetadataRanges)
     : scanSpec_(std::move(scanSpec)) {
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
     const auto& blockRangeView = blockMetadataRanges | ql::views::join;
@@ -407,20 +408,20 @@ CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
 }
 
 // _____________________________________________________________________________
-ql::span<const CompressedBlockMetadata>
+SubBlockMetadataSpan
 CompressedRelationReader::ScanSpecAndBlocks::getBlockMetadataSpan() const {
-  // ScanSpecAndBlocks must contain exactly one BlockMetadataRange to be
+  // ScanSpecAndBlocks must contain exactly one SubBlockMetadataRange to be
   // accessible as a span.
   AD_CONTRACT_CHECK(blockMetadata_.size() == 1);
   // `ql::span` object requires contiguous range.
-  static_assert(ql::ranges::contiguous_range<BlockMetadataRange>);
+  static_assert(ql::ranges::contiguous_range<SubBlockMetadataRange>);
   const auto& blockMetadataRange = blockMetadata_.front();
   return ql::span(blockMetadataRange.begin(), blockMetadataRange.end());
 }
 
 // _____________________________________________________________________________
 void CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
-    ql::span<const CompressedBlockMetadata> blocks, size_t firstFreeColIndex) {
+    SubBlockMetadataSpan blocks, size_t firstFreeColIndex) {
   checkBlockMetadataInvariantOrderAndUniquenessImpl(blocks);
   checkBlockMetadataInvariantBlockConsistencyImpl(blocks, firstFreeColIndex);
 }

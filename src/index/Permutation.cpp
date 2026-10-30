@@ -33,7 +33,7 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
 CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
     const ScanSpecification& scanSpec,
     const LocatedTriplesState& locatedTriplesState) const {
-  return {scanSpec, BlockMetadataRanges(getAugmentedMetadataForPermutation(
+  return {scanSpec, SubBlockMetadataRanges(getAugmentedMetadataForPermutation(
                         locatedTriplesState))};
 }
 
@@ -82,7 +82,8 @@ void Permutation::loadFromDisk(
 // _____________________________________________________________________________
 void Permutation::setOriginalMetadataForDeltaTriples(
     DeltaTriples& deltaTriples) const {
-  deltaTriples.setOriginalMetadata(permutation(), metaData().blockDataShared(),
+  deltaTriples.setOriginalMetadata(permutation(),
+                                   metaData().permutationBlockMetadata(),
                                    permutationType_ == Type::INTERNAL);
   if (internalPermutation_ != nullptr) {
     internalPermutation().setOriginalMetadataForDeltaTriples(deltaTriples);
@@ -243,7 +244,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 // _____________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+    std::optional<std::vector<SubBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
@@ -257,7 +258,7 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
 CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     const CompressedRelationReader& reader,
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+    std::optional<std::vector<SubBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
@@ -301,10 +302,12 @@ const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
 }
 
 // ______________________________________________________________________
-BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
+SubBlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
     const LocatedTriplesState& locatedTriplesState) const {
-  BlockMetadataSpan blocks(getLocatedTriplesForPermutation(locatedTriplesState)
-                               .getAugmentedMetadata());
+  SubBlockMetadataSpan blocks =
+      getLocatedTriplesForPermutation(locatedTriplesState)
+          .getAugmentedMetadata()
+          .subBlocks();
   return {{blocks.begin(), blocks.end()}};
 }
 

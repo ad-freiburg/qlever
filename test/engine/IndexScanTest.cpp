@@ -872,8 +872,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   // We have a corresponding column for ?x (at ColumnIndex 1), which is also the
   // first sorted variable column. Thus, we expect that the PrefilterExpression
   // (< 5, ?x) is applied for this `IndexScan`, resulting in prefiltered
-  // `BlockMetadataRanges`. For `IndexScan`s containing prefiltered
-  // `BlockMetadataRanges`, we expect that its result is not cacheable.
+  // `SubBlockMetadataRanges`. For `IndexScan`s containing prefiltered
+  // `SubBlockMetadataRanges`, we expect that its result is not cacheable.
   EXPECT_TRUE(updatedQet.has_value());
   EXPECT_FALSE(updatedQet.value()->getRootOperation()->canResultBeCached());
 
@@ -887,8 +887,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
       std::move(prefilterPairs));
   // No `PrefilterExpression` should be applied for this `IndexScan`, we don't
   // expect an updated QueryExecutionTree. The `IndexScan` should remain
-  // unchanged, containing no prefiltered `BlockMetadataRanges`. Thus, it should
-  // be still cacheable.
+  // unchanged, containing no prefiltered `SubBlockMetadataRanges`. Thus, it
+  // should be still cacheable.
   EXPECT_TRUE(!updatedQet.has_value());
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
 }

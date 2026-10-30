@@ -610,7 +610,7 @@ Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
 
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
-    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
+    std::optional<std::vector<SubBlockMetadata>> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -707,8 +707,7 @@ IndexScan::lazyScanForJoinOfColumnWithScan(ConstIdColumnRef joinColumn) const {
   if (!metaBlocks.has_value() || joinColumn.empty()) {
     return {};
   }
-  auto matchingBlocks =
-      [&]() -> std::optional<std::vector<CompressedBlockMetadata>> {
+  auto matchingBlocks = [&]() -> std::optional<std::vector<SubBlockMetadata>> {
     bool hasUndef = joinColumn.front().isUndefined();
     if (hasUndef) {
       return std::nullopt;
@@ -768,7 +767,7 @@ struct IndexScan::SharedGeneratorState {
   using PrefetchStorage = absl::InlinedVector<Result::IdTableVocabPair, 3>;
   PrefetchStorage prefetchedValues_{};
   // Metadata of blocks that still need to be read.
-  std::vector<CompressedBlockMetadata> pendingBlocks_{};
+  std::vector<SubBlockMetadata> pendingBlocks_{};
   // The join column entry in the last block that has already been fetched.
   std::optional<Id> lastEntryInBlocks_ = std::nullopt;
   // Indicates if the generator has yielded any undefined values.

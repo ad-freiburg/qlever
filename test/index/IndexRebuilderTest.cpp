@@ -482,12 +482,12 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 // _____________________________________________________________________________
 TEST(IndexRebuilder, getNumColumns) {
   EXPECT_EQ(getNumColumns({}), 4);
-  ql::span<const CompressedBlockMetadata> emptySpan;
+  SubBlockMetadataSpan emptySpan;
   EXPECT_EQ(
       getNumColumns({ql::ranges::subrange{emptySpan.begin(), emptySpan.end()}}),
       4);
   using C = CompressedBlockMetadataNoBlockIndex;
-  std::array metadata{
+  PermutationBlockMetadata metadata{std::vector{
       CompressedBlockMetadata{
           C{std::optional{std::vector<C::OffsetAndCompressedSize>(4)}, 0,
             C::PermutedTriple{}, C::PermutedTriple{}, std::nullopt, false},
@@ -498,8 +498,8 @@ TEST(IndexRebuilder, getNumColumns) {
           0},
       CompressedBlockMetadata{C{std::nullopt, 0, C::PermutedTriple{},
                                 C::PermutedTriple{}, std::nullopt, false},
-                              0}};
-  ql::span<const CompressedBlockMetadata> metaSpan{metadata};
+                              0}}};
+  SubBlockMetadataSpan metaSpan = metadata.subBlocks();
 
   EXPECT_EQ(getNumColumns(
                 {ql::ranges::subrange{metaSpan.begin(), metaSpan.begin() + 1}}),
@@ -523,12 +523,12 @@ TEST(IndexRebuilder, getNumColumns) {
 // _____________________________________________________________________________
 TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
   using C = CompressedBlockMetadataNoBlockIndex;
-  CompressedBlockMetadata metadata{
+  PermutationBlockMetadata metadata{std::vector{CompressedBlockMetadata{
       C{std::optional{std::vector<C::OffsetAndCompressedSize>(6)}, 0,
         C::PermutedTriple{}, C::PermutedTriple{}, std::nullopt, false},
-      0};
+      0}}};
 
-  ql::span<const CompressedBlockMetadata> metaSpan{&metadata, 1};
+  SubBlockMetadataSpan metaSpan = metadata.subBlocks();
 
   auto result = getNumberOfColumnsAndAdditionalColumns({});
   EXPECT_EQ(result.first, 4);
