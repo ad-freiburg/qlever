@@ -296,6 +296,16 @@ TEST(VocabularyInMemoryBinSearch, lookupBatch) {
   EXPECT_EQ((*result)[1],
             ad_utility::vocabulary::placeholderForMissingVocabIndex(5));
   EXPECT_EQ((*result)[2], "gamma");
+  // The contained words are views into the vocabulary (no copy).
+  EXPECT_EQ((*result)[0].data(), vocab[0].value().data());
+
+  // The result shares the ownership of the words, so it stays valid after the
+  // vocabulary is closed; the empty batch is rejected.
+  vocab.close();
+  EXPECT_EQ((*result)[0], "alpha");
+  EXPECT_EQ((*result)[2], "gamma");
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
 }
 
 // _____________________________________________________________________________

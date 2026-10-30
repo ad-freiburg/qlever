@@ -7,6 +7,10 @@
 #include <absl/strings/str_cat.h>
 
 #include <memory>
+#include <optional>
+#include <utility>
+
+#include "backports/algorithm.h"
 
 using std::string;
 
@@ -16,11 +20,10 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
       words().size() == 0 && indices().empty(),
       "Calling open on the same vocabulary twice is probably a bug");
   {
-    // Never modify words that a batch-lookup result might share.
-    auto words = std::make_shared<Words>();
+    Words words;
     ad_utility::serialization::FileReadSerializer file(fileName);
-    file >> *words;
-    words_ = std::move(words);
+    file >> words;
+    words_ = std::make_shared<const Words>(std::move(words));
   }
   {
     ad_utility::serialization::FileReadSerializer idFile(
@@ -98,7 +101,7 @@ VocabularyInMemoryBinSearch::makeDiskWriterPtr(
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
   // Batch-lookup results that are still alive keep the previous words.
-  words_ = std::make_shared<Words>();
+  words_ = std::make_shared<const Words>();
   indices_ = {};
 }
 
@@ -121,4 +124,38 @@ uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(
 void VocabularyInMemoryBinSearch::WordWriter::finish() {
   writer_.finish();
   offsetWriter_.finish();
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInMemoryBinSearch::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+
+  // Translate each index to its position once (a binary search); the holes
+  // are the indices without a position.
+  const auto positions =
+      ::ranges::to_vector(indices | ql::views::transform([this](size_t index) {
+                            return positionOfIndex(index);
+                          }));
+  auto data =
+      std::make_shared<SharedWordsWithPlaceholdersVocabBatchLookupData>();
+  data->buffer().words_ = words_;
+  // The placeholders are created up front so that the views into them stay
+  // valid (the vector is not resized afterwards).
+  auto& placeholders = data->buffer().placeholders_;
+  placeholders.reserve(ql::ranges::count_if(
+      positions, [](const auto& position) { return !position.has_value(); }));
+  auto& views = data->views();
+  views.reserve(indices.size());
+  for (const auto& [index, position] :
+       ::ranges::views::zip(indices, positions)) {
+    if (position.has_value()) {
+      views.push_back(wordAtPosition(position.value()));
+    } else {
+      views.push_back(placeholders.emplace_back(
+          ad_utility::vocabulary::placeholderForMissingVocabIndex(index)));
+    }
+  }
+  return SharedWordsWithPlaceholdersVocabBatchLookupData::asResult(
+      std::move(data));
 }

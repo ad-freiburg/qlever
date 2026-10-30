@@ -9,11 +9,13 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
 #include <memory>
+#include <range/v3/view/enumerate.hpp>
 #include <string_view>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "util/GlobalExecutor.h"
+#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
@@ -38,9 +40,10 @@ std::vector<InternalWord> findInternalWords(
     const VocabularyInMemoryBinSearch& internalVocab,
     ql::span<const size_t> indices) {
   std::vector<InternalWord> internalWords;
-  for (const size_t position : ql::views::iota(size_t{0}, indices.size())) {
-    if (const auto word = internalVocab[indices[position]]) {
-      internalWords.push_back({position, word.value()});
+  for (const auto& [position, index] : ::ranges::views::enumerate(indices)) {
+    if (const auto word = internalVocab[index]) {
+      internalWords.push_back(
+          InternalWord{static_cast<size_t>(position), word.value()});
     }
   }
   return internalWords;
@@ -53,8 +56,7 @@ std::vector<InternalWord> findInternalWords(
 template <typename OnInternal, typename OnExternal>
 void forEachPosition(size_t numPositions,
                      ql::span<const InternalWord> internalWords,
-                     const OnInternal& onInternal,
-                     const OnExternal& onExternal) {
+                     OnInternal onInternal, OnExternal onExternal) {
   auto nextInternal = internalWords.begin();
   for (const size_t position : ql::views::iota(size_t{0}, numPositions)) {
     if (nextInternal != internalWords.end() &&
@@ -75,7 +77,7 @@ std::vector<size_t> externalIndices(
   std::vector<size_t> result;
   result.reserve(indices.size() - internalWords.size());
   forEachPosition(
-      indices.size(), internalWords, [](const InternalWord&) {},
+      indices.size(), internalWords, ad_utility::noop,
       [&](size_t position) { result.push_back(indices[position]); });
   return result;
 }
@@ -118,12 +120,12 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   // returned batch owns a share of the internal words and that sub-batch
   // result, so all its views stay valid as long as it lives.
   auto data = std::make_shared<SubBatchVocabBatchLookupData>();
-  data->buffer().internalWords = internalVocab_.sharedWords();
+  data->buffer().internalWords_ = internalVocab_.sharedWords();
   ql::span<const std::string_view> externalWords;
   if (const auto indicesToRead = externalIndices(indices, internalWords);
       !indicesToRead.empty()) {
-    data->buffer().externalWords = externalVocab_.lookupBatch(indicesToRead);
-    externalWords = *data->buffer().externalWords;
+    data->buffer().externalWords_ = externalVocab_.lookupBatch(indicesToRead);
+    externalWords = *data->buffer().externalWords_;
   }
   data->views() = mergeWords(indices.size(), internalWords, externalWords);
   return SubBatchVocabBatchLookupData::asResult(std::move(data));

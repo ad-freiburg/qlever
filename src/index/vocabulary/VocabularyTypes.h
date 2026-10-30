@@ -148,8 +148,8 @@ struct StringVectorVocabBatchLookupData
 // vocabulary), and the result of one batch lookup in another vocabulary (null
 // if no word came from there).
 struct SubBatchSources {
-  std::shared_ptr<const CompactVectorOfStrings<char>> internalWords;
-  VocabBatchLookupResult externalWords;
+  std::shared_ptr<const CompactVectorOfStrings<char>> internalWords_;
+  VocabBatchLookupResult externalWords_;
 };
 
 // A vocabulary batch-lookup result whose words come from up to two sources
@@ -160,6 +160,22 @@ struct SubBatchSources {
 // views are copied into the result, no word data.
 struct SubBatchVocabBatchLookupData
     : VocabLookupDataCommonBase<SubBatchSources> {};
+
+// The storage that a `SharedWordsWithPlaceholdersVocabBatchLookupData` owns:
+// a share of the word storage of a vocabulary with holes (see
+// `VocabularyInMemoryBinSearch`), and the placeholders for the indices of the
+// batch that are holes.
+struct SharedWordsAndPlaceholders {
+  std::shared_ptr<const CompactVectorOfStrings<char>> words_;
+  std::vector<std::string> placeholders_;
+};
+
+// A vocabulary batch-lookup result of a vocabulary with holes that keeps its
+// words in RAM (`VocabularyInMemoryBinSearch`): a contained index yields a
+// view into the shared word storage, a hole yields a view into one of the
+// owned placeholders.
+struct SharedWordsWithPlaceholdersVocabBatchLookupData
+    : VocabLookupDataCommonBase<SharedWordsAndPlaceholders> {};
 
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
