@@ -231,6 +231,15 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   ad_utility::deleteFile(filename);
 }
 
+// Test that `getIdRangeForFullTextPrefix` finds nothing in an empty text
+// vocabulary (the state on a server without a text index), in particular for
+// the bare `*`, whose range used to underflow to `[0, UINT64_MAX]`.
+TEST(VocabularyTest, getIdRangeForFullTextPrefixEmptyVocabulary) {
+  TextVocabulary v;
+  EXPECT_FALSE(v.getIdRangeForFullTextPrefix("*").has_value());
+  EXPECT_FALSE(v.getIdRangeForFullTextPrefix("word*").has_value());
+}
+
 // _____________________________________________________________________________
 TEST(VocabularyTest, createFromSetTest) {
   ad_utility::HashSet<string> s;

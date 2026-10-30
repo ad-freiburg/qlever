@@ -12,6 +12,8 @@
 
 #include <queue>
 
+#include "util/ContainersWithAllocator.h"
+
 // ____________________________________________________________________________
 Result BaselineAlgorithm::run() {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -21,6 +23,10 @@ Result BaselineAlgorithm::run() {
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
       params_;
   IdTable result{numColumns, qec_->getAllocator()};
+
+  // Rows skipped because their value is not a supported geometry.
+  size_t numSkippedLeft = 0;
+  size_t numSkippedRight = 0;
 
   // cartesian product between the two tables, pairs are restricted according to
   // `maxDistance_` and `maxResults_`
@@ -39,10 +45,17 @@ Result BaselineAlgorithm::run() {
         intermediate(compare);
 
     auto entryLeft = getRtreeEntry(idTableLeft, rowLeft, leftJoinCol);
+    numSkippedLeft += static_cast<size_t>(!entryLeft.has_value());
 
     // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
+      // Each iteration might parse a geometry, which is expensive.
+      throwIfCancelled();
       auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
+      // Count each right row only once, not once per left row.
+      if (rowLeft == 0) {
+        numSkippedRight += static_cast<size_t>(!entryRight.has_value());
+      }
 
       if (!entryLeft || !entryRight) {
         continue;
@@ -86,7 +99,9 @@ Result BaselineAlgorithm::run() {
       }
     }
   }
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  addSkippedRowsWarning(numSkippedLeft, numSkippedRight);
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 #endif
 }

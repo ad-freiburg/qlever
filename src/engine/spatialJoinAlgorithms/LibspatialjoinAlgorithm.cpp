@@ -11,7 +11,6 @@
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
-#include <absl/strings/str_cat.h>
 #include <spatialjoin/BoxIds.h>
 
 #include <thread>
@@ -21,6 +20,7 @@
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
 
@@ -238,26 +238,6 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 }
 
 // ____________________________________________________________________________
-void LibspatialjoinAlgorithm::addInvalidGeometriesWarning(
-    size_t numInvalidLeft, size_t numInvalidRight) const {
-  std::string counts;
-  if (numInvalidLeft > 0) {
-    absl::StrAppend(&counts, config_.left_.name(), ": ", numInvalidLeft);
-  }
-  if (numInvalidRight > 0) {
-    absl::StrAppend(&counts, counts.empty() ? "" : ", ", config_.right_.name(),
-                    ": ", numInvalidRight);
-  }
-  if (counts.empty()) {
-    return;
-  }
-  spatialJoin_.value()->addWarning(absl::StrCat(
-      spatialJoin_.value()->getDescriptor(),
-      ": skipped rows with invalid or unsupported geometry literals (", counts,
-      ")"));
-}
-
-// ____________________________________________________________________________
 Result LibspatialjoinAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
@@ -265,6 +245,13 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
+  // The per-thread result buffers are plain `std::vector`s, so their memory is
+  // not counted against the memory limit (the pairs are counted when they are
+  // copied into `result` below).
+  //
+  // NOTE: The buffers are filled by the callbacks below on the worker threads
+  // of `libspatialjoin`, which do not forward exceptions, so an allocation that
+  // exceeds the memory limit there would terminate the server.
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
@@ -370,11 +357,8 @@ Result LibspatialjoinAlgorithm::run() {
         "num-geoms-dropped-by-prefilter", droppedLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
                                                   invalidSmall + invalidLarge);
-    if (smallerIsRight) {
-      addInvalidGeometriesWarning(invalidLarge, invalidSmall);
-    } else {
-      addInvalidGeometriesWarning(invalidSmall, invalidLarge);
-    }
+    addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
+                          smallerIsRight ? invalidSmall : invalidLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
@@ -428,6 +412,7 @@ Result LibspatialjoinAlgorithm::run() {
       "time-for-collecting-results-from-threads", tCollect.msecs().count());
 
   // Return the result.
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }

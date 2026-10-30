@@ -18,7 +18,6 @@
 #include "util/IsProxy.h"
 
 namespace columnBasedIdTable::splitLayout {
-
 template <bool IsConst>
 class BasicIdRef;
 
@@ -48,9 +47,9 @@ class BasicIdRefImpl {
   class BasicIdRefWithRestrictedAccess {
    public:
     using PayloadPointer =
-        std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
+        std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
     using DatatypePointer =
-        std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+        std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
 
    protected:
     PayloadPointer payload_;
@@ -89,8 +88,7 @@ class BasicIdRefImpl {
     // for rvalues: `column[i] = id;` writes, while `auto ref = column[i]; ref =
     // id;` does not compile.
     CPP_template(typename = void)(requires(!IsConst))
-        BasicIdRefWithRestrictedAccess&
-        operator=(const Id id) && {
+    BasicIdRefWithRestrictedAccess& operator=(const Id id) && {
       *payload_ = id.getPayloadBits();
       *datatype_ = id.getDatatypeBits();
       return *this;
@@ -114,16 +112,15 @@ class BasicIdRefImpl {
     // details see the note at the end of
     // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable` and the
     // same overload for rows in `IdTableRow.h`.
-    CPP_template(typename = void)(requires(!IsConst)) const
-        BasicIdRefWithRestrictedAccess&
-        operator=(const Id id) const&&;
+    CPP_template(typename = void)(requires(!IsConst))
+    const BasicIdRefWithRestrictedAccess& operator=(const Id id) const&&;
 
     // Swap the referenced values (not the pointers), but only for rvalues, like
     // for rows in `IdTableRow.h`. This is what `std::iter_swap` and thus
     // `std::reverse` or `ranges::sort` call with the result of `*it`.
-    CPP_template(typename = void)(requires(!IsConst)) friend void swap(
-        BasicIdRefWithRestrictedAccess&& lhs,
-        BasicIdRefWithRestrictedAccess&& rhs) noexcept {
+    CPP_template(typename = void)(requires(!IsConst))
+    friend void swap(BasicIdRefWithRestrictedAccess&& lhs,
+                     BasicIdRefWithRestrictedAccess&& rhs) noexcept {
       std::swap(*lhs.payload_, *rhs.payload_);
       std::swap(*lhs.datatype_, *rhs.datatype_);
     }
@@ -140,7 +137,9 @@ class BasicIdRefImpl {
 
     [[nodiscard]] Id::T getBits() const noexcept { return toId().getBits(); }
 
-    [[nodiscard]] Id::T getPayloadBits() const noexcept { return *payload_; }
+    [[nodiscard]] Id::PayloadType getPayloadBits() const noexcept {
+      return *payload_;
+    }
 
     [[nodiscard]] Datatype getDatatype() const noexcept {
       return static_cast<Datatype>(*datatype_);
@@ -167,7 +166,7 @@ class BasicIdRefImpl {
       return toId().getVocabIndex();
     }
 
-    [[nodiscard]] uint64_t getEncodedVal() const noexcept {
+    [[nodiscard]] Id::PayloadType getEncodedVal() const noexcept {
       return toId().getEncodedVal();
     }
 
@@ -328,8 +327,8 @@ class BasicIdRef
   // Assign a new `Id` to the referenced slot (`IdRef` only). Like for any proxy
   // reference, this writes through to the referenced slot and does not rebind
   // the proxy.
-  CPP_template(typename = void)(requires(!IsConst)) BasicIdRef& operator=(
-      const Id id) {
+  CPP_template(typename = void)(requires(!IsConst))
+  BasicIdRef& operator=(const Id id) {
     *this->payload_ = id.getPayloadBits();
     *this->datatype_ = id.getDatatypeBits();
     return *this;
@@ -353,7 +352,6 @@ class BasicIdRef
 
 using IdRef = BasicIdRef<false>;
 using ConstIdRef = BasicIdRef<true>;
-
 }  // namespace columnBasedIdTable::splitLayout
 
 // The `IdRef` and the `ConstIdRef` are cheap to copy and refer to an element of
@@ -361,7 +359,7 @@ using ConstIdRef = BasicIdRef<true>;
 // references returned by `column[i]` (see `FullProxyType` there).
 template <bool IsConst>
 inline constexpr bool
-    qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst>> =
+    qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst> > =
         true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDREF_H

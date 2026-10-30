@@ -62,23 +62,22 @@ inline ConstIdColumnRef getIdsFromVariable(const ::Variable& variable,
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 // Use range-based implementation for C++17 compatibility.
 CPP_template(typename T, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<
-            Transformation,
-            T>) auto resultGeneratorImpl(T constant, size_t numItems,
-                                         Transformation transformation = {}) {
+    requires SingleExpressionResult<T> && isConstantResult<T> &&
+    ranges::invocable<Transformation, T>)
+auto resultGeneratorImpl(T constant, size_t numItems,
+                         Transformation transformation = {}) {
   // We have to use `range-v3` as `views::repeat` is a C++23 feature.
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
 #else
 // Use faster coroutine-based implementation.
 CPP_template(typename T, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<Transformation, T>)
-    cppcoro::generator<const std::decay_t<std::invoke_result_t<
-        Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
-                                                 Transformation transformation =
-                                                     {}) {
+    requires SingleExpressionResult<T> && isConstantResult<T> &&
+    ranges::invocable<Transformation, T>)
+cppcoro::generator<const std::decay_t<std::invoke_result_t<
+    Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
+                                             Transformation transformation =
+                                                 {}) {
   auto transformed = transformation(constant);
   for (size_t i = 0; i < numItems; ++i) {
     co_yield transformed;
@@ -87,9 +86,9 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 #endif
 
 CPP_template(typename T, typename Transformation = ql::identity)(
-    requires ql::ranges::input_range<
-        T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
-                                     Transformation transformation = {}) {
+    requires ql::ranges::input_range<T>)
+auto resultGeneratorImpl(T&& vector, size_t numItems,
+                         Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
   return AD_FWD(vector) | ql::views::transform(std::move(transformation));
 }
@@ -183,10 +182,10 @@ inline auto resultGenerator(S&& input, size_t targetSize,
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
 CPP_template(typename Input, typename Transformation = ql::identity)(
-    requires SingleExpressionResult<
-        Input>) auto makeGenerator(Input&& input, size_t numItems,
-                                   const EvaluationContext* context,
-                                   Transformation transformation = {}) {
+    requires SingleExpressionResult<Input>)
+auto makeGenerator(Input&& input, size_t numItems,
+                   const EvaluationContext* context,
+                   Transformation transformation = {}) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     return resultGenerator(getIdsFromVariable(AD_FWD(input), context), numItems,
                            transformation);
@@ -212,7 +211,12 @@ inline auto valueGetterGenerator =
 };
 
 // Return a lambda that takes a `LocalVocabEntry` and converts it to an `Id` by
-// adding it to the `localVocab`.
+// adding it to the `localVocab`. This is used to write the results of an
+// expression to an `IdTable`.
+//
+// NOTE: An IRI that can be encoded directly in an `Id` has already been encoded
+// when it was converted to the `Id` or `LocalVocabEntry` of the expression
+// result (see `toIdOrLocalVocabEntry`), so `entry` never needs this encoding.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
   return [localVocab](const LocalVocabEntry& entry) {
     auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);

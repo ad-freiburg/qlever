@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/OrderByComparator.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
@@ -264,13 +265,8 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
             subRes->getSharedLocalVocab()};
   }
 
-  // TODO<joka921> proper timeout for sorting operations
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      subTable.numRows(), subTable.numColumns(), deadline_,
-      "Sort for COUNT(DISTINCT *)");
-
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->cloneIdTable();
+  IdTable idTable = subRes->cloneIdTable(cancellationChecker());
 
   size_t width = idTable.numColumns();
 
@@ -320,11 +316,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // function deals with) but also on the `comparison`.
   ad_utility::callFixedSizeVi(
       width, [this, &idTable, &comparison](auto numColumns) {
-        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig());
+        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig(),
+                                       cancellationHandle());
       });
-  // We can't check during sort, so reset status here
-  cancellationHandle_->resetWatchDogState();
-  checkCancellation();
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
@@ -344,4 +338,37 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 std::unique_ptr<Operation> OrderBy::cloneImpl() const {
   return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
                                    sortIndices_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+OrderBy::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and the variables that
+  // the `OrderBy` sorts by (those at `sortIndices_`).
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  std::vector<std::pair<Variable, bool>> sortVars;
+  for (const auto& [columnIndex, sortOrder] : sortIndices_) {
+    const auto& sortVariable =
+        subtree_->getVariableAndInfoByColumnIndex(columnIndex).first;
+    sortVars.push_back(std::pair{sortVariable, sortOrder});
+    varsRequiredFromSubtree.add(sortVariable);
+  }
+
+  // Strip the subtree and translate `sortIndices_` to the column indices of
+  // the stripped subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree.get());
+  std::vector<std::pair<ColumnIndex, bool>> newSortIndices;
+  for (const auto& [sortVariable, sortOrder] : sortVars) {
+    newSortIndices.emplace_back(subtree->getVariableColumn(sortVariable),
+                                sortOrder);
+  }
+
+  // The new `OrderBy` also exports sorting variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<OrderBy>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      newSortIndices);
 }

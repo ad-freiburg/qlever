@@ -317,7 +317,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 4ec7405bcc0639f93a0b9435d29859ef0770c080 # branch fork-for-qlever
+        GIT_TAG 9814a99e4458936acdf012eb0bed4fbcd569a181 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -328,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG b05b342a0aa48279bf66030205e432b2d43cb93f
+        GIT_TAG 1177c1bee6203908b39c4e2dda4765aec5f59dee
         SYSTEM
         EXCLUDE_FROM_ALL
 )

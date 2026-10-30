@@ -37,8 +37,9 @@ template <bool IsConst>
 class BasicIdColumnView {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
-  using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+      std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
+  using DatatypePointer =
+      std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
   // The two reference types, see `BasicIdColumnIterator`.
   using reference = BasicIdRef<IsConst>;
   using reference_restricted = typename BasicIdRef<IsConst>::Base;
@@ -74,8 +75,8 @@ class BasicIdColumnView {
   // (rather than a conversion operator on the mutable view) avoids the
   // mutable instantiation having to name its own type as a target.
   CPP_template(typename = void)(requires IsConst)
-      /*implicit*/ BasicIdColumnView(
-          const BasicIdColumnView<false>& other)  // NOSONAR, intended
+  /*implicit*/ BasicIdColumnView(
+      const BasicIdColumnView<false>& other)  // NOSONAR, intended
       : payloads_{other.payloads_},
         datatypes_{other.datatypes_},
         size_{other.size_} {}
@@ -126,11 +127,13 @@ class BasicIdColumnView {
 
   // Direct access to the two underlying arrays (`.data()` is intentionally
   // not provided), e.g. for raw byte I/O.
-  [[nodiscard]] ql::span<std::conditional_t<IsConst, const uint64_t, uint64_t>>
+  [[nodiscard]] ql::span<
+      std::conditional_t<IsConst, const Id::PayloadType, Id::PayloadType>>
   rawPayloads() const {
     return {payloads_, size_};
   }
-  [[nodiscard]] ql::span<std::conditional_t<IsConst, const uint8_t, uint8_t>>
+  [[nodiscard]] ql::span<
+      std::conditional_t<IsConst, const Id::DatatypeType, Id::DatatypeType>>
   rawDatatypes() const {
     return {datatypes_, size_};
   }
