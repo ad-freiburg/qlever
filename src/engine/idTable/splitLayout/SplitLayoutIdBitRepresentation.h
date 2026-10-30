@@ -35,11 +35,24 @@ struct SplitLayoutIdBitRepresentation {
 
   PayloadType payload_;
   DatatypeType datatype_;
+
+  // The number of bytes of the two data members above, and the number of bytes
+  // that fill a bit representation up to a multiple of the alignment of the
+  // payload (computed like for a `SplitLayoutId`).
+  static constexpr size_t numDataBytes =
+      sizeof(PayloadType) + sizeof(DatatypeType);
+  // NOTE: Plain arithmetic on purpose: CLion cannot evaluate a function
+  // call (e.g. `ad_utility::alignUp`) in the size of `padding_` and marks
+  // the `static_assert`s below as failed.
+  static constexpr size_t numPaddingBytes =
+      (alignof(PayloadType) - numDataBytes % alignof(PayloadType)) %
+      alignof(PayloadType);
+
   // Explicit padding bytes, which are always set to zero by the constructor
   // below, s.t. the bytes of a bit representation are deterministic (e.g. for
   // writing them to disk). With them, the layout is the same as the one of a
   // `SplitLayoutId`.
-  std::array<uint8_t, sizeof(PayloadType) - sizeof(DatatypeType)> padding_;
+  std::array<uint8_t, numPaddingBytes> padding_;
 
   // Default construction of an uninitialized bit representation, like for an
   // `Id`.
