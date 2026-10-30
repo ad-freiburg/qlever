@@ -125,10 +125,12 @@ auto CompressedRelationReader::getBlocksForJoin(
   auto& blockIdx = res.numHandledBlocks;
   while (true) {
     // Skip all IDs in the `joinColumn` that are strictly smaller than any
-    // block that hasn't been handled so far.
-    while (colIt != colEnd && idLessThanBlock(*colIt, *blockIt)) {
-      ++colIt;
-    }
+    // block that hasn't been handled so far. Use a binary search, because
+    // after the first matching blocks have been found, this typically skips
+    // (almost) all the remaining entries of the `joinColumn`.
+    colIt = ql::ranges::lower_bound(
+        colIt, colEnd,
+        getRelevantIdFromTriple(blockIt->firstTriple_, metadataAndBlocks));
     if (colIt == colEnd) {
       return res;
     }
