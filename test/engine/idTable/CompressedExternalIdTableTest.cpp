@@ -503,6 +503,33 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
   EXPECT_THAT(result, ElementsAreArray(expected));
 }
 
+namespace {
+// A block transformation that records the address of the first column of each
+// block that it is applied to, see the tests below.
+struct RecordBuffer {
+  std::shared_ptr<std::vector<const Id*>> buffers_;
+  void operator()(IdTableStatic<NUM_COLS>& block) const {
+    buffers_->push_back(block.getColumn(0).data());
+  }
+};
+
+// A `CompressedExternalIdTableBase` that exposes the `asyncPushBlock` mode,
+// which is otherwise only available via `CompressedExternalIdTableSorter`.
+struct AsyncPushingTable
+    : public ad_utility::CompressedExternalIdTableBase<NUM_COLS, RecordBuffer> {
+  using Base =
+      ad_utility::CompressedExternalIdTableBase<NUM_COLS, RecordBuffer>;
+  using Base::Base;
+  using Base::setAsyncPushExecutor;
+  // Push the `table` via the `asyncPusher_` and wait for the push.
+  void asyncPushAndWait(const IdTable& table) {
+    this->asyncPusher_
+        ->asyncPushBlock(asyncPushTestHelpers::viewOf(table), net::use_future)
+        .get();
+  }
+};
+}  // namespace
+
 // Test that the input phase of a `CompressedExternalIdTableBase` only ever
 // allocates two block buffers: the one that the `push` calls fill, and the one
 // that the background thread transforms and writes. Each buffer that the
@@ -518,12 +545,6 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   // The transformation runs on the single background thread, and each run
   // completes before the next block is handed over, so no lock is needed.
   auto buffers = std::make_shared<std::vector<const Id*>>();
-  struct RecordBuffer {
-    std::shared_ptr<std::vector<const Id*>> buffers_;
-    void operator()(IdTableStatic<NUM_COLS>& block) const {
-      buffers_->push_back(block.getColumn(0).data());
-    }
-  };
 
   // Push 20 blocks of exactly one block size each.
   constexpr size_t blockSize = 1000;
@@ -550,6 +571,46 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   // The destructor has waited for the last block, so all of them have been
   // recorded, and from the third block on each block reuses the buffer of the
   // block before its predecessor.
+  ASSERT_EQ(buffers->size(), numBlocks);
+  for (size_t i = 2; i < numBlocks; ++i) {
+    EXPECT_EQ(buffers->at(i), buffers->at(i - 2)) << i;
+  }
+  EXPECT_NE(buffers->at(0), buffers->at(1));
+}
+
+// _____________________________________________________________________________
+// Test that the blocks of `asyncPushBlock` are recycled in the same way as the
+// blocks of `pushBlock` (see the previous test): the sink of the
+// `AsyncIdTablePusher` hands each complete block to the background thread and
+// gets back the block of the previous background task, which becomes the next
+// block that the pusher fills.
+TEST(CompressedExternalIdTable, asyncPushBlockBuffersAreRecycled) {
+  std::string filename = gtestCurrentTestName();
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  auto buffers = std::make_shared<std::vector<const Id*>>();
+
+  constexpr size_t blockSize = 1000;
+  constexpr size_t numBlocks = 20;
+  // The pool has to outlive the table, see `setAsyncPushExecutor`.
+  net::thread_pool pool{2};
+  {
+    AsyncPushingTable table{filename,
+                            NUM_COLS,
+                            memoryForBlocksize(blockSize, NUM_COLS),
+                            alloc,
+                            ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+                            RecordBuffer{buffers}};
+    table.setAsyncPushExecutor(pool.get_executor());
+    // See the previous test for the purpose of the `blockers`.
+    std::vector<std::vector<Id>> blockers;
+    auto block = createRandomlyFilledIdTable(blockSize, NUM_COLS);
+    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numBlocks)) {
+      table.asyncPushAndWait(block);
+      blockers.emplace_back(blockSize);
+    }
+  }
+
   ASSERT_EQ(buffers->size(), numBlocks);
   for (size_t i = 2; i < numBlocks; ++i) {
     EXPECT_EQ(buffers->at(i), buffers->at(i - 2)) << i;
