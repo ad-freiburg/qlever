@@ -341,6 +341,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeIsEncodedIriExpression));
   expectFunctionCall(absl::StrCat(ql, "toEpoch>(?x)"),
                      matchUnary(&makeToEpochExpression));
+  expectFunctionCall(absl::StrCat(ql, "normalize>(?x)"),
+                     matchUnary(&makeNormalizeExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeLowerLeft>(?x)"),
                      matchUnary(&makeEnvelopeLowerLeftExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeUpperRight>(?x)"),

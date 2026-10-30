@@ -403,6 +403,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"isGeoPoint", &makeIsGeoPointExpression},
       {"isEncodedIri", &makeIsEncodedIriExpression},
       {"toEpoch", &makeToEpochExpression},
+      {"normalize", &makeNormalizeExpression},
   };
   if (checkPrefix(QL_PREFIX)) {
     if (ql::starts_with(functionName, "envelope") ||
