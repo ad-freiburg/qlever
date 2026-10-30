@@ -271,7 +271,7 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
                                                                 indices);
 }
 
-// With `vocabulary-iouring-page-cache-fast-path`, the words and offsets that
+// With `vocabulary-page-cache-fast-path`, the words and offsets that
 // are in the page cache are read before the batch manager sees the rest. The
 // result must be byte-identical to the result without the fast path, for runs
 // of consecutive indices as well as for reordered and duplicated indices.
@@ -280,14 +280,11 @@ TEST(VocabularyOnDisk, LookupBatchPageCacheFastPathIsByteIdentical) {
   std::array<size_t, 13> indices{0, 1, 2, 3, 4, 2, 0, 3, 1, 1, 4, 0, 3};
   // The fast path is on by default; restore the default after the test.
   absl::Cleanup resetParameter{[]() {
-    setRuntimeParameter<
-        &RuntimeParameters::vocabularyIouringPageCacheFastPath_>(true);
+    setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(true);
   }};
-  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
-      false);
+  setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(false);
   auto withoutFastPath = vocab->lookupBatch(indices);
-  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
-      true);
+  setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(true);
   auto withFastPath = vocab->lookupBatch(indices);
   EXPECT_THAT(*withFastPath, ::testing::ElementsAreArray(*withoutFastPath));
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
@@ -311,20 +308,17 @@ TEST(VocabularyOnDisk, LookupBatchFollowsThePageCacheFastPathParameter) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 4> indices{0, 1, 3, 2};
   absl::Cleanup resetParameter{[]() {
-    setRuntimeParameter<
-        &RuntimeParameters::vocabularyIouringPageCacheFastPath_>(true);
+    setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(true);
   }};
   pageCacheReadTestHelpers::ScopedPageCacheRead inject{&countedNothingCached};
   numCountedPageCacheReads = 0;
 
-  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
-      false);
+  setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(false);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
       *vocab, vocab->lookupBatch(indices), indices);
   EXPECT_EQ(numCountedPageCacheReads, 0u);
 
-  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
-      true);
+  setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(true);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
       *vocab, vocab->lookupBatch(indices), indices);
   EXPECT_GT(numCountedPageCacheReads, 0u);

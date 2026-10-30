@@ -197,7 +197,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.permutationWriterNumBlocksInFlight_);
   check(params.vacuumMinimumBlockSize_);
   check(params.disableCaching_);
-  check(params.vocabularyIouringPageCacheFastPath_);
+  check(params.vocabularyPageCacheFastPath_);
   check(params.logLevel_);
   check(params.constructDeduplication_);
   EXPECT_EQ(totalSize,

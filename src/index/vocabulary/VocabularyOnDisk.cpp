@@ -288,8 +288,7 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   // The page-cache fast path belongs to the manager; the runtime parameter can
   // change between two lookups.
   manager->setPageCacheFastPath(
-      getRuntimeParameter<
-          &RuntimeParameters::vocabularyIouringPageCacheFastPath_>());
+      getRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>());
   auto offsetPairs = readOffsetPairs(*manager, indices);
   return readStrings(*manager, offsetPairs);
 }
