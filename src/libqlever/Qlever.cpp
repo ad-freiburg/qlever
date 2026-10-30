@@ -37,8 +37,38 @@
 #include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
+#include "util/UninitializedAllocator.h"
 
 namespace qlever {
+
+namespace {
+// Read the complete contents of the blob file with the given `filename`. The
+// buffer is not zero-initialized, because it is completely overwritten by the
+// read.
+std::vector<char, ad_utility::default_init_allocator<char>>
+readCompressedBlobFile(const std::string& filename) {
+  // A directory can be opened like a file, but its size is reported as the
+  // maximal file size, which we must not try to allocate.
+  if (!ql::filesystem::is_regular_file(filename)) {
+    throw std::runtime_error{
+        absl::StrCat("The blob file \"", filename,
+                     "\" does not exist or is not a regular file")};
+  }
+  ad_utility::File file{filename, "r"};
+  std::vector<char, ad_utility::default_init_allocator<char>> compressedBlob(
+      file.sizeOfFile());
+  auto numBytesRead =
+      file.read(compressedBlob.data(), compressedBlob.size(), 0);
+  AD_CORRECTNESS_CHECK(
+      static_cast<size_t>(numBytesRead) == compressedBlob.size(), [&]() {
+        return absl::StrCat("Could not read the complete blob file \"",
+                            filename, "\" (expected ", compressedBlob.size(),
+                            " bytes, but read ", numBytesRead,
+                            "), was it modified while it was being read?");
+      });
+  return compressedBlob;
+}
+}  // namespace
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
@@ -99,6 +129,17 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   // allocator. Clear the action of a previous instance, so that the parameter
   // is bound to nothing.
   globalRuntimeParameters.wlock()->memoryForQueries_.clearOnUpdateAction();
+
+  // If a blob file is given, populate this instance from it instead of from
+  // the on-disk index.
+  if (config.compressedBlobFilename_.has_value()) {
+    const auto& filename = config.compressedBlobFilename_.value();
+    AD_LOG_INFO << "Loading the index from the blob file \"" << filename
+                << "\" ..." << std::endl;
+    deserializeVocabAndNamedCacheFromCompressedBlob(
+        readCompressedBlobFile(filename));
+    return;
+  }
 
   // If `skipLoading` is set, we do not touch the on-disk index at all; the
   // instance is expected to be populated later from a blob (see

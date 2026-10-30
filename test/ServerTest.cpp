@@ -10,6 +10,7 @@
 #include <optional>
 #include <thread>
 
+#include "./libqlever/QleverTestHelpers.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
@@ -21,6 +22,7 @@
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
 #include "parser/SparqlParser.h"
+#include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -1247,4 +1249,51 @@ TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
   });
 
   EXPECT_THAT(lines, testing::IsEmpty());
+}
+
+// Test that a `Server` can be loaded from a blob file, but rejects the options
+// and commands that it does not support in that mode.
+TEST(ServerTest, readFromBlobFile) {
+  std::string filename = gtestCurrentTestName() + ".blob";
+  writeTestBlobFile(filename);
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  // The index basename deliberately does not exist, to verify that nothing is
+  // loaded from disk.
+  auto config =
+      serverTestHelpers::getDefaultConfigWithName("nonExistingIndexBasename");
+  config.compressedBlobFilename_ = filename;
+
+  // Persisting updates and automatic index rebuilds are not supported.
+  auto configWithPersistUpdates = config;
+  configWithPersistUpdates.persistUpdates_ = true;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (Server{4321, 1, "accessToken", configWithPersistUpdates}),
+      testing::HasSubstr("cannot be combined with `--persist-updates`"));
+  auto configWithRebuildStrategy = config;
+  configWithRebuildStrategy.rebuildIndexStrategy_ =
+      qlever::RebuildIndexStrategy::parse("automatic:1:2:0.5");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (Server{4321, 1, "accessToken", configWithRebuildStrategy}),
+      testing::HasSubstr("cannot be combined with an automatic "
+                         "`--rebuild-index-strategy`"));
+
+  // The named cached query from the blob can be answered.
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+  auto response = server.process(
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-query"},
+                   {http::field::accept, "text/tab-separated-values"}},
+                  std::string{testBlobFileQuery}));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_EQ(serverTestHelpers::responseBodyToString(std::move(response.body())),
+            testBlobFileQueryResult);
+
+  // A manual index rebuild is rejected.
+  expectHttpError(
+      [&] {
+        server.process(makeGetRequest("/?cmd=rebuild-index", "accessToken"));
+      },
+      boost::beast::http::status::bad_request,
+      testing::HasSubstr("was loaded from a blob and has no files on disk"));
 }

@@ -78,6 +78,22 @@ Server::Server(
               : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
+  if (config.compressedBlobFilename_.has_value()) {
+    if (config.persistUpdates_) {
+      throw std::runtime_error{
+          "A server that is loaded from a blob does not support persisting "
+          "updates, so `--read-from-blob-file` cannot be combined with "
+          "`--persist-updates`"};
+    }
+    if (config.rebuildIndexStrategy_.has_value()) {
+      throw std::runtime_error{
+          "A server that is loaded from a blob does not support index "
+          "rebuilds, so `--read-from-blob-file` cannot be combined with an "
+          "automatic `--rebuild-index-strategy`"};
+    }
+    loadedFromBlob_ = true;
+  }
+
   initializeServerMetrics(config.memoryLimit_);
 
   if (noAccessCheck_) {
@@ -1747,6 +1763,11 @@ CPP_template_def(typename RequestT)(
 Awaitable<Server::ResponseT> Server::processRebuildIndex(
     const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
+  if (loadedFromBlob_) {
+    throw HttpError(boost::beast::http::status::bad_request,
+                    "The index of this server was loaded from a blob and has "
+                    "no files on disk, so it cannot be rebuilt");
+  }
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
                                              std::nullopt),
