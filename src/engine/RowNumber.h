@@ -10,7 +10,14 @@
 #ifndef QLEVER_SRC_ENGINE_ROWNUMBER_H
 #define QLEVER_SRC_ENGINE_ROWNUMBER_H
 
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "engine/Operation.h"
+#include "rdfTypes/Variable.h"
 #include "util/ContainersWithAllocator.h"
 
 // An operation that prepends a column with the consecutive row numbers

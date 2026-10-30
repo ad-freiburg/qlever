@@ -10,7 +10,12 @@
 #ifndef QLEVER_SRC_PARSER_ROWNUMBERQUERY_H
 #define QLEVER_SRC_PARSER_ROWNUMBERQUERY_H
 
+#include <cstdint>
+#include <optional>
+#include <string_view>
+
 #include "parser/MagicServiceQuery.h"
+#include "rdfTypes/Variable.h"
 
 namespace parsedQuery {
 

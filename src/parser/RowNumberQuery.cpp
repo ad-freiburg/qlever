@@ -9,6 +9,9 @@
 
 #include "parser/RowNumberQuery.h"
 
+#include <variant>
+
+#include "absl/strings/str_cat.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/ParsedQuery.h"
@@ -16,6 +19,18 @@
 #include "util/Algorithm.h"
 
 namespace parsedQuery {
+
+namespace {
+// Return true iff `pattern` consists of a single subquery with an `ORDER BY` or
+// `INTERNAL SORT BY` clause and no filter.
+bool isSortedSubquery(const GraphPattern& pattern) {
+  if (pattern._graphPatterns.size() != 1 || !pattern._filters.empty()) {
+    return false;
+  }
+  const auto* subquery = std::get_if<Subquery>(&pattern._graphPatterns[0]);
+  return subquery != nullptr && !subquery->get()._orderBy.empty();
+}
+}  // namespace
 
 // ____________________________________________________________________________
 void RowNumberQuery::addParameter(const SparqlTriple& triple) {
@@ -47,13 +62,6 @@ void RowNumberQuery::validate() const {
   }
 
   // The row numbers are only well-defined if the child is a sorted subquery.
-  auto isSortedSubquery = [](const GraphPattern& pattern) {
-    if (pattern._graphPatterns.size() != 1 || !pattern._filters.empty()) {
-      return false;
-    }
-    const auto* subquery = std::get_if<Subquery>(&pattern._graphPatterns[0]);
-    return subquery != nullptr && !subquery->get()._orderBy.empty();
-  };
   if (!childGraphPattern_.has_value() ||
       !isSortedSubquery(childGraphPattern_.value())) {
     throw MagicServiceException(

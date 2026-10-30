@@ -10,7 +10,11 @@
 #include "engine/RowNumber.h"
 
 #include <numeric>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
@@ -32,6 +36,13 @@ RowNumber::RowNumber(QueryExecutionContext* qec,
 
   // By default, sort by the row number column and then by the sort columns of
   // the child.
+  //
+  // NOTE: The row number column is unique and the child's order is preserved,
+  // so the result is sorted by every column sequence that starts with the row
+  // number column, and also by the sort columns of the child alone. Since
+  // `resultSortedOn` can only express a single one of these orders, we report
+  // the one that keeps the most information and let `makeSortedTree` provide
+  // the other orders that start with the row number column for free.
   if (sortedOn_.empty()) {
     sortedOn_.push_back(0);
     for (auto col : child_->resultSortedOn()) {
@@ -91,6 +102,9 @@ std::unique_ptr<Operation> RowNumber::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> RowNumber::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
+  // Any order that starts with the row number column is already satisfied
+  // (the row numbers are unique and ascending, so there are no ties to be
+  // broken by the remaining columns, regardless of the order of the child).
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   if (sortColumns.at(0) != 0) {
     return std::nullopt;
@@ -118,16 +132,15 @@ VariableToColumnMap RowNumber::computeVariableToColumnMap() const {
 Result RowNumber::computeResult(bool requestLaziness) {
   auto childResult = child_->getResult(requestLaziness);
 
-  // Append a column with the row numbers starting at `nextRowNumber` to an
-  // `IdTable` and move it to the front. Advance `nextRowNumber` accordingly
-  // (it persists between the blocks of a lazy result). Throw if a row number
-  // exceeds the range of integer `Id`s (it would wrap around and break the
-  // sort order).
+  // Append a column with the consecutive row numbers starting at `offset_` to
+  // an `IdTable` and move it to the front. The next row number persists between
+  // the calls (for the blocks of a lazy result). Throw if a row number exceeds
+  // the range of integer `Id`s (it would wrap around and break the sort order).
   std::vector<ColumnIndex> permutation(getResultWidth());
   permutation[0] = permutation.size() - 1;
   std::iota(permutation.begin() + 1, permutation.end(), 0);
-  auto addRowNumbers = [permutation = std::move(permutation)](
-                           IdTable& idTable, int64_t& nextRowNumber) {
+  auto addRowNumbers = [permutation = std::move(permutation),
+                        nextRowNumber = offset_](IdTable& idTable) mutable {
     if (static_cast<int64_t>(idTable.numRows()) >
         Id::maxInt - nextRowNumber + 1) {
       throw std::runtime_error(absl::StrCat(
@@ -136,16 +149,16 @@ Result RowNumber::computeResult(bool requestLaziness) {
           Id::maxInt, ", choose a smaller `<offset>`"));
     }
     idTable.addEmptyColumn();
-    ql::ranges::generate(idTable.getColumn(idTable.numColumns() - 1),
-                         [&]() { return Id::makeFromInt(nextRowNumber++); });
+    ql::ranges::generate(
+        idTable.getColumn(idTable.numColumns() - 1),
+        [&nextRowNumber]() { return Id::makeFromInt(nextRowNumber++); });
     idTable.setColumnSubset(permutation);
   };
 
   // Number a copy of the materialized result.
   if (childResult->isFullyMaterialized()) {
     IdTable idTable = childResult->cloneIdTable(cancellationChecker());
-    int64_t nextRowNumber = offset_;
-    addRowNumbers(idTable, nextRowNumber);
+    addRowNumbers(idTable);
     return {std::move(idTable), resultSortedOn(),
             childResult->getSharedLocalVocab()};
   }
@@ -153,9 +166,9 @@ Result RowNumber::computeResult(bool requestLaziness) {
   // Number the blocks of the lazy result one after the other.
   return {Result::LazyResult{ad_utility::CachingTransformInputRange(
               childResult->idTables(),
-              [addRowNumbers = std::move(addRowNumbers),
-               nextRowNumber = offset_](auto& tableAndVocab) mutable {
-                addRowNumbers(tableAndVocab.idTable_, nextRowNumber);
+              [addRowNumbers =
+                   std::move(addRowNumbers)](auto& tableAndVocab) mutable {
+                addRowNumbers(tableAndVocab.idTable_);
                 return std::move(tableAndVocab);
               })},
           resultSortedOn()};

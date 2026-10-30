@@ -1055,6 +1055,26 @@ TEST(QueryPlanner, RowNumber) {
                       qec),
       HasSubstr("Variable ?typo is used in the ORDER BY clause"));
 
+  // A row number service can be nested in the sorted subquery of another one.
+  std::string_view service =
+      "SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/>";
+  h::expect(
+      absl::StrCat("SELECT * { ", service, " { [] <bind> ?n . { SELECT * { ",
+                   service, " { [] <bind> ?m . { SELECT ?x ?y { ?x <p> ?y } ",
+                   "INTERNAL SORT BY ?x ?y } } } ORDER BY ?m } } }"),
+      rowNumber(
+          h::OrderBy({{Variable{"?m"}, Asc}},
+                     rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y")))),
+      qec);
+
+  // A plain subquery nested in the sorted subquery of a row number service
+  // still ignores unbound variables of its `ORDER BY`.
+  h::expect(
+      absl::StrCat("SELECT * { ", service,
+                   " { [] <bind> ?n . { SELECT * { { SELECT ?x ?y { ?x <p> ?y "
+                   "} ORDER BY ?typo } } INTERNAL SORT BY ?x ?y } } }"),
+      rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y")), qec);
+
   // The offset must be a non-negative integer.
   for (std::string_view offset : {"-1", "\"1\""}) {
     AD_EXPECT_THROW_WITH_MESSAGE(

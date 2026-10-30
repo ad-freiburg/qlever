@@ -3586,6 +3586,10 @@ void QueryPlanner::GraphPatternPlanner::visitRowNumber(
   // Require all variables of the `ORDER BY` of the sorted subquery (see
   // `RowNumberQuery::validate`) to be bound (the row numbers depend on the
   // order).
+  //
+  // NOTE: The flag is a member of the `ParsedQuery` of this subquery and only
+  // read when planning its `ORDER BY` clause, so it does not leak into nested
+  // subqueries or row number services, which have their own `ParsedQuery`.
   AD_CORRECTNESS_CHECK(rowNumberQuery.childGraphPattern_.has_value());
   std::get<parsedQuery::Subquery>(
       rowNumberQuery.childGraphPattern_->_graphPatterns.at(0))
