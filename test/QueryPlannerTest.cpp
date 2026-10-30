@@ -13,6 +13,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
+#include "engine/RowNumber.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
@@ -968,6 +969,125 @@ TEST(QueryPlanner, TransitivePathBindRight) {
           scan("?y", "<p>", "<o>"),
           scan(internalVar(0), "<p>", internalVar(1), {Permutation::POS})),
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
+}
+
+// Test that two row number services on the same sorted subquery with different
+// offsets (the equivalent of the SQL window function `LAG`) are joined without
+// sorting, and that invalid configurations are rejected.
+TEST(QueryPlanner, RowNumber) {
+  // A relation `<p>` with two objects for `<x>`.
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <x> <p> <z>");
+  auto rowNumberService = [](std::string_view config, std::string_view y,
+                             std::string_view orderBy) {
+    return absl::StrCat(
+        "SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> { ", config,
+        " { SELECT ?x ", y, " { ?x <p> ", y, " } ", orderBy, " } }");
+  };
+
+  // The row numbers are added on top of the sorted subqueries (the second one
+  // is sorted by the index scan). The result of each service is sorted by `?n`
+  // and `?x`, so the multi-column join on `?n` and `?x` needs no `Sort`.
+  using enum ::OrderBy::AscOrDesc;
+  auto rowNumber = h::MatchTypeAndOrderedChildren<::RowNumber>;
+  h::expect(
+      absl::StrCat(
+          "SELECT * { ",
+          rowNumberService("[] <bind> ?n .", "?y", "ORDER BY ?x DESC(?y)"),
+          rowNumberService("[] <bind> ?n ; <offset> 1 .", "?y2",
+                           "INTERNAL SORT BY ?x ?y2"),
+          " }"),
+      h::MultiColumnJoin(
+          rowNumber(h::OrderBy({{Variable{"?x"}, Asc}, {Variable{"?y"}, Desc}},
+                               h::IndexScanFromStrings("?x", "<p>", "?y"))),
+          rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y2"))),
+      qec);
+
+  // The row number variable is required.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ", rowNumberService("", "?y", "ORDER BY ?y"),
+                       " }"),
+          qec),
+      HasSubstr("requires a `<bind>` parameter"));
+
+  // The child graph pattern must be present and consist of a single subquery
+  // with an `ORDER BY` or `INTERNAL SORT BY` clause and no filter.
+  std::string_view sorted = "{ SELECT ?x ?y { ?x <p> ?y } ORDER BY ?y }";
+  for (const std::string& child :
+       {std::string{}, std::string{"{ ?x <p> ?y }"},
+        std::string{"{ SELECT ?x ?y { ?x <p> ?y } }"},
+        absl::StrCat("{ ", sorted, " FILTER (?y != <y>) }"),
+        absl::StrCat("{ ", sorted, " ?x <p> ?y }")}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::parseAndPlan(
+            absl::StrCat("SELECT * { SERVICE "
+                         "<https://qlever.cs.uni-freiburg.de/rowNumber/> { "
+                         "[] <bind> ?n . ",
+                         child, " } }"),
+            qec),
+        HasSubstr("`ORDER BY` or `INTERNAL SORT BY`"));
+  }
+
+  // The row number variable must not be selected by the subquery.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ",
+                       rowNumberService("[] <bind> ?y .", "?y", "ORDER BY ?y"),
+                       " }"),
+          qec),
+      HasSubstr("must not be selected by the subquery"));
+
+  // Unknown parameters are rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(absl::StrCat("SELECT * { ",
+                                   rowNumberService("[] <bind> ?n ; <typo> 1 .",
+                                                    "?y", "ORDER BY ?y"),
+                                   " }"),
+                      qec),
+      HasSubstr("Unknown parameter for row number query: `<typo>`"));
+
+  // Each variable of the `ORDER BY` must be bound by the subquery.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(absl::StrCat("SELECT * { ",
+                                   rowNumberService("[] <bind> ?n .", "?y",
+                                                    "ORDER BY ?x ?typo"),
+                                   " }"),
+                      qec),
+      HasSubstr("Variable ?typo is used in the ORDER BY clause"));
+
+  // A row number service can be nested in the sorted subquery of another one.
+  std::string_view service =
+      "SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/>";
+  h::expect(
+      absl::StrCat("SELECT * { ", service, " { [] <bind> ?n . { SELECT * { ",
+                   service, " { [] <bind> ?m . { SELECT ?x ?y { ?x <p> ?y } ",
+                   "INTERNAL SORT BY ?x ?y } } } ORDER BY ?m } } }"),
+      rowNumber(
+          h::OrderBy({{Variable{"?m"}, Asc}},
+                     rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y")))),
+      qec);
+
+  // A plain subquery nested in the sorted subquery of a row number service
+  // still ignores unbound variables of its `ORDER BY`.
+  h::expect(
+      absl::StrCat("SELECT * { ", service,
+                   " { [] <bind> ?n . { SELECT * { { SELECT ?x ?y { ?x <p> ?y "
+                   "} ORDER BY ?typo } } INTERNAL SORT BY ?x ?y } } }"),
+      rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y")), qec);
+
+  // The offset must be a non-negative integer.
+  for (std::string_view offset : {"-1", "\"1\""}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::parseAndPlan(
+            absl::StrCat(
+                "SELECT * { ",
+                rowNumberService(
+                    absl::StrCat("[] <bind> ?n ; <offset> ", offset, " ."),
+                    "?y", "ORDER BY ?y"),
+                " }"),
+            qec),
+        HasSubstr("non-negative integer"));
+  }
 }
 
 TEST(QueryPlanner, PathSearchSingleTarget) {

@@ -178,4 +178,10 @@ void VariableCounter::operator()(const ExternalValuesQuery& op) {
   (*this)(op.variables_);
 }
 
+// ____________________________________________________________________________
+void VariableCounter::operator()(const RowNumberQuery& op) {
+  (*this)(op.rowNumberVariable_);
+  (*this)(op.childGraphPattern_);
+}
+
 }  // namespace parsedQuery

@@ -737,6 +737,7 @@ class QueryPlanner {
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitExternalValues(const parsedQuery::ExternalValuesQuery& config);
+    void visitRowNumber(parsedQuery::RowNumberQuery& config);
     void visitNamedCachedResult(const parsedQuery::NamedCachedResult& config);
     void visitMaterializedViewQuery(
         const parsedQuery::MaterializedViewQuery& viewQuery);
