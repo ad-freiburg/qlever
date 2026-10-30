@@ -50,6 +50,11 @@ std::vector<ColumnIndex> Join::resultSortedOn() const {
 size_t Join::getCostEstimate() { return impl_->getCostEstimate(); }
 
 // _____________________________________________________________________________
+std::vector<size_t> Join::getCostEstimatesChargedForChildren() {
+  return impl_->getCostEstimatesChargedForChildren();
+}
+
+// _____________________________________________________________________________
 bool Join::knownEmptyResult() { return impl_->knownEmptyResult(); }
 
 // _____________________________________________________________________________

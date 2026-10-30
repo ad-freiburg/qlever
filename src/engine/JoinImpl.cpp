@@ -12,6 +12,7 @@
 
 #include "engine/JoinImpl.h"
 
+#include <algorithm>
 #include <sstream>
 #include <vector>
 
@@ -33,6 +34,7 @@
 #include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/Math.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;
@@ -217,16 +219,81 @@ float JoinImpl::getMultiplicity(size_t col) {
   return multiplicities_.at(col);
 }
 
+namespace {
+// If `child` is an index scan that the join reads only partially, filtered by
+// the join column of `sibling`, return an upper bound for the number of rows
+// that it reads. Otherwise return `std::nullopt`.
+std::optional<size_t> getNumRowsReadOfPartialScanIfPresent(
+    QueryExecutionTree& child, QueryExecutionTree& sibling,
+    ColumnIndex siblingJoinCol) {
+  // `computeResult` materializes every small child (also a scan), and reads a
+  // scan that is not small lazily, filtered by the join column of a
+  // materialized sibling (see `IndexScan::lazyScanForJoinOfColumnWithScan`).
+  // That reads only the blocks that contain one of the values of the sibling,
+  // so at most one block per row of the sibling. Two scans that are both not
+  // small are joined via `computeResultForTwoIndexScans`, which prefilters by
+  // block ranges only and is not bounded this way.
+  auto scan = IndexScan::getIfSupportsPrefilteredJoin(child);
+  if (!scan) {
+    return std::nullopt;
+  }
+  size_t threshold = getRuntimeParameter<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>();
+  size_t siblingSize = sibling.getSizeEstimate();
+  size_t size = child.getSizeEstimate();
+  if (siblingSize >= threshold || size < threshold) {
+    return std::nullopt;
+  }
+  // The scan reads all blocks if the sibling has UNDEF values in the join
+  // column or if the scan has a LIMIT or OFFSET (see `IndexScan::getLazyScan`).
+  bool siblingMightBeUndef =
+      sibling.getVariableAndInfoByColumnIndex(siblingJoinCol)
+          .second.mightContainUndef_ ==
+      ColumnIndexAndTypeInfo::PossiblyUndefined;
+  if (siblingMightBeUndef || !scan->getLimitOffset().isUnconstrained()) {
+    return std::nullopt;
+  }
+  // At most one block per row of the sibling, but at least one block (a
+  // sibling that is estimated to be empty does not make the scan free). The
+  // comparison in blocks ensures that the multiplication cannot overflow.
+  size_t rowsPerBlock = scan->getIndex().rowsPerBlock();
+  size_t maxNumBlocksRead = std::max<size_t>(siblingSize, 1);
+  if (maxNumBlocksRead >= ad_utility::ceilDiv(size, rowsPerBlock)) {
+    return std::nullopt;
+  }
+  return maxNumBlocksRead * rowsPerBlock;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::vector<size_t> JoinImpl::getNumRowsReadOfChildrenOr(
+    absl::FunctionRef<size_t(QueryExecutionTree&)> fallback) {
+  auto numRowsRead = [fallback](QueryExecutionTree& child,
+                                QueryExecutionTree& sibling,
+                                ColumnIndex siblingJoinCol) {
+    return getNumRowsReadOfPartialScanIfPresent(child, sibling, siblingJoinCol)
+        .value_or(fallback(child));
+  };
+  return {numRowsRead(*left_, *right_, rightJoinCol_),
+          numRowsRead(*right_, *left_, leftJoinCol_)};
+}
+
 // _____________________________________________________________________________
 size_t JoinImpl::getCostEstimate() {
-  size_t costJoin = left_->getSizeEstimate() + right_->getSizeEstimate();
+  // An index scan that the join reads only partially is charged only for the
+  // rows that it reads, both here and as the cost of its subtree.
+  auto numRowsRead =
+      getNumRowsReadOfChildrenOr(&QueryExecutionTree::getSizeEstimate);
+  size_t costJoin = numRowsRead.at(0) + numRowsRead.at(1);
 
-  // TODO<joka921> once the `getCostEstimate` functions are `const`,
-  // the argument can also be `const auto`
-  auto costOfSubtree = [](auto& subtree) { return subtree->getCostEstimate(); };
+  auto costOfSubtrees = getCostEstimatesChargedForChildren();
+  return getSizeEstimateBeforeLimit() + costJoin + costOfSubtrees.at(0) +
+         costOfSubtrees.at(1);
+}
 
-  return getSizeEstimateBeforeLimit() + costJoin + costOfSubtree(left_) +
-         costOfSubtree(right_);
+// _____________________________________________________________________________
+std::vector<size_t> JoinImpl::getCostEstimatesChargedForChildren() {
+  return getNumRowsReadOfChildrenOr(&QueryExecutionTree::getCostEstimate);
 }
 
 // _____________________________________________________________________________

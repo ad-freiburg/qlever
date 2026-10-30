@@ -280,6 +280,13 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   virtual size_t getCostEstimate() = 0;
 
+  // The costs that `getCostEstimate` charges for the children (in the order of
+  // `getChildren()`). By default, these are the cost estimates of the children,
+  // but they can be lower, e.g. because a join reads only some blocks of an
+  // index scan. `createRuntimeInfoFromEstimates` shows these costs in the
+  // runtime information of the children.
+  virtual std::vector<size_t> getCostEstimatesChargedForChildren();
+
   virtual uint64_t getSizeEstimate() final;
 
   // The cancellation handle of the query, which is stored in the

@@ -44,6 +44,7 @@ class Join : public Operation {
   size_t getResultWidth() const override;
   std::vector<ColumnIndex> resultSortedOn() const override;
   size_t getCostEstimate() override;
+  std::vector<size_t> getCostEstimatesChargedForChildren() override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
 
