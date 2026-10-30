@@ -2993,3 +2993,43 @@ TEST(CompressedRelationWriter, destructorWaitsForAllPendingTwinRelationPushes) {
   EXPECT_TRUE(failingPushWasAwaited);
   EXPECT_TRUE(succeedingPushWasAwaited);
 }
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, usesTheConfiguredCompressionLevel) {
+  // A few large relations with very regular (and therefore well compressible)
+  // contents, and some small ones.
+  auto inputs = makeInputsWithMixedSizes();
+  int col0 = static_cast<int>(inputs.size());
+  for (int numRows : {2'000, 3'000}) {
+    inputs.push_back(makeRelation(++col0, numRows, false));
+  }
+
+  // Build the permutation with the given compression `level`, check that its
+  // contents can be read back, and return the total compressed size of its
+  // blocks.
+  auto buildWithLevel = [&inputs](size_t level) {
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationCompressionLevel_>(level);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    auto result = buildPermutation(inputs, 1'000, 100, filename);
+    EXPECT_EQ(result.numDistinctCol0_, inputs.size());
+    EXPECT_EQ(result.scanResults_.size(), inputs.size());
+    for (size_t i = 0; i < inputs.size(); ++i) {
+      checkThatTablesAreEqual(inputs.at(i).col1And2_,
+                              result.scanResults_.at(i));
+    }
+    size_t totalSize = 0;
+    for (const auto& block : result.blocks_) {
+      for (size_t size : getCompressedSizes(block)) {
+        totalSize += size;
+      }
+    }
+    return totalSize;
+  };
+
+  auto sizeFast = buildWithLevel(1);
+  auto sizeDefault = buildWithLevel(3);
+  auto sizeStrong = buildWithLevel(19);
+  EXPECT_GE(sizeFast, sizeDefault);
+  EXPECT_GT(sizeFast, sizeStrong);
+}
