@@ -311,6 +311,58 @@ TEST(Union, sortedMerge) {
 }
 
 // _____________________________________________________________________________
+TEST(Union, sortedMergeWithColumnMissingOnOneSide) {
+  // A sort column that is missing in one of the children is UNDEF for all of
+  // its rows. If the row of the other child is also UNDEF in that column, the
+  // two rows are equal in that column and the next sort column has to decide.
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto U = Id::makeUndefined();
+  auto makeTree = [qec](IdTable table, Vars vars) {
+    std::vector<ColumnIndex> sortedOn(vars.size());
+    std::iota(sortedOn.begin(), sortedOn.end(), 0);
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(table), std::move(vars), false, std::move(sortedOn));
+  };
+  auto withB = [&]() {
+    auto table = makeIdTableFromVector({{1, 0, 5}});
+    table(0, 1) = U;
+    return makeTree(std::move(table), Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}});
+  };
+  auto withoutB = [&](int64_t c) {
+    return makeTree(makeIdTableFromVector({{1, c}}),
+                    Vars{Var{"?a"}, Var{"?c"}});
+  };
+  // The columns of the result are those of `left`, followed by the remaining
+  // ones of `right`, so `targetOrder` sorts by `?a ?b ?c` in both cases.
+  auto test = [&](auto left, auto right, std::vector<ColumnIndex> targetOrder,
+                  const IdTable& expected) {
+    Union unionOperation{qec, std::move(left), std::move(right),
+                         std::move(targetOrder)};
+    for (auto mode : {ComputationMode::FULLY_MATERIALIZED,
+                      ComputationMode::LAZY_IF_SUPPORTED}) {
+      qec->getQueryTreeCache().clearAll();
+      auto result = unionOperation.getResult(true, mode);
+      IdTable actual{3, ad_utility::testing::makeAllocator()};
+      if (result->isFullyMaterialized()) {
+        actual = result->idTableView().clone();
+      } else {
+        for (const auto& [idTable, localVocab] : result->idTables()) {
+          actual.insertAtEnd(idTable);
+        }
+      }
+      EXPECT_EQ(actual, expected);
+    }
+  };
+  // The column `?b` is missing in the left child (result columns `?a ?c ?b`).
+  test(withoutB(7), withB(), {0, 2, 1},
+       makeIdTableFromVector({{1, 5, U}, {1, 7, U}}));
+  // The column `?b` is missing in the right child (result columns `?a ?b ?c`).
+  test(withB(), withoutB(7), {0, 1, 2},
+       makeIdTableFromVector({{1, U, 5}, {1, U, 7}}));
+}
+
+// _____________________________________________________________________________
 TEST(Union, sortedMergeWithOneSideNonLazy) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
