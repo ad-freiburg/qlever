@@ -200,7 +200,7 @@ TEST(GeoCellGrid, markerBitConsistentWithSplitGeoVocabulary) {
   using SGV = SplitGeoVocabulary<VocabularyInMemory>;
 
   // The `SplitGeoVocabulary` marks the words of its geo vocabulary with the
-  // topmost data bit of the vocabulary index. These checks fail if one of
+  // topmost bit of the vocabulary index. These checks fail if one of
   // the two sides changes its layout.
   EXPECT_EQ(SGV::markerShift, ValueId::numVocabIndexBits - 1);
   EXPECT_EQ(SGV::addMarker(0, 1), GeoCellGrid::geoVocabMarkerBit);

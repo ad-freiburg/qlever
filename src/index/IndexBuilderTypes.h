@@ -111,18 +111,19 @@ using Triple =
 // The index of a word within a partial vocabulary and the corresponding bool
 // that indicates if it belongs to the external vocabulary.
 // The `isExternal` bool is encoded in the most significant bit, so that both
-// fit into a single 64-bit integer. For the FoldedValueId, this bit is one of
-// the datatype bits of the FoldedValueId. For the SplitLayoutId, it is the
-// highest bit of the payload.
+// fit into a single 64-bit integer. For the `FoldedValueId`, this bit is one of
+// the datatype bits, for the `SplitLayoutId` it is the highest bit of the
+// payload.
 class PartialVocabIndexWithExternalFlag {
   uint64_t encodedIndex_;
 
  public:
   PartialVocabIndexWithExternalFlag(uint64_t index, bool isExternal)
       : encodedIndex_{(uint64_t(isExternal) << 63) | index} {
-    // The `index` must not collide with the `isExternal` bit: for the
-    // FoldedValueId it must not reach the datatype bits (`ValueId::maxIndex`),
-    // for the SplitLayoutId it must not use the highest bit of the payload.
+    // The `index` must not collide with the `isExternal` bit. For the
+    // `FoldedValueId`, it must not reach the datatype bits
+    // (`ValueId::maxIndex`), for the `SplitLayoutId` it must not use the
+    // highest bit of the payload.
     AD_EXPENSIVE_CHECK(index <= std::min<uint64_t>(ValueId::maxIndex,
                                                    (uint64_t{1} << 63) - 1));
   }
@@ -131,7 +132,6 @@ class PartialVocabIndexWithExternalFlag {
 
   // Access the original values.
   uint64_t index() const { return encodedIndex_ & (uint64_t(-1) >> 1); }
-
   bool isExternal() const { return (encodedIndex_ >> 63) != 0; }
 };
 

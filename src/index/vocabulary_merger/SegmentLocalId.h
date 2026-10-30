@@ -42,8 +42,9 @@ namespace ad_utility::vocabulary_merger::detail {
 //   later turns this into the global index by adding the number of words of
 //   the sub-vocabulary (or of blank nodes) in all the previous segments.
 //
-// The index has as many bits as a vocabulary index,
-// so that the global index fits into a `ValueId` afterwards.
+// The index has as many bits as a vocabulary index
+// (`ValueId::numVocabIndexBits`), so that the global index fits into a
+// `ValueId` afterwards.
 //
 // Example (with the current `ValueId::numVocabIndexBits` of 60): the third word
 // (index `2`) of the sub-vocabulary `1` has the bits `0001 | 000...0010`, that
