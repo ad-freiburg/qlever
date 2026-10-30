@@ -30,8 +30,8 @@ namespace {
 // A word of the internal vocabulary that is part of a batch: its position in
 // the batch and the view into the internal vocabulary.
 struct InternalWord {
-  size_t position;
-  std::string_view word;
+  size_t position_;
+  std::string_view word_;
 };
 
 // Return the words of `indices` that are in `internalVocab`, in the order of
@@ -60,7 +60,7 @@ void forEachPosition(size_t numPositions,
   auto nextInternal = internalWords.begin();
   for (const size_t position : ql::views::iota(size_t{0}, numPositions)) {
     if (nextInternal != internalWords.end() &&
-        nextInternal->position == position) {
+        nextInternal->position_ == position) {
       onInternal(*nextInternal);
       ++nextInternal;
     } else {
@@ -95,7 +95,7 @@ std::vector<std::string_view> mergeWords(
   forEachPosition(
       numWords, internalWords,
       [&](const InternalWord& internalWord) {
-        views.push_back(internalWord.word);
+        views.push_back(internalWord.word_);
       },
       [&](size_t) { views.push_back(*(nextExternal++)); });
   return views;
