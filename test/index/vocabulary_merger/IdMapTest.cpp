@@ -46,7 +46,8 @@ TEST(IdMapWriter, writeAndReadBack) {
   // Far more entries than fit into the internal buffer of the writer, such
   // that the buffer has to be flushed many times.
   const size_t numPairs = 200'000;
-  ASSERT_GT(numPairs * 16, 10 * idMapWriterBufferSize.getBytes());
+  ASSERT_GT(numPairs * sizeof(IdMapEntry),
+            10 * idMapWriterBufferSize.getBytes());
   IdMap expected;
   expected.reserve(numPairs);
   for (size_t i = 0; i < numPairs; ++i) {

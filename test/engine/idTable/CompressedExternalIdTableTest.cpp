@@ -112,8 +112,10 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
   // With one `Id` per block, the first and second IdTable are split up into
   // multiple blocks.
   runTestForBlockSize(ad_utility::MemorySize::bytes(BYTES_PER_ID_COLUMN_ENTRY));
-  // With 48 bytes, each IdTable is stored in a single block.
-  runTestForBlockSize(48_B);
+  // With six `Id`s per block, each IdTable (at most three rows) is stored in
+  // a single block.
+  runTestForBlockSize(
+      ad_utility::MemorySize::bytes(6 * BYTES_PER_ID_COLUMN_ENTRY));
 }
 
 template <size_t NumStaticColumns>

@@ -1188,7 +1188,8 @@ TEST(IdTable, shrinkToFit) {
   auto allocator = qlever::makeAllocatorWithLimit<Id>(limit);
   IdTable table{2, allocator};
   ASSERT_THAT(allocator, hasAllocatedIds(0, limit));
-  // 20 rows of 2 columns.
+  // Reserving 20 rows allocates 20 rows of 2 columns, and two `emplace_back`s
+  // do not change that.
   table.reserve(20);
   ASSERT_TRUE(table.empty());
   ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
@@ -1196,7 +1197,7 @@ TEST(IdTable, shrinkToFit) {
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
   ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
-  // Only the 2 rows of 2 columns are left.
+  // `shrinkToFit` releases all but the 2 rows of 2 columns.
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
   ASSERT_THAT(allocator, hasAllocatedIds(2 * 2, limit));

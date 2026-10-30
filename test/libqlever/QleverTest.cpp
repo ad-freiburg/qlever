@@ -962,9 +962,8 @@ TEST(LibQlever, allocatorGetter) {
   const auto memoryLeftBefore = constEngine.allocator().amountMemoryLeft();
   constexpr size_t numIds = 16;
   Id* ptr = allocator.allocate(numIds);
-  EXPECT_EQ(
-      constEngine.allocator().amountMemoryLeft(),
-      memoryLeftBefore - ad_utility::MemorySize::bytes(numIds * sizeof(Id)));
+  EXPECT_EQ(constEngine.allocator().amountMemoryLeft(),
+            memoryLeftBefore - memoryOfIds(numIds));
   allocator.deallocate(ptr, numIds);
   EXPECT_EQ(constEngine.allocator().amountMemoryLeft(), memoryLeftBefore);
 }
