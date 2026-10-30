@@ -17,11 +17,10 @@ using std::string;
 void VocabularyInMemory::open(const string& fileName) {
   AD_LOG_INFO << "Reading vocabulary from file " << fileName << " ..."
               << std::endl;
-  // Never modify words that a batch-lookup result might share.
-  auto words = std::make_shared<Words>();
+  Words words;
   ad_utility::serialization::FileReadSerializer file(fileName);
-  file >> *words;
-  words_ = std::move(words);
+  file >> words;
+  words_ = std::make_shared<const Words>(std::move(words));
   AD_LOG_INFO << "Done, number of words: " << size() << std::endl;
 }
 

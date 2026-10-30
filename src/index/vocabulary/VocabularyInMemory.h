@@ -30,9 +30,9 @@ class VocabularyInMemory
 
  private:
   // The actual storage. It is shared with the batch-lookup results (see
-  // `lookupBatch`), which is why it is never modified in place: `open()` and
+  // `lookupBatch`), which is why it is immutable: `open()` and
   // deserialization replace it by a new one, `close()` by an empty one.
-  std::shared_ptr<Words> words_ = std::make_shared<Words>();
+  std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
 
   // Const access to the words.
   const Words& words() const { return *words_; }
@@ -43,7 +43,7 @@ class VocabularyInMemory
 
   // Construct the vocabulary from `Words`
   explicit VocabularyInMemory(Words words)
-      : words_{std::make_shared<Words>(std::move(words))} {}
+      : words_{std::make_shared<const Words>(std::move(words))} {}
 
   // Build a vocabulary as a non-owning, zero-copy view directly into the
   // buffer of `serializer`, which must support zero-copy deserialization
@@ -157,7 +157,7 @@ class VocabularyInMemory
 
   // Clear the vocabulary. Batch-lookup results that are still alive keep the
   // previous words.
-  void close() { words_ = std::make_shared<Words>(); }
+  void close() { words_ = std::make_shared<const Words>(); }
 
   // Const access to the underlying words.
   auto begin() const { return words().begin(); }
@@ -166,10 +166,12 @@ class VocabularyInMemory
   // Generic serialization support.
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) {
     if constexpr (ad_utility::serialization::ReadSerializer<S>) {
-      // Never modify words that a batch-lookup result might share.
-      arg.words_ = std::make_shared<Words>();
+      Words words;
+      serializer | words;
+      arg.words_ = std::make_shared<const Words>(std::move(words));
+    } else {
+      serializer | *arg.words_;
     }
-    serializer | *arg.words_;
   }
 };
 
