@@ -303,6 +303,21 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 
 // _____________________________________________________________________________
 
+TEST(CancellationHandle, cancellationCheckerCallsThrowIfCancelled) {
+  CancellationHandle<ENABLED> handle;
+  auto checker = handle.cancellationChecker();
+
+  handle.cancellationState_ = WAITING_FOR_CHECK;
+  EXPECT_NO_THROW(checker());
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+
+  handle.cancellationState_ = MANUAL;
+  EXPECT_THROW(checker(), CancellationException);
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
+}
+
+// _____________________________________________________________________________
+
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);

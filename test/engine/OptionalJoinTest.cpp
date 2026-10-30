@@ -28,6 +28,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 #include "index/TripleComponentConversions.h"
+#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -1480,4 +1481,22 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
       EXPECT_NE(id, Id::makeUndefined());
     }
   }
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
+  auto makeResult = []() {
+    return std::make_shared<const Result>(makeIdTableFromVector({{1}}),
+                                          std::vector<ColumnIndex>{0},
+                                          LocalVocab{});
+  };
+  auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
+    joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
+        JoinColumns{{0, 0}}, makeResult(), makeResult(), std::move(handle));
+  };
+  EXPECT_NO_THROW(
+      makeJoin(std::make_shared<ad_utility::CancellationHandle<>>()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeJoin(nullptr),
+      ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
