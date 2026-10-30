@@ -652,6 +652,9 @@ TEST_F(MaterializedViewsTest, ScansAllocateThroughTheGivenAllocator) {
   qlever::EngineConfig config;
   config.baseName_ = testIndexBase_;
   config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
+  // The engine sets `memory-for-queries` to its memory limit.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   qlever::Qlever limitedEngine{config};
   auto viewFromLimitedEngine =
       limitedEngine.indexAndViewsSnapshot()->materializedViewsManager_.getView(

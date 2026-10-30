@@ -22,6 +22,7 @@
 #include "libqlever/Qlever.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/metrics/Metrics.h"
 
 namespace serverTestHelpers {
@@ -74,6 +75,13 @@ inline auto expectRequiresValidAccessToken =
 // and the state of the `Server` and `DeltaTriples` can be inspected after each
 // request.
 class ServerForTesting {
+  // The `Server` sets `memory-for-queries` to the memory limit of its `config`.
+  // Restore it after the `Server` is destroyed (members are destroyed in
+  // reverse order).
+  decltype(restoreRuntimeParameterOnScopeExit<
+           &RuntimeParameters::memoryForQueries_>()) restoreMemoryForQueries_ =
+      restoreRuntimeParameterOnScopeExit<
+          &RuntimeParameters::memoryForQueries_>();
   std::unique_ptr<Server> server_;
 
  public:
