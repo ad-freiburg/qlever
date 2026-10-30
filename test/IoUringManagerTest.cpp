@@ -580,6 +580,17 @@ void expectManagerWorks(ad_utility::BatchManagerBase& manager) {
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("BBBB", "AAAA"));
 }
 
+// True if `manager` is a `BatchManager` for `Policy`, decorated with
+// `PageCacheFirstPolicy` exactly where the page-cache fast path is supported.
+template <typename Policy>
+bool usesPolicy(ad_utility::BatchManagerBase* manager) {
+  if (ad_utility::pageCacheFastPathIsSupported()) {
+    return dynamic_cast<ad_utility::BatchManager<
+               ad_utility::PageCacheFirstPolicy<Policy>>*>(manager) != nullptr;
+  }
+  return dynamic_cast<ad_utility::BatchManager<Policy>*>(manager) != nullptr;
+}
+
 // With `preferIoUring == false`, `makeBatchManager` must return a
 // `SyncIoPolicy`-backed manager without probing io_uring, and leave the flag
 // `false`.
@@ -588,9 +599,7 @@ TEST(MakeBatchManager, syncBackendWhenIoUringNotPreferred) {
   auto manager = ad_utility::makeBatchManager(preferIoUring);
   ASSERT_NE(manager, nullptr);
   EXPECT_FALSE(preferIoUring);
-  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
-                manager.get()),
-            nullptr);
+  EXPECT_TRUE(usesPolicy<ad_utility::SyncIoPolicy>(manager.get()));
   expectManagerWorks(*manager);
 }
 
@@ -607,20 +616,13 @@ TEST(MakeBatchManager, backendMatchesFlagWhenIoUringPreferred) {
   ASSERT_NE(manager, nullptr);
 #ifdef QLEVER_HAS_IO_URING
   if (preferIoUring) {
-    EXPECT_NE(
-        dynamic_cast<ad_utility::BatchManager<ad_utility::IoUringPolicy>*>(
-            manager.get()),
-        nullptr);
+    EXPECT_TRUE(usesPolicy<ad_utility::IoUringPolicy>(manager.get()));
   } else {
-    EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
-                  manager.get()),
-              nullptr);
+    EXPECT_TRUE(usesPolicy<ad_utility::SyncIoPolicy>(manager.get()));
   }
 #else
   EXPECT_FALSE(preferIoUring);
-  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
-                manager.get()),
-            nullptr);
+  EXPECT_TRUE(usesPolicy<ad_utility::SyncIoPolicy>(manager.get()));
 #endif
   expectManagerWorks(*manager);
 }
@@ -987,26 +989,13 @@ TEST(PageCacheFirstPolicy, anUnsupportedFastPathIsLeftAlone) {
   EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{2}, size_t{2}));
 }
 
-// `makeBatchManager` decorates the policy with `PageCacheFirstPolicy` only on
-// request, and only if the fast path is available.
-TEST(MakeBatchManager, pageCacheFirstDecoratesThePolicy) {
+// The manager from `makeBatchManager` works with the page-cache fast path
+// switched on and off.
+TEST(MakeBatchManager, worksWithTheFastPathOnAndOff) {
   bool preferIoUring = false;
-  using Plain = ad_utility::BatchManager<ad_utility::SyncIoPolicy>;
-  using Decorated = ad_utility::BatchManager<
-      ad_utility::PageCacheFirstPolicy<ad_utility::SyncIoPolicy>>;
-  auto plain = ad_utility::makeBatchManager(preferIoUring,
-                                            /*pageCacheFirst=*/false);
-  EXPECT_NE(dynamic_cast<Plain*>(plain.get()), nullptr);
-  auto requested = ad_utility::makeBatchManager(preferIoUring,
-                                                /*pageCacheFirst=*/true);
-  if (ad_utility::pageCacheFastPathIsSupported()) {
-    EXPECT_NE(dynamic_cast<Decorated*>(requested.get()), nullptr);
-  } else {
-    EXPECT_NE(dynamic_cast<Plain*>(requested.get()), nullptr);
-  }
-  expectManagerWorks(*requested);
-  // A manager without a page-cache fast path ignores the switch.
-  plain->setPageCacheFastPath(false);
-  expectManagerWorks(*plain);
+  auto manager = ad_utility::makeBatchManager(preferIoUring);
+  expectManagerWorks(*manager);
+  manager->setPageCacheFastPath(false);
+  expectManagerWorks(*manager);
 }
 }  // namespace
