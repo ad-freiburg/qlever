@@ -90,6 +90,17 @@ TEST(TripleComponent, setAndGetId) {
   ASSERT_EQ(tcConst.getId(), id);
 }
 
+TEST(TripleComponent, constructFromLiteralOrIri) {
+  using ad_utility::triple_component::LiteralOrIri;
+  TripleComponent iri{LiteralOrIri::fromStringRepresentation("<x>")};
+  ASSERT_TRUE(iri.isIri());
+  EXPECT_EQ(iri.getIri().toStringRepresentation(), "<x>");
+
+  TripleComponent literal{LiteralOrIri::fromStringRepresentation("\"abc\"@en")};
+  ASSERT_TRUE(literal.isLiteral());
+  EXPECT_EQ(literal.getLiteral().toStringRepresentation(), "\"abc\"@en");
+}
+
 TEST(TripleComponent, assignmentOperator) {
   TripleComponent object;
   object = -12.435;

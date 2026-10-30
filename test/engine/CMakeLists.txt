@@ -1,5 +1,6 @@
 add_subdirectory(idTable)
 add_subdirectory(idTable/splitLayout)
+add_subdirectory(binaryExport)
 addLinkAndDiscoverTest(IndexScanTest engine)
 addLinkAndRunAsSingleTest(CartesianProductJoinTest engine)
 addLinkAndDiscoverTest(TextIndexScanForWordTest engine)
