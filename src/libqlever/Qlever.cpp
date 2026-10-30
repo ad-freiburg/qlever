@@ -57,8 +57,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   // the action once, which is a no-op because the difference is zero.
   //
   // NOTE: The action holds a copy of the allocator, which shares the limit
-  // with `allocator_` and keeps it alive, so the action never dangles, also
-  // not after this instance is destroyed.
+  // with `allocator_`. The destructor removes the action again.
   auto memoryLimit = config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES);
   auto runtimeParameters = globalRuntimeParameters.wlock();
   runtimeParameters->memoryForQueries_.set(memoryLimit);
@@ -141,6 +140,15 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                    << "' failed: " << ex.what() << "." << std::endl;
     }
   }
+}
+
+// _____________________________________________________________________________
+Qlever::~Qlever() {
+  auto runtimeParameters = globalRuntimeParameters.wlock();
+  runtimeParameters->cacheMaxNumEntries_.clearOnUpdateAction();
+  runtimeParameters->cacheMaxSize_.clearOnUpdateAction();
+  runtimeParameters->cacheMaxSizeSingleEntry_.clearOnUpdateAction();
+  runtimeParameters->memoryForQueries_.clearOnUpdateAction();
 }
 
 // _____________________________________________________________________________
