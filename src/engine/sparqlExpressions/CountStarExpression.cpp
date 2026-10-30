@@ -59,9 +59,9 @@ ExpressionResult CountStarExpression::evaluate(
   }
   ad_utility::callFixedSizeVi(
       table.numColumns(),
-      [&table, &sortConfig = ctx->_qec.sortConfig(), ctx](auto i) {
+      [&table, &sortConfig = ctx->_qec.sortConfig()](auto i) {
         IdTableUtils::sort<i>(&table, ql::ranges::lexicographical_compare,
-                              sortConfig, ctx->cancellationHandle_);
+                              sortConfig);
       });
   return Id::makeFromInt(static_cast<int64_t>(
       IdTableUtils::countDistinct(table, checkCancellation)));

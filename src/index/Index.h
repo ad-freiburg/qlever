@@ -30,6 +30,7 @@ class TextBlockMetaData;
 class IndexImpl;
 class LocalVocabContext;
 struct LocatedTriplesState;
+struct SortConfig;
 class DeltaTriplesManager;
 
 class Index {
@@ -168,13 +169,16 @@ class Index {
   [[nodiscard]] size_t getSizeOfTextBlocksSum(const std::string& word,
                                               TextScanMode textScanMode) const;
 
+  // See the corresponding functions in `IndexImpl.h`.
   IdTable getWordPostingsForTerm(
       const std::string& term,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const SortConfig& sortConfig) const;
 
   IdTable getEntityMentionsForWord(
       const std::string& term,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const SortConfig& sortConfig) const;
 
   size_t getIndexOfBestSuitedElTerm(
       const std::vector<std::string>& terms) const;
@@ -238,13 +242,6 @@ class Index {
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
-
-  // Similar to the previous overload of `scan`, but only get the exact size of
-  // the scan result.
-  size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpecification,
-      const Permutation::Enum& permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header

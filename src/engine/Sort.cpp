@@ -145,8 +145,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
                                    LocalVocab localVocab) const {
   runtimeInfo().addDetail("is-external", "false");
 
-  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig(),
-                     cancellationHandle());
+  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig());
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }

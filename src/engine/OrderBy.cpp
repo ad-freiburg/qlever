@@ -316,8 +316,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // function deals with) but also on the `comparison`.
   ad_utility::callFixedSizeVi(
       width, [this, &idTable, &comparison](auto numColumns) {
-        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig(),
-                                       cancellationHandle());
+        IdTableUtils::sort<numColumns>(&idTable, comparison, sortConfig());
       });
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
