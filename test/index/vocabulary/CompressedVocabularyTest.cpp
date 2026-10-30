@@ -154,11 +154,11 @@ TYPED_TEST(CompressedVocabularyF, AccessOperator) {
 // single index, and that it rejects the empty batch.
 TYPED_TEST(CompressedVocabularyF, LookupBatch) {
   // Many more words than the block size of the fixture (4), so that the full
-  // batch spans many decoder blocks.
+  // batch spans many decoder blocks. The first word is empty.
   constexpr size_t numWords = 64;
-  std::vector<std::string> words;
+  std::vector<std::string> words{""};
   words.reserve(numWords);
-  for (size_t i : ql::views::iota(size_t{0}, numWords)) {
+  for (size_t i : ql::views::iota(size_t{1}, numWords)) {
     // Fixed-width numbers, so that the words are sorted.
     words.push_back(
         absl::StrCat("s", i / 10, i % 10, "-", std::string(i % 7, 'x')));
