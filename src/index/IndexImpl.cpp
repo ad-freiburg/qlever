@@ -10,6 +10,7 @@
 #include <absl/strings/str_join.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
+#include <re2/re2.h>
 #include <sys/stat.h>
 
 #include <atomic>
@@ -1645,13 +1646,34 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
+    bool addWordTriples =
+        wordTriplePredicates_.empty() ||
+        (triple.predicate_.isIri() &&
+         wordTriplePredicates_.contains(
+             triple.predicate_.getIri().toStringRepresentation()));
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
-    if (addHasWordTriples_) {
+    if (addHasWordTriples_ && addWordTriples) {
       std::string_view content = lit.getContent();
+      // With `LowercaseNoAccents`, remove the accents before the tokenization
+      // (combining marks are not alphanumeric and would otherwise split
+      // words). `contentWithoutAccents` owns the result, so that `content`
+      // stays valid during the tokenization.
+      std::string contentWithoutAccents;
+      if (hasWordNormalization_ ==
+          ad_utility::HasWordNormalization::LowercaseNoAccents) {
+        contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
+        content = contentWithoutAccents;
+      }
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
         ++result.wordFrequencies_[std::move(word)];
+      }
+    }
+    if (addNormalizedTriples_ && addWordTriples) {
+      auto normalized = normalizeLiteralContent(lit.getContent());
+      if (!normalized.empty()) {
+        result.normalized_ = std::move(normalized);
       }
     }
   }
@@ -2203,6 +2225,21 @@ void IndexImpl::setPrefixesForEncodedValues(
 }
 
 // _____________________________________________________________________________
+void IndexImpl::setWordTriplePredicates(
+    const std::vector<std::string>& predicates) {
+  wordTriplePredicates_.clear();
+  for (const std::string& predicate : predicates) {
+    if (!predicate.starts_with('<') || !predicate.ends_with('>')) {
+      throw std::runtime_error{absl::StrCat(
+          "The predicate \"", predicate,
+          "\" passed to `--word-triple-predicates` is not an IRI in angle "
+          "brackets")};
+    }
+    wordTriplePredicates_.insert(predicate);
+  }
+}
+
+// _____________________________________________________________________________
 void IndexImpl::setBlankNodeIriRegexes(
     std::vector<std::string> blankNodeIriRegexes) {
   ql::ranges::for_each(blankNodeIriRegexes, [](const std::string& regex) {
@@ -2221,6 +2258,36 @@ void IndexImpl::setBlankNodeIriRegexes(
   blankNodeIriRegexes_ =
       ad_utility::RegexSet{std::move(blankNodeIriRegexes),
                            "passed to `--iri-as-blank-node-regexes`"};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setNormalizationRegexes(
+    const std::vector<std::string>& regexes) {
+  normalizationRegexes_.clear();
+  for (const std::string& regex : regexes) {
+    auto compiled = std::make_shared<const re2::RE2>(regex, re2::RE2::Quiet);
+    if (!compiled->ok()) {
+      throw std::runtime_error{absl::StrCat(
+          "The regex \"", regex,
+          "\" passed to `--normalization-regexes` is not a valid regular "
+          "expression (as understood by Google's RE2 library): ",
+          compiled->error())};
+    }
+    normalizationRegexes_.push_back(std::move(compiled));
+  }
+}
+
+// _____________________________________________________________________________
+std::string IndexImpl::normalizeLiteralContent(std::string_view content) const {
+  std::string cleaned{content};
+  for (const auto& regex : normalizationRegexes_) {
+    re2::RE2::GlobalReplace(&cleaned, *regex, " ");
+  }
+  std::string withoutAccents = ad_utility::removeAccentsUtf8(cleaned);
+  return absl::StrJoin(
+      ::ranges::to<std::vector<std::string>>(
+          tokenizeAndNormalizeText(withoutAccents, vocab_.getLocaleManager())),
+      " ");
 }
 
 // _____________________________________________________________________________

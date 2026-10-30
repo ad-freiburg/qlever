@@ -180,6 +180,7 @@ constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 namespace constants::details::strings {
 constexpr inline std::string_view langtag{"langtag"};
 constexpr inline std::string_view hasWord{"has-word"};
+constexpr inline std::string_view normalized{"normalized"};
 }  // namespace constants::details::strings
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::langtag>();
@@ -188,6 +189,8 @@ constexpr inline std::string_view LANGUAGE_PREDICATE =
 constexpr inline std::string_view LANGUAGE_TAGGED_PREDICATE_PREFIX = "@";
 constexpr inline std::string_view HAS_WORD_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::hasWord>();
+constexpr inline std::string_view NORMALIZED_PREDICATE =
+    makeQleverInternalIriConst<constants::details::strings::normalized>();
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.

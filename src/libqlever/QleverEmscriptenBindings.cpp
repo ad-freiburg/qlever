@@ -80,6 +80,11 @@ EMSCRIPTEN_BINDINGS(qlever) {
       .value("OnDiskCompressedGeoSplit",
              ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit);
 
+  enum_<ad_utility::HasWordNormalization::Enum>("HasWordNormalization")
+      .value("Lowercase", ad_utility::HasWordNormalization::Enum::Lowercase)
+      .value("LowercaseNoAccents",
+             ad_utility::HasWordNormalization::Enum::LowercaseNoAccents);
+
   // The formats in which query results can be exported.
   enum_<ad_utility::MediaType>("MediaType")
       .value("textPlain", ad_utility::MediaType::textPlain)
@@ -117,6 +122,22 @@ EMSCRIPTEN_BINDINGS(qlever) {
       .property("noPatterns", &qlever::CommonConfig::noPatterns_)
       .property("onlyPsoAndPos", &qlever::CommonConfig::onlyPsoAndPos_)
       .property("addHasWordTriples", &qlever::CommonConfig::addHasWordTriples_)
+      .property(
+          "hasWordNormalization",
+          optional_override([](const qlever::CommonConfig& self) {
+            return self.hasWordNormalization_.value();
+          }),
+          optional_override([](qlever::CommonConfig& self,
+                               ad_utility::HasWordNormalization::Enum value) {
+            self.hasWordNormalization_ =
+                ad_utility::HasWordNormalization{value};
+          }))
+      .property("addNormalizedTriples",
+                &qlever::CommonConfig::addNormalizedTriples_)
+      .property("normalizationRegexes",
+                &qlever::CommonConfig::normalizationRegexes_)
+      .property("wordTriplePredicates",
+                &qlever::CommonConfig::wordTriplePredicates_)
       .function("setMemoryLimitMB",
                 optional_override([](qlever::CommonConfig& self, double mb) {
                   self.memoryLimit_ = memorySizeFromMegabytes(mb);

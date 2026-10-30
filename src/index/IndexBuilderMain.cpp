@@ -276,6 +276,36 @@ int main(int argc, char** argv) {
   add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
       "Add `ql:has-word` triples for each word in each literal. This enables "
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
+  auto hasWordNormalizationDescription = absl::StrCat(
+      "The normalization of the words of the `ql:has-word` triples. Literals "
+      "are always split at non-alphanumeric characters and the words are "
+      "lowercased; with `lowercase-no-accents`, accents are also removed (e.g. "
+      "\"Café\" becomes \"cafe\"). One of ",
+      ad_utility::HasWordNormalization::getListOfSupportedValues(),
+      ", the default is `lowercase`.");
+  add("has-word-normalization", po::value(&config.hasWordNormalization_),
+      hasWordNormalizationDescription.c_str());
+  add("add-normalized-triples", po::bool_switch(&config.addNormalizedTriples_),
+      "Add a triple `<literal> ql:normalized \"normalized literal\"` for each "
+      "literal. The normalized literal is obtained by removing the matches of "
+      "the `--normalization-regexes`, removing accents, and lowercasing the "
+      "words of the literal, separated by single spaces. Accents are all "
+      "nonspacing marks, which in some scripts (e.g. Devanagari or Thai) "
+      "also include vowel signs. This enables efficient matching of literals "
+      "via their normalized form.");
+  add("normalization-regexes",
+      po::value(&config.normalizationRegexes_)->composing()->multitoken(),
+      "Space-separated list of regexes (RE2 syntax), whose matches are "
+      "replaced by a space before a literal is normalized for "
+      "`--add-normalized-triples` (in the given order), e.g. `\\(.*?\\)` "
+      "to remove text in parentheses, or `(?i)\\bltd\\b` to remove "
+      "this word case-insensitively.");
+  add("word-triple-predicates",
+      po::value(&config.wordTriplePredicates_)->composing()->multitoken(),
+      "Space-separated list of predicate IRIs in angle brackets. If "
+      "specified, the `ql:has-word` and `ql:normalized` triples are only "
+      "added for literals that are the object of a triple with one of these "
+      "predicates.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());

@@ -769,6 +769,111 @@ TEST(IndexTest, processTriple) {
   }
 }
 
+// Test the words of the `ql:has-word` triples with the different
+// normalizations.
+TEST(IndexTest, processTripleHasWordNormalization) {
+  // A literal with "café" composed, decomposed, uppercased and in plural, and
+  // a function that returns its words with the given normalization.
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.addHasWordTriples() = true;
+    index.setHasWordNormalization(normalization);
+    TurtleTriple turtleTriple{
+        iri("<subject>"), iri("<predicate>"),
+        lit("\"Café cafe, CAFE\xcc\x81! cafe\xcc\x81s\"")};
+    return index.processTriple(std::move(turtleTriple)).wordFrequencies_;
+  };
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // With `Lowercase`, the composed "é" is kept, and the combining mark of the
+  // decomposed "é" splits the words (it is not alphanumeric).
+  EXPECT_THAT(
+      getWords(ad_utility::HasWordNormalization::Lowercase),
+      UnorderedElementsAre(Pair("café", 1), Pair("cafe", 3), Pair("s", 1)));
+
+  // With `LowercaseNoAccents`, all accents are removed before the
+  // tokenization.
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              UnorderedElementsAre(Pair("cafe", 3), Pair("cafes", 1)));
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, normalizedTriples) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto process = [&index](std::string literal) {
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+                              lit(std::move(literal))};
+    return index.processTriple(std::move(turtleTriple)).normalized_;
+  };
+  // Disabled by default.
+  EXPECT_EQ(process("\"Café\""), std::nullopt);
+
+  index.addNormalizedTriples() = true;
+  EXPECT_EQ(process("\"Café (Paris), OLÉ!  42\""), "cafe paris ole 42");
+  // A literal without words has no normalized form.
+  EXPECT_EQ(process("\"?!\""), std::nullopt);
+  // Not a literal.
+  EXPECT_EQ(
+      index.processTriple(TurtleTriple{iri("<s>"), iri("<p>"), iri("<o>")})
+          .normalized_,
+      std::nullopt);
+
+  // The matches of the regexes are replaced by a space, in the given order.
+  index.setNormalizationRegexes(
+      {"\\([^)]*\\)|\\[[^\\]]*\\]", "(?i)\\bco(mpany)?\\.? ltd\\b"});
+  EXPECT_EQ(process("\"Café (Paris) [2020] Olé Company Ltd\""), "cafe ole");
+  EXPECT_EQ(process("\"Foo(Bar)Baz\""), "foo baz");
+  EXPECT_EQ(index.normalizeLiteralContent("(only brackets)"), "");
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setNormalizationRegexes({"(unclosed"}),
+      ::testing::HasSubstr("not a valid regular expression"));
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, wordTriplePredicates) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.addHasWordTriples() = true;
+  index.addNormalizedTriples() = true;
+  auto process = [&index](std::string predicate) {
+    return index.processTriple(
+        TurtleTriple{iri("<s>"), iri(std::move(predicate)), lit("\"Café\"")});
+  };
+  // By default, the triples are added for all predicates.
+  auto result = process("<p>");
+  EXPECT_EQ(result.wordFrequencies_.size(), 1);
+  EXPECT_EQ(result.normalized_, "cafe");
+
+  index.setWordTriplePredicates({"<p>", "<q>"});
+  result = process("<q>");
+  EXPECT_EQ(result.wordFrequencies_.size(), 1);
+  EXPECT_EQ(result.normalized_, "cafe");
+  result = process("<r>");
+  EXPECT_TRUE(result.wordFrequencies_.empty());
+  EXPECT_EQ(result.normalized_, std::nullopt);
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setWordTriplePredicates({"<p>", "q"}),
+      ::testing::HasSubstr("is not an IRI in angle brackets"));
+}
+
+// Test the names of the normalizations in the option of `qlever-index`.
+TEST(IndexTest, hasWordNormalizationNames) {
+  using ad_utility::HasWordNormalization;
+
+  // Both names are parsed to their normalization.
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase"),
+            HasWordNormalization::Lowercase);
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase-no-accents"),
+            HasWordNormalization::LowercaseNoAccents);
+
+  // An unknown name throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HasWordNormalization::fromString("uppercase"),
+      ::testing::HasSubstr("is not a valid has-word normalization"));
+}
+
 // _____________________________________________________________________________
 // The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
 // therefore have to start with `<`) and must be valid regular expressions;

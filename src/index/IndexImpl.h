@@ -30,6 +30,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "index/GeoPointEncoding.h"
 #include "index/GraphNameManager.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -50,6 +51,7 @@
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
+#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
@@ -98,6 +100,10 @@ struct IndexBuilderDataAsFirstPermutationSorter {
   SorterPtr sorter_;
 };
 
+namespace re2 {
+class RE2;
+}  // namespace re2
+
 class IndexImpl {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
@@ -143,6 +149,24 @@ class IndexImpl {
 
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
+
+  // If true, add a `ql:normalized` triple for each literal, see
+  // `normalizeLiteralContent`.
+  bool addNormalizedTriples_ = false;
+
+  // The regexes whose matches are removed from a literal before it is
+  // normalized, see `normalizeLiteralContent`.
+  std::vector<std::shared_ptr<const re2::RE2>> normalizationRegexes_;
+
+  // If not empty, the `ql:has-word` and `ql:normalized` triples are only added
+  // for literals that are the object of a triple with one of these predicates
+  // (IRIs in angle brackets).
+  ad_utility::HashSet<std::string> wordTriplePredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -440,6 +464,30 @@ class IndexImpl {
       ad_utility::GeoPointEncoding encoding) {
     geoPointEncodingForIndexBuilding_ = encoding;
   }
+
+  // Set the normalization of the words of the `ql:has-word` triples; see
+  // `ad_utility::HasWordNormalization` for details.
+  void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
+    hasWordNormalization_ = normalization;
+  }
+
+  bool& addNormalizedTriples() { return addNormalizedTriples_; }
+
+  // Set the regexes for `normalizeLiteralContent`. Throw if one of them is not
+  // a valid regular expression (as understood by Google's RE2 library).
+  void setNormalizationRegexes(const std::vector<std::string>& regexes);
+
+  // Return the normalized form of the `content` of a literal, which is the
+  // object of its `ql:normalized` triple: Replace each match of the
+  // `normalizationRegexes_` (in order) by a space, remove all accents, split
+  // the result at non-alphanumeric characters, and join the lowercased words
+  // with a single space. For example, with the regex `\(.*?\)`, the content
+  // "Café (Paris), Olé!" becomes "cafe ole".
+  std::string normalizeLiteralContent(std::string_view content) const;
+
+  // Set the `wordTriplePredicates_`. Throw if one of them is not an IRI in
+  // angle brackets.
+  void setWordTriplePredicates(const std::vector<std::string>& predicates);
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
