@@ -409,7 +409,7 @@ void testLookupBatchOverUnderlying(const std::string& filename) {
   }
   vocab.open(filename);
 
-  for (const std::vector<size_t> indices :
+  for (const std::vector<size_t>& indices :
        {std::vector<size_t>{29, 0, 7, 7, 2, 1}, std::vector<size_t>{1},
         std::vector<size_t>{2}}) {
     assertLookupResultMatchesVocabularyAtIndices(
