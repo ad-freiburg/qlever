@@ -168,13 +168,19 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
 }
 
 // ____________________________________________________________________________
-bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
+std::optional<std::string> GeometryInfo::getWktParseError(
+    std::string_view wkt) {
   try {
     detail::parseWktOrThrow(wkt);
-    return true;
-  } catch (const ::util::geo::WKTParseException&) {
-    return false;
+    return std::nullopt;
+  } catch (const ::util::geo::WKTParseException& error) {
+    return error.what();
   }
+}
+
+// ____________________________________________________________________________
+bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
+  return !getWktParseError(wkt).has_value();
 }
 
 // ____________________________________________________________________________

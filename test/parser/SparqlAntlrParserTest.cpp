@@ -2308,6 +2308,12 @@ TEST(SparqlParser, strictInlineWktForGeoFunctions) {
                            ") } BIND(geof:distance(?g, ?p) AS ?d)")),
         fails);
 
+    // The message contains the reason from the WKT parser.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", wkt, ")")),
+        ::testing::HasSubstr(
+            "Could not parse WKT: coordinate is not a number"));
+
     // Invalid WKT literals that are not passed to a geo function are allowed.
     EXPECT_NO_THROW(parse(absl::StrCat("BIND(", wkt, " AS ?p)")));
     EXPECT_NO_THROW(parse(absl::StrCat("BIND(STR(", wkt, ") AS ?p)")));

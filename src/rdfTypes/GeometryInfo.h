@@ -331,6 +331,10 @@ class GeometryInfo {
   // IRI, and coordinates out of range are all valid.
   static bool isValidWktStrict(std::string_view wkt);
 
+  // Like `isValidWktStrict`, but return the error message of the parser for an
+  // invalid literal and `std::nullopt` for a valid one.
+  static std::optional<std::string> getWktParseError(std::string_view wkt);
+
   // Create geometry info for a GeoPoint object.
   static GeometryInfo fromGeoPoint(const GeoPoint& point);
 
