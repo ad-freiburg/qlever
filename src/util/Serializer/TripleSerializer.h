@@ -134,11 +134,10 @@ std::tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
         context);
     if (auto* entry = std::get_if<LocalVocabEntry>(&idOrEntry)) {
       mapping.emplace(
-          id.getBits(),
-          Id::makeFromLocalVocabIndex(
-              vocab.getIndexAndAddIfNotContained(std::move(*entry))));
+          id, Id::makeFromLocalVocabIndex(
+                  vocab.getIndexAndAddIfNotContained(std::move(*entry))));
     } else {
-      mapping.emplace(id.getBits(), std::get<Id>(idOrEntry));
+      mapping.emplace(id, std::get<Id>(idOrEntry));
     }
   }
   return {std::move(vocab), std::move(mapping)};
