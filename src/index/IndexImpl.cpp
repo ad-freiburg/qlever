@@ -1645,9 +1645,14 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
+    bool addWordTriples =
+        wordTriplePredicates_.empty() ||
+        (triple.predicate_.isIri() &&
+         wordTriplePredicates_.contains(
+             triple.predicate_.getIri().toStringRepresentation()));
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
-    if (addHasWordTriples_) {
+    if (addHasWordTriples_ && addWordTriples) {
       std::string_view content = lit.getContent();
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
@@ -2200,6 +2205,21 @@ void IndexImpl::setPrefixesForEncodedValues(
     std::vector<encodedIri::Pattern> patterns) {
   encodedIriManager_ = EncodedIriManager{
       std::move(prefixesWithoutAngleBrackets), std::move(patterns)};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setWordTriplePredicates(
+    const std::vector<std::string>& predicates) {
+  wordTriplePredicates_.clear();
+  for (const std::string& predicate : predicates) {
+    if (!predicate.starts_with('<') || !predicate.ends_with('>')) {
+      throw std::runtime_error{absl::StrCat(
+          "The predicate \"", predicate,
+          "\" passed to `--word-triple-predicates` is not an IRI in angle "
+          "brackets")};
+    }
+    wordTriplePredicates_.insert(predicate);
+  }
 }
 
 // _____________________________________________________________________________

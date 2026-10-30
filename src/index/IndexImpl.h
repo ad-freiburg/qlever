@@ -50,6 +50,7 @@
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
+#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
@@ -143,6 +144,11 @@ class IndexImpl {
 
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
+
+  // If not empty, the `ql:has-word` triples are only added for literals that
+  // are the object of a triple with one of these predicates (IRIs in angle
+  // brackets).
+  ad_utility::HashSet<std::string> wordTriplePredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -440,6 +446,10 @@ class IndexImpl {
       ad_utility::GeoPointEncoding encoding) {
     geoPointEncodingForIndexBuilding_ = encoding;
   }
+
+  // Set the `wordTriplePredicates_`. Throw if one of them is not an IRI in
+  // angle brackets.
+  void setWordTriplePredicates(const std::vector<std::string>& predicates);
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;

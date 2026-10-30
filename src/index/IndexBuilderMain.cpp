@@ -276,6 +276,11 @@ int main(int argc, char** argv) {
   add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
       "Add `ql:has-word` triples for each word in each literal. This enables "
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
+  add("word-triple-predicates",
+      po::value(&config.wordTriplePredicates_)->composing()->multitoken(),
+      "Space-separated list of predicate IRIs in angle brackets. If "
+      "specified, the `ql:has-word` triples are only added for literals that "
+      "are the object of a triple with one of these predicates.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
