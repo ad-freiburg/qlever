@@ -98,16 +98,17 @@ TEST(Vocabulary, SplitGeoVocab) {
   ASSERT_EQ(SGV::getVocabIndex((1ULL << markerShiftTwo) | 25), 25);
 
   // Vocab index is out of range
-  EXPECT_ANY_THROW(SGV::addMarker((1ULL << 60) | 42, 5));
-  EXPECT_ANY_THROW(SGV::addMarker(1ULL << 59, 5));
+  EXPECT_ANY_THROW(
+      SGV::addMarker((1ULL << ValueId::numVocabIndexBits) | 42, 5));
+  EXPECT_ANY_THROW(SGV::addMarker(1ULL << markerShiftTwo, 5));
 
   // Check marker bit
   ASSERT_TRUE(SGV::isSpecialVocabIndex((1ULL << markerShiftTwo) | 42));
   ASSERT_TRUE(SGV::isSpecialVocabIndex(1ULL << markerShiftTwo));
   ASSERT_FALSE(SGV::isSpecialVocabIndex(0));
   ASSERT_FALSE(SGV::isSpecialVocabIndex(42));
-  ASSERT_FALSE(SGV::isSpecialVocabIndex((1ULL << 59) - 1));
-  ASSERT_FALSE(SGV::isSpecialVocabIndex(1ULL << 58));
+  ASSERT_FALSE(SGV::isSpecialVocabIndex((1ULL << markerShiftTwo) - 1));
+  ASSERT_FALSE(SGV::isSpecialVocabIndex(1ULL << (markerShiftTwo - 1)));
 
   // Geometry info
   ASSERT_TRUE(SGV::isGeoInfoAvailable());
@@ -138,7 +139,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv.getVocabIndex((1ULL << markerShiftTwo) | 42), 42);
   ASSERT_EQ(sv.getVocabIndex(1ULL << markerShiftTwo), 0);
   ASSERT_EQ(sv.getVocabIndex(0), 0);
-  ASSERT_EQ(sv.getVocabIndex((1ULL << 59) - 1), (1ULL << 59) - 1);
+  ASSERT_EQ(sv.getVocabIndex((1ULL << markerShiftTwo) - 1),
+            (1ULL << markerShiftTwo) - 1);
   ASSERT_EQ(sv.getVocabIndex(42), 42);
 
   ASSERT_TRUE(sv.isSpecialVocabIndex((1ULL << markerShiftTwo) | 42));
@@ -257,7 +259,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ASSERT_EQ(sv.getVocabIndex(1ULL << markerShiftThree), 0);
   ASSERT_EQ(sv.getVocabIndex(2ULL << markerShiftThree), 0);
   ASSERT_EQ(sv.getVocabIndex(0), 0);
-  ASSERT_EQ(sv.getVocabIndex((1ULL << 58) - 1), (1ULL << 58) - 1);
+  ASSERT_EQ(sv.getVocabIndex((1ULL << markerShiftThree) - 1),
+            (1ULL << markerShiftThree) - 1);
   ASSERT_EQ(sv.getVocabIndex(42), 42);
 
   ASSERT_TRUE(sv.isSpecialVocabIndex((1ULL << markerShiftThree) | 42));
@@ -319,7 +322,7 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
 
   // Out of range indices
   EXPECT_ANY_THROW(v[VocabIndex::make(42)]);
-  EXPECT_ANY_THROW(v[VocabIndex::make((1ULL << 59) | 42)]);
+  EXPECT_ANY_THROW(v[VocabIndex::make((1ULL << markerShiftTwo) | 42)]);
 
   auto idx = VocabIndex::make(1ULL << markerShiftTwo);
   ASSERT_EQ(v[idx],
