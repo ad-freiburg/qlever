@@ -82,7 +82,12 @@ TEST(VocabBatchLookupData, AsResultExposesViewsAndKeepsDataAlive) {
 }
 
 // An empty lookup result is valid: no views, empty span.
-// _____________________________________________________________________________
+TEST(VocabBatchLookupData, AsResultEmpty) {
+  auto data = std::make_shared<VocabBatchLookupData>();
+  VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
+  EXPECT_TRUE(result->empty());
+}
+
 // Test that `fromWords` returns a result with one view per word, in order,
 // that the views point at the moved-in strings (no copy), and that the result
 // stays valid after the input vector has been moved from.
@@ -96,12 +101,6 @@ TEST(StringVectorVocabBatchLookupData, FromWords) {
   EXPECT_EQ((*result)[1], std::string(100, 'b'));
   EXPECT_EQ((*result)[1].data(), longWordData);
   EXPECT_EQ((*result)[2], "");
-}
-
-TEST(VocabBatchLookupData, AsResultEmpty) {
-  auto data = std::make_shared<VocabBatchLookupData>();
-  VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
-  EXPECT_TRUE(result->empty());
 }
 
 // Tests for `PmrVocabBatchLookupData`: the `monotonic_buffer_resource` backing

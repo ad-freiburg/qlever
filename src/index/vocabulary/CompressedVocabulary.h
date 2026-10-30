@@ -152,7 +152,6 @@ class CompressedVocabulary {
         });
   }
 
-  //____________________________________________________________________________
   // Return the words for `indices` (not empty) in that order, as views into
   // a buffer owned by the result. For an underlying vocabulary with holes,
   // this currently falls back to the sequential lookup.

@@ -81,11 +81,13 @@ class VocabularyInMemory
            });
   }
 
-  //____________________________________________________________________________
-  // Return the words for `indices` (not empty, every index less than
-  // `size()`; both checked) in that order, as views into the word storage of
-  // this vocabulary, whose ownership the result shares; no word is copied,
-  // and the result stays valid when this vocabulary is closed or reopened.
+  // Return the words for `indices` in that order, as views into the word
+  // storage of this vocabulary. The batch must not be empty and every index
+  // must be less than `size()` (both checked).
+  //
+  // NOTE: The result shares the ownership of the word storage, so no word is
+  // copied and the result stays valid when this vocabulary is closed or
+  // reopened.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________

@@ -60,7 +60,6 @@ TEST(VocabularyInMemory, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
 }
 
-// _____________________________________________________________________________
 // Test that `lookupBatch` returns views into the vocabulary (no copy), in the
 // order of the indices, also for duplicates, that it rejects the empty batch
 // and an index that is out of range, and that a result stays valid after the
