@@ -132,6 +132,14 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE =
 // memory per task and a later start of the writing.
 constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
 
+// The minimal memory of the merged words after which the vocabulary merger
+// cuts a new segment (it also cuts at `VOCAB_MERGER_SEGMENT_NUM_WORDS`). The
+// actual threshold derives from the memory limit, see `SegmentPipeline` in
+// `index/vocabulary_merger/SegmentPipeline.h`; this minimum only avoids tiny
+// segments for a tiny memory limit.
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_MIN_SEGMENT_MEMORY =
+    ad_utility::MemorySize::megabytes(4);
+
 // The number of groups into which the partial ID maps are split for writing
 // (the maps of a group are written by one task per segment, on a strand of
 // the global thread pool), see `index/vocabulary_merger/IdMapWriters.h`.
