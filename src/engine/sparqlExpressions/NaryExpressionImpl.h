@@ -17,7 +17,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
 #include "util/CryptographicHashUtils.h"
-#include "util/TupleHelpers.h"
 
 namespace sparqlExpression::detail {
 
@@ -386,7 +385,7 @@ class NaryExpressionTypeErasedImpl
     // tuples as value and reference type).
     auto onTuple = [&](auto&& tuple) {
       return promoteToLocalVocabEntry(
-          ad_tuple_helpers::applyToTupleLike(
+          std::apply(
               [this](auto&&... args) { return function_(AD_FWD(args)...); },
               AD_FWD(tuple)),
           context->getLocalVocabContext());
