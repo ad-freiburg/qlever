@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <sstream>
 
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationHelpersImpl.h"
@@ -89,9 +90,31 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
   // moving a `BlockToWrite` doesn't move the memory that the view points to
   // anyway.
   auto view = block.view();
+  std::optional<qlever::RowsChecksum> checksum;
+  if (computeChecksums_) {
+    checksum = qlever::RowsChecksum::of(view, checksumWithSwappedColumns12_);
+  }
   std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
   for (const auto& column : view.getColumns()) {
     offsets.push_back(compressAndWriteColumn(column));
+  }
+  if (checksum.has_value()) {
+    auto checksumAfterCompression =
+        qlever::RowsChecksum::of(view, checksumWithSwappedColumns12_);
+    AD_CORRECTNESS_CHECK(checksumAfterCompression == checksum.value(), [&]() {
+      std::ostringstream message;
+      message << "The rows of a block changed while the block was "
+                 "compressed, so their memory was modified concurrently "
+                 "(block of col0 IDs "
+              << firstCol0Id << " to " << lastCol0Id
+              << ", writer of the twin permutation: "
+              << checksumWithSwappedColumns12_
+              << ", checksum before: " << checksum.value().toString()
+              << ", checksum after: " << checksumAfterCompression.toString()
+              << ")";
+      return std::move(message).str();
+    });
+    checksumOfWrittenRows_.add(checksum.value());
   }
   AD_CORRECTNESS_CHECK(!offsets.empty());
   auto numRows = view.numRows();

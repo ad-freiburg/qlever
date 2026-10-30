@@ -30,6 +30,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
+#include "index/RowsChecksum.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Executor.h"
 #include "util/File.h"
@@ -43,6 +44,19 @@
 // This type is used to buffer small relations that will be stored in the same
 // block.
 using SmallRelationsBuffer = IdTable;
+
+// If `true`, then the writing of a permutation pair (see
+// `CompressedRelationWriter::createPermutationPair`) checks via checksums that
+// the rows of the twin permutation are exactly the rows of the first
+// permutation, at each of the stages via which they are written. A failed check
+// throws an exception that names the stage. The checks are cheap compared to
+// the compression of the blocks, but they run partly on the thread that drives
+// the writing, which is why they are only enabled for the unit tests (see
+// `makeTestIndex`).
+//
+// NOTE: This is a diagnostic for a rare corruption of a column of the POS
+// permutation that so far only occurred in the arm64 Docker build in CI.
+inline std::atomic<bool> PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING = false;
 
 /// Manage the compression and serialization of relations during the index
 /// build.
@@ -96,6 +110,17 @@ class CompressedRelationWriter {
   // its twin permutation, which only has to re-sort and write the block.
   using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
+
+  // If `computeChecksums_` is `true`, then the checksum of each block is
+  // computed right before and right after it is compressed, the two are checked
+  // for equality, and the checksum is added to the `checksumOfWrittenRows_`.
+  // If `checksumWithSwappedColumns12_` is `true`, then the checksums are
+  // computed with the columns 1 and 2 swapped, which is used for the twin
+  // permutation. Both are set by the `PermutationWriter`, see
+  // `PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING`.
+  bool computeChecksums_ = false;
+  bool checksumWithSwappedColumns12_ = false;
+  qlever::AtomicRowsChecksum checksumOfWrittenRows_;
 
   // A pool of block buffers whose blocks have already been written and whose
   // memory can therefore be reused for the following blocks (see

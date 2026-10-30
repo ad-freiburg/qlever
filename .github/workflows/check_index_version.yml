@@ -3,12 +3,8 @@ name: Check index version
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
-    # Also run when a label is applied, so that applying the `run-ci` or
-    # `run-full-ci` label triggers the checks. There is no need for `opened`,
-    # see `README.md`.
-    types: [ synchronize, reopened, labeled ]
+  # TEMPORARILY DISABLED for pull requests, so that only the Docker build
+  # runs, see `docker-publish.yml` and the diagnostics in `Dockerfile`.
   merge_group:
 
 concurrency:

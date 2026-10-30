@@ -17,12 +17,14 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <utility>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
+#include "util/InputRangeUtils.h"
 #include "util/ProgressBar.h"
 #include "util/TaskQueueOnExecutor.h"
 
@@ -204,6 +206,29 @@ struct CompressedRelationWriter::PermutationWriter {
   // the sorter must not be destroyed while a push into it is in flight.
   std::deque<std::future<void>> twinRelationPushes_;
 
+  // If `true`, then the rows of the twin permutation are checked via
+  // checksums at each of the stages via which they are written, see
+  // `PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING`. The stages are:
+  // 1. The rows of the blocks of a large relation must not change until the
+  //    push into the `twinRelationSorter_` has completed, see
+  //    `twinRelationPushChecksums_` and `waitForOldestTwinRelationPush`.
+  // 2. The `twinRelationSorter_` must yield exactly the rows of a large
+  //    relation that were pushed into it, see
+  //    `twinRelationInputChecksum_` and `finishRelation`.
+  // 3. The rows of a block must not change while it is compressed, and the
+  //    two writers must write exactly the same rows, see
+  //    `CompressedRelationWriter::computeChecksums_` and `writePermutation`.
+  const bool computeChecksums_ =
+      WritePair && PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING.load();
+  // For each of the `twinRelationPushes_` (if `computeChecksums_` is `true`),
+  // the pushed rows and their checksum at the time of the push.
+  IfPair<std::deque<
+      std::pair<std::shared_ptr<const IdTableView<0>>, qlever::RowsChecksum>>>
+      twinRelationPushChecksums_;
+  // The checksum of all the rows of the current large relation that have been
+  // pushed into the `twinRelationSorter_` (if `computeChecksums_` is `true`).
+  IfPair<qlever::RowsChecksum> twinRelationInputChecksum_;
+
   // The queue via which the counting of the distinct `col1` IDs and the
   // writing of the blocks of large relations is offloaded to the global thread
   // pool. Its tasks may run concurrently and in an arbitrary order, which is
@@ -272,6 +297,9 @@ struct CompressedRelationWriter::PermutationWriter {
     // `AddBlockOfSmallRelationsToSwitched`), so their buffers are also given
     // back by `writer2_`, which therefore has to use the same pool.
     writer2_->shareBlockBufferPoolWith(*writer1_);
+    writer1_->computeChecksums_ = computeChecksums_;
+    writer2_->computeChecksums_ = computeChecksums_;
+    writer2_->checksumWithSwappedColumns12_ = true;
   }
 
   // Constructor for a `PermutationWriter` which writes a single permutation.
@@ -343,9 +371,8 @@ struct CompressedRelationWriter::PermutationWriter {
       if (twinRelationPushes_.size() >=
           largeRelationBlockQueue_.maxNumTasksInFlight()) {
         largeRelationBlockTimer_.cont();
-        twinRelationPushes_.front().get();
+        waitForOldestTwinRelationPush();
         largeRelationBlockTimer_.stop();
-        twinRelationPushes_.pop_front();
       }
       auto twinRelation = block;
       twinRelation.swapColumns(c1Idx, c2Idx);
@@ -357,6 +384,11 @@ struct CompressedRelationWriter::PermutationWriter {
           std::make_shared<OwnerAndView>(owner, std::move(twinRelation));
       std::shared_ptr<const IdTableView<0>> twinRelationPtr{
           ownerAndView, &ownerAndView->second};
+      if (computeChecksums_) {
+        auto checksum = qlever::RowsChecksum::of(*twinRelationPtr, true);
+        twinRelationInputChecksum_.add(checksum);
+        twinRelationPushChecksums_.emplace_back(twinRelationPtr, checksum);
+      }
       twinRelationPushes_.push_back(twinRelationSorter_.asyncPushBlock(
           std::move(twinRelationPtr), boost::asio::use_future));
     }
@@ -394,12 +426,39 @@ struct CompressedRelationWriter::PermutationWriter {
     largeRelationBlockTimer_.cont();
     largeRelationBlockQueue_.waitUntilAllTasksAreDone();
     while (!twinRelationPushes_.empty()) {
-      // Note: The element is only removed after its `get()`, so that the
-      // destructor still waits for the remaining pushes if `get()` throws.
-      twinRelationPushes_.front().get();
-      twinRelationPushes_.pop_front();
+      waitForOldestTwinRelationPush();
     }
     largeRelationBlockTimer_.stop();
+  }
+
+  // Wait for the oldest of the `twinRelationPushes_` and remove it. If
+  // `computeChecksums_` is `true`, also check that the pushed rows haven't
+  // changed until the push has completed.
+  void waitForOldestTwinRelationPush() {
+    // Note: The element is only removed after its `get()`, so that the
+    // destructor still waits for the remaining pushes if `get()` throws.
+    twinRelationPushes_.front().get();
+    twinRelationPushes_.pop_front();
+    if constexpr (WritePair) {
+      if (!computeChecksums_) {
+        return;
+      }
+      auto [rows, checksumAtPush] =
+          std::move(twinRelationPushChecksums_.front());
+      twinRelationPushChecksums_.pop_front();
+      auto checksumAfterPush = qlever::RowsChecksum::of(*rows, true);
+      AD_CORRECTNESS_CHECK(checksumAfterPush == checksumAtPush, [&]() {
+        std::ostringstream message;
+        message << "The rows of a block of the large relation "
+                << col0IdCurrentRelation_.value()
+                << " changed before their push into the twin sorter had "
+                   "completed (checksum at the push: "
+                << checksumAtPush.toString()
+                << ", checksum after the push: " << checksumAfterPush.toString()
+                << ")";
+        return std::move(message).str();
+      });
+    }
   }
 
   // Forget the distinct `col1` counts that were collected so far, so that the
@@ -477,12 +536,40 @@ struct CompressedRelationWriter::PermutationWriter {
       auto md1 = writer1_->finishLargeRelation(getAndResetNumDistinctCol1());
       if constexpr (WritePair) {
         largeTwinRelationTimer_.cont();
+        // Compute the checksum of the rows that the `twinRelationSorter_`
+        // yields, before they are passed to `writer2_`.
+        qlever::RowsChecksum twinRelationOutputChecksum;
+        auto addToOutputChecksum = [this,
+                                    &twinRelationOutputChecksum](auto& block) {
+          if (computeChecksums_) {
+            twinRelationOutputChecksum.add(
+                qlever::RowsChecksum::of(block, true));
+          }
+          return std::move(block);
+        };
         auto md2 = writer2_->addCompleteLargeRelation(
             col0IdCurrentRelation_.value(),
-            twinRelationSorter_.getSortedBlocks(twinSorterBlocksizeFactor_ *
-                                                blocksize_));
+            ad_utility::CachingTransformInputRange{
+                twinRelationSorter_.getSortedBlocks(twinSorterBlocksizeFactor_ *
+                                                    blocksize_),
+                addToOutputChecksum});
         largeTwinRelationTimer_.stop();
         twinRelationSorter_.clear();
+        if (computeChecksums_) {
+          AD_CORRECTNESS_CHECK(
+              twinRelationOutputChecksum == twinRelationInputChecksum_, [&]() {
+                std::ostringstream message;
+                message << "The twin sorter of the large relation "
+                        << col0IdCurrentRelation_.value()
+                        << " yielded other rows than were pushed into it "
+                           "(checksum of the pushed rows: "
+                        << twinRelationInputChecksum_.toString()
+                        << ", checksum of the yielded rows: "
+                        << twinRelationOutputChecksum.toString() << ")";
+                return std::move(message).str();
+              });
+          twinRelationInputChecksum_ = {};
+        }
         writeMetadata_(md1, md2);
       } else {
         writeMetadata_(md1);
@@ -886,6 +973,18 @@ struct CompressedRelationWriter::PermutationWriter {
     writer1_->finish();
     if constexpr (WritePair) {
       writer2_->finish();
+      if (computeChecksums_) {
+        auto checksum1 = writer1_->checksumOfWrittenRows_.get();
+        auto checksum2 = writer2_->checksumOfWrittenRows_.get();
+        AD_CORRECTNESS_CHECK(checksum1 == checksum2, [&]() {
+          return absl::StrCat(
+              "The two permutations of a pair were written with different "
+              "rows (checksum of the first permutation: ",
+              checksum1.toString(),
+              ", checksum of the twin permutation: ", checksum2.toString(),
+              ")");
+        });
+      }
     }
     blockCallbackManager_.finishBlockCallbackQueue();
     logTimers();

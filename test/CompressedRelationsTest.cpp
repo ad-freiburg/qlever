@@ -2993,3 +2993,78 @@ TEST(CompressedRelationWriter, destructorWaitsForAllPendingTwinRelationPushes) {
   EXPECT_TRUE(failingPushWasAwaited);
   EXPECT_TRUE(succeedingPushWasAwaited);
 }
+
+// Test that the `RowsChecksum` doesn't depend on the order of the rows, but
+// detects a changed value as well as two swapped values of the same row, and
+// that with `swapColumns12` a table and its twin (with columns 1 and 2
+// swapped) have the same checksum.
+TEST(RowsChecksum, orderIndependenceAndSwappedColumns) {
+  using qlever::RowsChecksum;
+  auto table = makeIdTableFromVector({{1, 2, 3, 4}, {5, 6, 7, 8}});
+  auto checksum = RowsChecksum::of(table);
+  EXPECT_EQ(checksum.numRows_, 2u);
+  EXPECT_EQ(
+      RowsChecksum::of(makeIdTableFromVector({{5, 6, 7, 8}, {1, 2, 3, 4}})),
+      checksum);
+  EXPECT_NE(
+      RowsChecksum::of(makeIdTableFromVector({{1, 2, 3, 4}, {5, 6, 7, 9}})),
+      checksum);
+  EXPECT_NE(
+      RowsChecksum::of(makeIdTableFromVector({{1, 3, 2, 4}, {5, 6, 7, 8}})),
+      checksum);
+  EXPECT_NE(RowsChecksum::of(makeIdTableFromVector({{1, 2, 3, 4}})), checksum);
+
+  auto twin = makeIdTableFromVector({{1, 3, 2, 4}, {5, 7, 6, 8}});
+  EXPECT_EQ(RowsChecksum::of(twin, true), checksum);
+  EXPECT_NE(RowsChecksum::of(twin), checksum);
+  // Also works for views of a subset of the columns.
+  EXPECT_EQ(
+      RowsChecksum::of(
+          table.asColumnSubsetView(std::vector<ColumnIndex>{0, 2, 1, 3}), true),
+      checksum);
+
+  // The checksum of the rows of several tables is the sum of their
+  // checksums, also when added concurrently via `AtomicRowsChecksum`.
+  RowsChecksum sum;
+  qlever::AtomicRowsChecksum atomicSum;
+  for (const auto& part : {makeIdTableFromVector({{5, 6, 7, 8}}),
+                           makeIdTableFromVector({{1, 2, 3, 4}})}) {
+    sum.add(RowsChecksum::of(part));
+    atomicSum.add(RowsChecksum::of(part));
+  }
+  EXPECT_EQ(sum, checksum);
+  EXPECT_EQ(atomicSum.get(), checksum);
+  EXPECT_THAT(checksum.toString(), ::testing::HasSubstr("numRows: 2"));
+}
+
+// Test that a permutation pair with small relations and a large relation (that
+// spans several blocks of the twin sorter) can be written while the checksums
+// of `PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING` are enabled, that is, all the
+// checks of these checksums pass.
+TEST(CompressedRelationWriter, permutationPairWithChecksums) {
+  bool previous = PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING.exchange(true);
+  absl::Cleanup restore{
+      [previous] { PERMUTATION_WRITER_CHECKSUMS_FOR_TESTING = previous; }};
+  static constexpr size_t blocksize = 10;
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  std::string twinFilename = filename + ".twin";
+  absl::Cleanup twinCleanup{
+      [&twinFilename] { ad_utility::deleteFile(twinFilename); }};
+
+  // A few small relations, followed by a large one.
+  IdTableStatic<0> input = makeIdTableFromVector(
+      {{1, 2, 3, 0}, {1, 3, 2, 0}, {2, 5, 4, 0}, {2, 5, 4, 1}});
+  input.insertAtEnd(makeBlockOfLargeRelation(42, 400, 155, 170));
+  auto noop = [](ql::span<const CompressedRelationMetadata>) {};
+  auto makeWriter = [](const std::string& name) {
+    return std::make_unique<CompressedRelationWriter>(
+        4, ad_utility::File{name, "w"}, blocksize, executor());
+  };
+  std::vector<IdTableStatic<0>> inputs;
+  inputs.push_back(std::move(input));
+  auto result = CompressedRelationWriter::createPermutationPair(
+      filename, {makeWriter(filename), noop}, {makeWriter(twinFilename), noop},
+      ad_utility::InputRangeTypeErased{std::move(inputs)},
+      qlever::KeyOrder{0, 1, 2, 3}, {});
+  EXPECT_EQ(result.numDistinctCol0_, 3u);
+}
