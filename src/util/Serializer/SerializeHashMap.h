@@ -26,6 +26,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     auto size = arg.size();
     serializer >> size;
 
+    // NOTE: The actual memory usage of the hash map is larger than this, but
+    // this check is enough to reject invalid huge sizes before reserving.
+    checkAllocation(serializer, size, sizeof(std::pair<K, M>));
     arg.reserve(size);
     for (size_t i = 0; i < size; ++i) {
       // We have to use `pair<T::key_type, T::mapped_type>` instead of
