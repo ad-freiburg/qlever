@@ -274,7 +274,7 @@ using BatchIoManager = BatchManager<SyncIoPolicy>;
 
 // Serve the reads of a batch that are completely in the page cache with
 // non-blocking `preadv2(RWF_NOWAIT)` calls, one call per run of adjacent file
-// ranges, and return the positions of the other reads in ascending order. The
+// ranges (split into chunks of at most `IOV_MAX` reads), and return the positions of the other reads in ascending order. The
 // caller issues those through its regular path, which also reports errors.
 // Precondition: the three spans have the same length.
 std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
@@ -304,8 +304,6 @@ PageCacheRead& pageCacheRead();
 void resetPageCacheFastPathSupport();
 }  // namespace detail
 
-// A `ReadPolicy` that serves the reads of a batch that are in the page cache
-// with `readPageCacheHits` and passes only the others on to `Policy`.
 namespace detail {
 // The reads of a batch at `positions`, as the three arguments of
 // `ReadPolicy::addBatch`.
@@ -332,6 +330,8 @@ struct SelectedReads {
 };
 }  // namespace detail
 
+// A `ReadPolicy` that serves the reads of a batch that are in the page cache
+// with `readPageCacheHits` and passes only the others on to `Policy`.
 template <typename Policy>
 class PageCacheFirstPolicy {
   static_assert(

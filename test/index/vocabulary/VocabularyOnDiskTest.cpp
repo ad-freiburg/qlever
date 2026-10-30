@@ -294,18 +294,55 @@ TEST(VocabularyOnDisk, LookupBatchPageCacheFastPathIsByteIdentical) {
       *vocab, withFastPath, indices);
 }
 
-// Every other page-cache read finds nothing cached.
+// Count the page-cache reads; none of them finds anything cached.
+size_t numCountedPageCacheReads = 0;
+int64_t countedNothingCached(int fd, const ::iovec* iov, int iovcnt,
+                             int64_t offset) {
+  ++numCountedPageCacheReads;
+  return pageCacheReadTestHelpers::nothingCached(fd, iov, iovcnt, offset);
+}
+
+// `lookupBatch` reads the runtime parameter for every lookup: with the
+// parameter off, no page-cache read is attempted.
+TEST(VocabularyOnDisk, LookupBatchFollowsThePageCacheFastPathParameter) {
+  if (!ad_utility::pageCacheFastPathIsSupported()) {
+    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not available";
+  }
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 4> indices{0, 1, 3, 2};
+  absl::Cleanup resetParameter{[]() {
+    setRuntimeParameter<
+        &RuntimeParameters::vocabularyIouringPageCacheFastPath_>(true);
+  }};
+  pageCacheReadTestHelpers::ScopedPageCacheRead inject{&countedNothingCached};
+  numCountedPageCacheReads = 0;
+
+  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
+      false);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      *vocab, vocab->lookupBatch(indices), indices);
+  EXPECT_EQ(numCountedPageCacheReads, 0u);
+
+  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
+      true);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      *vocab, vocab->lookupBatch(indices), indices);
+  EXPECT_GT(numCountedPageCacheReads, 0u);
+}
+
+// Every other page-cache read finds nothing cached, starting with the second
+// read after `numEveryOtherReadCalls` was reset.
+size_t numEveryOtherReadCalls = 0;
 int64_t everyOtherReadCached(int fd, const ::iovec* iov, int iovcnt,
                              int64_t offset) {
-  static size_t numCalls = 0;
-  if (numCalls++ % 2 == 1) {
+  if (numEveryOtherReadCalls++ % 2 == 1) {
     return pageCacheReadTestHelpers::nothingCached(fd, iov, iovcnt, offset);
   }
   return ad_utility::detail::systemPageCacheRead(fd, iov, iovcnt, offset);
 }
 
-// With the fast path on, reads that the page-cache read does not serve (none,
-// some or all of them, and after the fast path was found unsupported) go
+// With the fast path on, reads that the page-cache read does not serve (all or
+// some of them, and all after the fast path was found unsupported) go
 // through the batch manager; the result always matches `operator[]`.
 TEST(VocabularyOnDisk, LookupBatchPageCacheMissesGoThroughTheManager) {
   if (!ad_utility::pageCacheFastPathIsSupported()) {
@@ -324,6 +361,7 @@ TEST(VocabularyOnDisk, LookupBatchPageCacheMissesGoThroughTheManager) {
     check();
   }
   {
+    numEveryOtherReadCalls = 0;
     ScopedPageCacheRead inject{&everyOtherReadCached};
     check();
   }

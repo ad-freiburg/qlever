@@ -53,7 +53,7 @@ void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
 
 namespace {
 #ifdef QL_PAGE_CACHE_FAST_PATH
-// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP`. The flag is a
+// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP` or `ENOSYS`. The flag is a
 // best-effort hint without associated data; the default sequential
 // consistency (Sonar cpp:S8417) keeps the publication of the disabled state
 // obvious.
@@ -113,10 +113,11 @@ constexpr auto areAdjacent = [](const auto& previous, const auto& next) {
   return std::get<2>(previous) + std::get<1>(previous) == std::get<2>(next);
 };
 
-// Log once that the kernel or file system rejects `RWF_NOWAIT`, and switch the
-// fast path off for the rest of the process.
+// Log once that the kernel or file system rejects `RWF_NOWAIT` (`EOPNOTSUPP`)
+// or that `preadv2` does not exist (`ENOSYS`, Linux < 4.6 or a seccomp filter),
+// and switch the fast path off for the rest of the process.
 void disableIfNotSupported(int64_t numBytesRead) {
-  if (numBytesRead < 0 && errno == EOPNOTSUPP &&
+  if (numBytesRead < 0 && (errno == EOPNOTSUPP || errno == ENOSYS) &&
       pageCacheFastPathSupported.exchange(false)) {
     AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
                    "vocabulary files; reading them without the "

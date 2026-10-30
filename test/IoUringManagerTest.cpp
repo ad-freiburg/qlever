@@ -746,7 +746,8 @@ int64_t countedNotSupported(int fd, const ::iovec* iov, int iovcnt,
   return pageCacheReadTestHelpers::notSupported(fd, iov, iovcnt, offset);
 }
 
-// Only the first 6 bytes of every run are "cached".
+// Only the first 6 bytes of every run are "cached": the whole run is read, but
+// only 6 bytes are reported as read.
 int64_t sixBytesCached(int fd, const ::iovec* iov, int iovcnt, int64_t offset) {
   int64_t numBytesRead = blockingFill(fd, iov, iovcnt, offset);
   return numBytesRead < 0 ? numBytesRead : std::min<int64_t>(numBytesRead, 6);
@@ -805,7 +806,7 @@ TEST(ReadPageCacheHits, notSupportedDisablesTheFastPath) {
     EXPECT_EQ(notServed, allPositions(3));
     EXPECT_EQ(numPageCacheReads, 1u);
     EXPECT_FALSE(ad_utility::pageCacheFastPathIsSupported());
-    auto [notServed2, buffers2] = readHits(fd, {{0, 4}});
+    auto [notServed2, unusedBuffers] = readHits(fd, {{0, 4}});
     EXPECT_EQ(notServed2, allPositions(1));
     EXPECT_EQ(numPageCacheReads, 1u);
   }
