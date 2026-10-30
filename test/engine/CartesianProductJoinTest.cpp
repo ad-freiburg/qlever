@@ -19,6 +19,7 @@
 #include "engine/Distinct.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
+#include "parser/SparqlTriple.h"
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;

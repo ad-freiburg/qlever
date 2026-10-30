@@ -19,6 +19,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
+#include "util/ParseException.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"

@@ -11,10 +11,10 @@
 #include <re2/re2.h>
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
@@ -267,9 +267,9 @@ inline constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
 inline constexpr auto isLiteralPrefix =
     ad_utility::ConstexprSmallString<2>{"\""};
 using IsIriValueGetter =
-    IsSomethingValueGetter<&Index::Vocab::isIri, isIriPrefix>;
+    IsSomethingValueGetter<&RdfsVocabulary::isIri, isIriPrefix>;
 using IsLiteralValueGetter =
-    IsSomethingValueGetter<&Index::Vocab::isLiteral, isLiteralPrefix>;
+    IsSomethingValueGetter<&RdfsVocabulary::isLiteral, isLiteralPrefix>;
 
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It produces a `std::optional<DateYearOrDuration>`.

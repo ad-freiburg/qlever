@@ -15,7 +15,6 @@
 #include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
-#include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
 #include "util/AllocateShared.h"
 #include "util/HashSet.h"
@@ -28,6 +27,12 @@ enum class HideStrippedColumns { False, True };
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
+// Forward declarations, to not include the expensive `parser/ParsedQuery.h`.
+namespace parsedQuery {
+struct SelectClause;
+struct Bind;
+}  // namespace parsedQuery
+
 class QueryExecutionTree {
  public:
   QueryExecutionTree(QueryExecutionContext* qec,

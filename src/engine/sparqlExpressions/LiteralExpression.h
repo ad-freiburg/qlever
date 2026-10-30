@@ -53,7 +53,7 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       TripleComponent tc{s};
-      std::optional<Id> id = toValueId(tc, context->_qec.getIndex());
+      std::optional<Id> id = toValueId(tc, context->getIndexImpl());
       IdOrLocalVocabEntry result =
           id.has_value() ? IdOrLocalVocabEntry{id.value()}
                          : toIdOrLocalVocabEntry(
@@ -271,7 +271,7 @@ using SingleUseExpression = detail::SingleUseExpression;
 namespace detail {
 
 //______________________________________________________________________________
-using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
+using IdOrLocalVocabEntry = ::IdOrLocalVocabEntry;
 // Given a `SparqlExpression*` pointing to a `LiteralExpression`, this helper
 // function retrieves a corresponding `IdOrLocalVocabEntry` variant
 // (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that

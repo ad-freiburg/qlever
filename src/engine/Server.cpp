@@ -46,6 +46,7 @@
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 #include "util/http/websocket/MessageSender.h"
 
@@ -1138,10 +1139,9 @@ Awaitable<void> Server::sendStreamableResponse(
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
-  if (plannedQuery.parsedQuery().responseMiddleware_.has_value()) {
-    response =
-        plannedQuery.parsedQuery().responseMiddleware_.value().applyQuery(
-            std::move(response));
+  if (const auto& middleware = plannedQuery.parsedQuery().responseMiddleware_;
+      middleware != nullptr) {
+    response = middleware->applyQuery(std::move(response));
   }
   try {
     // The result of the query is computed lazily while the response is being
@@ -1384,10 +1384,9 @@ Awaitable<void> Server::processUpdate(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
   auto responseMiddlewares =
-      ad_utility::RvalueView(
-          updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
-          ql::views::filter(ad_utility::hasValue) |
-          ql::views::transform(ad_utility::value)) |
+      updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
+      ql::views::filter(
+          [](const auto& middleware) { return middleware != nullptr; }) |
       ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
@@ -1484,7 +1483,7 @@ Awaitable<void> Server::processUpdate(
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
   for (auto& middleware : responseMiddlewares) {
-    response = middleware.applyUpdate(std::move(response), metadatas);
+    response = middleware->applyUpdate(std::move(response), metadatas);
   }
   // The body of the response is a single string, so it can be serialized on
   // the executor of this coroutine.

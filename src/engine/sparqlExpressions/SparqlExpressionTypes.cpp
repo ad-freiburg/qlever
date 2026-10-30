@@ -6,6 +6,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 
+#include "engine/QueryExecutionContext.h"
+
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
@@ -87,6 +89,11 @@ EvaluationContext::getResultFromPreviousAggregate(const Variable& var) const {
 // _____________________________________________________________________________
 const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
   return _qec.getLocalVocabContext();
+}
+
+// _____________________________________________________________________________
+const IndexImpl& EvaluationContext::getIndexImpl() const {
+  return _qec.getIndex().getImpl();
 }
 
 }  // namespace sparqlExpression

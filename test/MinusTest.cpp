@@ -14,6 +14,7 @@
 #include "engine/Minus.h"
 #include "engine/MinusRowHandler.h"
 #include "engine/ValuesForTesting.h"
+#include "parser/SparqlTriple.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"

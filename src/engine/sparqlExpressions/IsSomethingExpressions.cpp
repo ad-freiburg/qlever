@@ -10,6 +10,7 @@
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/ValueIdComparators.h"
 #include "util/Algorithm.h"

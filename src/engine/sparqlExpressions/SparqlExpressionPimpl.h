@@ -9,9 +9,14 @@
 #include <vector>
 
 #include "engine/VariableToColumnMap.h"
-#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
+
+// Forward declaration, to not include the expensive
+// `engine/sparqlExpressions/PrefilterExpressionIndex.h` here.
+namespace prefilterExpressions {
+class PrefilterExpression;
+}  // namespace prefilterExpressions
 
 namespace sparqlExpression {
 

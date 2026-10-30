@@ -11,6 +11,7 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/SparqlTriple.h"
 #include "util/ChunkedForLoop.h"
 
 // _____________________________________________________________________________

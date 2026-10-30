@@ -5,6 +5,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 
 namespace sparqlExpression {
 namespace detail {

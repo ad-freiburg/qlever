@@ -8,6 +8,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "index/IdTableUtils.h"
 

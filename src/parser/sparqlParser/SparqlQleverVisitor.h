@@ -23,6 +23,7 @@
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
+#include "parser/ParsedQuery.h"
 #include "util/BlankNodeManager.h"
 
 /**

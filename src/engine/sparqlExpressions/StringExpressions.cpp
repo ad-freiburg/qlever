@@ -11,11 +11,13 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/RdfParser.h"
+#include "parser/TokenizerCtre.h"
 #include "util/ParsedUri.h"
 #include "util/StringUtils.h"
 

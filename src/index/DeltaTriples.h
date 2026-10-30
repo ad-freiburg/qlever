@@ -16,7 +16,6 @@
 #include "engine/UpdateMetadata.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
-#include "index/IndexBuilderTypes.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/LocalVocab.h"
 #include "index/LocatedTriples.h"
