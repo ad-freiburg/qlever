@@ -574,6 +574,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   if (maxConcurrentPairs == 0 || maxConcurrentPairs > numberOfPairs) {
     maxConcurrentPairs = numberOfPairs;
   }
+  REBUILD_LOG_INFO << "Writing at most " << maxConcurrentPairs << " of the "
+                   << numberOfPairs
+                   << " permutation pairs concurrently (see the runtime "
+                      "parameter `rebuild-max-concurrent-permutation-pairs`)"
+                   << std::endl;
   namespace net = boost::asio;
 
   // Collect the first exception thrown by any worker so it can be rethrown to
