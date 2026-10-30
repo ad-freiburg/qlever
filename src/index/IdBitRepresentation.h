@@ -13,7 +13,7 @@
 // The type of the bits of an `Id` (`Id::T`), for headers that cannot include
 // `global/Id.h` because of an include cycle, like `LocalVocabEntry.h`.
 // `global/Id.h` checks that the two types are the same.
-#ifdef QLEVER_USE_SPLIT_LAYOUT
+#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
 #include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
 using IdBitRepresentation =
     columnBasedIdTable::splitLayout::SplitLayoutIdBitRepresentation;
