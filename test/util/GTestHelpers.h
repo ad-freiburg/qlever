@@ -153,7 +153,10 @@ MATCHER_P2(LogLevelIsEnabledAndLogMatches, level, matcher,
 // otherwise. The returned matcher also checks that the runtime log level does
 // not suppress messages with `level`. Use this for the log checks of a test
 // that also checks other things, which `ENFORCE_LOG_LEVEL_OR_SKIP` would skip
-// as well. Note: Don't negate the result, `Not(_)` matches nothing.
+// as well.
+//
+// NOTE: Don't negate the result, `Not(_)` matches nothing. Write
+// `Not(HasSubstr(...))` directly instead, it is valid at every log level.
 template <ad_utility::LogLevel::Enum level, typename Matcher>
 auto ifLogLevelIsCompiledIn(Matcher matcher) {
   if constexpr (ad_utility::compileTimeLogLevel >= level) {
