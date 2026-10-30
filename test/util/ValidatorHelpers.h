@@ -22,9 +22,10 @@ cooperation with `generateSingleParameterValidatorFunction`, while keeping the
 invariant of `generateValidatorFunction` true.
 `variant` slightly changes the returned value.
 */
-CPP_template(typename Type)(requires ad_utility::SameAsAnyTypeIn<
-                            Type, ad_utility::ConfigOption::AvailableTypes>)
-    Type createDummyValueForValidator(size_t variant);
+CPP_template(typename Type)(
+    requires ad_utility::SameAsAnyTypeIn<
+        Type, ad_utility::ConfigOption::AvailableTypes>)
+Type createDummyValueForValidator(size_t variant);
 
 /*
 @brief For easily creating `Validator` functions, that compare given values to
@@ -49,11 +50,9 @@ creation of multiple different validator functions. For more information,
 what the exact difference is, see the code in `createDummyValueForValidator`.
 */
 CPP_variadic_template(typename... ParameterTypes)(requires(
-    ad_utility::SameAsAnyTypeIn<
-        ParameterTypes,
-        ad_utility::ConfigOption::
-            AvailableTypes>&&...)) auto generateDummyNonExceptionValidatorFunction(size_t
-                                                                                       variant) {
+    ad_utility::SameAsAnyTypeIn<ParameterTypes,
+                                ad_utility::ConfigOption::AvailableTypes>&&...))
+auto generateDummyNonExceptionValidatorFunction(size_t variant) {
   return [dummyValuesToCompareTo = std::tuple<ParameterTypes...>{
               createDummyValueForValidator<ParameterTypes>(
                   variant)...}](const ParameterTypes&... args) {

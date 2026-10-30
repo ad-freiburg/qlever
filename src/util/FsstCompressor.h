@@ -24,8 +24,8 @@ namespace detail {
 // `reinterpret_cast` is safe.
 struct CastToUnsignedPtr {
   CPP_template(typename T)(
-      requires ad_utility::SameAsAny<T, char*, const char*>) auto
-  operator()(T ptr) const {
+      requires ad_utility::SameAsAny<T, char*, const char*>)
+  auto operator()(T ptr) const {
     using Res = std::conditional_t<ql::concepts::same_as<T, const char*>,
                                    const unsigned char*, unsigned char*>;
     return reinterpret_cast<Res>(ptr);
@@ -49,7 +49,14 @@ class FsstDecoder {
   // Construct from the internal `fsst_decoder_t`. Note that the typical way to
   // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
   // `getDecoder()` on that encoder.
-  explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
+  explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {
+    // NOTE: `fsst_decoder` leaves the (unused) `version` field of the struct
+    // uninitialized. It is set here, so that the serialized decoders are the
+    // same for the same input, no matter on which thread they were created.
+    // See https://github.com/cwida/fsst/issues/50, once that is fixed, this
+    // workaround is no longer required.
+    decoder_.version = 0;
+  }
 
   // Decompress a  single string.
   std::string decompress(std::string_view str) const {
@@ -65,8 +72,8 @@ class FsstDecoder {
   }
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
-      requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
-      allowTrivialSerialization(T, U&&) {
+      requires ql::concepts::same_as<T, FsstDecoder>)
+  friend std::true_type allowTrivialSerialization(T, U&&) {
     return {};
   }
 };
@@ -108,7 +115,7 @@ class FsstRepeatedDecoder {
   // Allow this type to be trivially serializable,
   CPP_template_2(typename T, typename U)(
       requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
-      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
+  [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
     return {};
   }
 };

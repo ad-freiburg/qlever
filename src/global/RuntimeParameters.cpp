@@ -24,12 +24,12 @@ RuntimeParameters::RuntimeParameters() {
   };
 
   add(stripColumns_);
-  add(sortEstimateCancellationFactor_);
+  add(memoryForQueries_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);
-  add(lazyIndexScanQueueSize_);
-  add(lazyIndexScanNumThreads_);
+  add(lazyIndexScanNumBlocksInFlight_);
+  add(maxNumThreadsPerQuery_);
   add(rebuildIndexScanNumThreads_);
   add(rebuildPermutationWriterNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
@@ -43,16 +43,19 @@ RuntimeParameters::RuntimeParameters() {
   add(throwOnUnboundVariables_);
   add(cacheMaxSizeLazyResult_);
   add(websocketUpdatesEnabled_);
+  add(websocketUpdateInterval_);
   add(smallIndexScanSizeEstimateDivisor_);
   add(zeroCostEstimateForCachedSubtree_);
   add(requestBodyLimit_);
   add(cacheServiceResults_);
+  add(cacheLoadResults_);
   add(syntaxTestMode_);
   add(divisionByZeroIsUndef_);
+  add(throwOnInvalidWkt_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
-  add(patternTrickNumThreads_);
-  add(parallelSortNumThreads_);
+  add(patternTrickNumTasksInFlight_);
+  add(sortNumTasksInFlight_);
   add(spatialJoinPrefilterMaxSize_);
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
@@ -66,7 +69,7 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewPatternMatchNumAssignments_);
   add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
-  add(permutationWriterNumThreads_);
+  add(permutationWriterNumBlocksInFlight_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);
@@ -97,7 +100,12 @@ RuntimeParameters::RuntimeParameters() {
     }
   };
   defaultQueryTimeout_.setParameterConstraint(mustBeStrictlyPositive);
-  lazyIndexScanNumThreads_.setParameterConstraint(mustBeStrictlyPositive);
+  lazyIndexScanNumBlocksInFlight_.setParameterConstraint(
+      mustBeStrictlyPositive);
+  maxNumThreadsPerQuery_.setParameterConstraint(mustBeStrictlyPositive);
+  permutationWriterNumBlocksInFlight_.setParameterConstraint(
+      mustBeStrictlyPositive);
+  sortNumTasksInFlight_.setParameterConstraint(mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________

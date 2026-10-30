@@ -205,8 +205,15 @@ TEST(AsyncIdTablePusher, exceptionInSink) {
 // _____________________________________________________________________________
 TEST(AsyncIdTablePusher, completionHandlerRunsOnItsExecutor) {
   auto alloc = ad_utility::testing::makeAllocator();
-  net::thread_pool pool{2};
+  // NOTE: The `handlerPool` has to be declared before the `pool`, such that
+  // the `pool` is joined before the `handlerPool` is destroyed. A thread of
+  // the `pool` posts the completion handler to the `handlerPool`, and Asio
+  // signals the waiting thread of the `handlerPool` only after unlocking its
+  // mutex. So the handler may already have run (and the `future` below may
+  // already be ready) while the thread of the `pool` still accesses the
+  // `handlerPool`.
   net::thread_pool handlerPool{1};
+  net::thread_pool pool{2};
   Pusher pusher{pool.get_executor(), 1, 4, alloc, [](IdTableStatic<0>) {}};
   auto table = createRandomlyFilledIdTable(10, 1);
   auto handlerExecutor = handlerPool.get_executor();

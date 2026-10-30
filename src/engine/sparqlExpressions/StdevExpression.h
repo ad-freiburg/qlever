@@ -16,7 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 
 namespace sparqlExpression {
 

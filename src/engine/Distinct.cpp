@@ -10,6 +10,7 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/QueryExecutionTree.h"
 
 using std::endl;
@@ -240,4 +241,36 @@ IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
   return ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
     return self->outOfPlaceDistinct<width>(input.asStaticView<0>());
   });
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Distinct::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and the variables that
+  // the `DISTINCT` compares on (those at `keepIndices_`).
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  std::vector<const Variable*> keepVars;
+  for (ColumnIndex keepIndex : keepIndices_) {
+    const auto& var =
+        subtree_->getVariableAndInfoByColumnIndex(keepIndex).first;
+    keepVars.push_back(&var);
+    varsRequiredFromSubtree.add(var);
+  }
+
+  // Strip the subtree and translate `keepIndices_` to the column indices of
+  // the stripped subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree.get());
+  std::vector<ColumnIndex> newKeepIndices;
+  for (const Variable* var : keepVars) {
+    newKeepIndices.push_back(subtree->getVariableColumn(*var));
+  }
+
+  // The new `Distinct` also exports the compared variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Distinct>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      std::move(newKeepIndices));
 }
