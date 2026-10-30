@@ -84,8 +84,10 @@ Server::Server(
     AD_LOG_INFO << "No access token required for restricted API calls"
                 << std::endl;
   } else {
-    AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
-                << "\"" << std::endl;
+    // Don’t log the token itself: logs are often readable by more people than
+    // should be able to run restricted API calls.
+    AD_LOG_INFO << "Access token required for restricted API calls"
+                << std::endl;
   }
 }
 
