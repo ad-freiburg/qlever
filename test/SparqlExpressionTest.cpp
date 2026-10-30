@@ -1948,6 +1948,187 @@ TEST(SparqlExpression, DatatypeExpression) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, sameTermExpression) {
+  const auto& ctx = testContext();
+  auto date = [](std::string_view s) {
+    return Id::makeFromDate(DateYearOrDuration::parseXsdDate(s));
+  };
+  auto dateTime = [](std::string_view s) {
+    return Id::makeFromDate(DateYearOrDuration::parseXsdDatetime(s));
+  };
+  auto blankNode = [](uint64_t i) {
+    return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(i));
+  };
+  auto xsd = [](std::string_view type) {
+    return absl::StrCat("^^<http://www.w3.org/2001/XMLSchema#", type, ">");
+  };
+  // A NaN that is the result of a computation (on x86, `0.0 / 0.0` has the sign
+  // bit set) and a NaN with a payload. Both have a different bit pattern than
+  // the `quiet_NaN()`, but they are all the same RDF term `"NaN"^^xsd:double`.
+  volatile double zero = 0.0;
+  double computedNaN = zero / zero;
+  double payloadNaN = std::nan("42");
+
+  // A matrix of RDF terms, each with the number of its equivalence class. Two
+  // terms are the same RDF term iff they have the same class. The terms within
+  // a class differ in the way they are stored (as an `Id` from the vocabulary
+  // of the index, an `Id` from the local vocab, or a `LocalVocabEntry`, which
+  // is what constants and the results of string expressions are).
+  struct Term {
+    std::string description_;
+    IdOrLocalVocabEntry term_;
+    size_t class_;
+  };
+  std::vector<Term> terms{
+      // IRIs.
+      {"<x> from the vocab", ctx.x, 0},
+      {"<x> as a LocalVocabEntry", iriref("<x>"), 0},
+      {"<notInVocabC> from the local vocab", ctx.notInVocabC, 1},
+      {"<notInVocabC> as a LocalVocabEntry", iriref("<notInVocabC>"), 1},
+      {"<notInVocabD> from the local vocab", ctx.notInVocabD, 2},
+      // An IRI and a literal with the same content are different terms.
+      {"<...#langString> from the local vocab", ctx.notInVocabIri, 3},
+      {"\"...#langString\" from the local vocab", ctx.notInVocabIriLit, 4},
+      // Plain literals. The words "alpha", "Alpha", "älpha" and "A" compare
+      // equal on some collation levels (which is what `=` uses), but they are
+      // different terms.
+      {"\"alpha\" from the vocab", ctx.alpha, 5},
+      {"\"alpha\" as a LocalVocabEntry", lit("alpha"), 5},
+      {"\"alpha\"^^xsd:string as a LocalVocabEntry",
+       lit("alpha", xsd("string")), 5},
+      {"\"Alpha\" from the vocab", ctx.getId("\"Alpha\""), 6},
+      {"\"älpha\" from the vocab", ctx.aelpha, 7},
+      {"\"A\" from the vocab", ctx.A, 8},
+      {"\"notInVocabA\" from the local vocab", ctx.notInVocabA, 9},
+      {"\"notInVocabA\" as a LocalVocabEntry", lit("notInVocabA"), 9},
+      {"\"notInVocabB\" from the local vocab", ctx.notInVocabB, 10},
+      {"\"\" as a LocalVocabEntry", lit(""), 11},
+      // Literals with a language tag or a custom datatype.
+      {"\"zz\"@en from the vocab", ctx.zz, 12},
+      {"\"zz\"@en as a LocalVocabEntry", lit("zz", "@en"), 12},
+      {"\"zz\"@de as a LocalVocabEntry", lit("zz", "@de"), 13},
+      {"\"zz\" as a LocalVocabEntry", lit("zz"), 14},
+      {"\"1\"^^<dt> as a LocalVocabEntry",
+       lit("1", "^^<http://example.org/dt>"), 15},
+      {"\"1\"^^<dt2> as a LocalVocabEntry",
+       lit("1", "^^<http://example.org/dt2>"), 16},
+      // Blank nodes.
+      {"_:blank from the vocab", ctx.blank, 17},
+      {"another blank node", blankNode(12), 18},
+      // Integers, which are different terms from equal doubles and booleans.
+      {"1", I(1), 19},
+      {"1 (a second time)", I(1), 19},
+      {"0", I(0), 20},
+      {"-1", I(-1), 21},
+      {"\"1\" as a plain literal", lit("1"), 22},
+      // Doubles. `0.0` and `-0.0` are different terms (`"0.0"^^xsd:double` and
+      // `"-0.0"^^xsd:double`), but all NaNs are the same term.
+      {"1.0", D(1.0), 23},
+      {"0.0", D(0.0), 24},
+      {"-0.0", D(-0.0), 25},
+      {"NaN", D(naN), 26},
+      {"-NaN", D(-naN), 26},
+      {"NaN from 0.0 / 0.0", D(computedNaN), 26},
+      {"NaN with a payload", D(payloadNaN), 26},
+      {"INF", D(inf), 27},
+      {"-INF", D(negInf), 28},
+      // Booleans. `"1"^^xsd:boolean` and `"true"^^xsd:boolean` are different
+      // terms, and QLever stores them differently.
+      {"true", B(true), 29},
+      {"\"1\"^^xsd:boolean", Id::makeBoolFromZeroOrOne(true), 30},
+      {"false", B(false), 31},
+      {"\"0\"^^xsd:boolean", Id::makeBoolFromZeroOrOne(false), 32},
+      // Dates. A date and a dateTime are different terms.
+      {"2025-06-13", date("2025-06-13"), 33},
+      {"2025-06-13 (a second time)", date("2025-06-13"), 33},
+      {"2025-06-14", date("2025-06-14"), 34},
+      {"2025-06-13T00:00:00", dateTime("2025-06-13T00:00:00"), 35},
+      // Geo points.
+      {"POINT(1 2)", GP(GeoPoint{2, 1}), 36},
+      {"POINT(1 2) (a second time)", GP(GeoPoint{2, 1}), 36},
+      {"POINT(2 1)", GP(GeoPoint{1, 2}), 37},
+      // Encoded IRIs.
+      {"encoded IRI 0", Id::makeFromEncodedVal(0), 38},
+      {"encoded IRI 0 (a second time)", Id::makeFromEncodedVal(0), 38},
+      {"encoded IRI 1", Id::makeFromEncodedVal(1), 39},
+  };
+  // UNDEF is not an RDF term, so `sameTerm` with UNDEF is an error (UNDEF).
+  terms.push_back({"UNDEF", U, std::numeric_limits<size_t>::max()});
+  auto isUndef = [](const Term& t) {
+    return t.class_ == std::numeric_limits<size_t>::max();
+  };
+
+  // Test all pairs of terms (in both orders), first one by one, then all at
+  // once.
+  IdOrLocalVocabEntryVec allLeft;
+  IdOrLocalVocabEntryVec allRight;
+  Ids allExpected;
+  for (const auto& left : terms) {
+    for (const auto& right : terms) {
+      Id expected =
+          isUndef(left) || isUndef(right) ? U : B(left.class_ == right.class_);
+      SCOPED_TRACE(absl::StrCat("sameTerm(", left.description_, ", ",
+                                right.description_, ")"));
+      testNaryExpression(&makeSameTermExpression, Ids{expected},
+                         IdOrLocalVocabEntryVec{left.term_},
+                         IdOrLocalVocabEntryVec{right.term_});
+      allLeft.push_back(left.term_);
+      allRight.push_back(right.term_);
+      allExpected.push_back(expected);
+    }
+  }
+  testNaryExpression(&makeSameTermExpression, allExpected, allLeft, allRight);
+
+  // Constant and vector arguments, which are mixed.
+  testNaryExpression(&makeSameTermExpression, Ids{B(true), B(false), U},
+                     IdOrLocalVocabEntryVec{ctx.alpha, ctx.A, U}, ctx.alpha);
+  testNaryExpression(&makeSameTermExpression, Ids{B(false), B(true), U}, I(1),
+                     Ids{D(1.0), I(1), U});
+  // A constant string is a `LocalVocabEntry` that is compared to `Id`s from
+  // the vocab and the local vocab.
+  testNaryExpression(&makeSameTermExpression, Ids{B(true), B(false), B(true)},
+                     IdOrLocalVocabEntryVec{ctx.alpha, ctx.A, lit("alpha")},
+                     "alpha");
+  // Two constants.
+  testNaryExpression(&makeSameTermExpression, B(true), I(42), I(42));
+  testNaryExpression(&makeSameTermExpression, B(false), I(42), D(42.0));
+  testNaryExpression(&makeSameTermExpression, U, I(42), U);
+
+  // The boolean results of other expressions (`SetOfIntervals`) are compared
+  // as `true` and `false`.
+  testNaryExpression(
+      &makeSameTermExpression, Ids{B(true), B(false), B(false), B(true)},
+      ad_utility::SetOfIntervals{{{0, 1}}, 4},
+      Ids{B(true), B(true), Id::makeBoolFromZeroOrOne(false), B(false)});
+
+  // Variables (the columns of the `TestContext`).
+  {
+    TestContext testCtx;
+    auto evaluate = [&testCtx](std::string_view var1, std::string_view var2) {
+      return makeSameTermExpression(std::make_unique<VariableExpression>(
+                                        Variable{std::string{var1}}),
+                                    std::make_unique<VariableExpression>(
+                                        Variable{std::string{var2}}))
+          ->evaluate(&testCtx.context);
+    };
+    auto matches = [&testCtx](const Ids& expected) {
+      return ::testing::VariantWith<V<Id>>(sparqlExpressionResultMatcher(V<Id>{
+          expected.begin(), expected.end(), testCtx.qec->getAllocator()}));
+    };
+    // ?ints: 1, 0, -1; ?numeric: 1, -0.1, 3.4; ?doubles: 0.1, -0.1, 2.8;
+    // ?mixed: 1, -0.1, <x>; ?everything: <notInVocabC>, "alpha", UNDEF.
+    EXPECT_THAT(evaluate("?ints", "?numeric"),
+                matches({B(true), B(false), B(false)}));
+    EXPECT_THAT(evaluate("?doubles", "?mixed"),
+                matches({B(false), B(true), B(false)}));
+    EXPECT_THAT(evaluate("?everything", "?everything"),
+                matches({B(true), B(true), U}));
+    EXPECT_THAT(evaluate("?localVocab", "?everything"),
+                matches({B(false), B(false), U}));
+  }
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testStrToHashExpressions) {
   auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
   auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
