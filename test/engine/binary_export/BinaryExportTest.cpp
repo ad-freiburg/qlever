@@ -12,101 +12,12 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <vector>
-
-#include "../util/GTestHelpers.h"
-#include "../util/IdTableHelpers.h"
-#include "../util/IndexTestHelpers.h"
-#include "ValuesForTesting.h"
-#include "engine/BinaryExport.h"
-#include "engine/QueryExecutionTree.h"
-#include "global/Id.h"
-#include "parser/SelectClause.h"
+#include "./BinaryExportTestHelpers.h"
+#include "engine/binary_export/BinaryExport.h"
+#include "index/vocabulary/EncodedIriManager.h"
 
 using namespace qlever::binary_export;
-
-namespace {
-// The `Id` with which the exporter refers to the `i`-th transmitted string of
-// a batch, see `StringMapping`.
-Id transmitted(size_t i) {
-  return Id::makeFromLocalVocabIndex(
-      reinterpret_cast<LocalVocabIndex>(i << Id::numDatatypeBits));
-}
-
-// Add `word` to the `localVocab` and return its `Id`.
-Id localVocabId(LocalVocab& localVocab, std::string word,
-                const QueryExecutionContext& qec) {
-  return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation(std::move(word),
-                                                qec.getLocalVocabContext())));
-}
-
-// The bytes of the trivially copyable `value`.
-template <typename T>
-std::string bytesOf(const T& value) {
-  return std::string{reinterpret_cast<const char*>(&value), sizeof(value)};
-}
-
-// The bytes of the `ids`.
-std::string bytesOf(const std::vector<Id>& ids) {
-  std::string result;
-  for (Id id : ids) {
-    result.append(bytesOf(id.getBits()));
-  }
-  return result;
-}
-
-// A string as serialized by QLever's serialization framework.
-std::string serialized(std::string_view string) {
-  return absl::StrCat(bytesOf(string.size()), string);
-}
-
-// A vector of strings as serialized by QLever's serialization framework.
-std::string serialized(const std::vector<std::string>& strings) {
-  std::string result = bytesOf(strings.size());
-  for (const auto& string : strings) {
-    result.append(serialized(string));
-  }
-  return result;
-}
-
-// A batch consists of the IDs, followed by a marker (which has the size of an
-// `Id`) and the strings.
-void expectBatch(std::string_view batch, const std::vector<Id>& ids,
-                 const std::vector<std::string>& strings,
-                 ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto t = generateLocationTrace(l);
-  auto idBytes = bytesOf(ids);
-  auto stringBytes = serialized(strings);
-  ASSERT_EQ(batch.size(), idBytes.size() + sizeof(Id::T) + stringBytes.size());
-  EXPECT_EQ(batch.substr(0, idBytes.size()), idBytes);
-  EXPECT_EQ(batch.substr(idBytes.size() + sizeof(Id::T)), stringBytes);
-}
-
-// Export the `varNames` of the result of `qet` and return all the bytes.
-std::string exportBytes(const QueryExecutionTree& qet,
-                        const std::vector<std::string>& varNames,
-                        LimitOffsetClause limitAndOffset = {}) {
-  parsedQuery::SelectClause selectClause;
-  selectClause.setSelected(ad_utility::transform(
-      varNames, [](const std::string& name) { return Variable{name}; }));
-  std::string result;
-  for (std::string_view chunk : exportAsQLeverBinary(
-           qet, selectClause, limitAndOffset,
-           std::make_shared<ad_utility::CancellationHandle<>>())) {
-    result.append(chunk);
-  }
-  return result;
-}
-
-// A `QueryExecutionTree` with the result `table` and the `variables`.
-QueryExecutionTree makeQet(QueryExecutionContext* qec, IdTable table,
-                           std::vector<std::optional<Variable>> variables) {
-  return QueryExecutionTree{
-      qec, std::make_shared<ValuesForTesting>(qec, std::move(table),
-                                              std::move(variables))};
-}
-}  // namespace
+using namespace binaryExportTestHelpers;
 
 // Test that `appendVectorOfStrings` appends the serialization of the strings,
 // whose size `serializedSize` predicts.

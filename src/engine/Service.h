@@ -140,6 +140,12 @@ class Service : public Operation {
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
   Result computeResult(bool requestLaziness) override;
 
+  // Read the result from the `response`, which is in QLever's binary format
+  // (see `engine/binary_export/BinaryExport.h`). This is the counterpart of the
+  // JSON handling in `computeResultImpl`.
+  Result computeBinaryResult(bool requestLaziness,
+                             HttpOrHttpsResponse response);
+
   // Actually compute the result for the function above.
   Result computeResultImpl(bool requestLaziness);
 

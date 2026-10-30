@@ -9,19 +9,17 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-#include "engine/BinaryExport.h"
+#include "engine/binary_export/BinaryExport.h"
 
-#include <array>
 #include <cstring>
 #include <utility>
 
 #include "backports/algorithm.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
-#include "engine/StringMapping.h"
+#include "engine/binary_export/BinaryFormat.h"
 #include "util/Algorithm.h"
 #include "util/Generator.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
@@ -49,64 +47,6 @@ AD_ALWAYS_INLINE static Id toExportableId(Id originalId,
     return stringMapping.remapId(originalId);
   }
 }
-
-// The format transfers the bits of `Id`s directly, so a change of their
-// representation requires increasing `ad_utility::binaryQleverExportVersion`.
-// The following assertions only detect a change of the datatype tags.
-static_assert(ad_utility::binaryQleverExportVersion == 1);
-static_assert(Id::numDatatypeBits == 4);
-static constexpr auto datatypesOfVersion1 = []() {
-  using enum Datatype;
-  return std::to_array({Undefined, Bool, Int, Double, VocabIndex,
-                        LocalVocabIndex, SecondaryVocabIndex, TextRecordIndex,
-                        Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
-                        EncodedVal});
-}();
-static_assert(isListOfAllDatatypesInOrder(datatypesOfVersion1));
-
-static constexpr std::string_view magicBytes = "QLEVER.EXPORT";
-
-// The header of the format. Its serialization starts with the `magicBytes` and
-// the version, such that the reader can check the format and its version.
-struct Header {
-  // The encoding of the `GeoPoint`s of the exporting instance, see
-  // `GeoPoint::encoding()`.
-  GeoPointEncodingEnum geoPointEncoding_ = GeoPointEncodingEnum::ZOrder;
-  // The patterns of the `EncodedIriManager` of the exporting instance, which
-  // are transferred as JSON.
-  std::vector<encodedIri::Pattern> patterns_;
-  // The names of the variables, one per column.
-  std::vector<std::string> variableNames_;
-  // The names of the selected variables that are not bound in the result, and
-  // therefore have no column. The reader could treat every missing variable
-  // as unbound without them, but with them it can check that the result
-  // contains exactly the variables it expects.
-  std::vector<std::string> unboundVariableNames_;
-
-  // Return the serialized header.
-  std::string serialize() const {
-    ad_utility::serialization::ByteBufferWriteSerializer serializer;
-    nlohmann::json patterns;
-    detail::patternsToJson(patterns, patterns_,
-                           EncodedIriManager::NumBitsEncoding);
-    serializer << std::string{magicBytes};
-    serializer << ad_utility::binaryQleverExportVersion;
-    serializer << geoPointEncoding_;
-    serializer << patterns.dump();
-    serializer << variableNames_;
-    serializer << unboundVariableNames_;
-    return std::string{serializer.data().data(), serializer.data().size()};
-  }
-};
-
-// The marker that precedes each batch of strings (see `StringMapping`) in the
-// stream of IDs. It is an undefined `Id` with additional bits set, which never
-// occurs as an actual value (all undefined values are `Id::makeUndefined()`).
-// The reader reads the first `Id` of each row and compares it to this marker
-// to decide whether a row or a batch of strings follows. This is subtle: it
-// only works because the marker is never the first `Id` of an actual row.
-static constexpr Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
-static_assert(Id::fromBits(vocabMarker).getDatatype() == Datatype::Undefined);
 
 // _____________________________________________________________________________
 void ExportBatch::addRow(const IdTableView<0>& idTable, size_t row,
@@ -165,7 +105,8 @@ void BinaryExportHelpers::appendVectorOfStrings(
 }
 
 // The special case of a result without columns, for which only the number of
-// rows is exported.
+// rows is exported. `exportNumRows` and `importNumRows` (in `BinaryImport.cpp`)
+// are the two counterparts of this format.
 static std::string exportNumRows(LimitOffsetClause limitAndOffset,
                                  const Result& result,
                                  const CancellationHandle& cancellationHandle) {

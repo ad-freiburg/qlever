@@ -215,4 +215,46 @@ popd
 grep -q "only supports plain HTTP proxies" "$BINARY_DIR/bad_proxy_log.txt" \
   || bail "The error message for a malformed http_proxy is missing"
 echo "The HTTP proxy tests passed"
+
+# Test the transfer of the results of federated queries (`SERVICE`) between
+# two QLever instances, which use QLever's binary format for that (see
+# `src/engine/binary_export/BinaryExport.h`). The second server (which uses the proxy) sends
+# queries with `SERVICE` parts to the first server, and the result must be the
+# same as the one of the direct query. The queries cover all the datatypes
+# that the binary format has to handle, except for the ones that are tested in
+# the unit tests only (blank nodes, encoded IRIs, and the secondary
+# vocabulary).
+echo "Testing the transfer of results between QLever instances ..."
+function sorted_tsv_result {
+  curl --silent --fail "http://localhost:$1/" -H "Accept: text/tab-separated-values" \
+    --data-urlencode "query=$2" | sort
+}
+GEO_PREFIX="PREFIX geo: <http://www.opengis.net/ont/geosparql#>"
+# Vocab entries, dates, undefined values, local vocab entries, booleans,
+# integers, decimals, and geo points.
+VARIABLES_1="?s ?name ?birth ?str ?bool ?len ?num ?geo"
+BODY_1='?s <is-a> <Scientist> . ?s <label> ?name .
+  OPTIONAL { ?s <Date_of_birth> ?birth }
+  BIND(CONCAT(STR(?name), "!") AS ?str) BIND(STRLEN(?name) > 10 AS ?bool)
+  BIND(STRLEN(?name) AS ?len) BIND(STRLEN(?name) / 4 AS ?num)
+  BIND("POINT(7.8 47.9)"^^geo:wktLiteral AS ?geo)'
+# Text records and words of the text index.
+VARIABLES_2="?s ?t ?ql_matchingword_t_relati"
+BODY_2='?s <is-a> <Scientist> . ?t ql:contains-entity ?s . ?t ql:contains-word "relati*"'
+# The text records and words are printed without quotes by the direct query,
+# but are ordinary literals after the transfer, so the quotes are ignored for
+# that query.
+NORMALIZE_1="cat"
+NORMALIZE_2="tr -d \""
+for i in 1 2; do
+  VARIABLES="VARIABLES_$i"
+  BODY="BODY_$i"
+  NORMALIZE="NORMALIZE_$i"
+  DIRECT=$(sorted_tsv_result 9099 "$GEO_PREFIX SELECT ${!VARIABLES} WHERE { ${!BODY} }")
+  FEDERATED=$(sorted_tsv_result 9098 "$GEO_PREFIX SELECT ${!VARIABLES} WHERE { SERVICE <http://localhost:9099> { SELECT ${!VARIABLES} WHERE { ${!BODY} } } }")
+  [ "$(echo "$DIRECT" | wc -l)" -gt 100 ] || bail "The direct query $i returned too few rows"
+  [ "$(echo "$DIRECT" | ${!NORMALIZE})" == "$(echo "$FEDERATED" | ${!NORMALIZE})" ] \
+    || bail "The federated query $i returned a different result than the direct query"
+done
+echo "The tests of the transfer of results between QLever instances passed"
 popd

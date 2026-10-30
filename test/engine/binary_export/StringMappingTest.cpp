@@ -8,9 +8,9 @@
 #include <ranges>
 #include <vector>
 
-#include "../util/IdTableHelpers.h"
-#include "../util/IndexTestHelpers.h"
-#include "engine/StringMapping.h"
+#include "../../util/IdTableHelpers.h"
+#include "../../util/IndexTestHelpers.h"
+#include "engine/binary_export/StringMapping.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
 #include "index/vocabulary/SecondaryVocabulary.h"

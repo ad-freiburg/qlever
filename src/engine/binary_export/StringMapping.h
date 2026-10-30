@@ -1,14 +1,15 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2025 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+// 2025        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_STRING_MAPPING_H
-#define QLEVER_SRC_ENGINE_STRING_MAPPING_H
+#ifndef QLEVER_SRC_ENGINE_BINARY_EXPORT_STRINGMAPPING_H
+#define QLEVER_SRC_ENGINE_BINARY_EXPORT_STRINGMAPPING_H
 
 #include <string>
 #include <vector>
@@ -26,6 +27,8 @@ namespace qlever::binary_export {
 // directly in the ID) for a batch of IDs. It assigns a unique index to each of
 // those IDs and resolves it to its string right away, so the size of a batch
 // is known.
+// The counterpart on the importing side is the `IdRewriter` (see
+// `IdRewriter.h`).
 class StringMapping {
   const Index* index_;
   // Only required for the signature of `idToLiteralOrIri`. A `LocalVocabIndex`
@@ -70,4 +73,4 @@ class StringMapping {
 };
 }  // namespace qlever::binary_export
 
-#endif  // QLEVER_SRC_ENGINE_STRING_MAPPING_H
+#endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_STRINGMAPPING_H
