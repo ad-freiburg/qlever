@@ -100,7 +100,8 @@ VocabularyInMemoryBinSearch::makeDiskWriterPtr(
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
-  // Batch-lookup results that are still alive keep the previous words.
+  // Install empty storage (batch-lookup results that are still alive keep the
+  // previous words).
   words_ = std::make_shared<const Words>();
   indices_ = {};
 }

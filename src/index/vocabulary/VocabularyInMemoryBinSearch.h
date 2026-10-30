@@ -48,14 +48,19 @@ class VocabularyInMemoryBinSearch
   static constexpr bool replaceOptionalByPlaceholderOnExport = true;
 
  private:
-  // The actual storage. The words are shared with the batch-lookup results
-  // (see `lookupBatch` and `sharedWords`), which is why they are immutable:
-  // `open()` and deserialization replace them by new ones, `close()` by empty
-  // ones. The indices are stored
-  // either as an owned vector (after `open()`, or after reading from a
-  // regular, non-zero-copy serializer), or as a non-owning view into
-  // externally-owned memory (after `fromZeroCopyDeserializer`).
+  // The words, as immutable shared storage. The batch-lookup results share
+  // its ownership (see `lookupBatch` and `sharedWords`), so it is never
+  // modified in place: `open()` and deserialization install new storage,
+  // `close()` installs empty storage.
+  //
+  // NOTE: After `fromZeroCopyDeserializer` the storage itself is a non-owning
+  // view into the serializer's buffer, which then has to outlive the results.
   std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
+
+  // The indices of the words, either as an owned vector (after `open()`, or
+  // after reading from a regular, non-zero-copy serializer), or as a
+  // non-owning view into externally-owned memory (after
+  // `fromZeroCopyDeserializer`).
   IndexStorage indices_;
 
   // Const access to the words.
@@ -152,12 +157,13 @@ class VocabularyInMemoryBinSearch
            });
   }
 
-  //____________________________________________________________________________
-  // Return the words for `indices` (not empty) in that order: a contained
-  // index yields a view into the word storage of this vocabulary, whose
-  // ownership the result shares (no copy), an index that is a hole yields
-  // the placeholder of `operator[]`, owned by the result. A result stays
-  // valid when this vocabulary is closed.
+  // Return the words for `indices` (not empty) in that order. A contained
+  // index yields a view into the word storage of this vocabulary (no copy),
+  // an index that is a hole yields the placeholder of `operator[]`.
+  //
+  // NOTE: The result shares the ownership of the word storage and owns the
+  // placeholders, so it stays valid when this vocabulary is closed (for the
+  // zero-copy case see the NOTE at `words_`).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________

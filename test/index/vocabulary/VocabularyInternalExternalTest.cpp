@@ -119,7 +119,6 @@ TEST(VocabularyInternalExternal, EmptyVocabulary) {
 }
 
 namespace {
-// _____________________________________________________________________________
 // Return `numWords` distinct words of varying length, in index order (empty
 // for `numWords == 0`).
 std::vector<std::string> makeWords(size_t numWords) {
@@ -131,14 +130,12 @@ std::vector<std::string> makeWords(size_t numWords) {
   return words;
 }
 
-// _____________________________________________________________________________
 // Return whether the word with `index` is in the internal vocabulary of
 // `vocab`.
 bool isInternal(const VocabularyInternalExternal& vocab, size_t index) {
   return vocab.internalVocab()[index].has_value();
 }
 
-// _____________________________________________________________________________
 // Assert that `lookupBatch(indices)` on `vocab` matches `operator[]`, in the
 // order of `indices`, and that the internal words are views into the
 // vocabulary (no copy).
@@ -161,7 +158,6 @@ void checkLookupBatch(const VocabularyInternalExternal& vocab,
 }
 }  // namespace
 
-// _____________________________________________________________________________
 // Test that `lookupBatch` returns the same words as `operator[]`, in the
 // order of the indices, for batches that mix internal and external words,
 // contain duplicates, consist of only internal or only external words, or
@@ -192,7 +188,6 @@ TEST(VocabularyInternalExternal, LookupBatch) {
   checkLookupBatch(vocab, std::vector<size_t>{2, 4, 6});
 }
 
-// _____________________________________________________________________________
 // Test that `lookupBatch` rejects the empty batch and an index that is out of
 // range.
 TEST(VocabularyInternalExternal, LookupBatchRejectsInvalidBatches) {
@@ -207,7 +202,6 @@ TEST(VocabularyInternalExternal, LookupBatchRejectsInvalidBatches) {
       ::testing::HasSubstr("index < size()"));
 }
 
-// _____________________________________________________________________________
 // Test that a result of a mixed batch (so that the external words come from
 // a sub-batch result that the result keeps alive) stays valid after a later
 // lookup whose result has already been destroyed, and after the vocabulary

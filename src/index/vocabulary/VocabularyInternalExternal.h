@@ -64,14 +64,14 @@ class VocabularyInternalExternal {
   // vocabulary.
   auto scanAll() const { return externalVocab_.scanAll(); }
 
-  //____________________________________________________________________________
-  // Look up the words for `indices` and return them in the order of
-  // `indices`. A word of the internal (RAM) vocabulary is returned as a view
-  // into the word storage of that vocabulary, whose ownership the result
-  // shares, without a copy. All other words are read with one `lookupBatch`
-  // call on the external vocabulary (batched reads, via `io_uring` where
-  // available); the result owns the buffer that holds them. So a result stays
-  // valid as long as it lives, also after this vocabulary was closed.
+  // Return the words for `indices` (not empty, all `< size()`) in that order.
+  // A word of the internal (RAM) vocabulary is returned as a view into that
+  // vocabulary (no copy), all other words are read with one `lookupBatch` call
+  // on the external vocabulary (batched reads, via `io_uring` where available).
+  //
+  // NOTE: The result shares the ownership of the internal words and owns the
+  // buffer of the external words, so it stays valid when this vocabulary is
+  // closed.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
