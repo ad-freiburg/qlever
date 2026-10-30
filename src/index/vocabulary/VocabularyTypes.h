@@ -44,10 +44,12 @@ using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
 // Base class for a vocabulary batch-lookup result, shared by the different
-// vocabulary implementations. Owns the materialized string data (`buffer()`,
-// whose concrete type `BufferType` depends on the implementation) and one
-// `string_view` per looked-up term (`views()`, each pointing into `buffer()`).
-// The vocabulary implementation that performs the lookup fills `buffer()` and
+// vocabulary implementations. Owns the storage of the words (`buffer()`,
+// whose concrete type `BufferType` depends on the implementation: a byte
+// buffer, a vector of strings, or a shared handle on the word storage of a
+// vocabulary that keeps its words in RAM) and one `string_view` per looked-up
+// term (`views()`, each pointing into storage that `buffer()` owns). The
+// vocabulary implementation that performs the lookup fills `buffer()` and
 // `views()`, then calls `asResult()` to hand out a `VocabBatchLookupResult`
 // that keeps this object (and thus the storage the views point into) alive for
 // as long as the `VocabBatchLookupResult` is used.
@@ -62,8 +64,8 @@ class VocabLookupDataCommonBase {
   BufferType& buffer() { return buffer_; }
 
   // Mutable access to the views (one `string_view` per looked-up index, each
-  // pointing into `buffer()`), for the producer to fill before calling
-  // `asResult`.
+  // pointing into storage that `buffer()` owns), for the producer to fill
+  // before calling `asResult`.
   std::vector<std::string_view>& views() { return views_; }
 
   // Convert a filled lookup-data object into the public result type
@@ -84,7 +86,8 @@ class VocabLookupDataCommonBase {
   // Buffer for the materialized string data (used by disk-based vocabularies).
   BufferType buffer_;
 
-  // One `string_view` per looked-up index, each pointing into `buffer_`.
+  // One `string_view` per looked-up index, each pointing into storage that
+  // `buffer_` owns.
   std::vector<std::string_view> views_;
 
   // The span over `views_`, populated by `finalize()` and exposed by
@@ -94,6 +97,26 @@ class VocabLookupDataCommonBase {
   // Set up `span_` over `views_`. Call after `views_` is fully filled; do not
   // modify `views_` afterward, as `span_` would be invalidated.
   void finalize() { span_ = ql::span<std::string_view>{views_}; }
+};
+
+// Lookup data of a vocabulary that keeps its words in RAM
+// (`VocabularyInMemory`): the result shares the ownership of the word storage
+// with the vocabulary, so the views point into storage that `buffer()` owns
+// and no word is copied. Closing or reopening the vocabulary does not
+// invalidate a result.
+struct SharedWordsVocabBatchLookupData
+    : VocabLookupDataCommonBase<
+          std::shared_ptr<const CompactVectorOfStrings<char>>> {
+  // Return the batch-lookup result for `views` (one per looked-up index, in
+  // order), which point into `words`.
+  static VocabBatchLookupResult fromViews(
+      std::shared_ptr<const CompactVectorOfStrings<char>> words,
+      std::vector<std::string_view> views) {
+    auto data = std::make_shared<SharedWordsVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views() = std::move(views);
+    return asResult(std::move(data));
+  }
 };
 
 // A vocabulary batch-lookup result whose total size is known up front, so all
@@ -136,7 +159,20 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 // owning `std::string`s. The words are moved into the
 // `std::vector<std::string>` buffer and the `views()` point at those strings.
 struct StringVectorVocabBatchLookupData
-    : VocabLookupDataCommonBase<std::vector<std::string>> {};
+    : VocabLookupDataCommonBase<std::vector<std::string>> {
+  // Return the batch-lookup result that takes ownership of `words` (one word
+  // per looked-up index, in order): move the vector into the buffer (this
+  // transfers the storage, the strings are not relocated) and then point one
+  // view at each string.
+  static VocabBatchLookupResult fromWords(std::vector<std::string> words) {
+    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views() = ::ranges::to_vector(
+        data->buffer() |
+        ql::views::transform(ad_utility::staticCast<std::string_view>));
+    return asResult(std::move(data));
+  }
+};
 
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
@@ -233,24 +269,14 @@ template <typename Vocab>
 VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
                                              ql::span<const size_t> indices) {
   AD_CONTRACT_CHECK(!indices.empty());
-  // Materialize the words as owning `std::string`s and move them into the
-  // result's `std::vector<std::string>` buffer. The views then point at those
-  // strings; no byte copying into a contiguous buffer is needed. Building the
-  // views after the move is safe: moving the vector does not relocate the
-  // contained strings.
 
-  std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
-      indices | ql::views::transform([&vocab](size_t idx) {
-        return wordAsStringOrPlaceholder(vocab, idx);
-      }));
-
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+  // Materialize the words as owning `std::string`s; `fromWords` moves them
+  // into the result and points one view at each of them.
+  return StringVectorVocabBatchLookupData::fromWords(
+      ::ranges::to<std::vector<std::string>>(
+          indices | ql::views::transform([&vocab](size_t idx) {
+            return wordAsStringOrPlaceholder(vocab, idx);
+          })));
 }
 
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the

@@ -12,6 +12,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
@@ -145,6 +146,36 @@ TYPED_TEST(CompressedVocabularyF, LowerUpperBoundNumeric) {
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(this->createCompressedVocabulary());
+}
+
+// _______________________________________________________
+// Test that `lookupBatch` returns the same words as `operator[]`, in the order
+// of the indices, for a batch that spans several decoder blocks (the block
+// size of the fixture is 4), for a reordered batch with duplicates, and for a
+// single index, and that it rejects the empty batch.
+TYPED_TEST(CompressedVocabularyF, LookupBatch) {
+  // Many more words than the block size of the fixture (4), so that the full
+  // batch spans many decoder blocks.
+  constexpr size_t numWords = 64;
+  std::vector<std::string> words;
+  words.reserve(numWords);
+  for (size_t i : ql::views::iota(size_t{0}, numWords)) {
+    // Fixed-width numbers, so that the words are sorted.
+    words.push_back(
+        absl::StrCat("s", i / 10, i % 10, "-", std::string(i % 7, 'x')));
+  }
+  const auto vocab = this->createCompressedVocabulary()(words);
+  const auto checkLookupBatch = [&](ql::span<const size_t> indices) {
+    assertLookupResultMatchesVocabularyAtIndices(
+        vocab, vocab.lookupBatch(indices), indices);
+  };
+
+  checkLookupBatch(
+      ::ranges::to_vector(ql::views::iota(size_t{0}, words.size())));
+  checkLookupBatch(std::vector<size_t>{63, 0, 5, 5, 17, 4});
+  checkLookupBatch(std::vector<size_t>{42});
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
 }
 
 // _______________________________________________________
@@ -329,6 +360,74 @@ std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
 }
 
 }  // namespace
+
+// _____________________________________________________________________________
+// Test that for a vocabulary with holes `lookupBatch` matches `operator[]`:
+// contained indices (reordered, with a duplicate) yield their words, holes
+// (before the first word, between two words, and one past the last word,
+// which is `endIndex()`) yield the placeholder.
+TEST(CompressedVocabularyWithHoles, lookupBatch) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = getFileCleanup(filename);
+  const auto containedIndices = indicesWithHoles();
+  const auto vocab =
+      createVocabularyWithHoles(filename, wordsWithHoles(), containedIndices);
+  const std::vector<size_t> indices{
+      containedIndices.at(3),     0,
+      containedIndices.at(0),     containedIndices.at(3),
+      containedIndices.at(1) + 1, containedIndices.at(10) + 1};
+  const auto result = vocab.lookupBatch(indices);
+
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  for (size_t position : {1, 4, 5}) {
+    EXPECT_EQ((*result)[position],
+              ad_utility::vocabulary::placeholderForMissingVocabIndex(
+                  indices[position]));
+  }
+}
+
+// Test `lookupBatch` for the compressed vocabulary over the two underlying
+// vocabularies that `PolymorphicVocabulary` uses in production: the in-memory
+// vocabulary (whose batch result is views into the vocabulary) and the
+// internal-external vocabulary.
+template <typename Vocabulary>
+void testLookupBatchOverUnderlying(const std::string& filename) {
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<Vocabulary>(filename);
+  std::vector<std::string> words;
+  for (size_t i : ql::views::iota(size_t{0}, size_t{30})) {
+    words.push_back(absl::StrCat("w", i, std::string(i % 3, 'z')));
+  }
+  Vocabulary vocab;
+  {
+    auto writerPtr = vocab.makeDiskWriterPtr(filename);
+    for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+      // The second argument (`isExternal`) only matters for the
+      // internal-external vocabulary; every second word is external only.
+      (*writerPtr)(word, i % 2 == 0);
+    }
+    writerPtr->finish();
+  }
+  vocab.open(filename);
+
+  for (const std::vector<size_t>& indices :
+       {std::vector<size_t>{29, 0, 7, 7, 2, 1}, std::vector<size_t>{1},
+        std::vector<size_t>{2}}) {
+    assertLookupResultMatchesVocabularyAtIndices(
+        vocab, vocab.lookupBatch(indices), indices);
+  }
+}
+
+TEST(CompressedVocabularyOverInMemory, lookupBatch) {
+  testLookupBatchOverUnderlying<CompressedVocabulary<
+      VocabularyInMemory, FsstSquaredCompressionWrapper, 4>>(
+      gtestCurrentTestName());
+}
+
+TEST(CompressedVocabularyOverInternalExternal, lookupBatch) {
+  testLookupBatchOverUnderlying<CompressedVocabulary<
+      VocabularyInternalExternal, FsstSquaredCompressionWrapper, 4>>(
+      gtestCurrentTestName());
+}
 
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, accessOperator) {

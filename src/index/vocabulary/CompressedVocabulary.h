@@ -56,10 +56,11 @@ class CompressedVocabulary {
   static constexpr bool underlyingHasHoles =
       std::is_same_v<UnderlyingVocabulary, VocabularyInMemoryBinSearch>;
 
-  // As a safeguard for the future: A vocabulary with holes has to report a
-  // placeholder (and not throw) for the indices that are holes, see
-  // `operator[]` below.
-  static_assert(!underlyingHasHoles ||
+  // As a safeguard for the future: exactly the vocabularies with holes report
+  // a placeholder (and do not throw) for the indices that are holes, see
+  // `operator[]` and `lookupBatch` below, which decompress a word only if it
+  // cannot be a placeholder.
+  static_assert(underlyingHasHoles ==
                 ad_utility::vocabulary::replaceOptionalByPlaceholderOnExport<
                     UnderlyingVocabulary>);
 
@@ -152,8 +153,28 @@ class CompressedVocabulary {
   }
 
   //____________________________________________________________________________
+  // Return the words for `indices` (not empty) in that order, as views into
+  // a buffer owned by the result. For an underlying vocabulary with holes,
+  // this currently falls back to the sequential lookup.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+
+    if constexpr (underlyingHasHoles) {
+      return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    } else {
+      const auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
+      AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size(),
+                           "the underlying vocabulary returned a different "
+                           "number of words than requested");
+      auto words = ::ranges::to<std::vector<std::string>>(
+          ::ranges::views::zip(*compressedWords, indices) |
+          ql::views::transform([this](const auto& compressedWordAndIndex) {
+            const auto& [compressedWord, index] = compressedWordAndIndex;
+            return compressionWrapper_.decompress(compressedWord,
+                                                  getDecoderIdx(index));
+          }));
+      return StringVectorVocabBatchLookupData::fromWords(std::move(words));
+    }
   }
 
   //____________________________________________________________________________
