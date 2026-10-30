@@ -14,6 +14,7 @@
 #include "index/LocalVocab.h"
 #include "util/Algorithm.h"
 #include "util/TransparentFunctors.h"
+#include "util/TupleHelpers.h"
 
 namespace ad_utility {
 // The implementations of the join algorithms (merge/zipper join, galloping
@@ -120,7 +121,7 @@ struct GetColsFromTable {
     return [&table]<size_t... I>(std::index_sequence<I...>) {
       return ::ranges::views::zip(table.getColumn(I)...) |
              ::ranges::views::transform([](auto&& tuple) {
-               return std::apply(
+               return ad_tuple_helpers::applyToTupleLike(
                    [](auto&... refs) { return std::array{refs...}; },
                    AD_FWD(tuple));
              });

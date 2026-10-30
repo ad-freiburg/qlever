@@ -94,18 +94,20 @@ void testForVocabTypeWithHoles(VocabularyType::Enum vocabType) {
   }
 
   // The binary search reports the (non-contiguous) vocabulary indices.
-  auto wI = vocab.lower_bound("alx", ql::ranges::less{});
+  auto wI = vocab.lower_bound(std::string_view{"alx"}, ql::ranges::less{});
   EXPECT_EQ(wI.index(), 2);
   EXPECT_EQ(wI.word(), "beta");
-  wI = vocab.upper_bound("gamma", ql::ranges::less{});
+  wI = vocab.upper_bound(std::string_view{"gamma"}, ql::ranges::less{});
   EXPECT_TRUE(wI.isEnd());
-  EXPECT_EQ(vocab.getPositionOfWord("beta", ql::ranges::less{}),
-            (std::pair<uint64_t, uint64_t>{2, 3}));
+  EXPECT_EQ(
+      vocab.getPositionOfWord(std::string_view{"beta"}, ql::ranges::less{}),
+      (std::pair<uint64_t, uint64_t>{2, 3}));
   // A word that sorts after all contained words has to be reported as "one
   // past the largest contained index" (here 7), and not as `size()` (here 4),
   // which because of the holes is the index of an actual, smaller word.
-  EXPECT_EQ(vocab.getPositionOfWord("zzz", ql::ranges::less{}),
-            (std::pair<uint64_t, uint64_t>{7, 7}));
+  EXPECT_EQ(
+      vocab.getPositionOfWord(std::string_view{"zzz"}, ql::ranges::less{}),
+      (std::pair<uint64_t, uint64_t>{7, 7}));
 
   // A vocabulary with holes never provides geometry information.
   EXPECT_FALSE(vocab.isGeoInfoAvailable());
@@ -146,11 +148,11 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   vocabulary_test::assertVocabularyMatchesContiguousIndices(
       vocab, {"alpha", "beta", "gamma"});
 
-  auto wI = vocab.lower_bound("alx", ql::ranges::less{});
+  auto wI = vocab.lower_bound(std::string_view{"alx"}, ql::ranges::less{});
   EXPECT_EQ(wI.index(), 1);
   EXPECT_EQ(wI.word(), "beta");
 
-  wI = vocab.upper_bound("gamma", ql::ranges::less{});
+  wI = vocab.upper_bound(std::string_view{"gamma"}, ql::ranges::less{});
   EXPECT_TRUE(wI.isEnd());
 
   EXPECT_EQ(std::visit([](auto& u) { return static_cast<uint64_t>(u.size()); },

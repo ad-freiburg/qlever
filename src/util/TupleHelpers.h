@@ -6,6 +6,7 @@
 #define QLEVER_TUPLEHELPERS_H
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -111,6 +112,28 @@ struct is_tuple : detail::is_tuple_impl<std::decay_t<T>> {};
 /// is_tuple_v is true iff T is a specialization of std::tuple
 template <typename T>
 constexpr bool is_tuple_v = is_tuple<T>::value;
+
+namespace detail {
+// Implementation of `applyToTupleLike` (see below).
+template <typename F, typename Tuple, size_t... I>
+constexpr decltype(auto) applyToTupleLikeImpl(F&& f, Tuple&& tuple,
+                                              std::index_sequence<I...>) {
+  return std::invoke(std::forward<F>(f),
+                     std::get<I>(std::forward<Tuple>(tuple))...);
+}
+}  // namespace detail
+
+// Equivalent to `std::apply(f, tuple)`, but also work for types that are
+// derived from `std::tuple` or `std::pair` and specialize `std::tuple_size`,
+// in particular `::ranges::common_tuple` and `::ranges::common_pair`, which are
+// the reference types of `::ranges::views::zip`. Since C++23, `std::apply`
+// only accepts the "tuple-like" types of the standard library itself.
+template <typename F, typename Tuple>
+constexpr decltype(auto) applyToTupleLike(F&& f, Tuple&& tuple) {
+  return detail::applyToTupleLikeImpl(
+      std::forward<F>(f), std::forward<Tuple>(tuple),
+      std::make_index_sequence<std::tuple_size_v<std::decay_t<Tuple>>>{});
+}
 }  // namespace ad_tuple_helpers
 
 #endif  // QLEVER_TUPLEHELPERS_H

@@ -44,7 +44,13 @@ jobs:
         warnings: [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
         build-type: [Release]
         expensive-tests: [true]
-        additional-cmake-options: [""]
+        # Also check that QLever compiles with the newest C++ standards that
+        # the respective compiler supports.
+        include:
+          - compiler-version: 15
+            additional-cmake-options: "-DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=23"
+          - compiler-version: 16
+            additional-cmake-options: "-DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=26"
 
     runs-on: ubuntu-24.04
     # Run all steps of the job inside a Docker container of Ubuntu 26.04, so

@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
     if (optionsMap.count("set-runtime-parameter") &&
         ad_utility::contains(
             optionsMap["set-runtime-parameter"].as<std::vector<std::string>>(),
-            "help")) {
+            std::string_view{"help"})) {
       std::cout << "Available runtime parameters and their default values:\n";
       auto parameters = globalRuntimeParameters.rlock()->toMap();
       for (const auto& name : globalRuntimeParameters.rlock()->getKeys()) {

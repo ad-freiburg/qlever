@@ -3,6 +3,7 @@
 // Authors: Jonathan Zeller @Jonathan24680
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
@@ -422,7 +423,7 @@ class SpatialJoinParamTest
     auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
     auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
 
-    return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
+    return absl::StrFormat("%f", S2Earth::ToKm(S1Angle(p1_, p2_)));
   }
 
   // Places for testing

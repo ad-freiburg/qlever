@@ -102,8 +102,8 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
 
     // The literal that is only valid in lenient parsing mode is treated as an
     // invalid geometry.
-    auto leniencyIdx =
-        geoVocab.lower_bound("\"LINESTRING(1 1, 2 a", ql::ranges::less{});
+    auto leniencyIdx = geoVocab.lower_bound(
+        std::string_view{"\"LINESTRING(1 1, 2 a"}, ql::ranges::less{});
     ASSERT_EQ(leniencyIdx.word(),
               "\"LINESTRING(1 1, 2 a, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
@@ -116,13 +116,14 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     ASSERT_EQ(geoVocabConstRef.getUnderlyingVocabulary().size(),
               testLiterals.size());
 
-    auto wI = geoVocab.lower_bound("\"LINE", ql::ranges::less{});
+    auto wI =
+        geoVocab.lower_bound(std::string_view{"\"LINE"}, ql::ranges::less{});
     ASSERT_EQ(wI.index(), 3);
     ASSERT_EQ(wI.word(),
               "\"LINESTRING(1 1, 2 2, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
-    wI = geoVocab.upper_bound("\"XYZ", ql::ranges::less{});
+    wI = geoVocab.upper_bound(std::string_view{"\"XYZ"}, ql::ranges::less{});
     ASSERT_TRUE(wI.isEnd());
 
     geoVocab.close();
