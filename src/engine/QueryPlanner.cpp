@@ -286,8 +286,101 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
   }
 }
 
+namespace {
+// Return the constant to which `bind` binds its target variable, or
+// `std::nullopt` if its expression is not a constant IRI, literal or `Id`.
+std::optional<TripleComponent> getConstantOfBind(const p::Bind& bind) {
+  using namespace sparqlExpression;
+  const auto* expression = bind._expression.getPimpl();
+  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
+    return TripleComponent{iri->value()};
+  } else if (const auto* literal =
+                 dynamic_cast<const StringLiteralExpression*>(expression)) {
+    return TripleComponent{literal->value()};
+  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression)) {
+    return TripleComponent{id->value()};
+  }
+  return std::nullopt;
+}
+
+// Replace each variable of `pattern` that is bound to a single constant by a
+// `VALUES` clause with a single row or by a `BIND` with a constant expression
+// by this constant in the triples of `pattern`. The `VALUES` or `BIND` clause
+// itself is kept, so the variable is still bound in the result.
+//
+// NOTE 1: The fixed constant allows for index scans with fewer variables, which
+// are sorted by the remaining variables and thus avoid joins and sorts.
+//
+// NOTE 2: Only the triples directly in `pattern` are substituted, not the ones
+// in nested groups (in particular not in a `MINUS`, where removing a shared
+// variable would change the result). A `BIND` only affects the triples after
+// it (using its variable before it is an error anyway).
+void substituteConstantVariables(ParsedQuery::GraphPattern& pattern) {
+  // Collect the constants of the `VALUES` clauses with a single row, their
+  // position in the group does not matter.
+  ad_utility::HashMap<Variable, TripleComponent> constants;
+  for (const auto& operation : pattern._graphPatterns) {
+    const auto* values = std::get_if<p::Values>(&operation);
+    if (values == nullptr || values->_inlineValues._values.size() != 1) {
+      continue;
+    }
+    const auto& row = values->_inlineValues._values.at(0);
+    for (const auto& [variable, value] :
+         ::ranges::views::zip(values->_inlineValues._variables, row)) {
+      if (!value.isUndef()) {
+        constants.emplace(variable, value);
+      }
+    }
+  }
+
+  // Replace the variable in `component` by its constant if it has one.
+  auto substitute = [&constants](TripleComponent& component) {
+    if (!component.isVariable()) {
+      return;
+    }
+    auto it = constants.find(component.getVariable());
+    if (it != constants.end()) {
+      component = it->second;
+    }
+  };
+
+  // Substitute the constants in the triples, add the constants of the `BIND`
+  // clauses on the way. A variable predicate can only be replaced by an IRI.
+  // Triples with a property path are skipped (a constant at the end of a path
+  // with zero length matches even if it is not contained in the graph, while
+  // a variable does not).
+  for (auto& operation : pattern._graphPatterns) {
+    if (const auto* bind = std::get_if<p::Bind>(&operation)) {
+      if (auto constant = getConstantOfBind(*bind)) {
+        constants.emplace(bind->_target, std::move(constant.value()));
+      }
+      continue;
+    }
+    auto* basicPattern = std::get_if<p::BasicGraphPattern>(&operation);
+    if (basicPattern == nullptr) {
+      continue;
+    }
+    for (auto& triple : basicPattern->_triples) {
+      if (!std::holds_alternative<Variable>(triple.p_) &&
+          !triple.getSimplePredicate().has_value()) {
+        continue;
+      }
+      substitute(triple.s_);
+      substitute(triple.o_);
+      if (const auto* predicate = std::get_if<Variable>(&triple.p_)) {
+        auto it = constants.find(*predicate);
+        if (it != constants.end() && it->second.isIri()) {
+          triple.p_ = PropertyPath::fromIri(it->second.getIri());
+        }
+      }
+    }
+  }
+}
+}  // namespace
+
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
+  substituteConstantVariables(*rootPattern);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {

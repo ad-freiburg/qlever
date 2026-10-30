@@ -447,10 +447,11 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
   // the index scan), while the filter on the possibly undefined `?o` may only
   // be applied at the very end.
   std::string queryWithTwoFilters =
-      "SELECT * { ?s <r> ?x . VALUES (?s ?o) { (<s> UNDEF) } "
+      "SELECT * { ?s <r> ?x . VALUES (?s ?o) { (<s> UNDEF) (<t> UNDEF) } "
       "FILTER(?s != <x>) FILTER(?o != <y>) }";
   auto valuesWithFilter = h::Sort(h::Filter(
-      "?s != <x>", h::ValuesClause("VALUES (?s\t?o) { (<s> UNDEF) }")));
+      "?s != <x>",
+      h::ValuesClause("VALUES (?s\t?o) { (<s> UNDEF) (<t> UNDEF) }")));
   h::expectGreedy(
       queryWithTwoFilters,
       h::Filter("?o != <y>",
@@ -461,10 +462,11 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
   // Sanity check that filters are still applied as early as possible if all
   // their variables are always defined.
   h::expectGreedy(
-      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { <r2> } }",
-      h::Join(h::Sort(h::Filter("?p != <r>",
-                                h::ValuesClause("VALUES (?p) { (<r2>) }"))),
-              h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { <r2> <r3> } }",
+      h::Join(
+          h::Sort(h::Filter("?p != <r>",
+                            h::ValuesClause("VALUES (?p) { (<r2>) (<r3>) }"))),
+          h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
       qec);
 }
 
@@ -1887,6 +1889,43 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The <algorithm> value has to be an IRI"),
       InvalidSparqlQueryException);
+}
+
+// Test that a variable that is bound to a constant by a `VALUES` clause with a
+// single row or by a constant `BIND` is replaced by this constant in the
+// triples of the same group.
+TEST(QueryPlanner, substituteConstantVariables) {
+  auto scan = h::IndexScanFromStrings;
+
+  // A `VALUES` clause with a single row also fixes a variable predicate, and
+  // its position in the group does not matter.
+  h::expect("SELECT * { ?x ?p ?o VALUES (?x ?p) { (<a> <p>) } }",
+            h::CartesianProductJoin(
+                scan("<a>", "<p>", "?o"),
+                h::ValuesClause("VALUES (?x\t?p) { (<a> <p>) }")));
+
+  // A constant `BIND` fixes the triples after it.
+  h::expect("SELECT * { BIND(<a> AS ?x) ?s <p> ?x }",
+            h::CartesianProductJoin(
+                h::Bind(h::NeutralElement(), "<a>", Variable{"?x"}),
+                scan("?s", "<p>", "<a>")));
+
+  // A `VALUES` clause with more than one row, an `UNDEF` value, a
+  // non-constant `BIND`, and a triple in a nested group are not substituted
+  // (for a property path, see the `emptyPath...` tests).
+  h::expect("SELECT * { VALUES ?x { <a> <b> } ?x <p> ?o }",
+            h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) (<b>) }")),
+                    scan("?x", "<p>", "?o")));
+  h::expect("SELECT * { VALUES ?x { UNDEF } ?x <p> ?o }",
+            h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (UNDEF) }")),
+                    scan("?x", "<p>", "?o")));
+  h::expect(
+      "SELECT * { BIND(3 + 5 AS ?x) ?x <p> ?o }",
+      h::Join(h::Sort(h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"})),
+              scan("?x", "<p>", "?o")));
+  h::expect("SELECT * { VALUES ?x { <a> } MINUS { ?x <p> ?o } }",
+            h::Minus(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) }")),
+                     scan("?x", "<p>", "?o")));
 }
 
 // _____________________________________________________________________________
@@ -4128,27 +4167,29 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
   // clause and the index scan. The `?var` of that join is guaranteed to be part
   // of the knowledge graph, so no existence check is required.
   h::expectWithGivenBudgets(
-      "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
+      "SELECT * { VALUES ?var { 1 2 } . ?var <c> <d> . ?other <a>* ?var }",
       h::transitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) }")),
+          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) (2) }")),
                   h::IndexScanFromStrings("?var", "<c>", "<d>")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")),
       qec, {16, 64'000'000});
-  // The greedy planner binds the path to the `VALUES` clause directly (which
-  // requires an existence check) and joins the index scan afterwards.
-  h::expectWithGivenBudgets(
+  // With a single value, the `?var` of the index scan is replaced by it, so the
+  // path is bound to the `VALUES` clause directly (which requires an existence
+  // check).
+  h::expect(
       "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
-      h::Join(
-          h::Sort(h::transitivePath(
+      h::CartesianProductJoin(
+          h::transitivePath(
               left, right, 0, std::numeric_limits<size_t>::max(),
               h::EmptyPath(Variable{"?var"}, std::nullopt,
                            h::ValuesClause("VALUES (?var) { (1) }")),
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
-                                      "?_QLever_internal_variable_qp_1"))),
-          h::IndexScanFromStrings("?var", "<c>", "<d>")),
-      qec, {0, 1, 4});
+                                      "?_QLever_internal_variable_qp_1")),
+          h::IndexScan(1, TripleComponent::Iri::fromIriref("<c>"),
+                       TripleComponent::Iri::fromIriref("<d>"))),
+      qec);
 }
 
 // _____________________________________________________________________________
