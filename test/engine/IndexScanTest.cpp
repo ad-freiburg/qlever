@@ -2433,3 +2433,56 @@ TEST(IndexScan, isDistinctBy) {
       std::dynamic_pointer_cast<IndexScan>(strippedGraph->getRootOperation()));
   EXPECT_FALSE(strippedGraph->getRootOperation()->isDistinctBy(SC{0, 1, 2, 3}));
 }
+
+// Test that a prefilter that was already applied to a scan is not applied
+// again (the query planner relies on this when it prefilters the seed scans
+// once, see `QueryPlanner::prefilterSeeds`), while a different prefilter still
+// is, and that the prefiltered copy remembers both.
+TEST(IndexScan, prefilterAlreadyAppliedIsNotAppliedAgain) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  std::string kg =
+      "<a> <price_tag> 10.00 . <b> <price_tag> 12.00 . <b> <price_tag> "
+      "12.001 . <b> <price_tag> 21.99 . <b> <price_tag> 24.33 . <b> "
+      "<price_tag> 147.32 . <b> <price_tag> 189.99 . <b> <price_tag> 194.67 "
+      ".";
+  auto qec = getQec(kg);
+  // In the POS permutation `?price` is the first free column, so prefilters
+  // on it apply.
+  SparqlTripleSimple triple{Tc{Variable{"?b"}}, iri("<price_tag>"),
+                            Tc{Variable{"?price"}}};
+  IndexScan scan{qec, Permutation::POS, triple};
+  auto prefilter = [](auto expression) {
+    return makePrefilterVec(pr(std::move(expression), Variable{"?price"}));
+  };
+  auto asScan = [](const auto& optTree) -> const IndexScan& {
+    return dynamic_cast<const IndexScan&>(*optTree.value()->getRootOperation());
+  };
+
+  // The first application prefilters the scan, the same prefilter again is a
+  // no-op.
+  auto once = scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      prefilter(gt(DoubleId(12.00))));
+  ASSERT_TRUE(once.has_value());
+  EXPECT_FALSE(asScan(once)
+                   .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                       prefilter(gt(DoubleId(12.00))))
+                   .has_value());
+
+  // A different prefilter still applies, after which both are remembered.
+  auto twice = asScan(once).getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      prefilter(le(IntId(174))));
+  ASSERT_TRUE(twice.has_value());
+  EXPECT_FALSE(asScan(twice)
+                   .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                       prefilter(gt(DoubleId(12.00))))
+                   .has_value());
+  EXPECT_FALSE(asScan(twice)
+                   .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                       prefilter(le(IntId(174))))
+                   .has_value());
+  EXPECT_TRUE(asScan(twice)
+                  .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                      prefilter(lt(DoubleId(147.32))))
+                  .has_value());
+}

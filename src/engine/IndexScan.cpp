@@ -5,6 +5,7 @@
 #include "engine/IndexScan.h"
 
 #include <absl/container/inlined_vector.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
 #include <algorithm>
@@ -292,24 +293,34 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
   // Return a new `IndexScan` with updated `scanSpecAndBlocks_`, by
   // intersecting its block ranges with the block ranges from the applicable
-  // prefilters.
+  // prefilter.
   const auto& [sortedVar, colIndex] = sortedVarAndColIndex.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
-  if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges =
-        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
-                                getScanSpecAndBlocks().getBlockMetadataSpan(),
-                                colIndex),
-            scanSpecAndBlocks_.blockMetadata_);
-
-    return makeCopyWithPrefilteredScanSpecAndBlocks(
-        {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  if (it == prefilterVariablePairs.end()) {
+    // No prefilter applies.
+    return std::nullopt;
   }
 
-  // If no prefilter applies, return `std::nullopt`.
-  return std::nullopt;
+  // A prefilter that was already applied to this scan would not remove any
+  // further blocks, so skip the (block metadata walk of the) evaluation.
+  auto key = absl::StrCat(it->first->asString(0), " on ", sortedVar.name());
+  if (ad_utility::contains(appliedPrefilters_, key)) {
+    return std::nullopt;
+  }
+
+  const auto& blockMetadataRanges =
+      prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+          it->first->evaluate(getIndex(),
+                              getScanSpecAndBlocks().getBlockMetadataSpan(),
+                              colIndex),
+          scanSpecAndBlocks_.blockMetadata_);
+  auto copy = makeCopyWithPrefilteredScanSpecAndBlocks(
+      {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  auto& copiedScan = dynamic_cast<IndexScan&>(*copy->getRootOperation());
+  copiedScan.appliedPrefilters_ = appliedPrefilters_;
+  copiedScan.appliedPrefilters_.push_back(std::move(key));
+  return copy;
 }
 
 // _____________________________________________________________________________

@@ -50,6 +50,16 @@ class IndexScan final : public Operation {
   using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
   VarsToKeep varsToKeep_;
 
+  // The prefilters already applied to this scan (see
+  // `getUpdatedQueryExecutionTreeWithPrefilterApplied`), each as the string of
+  // its `PrefilterExpression` plus its variable. Applying one of them again
+  // is a no-op. The query planner prefilters the seed scans of a group graph
+  // pattern once (see `QueryPlanner::prefilterSeeds`); without this memo, the
+  // `Filter` on top of every candidate plan would evaluate the same prefilter
+  // on the same scan again, which costs a walk over the block metadata each
+  // time.
+  std::vector<std::string> appliedPrefilters_;
+
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
             LocatedTriplesSharedState locatedTriplesSharedState,
