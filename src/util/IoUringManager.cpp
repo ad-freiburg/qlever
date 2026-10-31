@@ -304,6 +304,14 @@ void IoUringPolicy::wait(BatchHandle handle) {
     drainAtLeast(
         static_cast<unsigned>(std::min<size_t>(REAP_WAVE, it->second)));
   }
+  // Throw only now that every read of the batch is reaped, so the kernel no
+  // longer writes into its buffers.
+  if (auto failed = failedBatches_.find(handle);
+      failed != failedBatches_.end()) {
+    const char* errorMessage = failed->second;
+    failedBatches_.erase(failed);
+    AD_THROW(errorMessage);
+  }
 }
 
 //______________________________________________________________________________
@@ -312,7 +320,8 @@ void IoUringPolicy::drainAtLeast(unsigned minComplete) {
   AD_CORRECTNESS_CHECK(minComplete <= numOutstandingReadRequests_);
 
   // Block until at least `minComplete` completion queue entries (CQEs) are
-  // ready. This costs at most one `io_uring_enter` for the whole wave.
+  // ready. This typically costs one `io_uring_enter` for the whole wave (and
+  // one more after each `EINTR`).
   io_uring_cqe* cqe = nullptr;
   int ret = 0;
   do {
@@ -326,9 +335,8 @@ void IoUringPolicy::drainAtLeast(unsigned minComplete) {
   // Reap every ready CQE in chunks. `io_uring_peek_batch_cqe` does not block;
   // `io_uring_cq_advance` releases a whole chunk with one CQ-head update
   // instead of one `io_uring_cqe_seen` per CQE. Every CQE of the wave is
-  // applied to the bookkeeping before any error is thrown, so the outstanding
-  // counts stay consistent and no CQE is processed twice.
-  const char* firstErrorMessage = nullptr;
+  // applied to the bookkeeping, so the outstanding counts stay consistent and
+  // no CQE is processed twice.
   std::array<io_uring_cqe*, 64> cqes{};
   while (true) {
     const unsigned n = io_uring_peek_batch_cqe(
@@ -336,23 +344,17 @@ void IoUringPolicy::drainAtLeast(unsigned minComplete) {
     if (n == 0) {
       break;
     }
-    for (unsigned i = 0; i < n; ++i) {
+    for (const io_uring_cqe* cqe :
+         ql::span<io_uring_cqe* const>(cqes.data(), n)) {
       // Recover the id via the 64-bit `user_data` field, see `addBatch`.
-      const char* errorMessage =
-          processCqe(cqes[i]->res, io_uring_cqe_get_data64(cqes[i]));
-      if (firstErrorMessage == nullptr) {
-        firstErrorMessage = errorMessage;
-      }
+      processCqe(cqe->res, io_uring_cqe_get_data64(cqe));
     }
     io_uring_cq_advance(&ring_, n);
-  }
-  if (firstErrorMessage != nullptr) {
-    AD_THROW(firstErrorMessage);
   }
 }
 
 //______________________________________________________________________________
-const char* IoUringPolicy::processCqe(int numBytesRead, uint64_t requestId) {
+void IoUringPolicy::processCqe(int numBytesRead, uint64_t requestId) {
   --numOutstandingReadRequests_;
 
   // Every reaped CQE corresponds to exactly one outstanding read whose id we
@@ -373,16 +375,20 @@ const char* IoUringPolicy::processCqe(int numBytesRead, uint64_t requestId) {
     numOutstandingReadRequestsPerBatch_.erase(it);
   }
 
-  // `cqe->res` < 0 is `-errno`.
+  // `cqe->res` < 0 is `-errno`. A result smaller than requested (a partial
+  // read, or 0 at end of file) means we read fewer bytes than expected, which
+  // we treat as an error.
+  const char* errorMessage = nullptr;
   if (numBytesRead < 0) {
-    return "I/O error in IoUringPolicy read operation";
+    errorMessage = "I/O error in IoUringPolicy read operation";
+  } else if (static_cast<size_t>(numBytesRead) !=
+             outstandingRead.expectedNumBytes) {
+    errorMessage = "read fewer bytes than requested in IoUringPolicy";
   }
-  // A result smaller than requested (a partial read, or 0 at end of file) means
-  // we read fewer bytes than expected, which we treat as an error.
-  if (static_cast<size_t>(numBytesRead) != outstandingRead.expectedNumBytes) {
-    return "read fewer bytes than requested in IoUringPolicy";
+  if (errorMessage != nullptr) {
+    // Keep the first failure of the batch; `wait()` of that batch throws it.
+    failedBatches_.try_emplace(outstandingRead.batchHandle, errorMessage);
   }
-  return nullptr;
 }
 
 #endif  // QLEVER_HAS_IO_URING

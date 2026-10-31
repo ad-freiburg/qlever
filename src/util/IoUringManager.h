@@ -220,9 +220,14 @@ class IoUringPolicy {
   // The same outstanding reads as `numOutstandingReadRequests_`, but broken
   // down per batch: maps a batch handle to the number of its reads that have
   // not yet been reaped. An entry is removed as soon as the last read of its
-  // batch is reaped, which can happen in `addBatch` or in the `wait()` of
-  // another batch.
+  // batch is reaped: usually in the `wait()` of that batch, but also in
+  // `addBatch` or in the `wait()` of another batch, which reap every ready CQE.
   ad_utility::HashMap<BatchHandle, size_t> numOutstandingReadRequestsPerBatch_;
+
+  // Batches with a failed or short read, mapped to the message of their first
+  // failure. `addBatch` and the `wait()` of another batch also reap CQEs, so a
+  // failure is kept here until the `wait()` of its own batch throws it.
+  ad_utility::HashMap<BatchHandle, const char*> failedBatches_;
 
   // Per-read metadata needed when a completion is reaped: which batch the read
   // belongs to, and how many bytes it was supposed to read (so that reading
@@ -249,15 +254,15 @@ class IoUringPolicy {
   static constexpr unsigned REAP_WAVE = 8;
 
   // Block until at least `minComplete` CQEs are ready, then reap every ready
-  // CQE. Throw after the whole wave is reaped if any read in it failed or was
-  // short.
-  // `minComplete` must be > 0 and at most `numOutstandingReadRequests_`.
+  // CQE. `minComplete` must be > 0 and at most the number of submitted reads
+  // that are not yet reaped: a read that is only prepared (SQE filled in, not
+  // yet submitted) never completes, so both callers submit before they drain.
   void drainAtLeast(unsigned minComplete);
 
   // Apply one completion to the bookkeeping of the outstanding reads. Always
-  // updates the counts, also for a failed read. Return a static error message
-  // if the read failed or was short, and `nullptr` otherwise.
-  [[nodiscard]] const char* processCqe(int numBytesRead, uint64_t requestId);
+  // updates the counts, also for a failed read, and records a failed or short
+  // read in `failedBatches_`.
+  void processCqe(int numBytesRead, uint64_t requestId);
 
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
@@ -280,7 +285,8 @@ class IoUringPolicy {
 
   // Block until every read in the batch that is represented by the `handle` has
   // completed. (The `handle` was submitted along the read requests using
-  // `addBatch`.) Throws on any I/O error.
+  // `addBatch`.) Throws if a read of this batch failed or was short, after all
+  // of its reads are reaped.
   void wait(BatchHandle handle);
 };
 
