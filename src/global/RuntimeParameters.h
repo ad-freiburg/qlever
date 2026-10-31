@@ -1,6 +1,12 @@
-//   Copyright 2024, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
@@ -254,6 +260,13 @@ struct RuntimeParameters {
   // debug caching issues, and to get rid of the overhead of caching (in
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
+
+  // Serve the reads of `VocabularyOnDisk::lookupBatch` that hit the page cache
+  // with `preadv2(RWF_NOWAIT)` instead of the batch manager (`io_uring` or
+  // synchronous reads, see `PageCacheFirstPolicy`). Has no effect where
+  // `preadv2(RWF_NOWAIT)` is not supported (see
+  // `pageCacheFastPathIsSupported`).
+  Bool vocabularyPageCacheFastPath_{true, "vocabulary-page-cache-fast-path"};
 
   // The maximal number of blocks per permutation that are queued for or
   // currently being compressed and written (see
