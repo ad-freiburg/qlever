@@ -1253,9 +1253,14 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
       {Variable{"?w"}, {3, PossiblyUndefined}}};
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  auto expected = makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
-                                         {d(3), d(1), d(13.37), d(18.37)},
-                                         {d(4), undef, undef, undef}});
+  // The sum `13.37 + 1.0 + 4.0` differs from the double `18.37` in the lowest
+  // bit of the mantissa. The legacy `Id` drops that bit, the split `Id` keeps
+  // it, so the expected value is spelled as the sum (the same in every
+  // summation order).
+  auto expected =
+      makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
+                             {d(3), d(1), d(13.37), d(13.37 + 1.0 + 4.0)},
+                             {d(4), undef, undef, undef}});
   EXPECT_EQ(table, expected);
 }
 
