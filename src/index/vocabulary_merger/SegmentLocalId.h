@@ -42,16 +42,17 @@ namespace ad_utility::vocabulary_merger::detail {
 //   later turns this into the global index by adding the number of words of
 //   the sub-vocabulary (or of blank nodes) in all the previous segments.
 //
-// The index has as many bits as the data bits of a `ValueId`, so that the
-// global index fits into a `ValueId` afterwards.
+// The index has as many bits as a vocabulary index
+// (`ValueId::numVocabIndexBits`), so that the global index fits into a
+// `ValueId` afterwards.
 //
-// Example (with the current `ValueId::numDataBits` of 60): the third word
+// Example (with the current `ValueId::numVocabIndexBits` of 60): the third word
 // (index `2`) of the sub-vocabulary `1` has the bits `0001 | 000...0010`, that
 // is, the value `(1 << 60) | 2`; the first blank node of a segment has the
 // bits `1111 | 000...0000`, that is, `15 << 60`.
 class SegmentLocalId {
  public:
-  static constexpr size_t numIndexBits = ValueId::numDataBits;
+  static constexpr size_t numIndexBits = ValueId::numVocabIndexBits;
   static constexpr size_t numSubVocabIndexBits = 64 - numIndexBits;
   static_assert(numSubVocabIndexBits >= 4,
                 "At least four bits are needed for the sub-vocabulary index");

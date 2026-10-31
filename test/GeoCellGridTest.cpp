@@ -44,14 +44,15 @@ TEST(GeoCellGrid, basics) {
 
   // The bits of a vocabulary index below the marker bit and the cell bits hold
   // the position of a word inside the geo vocabulary.
-  EXPECT_EQ(grid.numPositionBits(), ValueId::numDataBits - 22);
-  EXPECT_EQ(grid.maxNumWords(), uint64_t{1} << (ValueId::numDataBits - 22));
+  EXPECT_EQ(grid.numPositionBits(), ValueId::numVocabIndexBits - 22);
+  EXPECT_EQ(grid.maxNumWords(),
+            uint64_t{1} << (ValueId::numVocabIndexBits - 22));
 
   // Level 0 is invalid, as are levels where no position bits remain. The
   // largest valid level leaves exactly one bit for the position: a vocabulary
   // index has one marker bit, `2 * level + 1` cell bits, and at least one
   // position bit.
-  uint8_t maxLevel = (ValueId::numDataBits - 3) / 2;
+  uint8_t maxLevel = (ValueId::numVocabIndexBits - 3) / 2;
   EXPECT_NO_THROW(GeoCellGrid{maxLevel});
   EXPECT_GE(GeoCellGrid{maxLevel}.numPositionBits(), 1u);
   EXPECT_ANY_THROW(GeoCellGrid{0});
@@ -199,9 +200,9 @@ TEST(GeoCellGrid, markerBitConsistentWithSplitGeoVocabulary) {
   using SGV = SplitGeoVocabulary<VocabularyInMemory>;
 
   // The `SplitGeoVocabulary` marks the words of its geo vocabulary with the
-  // topmost data bit of the vocabulary index. These checks fail if one of
+  // topmost bit of the vocabulary index. These checks fail if one of
   // the two sides changes its layout.
-  EXPECT_EQ(SGV::markerShift, ValueId::numDataBits - 1);
+  EXPECT_EQ(SGV::markerShift, ValueId::numVocabIndexBits - 1);
   EXPECT_EQ(SGV::addMarker(0, 1), GeoCellGrid::geoVocabMarkerBit);
   EXPECT_TRUE(GeoCellGrid::isGeoVocabIndex(SGV::addMarker(42, 1)));
   EXPECT_FALSE(GeoCellGrid::isGeoVocabIndex(SGV::addMarker(42, 0)));
