@@ -39,6 +39,7 @@
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
 
@@ -1213,8 +1214,8 @@ TEST(IndexImpl, recomputeStatistics) {
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
     LocalVocabEntry zzz =
-        LocalVocabEntry::fromIriref("<zzz>", indexImpl.getLocalVocabContext());
-    LocalVocabEntry literal = LocalVocabEntry::fromStringRepresentation(
+        iriLocalVocabEntry("<zzz>", indexImpl.getLocalVocabContext());
+    LocalVocabEntry literal = localVocabEntryFromStringRepresentation(
         "\"test\"@en", indexImpl.getLocalVocabContext());
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);

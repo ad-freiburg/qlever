@@ -39,6 +39,7 @@
 #include "parser/SparqlParser.h"
 #include "util/DateYearDuration.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
@@ -2865,11 +2866,11 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
   const auto& [idTable0, localVocab0] = resultPairs.at(0);
   EXPECT_EQ(localVocab0.size(), 2);
   auto localVocabIndex0 =
-      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+      localVocab0.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
           "\"1\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex0.has_value());
   auto localVocabIndex1 =
-      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+      localVocab0.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
           "\"2\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex1.has_value());
   EXPECT_EQ(idTable0,
@@ -2882,7 +2883,7 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
   const auto& [idTable1, localVocab1] = resultPairs.at(1);
   EXPECT_EQ(localVocab1.size(), 1);
   auto localVocabIndex2 =
-      localVocab1.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+      localVocab1.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
           "\"3\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex2.has_value());
   EXPECT_EQ(idTable1,
@@ -2900,7 +2901,7 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
   LocalVocab dummy{};
-  dummy.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+  dummy.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
@@ -2930,12 +2931,11 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
               expected.at(expectedIndex));
     // New value + dummy value
     EXPECT_EQ(localVocab.size(), 2);
-    EXPECT_TRUE(
-        localVocab
-            .getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
-                std::string{expected.at(expectedIndex)},
-                qec->getLocalVocabContext()))
-            .has_value());
+    EXPECT_TRUE(localVocab
+                    .getIndexOrNullopt(localVocabEntryFromStringRepresentation(
+                        std::string{expected.at(expectedIndex)},
+                        qec->getLocalVocabContext()))
+                    .has_value());
     expectedIndex++;
   }
   EXPECT_EQ(expectedIndex, expected.size());
@@ -3154,9 +3154,8 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
 
   // Acquire the local vocab index for a given string representation if present.
   auto makeEntry = [this](std::string string, const LocalVocab& localVocab) {
-    return localVocab.getIndexOrNullopt(
-        LocalVocabEntry::fromStringRepresentation(
-            std::move(string), qec_->getLocalVocabContext()));
+    return localVocab.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
+        std::move(string), qec_->getLocalVocabContext()));
   };
 
   auto entryToId = [](std::optional<LocalVocabIndex> entry) {
