@@ -6,6 +6,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "index/ScanSpecification.h"
 
 TEST(ScanSpecification, getters) {
@@ -105,8 +106,8 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
   // `toScanSpecification` is `nullopt`.
   TripleComponent notInVocab =
       TripleComponent::Iri::fromIriref("<thisIriIsNotContained>");
-  LocalVocabEntry localVocabEntry{notInVocab.getIri(),
-                                  index.getLocalVocabContext()};
+  LocalVocabEntry localVocabEntry = ad_utility::testing::localVocabEntry(
+      notInVocab.getIri(), index.getLocalVocabContext());
   auto localVocabId = Id::makeFromLocalVocabIndex(&localVocabEntry);
   EXPECT_THAT(STc(notInVocab, xIri, xIri),
               matchScanSpec(S(localVocabId, x, x)));

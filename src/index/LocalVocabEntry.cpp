@@ -60,14 +60,15 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // this word would be stored if it were present.
   PositionInVocab positionInVocab;
 
-  // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
-  // give us a consistent ordering, which is important for determining equality
-  // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
+  // An IRI that is encoded directly in an `Id` is never stored in a
+  // `LocalVocabEntry` (the constructors that can store an IRI are private, see
+  // `toIdOrLocalVocabEntry`), so the position is always a position in the
+  // vocabularies.
+  AD_EXPENSIVE_CHECK(
+      !isIri() || !context_->encodeAsId(toStringRepresentation()).has_value(),
+      "An IRI that is encoded directly in an `Id` must not be stored in a "
+      "`LocalVocabEntry`.");
   auto [lower, upper] = [&]() -> std::pair<Id, Id> {
-    if (auto opt = context_->encodeAsId(toStringRepresentation());
-        opt.has_value()) {
-      return {opt.value(), opt.value().incremented()};
-    }
     // Look up the word in the vocabularies of the index. A word that is
     // contained in one of them is positioned exactly at its `Id`, so its range
     // is that single `Id`. A word that is contained in none of them is
@@ -90,18 +91,6 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
                            std::memory_order_relaxed);
   positionInVocabKnown_.store(true, std::memory_order_release);
   return positionInVocab;
-}
-
-// _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromStringRepresentation(
-    std::string s, const LocalVocabContext& ctx) {
-  return LocalVocabEntry{Base::fromStringRepresentation(std::move(s)), ctx};
-}
-
-// _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromIriref(std::string_view view,
-                                            const LocalVocabContext& ctx) {
-  return LocalVocabEntry{IriT::fromIriref(view), ctx};
 }
 
 // _____________________________________________________________________________

@@ -36,7 +36,10 @@
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/CompactStringVector.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -110,7 +113,7 @@ class SecondaryVocabIndexTest : public ::testing::Test {
 
   // A `LocalVocabEntry` for the given IRI, in the context of this index.
   LocalVocabEntry entry(std::string_view iriref) const {
-    return LocalVocabEntry::fromIriref(iriref, context_);
+    return iriLocalVocabEntry(iriref, context_);
   }
 
   // The `Id` that refers to the given entry. NOTE: The entry has to outlive the
@@ -622,7 +625,7 @@ TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
   EXPECT_EQ(index.getImpl().secondaryVocab(), nullptr);
   EXPECT_FALSE(context.hasSecondaryVocabulary());
   auto entry = [&context](std::string_view iriref) {
-    return LocalVocabEntry::fromIriref(iriref, context);
+    return iriLocalVocabEntry(iriref, context);
   };
 
   auto entryB = entry("<b>");

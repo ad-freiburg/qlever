@@ -287,6 +287,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
     index.addHasWordTriples() = c.addHasWordTriples;
+    index.getImpl().setHasWordNormalization(c.hasWordNormalization);
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     if (c.parseInParallel.has_value()) {
