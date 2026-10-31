@@ -445,17 +445,15 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
       indexScan->computeSizeEstimate();
   // Remember the row total of the unprefiltered blocks for runtime
-  // statistics. If this scan is itself already a prefiltered copy (e.g. a
-  // plan-time prefiltered scan that is prefiltered again at runtime), keep
-  // the row total of the original, completely unprefiltered scan.
-  uint64_t numRowsBefore = 0;
-  for (const auto& blockRange : scanSpecAndBlocks_.blockMetadata_) {
-    for (const auto& block : blockRange) {
-      numRowsBefore += block.numRows_;
-    }
-  }
+  // statistics (e.g. the geo prefilter funnel of the spatial join). If this
+  // scan is itself already a prefiltered copy (e.g. a plan-time prefiltered
+  // scan that is prefiltered again at runtime), keep the row total of the
+  // original, completely unprefiltered scan. The size estimate of the
+  // unprefiltered scan is that total (up to the rows of neighboring relations
+  // in its first and last block), and unlike a loop over all blocks it is
+  // O(1) for a relation with its own metadata entry.
   indexScan->numBlockRowsBeforePrefilter_ =
-      numBlockRowsBeforePrefilter_.value_or(numRowsBefore);
+      numBlockRowsBeforePrefilter_.value_or(sizeEstimate_);
   return copy;
 }
 
