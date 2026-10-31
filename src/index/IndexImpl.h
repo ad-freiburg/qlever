@@ -23,13 +23,13 @@
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/GeoPointEncoding.h"
 #include "index/GraphNameManager.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -40,6 +40,7 @@
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
 #include "index/VocabularyMerger.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
@@ -143,6 +144,11 @@ class IndexImpl {
 
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -439,6 +445,12 @@ class IndexImpl {
   void setGeoPointEncodingForIndexBuilding(
       ad_utility::GeoPointEncoding encoding) {
     geoPointEncodingForIndexBuilding_ = encoding;
+  }
+
+  // Set the normalization of the words of the `ql:has-word` triples; see
+  // `ad_utility::HasWordNormalization` for details.
+  void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
+    hasWordNormalization_ = normalization;
   }
 
   // __________________________________________________________________________
@@ -918,6 +930,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, writePatternsToFile);
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
   FRIEND_TEST(IndexImpl, dateOfIndexBuild);
+  FRIEND_TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex);
 
   bool isLiteral(std::string_view object) const;
 
