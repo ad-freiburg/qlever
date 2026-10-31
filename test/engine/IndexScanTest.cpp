@@ -2486,3 +2486,46 @@ TEST(IndexScan, prefilterAlreadyAppliedIsNotAppliedAgain) {
                       prefilter(lt(DoubleId(147.32))))
                   .has_value());
 }
+
+// Test the size estimate of a prefiltered scan on a relation with its own
+// metadata entry: it is computed from the metadata minus the dropped blocks
+// when most blocks are kept (see `IndexScan::sizeEstimateFromDroppedBlocks`),
+// and from the kept blocks otherwise. Both ways must agree.
+TEST(IndexScan, sizeEstimateOfPrefilteredScanFromRelationMetadata) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  // 49 triples `<x_i> <p> i` and one triple with `<q>`, two rows per block, so
+  // in POS `<p>` has 25 blocks (the last one with a single row) and a
+  // metadata entry.
+  std::string kg;
+  for (size_t i = 0; i < 49; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> ", i, " . ");
+  }
+  kg += "<x0> <q> 0 .";
+  TestIndexConfig config{kg};
+  config.rowsPerBlock = 2;
+  auto qec = getQec(std::move(config));
+  SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<p>"), Tc{Variable{"?o"}}};
+  IndexScan scan{qec, Permutation::POS, triple};
+  ASSERT_EQ(scan.getSizeEstimate(), 49u);
+
+  auto estimateAfter = [&](auto expression) {
+    auto prefiltered = scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+        makePrefilterVec(pr(std::move(expression), Variable{"?o"})));
+    AD_CORRECTNESS_CHECK(prefiltered.has_value());
+    auto& prefilteredScan =
+        dynamic_cast<IndexScan&>(*prefiltered.value()->getRootOperation());
+    return std::pair{prefilteredScan.getSizeEstimate(),
+                     prefilteredScan.sizeEstimateIsExactForTesting()};
+  };
+  using EstimateAndExact = std::pair<size_t, bool>;
+  // Few blocks dropped (the metadata path): the first 5 of 25 blocks, all
+  // of them entirely `<p>`, so the estimate is exact.
+  EXPECT_EQ(estimateAfter(ge(IntId(10))), EstimateAndExact(39, true));
+  // Nothing dropped.
+  EXPECT_EQ(estimateAfter(neq(IntId(10))), EstimateAndExact(49, true));
+  // The dropped last block holds a single row of `<p>`.
+  EXPECT_EQ(estimateAfter(lt(IntId(48))), EstimateAndExact(48, true));
+  // Most blocks dropped (the kept-blocks path).
+  EXPECT_EQ(estimateAfter(ge(IntId(40))), EstimateAndExact(9, true));
+}
