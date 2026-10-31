@@ -656,8 +656,9 @@ std::vector<size_t> allPositions(size_t n) {
   return positions;
 }
 
-// A batch whose file was just written is in the page cache and is served
-// completely; adjacent ranges (the first two reads) are read in one call.
+// A batch whose file was just written is in the page cache. Where the file
+// system supports `RWF_NOWAIT`, it is served completely; otherwise the first
+// page-cache read switches the fast path off and all reads are returned.
 TEST(ReadPageCacheHits, hitOnlyBatch) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
   auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}, {4, 0}});
@@ -682,7 +683,9 @@ TEST(ReadPageCacheHits, missOnlyBatch) {
 
 // A mixed batch: a short read in the middle of a run of adjacent ranges
 // returns the incomplete read and the rest of its run, the complete reads of
-// the run and of other runs are served.
+// the run and of other runs are served. Where the file system rejects
+// `RWF_NOWAIT`, all reads are returned. Where the file system rejects
+// `RWF_NOWAIT`, all reads are returned.
 TEST(ReadPageCacheHits, mixedBatchWithShortRead) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
   auto [notServed, buffers] =
@@ -705,9 +708,10 @@ using pageCacheReadTestHelpers::ScopedPageCacheRead;
 // Number of calls of the injected page-cache reads below.
 size_t numPageCacheReads = 0;
 
-// Fill `iov` with plain blocking `pread` calls (which work on any file
-// system, unlike `preadv2` with `RWF_NOWAIT`): the number of bytes read, a
-// short count at the end of the file, or -1 on a real I/O error. This lets the
+// Read into the buffers of `iov` with plain blocking `pread` calls (which work
+// on any file system, unlike `preadv2` with `RWF_NOWAIT`) and return the
+// number of bytes read (short at the end of the file), or -1 on a real I/O
+// error. This lets the
 // tests below exercise the batching of `readPageCacheHits` without depending
 // on `RWF_NOWAIT` being supported for the test files (it is rejected with
 // `EOPNOTSUPP` in the docker builds, for example on overlayfs).
@@ -739,6 +743,13 @@ int64_t countedCachedRead(int fd, const ::iovec* iov, int iovcnt,
   return blockingFill(fd, iov, iovcnt, offset);
 }
 
+// `EAGAIN` (nothing cached), counted.
+int64_t countedNothingCached(int fd, const ::iovec* iov, int iovcnt,
+                             int64_t offset) {
+  ++numPageCacheReads;
+  return pageCacheReadTestHelpers::nothingCached(fd, iov, iovcnt, offset);
+}
+
 // `EOPNOTSUPP`, counted.
 int64_t countedNotSupported(int fd, const ::iovec* iov, int iovcnt,
                             int64_t offset) {
@@ -756,10 +767,13 @@ int64_t sixBytesCached(int fd, const ::iovec* iov, int iovcnt, int64_t offset) {
 // `RWF_NOWAIT` may return 0 before the end of the file (readv(2)).
 int64_t zeroBytes(int, const ::iovec*, int, int64_t) { return 0; }
 
-// Skip a test if `RWF_NOWAIT` is not available on this platform.
-#define SKIP_WITHOUT_PAGE_CACHE_FAST_PATH()                 \
-  if (!ad_utility::pageCacheFastPathIsSupported()) {        \
-    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not available"; \
+// Skip a test if the page-cache fast path is compiled out. Otherwise switch it
+// on: an earlier real `preadv2(RWF_NOWAIT)` in this process may have switched
+// it off, but the tests below inject their own page-cache read.
+#define SKIP_WITHOUT_PAGE_CACHE_FAST_PATH()                   \
+  ad_utility::detail::resetPageCacheFastPathSupport();        \
+  if (!ad_utility::pageCacheFastPathIsSupported()) {          \
+    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not compiled in"; \
   }
 
 // Reads that are not cached (`EAGAIN`) are all returned, their buffers stay
@@ -843,8 +857,9 @@ TEST(ReadPageCacheHits, emptyBatchAndContract) {
   std::vector<uint64_t> offsets{0};
   std::string buffer(8, '-');
   std::vector<char*> targets{buffer.data(), buffer.data() + 4};
-  EXPECT_ANY_THROW(
-      ad_utility::readPageCacheHits(fd, numBytes, offsets, targets));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::readPageCacheHits(fd, numBytes, offsets, targets),
+      HasSubstr("offsets.size() == numBytes.size()"));
 }
 
 // A `ReadPolicy` that reads synchronously and records the reads it receives.
@@ -929,7 +944,8 @@ TEST(PageCacheFirstPolicy, aBatchThatIsNotServedIsPassedOnUnchanged) {
   SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
   RecordingPolicy::reset();
-  ScopedPageCacheRead inject{&pageCacheReadTestHelpers::nothingCached};
+  numPageCacheReads = 0;
+  ScopedPageCacheRead inject{&countedNothingCached};
   RecordedManager manager(64);
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
@@ -938,6 +954,8 @@ TEST(PageCacheFirstPolicy, aBatchThatIsNotServedIsPassedOnUnchanged) {
   EXPECT_THAT(RecordingPolicy::batchSizes, ElementsAre(size_t{3}));
   EXPECT_THAT(RecordingPolicy::receivedOffsets,
               ElementsAre(uint64_t{8}, uint64_t{0}, uint64_t{12}));
+  // One page-cache read per run; the three reads are not adjacent.
+  EXPECT_EQ(numPageCacheReads, size_t{3});
 }
 
 // With the fast path switched off through the manager, the page-cache read is

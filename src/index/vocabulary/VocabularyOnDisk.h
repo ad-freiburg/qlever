@@ -203,10 +203,11 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t nextOffset_;
   };
 
-  // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
-  // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
-  // Each run of consecutive indices is read as one range, because their pairs
-  // overlap in the file.
+  // Phase 1 of `lookupBatch`: for each requested index, return its `OffsetPair`
+  // from the `.offsets` file, read in a single batch via `manager`. The file
+  // stores one `uint64_t` per index, and the pair of index `i` is entries `i`
+  // and `i + 1`, so a run of `k` consecutive indices is read as one range of
+  // `k + 1` entries.
   std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
                                           ql::span<const size_t> indices) const;
 

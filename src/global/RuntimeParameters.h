@@ -263,7 +263,9 @@ struct RuntimeParameters {
 
   // Serve the reads of `VocabularyOnDisk::lookupBatch` that hit the page cache
   // with `preadv2(RWF_NOWAIT)` instead of the batch manager (`io_uring` or
-  // synchronous reads, see `PageCacheFirstPolicy`).
+  // synchronous reads, see `PageCacheFirstPolicy`). Has no effect where
+  // `preadv2(RWF_NOWAIT)` is not supported (see
+  // `pageCacheFastPathIsSupported`).
   Bool vocabularyPageCacheFastPath_{true, "vocabulary-page-cache-fast-path"};
 
   // The maximal number of blocks per permutation that are queued for or

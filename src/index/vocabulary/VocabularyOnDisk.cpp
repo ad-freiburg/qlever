@@ -163,48 +163,57 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
 }
 
 namespace {
-// A run of consecutive vocabulary indices together with the `size + 1` entries
-// of the `.offsets` file that bound their words. The offsets of consecutive
-// indices overlap, so a run is read as one range.
+// A run of consecutive vocabulary indices, starting at `firstIndex_`, together
+// with the entries of the `.offsets` file that bound their words: entries `i`
+// and `i + 1` of `offsets_` bound the word of index `firstIndex_ + i`, so a run
+// of `k` indices has `k + 1` entries, which are read as one range. `offsets_`
+// points into the buffer passed to `splitIntoOffsetRuns`.
 struct OffsetRun {
-  ql::span<const size_t> indices_;
+  size_t firstIndex_;
   ql::span<uint64_t> offsets_;
 };
 
+// _____________________________________________________________________________
 // Split `indices` into runs of consecutive indices and give each run its
-// entries in `offsets`, which is resized to hold all of them.
+// entries in `offsets`, which is resized to hold all of them. The result points
+// into `offsets`, so `offsets` must outlive it and must not be resized.
 std::vector<OffsetRun> splitIntoOffsetRuns(ql::span<const size_t> indices,
                                            std::vector<uint64_t>& offsets) {
-  auto runs = ::ranges::to<std::vector<ql::span<const size_t>>>(
+  // The first index and the number of indices of each run (`chunk_by` yields
+  // no empty chunks).
+  const auto runs = ::ranges::to<std::vector<std::pair<size_t, size_t>>>(
       indices | ::ranges::views::chunk_by([](size_t previous, size_t next) {
         return next == previous + 1;
       }) |
       ::ranges::views::transform([](const auto& run) {
-        return ql::span<const size_t>{
-            &*::ranges::begin(run),
-            static_cast<size_t>(::ranges::distance(run))};
+        return std::pair{*::ranges::begin(run),
+                         static_cast<size_t>(::ranges::distance(run))};
       }));
+
   offsets.resize(indices.size() + runs.size());
   std::vector<OffsetRun> offsetRuns;
   offsetRuns.reserve(runs.size());
-  uint64_t* nextOffsets = offsets.data();
-  for (ql::span<const size_t> run : runs) {
-    offsetRuns.push_back({run, {nextOffsets, run.size() + 1}});
-    nextOffsets += run.size() + 1;
+  size_t nextOffset = 0;
+  for (auto [firstIndex, numIndices] : runs) {
+    const size_t numOffsets = numIndices + 1;
+    offsetRuns.push_back({firstIndex, ql::span<uint64_t>{offsets}.subspan(
+                                          nextOffset, numOffsets)});
+    nextOffset += numOffsets;
   }
   return offsetRuns;
 }
 
+// _____________________________________________________________________________
 // Read the offsets of all `runs` from the `.offsets` file `fd` in one batch.
 void readOffsetRuns(ad_utility::BatchManagerBase& manager, int fd,
                     ql::span<const OffsetRun> runs) {
-  auto sizes = ::ranges::to<std::vector<size_t>>(
+  const auto sizes = ::ranges::to<std::vector<size_t>>(
       runs | ::ranges::views::transform([](const OffsetRun& run) {
         return run.offsets_.size_bytes();
       }));
-  auto fileOffsets = ::ranges::to<std::vector<uint64_t>>(
+  const auto fileOffsets = ::ranges::to<std::vector<uint64_t>>(
       runs | ::ranges::views::transform([](const OffsetRun& run) {
-        return uint64_t{run.indices_.front() * sizeof(uint64_t)};
+        return uint64_t{run.firstIndex_ * sizeof(uint64_t)};
       }));
   auto targets = ::ranges::to<std::vector<char*>>(
       runs | ::ranges::views::transform([](const OffsetRun& run) {

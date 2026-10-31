@@ -105,27 +105,33 @@ namespace {
 // The elements of the range of reads in `readPageCacheHits`: the position of a
 // read in its batch, its number of bytes, its file offset and its buffer.
 constexpr auto position = [](const auto& read) { return std::get<0>(read); };
-constexpr auto toIovec = [](const auto& read) {
-  return ::iovec{std::get<3>(read), std::get<1>(read)};
+constexpr auto numBytesOf = [](const auto& read) { return std::get<1>(read); };
+constexpr auto fileOffsetOf = [](const auto& read) {
+  return std::get<2>(read);
 };
-// True if the file range of `next` starts where the one of `previous` ends.
+constexpr auto toIovec = [](const auto& read) {
+  return ::iovec{std::get<3>(read), numBytesOf(read)};
+};
+// True if the file range of `next` starts where that of `previous` ends.
 constexpr auto areAdjacent = [](const auto& previous, const auto& next) {
-  return std::get<2>(previous) + std::get<1>(previous) == std::get<2>(next);
+  return fileOffsetOf(previous) + numBytesOf(previous) == fileOffsetOf(next);
 };
 
+//______________________________________________________________________________
 // Log once that the kernel or file system rejects `RWF_NOWAIT` (`EOPNOTSUPP`)
 // or that `preadv2` does not exist (`ENOSYS`, Linux < 4.6 or a seccomp filter),
 // and switch the fast path off for the rest of the process.
 void disableIfNotSupported(int64_t numBytesRead) {
   if (numBytesRead < 0 && (errno == EOPNOTSUPP || errno == ENOSYS) &&
       pageCacheFastPathSupported.exchange(false)) {
-    AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
-                   "vocabulary files; reading them without the "
-                   "page-cache fast path"
+    AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported (EOPNOTSUPP or "
+                   "ENOSYS); reading without the page-cache fast path "
+                   "from now on"
                 << std::endl;
   }
 }
 
+//______________________________________________________________________________
 // Read a `run` of adjacent reads with one `preadv2(RWF_NOWAIT)` call and return
 // how many of its reads, from the front, were read completely. `EAGAIN`, a
 // short read and any other error leave the remaining reads unserved.
@@ -135,14 +141,19 @@ size_t serveRun(int fd, Run run) {
       run | ::ranges::views::transform(toIovec));
   const int64_t numBytesRead = detail::pageCacheRead()(
       fd, iovecs.data(), static_cast<int>(iovecs.size()),
-      static_cast<int64_t>(std::get<2>(*::ranges::begin(run))));
+      static_cast<int64_t>(fileOffsetOf(*::ranges::begin(run))));
   disableIfNotSupported(numBytesRead);
+  if (numBytesRead < 0) {
+    return 0;
+  }
   // The end of each read within the run; a read is served if its end was read.
   auto readEnds = iovecs | ::ranges::views::transform(&::iovec::iov_len) |
                   ::ranges::views::partial_sum;
-  return static_cast<size_t>(::ranges::count_if(readEnds, [&](size_t end) {
-    return numBytesRead >= 0 && end <= static_cast<size_t>(numBytesRead);
-  }));
+  const auto numBytesReadUnsigned = static_cast<size_t>(numBytesRead);
+  return static_cast<size_t>(
+      ::ranges::count_if(readEnds, [numBytesReadUnsigned](size_t end) {
+        return end <= numBytesReadUnsigned;
+      }));
 }
 }  // namespace
 #endif
@@ -157,12 +168,13 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
 #ifdef QL_PAGE_CACHE_FAST_PATH
   auto reads = ::ranges::views::zip(positions, numBytes, offsets, buffers);
   std::vector<size_t> notServed;
+  notServed.reserve(numBytes.size());
   for (auto adjacentReads : reads | ::ranges::views::chunk_by(areAdjacent)) {
     // One `preadv2` call takes at most `IOV_MAX` buffers.
     for (auto run :
          adjacentReads | ::ranges::views::chunk(static_cast<size_t>(IOV_MAX))) {
       const size_t numServed =
-          pageCacheFastPathSupported.load() ? serveRun(fd, run) : 0;
+          pageCacheFastPathIsSupported() ? serveRun(fd, run) : 0;
       ::ranges::push_back(notServed, run | ::ranges::views::drop(numServed) |
                                          ::ranges::views::transform(position));
     }
