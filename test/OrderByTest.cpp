@@ -2,13 +2,17 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/IndexScan.h"
 #include "engine/OrderBy.h"
+#include "engine/QueryPlanner.h"
 #include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
@@ -16,6 +20,7 @@
 #include "index/LocalVocabEntry.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 using namespace std::string_literals;
 using ad_utility::source_location;
@@ -259,28 +264,35 @@ namespace {
 // numeric input.
 using ResultAndFastPath = std::pair<IdTable, bool>;
 
-// Sort the `input` by the `sortedColumns` in the internal order, and compute
-// an `OrderBy` on the first column (descending iff `isDescending`) on an input
-// that reports being sorted by these columns.
-ResultAndFastPath orderByOnSortedInput(
-    const VectorTable& input, bool isDescending = false,
-    std::vector<ColumnIndex> sortedColumns = {0}) {
-  // Sort the `input` by the `sortedColumns`, and make it the result of a
-  // subtree that reports being sorted by these columns.
+// Sort the `input` by the `sortedColumns` in the internal order, and make an
+// `OrderBy` by the `sortIndices` on a subtree with that input that reports
+// being sorted by these columns. The direction of the first sort column is
+// set to `isDescending`.
+OrderBy makeOrderByOnSortedInput(IdTable input, bool isDescending = false,
+                                 std::vector<ColumnIndex> sortedColumns = {0},
+                                 OrderBy::SortIndices sortIndices = {
+                                     {0, false}}) {
   auto qec = ad_utility::testing::getQec();
-  IdTable table = makeIdTableFromVector(input);
-  IdTableUtils::sort(table, sortedColumns, qec->sortConfig(),
+  IdTableUtils::sort(input, sortedColumns, qec->sortConfig(),
                      std::make_shared<ad_utility::CancellationHandle<>>());
   std::vector<std::optional<Variable>> vars;
-  for (size_t i = 0; i < table.numColumns(); ++i) {
+  for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(table), vars, false, std::move(sortedColumns));
+      qec, std::move(input), vars, false, std::move(sortedColumns));
+  sortIndices.front().second = isDescending;
+  return OrderBy{qec, std::move(subtree), std::move(sortIndices)};
+}
 
-  // Compute the `OrderBy` on that subtree, and check the runtime information
-  // for whether it took the fast path.
-  OrderBy orderBy{qec, std::move(subtree), {{0, isDescending}}};
+// Compute an `OrderBy` on the first column (descending iff `isDescending`) of
+// the `input`, sorted by the `sortedColumns` (see `makeOrderByOnSortedInput`),
+// and return its result together with whether it took the fast path.
+ResultAndFastPath orderByOnSortedInput(
+    const VectorTable& input, bool isDescending = false,
+    std::vector<ColumnIndex> sortedColumns = {0}) {
+  OrderBy orderBy = makeOrderByOnSortedInput(
+      makeIdTableFromVector(input), isDescending, std::move(sortedColumns));
   return {orderBy.getResult()->idTableView().clone(),
           orderBy.runtimeInfo().details_.contains("sorted-numeric-input")};
 }
@@ -436,6 +448,298 @@ TEST(OrderBy, sortedInputWithoutFastPath) {
   EXPECT_EQ(orderByOnSortedInput(input, false, {1}),
             (ResultAndFastPath{
                 makeIdTableFromVector({{I(-2), I(0)}, {I(3), I(1)}}), false}));
+}
+
+// Test that `ORDER BY` on a sorted input with a single sort column handles the
+// `LIMIT` and `OFFSET` itself, with and without the fast path.
+TEST(OrderBy, limitOffsetOnSortedInput) {
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  auto U = Id::makeUndefined();
+  auto inf = std::numeric_limits<double>::infinity();
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  auto negNan = std::copysign(nan, -1.0);
+  std::vector<VectorTable> inputs{
+      // Ints with undefined values, and without.
+      {{I(0), I(1)},
+       {I(3), I(2)},
+       {I(-1), I(3)},
+       {U, I(4)},
+       {I(-17), I(5)},
+       {I(123), I(6)}},
+      {{I(0), I(1)}, {I(3), I(2)}, {I(-1), I(3)}, {I(-17), I(5)}},
+      // Doubles.
+      {{D(0.0), D(1)},
+       {D(2.25), D(2)},
+       {D(-inf), D(3)},
+       {D(nan), D(4)},
+       {D(-0.0), D(5)},
+       {D(-3.5), D(6)},
+       {U, D(7)},
+       {D(negNan), D(8)},
+       {D(inf), D(9)},
+       {D(-1e-4), D(10)}},
+      // Mixed datatypes: no fast path, but the limit must still be applied by
+      // the `OrderBy`, as it promises to handle it for sorted input.
+      {{I(3), I(1)}, {D(-2.5), I(2)}, {I(-4), I(3)}, {D(7.0), I(4)}}};
+  for (const auto& input : inputs) {
+    auto inputTable = makeIdTableFromVector(input);
+    for (bool isDescending : {false, true}) {
+      // The complete result of the `ORDER BY`, against which the limited
+      // results are checked.
+      OrderBy complete =
+          makeOrderByOnSortedInput(inputTable.clone(), isDescending);
+      EXPECT_EQ(complete.handlesLimitOffset(), LimitOffsetHandling::FULL);
+      const auto& completeTable = complete.getResult()->idTableView();
+      bool fastPath =
+          complete.runtimeInfo().details_.contains("sorted-numeric-input");
+      for (uint64_t offset : {0, 1, 2, 3, 5, 20}) {
+        for (std::optional<uint64_t> limit :
+             {std::optional<uint64_t>{}, std::optional<uint64_t>{0},
+              std::optional<uint64_t>{1}, std::optional<uint64_t>{2},
+              std::optional<uint64_t>{4}, std::optional<uint64_t>{100}}) {
+          OrderBy orderBy =
+              makeOrderByOnSortedInput(inputTable.clone(), isDescending);
+          LimitOffsetClause limitOffset{limit, offset};
+          orderBy.applyLimitOffset(limitOffset, true);
+          IdTable expected = completeTable.clone();
+          size_t begin = limitOffset.actualOffset(expected.numRows());
+          size_t end = limitOffset.upperBound(expected.numRows());
+          expected.erase(expected.begin() + end, expected.end());
+          expected.erase(expected.begin(), expected.begin() + begin);
+          EXPECT_EQ(orderBy.getResult()->idTableView(), expected)
+              << "descending: " << isDescending << ", offset: " << offset
+              << ", limit: " << limit.value_or(0);
+          EXPECT_EQ(
+              orderBy.runtimeInfo().details_.contains("sorted-numeric-input"),
+              fastPath);
+        }
+      }
+    }
+  }
+
+  // The `LIMIT`/`OFFSET` is only handled if the input is sorted by the single
+  // sort column.
+  auto I2 = makeIdTableFromVector({{I(3), I(1)}, {I(-2), I(0)}});
+  EXPECT_EQ(makeOrderBy(I2.clone(), {{0, false}}).handlesLimitOffset(),
+            LimitOffsetHandling::NONE);
+  EXPECT_EQ(
+      makeOrderByOnSortedInput(I2.clone(), false, {1}).handlesLimitOffset(),
+      LimitOffsetHandling::NONE);
+  EXPECT_EQ(
+      makeOrderByOnSortedInput(I2.clone(), false, {0}, {{0, false}, {1, false}})
+          .handlesLimitOffset(),
+      LimitOffsetHandling::NONE);
+  EXPECT_EQ(makeOrderByOnSortedInput(I2.clone(), true).handlesLimitOffset(),
+            LimitOffsetHandling::FULL);
+}
+
+namespace {
+// Run the query and return the TSV result and the runtime details of the root
+// `OrderBy`. The cache is cleared first: a restricted scan can read the full
+// scan's cached result, which would hide a wrong block selection.
+std::pair<std::string, nlohmann::json> queryWithOrderByAtRoot(
+    QueryExecutionContext* qec, const std::string& queryString) {
+  qec->clearCacheUnpinnedOnly();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner planner{qec, cancellationHandle};
+  auto parsedQuery = ad_utility::testing::parseQuery(queryString);
+  auto tree = planner.createExecutionTree(parsedQuery);
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  std::string result;
+  for (const auto& block : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, *tree, ad_utility::MediaType::tsv, timer,
+           std::move(cancellationHandle))) {
+    result += block;
+  }
+  auto rootOperation = tree->getRootOperation();
+  EXPECT_NE(dynamic_cast<const OrderBy*>(rootOperation.get()), nullptr);
+  return {std::move(result), rootOperation->runtimeInfo().details_};
+}
+
+// Check that the results of the `query` (which has an `ORDER BY`, but no
+// `LIMIT`) with various `LIMIT`s and `OFFSET`s are slices of its complete
+// result.
+void expectLimitedResultsAreSlices(
+    QueryExecutionContext* qec, const std::string& query,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  // Return the result rows (without header) of the `query` with the given
+  // `LIMIT` and `OFFSET`.
+  auto rows = [qec, &query](std::optional<size_t> limit, size_t offset) {
+    std::string queryString = query;
+    if (limit.has_value()) {
+      absl::StrAppend(&queryString, " LIMIT ", limit.value(), " OFFSET ",
+                      offset);
+    }
+    auto result = queryWithOrderByAtRoot(qec, queryString).first;
+    std::vector<std::string> lines = absl::StrSplit(result, '\n');
+    lines.erase(lines.begin());
+    lines.pop_back();
+    return lines;
+  };
+  auto complete = rows(std::nullopt, 0);
+  for (size_t offset : {0, 1, 2, 4}) {
+    for (size_t limit : {1, 2, 3, 5, 20}) {
+      std::vector<std::string> expected;
+      for (size_t i = offset; i < std::min(complete.size(), offset + limit);
+           ++i) {
+        expected.push_back(complete[i]);
+      }
+      EXPECT_EQ(rows(limit, offset), expected)
+          << query << " LIMIT " << limit << " OFFSET " << offset;
+    }
+  }
+}
+}  // namespace
+
+// Test that an `ORDER BY` with a `LIMIT` on top of an `IndexScan` that is
+// sorted by the `ORDER BY` variable only reads the blocks that can contain the
+// requested rows. With three rows per block, the values of `<p>` form the
+// blocks [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2] (and those of `<q>` the
+// same values plus 0.5); the third block spans the boundary between the
+// non-negative and the negative numbers.
+TEST(OrderBy, limitPushedIntoIndexScan) {
+  std::vector<int> values{1, 2, 3, 4, 5, 6, 7, 8, -5, -4, -3, -2};
+  std::string turtle;
+  for (int i : values) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . <t", i, "> <q> ", i,
+                    ".5 . ");
+  }
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  auto query = [qec](const std::string& queryString) {
+    return queryWithOrderByAtRoot(qec, queryString);
+  };
+  auto expected = [&values](const std::string& prefix, bool isDescending,
+                            size_t offset, size_t limit) {
+    auto sorted = values;
+    ql::ranges::sort(sorted);
+    if (isDescending) {
+      ql::ranges::reverse(sorted);
+    }
+    std::string result = "?s\n";
+    for (size_t i = offset; i < std::min(sorted.size(), offset + limit); ++i) {
+      absl::StrAppend(&result, "<", prefix, sorted[i], ">\n");
+    }
+    return result;
+  };
+
+  for (auto [predicate, prefix] : {std::pair{"p", "s"}, std::pair{"q", "t"}}) {
+    for (bool isDescending : {false, true}) {
+      for (size_t offset : {0, 1, 2, 4, 7}) {
+        for (size_t limit : {1, 2, 3, 5, 8, 20}) {
+          auto queryString =
+              absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                           "> ?x } ORDER BY ", isDescending ? "DESC" : "ASC",
+                           "(?x) LIMIT ", limit, " OFFSET ", offset);
+          auto [result, details] = query(queryString);
+          EXPECT_EQ(result, expected(prefix, isDescending, offset, limit))
+              << queryString;
+          EXPECT_TRUE(details.contains("sorted-numeric-input")) << queryString;
+          // As long as the requested rows fit into two of the four blocks,
+          // the scan does not read all blocks (the blocks at the border of
+          // the relation are always read, so the exact number depends on the
+          // layout of the index).
+          if (offset + limit <= 3) {
+            ASSERT_TRUE(details.contains("num-blocks-read-for-limit"))
+                << queryString;
+            EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
+                      details["num-blocks-total"].get<size_t>())
+                << queryString;
+          } else if (offset + limit >= values.size()) {
+            EXPECT_FALSE(details.contains("num-blocks-read-for-limit"))
+                << queryString;
+          }
+        }
+      }
+    }
+  }
+
+  // Without a `LIMIT` the complete scan is read, and the `OrderBy` still uses
+  // the fast path.
+  auto [result, details] =
+      query("SELECT ?s WHERE { ?s <p> ?x } ORDER BY DESC(?x)");
+  EXPECT_EQ(result, expected("s", true, 0, 100));
+  EXPECT_TRUE(details.contains("sorted-numeric-input"));
+  EXPECT_FALSE(details.contains("num-blocks-read-for-limit"));
+}
+
+// Test the `LIMIT` pushdown for relations whose block metadata does not allow
+// it: `<i>` (IRIs), `<m>` (ints and doubles), `<n>` (ints and an IRI), and
+// `<k>`, whose only block also holds the row of `<j>` (a block at the border
+// of the relation).
+TEST(OrderBy, limitPushedIntoIndexScanSpecialCases) {
+  std::string turtle;
+  for (int i = 1; i <= 7; ++i) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . ");
+  }
+  absl::StrAppend(&turtle, "<a> <i> <x> . <b> <i> <y> . <c> <i> <z> . ",
+                  "<a> <j> 5 . <a> <k> 1 . <b> <k> 2 . ",
+                  "<a> <m> 1 . <b> <m> 2.5 . <c> <m> 3 . <d> <m> -4.5 . ",
+                  "<a> <n> 1 . <b> <n> 2 . <c> <n> <x> . ");
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  for (std::string_view predicate : {"p", "i", "k", "m", "n"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      expectLimitedResultsAreSlices(
+          qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate, "> ?x } ",
+                            "ORDER BY ", direction, "(?x)"));
+    }
+  }
+
+  // Without a single numeric datatype, no blocks are skipped.
+  for (std::string_view predicate : {"i", "m", "n"}) {
+    auto details = queryWithOrderByAtRoot(
+                       qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                                         "> ?x } ORDER BY ?x LIMIT 1"))
+                       .second;
+    EXPECT_FALSE(details.contains("num-blocks-read-for-limit")) << predicate;
+  }
+}
+
+// Test the `LIMIT` pushdown with named graphs, where a scan can yield fewer
+// rows than its blocks hold (graph filter, merged duplicates). `<s1> <p> 1`,
+// `<s2> <p> 2`, and `<s7> <p> 7` are in both graphs.
+TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
+  std::string nquads;
+  auto addQuad = [&nquads](int i, std::string_view graph) {
+    absl::StrAppend(&nquads, "<s", i, "> <p> \"", i,
+                    "\"^^<http://www.w3.org/2001/XMLSchema#integer> <", graph,
+                    "> .\n");
+  };
+  for (int i = 1; i <= 12; ++i) {
+    addQuad(i, "g1");
+  }
+  for (int i : {1, 2, 7}) {
+    addQuad(i, "g2");
+  }
+  ad_utility::testing::TestIndexConfig config{nquads};
+  config.indexType = qlever::Filetype::NQuad;
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  for (std::string_view dataset :
+       {"", "FROM <g1>", "FROM <g2>", "FROM <g1> FROM <g2>"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      expectLimitedResultsAreSlices(
+          qec, absl::StrCat("SELECT ?s ", dataset, " WHERE { ?s <p> ?x } ",
+                            "ORDER BY ", direction, "(?x)"));
+    }
+  }
+
+  // Blocks with only `<g1>` triples and no duplicates still count.
+  auto [result, details] = queryWithOrderByAtRoot(
+      qec, "SELECT ?s FROM <g1> WHERE { ?s <p> ?x } ORDER BY DESC(?x) LIMIT 1");
+  EXPECT_EQ(result, "?s\n<s12>\n");
+  ASSERT_TRUE(details.contains("num-blocks-read-for-limit"));
+  EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
+            details["num-blocks-total"].get<size_t>());
 }
 
 // Test that the cost estimate of `ORDER BY` is linear for an input that is

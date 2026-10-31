@@ -6,12 +6,15 @@
 #include "engine/OrderBy.h"
 
 #include <cmath>
+#include <limits>
 #include <sstream>
 #include <utility>
 
 #include "engine/CallFixedSize.h"
 #include "engine/ColumnStrippingHelpers.h"
+#include "engine/IndexScan.h"
 #include "engine/OrderByComparator.h"
+#include "engine/OrderByOnSortedNumericInput.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -102,149 +105,15 @@ bool OrderBy::hasSingleSortColumnWithSortedInput() const {
          sortedOn.front() == sortIndices_.front().first;
 }
 
-namespace {
-// A contiguous range `[begin_, end_)` of rows of an `IdTable`. If `reversed_`
-// is true, the rows are to be output in reverse order.
-struct RowRange {
-  size_t begin_;
-  size_t end_;
-  bool reversed_;
-};
-
-// If the `column`, which must be sorted in the internal order of the `Id`s
-// (that is, by their bits), contains only `Int`s or only `Double`s, possibly
-// preceded by `Undefined` values, return the row ranges which, concatenated,
-// yield the column in the ascending order of `ORDER BY`. Otherwise return
-// `std::nullopt`.
-//
-// The datatype bits are the most significant bits of an `Id`, so a column that
-// is sorted by bits is grouped by datatype, and the check is O(1) apart from
-// the binary searches for the range boundaries. The internal order deviates
-// from the semantic order as follows (see `valueIdComparators::compareByBits`):
-// ints are `[0 .. max, min .. -1]`, doubles are `[0.0 .. +inf, NaN, -0.0 ..
-// -inf, -NaN]`, where the sign bit of a `NaN` may be set as well. `ORDER BY`
-// puts all `NaN`s after all other doubles (see `OrderByComparator`) and
-// `Undefined` before everything else.
-std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
-    ConstIdColumnRef column) {
-  // Return the index of the first row in `[begin, end)` for which the
-  // `predicate` is false. The predicate must be monotone on that range.
-  auto partitionPoint = [&column](size_t begin, size_t end, auto predicate) {
-    return static_cast<size_t>(
-        ql::ranges::partition_point(column.begin() + begin,
-                                    column.begin() + end, predicate) -
-        column.begin());
-  };
-
-  // Find the first row that is not `Undefined` (the `Undefined` values come
-  // first, because their datatype bits are all zero). If there is no such row,
-  // return the whole column as a single range (it is then already in the order
-  // of `ORDER BY`).
-  size_t firstDefined = partitionPoint(0, column.size(), Id::isUndefinedL);
-  if (firstDefined == column.size()) {
-    return std::vector<RowRange>{{0, column.size(), false}};
-  }
-
-  // Return `std::nullopt` unless the rows from `firstDefined` on are all ints
-  // or all doubles (a mix of the two is not handled). Since the column is
-  // grouped by datatype, it suffices to compare the datatypes of the first and
-  // the last of these rows.
-  Datatype type = column[firstDefined].getDatatype();
-  if (column.back().getDatatype() != type ||
-      (type != Datatype::Int && type != Datatype::Double)) {
-    return std::nullopt;
-  }
-
-  // Output the `Undefined` values first, as `ORDER BY` does (the range is
-  // empty if there are none).
-  std::vector<RowRange> ranges;
-  ranges.push_back({0, firstDefined, false});
-
-  // For ints, output the negative ints first and then the non-negative ones (in
-  // the column, the non-negative ints come first, and each of the two parts is
-  // sorted by value).
-  if (type == Datatype::Int) {
-    size_t firstNegative = partitionPoint(
-        firstDefined, column.size(), [](Id id) { return id.getInt() >= 0; });
-    ranges.push_back({firstNegative, column.size(), false});
-    ranges.push_back({firstDefined, firstNegative, false});
-    return ranges;
-  }
-
-  // For doubles, find where the negative doubles begin (those with the sign bit
-  // set, including `-0.0`, which come after the non-negative ones), and where
-  // the `NaN`s at the end of each of the two parts begin.
-  auto isNotNan = [](Id id) { return !std::isnan(id.getDouble()); };
-  size_t firstNegative = partitionPoint(firstDefined, column.size(), [](Id id) {
-    return !std::signbit(id.getDouble());
-  });
-  size_t firstPositiveNan =
-      partitionPoint(firstDefined, firstNegative, isNotNan);
-  size_t firstNegativeNan =
-      partitionPoint(firstNegative, column.size(), isNotNan);
-
-  // Output the negative doubles in reverse order (in the column, they are
-  // sorted by descending value, because their magnitude increases with the
-  // bits), then the non-negative doubles, and then all `NaN`s.
-  //
-  // NOTE: The SPARQL standard does not say where `NaN`s go. Putting them last
-  // is how the regular comparator of `ORDER BY` does it (see
-  // `OrderByComparator`).
-  ranges.push_back({firstNegative, firstNegativeNan, true});
-  ranges.push_back({firstDefined, firstPositiveNan, false});
-  ranges.push_back({firstPositiveNan, firstNegative, false});
-  ranges.push_back({firstNegativeNan, column.size(), false});
-  return ranges;
-}
-}  // namespace
-
 // _____________________________________________________________________________
 std::optional<IdTable> OrderBy::computeResultForSortedInput(
     const IdTableView<0>& input) const {
-  // Get the row ranges of the sort column in the order of `ORDER BY ASC`.
-  // Return `std::nullopt` if the fast path does not apply (see
-  // `hasSingleSortColumnWithSortedInput` and
-  // `getRowRangesForSortedNumericColumn`).
   if (!hasSingleSortColumnWithSortedInput()) {
     return std::nullopt;
   }
   auto [column, isDescending] = sortIndices_.front();
-  auto ranges = getRowRangesForSortedNumericColumn(input.getColumn(column));
-  if (!ranges.has_value()) {
-    return std::nullopt;
-  }
-
-  // For `ORDER BY DESC`, reverse the order of the ranges and the direction of
-  // each range. This yields the reverse of the result for `ORDER BY ASC`,
-  // without an extra pass over the data that reversing that result would need.
-  if (isDescending) {
-    ql::ranges::reverse(ranges.value());
-    for (auto& range : ranges.value()) {
-      range.reversed_ = !range.reversed_;
-    }
-  }
-
-  // Copy the ranges to the result, one after the other, column by column and
-  // each range in its direction.
-  //
-  // NOTE: `std::copy` and not `ql::ranges::copy`, because only the former
-  // reliably becomes a `memmove` (see the description of #3436).
-  IdTable result{input.numColumns(), allocator()};
-  result.resize(input.numRows());
-  size_t offset = 0;
-  for (const auto& [begin, end, reversed] : ranges.value()) {
-    for (size_t i = 0; i < input.numColumns(); ++i) {
-      auto source = input.getColumn(i).subspan(begin, end - begin);
-      auto target = result.getColumn(i).begin() + offset;
-      if (reversed) {
-        ql::ranges::reverse_copy(source, target);
-      } else {
-        std::copy(source.begin(), source.end(), target);
-      }
-    }
-    offset += end - begin;
-  }
-  return result;
+  return orderByOnSortedNumericInput::computeOrderBy(
+      input, column, isDescending, getLimitOffset(), allocator());
 }
 
 // _____________________________________________________________________________
@@ -255,6 +124,15 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes = subtree_->getResult();
   const auto& subTable = subRes->idTableView();
 
+  // Record how many blocks an `IndexScan` below reads because of the `LIMIT`
+  // (see `onLimitOffsetChanged`).
+  if (blocksReadForLimit_.has_value()) {
+    runtimeInfo().addDetail("num-blocks-read-for-limit",
+                            blocksReadForLimit_->numBlocksRead_);
+    runtimeInfo().addDetail("num-blocks-total",
+                            blocksReadForLimit_->numBlocksTotal_);
+  }
+
   // Take the fast path for a sorted numeric input if it applies (see
   // `computeResultForSortedInput`), and record that in the runtime
   // information.
@@ -264,6 +142,12 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
     return {std::move(result).value(), resultSortedOn(),
             subRes->getSharedLocalVocab()};
   }
+
+  // The blocks of an `IndexScan` are only restricted if the block metadata
+  // guarantees that the fast path applies (see
+  // `orderByOnSortedNumericInput::selectBlocksForLimit`), so the following must
+  // not happen: sorting a subset of the rows would give a wrong result.
+  AD_CORRECTNESS_CHECK(!blocksReadForLimit_.has_value());
 
   AD_LOG_DEBUG << "OrderBy result computation..." << endl;
   IdTable idTable = subRes->cloneIdTable(cancellationChecker());
@@ -320,7 +204,53 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
                                        cancellationHandle());
       });
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
-  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+  Result result{std::move(idTable), resultSortedOn(),
+                subRes->getSharedLocalVocab()};
+  // If this operation was promised to handle the `LIMIT`/`OFFSET` itself (see
+  // `handlesLimitOffset`), but the fast path did not apply, apply it here.
+  if (handlesLimitOffset() == LimitOffsetHandling::FULL) {
+    result.applyLimitOffset(getLimitOffset(), ad_utility::noop);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+LimitOffsetHandling OrderBy::handlesLimitOffset() const {
+  return hasSingleSortColumnWithSortedInput() ? LimitOffsetHandling::FULL
+                                              : LimitOffsetHandling::NONE;
+}
+
+// _____________________________________________________________________________
+void OrderBy::onLimitOffsetChanged(const LimitOffsetClause&, bool) {
+  // The complete `LIMIT`/`OFFSET` of this operation (all calls merged).
+  const auto& limitOffset = getLimitOffset();
+  if (handlesLimitOffset() != LimitOffsetHandling::FULL ||
+      !limitOffset._limit.has_value()) {
+    return;
+  }
+  auto scan =
+      std::dynamic_pointer_cast<IndexScan>(subtree_->getRootOperation());
+  if (scan == nullptr) {
+    return;
+  }
+  size_t numRows = limitOffset.upperBound(std::numeric_limits<size_t>::max());
+  bool isDescending = sortIndices_.front().second;
+  std::optional<NumBlocksReadForLimit> blocksReadForLimit;
+  auto restrictedScan = scan->makeCopyWithSelectedBlocks(
+      [numRows, isDescending,
+       &blocksReadForLimit](const IndexScan::BlocksOfSortedVariable& blocks) {
+        auto selected = orderByOnSortedNumericInput::selectBlocksForLimit(
+            blocks, numRows, isDescending);
+        if (selected.has_value()) {
+          blocksReadForLimit =
+              NumBlocksReadForLimit{selected->size(), blocks.blocks_.size()};
+        }
+        return selected;
+      });
+  if (restrictedScan.has_value()) {
+    subtree_ = std::move(restrictedScan).value();
+    blocksReadForLimit_ = blocksReadForLimit;
+  }
 }
 
 // ___________________________________________________________________
@@ -336,8 +266,11 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> OrderBy::cloneImpl() const {
-  return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
-                                   sortIndices_);
+  auto result = std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
+                                          sortIndices_);
+  // The cloned subtree keeps the selected blocks.
+  result->blocksReadForLimit_ = blocksReadForLimit_;
+  return result;
 }
 
 // _____________________________________________________________________________
