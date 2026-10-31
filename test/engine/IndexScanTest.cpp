@@ -16,6 +16,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
@@ -120,7 +121,7 @@ void testLazyScanForJoinOfTwoScans(
     config.rowsPerBlock = rowsPerBlock;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
-    s1.applyLimitOffset(limit);
+    s1.applyLimitOffset(limit, false);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
     auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
                             const auto& expectedR,
@@ -1238,7 +1239,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
   // Rows 3-5 of the six `<p>` rows, join side with two matching values from
   // different blocks and a value (`<xb>`) that matches no block.
   IndexScan scan = makeScan();
-  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2});
+  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2}, false);
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
@@ -1395,9 +1396,9 @@ TEST_P(IndexScanWithLazyJoin,
   LocalVocab extraVocab;
   const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<e>"), localVocabContext});
+      localVocabEntry(iri("<e>"), localVocabContext));
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<g>"), localVocabContext});
+      localVocabEntry(iri("<g>"), localVocabContext));
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -2027,7 +2028,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
     return makePrefilterVec(
-        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+        pr(lt(iriLocalVocabEntry("<s2>", qec->getLocalVocabContext())),
            Var{"?x"}));
   };
 

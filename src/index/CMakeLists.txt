@@ -21,7 +21,7 @@ add_library(index
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
         CompressedRelationMetadata.cpp CompressedRelationReader.cpp
-        CompressedRelationReaderBlockSelection.cpp CompressedRelationWriter.cpp
+        CompressedRelationReaderBlockSelection.cpp compressedRelationWriter/CompressedRelationWriter.cpp
         chunkwisePermutationWriter/ChunkWriter.cpp
         chunkwisePermutationWriter/ChunkwisePermutationWriter.cpp
         DistinctCol0Ids.cpp

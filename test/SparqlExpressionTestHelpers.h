@@ -9,6 +9,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 namespace sparqlExpression {
 
@@ -78,7 +79,7 @@ struct TestContext {
     auto addLocalIri = [this, &localVocabContext](std::string_view s) {
       return Id::makeFromLocalVocabIndex(
           this->localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromIriref(s, localVocabContext)));
+              ad_utility::testing::iriLocalVocabEntry(s, localVocabContext)));
     };
 
     notInVocabA = addLocalLiteral("notInVocabA");

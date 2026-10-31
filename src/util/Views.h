@@ -272,8 +272,9 @@ CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
 // rvalue references via `std::move`. It is implemented via
 // `ql::make_move_iterator`.
 CPP_template(typename UnderlyingRange)(
-    requires ql::ranges::view<UnderlyingRange> CPP_and
-        ql::ranges::input_range<UnderlyingRange>) class RvalueView
+    requires ql::ranges::view<UnderlyingRange> &&
+    ql::ranges::input_range<UnderlyingRange>)
+class RvalueView
     : public ql::ranges::view_interface<RvalueView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -345,9 +346,9 @@ RvalueView(Range&&) -> RvalueView<all_t<Range>>;
 // fulfill the predicate anymore. This is technically undefined behavior, but
 // works in practice if the filter_view is treated as an `input_range`.
 // In C++26 this will become obsolete by `std::views::to_input`.
-CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
-                             ql::ranges::input_range<V>) class ForceInputView
-    : public ql::ranges::view_interface<ForceInputView<V>> {
+CPP_template(typename V)(requires ql::ranges::view<V> &&
+                               ql::ranges::input_range<V>)
+class ForceInputView : public ql::ranges::view_interface<ForceInputView<V>> {
  private:
   V base_;
   bool beginWasCalled_ = false;
@@ -435,7 +436,7 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
 // Deduction guides
 CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
-    ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
+ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
@@ -506,8 +507,8 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
-                           Int>) auto integerRange(Int upperBound) {
+CPP_template(typename Int)(requires ql::concepts::unsigned_integral<Int>)
+auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
 

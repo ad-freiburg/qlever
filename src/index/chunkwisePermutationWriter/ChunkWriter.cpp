@@ -15,7 +15,6 @@
 
 #include <algorithm>
 
-#include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h"
 #include "util/views/UniqueBlockView.h"
 
@@ -23,26 +22,24 @@ namespace chunkwisePermutationWriter {
 
 using namespace compressedRelationHelpers;
 using BlockToWrite = CompressedRelationWriter::BlockToWrite;
-// The static helpers of the classical writer that are reused here.
-using ClassicalWriter = CompressedRelationWriter::PermutationWriter<true>;
 
 // _____________________________________________________________________________
 ChunkWriter::ChunkWriter(ChunkwisePermutationWriter& shared, size_t chunkIndex)
-    : shared_{shared},
+    : Base{shared.blocksize_, shared.writer1_->takeBlockBuffer()},
+      shared_{shared},
       chunkIndex_{chunkIndex},
       isLastChunk_{chunkIndex + 1 == shared.numChunks_},
       writer1_{*shared.writer1_},
       writer2_{*shared.writer2_},
-      blocksize_{shared.blocksize_},
       numColumns_{shared.numColumns_},
-      relation_{writer1_.takeBlockBuffer()},
       inFirstRelation_{chunkIndex > 0},
-      smallRelationsBuffer_{writer1_.takeBlockBuffer()} {}
+      smallRelations_{writer1_.takeBlockBuffer(), blocksize_} {}
 
 // _____________________________________________________________________________
 ChunkWriter::~ChunkWriter() {
+  // Note: The buffer of the `smallRelations_` can't be taken out of the
+  // builder, so it is simply freed.
   writer1_.blockBufferPool()->giveBack(std::move(relation_));
-  writer1_.blockBufferPool()->giveBack(std::move(smallRelationsBuffer_));
 }
 
 // _____________________________________________________________________________
@@ -66,38 +63,17 @@ SharedBlock ChunkWriter::processBlock(Block block) {
   if (block.empty()) {
     return nullptr;
   }
-  inputBlock_ = std::make_shared<const Block>(std::move(block));
-  const auto& inputBlock = *inputBlock_;
-  const size_t numRows = inputBlock.numRows();
-  auto firstCol = inputBlock.getColumn(shared_.permutation_.keys().at(0));
-  auto permutedCols =
-      inputBlock.asColumnSubsetView(shared_.permutedColIndices_);
   if (!col0IdCurrentRelation_.has_value()) {
     // This can only happen for the very first block of the chunk; afterwards
-    // the current relation is reset only by `writeCompleteSmallRelations`,
-    // which also means that the first relation of the chunk is over.
+    // the current relation is reset only by
+    // `RelationBlockCutter::writeCompleteSmallRelations`, which also means
+    // that the first relation of the chunk is over.
     AD_CORRECTNESS_CHECK(!inFirstRelation_ || result_.numRows_ == 0);
-    col0IdCurrentRelation_ = firstCol[0];
   }
-
-  // See `CompressedRelationWriter::PermutationWriter::writePermutation` for
-  // the explanation of this loop.
-  size_t runBegin = 0;
-  while (runBegin < numRows) {
-    Id col0Id = firstCol[runBegin];
-    if (col0Id != col0IdCurrentRelation_) {
-      finishRelation();
-      col0IdCurrentRelation_ = col0Id;
-    }
-    size_t runEnd = ClassicalWriter::findEndOfRun(firstCol, runBegin);
-    if (isCompleteSmallRelation(runBegin, runEnd, numRows)) {
-      runBegin = writeCompleteSmallRelations(permutedCols, firstCol, runBegin,
-                                             runEnd, numRows);
-    } else {
-      addRowsOfCurrentRelation(permutedCols, runBegin, runEnd);
-      runBegin = runEnd;
-    }
-  }
+  const size_t numRows = block.numRows();
+  this->addInputBlock(std::make_shared<const Block>(std::move(block)),
+                      shared_.permutation_.keys().at(0),
+                      shared_.permutedColIndices_);
   result_.numRows_ += numRows;
   shared_.numRowsProcessed_.fetch_add(numRows);
   return std::exchange(inputBlock_, nullptr);
@@ -105,101 +81,12 @@ SharedBlock ChunkWriter::processBlock(Block block) {
 
 // _____________________________________________________________________________
 template <typename PermutedCols>
-void ChunkWriter::addRowsOfCurrentRelation(const PermutedCols& permutedCols,
-                                           size_t begin, size_t end) {
-  while (begin < end) {
-    size_t chunkEnd;
-    if (relation_.numRows() < blocksize_) {
-      // The first block of the first relation of the chunk is kept in memory
-      // (see `head_`), so it must never be written directly from the input
-      // block. Note that this flag changes inside the loop, when the head is
-      // captured by `addBlockForLargeRelation`.
-      const bool mayWriteDirectly = !inFirstRelation_ || head_.has_value();
-      std::optional<size_t> directBlockEnd = [&]() -> std::optional<size_t> {
-        if (!mayWriteDirectly || !relation_.empty() ||
-            end - begin < blocksize_) {
-          return std::nullopt;
-        }
-        size_t blockEnd = ClassicalWriter::findFirstTripleChange(
-            permutedCols, begin + blocksize_, end,
-            pickFirstThreeColumnsOfIdsWithoutLocalVocab(
-                permutedCols[begin + blocksize_ - 1]));
-        if (blockEnd == end) {
-          return std::nullopt;
-        }
-        return blockEnd;
-      }();
-      if (directBlockEnd.has_value()) {
-        size_t blockEnd = directBlockEnd.value();
-        addBlockOfLargeRelationWithoutCopying(
-            permutedCols.subView(begin, blockEnd - begin));
-        begin = blockEnd;
-        continue;
-      }
-      chunkEnd = std::min(end, begin + (blocksize_ - relation_.numRows()));
-    } else {
-      chunkEnd = ClassicalWriter::findFirstTripleChange(
-          permutedCols, begin, end,
-          pickFirstThreeColumnsOfIdsWithoutLocalVocab(relation_.back()));
-      if (chunkEnd == begin) {
-        addBlockForLargeRelation();
-        continue;
-      }
-    }
-    relation_.insertAtEnd(permutedCols, begin, chunkEnd);
-    begin = chunkEnd;
-  }
-}
-
-// _____________________________________________________________________________
-bool ChunkWriter::isCompleteSmallRelation(size_t begin, size_t end,
-                                          size_t numRowsOfBlock) const {
-  // The first relation of the chunk is never written as a small relation by
-  // the chunk, because it may continue the last relation of the previous
-  // chunk.
-  return !inFirstRelation_ && relation_.empty() && numBlocksCurrentRel_ == 0 &&
-         end < numRowsOfBlock &&
-         static_cast<double>(end - begin) <=
-             0.8 * static_cast<double>(blocksize_);
-}
-
-// _____________________________________________________________________________
-template <typename PermutedCols, typename Col0>
-size_t ChunkWriter::writeCompleteSmallRelations(
-    const PermutedCols& permutedCols, const Col0& col0, size_t begin,
-    size_t firstRunEnd, size_t numRowsOfBlock) {
-  AD_CORRECTNESS_CHECK(begin < firstRunEnd);
-  // See `CompressedRelationWriter::PermutationWriter` for the explanation.
-  size_t capacity = numRowsUntilSmallRelationBlockIsFull();
-  if (firstRunEnd - begin > capacity) {
-    capacity = smallRelationBlockCapacity();
-  }
-  size_t end = firstRunEnd;
-  size_t numRelations = 1;
-  Id lastCol0Id = col0[begin];
-  for (;;) {
-    AD_CORRECTNESS_CHECK(end < numRowsOfBlock);
-    size_t nextEnd = ClassicalWriter::findEndOfRun(col0, end);
-    if (!isCompleteSmallRelation(end, nextEnd, numRowsOfBlock) ||
-        nextEnd - begin > capacity) {
-      break;
-    }
-    lastCol0Id = col0[end];
-    end = nextEnd;
-    ++numRelations;
-  }
+void ChunkWriter::addCompleteSmallRelations(Id firstCol0Id, Id lastCol0Id,
+                                            const PermutedCols& permutedCols,
+                                            size_t begin, size_t end,
+                                            size_t numRelations) {
   result_.numMiddleRelations_ += numRelations;
-  addSmallRelations(col0IdCurrentRelation_.value(), lastCol0Id, permutedCols,
-                    begin, end);
-  col0IdCurrentRelation_.reset();
-  return end;
-}
-
-// _____________________________________________________________________________
-size_t ChunkWriter::numRowsUntilSmallRelationBlockIsFull() const {
-  size_t capacity = smallRelationBlockCapacity();
-  size_t numBuffered = smallRelationsBuffer_.numRows();
-  return numBuffered >= capacity ? 0 : capacity - numBuffered;
+  addSmallRelations(firstCol0Id, lastCol0Id, permutedCols, begin, end);
 }
 
 // _____________________________________________________________________________
@@ -207,32 +94,24 @@ template <typename Table>
 void ChunkWriter::addSmallRelations(Id firstCol0Id, Id lastCol0Id,
                                     const Table& relations, size_t beginIdx,
                                     size_t endIdx) {
-  AD_CORRECTNESS_CHECK(beginIdx < endIdx && endIdx <= relations.numRows());
-  AD_CORRECTNESS_CHECK(firstCol0Id == relations(beginIdx, 0) &&
-                       lastCol0Id == relations(endIdx - 1, 0));
-  size_t numRows = endIdx - beginIdx;
-  if (numRows + smallRelationsBuffer_.numRows() >
-      smallRelationBlockCapacity()) {
+  AD_CORRECTNESS_CHECK(beginIdx < endIdx);
+  if (!smallRelations_.fits(endIdx - beginIdx)) {
     writeBufferedSmallRelationsToSingleBlock();
   }
-  if (smallRelationsBuffer_.numRows() == 0) {
-    currentSmallBlockFirstCol0_ = firstCol0Id;
-  }
-  currentSmallBlockLastCol0_ = lastCol0Id;
-  smallRelationsBuffer_.insertAtEnd(relations, beginIdx, endIdx);
+  smallRelations_.add(firstCol0Id, lastCol0Id, relations, beginIdx, endIdx);
 }
 
 // _____________________________________________________________________________
 void ChunkWriter::writeBufferedSmallRelationsToSingleBlock() {
-  if (smallRelationsBuffer_.empty()) {
+  if (smallRelations_.empty()) {
     return;
   }
+  auto block = smallRelations_.takeBlock(writer1_.takeBlockBuffer());
   // The last argument invokes the `smallBlocksCallback_` of `writer1_`, which
   // writes the block to the twin permutation (in this thread).
   writer1_.compressAndWriteBlockInCallingThread(
-      currentSmallBlockFirstCol0_, currentSmallBlockLastCol0_,
-      BlockToWrite{std::move(smallRelationsBuffer_)}, true);
-  smallRelationsBuffer_ = writer1_.takeBlockBuffer();
+      block.firstCol0_, block.lastCol0_, BlockToWrite{std::move(block.rows_)},
+      true);
 }
 
 // _____________________________________________________________________________
@@ -340,7 +219,8 @@ void ChunkWriter::resetCurrentRelation() {
 // _____________________________________________________________________________
 void ChunkWriter::finishRelation() {
   // The relation was already written completely by
-  // `writeCompleteSmallRelations`, so there is nothing left to do.
+  // `RelationBlockCutter::writeCompleteSmallRelations`, so there is nothing
+  // left to do.
   if (!col0IdCurrentRelation_.has_value()) {
     AD_CORRECTNESS_CHECK(relation_.empty() && numBlocksCurrentRel_ == 0);
     return;
@@ -350,11 +230,10 @@ void ChunkWriter::finishRelation() {
     return;
   }
   Id col0Id = col0IdCurrentRelation_.value();
-  if (numBlocksCurrentRel_ > 0 || static_cast<double>(relation_.numRows()) >
-                                      0.8 * static_cast<double>(blocksize_)) {
+  if (this->currentRelationIsLarge()) {
     // The relation is large.
     addBlockForLargeRelation();
-    auto md1 = ChunkwisePermutationWriter::makeMetadata(
+    auto md1 = CompressedRelationWriter::makeLargeRelationMetadata(
         col0Id, numRowsCurrentRel_, distinctCol1Counter_.getAndReset());
     auto md2 = writeTwinOfCompleteLargeRelation(col0Id);
     result_.middleMetadata_.emplace_back(md1, md2);

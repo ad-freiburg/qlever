@@ -24,10 +24,10 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationReader.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/LocatedTriples.h"
 #include "index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/GlobalExecutor.h"
 
 // NOTE: The chunkwise writer needs the parallel merge, which only exists in the
@@ -294,7 +294,7 @@ void checkPermutation(const std::string& filename,
   }
   // No block contains more rows than it should (the `1.5 * blocksize` of a
   // block of small relations, plus the rows of the last relation that is
-  // added to it, see `CompressedRelationWriter::smallRelationBlockCapacity`).
+  // added to it, see `SmallRelationsBlockBuilder::capacity`).
   // The invariants on the order of the blocks have already been checked by
   // `CompressedRelationWriter::getFinishedBlocks`.
   size_t numRowsInBlocks = 0;

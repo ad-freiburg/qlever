@@ -22,7 +22,7 @@
 #include <limits>
 
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
-#include "index/CompressedRelationPermutationWriterImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
 #include "util/Algorithm.h"
 #include "util/Log.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
@@ -31,8 +31,6 @@ namespace chunkwisePermutationWriter {
 
 using namespace compressedRelationHelpers;
 using BlockToWrite = CompressedRelationWriter::BlockToWrite;
-// The static helpers of the classical writer that are reused here.
-using ClassicalWriter = CompressedRelationWriter::PermutationWriter<true>;
 
 namespace detail {
 
@@ -449,8 +447,7 @@ void ChunkwisePermutationWriter::writeBoundaryRelation(
     numRows += part.numRows_;
     anyPartIsLarge = anyPartIsLarge || part.isLarge();
   }
-  if (!anyPartIsLarge &&
-      static_cast<double>(numRows) <= 0.8 * static_cast<double>(blocksize_)) {
+  if (!anyPartIsLarge && isSmallRelation(numRows, blocksize_)) {
     // The relation is small, so it is batched into a block of small
     // relations together with the other small boundary relations that are
     // adjacent to it (see `consolidate`).
@@ -492,7 +489,8 @@ void ChunkwisePermutationWriter::writeBoundaryRelation(
   if (!pending.empty()) {
     writeRowsOfLargeRelation(*writer1_, col0Id, std::move(pending), true);
   }
-  auto md1 = makeMetadata(col0Id, numRows, distinctCol1Counter.getAndReset());
+  auto md1 = CompressedRelationWriter::makeLargeRelationMetadata(
+      col0Id, numRows, distinctCol1Counter.getAndReset());
   auto md2 = writeTwinOfBoundaryRelation(col0Id, parts);
   AD_CORRECTNESS_CHECK(md2.numRows_ == numRows);
   writeMetadata_(md1, md2);
@@ -607,18 +605,10 @@ void ChunkwisePermutationWriter::writeRowsOfLargeRelation(
   // The slices are views into the `rows`, which are shared among them.
   auto owner = std::make_shared<const IdTable>(std::move(rows));
   auto view = owner->asStaticView<0>();
-  size_t begin = 0;
-  while (begin < numRows) {
-    size_t end = std::min(begin + blocksize, numRows);
-    // Never split rows whose first three columns are equal across two blocks.
-    while (end < numRows &&
-           pickFirstThreeColumnsOfIdsWithoutLocalVocab(view[end]) ==
-               pickFirstThreeColumnsOfIdsWithoutLocalVocab(view[end - 1])) {
-      ++end;
-    }
-    write(BlockToWrite{view.subView(begin, end - begin), owner});
-    begin = end;
-  }
+  forEachSliceOfLargeBlock(
+      view, blocksize, [&write, &view, &owner](size_t begin, size_t end) {
+        write(BlockToWrite{view.subView(begin, end - begin), owner});
+      });
 }
 
 // _____________________________________________________________________________
@@ -633,52 +623,19 @@ ChunkwisePermutationWriter::writeSortedBlocksOfLargeRelation(
     distinctCol1Counter.addBlock(std::as_const(block).getColumn(c1Idx));
     writeRowsOfLargeRelation(writer, col0Id, std::move(block), useQueue);
   };
-  // See `CompressedRelationWriter::addCompleteLargeRelation` for the
-  // explanation of this loop, which makes sure that equal triples (when
-  // disregarding the graph) stay in the same block.
-  std::optional<Block> bufferedBlock;
+  // Equal triples (when disregarding the graph) have to stay in the same
+  // block, see `TripleAlignedBlockBuffer`.
+  TripleAlignedBlockBuffer<Block> alignedBlocks;
   for (Block& block : blocks) {
-    if (block.empty()) {
-      continue;
+    if (auto complete = alignedBlocks.push(std::move(block))) {
+      writeBlock(std::move(complete).value());
     }
-    if (!bufferedBlock.has_value()) {
-      bufferedBlock = std::move(block);
-      continue;
-    }
-    const auto& lastRowFromPrevious = bufferedBlock.value().back();
-    const size_t upperBoundEqualTriples =
-        ql::ranges::find_if(
-            block,
-            [&lastRowFromPrevious](const auto& row) {
-              return pickFirstThreeColumnsOfIdsWithoutLocalVocab(
-                         lastRowFromPrevious) !=
-                     pickFirstThreeColumnsOfIdsWithoutLocalVocab(row);
-            }) -
-        block.begin();
-    if (upperBoundEqualTriples > 0) {
-      bufferedBlock->insertAtEnd(block, 0, upperBoundEqualTriples);
-      block.erase(block.begin(), block.begin() + upperBoundEqualTriples);
-    }
-    if (block.empty()) {
-      continue;
-    }
-    writeBlock(std::move(bufferedBlock).value());
-    bufferedBlock = std::move(block);
   }
-  if (bufferedBlock.has_value()) {
-    writeBlock(std::move(bufferedBlock).value());
+  if (auto last = alignedBlocks.finish()) {
+    writeBlock(std::move(last).value());
   }
-  return makeMetadata(col0Id, numRows, distinctCol1Counter.getAndReset());
-}
-
-// _____________________________________________________________________________
-CompressedRelationMetadata ChunkwisePermutationWriter::makeMetadata(
-    Id col0Id, size_t numRows, size_t numDistinctCol1) {
-  AD_CORRECTNESS_CHECK(numRows > 0);
-  auto multiplicity =
-      CompressedRelationWriter::computeMultiplicity(numRows, numDistinctCol1);
-  return CompressedRelationMetadata{col0Id, numRows, multiplicity, multiplicity,
-                                    std::numeric_limits<uint64_t>::max()};
+  return CompressedRelationWriter::makeLargeRelationMetadata(
+      col0Id, numRows, distinctCol1Counter.getAndReset());
 }
 
 // _____________________________________________________________________________

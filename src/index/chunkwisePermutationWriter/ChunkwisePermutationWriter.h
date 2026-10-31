@@ -24,11 +24,11 @@
 #include <vector>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/KeyOrder.h"
 #include "index/chunkwisePermutationWriter/ChunkWriter.h"
 #include "index/chunkwisePermutationWriter/Options.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/AsyncResourcePool.h"
 #include "util/GlobalExecutor.h"
 #include "util/NoCopyNoMove.h"
@@ -287,10 +287,6 @@ class ChunkwisePermutationWriter
   static CompressedRelationMetadata writeSortedBlocksOfLargeRelation(
       CompressedRelationWriter& writer, Id col0Id,
       ad_utility::InputRangeTypeErased<Block> blocks, bool useQueue);
-
-  // Create the metadata of a large relation.
-  static CompressedRelationMetadata makeMetadata(Id col0Id, size_t numRows,
-                                                 size_t numDistinctCol1);
 
   // Create a twin sorter with the given `filename`.
   std::unique_ptr<TwinSorter> makeTwinSorter(const std::string& filename) const;

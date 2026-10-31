@@ -17,9 +17,11 @@
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/chunkwisePermutationWriter/Options.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
+#include "index/compressedRelationWriter/RelationBlockCutter.h"
+#include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/NoCopyNoMove.h"
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -113,9 +115,14 @@ class ChunkwisePermutationWriter;
 // `CompressedRelationWriter`s (the compression and writing of a block in the
 // calling thread, and the pool of block buffers) and keeps all the other state
 // (the current relation, the buffer of small relations, the twin sorter) for
-// itself.
-class ChunkWriter : public ad_utility::NoCopyNoMove {
+// itself. The cutting of the input blocks into relations and blocks is
+// inherited from the `RelationBlockCutter`, see there for the hooks that are
+// implemented below.
+class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
+                    public ad_utility::NoCopyNoMove {
  private:
+  using Base = RelationBlockCutter<ChunkWriter>;
+  friend Base;
   using DistinctIdCounter = compressedRelationHelpers::DistinctIdCounter;
 
   ChunkwisePermutationWriter& shared_;
@@ -125,15 +132,9 @@ class ChunkWriter : public ad_utility::NoCopyNoMove {
   const bool isLastChunk_;
   CompressedRelationWriter& writer1_;
   CompressedRelationWriter& writer2_;
-  const size_t blocksize_;
   const size_t numColumns_;
 
-  // The buffered rows of the current relation, see
-  // `CompressedRelationWriter::PermutationWriter::relation_`.
-  IdTable relation_;
-  // The current relation and its statistics so far.
-  std::optional<Id> col0IdCurrentRelation_;
-  size_t numBlocksCurrentRel_ = 0;
+  // The statistics of the current relation so far.
   size_t numRowsCurrentRel_ = 0;
   DistinctIdCounter distinctCol1Counter_;
   std::optional<Id> firstCol1CurrentRel_;
@@ -148,10 +149,8 @@ class ChunkWriter : public ad_utility::NoCopyNoMove {
   std::optional<IdTable> head_;
 
   // The small relations that are batched into the current block of small
-  // relations, see `CompressedRelationWriter::smallRelationsBuffer_`.
-  IdTable smallRelationsBuffer_;
-  Id currentSmallBlockFirstCol0_ = Id::makeUndefined();
-  Id currentSmallBlockLastCol0_ = Id::makeUndefined();
+  // relations, see `CompressedRelationWriter::smallRelations_`.
+  SmallRelationsBlockBuilder smallRelations_;
 
   // The twin sorter of this chunk, which is created lazily by the first large
   // relation, and which moves into the `BoundaryPart` of a large boundary
@@ -163,10 +162,6 @@ class ChunkWriter : public ad_utility::NoCopyNoMove {
   // The last row of the previous input block (if any), for the removal of
   // duplicates across the blocks of this chunk.
   std::optional<IdTable::row_type> lastRowOfPreviousBlock_;
-
-  // The input block that is currently being processed, see
-  // `addBlockOfLargeRelationWithoutCopying`.
-  SharedBlock inputBlock_;
 
   ChunkResult result_;
 
@@ -189,20 +184,27 @@ class ChunkWriter : public ad_utility::NoCopyNoMove {
   // the last row of the previous block.
   void removeDuplicates(Block& block);
 
-  // The equivalents of the respective functions of
-  // `CompressedRelationWriter::PermutationWriter`, see there.
-  template <typename PermutedCols>
-  void addRowsOfCurrentRelation(const PermutedCols& permutedCols, size_t begin,
-                                size_t end);
-  template <typename PermutedCols, typename Col0>
-  size_t writeCompleteSmallRelations(const PermutedCols& permutedCols,
-                                     const Col0& col0, size_t begin,
-                                     size_t firstRunEnd, size_t numRowsOfBlock);
-  bool isCompleteSmallRelation(size_t begin, size_t end,
-                               size_t numRowsOfBlock) const;
+  // The hooks of the `RelationBlockCutter`, see there and the respective
+  // functions of `CompressedRelationWriter::PermutationWriter`.
   void addBlockForLargeRelation();
   void addBlockOfLargeRelationWithoutCopying(IdTableView<0> block);
   void finishRelation();
+  template <typename PermutedCols>
+  void addCompleteSmallRelations(Id firstCol0Id, Id lastCol0Id,
+                                 const PermutedCols& permutedCols, size_t begin,
+                                 size_t end, size_t numRelations);
+  const SmallRelationsBlockBuilder& smallRelationsBlockBuilder() const {
+    return smallRelations_;
+  }
+  // The first block of the first relation of the chunk is kept in memory (see
+  // `head_`), so it must never be written directly from the input block.
+  bool mayWriteDirectly() const {
+    return !inFirstRelation_ || head_.has_value();
+  }
+  // The first relation of the chunk is never written as a small relation by
+  // the chunk, because it may continue the last relation of the previous
+  // chunk.
+  bool mayWriteCompleteSmallRelations() const { return !inFirstRelation_; }
 
   // Account for a block of rows of the current relation that has been
   // finalized (a block written directly, the head, the tail, or the rows of a
@@ -237,9 +239,7 @@ class ChunkWriter : public ad_utility::NoCopyNoMove {
   void resetCurrentRelation();
 
   // The equivalents of the respective functions of `CompressedRelationWriter`
-  // for the chunk-local buffer of small relations.
-  size_t smallRelationBlockCapacity() const { return (3 * blocksize_) / 2; }
-  size_t numRowsUntilSmallRelationBlockIsFull() const;
+  // for the chunk-local `smallRelations_`.
   template <typename Table>
   void addSmallRelations(Id firstCol0Id, Id lastCol0Id, const Table& relations,
                          size_t beginIdx, size_t endIdx);

@@ -23,6 +23,7 @@
 #include "util/DateYearDuration.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using ad_utility::testing::DateId;
 
@@ -118,8 +119,8 @@ namespace filterHelper {
 // value with `'`/`'`.
 inline auto LVE = [](std::string litOrIri,
                      const LocalVocabContext& context) -> LocalVocabEntry {
-  return LocalVocabEntry::fromStringRepresentation(std::move(litOrIri),
-                                                   context);
+  return ad_utility::testing::localVocabEntryFromStringRepresentation(
+      std::move(litOrIri), context);
 };
 
 //______________________________________________________________________________
@@ -255,8 +256,8 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
 //______________________________________________________________________________
 CPP_template(typename... Args)(
     requires(ql::concepts::convertible_to<Args, VariantArgs>&&...))
-    std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
-                                                  Args&&... argList) {
+std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
+                                              Args&&... argList) {
   std::vector<std::unique_ptr<SparqlExpression>> childrenSparql;
   childrenSparql.reserve(sizeof...(argList));
   (childrenSparql.push_back(

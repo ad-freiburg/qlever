@@ -15,7 +15,7 @@
 #include <memory>
 
 #include "engine/idTable/IdTable.h"
-#include "index/CompressedRelationWriter.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/MemorySize/MemorySize.h"
 
 // The options and the types of the interface of the chunkwise permutation

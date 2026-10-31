@@ -12,11 +12,13 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/QueryExecutionContext.h"
 #include "global/Id.h"
 #include "parser/TripleComponent.h"
 
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 using ad_utility::testing::makeAllocator;
 using ad_utility::testing::VocabId;
 using ::testing::ElementsAre;
@@ -194,7 +196,7 @@ TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
 // _____________________________________________________________________________
 TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
   LocalVocab localVocab;
-  LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry testEntry = localVocabEntryFromStringRepresentation(
       "\"test_word\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
@@ -213,7 +215,7 @@ TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
 // Test cloneImpl functionality
 TEST_P(ExplicitIdTableOperationTest, CloneImpl) {
   LocalVocab localVocab;
-  LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry testEntry = localVocabEntryFromStringRepresentation(
       "\"clone_test\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 

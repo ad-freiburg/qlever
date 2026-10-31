@@ -17,14 +17,15 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "global/Constants.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/CompressedRelationReader.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -389,7 +390,11 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
         false};
   };
 
-  AD_EXPECT_NULLOPT(getMetadataFromId(V(Id::maxIndex - 1)).first);
+  // Not via `V`, because `Id::maxIndex - 1` does not fit into an `int64_t` for
+  // the split `Id`.
+  const auto almostMaxId =
+      Id::makeFromVocabIndex(VocabIndex::make(Id::maxIndex - 1));
+  AD_EXPECT_NULLOPT(getMetadataFromId(almostMaxId).first);
 
   // return a `pair<RelationMetadata, bool>` (see above), but for the `i`-th
   // relation specified by the `inputs`.
@@ -1721,8 +1726,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       std::move(testIndexConfig));
   index.deltaTriplesManager().modify<void>(
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry =
-            LocalVocabEntry::fromIriref("<zzz>", index.getLocalVocabContext());
+        LocalVocabEntry entry = ad_utility::testing::iriLocalVocabEntry(
+            "<zzz>", index.getLocalVocabContext());
         Id id = Id::makeFromLocalVocabIndex(&entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
@@ -2383,9 +2388,9 @@ void checkBuildResultsAreEqual(const PermutationBuildResult& expected,
 // by the `inputs`, and all the builds yield exactly the same permutation. The
 // latter is the crucial property, because depending on the `inputBlockSize`,
 // a different subset of the relations is written directly as a complete small
-// relation (see `CompressedRelationWriter::PermutationWriter::
-// isCompleteSmallRelation`), while the remaining ones go through the
-// `relation_` buffer. Both paths have to produce an identical result.
+// relation (see `RelationBlockCutter::isCompleteSmallRelation`), while the
+// remaining ones go through the `relation_` buffer. Both paths have to produce
+// an identical result.
 void checkPermutationIsIndependentOfInputBlockSize(
     std::vector<RelationInput> inputs, size_t rowsPerBlock,
     const std::vector<size_t>& inputBlockSizes,

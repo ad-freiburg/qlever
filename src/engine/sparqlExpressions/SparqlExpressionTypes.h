@@ -73,8 +73,8 @@ CPP_concept SingleExpressionResult =
 
 // Copy an expression result.
 CPP_template(typename ResultT)(
-    requires ad_utility::SimilarTo<ResultT, ExpressionResult>) ExpressionResult
-    copyExpressionResult(ResultT&& result) {
+    requires ad_utility::SimilarTo<ResultT, ExpressionResult>)
+ExpressionResult copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable = [](const auto& x)
       -> CPP_ret(ExpressionResult)(
           requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
@@ -369,8 +369,9 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 // NOTE: Aggregates must not use this function, they aggregate one value per
 // row of the `context` also for a constant input (see
 // `AggregateExpression.cpp`).
-CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
-    size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
+CPP_template(typename... Inputs)(
+    requires(SingleExpressionResult<Inputs>&&...))
+size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
 

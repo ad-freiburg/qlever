@@ -120,8 +120,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
              typename ElFromFirstNotFoundAction = decltype(noop),
              typename CheckCancellation = decltype(noop),
              typename CoverUndefRanges = std::true_type)(
-    requires ql::ranges::random_access_range<Range1> CPP_and
-        ql::ranges::random_access_range<Range2>)
+    requires ql::ranges::random_access_range<Range1> &&
+    ql::ranges::random_access_range<Range2>)
 [[nodiscard]] auto zipperJoinWithUndef(
     const Range1& left, const Range2& right, const LessThan& lessThan,
     const CompatibleRowAction& compatibleRowAction,
