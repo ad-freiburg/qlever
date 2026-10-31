@@ -13,6 +13,7 @@
 // `StringExpressions.cpp` to reduce the memory needed for compiling and
 // statically analyzing a single translation unit.
 
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "util/CryptographicHashUtils.h"

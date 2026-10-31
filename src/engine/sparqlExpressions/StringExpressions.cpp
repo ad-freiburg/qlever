@@ -15,6 +15,7 @@
 #include <boost/url.hpp>
 #endif
 
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "util/ParsedUri.h"
