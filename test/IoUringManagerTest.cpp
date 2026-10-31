@@ -10,6 +10,7 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
 
@@ -36,14 +37,6 @@
 #include "util/PageCacheReadTestHelpers.h"
 
 namespace {
-
-// `value` in decimal, padded with leading zeros to `width` characters, so that
-// distinct values give distinct, recognizable file chunks.
-std::string zeroPaddedNumber(size_t value, size_t width) {
-  std::string digits = std::to_string(value);
-  AD_CONTRACT_CHECK(digits.size() <= width);
-  return std::string(width - digits.size(), '0') + digits;
-}
 
 using namespace ::testing;
 
@@ -345,7 +338,8 @@ TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanTinyRing) {
   constexpr size_t N = 80;
   SequentialReadScenarioForTesting scenario;
   for (size_t i = 0; i < N; ++i) {
-    scenario.addRead(zeroPaddedNumber(i, 4));
+    // Distinct chunks, so that a completion in the wrong buffer is detected.
+    scenario.addRead(absl::StrFormat("%04zu", i));
   }
   auto [tmp, fd] = makeTempFile(scenario.content());
   TypeParam manager(8);
@@ -354,20 +348,22 @@ TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanTinyRing) {
               ::testing::ElementsAreArray(scenario.expected()));
 }
 
-// Waiting on the last of many small batches (1, 3 or 5 reads each) reaps the
-// CQEs of the other batches in the same wave. The remaining waits then find
-// their batches already complete and must still see the correct bytes. Batch
-// sizes that are not multiples of the reap wave (1, 3, 5, ...) cover partial
-// waves.
+// Waiting on the last of many small batches (1, 3 or 5 reads each) can reap
+// the CQEs of the other batches in the same waves. The remaining waits may then
+// find their batches already complete and must still see the correct bytes.
+// Batch sizes that are not multiples of the reap wave (1, 3, 5, ...) cover
+// partial waves.
 TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
   constexpr size_t M = 12;
   std::string fileContent;
   std::vector<std::vector<std::string>> expected(M);
   std::vector<ReadBatchForTesting> batches(M);
+  size_t numChunks = 0;
   for (size_t i = 0; i < M; ++i) {
     const size_t numReads = 2 * (i % 3) + 1;
     for (size_t j = 0; j < numReads; ++j) {
-      std::string chunk = zeroPaddedNumber(fileContent.size() / 3, 3);
+      // Distinct chunks, so that a completion in the wrong buffer is detected.
+      std::string chunk = absl::StrFormat("%03zu", numChunks++);
       batches[i].add(fileContent.size(), chunk.size());
       fileContent.append(chunk);
       expected[i].push_back(std::move(chunk));

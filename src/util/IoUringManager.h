@@ -242,9 +242,10 @@ class IoUringPolicy {
   // read is prepared in `addBatch` and erased when its completion is reaped.
   ad_utility::HashMap<uint64_t, OutstandingRead> outstandingReadsByRequestId_;
 
-  // Minimum number of completions to wait for when the ring is full or
-  // `wait()` blocks. Waiting for several CQEs and reaping all ready ones in
-  // one pass amortizes `io_uring_enter` and the CQ-head update over the wave.
+  // The size of a wave: when the ring is full or `wait()` blocks, wait for up
+  // to this many completions (fewer if fewer requests can complete), then reap
+  // all ready ones in one pass. This amortizes `io_uring_enter` and the
+  // CQ-head update over the wave.
   static constexpr unsigned REAP_WAVE = 8;
 
   // Block until at least `minComplete` CQEs are ready, then reap every ready
