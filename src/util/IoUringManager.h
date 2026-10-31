@@ -346,7 +346,6 @@ class PageCacheFirstPolicy {
   using BatchHandle = typename Policy::BatchHandle;
 
   // `ringSize` is forwarded to the constructor of the wrapped `Policy`.
-  // `ringSize` is forwarded to the constructor of the wrapped `Policy`.
   explicit PageCacheFirstPolicy(unsigned ringSize) : policy_(ringSize) {}
 
   PageCacheFirstPolicy(const PageCacheFirstPolicy&) = delete;

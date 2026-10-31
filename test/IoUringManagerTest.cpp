@@ -684,7 +684,6 @@ TEST(ReadPageCacheHits, missOnlyBatch) {
 // A mixed batch: a short read in the middle of a run of adjacent ranges
 // returns the incomplete read and the rest of its run, the complete reads of
 // the run and of other runs are served. Where the file system rejects
-// `RWF_NOWAIT`, all reads are returned. Where the file system rejects
 // `RWF_NOWAIT`, all reads are returned.
 TEST(ReadPageCacheHits, mixedBatchWithShortRead) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
