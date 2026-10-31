@@ -22,6 +22,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/sparqlExpressions/ArgMinMaxExpression.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -415,6 +416,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(&makePrefixMatchExpression);
     } else if (functionName == "simplifyGeometry") {
       return createBinary(&makeSimplifyGeometryExpression);
+    } else if (functionName == "argmin") {
+      return createBinary([](Ptr value, Ptr key) -> Ptr {
+        return std::make_unique<ArgMinExpression>(std::move(value),
+                                                  std::move(key));
+      });
+    } else if (functionName == "argmax") {
+      return createBinary([](Ptr value, Ptr key) -> Ptr {
+        return std::make_unique<ArgMaxExpression>(std::move(value),
+                                                  std::move(key));
+      });
     }
   }
 

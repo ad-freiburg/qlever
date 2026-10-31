@@ -2510,3 +2510,26 @@ TEST(ExportQueryExecutionTrees, SelectStarWithTrailingValues) {
   EXPECT_EQ(run("SELECT * { ?s <p> ?o } VALUES (?s ?x) { (<a> 1) }"),
             "?s\t?o\t?x\n<a>\t<c>\t1\n");
 }
+
+// Test `ql:argmin` and `ql:argmax` with and without `GROUP BY`.
+TEST(ExportQueryExecutionTrees, ArgMinMax) {
+  // Two groups `<a>` and `<b>` with the values `?x` and the keys `?v`.
+  const std::string kg =
+      "<a> <p> <x1> . <x1> <v> 3 . <a> <p> <x2> . <x2> <v> 1 . "
+      "<a> <p> <x3> . <x3> <v> 5 . <b> <p> <y1> . <y1> <v> 7 .";
+  auto tsv = [&kg](std::string_view query) {
+    return runQueryStreamableResult(kg, std::string{query},
+                                    ad_utility::MediaType::tsv);
+  };
+
+  // Per group, the `?x` with the minimal resp. maximal `?v`.
+  EXPECT_EQ(tsv("SELECT ?g (ql:argmin(?x, ?v) AS ?min) "
+                "(ql:argmax(?x, ?v) AS ?max) "
+                "{ ?g <p> ?x . ?x <v> ?v } GROUP BY ?g ORDER BY ?g"),
+            "?g\t?min\t?max\n<a>\t<x2>\t<x3>\n<b>\t<y1>\t<y1>\n");
+
+  // Over the implicit group of all rows, with an expression as the key.
+  EXPECT_EQ(
+      tsv("SELECT (ql:argmin(?x, -?v) AS ?min) { ?g <p> ?x . ?x <v> ?v }"),
+      "?min\n<y1>\n");
+}

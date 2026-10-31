@@ -4,6 +4,7 @@ add_library(sparqlExpressions
         SetOfIntervals.cpp
         SparqlExpressionPimpl.cpp
         SampleExpression.cpp
+        ArgMinMaxExpression.cpp
         RelationalExpressions.cpp
         AggregateExpression.cpp
         StdevExpression.cpp
