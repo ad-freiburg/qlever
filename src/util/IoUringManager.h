@@ -81,7 +81,7 @@ class BatchManagerBase {
   // Switch the page-cache fast path of this manager on or off (see
   // `PageCacheFirstPolicy`). Takes effect for the batches added afterwards.
   // Managers without a page-cache fast path ignore it.
-  virtual void setPageCacheFastPath([[maybe_unused]] bool enabled) {}
+  virtual void setPageCacheFastPath([[maybe_unused]] bool enabled) noexcept {}
 };
 
 namespace detail {
@@ -132,7 +132,7 @@ class BatchManager final : public BatchManagerBase {
   void wait(BatchHandle handle) override { policy_.wait(handle); }
 
   // Forward the switch to the policy if it has one.
-  void setPageCacheFastPath([[maybe_unused]] bool enabled) override {
+  void setPageCacheFastPath([[maybe_unused]] bool enabled) noexcept override {
     if constexpr (CPP_requires_ref(detail::HasPageCacheFastPathSwitch,
                                    ReadPolicy)) {
       policy_.setPageCacheFastPath(enabled);
@@ -286,25 +286,27 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
 // Return whether `readPageCacheHits` may use `preadv2(RWF_NOWAIT)`: false if it
 // is not compiled in, or once a call has failed with `EOPNOTSUPP` or `ENOSYS`.
 // That latch is process-wide.
-bool pageCacheFastPathIsSupported();
+bool pageCacheFastPathIsSupported() noexcept;
 
+// In `detail` because production code must call `readPageCacheHits` and
+// must not call or replace this hook; it exists only for the tests.
 namespace detail {
-// The one `preadv2(fd, iov, iovcnt, offset, RWF_NOWAIT)` call per run that
+// The one page-cache read call per run that
 // `readPageCacheHits` makes, with the same contract (the number of bytes read,
 // or -1 with `errno` set). A replaceable function pointer so that unit tests
 // can inject `EAGAIN`, short reads and `EOPNOTSUPP`; production code never
 // changes it.
 using PageCacheRead = int64_t (*)(int fd, const ::iovec* iov, int iovcnt,
-                                  int64_t offset);
+                                  int64_t offset) noexcept;
 // The default: the system call. Where it is not available it fails with
 // `EOPNOTSUPP` (it is never called there).
 int64_t systemPageCacheRead(int fd, const ::iovec* iov, int iovcnt,
-                            int64_t offset);
+                            int64_t offset) noexcept;
 // The function `readPageCacheHits` calls (initially `systemPageCacheRead`).
-PageCacheRead& pageCacheRead();
+PageCacheRead& pageCacheRead() noexcept;
 // Undo the effect of an `EOPNOTSUPP` on `pageCacheFastPathIsSupported()`, for
 // tests that injected one.
-void resetPageCacheFastPathSupport();
+void resetPageCacheFastPathSupport() noexcept;
 }  // namespace detail
 
 namespace detail {
@@ -324,6 +326,7 @@ struct SelectedReads {
         buffers_{selectAt(buffers, positions)} {}
 
  private:
+  // The elements of `values` at `positions`, copied into a vector.
   template <typename T>
   static std::vector<std::remove_const_t<T>> selectAt(
       ql::span<T> values, ql::span<const size_t> positions) {
@@ -353,7 +356,7 @@ class PageCacheFirstPolicy {
 
   // Switch the fast path on (the default) or off for the batches that are added
   // afterwards.
-  void setPageCacheFastPath(bool enabled) { enabled_ = enabled; }
+  void setPageCacheFastPath(bool enabled) noexcept { enabled_ = enabled; }
 
   // Serve the reads of the batch that are in the page cache and pass the others
   // on to the decorated policy. The arguments have the contract of
@@ -390,6 +393,9 @@ namespace detail {
 // the page-cache fast path is supported.
 template <typename Policy>
 std::unique_ptr<BatchManagerBase> makeBatchManagerFor(unsigned ringSize) {
+  static_assert(ReadPolicyConcept<Policy>,
+                "makeBatchManagerFor's Policy must satisfy the "
+                "ReadPolicyConcept.");
   if (pageCacheFastPathIsSupported()) {
     return std::make_unique<BatchManager<PageCacheFirstPolicy<Policy>>>(
         ringSize);

@@ -64,7 +64,7 @@ std::atomic<bool> pageCacheFastPathSupported{true};
 namespace detail {
 //______________________________________________________________________________
 int64_t systemPageCacheRead(int fd, const ::iovec* iov, int iovcnt,
-                            int64_t offset) {
+                            int64_t offset) noexcept {
 #ifdef QL_PAGE_CACHE_FAST_PATH
   return preadv2(fd, iov, iovcnt, static_cast<off_t>(offset), RWF_NOWAIT);
 #else
@@ -78,13 +78,13 @@ int64_t systemPageCacheRead(int fd, const ::iovec* iov, int iovcnt,
 }
 
 //______________________________________________________________________________
-PageCacheRead& pageCacheRead() {
+PageCacheRead& pageCacheRead() noexcept {
   static PageCacheRead function = &systemPageCacheRead;
   return function;
 }
 
 //______________________________________________________________________________
-void resetPageCacheFastPathSupport() {
+void resetPageCacheFastPathSupport() noexcept {
 #ifdef QL_PAGE_CACHE_FAST_PATH
   pageCacheFastPathSupported.store(true);
 #endif
@@ -92,7 +92,7 @@ void resetPageCacheFastPathSupport() {
 }  // namespace detail
 
 //______________________________________________________________________________
-bool pageCacheFastPathIsSupported() {
+bool pageCacheFastPathIsSupported() noexcept {
 #ifdef QL_PAGE_CACHE_FAST_PATH
   return pageCacheFastPathSupported.load();
 #else
@@ -121,7 +121,7 @@ constexpr auto areAdjacent = [](const auto& previous, const auto& next) {
 // Log once that the kernel or file system rejects `RWF_NOWAIT` (`EOPNOTSUPP`)
 // or that `preadv2` does not exist (`ENOSYS`, Linux < 4.6 or a seccomp filter),
 // and switch the fast path off for the rest of the process.
-void disableIfNotSupported(int64_t numBytesRead) {
+void switchOffFastPathIfUnsupported(int64_t numBytesRead) {
   if (numBytesRead < 0 && (errno == EOPNOTSUPP || errno == ENOSYS) &&
       pageCacheFastPathSupported.exchange(false)) {
     AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported (EOPNOTSUPP or "
@@ -142,7 +142,7 @@ size_t serveRun(int fd, Run run) {
   const int64_t numBytesRead = detail::pageCacheRead()(
       fd, iovecs.data(), static_cast<int>(iovecs.size()),
       static_cast<int64_t>(fileOffsetOf(*::ranges::begin(run))));
-  disableIfNotSupported(numBytesRead);
+  switchOffFastPathIfUnsupported(numBytesRead);
   if (numBytesRead < 0) {
     return 0;
   }
@@ -162,10 +162,14 @@ size_t serveRun(int fd, Run run) {
 std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
                                       ql::span<const uint64_t> offsets,
                                       ql::span<char*> buffers) {
-  AD_CONTRACT_CHECK(offsets.size() == numBytes.size() &&
-                    buffers.size() == numBytes.size());
-  auto positions = ::ranges::views::iota(size_t{0}, numBytes.size());
+  AD_CONTRACT_CHECK(
+      offsets.size() == numBytes.size() && buffers.size() == numBytes.size(),
+      "The three spans describe the same reads, so they "
+      "must have the same length.");
+  const auto positions = ::ranges::views::iota(size_t{0}, numBytes.size());
 #ifdef QL_PAGE_CACHE_FAST_PATH
+  // View over the three spans and `positions`; it is only used inside
+  // this call, while all four are alive.
   auto reads = ::ranges::views::zip(positions, numBytes, offsets, buffers);
   std::vector<size_t> notServed;
   notServed.reserve(numBytes.size());
@@ -183,7 +187,7 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
 #else
   (void)fd;
   return ::ranges::to<std::vector<size_t>>(positions);
-#endif
+#endif  // QL_PAGE_CACHE_FAST_PATH
 }
 
 //______________________________________________________________________________
