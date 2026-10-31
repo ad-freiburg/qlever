@@ -235,11 +235,11 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
   if (!keepJoinColumns_) {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
-  std::vector<ColumnIndex> sortedOn;
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // This optimization doesn't allow preserving sort order.
   if (isIndexNestedLoopJoinSuitable()) {
     return sortedOn;

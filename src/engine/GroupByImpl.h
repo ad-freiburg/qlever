@@ -80,7 +80,7 @@ class GroupByImpl : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
     // Implicit group by always returns a single row.

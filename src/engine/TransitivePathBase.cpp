@@ -288,15 +288,15 @@ std::string TransitivePathBase::getDescriptor() const {
 size_t TransitivePathBase::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
+qlm::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
   if (lhs_.isSortedOnInputCol()) {
-    return {0};
+    return {{0}, allocator()};
   }
   if (rhs_.isSortedOnInputCol()) {
-    return {1};
+    return {{1}, allocator()};
   }
 
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // _____________________________________________________________________________

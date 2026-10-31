@@ -29,7 +29,7 @@ class Distinct : public Operation {
 
   [[nodiscard]] std::string getDescriptor() const override;
 
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
     return subtree_->resultSortedOn();
   }
 

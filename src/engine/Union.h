@@ -44,7 +44,7 @@ class Union : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override;
 

@@ -105,8 +105,8 @@ StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> StripColumns::resultSortedOn() const {
-  std::vector<ColumnIndex> sortedOn;
+qlm::vector<ColumnIndex> StripColumns::resultSortedOn() const {
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   const auto& fromChild = child_->resultSortedOn();
   // Find the largest prefix of `fromChild` that is part of the `subset` and
   // return it with the columns mapped accordingly. In particular, if the child

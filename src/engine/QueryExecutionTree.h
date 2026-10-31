@@ -88,7 +88,7 @@ class QueryExecutionTree {
       const parsedQuery::SelectClause& selectClause,
       bool includeQuestionMark = true) const;
 
-  const std::vector<ColumnIndex>& resultSortedOn() const {
+  const qlm::vector<ColumnIndex>& resultSortedOn() const {
     return rootOperation_->getResultSortedOn();
   }
 

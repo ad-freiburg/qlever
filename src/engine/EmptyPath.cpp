@@ -230,9 +230,9 @@ bool EmptyPath::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
+qlm::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
   if (!checkedChild_.has_value()) {
-    return {0};
+    return {{0}, allocator()};
   }
   // The rows of the child are processed in order, so the sort order of the join
   // column is preserved. The only exception are UNDEF values, which match every
@@ -245,9 +245,9 @@ std::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
       ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   if (childSortedOn.empty() || childSortedOn.at(0) != joinColumn ||
       joinColumnMightBeUndef) {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
-  return {0};
+  return {{0}, allocator()};
 }
 
 // _____________________________________________________________________________

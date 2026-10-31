@@ -200,11 +200,11 @@ size_t JoinImpl::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> JoinImpl::resultSortedOn() const {
+qlm::vector<ColumnIndex> JoinImpl::resultSortedOn() const {
   if (keepJoinColumn_) {
-    return {leftJoinCol_};
+    return {{leftJoinCol_}, allocator()};
   } else {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 }
 

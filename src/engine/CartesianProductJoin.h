@@ -119,7 +119,9 @@ class CartesianProductJoin : public Operation {
   // result is already being computed, at which point an invalidated sort order
   // could no longer be repaired (see the caution note on
   // `Operation::applyLimitOffset`).
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

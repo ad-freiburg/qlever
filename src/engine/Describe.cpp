@@ -84,7 +84,9 @@ bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
-std::vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Describe::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // The result always has three variables `?subject`, `?predicate`, `?object`.
 //

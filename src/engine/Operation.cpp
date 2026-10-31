@@ -462,8 +462,8 @@ void Operation::storeToNamedResultCache(const Result& result) {
       std::make_shared<const IdTable>(
           result.cloneIdTable(cancellationChecker())),
       getExternallyVisibleVariableColumns(),
-      // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
-      // migrated to `qlm::vector` throughout the Operation hierarchy.
+      // TODO<vrbommireddy>: Make `NamedResultCache::Value::resultSortedOn_` a
+      // `qlm::vector<ColumnIndex>` and remove this conversion.
       std::vector<ColumnIndex>{result.sortedBy().begin(),
                                result.sortedBy().end()},
       result.localVocab().clone(), getCacheKey(), geoIndex()};
@@ -733,7 +733,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
 }
 
 // ___________________________________________________________________________
-const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
+const qlm::vector<ColumnIndex>& Operation::getResultSortedOn() const {
   // TODO<joka921> refactor this without a mutex (for details see the
   // `getVariableColumns` method for details.
   std::lock_guard l{_resultSortedColumnsMutex};

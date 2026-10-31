@@ -8,7 +8,6 @@
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
 
-#include <initializer_list>
 #include <variant>
 #include <vector>
 
@@ -177,49 +176,22 @@ class Result : public ad_utility::NoCopy {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  //
-  // TODO<vrbommireddy>: The `std::vector` and `std::initializer_list` overloads
-  // below exist only because not every `Operation` passes a `qlm::vector` for
-  // `sortedBy` yet. Once `resultSortedOn()` is migrated to `qlm::vector`
-  // everywhere, delete them and keep only the `qlm::vector` overloads.
   Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
-  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-         SharedLocalVocabWrapper localVocab);
-  Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
-         SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
-         LocalVocab&& localVocab);
-  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-         LocalVocab&& localVocab);
-  Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
   Result(std::shared_ptr<const IdTable> idTablePtr,
          qlm::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
-  Result(std::shared_ptr<const IdTable> idTablePtr,
-         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
-  Result(std::shared_ptr<const IdTable> idTablePtr,
-         std::initializer_list<ColumnIndex> sortedBy, LocalVocab&& localVocab);
 
   // Construct from a non-owning view. The caller is responsible for ensuring
   // that the underlying data outlives this `Result`.
   Result(IdTableView<0> view, qlm::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
-  Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
-         LocalVocab&& localVocab);
-  Result(IdTableView<0> view, std::initializer_list<ColumnIndex> sortedBy,
-         LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, qlm::vector<ColumnIndex> sortedBy);
-  Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
-  Result(IdTableVocabPair pair, std::initializer_list<ColumnIndex> sortedBy);
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   Result(Generator idTables, qlm::vector<ColumnIndex> sortedBy);
-  Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
-  Result(Generator idTables, std::initializer_list<ColumnIndex> sortedBy);
 #endif
   Result(LazyResult idTables, qlm::vector<ColumnIndex> sortedBy);
-  Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
-  Result(LazyResult idTables, std::initializer_list<ColumnIndex> sortedBy);
 
   // Wrap the generator stored in `data_` within a new generator that calls
   // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original

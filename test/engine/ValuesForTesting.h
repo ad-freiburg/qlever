@@ -187,8 +187,11 @@ class ValuesForTesting : public Operation {
     return tables_.empty() ? 1 : tables()[0].numColumns();
   }
 
-  std::vector<ColumnIndex> resultSortedOn() const override {
-    return resultSortedColumns_;
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    // TODO<vrbommireddy>: Make `resultSortedColumns_` a
+    // `qlm::vector<ColumnIndex>` and remove this conversion.
+    return {resultSortedColumns_.begin(), resultSortedColumns_.end(),
+            allocator()};
   }
 
   size_t getCostEstimate() override { return costEstimate_; }

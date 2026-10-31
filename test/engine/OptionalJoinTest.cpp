@@ -1381,6 +1381,27 @@ std::shared_ptr<QueryExecutionTree> makeOptionalJoinThatIsResortedOnLimit(
 }  // namespace
 
 // _____________________________________________________________________________
+// Test that an `OptionalJoin` that drops its join columns is not sorted by any
+// column, while one that keeps them is sorted by the join column.
+TEST(OptionalJoin, resultSortedOnDependsOnKeepJoinColumns) {
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = ad_utility::testing::getQec();
+  auto makeInput = [&](const Variable& otherVariable) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{0, 1}, {1, 2}}),
+        Vars{Variable{"?a"}, otherVariable}, false,
+        std::vector<ColumnIndex>{0});
+  };
+  auto left = makeInput(Variable{"?b"});
+  auto right = makeInput(Variable{"?c"});
+
+  OptionalJoin keepJoinColumns{qec, left, right};
+  EXPECT_THAT(keepJoinColumns.resultSortedOn(), ::testing::ElementsAre(0));
+  OptionalJoin dropJoinColumns{qec, left, right, false};
+  EXPECT_THAT(dropJoinColumns.resultSortedOn(), ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
 // Pushing a `LIMIT` into the left input can change the algorithm and with it
 // the sort order of an `OptionalJoin` inside that input, see the caution note
 // on `Operation::applyLimitOffset`. Check that the sort order this operation

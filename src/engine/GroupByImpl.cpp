@@ -409,9 +409,9 @@ size_t GroupByImpl::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
+qlm::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  vector<ColumnIndex> sortedOn;
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     sortedOn.push_back(varCols[var].columnIndex_);

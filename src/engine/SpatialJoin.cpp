@@ -436,12 +436,12 @@ bool SpatialJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
   // the baseline (with O(n^2) runtime) can have some sorted columns, but as
   // the "true" computeResult method will use bounding boxes, which can't
   // guarantee that a sorted column stays sorted, this will return no sorted
   // column in all cases.
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // ____________________________________________________________________________

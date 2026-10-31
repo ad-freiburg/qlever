@@ -97,7 +97,7 @@ class IndexScan final : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
   // none of the prefilters in `prefilterVariablePairs` applies, return
@@ -310,7 +310,7 @@ class IndexScan final : public Operation {
   // hold the variables of the scan triple and the graph, in this order. These
   // are exactly the columns by which the full result is sorted. The combination
   // of the values in these columns is unique for each row of the full result.
-  std::vector<ColumnIndex> variableAndGraphColumns() const;
+  qlm::vector<ColumnIndex> variableAndGraphColumns() const;
 
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
   // returns a subset of this actual columns, return the subset of columns that

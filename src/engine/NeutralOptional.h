@@ -49,7 +49,7 @@ class NeutralOptional : public Operation {
                             bool childrenAreExclusivelyOwned) override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

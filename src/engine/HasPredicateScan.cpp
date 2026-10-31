@@ -140,20 +140,20 @@ size_t HasPredicateScan::getResultWidth() const {
 }
 
 // ___________________________________________________________________________
-std::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
+qlm::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?
-      return {};
+      return qlm::vector<ColumnIndex>{allocator()};
     case ScanType::FREE_O:
-      return {0};
+      return {{0}, allocator()};
     case ScanType::FULL_SCAN:
-      return {0};
+      return {{0}, allocator()};
     case ScanType::SUBQUERY_S:
-      return subtree().resultSortedOn();
+      break;
   }
-  return {};
+  return subtree().resultSortedOn();
 }
 
 // ___________________________________________________________________________
