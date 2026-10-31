@@ -25,6 +25,41 @@ using ad_utility::testing::localVocabEntryFromStringRepresentation;
 namespace {
 auto V = ad_utility::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
+
+// Create a `ValuesForTesting` with the given `table` and `vars`, which is
+// sorted by all its columns.
+std::shared_ptr<QueryExecutionTree> makeSortedValues(QueryExecutionContext* qec,
+                                                     IdTable table, Vars vars) {
+  std::vector<ColumnIndex> sortedOn(vars.size());
+  std::iota(sortedOn.begin(), sortedOn.end(), 0);
+  return ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(table), std::move(vars), false, std::move(sortedOn));
+}
+
+// Check that the `UNION` of `left` and `right` sorted by `targetOrder` yields
+// `expected`, computed fully materialized and lazily.
+void testSortedUnion(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
+    std::shared_ptr<QueryExecutionTree> right,
+    std::vector<ColumnIndex> targetOrder, const IdTable& expected,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  Union unionOperation{qec, std::move(left), std::move(right),
+                       std::move(targetOrder)};
+  for (auto mode : {ComputationMode::FULLY_MATERIALIZED,
+                    ComputationMode::LAZY_IF_SUPPORTED}) {
+    SCOPED_TRACE(mode == ComputationMode::FULLY_MATERIALIZED
+                     ? "fully materialized"
+                     : "lazy if supported");
+    qec->getQueryTreeCache().clearAll();
+    auto result = unionOperation.getResult(true, mode);
+    auto actual =
+        result->isFullyMaterialized()
+            ? result->idTableView().clone()
+            : aggregateTables(result->idTables(), expected.numColumns()).first;
+    EXPECT_EQ(actual, expected);
+  }
+}
 }  // namespace
 
 // A simple test for computing a union.
@@ -311,6 +346,66 @@ TEST(Union, sortedMerge) {
 
     ASSERT_EQ(++it, idTables.end());
   }
+}
+
+// Test the sorted merge when a sort column is missing in one of the children.
+// Such a column is UNDEF for all rows of that child. If the row of the other
+// child is also UNDEF in that column, the next sort column has to decide.
+TEST(Union, sortedMergeWithColumnMissingOnOneSide) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto U = Id::makeUndefined();
+
+  // A child with the columns `?a ?b ?c`, where `?b` is UNDEF, and a child with
+  // the columns `?a ?c` only.
+  auto withB = [&]() {
+    auto table = makeIdTableFromVector({{1, 0, 5}});
+    table(0, 1) = U;
+    return makeSortedValues(qec, std::move(table),
+                            Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}});
+  };
+  auto withoutB = [&](int64_t c) {
+    return makeSortedValues(qec, makeIdTableFromVector({{1, c}}),
+                            Vars{Var{"?a"}, Var{"?c"}});
+  };
+
+  // The column `?b` is missing in the left child (result columns `?a ?c ?b`),
+  // the sort order is `?a ?b ?c`.
+  testSortedUnion(qec, withoutB(7), withB(), {0, 2, 1},
+                  makeIdTableFromVector({{1, 5, U}, {1, 7, U}}));
+
+  // The column `?b` is missing in the right child (result columns `?a ?b ?c`).
+  testSortedUnion(qec, withB(), withoutB(7), {0, 1, 2},
+                  makeIdTableFromVector({{1, U, 5}, {1, U, 7}}));
+}
+
+// Test the sorted merge when the FIRST sort column is missing in one of the
+// children and can be UNDEF in the other child. The children must then be
+// merged, a simple concatenation is not sorted.
+TEST(Union, sortedMergeWithFirstSortColumnMissingOnOneSide) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto U = Id::makeUndefined();
+
+  // A child with the columns `?a ?c`, where `?a` is UNDEF in the first row,
+  // and a child with the column `?c` only.
+  auto withA = [&]() {
+    auto table = makeIdTableFromVector({{0, 5}, {1, 2}});
+    table(0, 0) = U;
+    return makeSortedValues(qec, std::move(table), Vars{Var{"?a"}, Var{"?c"}});
+  };
+  auto withoutA = [&](int64_t c) {
+    return makeSortedValues(qec, makeIdTableFromVector({{c}}), Vars{Var{"?c"}});
+  };
+
+  // The column `?a` is missing in the left child (result columns `?c ?a`), the
+  // sort order is `?a ?c`.
+  testSortedUnion(qec, withoutA(7), withA(), {1, 0},
+                  makeIdTableFromVector({{5, U}, {7, U}, {2, 1}}));
+
+  // The column `?a` is missing in the right child (result columns `?a ?c`).
+  testSortedUnion(qec, withA(), withoutA(7), {0, 1},
+                  makeIdTableFromVector({{U, 5}, {U, 7}, {1, 2}}));
 }
 
 // _____________________________________________________________________________
@@ -722,10 +817,12 @@ TEST(Union, getCostEstimate) {
   IdTable oneColumn{1, qec->getAllocator()};
   oneColumn.resize(100);
   ql::ranges::fill(oneColumn.getColumn(0), Id::makeUndefined());
+  // The two columns are always defined, so that a sorted `UNION` whose first
+  // sort column is missing in the other child can skip the merge.
   IdTable twoColumns{2, qec->getAllocator()};
   twoColumns.resize(100);
-  ql::ranges::fill(twoColumns.getColumn(0), Id::makeUndefined());
-  ql::ranges::fill(twoColumns.getColumn(1), Id::makeUndefined());
+  ql::ranges::fill(twoColumns.getColumn(0), Id::makeFromInt(1));
+  ql::ranges::fill(twoColumns.getColumn(1), Id::makeFromInt(1));
 
   auto valuesA = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, oneColumn.clone(), Vars{Var{"?a"}}, false,

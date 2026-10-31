@@ -122,6 +122,12 @@ class Union : public Operation {
   // to `targetOrder_`. Only meaningful if `targetOrder_` is not empty.
   std::vector<ColumnIndex> sortOrderForSubtree(size_t subtreeIndex) const;
 
+  // Return true iff the concatenation of the (sorted) children is already
+  // sorted according to `targetOrder_`, so that the merge is not needed. This
+  // is the case if the first sort column is missing in the left child (it is
+  // UNDEF for all of its rows) and can never be UNDEF in the right child.
+  bool isSortedByConcatenation() const;
+
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   std::unique_ptr<Operation> cloneImpl() const override;
