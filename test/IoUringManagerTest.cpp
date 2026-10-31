@@ -633,8 +633,11 @@ TEST(MakeBatchManager, backendMatchesFlagWhenIoUringPreferred) {
 std::pair<std::vector<size_t>, std::vector<std::string>> readHits(
     int fd, const std::vector<std::pair<uint64_t, size_t>>& reads) {
   std::vector<size_t> numBytes;
+  numBytes.reserve(reads.size());
   std::vector<uint64_t> offsets;
+  offsets.reserve(reads.size());
   std::vector<std::string> buffers;
+  buffers.reserve(reads.size());
   for (const auto& [offset, size] : reads) {
     offsets.push_back(offset);
     numBytes.push_back(size);
@@ -656,48 +659,12 @@ std::vector<size_t> allPositions(size_t n) {
   return positions;
 }
 
-// A batch whose file was just written is in the page cache. Where the file
-// system supports `RWF_NOWAIT`, it is served completely; otherwise the first
-// page-cache read switches the fast path off and all reads are returned.
-TEST(ReadPageCacheHits, hitOnlyBatch) {
-  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
-  auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}, {4, 0}});
-  if (!ad_utility::pageCacheFastPathIsSupported()) {
-    EXPECT_EQ(notServed, allPositions(4));
-    return;
-  }
-  EXPECT_TRUE(notServed.empty());
-  EXPECT_EQ(buffers[0], "AAAA");
-  EXPECT_EQ(buffers[1], "BBBB");
-  EXPECT_EQ(buffers[2], "DDDD");
-  EXPECT_EQ(buffers[3], "");
-}
-
 // Reads that cannot be served completely (here: beyond the end of the file)
 // are all returned, whether or not `RWF_NOWAIT` is supported.
 TEST(ReadPageCacheHits, missOnlyBatch) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
   auto [notServed, buffers] = readHits(fd, {{16, 4}, {40, 4}, {20, 4}});
   EXPECT_EQ(notServed, allPositions(3));
-}
-
-// A mixed batch: a short read in the middle of a run of adjacent ranges
-// returns the incomplete read and the rest of its run, the complete reads of
-// the run and of other runs are served. Where the file system rejects
-// `RWF_NOWAIT`, all reads are returned.
-TEST(ReadPageCacheHits, mixedBatchWithShortRead) {
-  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
-  auto [notServed, buffers] =
-      readHits(fd, {{0, 4}, {8, 4}, {12, 2}, {14, 4}, {18, 4}, {4, 4}});
-  if (!ad_utility::pageCacheFastPathIsSupported()) {
-    EXPECT_EQ(notServed, allPositions(6));
-    return;
-  }
-  EXPECT_EQ(notServed, (std::vector<size_t>{3, 4}));
-  EXPECT_EQ(buffers[0], "AAAA");
-  EXPECT_EQ(buffers[1], "CCCC");
-  EXPECT_EQ(buffers[2], "DD");
-  EXPECT_EQ(buffers[5], "BBBB");
 }
 
 // Fault injection for `readPageCacheHits`: the tests below replace its
@@ -759,7 +726,7 @@ int64_t countedNotSupported(int fd, const ::iovec* iov, int iovcnt,
 // Only the first 6 bytes of every run are "cached": the whole run is read, but
 // only 6 bytes are reported as read.
 int64_t sixBytesCached(int fd, const ::iovec* iov, int iovcnt, int64_t offset) {
-  int64_t numBytesRead = blockingFill(fd, iov, iovcnt, offset);
+  const int64_t numBytesRead = blockingFill(fd, iov, iovcnt, offset);
   return numBytesRead < 0 ? numBytesRead : std::min<int64_t>(numBytesRead, 6);
 }
 
@@ -774,6 +741,40 @@ int64_t zeroBytes(int, const ::iovec*, int, int64_t) { return 0; }
   if (!ad_utility::pageCacheFastPathIsSupported()) {          \
     GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not compiled in"; \
   }
+
+// A batch whose reads are all in the page cache is served completely;
+// adjacent ranges (the first two reads) are read in one call. The page-cache
+// read is injected (a blocking `pread` that serves every byte that exists),
+// so the test does not depend on the real `preadv2(RWF_NOWAIT)` being
+// supported for the test file or on the file still being cached.
+TEST(ReadPageCacheHits, hitOnlyBatch) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  ScopedPageCacheRead inject{&countedCachedRead};
+  auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}, {4, 0}});
+  EXPECT_TRUE(notServed.empty());
+  EXPECT_EQ(buffers[0], "AAAA");
+  EXPECT_EQ(buffers[1], "BBBB");
+  EXPECT_EQ(buffers[2], "DDDD");
+  EXPECT_EQ(buffers[3], "");
+}
+
+// A mixed batch: a short read in the middle of a run of adjacent ranges
+// returns the incomplete read and the rest of its run, the complete reads
+// of the run and of other runs are served. The page-cache read is injected
+// as in `hitOnlyBatch`, so no real `preadv2(RWF_NOWAIT)` is involved.
+TEST(ReadPageCacheHits, mixedBatchWithShortRead) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  ScopedPageCacheRead inject{&countedCachedRead};
+  auto [notServed, buffers] =
+      readHits(fd, {{0, 4}, {8, 4}, {12, 2}, {14, 4}, {18, 4}, {4, 4}});
+  EXPECT_EQ(notServed, (std::vector<size_t>{3, 4}));
+  EXPECT_EQ(buffers[0], "AAAA");
+  EXPECT_EQ(buffers[1], "CCCC");
+  EXPECT_EQ(buffers[2], "DD");
+  EXPECT_EQ(buffers[5], "BBBB");
+}
 
 // Reads that are not cached (`EAGAIN`) are all returned, their buffers stay
 // untouched, and the fast path stays enabled.
@@ -835,6 +836,7 @@ TEST(ReadPageCacheHits, runsAreSplitAtIovMax) {
   content.back() = 'y';
   auto [tmp, fd] = makeTempFile(content);
   std::vector<std::pair<uint64_t, size_t>> reads;
+  reads.reserve(numReads);
   for (size_t i = 0; i < numReads; ++i) {
     reads.emplace_back(i, 1);
   }
