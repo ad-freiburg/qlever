@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_SPLITLAYOUTIDBITREPRESENTATION_H
 #define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_SPLITLAYOUTIDBITREPRESENTATION_H
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -22,7 +24,7 @@
 namespace columnBasedIdTable::splitLayout {
 
 // The raw bit representation of an `Id` in the experimental split layout: a
-// datatype byte and a full 64-bit payload word, kept apart (unlike the legacy
+// full 64-bit payload word and a datatype byte, kept apart (unlike the legacy
 // `ValueId`, which packs both into a single 64-bit word). The comparison is
 // datatype-major (first by `datatype_`, then by `payload_`), which is
 // consistent with the ordering of the legacy `ValueId`s (as long as no
@@ -31,13 +33,62 @@ struct SplitLayoutIdBitRepresentation {
   using PayloadType = uint64_t;
   using DatatypeType = uint8_t;
 
-  DatatypeType datatype_;
   PayloadType payload_;
+  DatatypeType datatype_;
 
-  // The default three-way comparison is datatype-major because `datatype_`
-  // is declared before `payload_`.
-  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
-      SplitLayoutIdBitRepresentation, datatype_, payload_)
+  // The number of bytes of the two data members above, and the number of bytes
+  // that fill a bit representation up to a multiple of the alignment of the
+  // payload (computed like for a `SplitLayoutId`).
+  static constexpr size_t numDataBytes =
+      sizeof(PayloadType) + sizeof(DatatypeType);
+  // NOTE: Plain arithmetic on purpose: CLion cannot evaluate a function
+  // call (e.g. `ad_utility::alignUp`) in the size of `padding_` and marks
+  // the `static_assert`s below as failed.
+  static constexpr size_t numPaddingBytes =
+      (alignof(PayloadType) - numDataBytes % alignof(PayloadType)) %
+      alignof(PayloadType);
+
+  // Explicit padding bytes, which are always set to zero by the constructor
+  // below, s.t. the bytes of a bit representation are deterministic (e.g. for
+  // writing them to disk). With them, the layout is the same as the one of a
+  // `SplitLayoutId`.
+  std::array<uint8_t, numPaddingBytes> padding_;
+
+  // Default construction of an uninitialized bit representation, like for an
+  // `Id`.
+  SplitLayoutIdBitRepresentation() = default;
+
+  constexpr SplitLayoutIdBitRepresentation(DatatypeType datatype,
+                                           PayloadType payload)
+      : payload_{payload}, datatype_{datatype}, padding_{} {}
+
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
+      SplitLayoutIdBitRepresentation)
+
+  // The datatype-major comparison: first compare the datatype byte, then the
+  // payload bits as unsigned integers, analogously to the bitwise comparison
+  // of a `SplitLayoutId`. NOTE: The defaulted comparison would compare the
+  // members in the order of their declaration, so first the `payload_`.
+  [[nodiscard]] constexpr ql::strong_ordering compareThreeWay(
+      const SplitLayoutIdBitRepresentation& other) const {
+    const auto typeComparison = ql::compareThreeWay(datatype_, other.datatype_);
+    return typeComparison != 0 ? typeComparison
+                               : ql::compareThreeWay(payload_, other.payload_);
+  }
+
+  // Compare the datatype first and then the payload, like `compareThreeWay`
+  // above. NOTE: Not defaulted, because in C++20 the defaulted equality would
+  // compare the members in the order of their declaration and also the
+  // `padding_`, but in C++17 (the macro with a tie) only the listed members,
+  // and both should behave exactly the same.
+  constexpr bool operator==(const SplitLayoutIdBitRepresentation& other) const {
+    return datatype_ == other.datatype_ && payload_ == other.payload_;
+  }
+#ifdef QLEVER_CPP_17
+  constexpr bool operator!=(const SplitLayoutIdBitRepresentation& other) const {
+    return !(*this == other);
+  }
+#endif
 
   // Return the bit representation of the smallest `Id` that is greater
   // than the `Id` of this bit representation. The overflow of the
@@ -58,10 +109,8 @@ struct SplitLayoutIdBitRepresentation {
     return H::combine(std::move(h), rep.datatype_, rep.payload_);
   }
 
-  // The bit representation can be serialized by simply copying its bytes.
-  // Note: The padding bytes between `datatype_` and `payload_` are not
-  // guaranteed to be zero, so the byte-level output is not deterministic,
-  // but roundtripping works correctly.
+  // The bit representation can be serialized by simply copying its bytes
+  // (including the zeroed padding).
   template <typename U>
   friend std::true_type allowTrivialSerialization(
       SplitLayoutIdBitRepresentation, U);
@@ -82,6 +131,15 @@ struct SplitLayoutIdBitRepresentation {
     return ostr << static_cast<int>(rep.datatype_) << ':' << rep.payload_;
   }
 };
+
+// The `payload_` is followed by the `datatype_` and the explicit padding up to
+// the size of two payloads, and there are no bytes that the compiler adds
+// implicitly (and leaves uninitialized).
+static_assert(offsetof(SplitLayoutIdBitRepresentation, payload_) == 0);
+static_assert(offsetof(SplitLayoutIdBitRepresentation, datatype_) ==
+              sizeof(SplitLayoutIdBitRepresentation::PayloadType));
+static_assert(
+    std::has_unique_object_representations_v<SplitLayoutIdBitRepresentation>);
 }  // namespace columnBasedIdTable::splitLayout
 
 // Make `SplitLayoutIdBitRepresentation` usable as a key of `std` hash

@@ -108,7 +108,7 @@ TEST(OrderByComparator, getTermKind) {
 
   // An `Id` with an invalid datatype.
   static_assert(static_cast<int>(Datatype::MaxValue) < 15);
-  EXPECT_ANY_THROW(kind(Id::fromBits(Id::T{15} << Id::numDataBits)));
+  EXPECT_ANY_THROW(kind(Id::fromBits(Id::DatatypeType{15}, 0)));
 }
 
 // Test the order on groups of `Id`s: the `Id`s of one group are equivalent, and
