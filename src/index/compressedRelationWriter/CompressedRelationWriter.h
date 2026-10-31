@@ -41,6 +41,15 @@
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
+// The writer that is fed directly by the chunks of a parallel merge (see
+// `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`), which
+// needs access to the thread-safe internals of the `CompressedRelationWriter`
+// below.
+namespace chunkwisePermutationWriter {
+class ChunkwisePermutationWriter;
+class ChunkWriter;
+}  // namespace chunkwisePermutationWriter
+
 /// Manage the compression and serialization of relations during the index
 /// build.
 class CompressedRelationWriter {
@@ -450,6 +459,8 @@ class CompressedRelationWriter {
   // compressed and written, as determined by the runtime parameter
   // `permutation-writer-num-blocks-in-flight`.
   static size_t getNumBlocksInFlight();
+  friend class chunkwisePermutationWriter::ChunkwisePermutationWriter;
+  friend class chunkwisePermutationWriter::ChunkWriter;
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);
