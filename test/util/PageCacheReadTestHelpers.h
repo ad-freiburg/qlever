@@ -10,6 +10,8 @@
 #ifndef QLEVER_TEST_UTIL_PAGECACHEREADTESTHELPERS_H
 #define QLEVER_TEST_UTIL_PAGECACHEREADTESTHELPERS_H
 
+#include <sys/uio.h>
+
 #include <cerrno>
 #include <cstdint>
 #include <utility>
@@ -36,20 +38,25 @@ class ScopedPageCacheRead {
   }
   ScopedPageCacheRead(const ScopedPageCacheRead&) = delete;
   ScopedPageCacheRead& operator=(const ScopedPageCacheRead&) = delete;
+  // Deleted: moving would restore the previous read twice.
+  ScopedPageCacheRead(ScopedPageCacheRead&&) = delete;
+  ScopedPageCacheRead& operator=(ScopedPageCacheRead&&) = delete;
 
  private:
-  ad_utility::detail::PageCacheRead previous_;
+  const ad_utility::detail::PageCacheRead previous_;
   bool wasSupported_ = ad_utility::pageCacheFastPathIsSupported();
 };
 
-// A page-cache read that finds nothing cached (`EAGAIN`).
-inline int64_t nothingCached(int, const ::iovec*, int, int64_t) {
+//______________________________________________________________________________
+// Report that nothing is cached (`EAGAIN`).
+inline int64_t nothingCached(int, const ::iovec*, int, int64_t) noexcept {
   errno = EAGAIN;
   return -1;
 }
 
-// A page-cache read on a file system that rejects `RWF_NOWAIT`.
-inline int64_t notSupported(int, const ::iovec*, int, int64_t) {
+//______________________________________________________________________________
+// Report that `RWF_NOWAIT` is not supported (`EOPNOTSUPP`).
+inline int64_t notSupported(int, const ::iovec*, int, int64_t) noexcept {
   errno = EOPNOTSUPP;
   return -1;
 }
