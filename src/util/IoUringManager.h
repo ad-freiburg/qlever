@@ -274,8 +274,9 @@ using BatchIoManager = BatchManager<SyncIoPolicy>;
 
 // Serve the reads of a batch that are completely in the page cache with
 // non-blocking `preadv2(RWF_NOWAIT)` calls, one call per run of adjacent file
-// ranges (split into chunks of at most `IOV_MAX` reads), and return the positions of the other reads in ascending order. The
-// caller issues those through its regular path, which also reports errors.
+// ranges (split into chunks of at most `IOV_MAX` reads), and return the
+// positions of the other reads in ascending order. The caller issues those
+// through its regular path, which also reports errors.
 // Precondition: the three spans have the same length.
 std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
                                       ql::span<const uint64_t> offsets,
