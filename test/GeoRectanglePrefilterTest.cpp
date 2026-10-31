@@ -1107,3 +1107,41 @@ TEST(GeoRectanglePrefilter, plannerEvaluatesSubqueryWithLimit) {
 }
 
 }  // namespace
+
+// The pruning key of the query planner tells a plan whose result is
+// restricted to the rectangle of a filter (a prefiltered scan or a
+// `GeoRectangleRowFilter`) apart from a plan that is not, because the former
+// computes a subset of the latter. Once the filter is applied to both, they
+// compute the same rows and get the same key again. This test is a friend of
+// `QueryPlanner` for `getPruningKey`.
+TEST(GeoRectanglePrefilter, pruningKeyOfPartiallyAppliedFilter) {
+  auto* qec = geoQec();
+  QueryPlanner planner{qec,
+                       std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto qet = queryPlannerTestHelpers::parseAndPlan(
+      "SELECT * WHERE { ?s <hasGeom> ?g }", qec);
+  auto key = [&planner](const QueryPlanner::SubtreePlan& plan) {
+    return planner.getPruningKey(plan, plan._qet->resultSortedOn());
+  };
+  QueryPlanner::SubtreePlan plain{qet};
+  plain._idsOfIncludedNodes = 1;
+  auto restricted = plain;
+
+  // Restricted to the rectangle of filter 0, which is not applied yet: a
+  // subset, hence a different key.
+  restricted.idsOfPartiallyAppliedFilters_ = 1;
+  EXPECT_NE(key(plain), key(restricted));
+
+  // Filter 0 applied to both: the same rows, hence the same key.
+  plain._idsOfIncludedFilters = 1;
+  restricted._idsOfIncludedFilters = 1;
+  EXPECT_EQ(key(plain), key(restricted));
+
+  // Restricted to the rectangles of filters 0 and 1, with only filter 0
+  // applied: still a subset with respect to filter 1.
+  restricted.idsOfPartiallyAppliedFilters_ = 3;
+  EXPECT_NE(key(plain), key(restricted));
+  restricted._idsOfIncludedFilters = 3;
+  plain._idsOfIncludedFilters = 3;
+  EXPECT_EQ(key(plain), key(restricted));
+}

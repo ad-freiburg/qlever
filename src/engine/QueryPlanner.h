@@ -165,6 +165,14 @@ class QueryPlanner {
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;
+    // The filters whose rectangle the result of this plan is already
+    // restricted to (by the block prefilter of a scan or a
+    // `GeoRectangleRowFilter`, see `applyGeoRectanglePrefilters`), although
+    // the filter itself is not applied yet. Such a plan computes a subset of
+    // the rows of the same plan without the restriction, so the two must not
+    // be compared by cost before the filter is applied to both; see
+    // `getPruningKey`.
+    uint64_t idsOfPartiallyAppliedFilters_ = 0;
     bool containsFilterSubstitute_ = false;
     bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
@@ -847,6 +855,7 @@ class QueryPlanner {
       bool useGreedyPlanning);
   FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
               findApplicableReplacementPlansGreedyOverlap);
+  FRIEND_TEST(GeoRectanglePrefilter, pruningKeyOfPartiallyAppliedFilter);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples

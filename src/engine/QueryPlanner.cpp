@@ -111,6 +111,8 @@ void mergeSubtreePlanIds(SubtreePlan& target, const SubtreePlan& a,
       a._idsOfIncludedFilters | b._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ =
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
+  target.idsOfPartiallyAppliedFilters_ =
+      a.idsOfPartiallyAppliedFilters_ | b.idsOfPartiallyAppliedFilters_;
   target.containsFilterSubstitute_ =
       a.containsFilterSubstitute_ || b.containsFilterSubstitute_;
   target.containsBindSubstitute_ =
@@ -124,6 +126,7 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target._idsOfIncludedNodes = source._idsOfIncludedNodes;
   target._idsOfIncludedFilters = source._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
+  target.idsOfPartiallyAppliedFilters_ = source.idsOfPartiallyAppliedFilters_;
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
   target.containsBindSubstitute_ = source.containsBindSubstitute_;
 }
@@ -821,7 +824,8 @@ auto QueryPlanner::seedWithScansAndText(
       using namespace ad_utility::use_type_identity;
       AD_CORRECTNESS_CHECK(
           (newIdPlan._idsOfIncludedFilters == 0 &&
-           newIdPlan.idsOfIncludedTextLimits_ == 0) ||
+           newIdPlan.idsOfIncludedTextLimits_ == 0 &&
+           newIdPlan.idsOfPartiallyAppliedFilters_ == 0) ||
               is(ti<Bind>) || newIdPlan.containsBindSubstitute_ ||
               is(ti<OptionalJoin>) || is(ti<Minus>),
           "Bit map _idsOfIncludedFilters or idsOfIncludedTextLimits_ illegal");
@@ -1383,6 +1387,13 @@ std::string QueryPlanner::getPruningKey(
   os << ' ' << plan._idsOfIncludedFilters;
   os << " t: ";
   os << ' ' << plan.idsOfIncludedTextLimits_;
+  // A plan that is restricted to the rectangle of a filter computes a subset
+  // of the rows of a plan that is not, so the two may only compete once the
+  // filter is applied to both (then both compute the same rows, and the
+  // restriction no longer matters).
+  os << " p: ";
+  os << ' '
+     << (plan.idsOfPartiallyAppliedFilters_ & ~plan._idsOfIncludedFilters);
   os << " s: ";
   os << ' ' << plan.containsFilterSubstitute_;
   os << " b: ";
@@ -1967,6 +1978,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   uint64_t nodes = 0;
   uint64_t filterIds = 0;
   uint64_t textLimitIds = 0;
+  uint64_t partiallyAppliedFilterIds = 0;
   bool containsFilterSubstitute = false;
   bool containsBindSubstitute = false;
   ql::ranges::for_each(
@@ -1978,6 +1990,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
         nodes |= plan._idsOfIncludedNodes;
         filterIds |= plan._idsOfIncludedFilters;
         textLimitIds |= plan.idsOfIncludedTextLimits_;
+        partiallyAppliedFilterIds |= plan.idsOfPartiallyAppliedFilters_;
         containsFilterSubstitute |= plan.containsFilterSubstitute_;
         containsBindSubstitute |= plan.containsBindSubstitute_;
         subtrees.push_back(std::move(plan._qet));
@@ -1988,6 +2001,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedNodes = nodes;
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
+  plan.idsOfPartiallyAppliedFilters_ = partiallyAppliedFilterIds;
   plan.containsFilterSubstitute_ = containsFilterSubstitute;
   plan.containsBindSubstitute_ = containsBindSubstitute;
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
@@ -2314,15 +2328,31 @@ void QueryPlanner::applyGeoRectanglePrefilters(
   // what carries over to the other side of a spatial join, see
   // `impliedRectangle` below). Each is the intersection of all rectangles of
   // its kind known for the variable.
+  //
+  // A rectangle holds for the geometries of a variable only once certain
+  // filters are applied: the rectangle carried over along a spatial join
+  // holds once that spatial join is applied, and the rectangle of a part of
+  // the query that is evaluated with filters (see below) holds once those
+  // filters are applied. `anyFilters_` and `containedFilters_` are the ids
+  // of these filters for `any_` and `contained_`; a plan whose scans are
+  // prefiltered with `any_` is marked with `anyFilters_` as partially
+  // applied, see `SubtreePlan::idsOfPartiallyAppliedFilters_`. The rectangle
+  // of a fixed side holds unconditionally (no filters).
   struct KnownRectangles {
     std::optional<GeoRectangle> any_;
     std::optional<GeoRectangle> contained_;
+    uint64_t anyFilters_ = 0;
+    uint64_t containedFilters_ = 0;
   };
   ad_utility::HashMap<Variable, KnownRectangles> known;
-  // Add `rectangle` to what is known about `variable`. Return true iff this
-  // changed something.
+  // Add `rectangle`, which holds once the filters in `filterIds` are applied,
+  // to what is known about `variable`. Return true iff this changed
+  // something. A rectangle that does not shrink the known rectangle adds
+  // nothing, also no filters: the known rectangle then lies inside it, so the
+  // geometries lie in it regardless of its filters.
   auto addRectangle = [&known](const Variable& variable,
-                               const GeoRectangle& rectangle, bool contained) {
+                               const GeoRectangle& rectangle, bool contained,
+                               uint64_t filterIds) {
     auto intersectInto = [&rectangle](std::optional<GeoRectangle>& target) {
       if (!target.has_value()) {
         target = rectangle;
@@ -2340,8 +2370,14 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     };
     auto& entry = known[variable];
     bool changed = intersectInto(entry.any_);
+    if (changed) {
+      entry.anyFilters_ |= filterIds;
+    }
     if (contained) {
       bool changedContained = intersectInto(entry.contained_);
+      if (changedContained) {
+        entry.containedFilters_ |= filterIds;
+      }
       changed = changed || changedContained;
     }
     return changed;
@@ -2367,7 +2403,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       AD_CORRECTNESS_CHECK(var == edge.left_ || var == edge.right_);
       if (auto rectangle = sparqlExpression::geoRectangleOfConstantGeometry(
               parsed._values.at(0).at(0))) {
-        addRectangle(var, rectangle.value(), true);
+        addRectangle(var, rectangle.value(), true, 0);
         fixedVariables.insert(var);
       }
     }
@@ -2388,7 +2424,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     if (auto rectangle = SpatialJoin::boundingRectangleOfColumn(
             result->idTableView(), plan._qet->getVariableColumn(target),
             _qec->getIndex())) {
-      addRectangle(target, rectangle.value(), true);
+      addRectangle(target, rectangle.value(), true, 0);
       fixedVariables.insert(target);
     }
   }
@@ -2546,9 +2582,20 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       if (result->idTableView().numRows() > maxRows) {
         continue;
       }
+      // The filter ids of the evaluated plan refer to `componentFilters` and
+      // are translated back to `filters`.
+      uint64_t filterIds = 0;
+      for (size_t j = 0; j < componentFilterIndex.size(); ++j) {
+        if (cheapest._idsOfIncludedFilters & (uint64_t{1} << j)) {
+          filterIds |= uint64_t{1} << componentFilterIndex[j];
+        }
+      }
       // Every geometry variable that the component binds is fixed now (its
       // values are known, so prefiltering its scans would be pointless),
       // and gets the bounding rectangle of its geometries, if it has any.
+      // The rectangle holds once the filters of the component are applied:
+      // the main planning may also build the component from its seeds, and
+      // such a plan binds more geometries until these filters are applied.
       for (const auto& boundVariable : edgeVariables) {
         if (!cheapest._qet->containsVariable(boundVariable)) {
           continue;
@@ -2558,7 +2605,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
                 result->idTableView(),
                 cheapest._qet->getVariableColumn(boundVariable),
                 _qec->getIndex())) {
-          addRectangle(boundVariable, rectangle.value(), true);
+          addRectangle(boundVariable, rectangle.value(), true, filterIds);
         }
       }
       // The evaluated plan becomes a candidate for the whole component in
@@ -2567,16 +2614,9 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       // can be far off (437 rows for the one geometry of a fixed subject on
       // the OSM planet), and the cost of the spatial join above grows with
       // it, which can make the planner prefer a worse plan for the other
-      // side. The filter ids of the plan refer to `componentFilters` and are
-      // translated back.
+      // side.
       SubtreePlan evaluated = cheapest;
       evaluated._qet->setSizeEstimate(result->idTableView().numRows());
-      uint64_t filterIds = 0;
-      for (size_t j = 0; j < componentFilterIndex.size(); ++j) {
-        if (evaluated._idsOfIncludedFilters & (uint64_t{1} << j)) {
-          filterIds |= uint64_t{1} << componentFilterIndex[j];
-        }
-      }
       evaluated._idsOfIncludedFilters = filterIds;
       evaluatedComponentPlans.push_back(std::move(evaluated));
     }
@@ -2631,7 +2671,9 @@ void QueryPlanner::applyGeoRectanglePrefilters(
         }
         auto [rectangle, contained] =
             impliedRectangle(edge, sourceIsLeft, it->second.contained_.value());
-        bool changedTarget = addRectangle(target, rectangle, contained);
+        bool changedTarget = addRectangle(
+            target, rectangle, contained,
+            (uint64_t{1} << edge.filterIndex_) | it->second.containedFilters_);
         changed = changed || changedTarget;
       }
     }
@@ -2661,6 +2703,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       continue;
     }
     const auto& rectangle = rectangles.any_.value();
+    const uint64_t partiallyAppliedFilters = rectangles.anyFilters_;
     auto makePrefilter = [&rectangle, &geometryVariable]() {
       std::vector<Operation::PrefilterVariablePair> pairs;
       pairs.emplace_back(
@@ -2681,7 +2724,10 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     // it does not: the join of the unprefiltered scan with a small other
     // side reads only the blocks of that side's values, whereas the
     // prefiltered scan reads, filters, and re-sorts all candidates of the
-    // rectangle.
+    // rectangle. The prefiltered plans are marked as partially applying the
+    // filters of the rectangle, so that they are not compared by cost with
+    // the unprefiltered plans (which compute more rows) before the spatial
+    // join is applied to both.
     std::optional<uint64_t> numCandidates;
     std::vector<SubtreePlan> prefilteredSeeds;
     for (const auto& plan : seeds) {
@@ -2694,6 +2740,8 @@ void QueryPlanner::applyGeoRectanglePrefilters(
                       makePrefilter())) {
         prefilteredSeeds.push_back(plan);
         prefilteredSeeds.back()._qet = std::move(prefiltered.value());
+        prefilteredSeeds.back().idsOfPartiallyAppliedFilters_ |=
+            partiallyAppliedFilters;
         numCandidates = std::min<uint64_t>(
             numCandidates.value_or(prefilteredSeeds.back().getSizeEstimate()),
             prefilteredSeeds.back().getSizeEstimate());
@@ -2712,6 +2760,8 @@ void QueryPlanner::applyGeoRectanglePrefilters(
           ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
               _qec, plan._qet, plan._qet->getVariableColumn(geometryVariable),
               rectangle, numCandidates);
+      prefilteredSeeds.back().idsOfPartiallyAppliedFilters_ |=
+          partiallyAppliedFilters;
     }
     ql::ranges::move(prefilteredSeeds, std::back_inserter(seeds));
     for (auto& row : replacementPlans) {
@@ -2720,6 +2770,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
                 plan._qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
                     makePrefilter())) {
           plan._qet = std::move(prefiltered.value());
+          plan.idsOfPartiallyAppliedFilters_ |= partiallyAppliedFilters;
         }
       }
     }
@@ -3668,6 +3719,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     for (auto& plan : candidatePlans_.back()) {
       plan._idsOfIncludedFilters = 0;
       plan.idsOfIncludedTextLimits_ = 0;
+      plan.idsOfPartiallyAppliedFilters_ = 0;
     }
 
     return;
@@ -3692,6 +3744,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       // been applied
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
+        plan.idsOfPartiallyAppliedFilters_ = a.idsOfPartiallyAppliedFilters_;
         plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
         plan.containsBindSubstitute_ = a.containsBindSubstitute_;
       }
@@ -3917,6 +3970,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
     plan.idsOfIncludedTextLimits_ = a.idsOfIncludedTextLimits_;
+    plan.idsOfPartiallyAppliedFilters_ = a.idsOfPartiallyAppliedFilters_;
     plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
     plan.containsBindSubstitute_ = a.containsBindSubstitute_;
     candidatePlans_.back().push_back(std::move(plan));
