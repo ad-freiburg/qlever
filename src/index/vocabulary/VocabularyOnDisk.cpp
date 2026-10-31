@@ -1,6 +1,12 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/VocabularyOnDisk.h"
 
@@ -12,6 +18,7 @@
 #include <atomic>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -270,25 +277,87 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
       }}};
 }
 
+namespace {
+// A run of consecutive vocabulary indices, starting at `firstIndex_`, together
+// with the entries of the `.offsets` file that bound their words: entries `i`
+// and `i + 1` of `offsets_` bound the word of index `firstIndex_ + i`, so a run
+// of `k` indices has `k + 1` entries, which are read as one range. `offsets_`
+// points into the buffer passed to `splitIntoOffsetRuns`.
+struct OffsetRun {
+  size_t firstIndex_;
+  ql::span<uint64_t> offsets_;
+};
+
+// _____________________________________________________________________________
+// Split `indices` into runs of consecutive indices and give each run its
+// entries in `offsets`, which is resized to hold all of them. The result points
+// into `offsets`, so `offsets` must outlive it and must not be resized.
+std::vector<OffsetRun> splitIntoOffsetRuns(ql::span<const size_t> indices,
+                                           std::vector<uint64_t>& offsets) {
+  // The first index and the number of indices of each run (`chunk_by` yields
+  // no empty chunks).
+  const auto runs = ::ranges::to<std::vector<std::pair<size_t, size_t>>>(
+      indices | ::ranges::views::chunk_by([](size_t previous, size_t next) {
+        return next == previous + 1;
+      }) |
+      ::ranges::views::transform([](const auto& run) {
+        return std::pair{*::ranges::begin(run),
+                         static_cast<size_t>(::ranges::distance(run))};
+      }));
+
+  offsets.resize(indices.size() + runs.size());
+  std::vector<OffsetRun> offsetRuns;
+  offsetRuns.reserve(runs.size());
+  size_t nextOffset = 0;
+  for (auto [firstIndex, numIndices] : runs) {
+    const size_t numOffsets = numIndices + 1;
+    offsetRuns.push_back({firstIndex, ql::span<uint64_t>{offsets}.subspan(
+                                          nextOffset, numOffsets)});
+    nextOffset += numOffsets;
+  }
+  return offsetRuns;
+}
+
+// _____________________________________________________________________________
+// Read the offsets of all `runs` from the `.offsets` file `fd` in one batch.
+void readOffsetRuns(ad_utility::BatchManagerBase& manager, int fd,
+                    ql::span<const OffsetRun> runs) {
+  const auto sizes = ::ranges::to<std::vector<size_t>>(
+      runs | ::ranges::views::transform([](const OffsetRun& run) {
+        return run.offsets_.size_bytes();
+      }));
+  const auto fileOffsets = ::ranges::to<std::vector<uint64_t>>(
+      runs | ::ranges::views::transform([](const OffsetRun& run) {
+        return uint64_t{run.firstIndex_ * sizeof(uint64_t)};
+      }));
+  auto targets = ::ranges::to<std::vector<char*>>(
+      runs | ::ranges::views::transform([](const OffsetRun& run) {
+        return reinterpret_cast<char*>(run.offsets_.data());
+      }));
+  manager.wait(manager.addBatch(fd, sizes, fileOffsets, targets));
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
     ad_utility::BatchManagerBase& manager,
     ql::span<const size_t> indices) const {
-  // For each requested index `i`, read its offset together with the next offset
-  // (which bounds the string) as one 16-byte pair from `.offsets`.
-  const size_t numIndices = indices.size();
-  std::vector<OffsetPair> offsetPairs(numIndices);
-  std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
-  std::vector<uint64_t> fileOffsets(numIndices);
-  std::vector<char*> targets(numIndices);
-  for (auto&& [fileOffset, index, target, offsetPair] :
-       ::ranges::views::zip(fileOffsets, indices, targets, offsetPairs)) {
+  for (size_t index : indices) {
     AD_CONTRACT_CHECK(index < size());
-    fileOffset = index * sizeof(uint64_t);
-    target = reinterpret_cast<char*>(&offsetPair);
   }
-  manager.wait(
-      manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
+  std::vector<uint64_t> offsets;
+  const auto runs = splitIntoOffsetRuns(indices, offsets);
+  readOffsetRuns(manager, offsetsFile_.fd(), runs);
+
+  // Each pair of neighbouring offsets of a run bounds one word.
+  std::vector<OffsetPair> offsetPairs;
+  offsetPairs.reserve(indices.size());
+  for (const OffsetRun& run : runs) {
+    for (auto [offset, nextOffset] : ::ranges::views::zip(
+             run.offsets_, run.offsets_ | ::ranges::views::drop(1))) {
+      offsetPairs.push_back(OffsetPair{offset, nextOffset});
+    }
+  }
   return offsetPairs;
 }
 
@@ -340,6 +409,10 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
         "`VocabularyOnDisk::lookupBatch`");
   }};
 
+  // The page-cache fast path belongs to the manager; the runtime parameter can
+  // change between two lookups.
+  manager->setPageCacheFastPath(
+      getRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>());
   auto offsetPairs = readOffsetPairs(*manager, indices);
   return readStrings(*manager, offsetPairs);
 }
@@ -441,7 +514,11 @@ void VocabularyOnDisk::open(const std::string& filename) {
       std::unique_ptr<ad_utility::BatchManagerBase>>>(
       NUM_VOCAB_BATCH_IO_MANAGERS);
   bool preferIoUring = true;
-  for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring));
+  auto makeManager = [&preferIoUring]() {
+    return ad_utility::makeBatchManager(preferIoUring);
+  };
+  for (auto&& manager :
+       ::ranges::views::generate_n(makeManager, NUM_VOCAB_BATCH_IO_MANAGERS)) {
+    ioManagers_->push(std::move(manager));
   }
 }
