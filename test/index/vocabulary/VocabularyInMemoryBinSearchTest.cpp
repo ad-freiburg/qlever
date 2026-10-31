@@ -248,7 +248,8 @@ TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
   // In an empty vocabulary, every word yields the empty range at index 0.
   auto emptyVocab = createVocabularyWithIndices(filename, {}, {});
   EXPECT_EQ(emptyVocab.endIndex(), 0);
-  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha", ql::ranges::less{}),
+  EXPECT_EQ(emptyVocab.getPositionOfWord(std::string_view{"alpha"},
+                                         ql::ranges::less{}),
             (std::pair<uint64_t, uint64_t>{0, 0}));
 }
 

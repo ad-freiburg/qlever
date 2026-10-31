@@ -7,6 +7,7 @@
 #include "util/ConfigManager/ConfigOption.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <array>
 #include <optional>
@@ -183,6 +184,11 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       return absl::StrCat("\"", content, "\"");
     } else if constexpr (std::is_same_v<T, bool>) {
       return content ? std::string{"true"} : std::string{"false"};
+    } else if constexpr (std::is_floating_point_v<T>) {
+      // NOTE: `%f` is what `std::to_string` did for floating-point values
+      // before C++26, which now produces the shortest round-trip
+      // representation.
+      return absl::StrFormat("%f", content);
     } else if constexpr (std::is_arithmetic_v<T>) {
       return std::to_string(content);
     } else {

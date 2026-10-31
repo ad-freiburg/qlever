@@ -232,6 +232,9 @@ struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
   using GraphPatternOperationVariant::GraphPatternOperationVariant;
+  // Since C++26, `std::variant` also has a `visit` member function, so
+  // explicitly choose the one from the mixin to avoid an ambiguity.
+  using VisitMixin<GraphPatternOperation, GraphPatternOperationVariant>::visit;
 
   // TODO<joka921> First refactor `SparqlParserTest.cpp`,
   // then get rid of this function.

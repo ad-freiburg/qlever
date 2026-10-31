@@ -4,6 +4,8 @@
 
 #include "rdfTypes/GeoPoint.h"
 
+#include <absl/strings/str_format.h>
+
 #include <cmath>
 #include <optional>
 #include <type_traits>
@@ -82,9 +84,9 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
 
 // _____________________________________________________________________________
 std::string GeoPoint::toStringRepresentation() const {
-  // Extra conversion using std::to_string to get more decimals
-  return absl::StrCat("POINT(", std::to_string(getLng()), " ",
-                      std::to_string(getLat()), ")");
+  // Use `%f` to get more decimals. NOTE: This is what `std::to_string` did
+  // before C++26, which now produces the shortest round-trip representation.
+  return absl::StrFormat("POINT(%f %f)", getLng(), getLat());
 }
 
 // _____________________________________________________________________________
