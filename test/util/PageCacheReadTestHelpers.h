@@ -22,17 +22,32 @@
 namespace pageCacheReadTestHelpers {
 
 // Replace the `preadv2(RWF_NOWAIT)` call of `ad_utility::readPageCacheHits`
-// with `function` for the lifetime of this object. On destruction the
-// previous function is restored and an injected `EOPNOTSUPP` is undone, so
-// later tests see the fast path as supported again. A fast path that was
-// already unsupported before stays unsupported.
+// with `function` for the lifetime of this object, and restore the state
+// that the test found on destruction. Two pieces of global state are
+// involved, and both are restored:
+//
+// 1. The read function itself: the constructor swaps `function` into
+//    `detail::pageCacheRead()` and remembers the previous one in
+//    `previous_`; the destructor writes it back.
+// 2. The process-wide fast-path latch (`pageCacheFastPathIsSupported()`):
+//    an injected `EOPNOTSUPP` read switches the latch off for the rest of
+//    the process (that is what `switchOffFastPathIfUnsupported` does with
+//    a real failing call, too). `wasSupported_` remembers whether the
+//    latch was on when this object was constructed. If it was, the
+//    destructor calls `resetPageCacheFastPathSupport()` to switch it on
+//    again, undoing an `EOPNOTSUPP` that the test itself injected. If it
+//    was already off (a platform without `RWF_NOWAIT`), nothing is
+//    reset: the test must not pretend the fast path works there.
 class ScopedPageCacheRead {
  public:
   explicit ScopedPageCacheRead(ad_utility::detail::PageCacheRead function)
       : previous_{
             std::exchange(ad_utility::detail::pageCacheRead(), function)} {}
   ~ScopedPageCacheRead() {
+    // Restore 1: the read function that was in place before.
     ad_utility::detail::pageCacheRead() = previous_;
+    // Restore 2: undo an injected `EOPNOTSUPP`, but only if the fast
+    // path was supported before this test (see the class comment).
     if (wasSupported_) {
       ad_utility::detail::resetPageCacheFastPathSupport();
     }
