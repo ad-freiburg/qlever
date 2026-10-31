@@ -20,14 +20,12 @@
 #include <optional>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
 #include "util/Log.h"
 
 #ifdef QLEVER_HAS_IO_URING
@@ -226,7 +224,9 @@ class IoUringInterface {
   virtual int submit() = 0;
 
   // Block until at least `minComplete` completions are ready. Return 0 or
-  // `-errno`.
+  // `-errno`. Must neither hand queued SQEs to the kernel nor consume
+  // completions: `IoUringPolicy` learns which SQEs the kernel took only from
+  // `submit`, and counts every completion that `popCompletions` returns.
   virtual int waitForCompletions(unsigned minComplete) = 0;
 
   // Move up to `completions.size()` ready completions into `completions` and
@@ -281,10 +281,10 @@ class IoUringPolicy {
   IoUringPolicy(unsigned ringSize, std::unique_ptr<IoUringInterface> ring);
 
   // Read the batch: read `i` reads `numBytesToRead[i]` bytes from `fd` at
-  // offset `offsets[i]` into `buffers[i]`. Returns once every read has
-  // completed. Throws if a read failed or was short, or if its reads could not
-  // be submitted; it then still returns only after the kernel holds none of
-  // its reads.
+  // offset `offsets[i]` into `buffers[i]`; the three spans must have the same
+  // length. `handle` is unused. Returns once every read has completed. Throws
+  // if a read failed or was short, or if its reads could not be submitted, but
+  // only once the kernel holds none of its reads.
   void addBatch(int fd, ql::span<const size_t> numBytesToRead,
                 ql::span<const uint64_t> offsets, ql::span<char*> buffers,
                 BatchHandle handle);
@@ -307,6 +307,8 @@ class IoUringPolicy {
     size_t numDone = 0;
     std::optional<std::string> error;
 
+    // The reads that the kernel took and whose completion has not been reaped
+    // yet (they may still write into their buffers).
     size_t numReadsInKernel() const { return numTaken - numDone; }
     // The ring slots that the batch's reads occupy (queued, in the kernel,
     // or completed but not reaped).
@@ -314,17 +316,25 @@ class IoUringPolicy {
   };
 
   // The request id of a no-op. A read's request id is its index in the batch,
-  // so no read gets this id.
+  // so no read gets this id. It is not `uint64_t` max: that is liburing's
+  // `LIBURING_UDATA_TIMEOUT`, whose completions liburing consumes itself on
+  // kernels without `IORING_FEAT_EXT_ARG` (before 5.11), so the no-op would
+  // never be reaped.
   static constexpr uint64_t NO_OP_REQUEST_ID =
-      std::numeric_limits<uint64_t>::max();
+      std::numeric_limits<uint64_t>::max() - 1;
 
+ public:
+  // The request id that `IoUringPolicy` gives the no-ops of cancelled reads.
+  static constexpr uint64_t noOpRequestId() { return NO_OP_REQUEST_ID; }
+
+ private:
   // The size of a wave: wait for up to this many completions at once (fewer if
   // fewer requests are in the kernel), then reap all ready ones in one pass.
   // This amortizes `io_uring_enter` and the CQ-head update over the wave.
   static constexpr unsigned REAP_WAVE = 8;
 
-  // How often an `io_uring_submit` that fails with `EAGAIN` is retried before
-  // the queued reads are cancelled.
+  // How often in a row an `io_uring_submit` that fails with `EAGAIN` is
+  // retried before the queued reads are cancelled.
   static constexpr unsigned MAX_SUBMIT_RETRIES = 16;
 
   std::unique_ptr<IoUringInterface> ring_;

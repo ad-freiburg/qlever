@@ -51,16 +51,22 @@ class FakeIoUring final : public IoUringInterface {
     // If nonzero, every submit (or wait) fails with this `errno`.
     int brokenSubmitErrno = 0;
     int brokenWaitErrno = 0;
+    // Whether a submit may already complete some of the requests it took.
+    bool completeOnSubmit = true;
   };
 
   FakeIoUring(std::string file, size_t sqCapacity, Faults faults, uint32_t seed)
       : file_{std::move(file)},
         sqCapacity_{sqCapacity},
         faults_{faults},
-        random_{seed} {}
+        random_{seed} {
+    // `submit` draws the length of an `EAGAIN` burst from
+    // [1, `maxEagainBurst`].
+    AD_CONTRACT_CHECK(faults_.maxEagainBurst >= 1);
+  }
 
   // Whether, since the last `resetObservations`, a read was made short or
-  // failed, or `cancelQueued` was called.
+  // failed. Whether `cancelQueued` was called is reported by `cancelled()`.
   bool injectedReadFault() const { return injectedReadFault_; }
 
   // How often each fault was injected over the lifetime of the ring, so that
@@ -74,6 +80,7 @@ class FakeIoUring final : public IoUringInterface {
     size_t cancelledReads = 0;
   };
   const FaultCounts& faultCounts() const { return faultCounts_; }
+  // Whether `cancelQueued` was called since the last `resetObservations`.
   bool cancelled() const { return cancelled_; }
   void resetObservations() {
     injectedReadFault_ = false;
@@ -122,8 +129,10 @@ class FakeIoUring final : public IoUringInterface {
       return -EINTR;
     }
     size_t numTaken = queue_.size();
-    if (numTaken > 1 && happens(faults_.partialSubmit)) {
-      numTaken = uniform(1, numTaken - 1);
+    // A partial submit may take nothing, which `IoUringPolicy` retries like
+    // `EAGAIN`.
+    if (numTaken > 0 && happens(faults_.partialSubmit)) {
+      numTaken = uniform(0, numTaken - 1);
       ++faultCounts_.partialSubmits;
     }
     for (size_t i = 0; i < numTaken; ++i) {
@@ -133,7 +142,9 @@ class FakeIoUring final : public IoUringInterface {
     AD_CORRECTNESS_CHECK(kernel_.size() + completions_.size() <=
                          2 * sqCapacity_);
     // The kernel may already have completed some of the requests.
-    completeRandomRequests(uniform(0, kernel_.size()));
+    if (faults_.completeOnSubmit) {
+      completeRandomRequests(uniform(0, kernel_.size()));
+    }
     return static_cast<int>(numTaken);
   }
 

@@ -21,7 +21,6 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
-#include <iostream>
 #include <memory>
 #include <numeric>
 #include <random>
@@ -118,14 +117,7 @@ class ReadBatchForTesting {
   // handle.
   template <typename Manager>
   typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
-    // Build the buffer pointers here, after all buffers have been added, so the
-    // addresses are stable (no further `add` will reallocate `targetBuffers_`).
-    // `addBatch` copies each address into its read request, so this temporary
-    // vector need not outlive the call.
-    std::vector<char*> pointers = ::ranges::to_vector(
-        targetBuffers_ | ql::views::transform([](std::string& buffer) {
-          return buffer.data();
-        }));
+    std::vector<char*> pointers = bufferPointers();
     return manager.addBatch(fd, numBytes_, offsets_, pointers);
   }
 
@@ -140,14 +132,22 @@ class ReadBatchForTesting {
   template <typename Policy>
   void submitToPolicy(Policy& policy, int fd,
                       typename Policy::BatchHandle handle) {
-    std::vector<char*> pointers = ::ranges::to_vector(
-        targetBuffers_ | ql::views::transform([](std::string& buffer) {
-          return buffer.data();
-        }));
+    std::vector<char*> pointers = bufferPointers();
     policy.addBatch(fd, numBytes_, offsets_, pointers, handle);
   }
 
  private:
+  // The buffer pointers, built when the batch is submitted, after all buffers
+  // have been added, so the addresses are stable (no further `add` will
+  // reallocate `targetBuffers_`). `addBatch` copies each address into its read
+  // request, so the vector need not outlive the call.
+  std::vector<char*> bufferPointers() {
+    return ::ranges::to_vector(targetBuffers_ |
+                               ql::views::transform([](std::string& buffer) {
+                                 return buffer.data();
+                               }));
+  }
+
   std::vector<size_t> numBytes_;
   std::vector<uint64_t> offsets_;
   std::vector<std::string> targetBuffers_;
@@ -375,11 +375,9 @@ TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanRing) {
   }
 }
 
-// Waiting on the last of many small batches (1, 3 or 5 reads each) can reap
-// the CQEs of the other batches in the same waves. The remaining waits may then
-// find their batches already complete and must still see the correct bytes.
-// Batch sizes that are not multiples of the reap wave (1, 3, 5, ...) cover
-// partial waves.
+// Many small batches (1, 3 or 5 reads each), waited on in a different order
+// than they were added, all see the correct bytes. Batch sizes that are not
+// multiples of the reap wave (1, 3, 5, ...) cover partial waves.
 TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
   constexpr size_t M = 12;
   std::string fileContent;
@@ -416,9 +414,8 @@ TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
   }
 }
 
-// A failed read in one batch must not lose the completions of another batch
-// reaped in the same wave: the failure is recorded for its own batch and thrown
-// by that batch's `wait()`, so the good batch still completes.
+// A failed read in one batch does not affect a good batch that was added
+// before it and is waited on after it.
 TYPED_TEST(IoUringManagerTest, ErrorInWaveKeepsOtherBatchesConsistent) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");  // 12 bytes
 
@@ -431,7 +428,7 @@ TYPED_TEST(IoUringManagerTest, ErrorInWaveKeepsOtherBatchesConsistent) {
   ReadBatchForTesting bad;
   bad.add(8, 16);  // past EOF: short read
 
-  // `SyncIoPolicy` reads in `addBatch`, so its throw happens on submission.
+  // Both policies read in `addBatch`, so the throw happens on submission.
   auto goodHandle = good.submitTo(manager, fd);
   AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(bad.submitTo(manager, fd)),
                                HasSubstr("read fewer bytes than requested"));
@@ -439,11 +436,9 @@ TYPED_TEST(IoUringManagerTest, ErrorInWaveKeepsOtherBatchesConsistent) {
   EXPECT_THAT(good.result(), ::testing::ElementsAre("AAAA", "BBBB", "CCCC"));
 }
 
-// Verify that many independent `addBatch` calls can be outstanding (submitted
-// to the kernel but not yet waited on) at once, and that the manager tracks
-// each batch's completion correctly. M batches of one read each are submitted
-// before any `wait`. Since the kernel posts completions in arbitrary order,
-// the manager must map each one back to its issuing batch.
+// Verify that many independent `addBatch` calls can be made before any
+// `wait`, and that each batch's read lands in its own buffer. M batches of one
+// read each are added before any `wait`.
 TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
   // M 4-byte chunks; chunk i is filled with the character 'A'+i. Since M <= 26
   // the chunks have distinct contents, so a read whose data lands in the wrong
@@ -462,14 +457,12 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
 
   TypeParam manager(64);
 
-  // Submit all M batches (one read each) before waiting on any of them, so they
-  // are outstanding concurrently.
+  // Add all M batches (one read each) before waiting on any of them.
   std::vector<typename TypeParam::BatchHandle> batchHandles(M);
   for (size_t i = 0; i < M; ++i) {
     batchHandles[i] = batches[i].submitTo(manager, fd);
   }
-  // Only now wait on each handle. Each wait must block until that batch's own
-  // read has completed, regardless of the order the kernel posted completions.
+  // Only now wait on each handle.
   for (size_t i = 0; i < M; ++i) {
     manager.wait(batchHandles[i]);
   }
@@ -484,8 +477,7 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
 
 // Request more bytes than the file contains, i.e. read past EOF. A read that
 // cannot be fully satisfied is a short read, which both policies must report as
-// an error (`std::runtime_error`). `SyncIoPolicy` throws in `addBatch`,
-// `IoUringPolicy` in `wait`.
+// an error (`std::runtime_error`). Both policies throw in `addBatch`.
 TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
   auto [tmp, fd] = makeTempFile("AAAABBBB");  // 8 bytes
 
@@ -583,7 +575,7 @@ TYPED_TEST(IoUringManagerTest, zeroLengthReadsWithNonZeroLengthReads) {
 // waited: the synchronous policy performs all reads eagerly in `submitTo`, so
 // by the time the manager is destroyed nothing is outstanding, the destructor
 // has nothing to drain, and it logs no warning. This is the counterpart to the
-// io_uring-specific `dropRunningManager` test below.
+// io_uring-specific `dropManagerWithoutWait` test below.
 TEST(IoUringManagerDrop, dropSyncManagerHasNothingOutstanding) {
   using Manager = ad_utility::BatchManager<ad_utility::SyncIoPolicy>;
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
@@ -656,7 +648,9 @@ TEST(LiburingRing, cancelledReadsCompleteAsNoOps) {
                     "(e.g. blocked by seccomp inside Docker)";
   }
   using Completion = ad_utility::IoUringInterface::Completion;
-  constexpr uint64_t noOp = 1000;
+  // The policy's real no-op id, so that a collision with an id that liburing
+  // reserves would show up here.
+  constexpr uint64_t noOp = ad_utility::IoUringPolicy::noOpRequestId();
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");
   auto ring = ad_utility::makeLiburingRing(8);
   std::vector<std::string> buffers(3, std::string(4, '-'));
@@ -756,12 +750,20 @@ TEST(IoUringPolicyModel, randomFaultsNeverLeaveReadsInTheRing) {
   EXPECT_GT(total.interruptedWaits, 0u);
   EXPECT_GT(total.faultyReads, 0u);
   EXPECT_GT(total.cancelledReads, 0u);
-  std::cout << "IoUringPolicyModel fault counts: partial submits "
-            << total.partialSubmits << ", interrupted submits "
-            << total.interruptedSubmits << ", EAGAIN submits "
-            << total.outOfMemorySubmits << ", interrupted waits "
-            << total.interruptedWaits << ", faulty reads " << total.faultyReads
-            << ", cancelled reads " << total.cancelledReads << std::endl;
+}
+
+// `IoUringPolicy::addBatch` rejects spans of different lengths.
+TEST(IoUringPolicyModel, spansOfDifferentLengthsThrow) {
+  using ad_utility::testing::FakeIoUring;
+  ad_utility::IoUringPolicy policy{
+      8, std::make_unique<FakeIoUring>("AAAA", 8, FakeIoUring::Faults{}, 0)};
+  std::vector<size_t> numBytes{4, 4};
+  std::vector<uint64_t> offsets{0};
+  std::string buffer(8, '-');
+  std::vector<char*> buffers{buffer.data(), buffer.data() + 4};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      policy.addBatch(/*fd=*/-1, numBytes, offsets, buffers, 0),
+      HasSubstr("offsets.size() == numBytesToRead.size()"));
 }
 
 // A submit error other than `EINTR` and `EAGAIN`, and a failed wait, mean that
@@ -785,8 +787,22 @@ TEST(IoUringPolicyModel, aBrokenRingTerminates) {
                             "io_uring_submit failed in IoUringPolicy");
   FakeIoUring::Faults brokenWait;
   brokenWait.brokenWaitErrno = EBADF;
+  // Keep both reads in the kernel, so that the policy has to wait.
+  brokenWait.completeOnSubmit = false;
   EXPECT_DEATH_IF_SUPPORTED(readWith(brokenWait),
                             "io_uring_wait_cqes failed in IoUringPolicy");
+}
+
+// `IoUringPolicy` needs a ring size > 0 and a ring.
+TEST(IoUringPolicyModel, invalidConstructionThrows) {
+  using ad_utility::testing::FakeIoUring;
+  auto makeFake = [] {
+    return std::make_unique<FakeIoUring>("AAAA", 8, FakeIoUring::Faults{}, 0);
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::IoUringPolicy(0, makeFake()),
+                               HasSubstr("ringSize_ > 0"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::IoUringPolicy(8, nullptr),
+                               HasSubstr("ring_ != nullptr"));
 }
 #endif
 

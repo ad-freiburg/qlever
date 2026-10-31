@@ -293,6 +293,9 @@ class LiburingRing final : public IoUringInterface {
   }
 
   std::vector<uint64_t> cancelQueued(uint64_t noOpRequestId) override {
+    // liburing consumes completions with this id itself (see
+    // `IoUringPolicy::NO_OP_REQUEST_ID`).
+    AD_CORRECTNESS_CHECK(noOpRequestId != LIBURING_UDATA_TIMEOUT);
     // Without `IORING_SETUP_SQPOLL`, the kernel reads SQEs only inside our own
     // `io_uring_enter` calls, so the SQEs it has not taken can safely be
     // rewritten between two calls.
@@ -348,6 +351,8 @@ void IoUringPolicy::addBatch(int fd, ql::span<const size_t> numBytesToRead,
                              ql::span<const uint64_t> offsets,
                              ql::span<char*> buffers,
                              [[maybe_unused]] BatchHandle handle) {
+  AD_CONTRACT_CHECK(offsets.size() == numBytesToRead.size() &&
+                    buffers.size() == numBytesToRead.size());
   if (numBytesToRead.empty()) {
     return;
   }
@@ -413,6 +418,8 @@ void IoUringPolicy::submit(Batch& batch) {
     const int ret = ring_->submit();
     if (ret > 0) {
       onTaken(batch, static_cast<size_t>(ret));
+      // Only an `EAGAIN` that persists cancels the reads.
+      numRetries = 0;
       continue;
     }
     if (ret == -EINTR) {
@@ -425,14 +432,15 @@ void IoUringPolicy::submit(Batch& batch) {
     }
     if (numRetries == MAX_SUBMIT_RETRIES) {
       cancelQueuedReads(
-          batch, absl::StrCat("io_uring_submit failed in IoUringPolicy: ",
-                              std::strerror(EAGAIN), " (after ",
-                              MAX_SUBMIT_RETRIES, " retries)"));
+          batch,
+          absl::StrCat("io_uring_submit failed in IoUringPolicy: ",
+                       ret == 0 ? "no SQE was taken" : std::strerror(-ret),
+                       " (after ", MAX_SUBMIT_RETRIES, " retries)"));
       return;
     }
     ++numRetries;
-    // The kernel could not allocate memory for the requests. Completed
-    // requests free some, so wait for one if there is any.
+    // With `EAGAIN` the kernel could not allocate memory for the requests.
+    // Completed requests free some, so wait for one if there is any.
     if (batch.numReadsInKernel() + numNoOpsInKernel_ > 0) {
       reap(batch, 1);
     } else {
@@ -443,9 +451,9 @@ void IoUringPolicy::submit(Batch& batch) {
 
 //______________________________________________________________________________
 void IoUringPolicy::onTaken(Batch& batch, size_t numTaken) {
-  // The no-ops were queued before any read of this batch: those of earlier
-  // batches before it started, and those of this batch's cancelled reads after
-  // its last queued read.
+  // The queued no-ops precede the queued reads: those of earlier batches were
+  // queued before this batch started, and cancelling this batch's reads turns
+  // every queued read into a no-op and stops queueing reads.
   const size_t numNoOps = std::min(numTaken, numNoOpsQueued_);
   numNoOpsQueued_ -= numNoOps;
   numNoOpsInKernel_ += numNoOps;
