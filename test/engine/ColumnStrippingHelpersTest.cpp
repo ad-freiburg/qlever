@@ -16,6 +16,8 @@
 #include "engine/ColumnStrippingHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 using namespace columnStrippingHelpers;
 using ::testing::ElementsAre;
@@ -52,6 +54,29 @@ TEST(ColumnStrippingHelpers, VarsRequiredFromSubtree) {
   helper.add(V{"?b"});
   helper.add(V{"?d"});
   EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}));
+}
+
+// Test that `addVarsFromExpression` collects the variables of an expression
+// and that it adds nothing and returns `NeedAllVarsFromSubtree` for an
+// expression that reads all columns (`COUNT(DISTINCT *)`).
+TEST(ColumnStrippingHelpers, addVarsFromExpression) {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  std::set<V> vars{V{"?a"}};
+  VarsRequiredFromSubtree helper{&vars};
+
+  auto expression =
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(V{"?b"});
+  EXPECT_EQ(helper.addVarsFromExpression(expression), AddVarsResult::Success);
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
+
+  sparqlExpression::SparqlExpressionPimpl countDistinctStar{
+      std::shared_ptr<sparqlExpression::SparqlExpression>{
+          sparqlExpression::makeCountStarExpression(true)},
+      "COUNT(DISTINCT *)"};
+  EXPECT_EQ(helper.addVarsFromExpression(countDistinctStar),
+            AddVarsResult::NeedAllVarsFromSubtree);
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
 }
 
 // Test that `allVariablesAreRequired` is true iff the requested variables are a
