@@ -433,6 +433,11 @@ TEST(SparqlParser, FunctionCall) {
       absl::StrCat(geof, "geometryN>(?a, ?b)"),
       matchNary(&makeGeometryNExpression, Variable{"?a"}, Variable{"?b"}));
 
+  // Transform
+  expectFunctionCall(
+      absl::StrCat(geof, "transform>(?a, ?b)"),
+      matchNary(&makeTransformExpression, Variable{"?a"}, Variable{"?b"}));
+
   // Simplify geometry (QLever-internal function)
   expectFunctionCall(absl::StrCat(ql, "simplifyGeometry>(?a, ?b)"),
                      matchNary(&makeSimplifyGeometryExpression, Variable{"?a"},
@@ -529,9 +534,9 @@ TEST(SparqlParser, FunctionCall) {
   }
 
   const std::vector<std::string> binaryGeofFunctionNames = {
-      "sfIntersects", "sfContains", "sfCovers",   "sfCrosses",
-      "sfTouches",    "sfEquals",   "sfOverlaps", "sfWithin",
-      "length",       "area",       "geometryN",  "metricDistance",
+      "sfIntersects", "sfContains", "sfCovers",       "sfCrosses", "sfTouches",
+      "sfEquals",     "sfOverlaps", "sfWithin",       "length",    "area",
+      "geometryN",    "transform",  "metricDistance",
   };
   for (const auto& func : binaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));

@@ -88,6 +88,32 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
 }
 
 // _____________________________________________________________________________
+std::optional<std::string> transformAsWkt(const GeoPointOrWkt& wkt,
+                                          const std::string& iri) {
+  ::util::geo::CRSType targetCrs = ::util::geo::getCRSType(iri);
+  if (targetCrs == ::util::geo::CRSType::UNSUPPORTED) {
+    return std::nullopt;
+  }
+  ::util::geo::CRSType sourceCrs = sourceCrsFromGeoPointOrWkt(wkt);
+  // No need to transform the input.
+  if (targetCrs == sourceCrs) {
+    return wktFromGeoPointOrWktVisitor(wkt);
+  }
+  // This projects the coordinates of `wkt` to `targetCrs` during parsing.
+  auto parseResult = parseGeoPointOrWkt(wkt, targetCrs);
+  auto wktResult = utilGeomToWkt(parseResult.parsedWkt_);
+  if (!wktResult.has_value()) {
+    return std::nullopt;
+  }
+  // Hide the CRS IRI for the default CRS.
+  if (targetCrs == defaultCrs) {
+    return wktResult.value();
+  } else {
+    return ::util::geo::getCrsIri(targetCrs) + wktResult.value();
+  }
+}
+
+// _____________________________________________________________________________
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
   auto parseResult = parseGeoPointOrWkt(wkt);
   return utilGeomToWkt(simplifyGeometry(parseResult.parsedWkt_, tolerance));

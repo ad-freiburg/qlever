@@ -76,6 +76,13 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
+// Helper to avoid including `GeometryInfoHelpersImpl.h`
+// Project geometry contained in `wkt` to CRS defined in `iri` and return as
+// WKT. Returns `std::nullopt` for invalid `wkt` or invalid/unsupported CRS
+// `iri`.
+std::optional<std::string> transformAsWkt(const GeoPointOrWkt& wkt,
+                                          const std::string& iri);
+
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
 // quotation marks nor a datatype yet.
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
@@ -262,6 +269,33 @@ class WktGeometryN {
     }
 
     auto resultWkt = detail::geometryNAsWkt(wkt.value(), n.value());
+
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{std::move(lit)}};
+  }
+};
+
+// Projects to coordinate reference system given by `iri`.
+class WktTransform {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeoPointOrWkt>& wkt,
+      const std::optional<triple_component::Iri>& iri) const {
+    using namespace triple_component;
+    if (!wkt.has_value() || !iri.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    // TODO<yarox-1> The function should return UNDEF if a transformation is
+    // not mathematically possible. (Currently, all transformations between the
+    // supported coordinate reference systems are possible, so this case cannot
+    // occur yet.)
+    auto resultWkt = detail::transformAsWkt(
+        wkt.value(), iri.value().toStringRepresentation());
 
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
