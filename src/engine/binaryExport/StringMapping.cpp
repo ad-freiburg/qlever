@@ -3,7 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 
-#include "engine/StringMapping.h"
+#include "engine/binaryExport/StringMapping.h"
 
 #include <utility>
 
