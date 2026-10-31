@@ -17,12 +17,12 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "global/Constants.h"
-#include "index/CompressedRelationHelpersImpl.h"
-#include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/CompressedRelationReader.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -2387,9 +2387,9 @@ void checkBuildResultsAreEqual(const PermutationBuildResult& expected,
 // by the `inputs`, and all the builds yield exactly the same permutation. The
 // latter is the crucial property, because depending on the `inputBlockSize`,
 // a different subset of the relations is written directly as a complete small
-// relation (see `CompressedRelationWriter::PermutationWriter::
-// isCompleteSmallRelation`), while the remaining ones go through the
-// `relation_` buffer. Both paths have to produce an identical result.
+// relation (see `RelationBlockCutter::isCompleteSmallRelation`), while the
+// remaining ones go through the `relation_` buffer. Both paths have to produce
+// an identical result.
 void checkPermutationIsIndependentOfInputBlockSize(
     std::vector<RelationInput> inputs, size_t rowsPerBlock,
     const std::vector<size_t>& inputBlockSizes,
