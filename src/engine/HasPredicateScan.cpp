@@ -151,9 +151,9 @@ qlm::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
     case ScanType::FULL_SCAN:
       return {{0}, allocator()};
     case ScanType::SUBQUERY_S:
-      return subtree().resultSortedOn();
+      break;
   }
-  return qlm::vector<ColumnIndex>{allocator()};
+  return subtree().resultSortedOn();
 }
 
 // ___________________________________________________________________________
