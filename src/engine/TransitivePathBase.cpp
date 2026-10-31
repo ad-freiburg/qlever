@@ -30,6 +30,37 @@ namespace {
 auto makeInternalVariable(std::string_view string) {
   return Variable{absl::StrCat("?internal_property_path_variable_", string)};
 }
+
+// The estimated size of the complete transitive hull divided by the number of
+// edges, which is the average number of reachable nodes per start node divided
+// by the average out-degree. On Wikidata, this is about 57 for `wdt:P279`
+// (subclass of), 17 for `wdt:P171` (parent taxon), and between 1.4 and 8 for
+// shallow hierarchies like `wdt:P131` (located in) or `wdt:P527` (has part).
+// We err on the large side, because underestimating the size of a transitive
+// path is more harmful for the query plan than overestimating it.
+constexpr double kHullSizePerEdge = 50;
+
+// Estimates are used as divisors and factors, so we clamp them to at least 1.
+constexpr double atLeastOne(double estimate) { return std::max(estimate, 1.0); }
+
+// The estimated number of distinct values in the given column of the tree.
+double numDistinctValues(QueryExecutionTree& tree, size_t col) {
+  return atLeastOne(tree.getSizeEstimate()) /
+         atLeastOne(tree.getMultiplicity(col));
+}
+
+// Return `base + base^2 + ... + base^exponent` for `base >= 1`.
+double geometricSum(double base, double exponent) {
+  return base == 1 ? exponent
+                   : base * (std::pow(base, exponent) - 1) / (base - 1);
+}
+
+// Convert a (possibly huge) estimate to an integer without overflowing. The
+// limit leaves room for adding up the costs of several operations.
+constexpr uint64_t toSaturatedInt(double value) {
+  constexpr auto max = std::numeric_limits<uint64_t>::max() / 4;
+  return static_cast<uint64_t>(std::min(value, static_cast<double>(max)));
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -315,49 +346,127 @@ bool TransitivePathBase::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
+TransitivePathBase::Estimates TransitivePathBase::computeEstimates() {
+  auto [startSide, targetSide] = decideDirection();
+  // Statistics of the graph that is traversed. The out-degree is the average
+  // number of edges of a node in the direction of the traversal, so it differs
+  // greatly between the two directions for hierarchy-like predicates like
+  // `wdt:P279` (subclass of): a class has few superclasses, but some classes
+  // have very many subclasses.
+  double numEdges = subtree_->getSizeEstimate();
+  double numStartNodes = numDistinctValues(*subtree_, startSide.subCol_);
+  double numTargetNodes = numDistinctValues(*subtree_, targetSide.subCol_);
+  double outDegree = numEdges / numStartNodes;
+
+  // The average number of nodes that are reachable from a start node. Summed
+  // over all start nodes, this is the size of the complete hull, which we
+  // estimate as a multiple of the number of edges. A node has fewer reachable
+  // nodes in the direction in which there are more distinct nodes, which makes
+  // the estimates direction-aware. A node has `outDegree` successors,
+  // `outDegree^2` successors of successors, and so on, which bounds the reach
+  // for small values of `maxDist_`.
+  double reach = std::min({kHullSizePerEdge * outDegree, numTargetNodes,
+                           geometricSum(outDegree, maxDist_)});
+
+  // The rows of the start side. For an unbound start side, these are all the
+  // start nodes of the graph.
+  double numStartRows = 1;
+  double numDistinctStartValues = 1;
+  if (startSide.treeAndCol_.has_value()) {
+    const auto& [tree, col] = startSide.treeAndCol_.value();
+    numStartRows = atLeastOne(tree->getSizeEstimate());
+    numDistinctStartValues = numDistinctValues(*tree, col);
+  } else if (startSide.isVariable()) {
+    numStartRows = numStartNodes;
+    numDistinctStartValues = numStartNodes;
+  }
+  // Only the start values that are start nodes of the graph have outgoing
+  // edges. Like the size estimate of a join, we assume that as many of them as
+  // possible are.
+  double fractionWithEdges =
+      std::min(numStartNodes / numDistinctStartValues, 1.0);
+  double numStartRowsWithEdges = numStartRows * fractionWithEdges;
+  double numVisitedNodes = numStartRowsWithEdges * reach;
+
+  // For a fixed target, the result consists of the start rows from which the
+  // target is reachable.
+  double size = numVisitedNodes;
+  if (!targetSide.isVariable()) {
+    size = numStartRowsWithEdges * std::min(reach / numTargetNodes, 1.0);
+  } else if (minDist_ == 0) {
+    size += numStartRows;
+  }
+  // Binding a variable is equivalent to joining it with the complete hull, so
+  // we apply the same correction as the size estimate of a join. This keeps
+  // the estimates of the two query plans comparable.
+  if (startSide.isBoundVariable() && startSide.isVariable() &&
+      !boundVariableIsForEmptyPath_) {
+    size *= getExecutionContext()->getCostFactor(
+        "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR");
+  }
+  size = atLeastOne(size);
+
+  // The values of the target column are the reached nodes, which overlap for
+  // different start values, so the number of distinct values follows the
+  // "balls into bins" model. With the empty path, the start values are also
+  // part of the target column.
+  double numDistinctTargetValues =
+      numTargetNodes *
+      (1 - std::exp(-numDistinctStartValues * fractionWithEdges * reach /
+                    numTargetNodes));
+  if (minDist_ == 0) {
+    numDistinctTargetValues += numDistinctStartValues;
+  }
+  double targetMultiplicity =
+      targetSide.isVariable()
+          ? size / std::clamp(numDistinctTargetValues, 1.0, size)
+          : size;
+  return {size, numVisitedNodes, size / numStartRows,
+          atLeastOne(size / numDistinctStartValues), targetMultiplicity};
+}
+
+// _____________________________________________________________________________
 float TransitivePathBase::getMultiplicity(size_t col) {
-  (void)col;
-  // The multiplicities are not known.
-  return 1;
+  auto estimates = computeEstimates();
+  auto [startSide, targetSide] = decideDirection();
+  if (col == startSide.outputCol_) {
+    return estimates.startMultiplicity_;
+  }
+  if (col == targetSide.outputCol_) {
+    return estimates.targetMultiplicity_;
+  }
+  // The remaining columns are copied from the start side, each row is repeated
+  // once for every reached node. The graph column might not stem from the start
+  // side, in which case we know nothing about it.
+  if (!startSide.treeAndCol_.has_value()) {
+    return 1;
+  }
+  const auto& tree = *startSide.treeAndCol_.value().first;
+  auto it = ql::ranges::find_if(variableColumns_, [col](const auto& pair) {
+    return pair.second.columnIndex_ == col;
+  });
+  auto childCol = it == variableColumns_.end()
+                      ? std::nullopt
+                      : tree.getVariableColumnOrNullopt(it->first);
+  if (!childCol.has_value()) {
+    return 1;
+  }
+  return tree.getMultiplicity(childCol.value()) *
+         atLeastOne(estimates.rowsPerStartRow_);
 }
 
 // _____________________________________________________________________________
 uint64_t TransitivePathBase::getSizeEstimateBeforeLimit() {
-  if (!lhs_.isVariable() || !rhs_.isVariable()) {
-    // If the subject or object is fixed, assume that the number of matching
-    // triples is 1000. This will usually be an overestimate, but it will do the
-    // job of avoiding query plans that first generate large intermediate
-    // results and only then merge them with a triple such as this. In the
-    // lhs_.isVar && rhs_.isVar case below, we assume a worst-case blowup of
-    // 10000; see the comment there.
-    return 1000;
-  }
-  if (lhs_.treeAndCol_.has_value()) {
-    return lhs_.treeAndCol_.value().first->getSizeEstimate();
-  }
-  if (rhs_.treeAndCol_.has_value()) {
-    return rhs_.treeAndCol_.value().first->getSizeEstimate();
-  }
-  // Set costs to something very large, so that we never compute the complete
-  // transitive hull (unless the variables on both sides are not bound in any
-  // other way, so that the only possible query plan is to compute the complete
-  // transitive hull).
-  //
-  // NOTE: _subtree->getSizeEstimateBeforeLimit() is the number of triples of
-  // the predicate, for which the transitive hull operator (+) is specified. On
-  // Wikidata, the predicate with the largest blowup when taking the
-  // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
-  // (without +) to 110M (with +), so about 1000 times larger.
-  AD_CORRECTNESS_CHECK(lhs_.isVariable() && rhs_.isVariable());
-  return subtree_->getSizeEstimate() * 10000;
+  return toSaturatedInt(computeEstimates().size_);
 }
 
 // _____________________________________________________________________________
 size_t TransitivePathBase::getCostEstimate() {
-  // We assume that the cost of computing the transitive path is proportional to
-  // the result size.
-  auto costEstimate = getSizeEstimateBeforeLimit();
-  // Add the cost for the index scan of the predicate involved.
+  // The cost consists of visiting the nodes of the hull and writing the result.
+  // The two differ if the target is fixed.
+  auto estimates = computeEstimates();
+  auto costEstimate =
+      toSaturatedInt(estimates.size_ + estimates.numVisitedNodes_);
   for (auto* ptr : getChildren()) {
     if (ptr) {
       costEstimate += ptr->getCostEstimate();
