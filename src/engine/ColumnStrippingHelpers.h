@@ -12,6 +12,7 @@
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
 
@@ -56,15 +57,15 @@ class VarsRequiredFromSubtree {
   // Result of `addVarsFromExpression`.
   enum class AddVarsResult { Success, NeedAllVarsFromSubtree };
 
-  // Add the variables contained in the given `expression`. Return true if all
-  // variables from the subtree are requested by the expression. Otherwise
-  // return false.
+  // Add the variables that the given `expression` reads. Return
+  // `NeedAllVarsFromSubtree` without adding anything if the expression reads
+  // all columns of the subtree (`COUNT(DISTINCT *)`), else `Success`.
   AddVarsResult addVarsFromExpression(
-      sparqlExpression::SparqlExpressionPimpl expression) {
+      const sparqlExpression::SparqlExpressionPimpl& expression) {
     if (expression.readsAllVisibleColumns()) {
       return AddVarsResult::NeedAllVarsFromSubtree;
     }
-    for (auto var : expression.containedVariables()) {
+    for (const auto* var : expression.containedVariables()) {
       add(*var);
     }
     return AddVarsResult::Success;

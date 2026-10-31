@@ -57,8 +57,8 @@ TEST(ColumnStrippingHelpers, VarsRequiredFromSubtree) {
 }
 
 // Test that `addVarsFromExpression` collects the variables of an expression
-// and returns true for expressions that need all columns
-// (e.g. `COUNT(DISTINCT *)`).
+// and that it adds nothing and returns `NeedAllVarsFromSubtree` for an
+// expression that reads all columns (`COUNT(DISTINCT *)`).
 TEST(ColumnStrippingHelpers, addVarsFromExpression) {
   using AddVarsResult =
       columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
