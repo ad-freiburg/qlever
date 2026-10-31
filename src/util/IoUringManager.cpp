@@ -57,10 +57,10 @@ void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
 
 namespace {
 #ifdef QL_PAGE_CACHE_FAST_PATH
-// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP` or `ENOSYS`. The flag is a
-// best-effort hint without associated data; the default sequential
-// consistency (Sonar cpp:S8417) keeps the publication of the disabled state
-// obvious.
+// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP` or `ENOSYS`.
+// The flag is a best-effort hint without associated data; the default
+// sequential consistency (Sonar cpp:S8417) keeps the publication of the
+// disabled state obvious.
 std::atomic<bool> pageCacheFastPathSupported{true};
 #endif
 }  // namespace
