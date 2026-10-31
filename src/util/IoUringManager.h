@@ -209,16 +209,19 @@ class IoUringPolicy {
   io_uring ring_{};
   unsigned ringSize_;
 
-  // Total number of outstanding reads: reads that occupy a ring slot because
-  // they are prepared (SQE filled in, not yet submitted), in flight (submitted
-  // to the kernel, not yet completed), or completed but not yet reaped via a
-  // completion queue entry (CQE). Used to detect whether the ring is full.
+  // Total number of outstanding reads: reads that are prepared (SQE filled in,
+  // not yet submitted), in flight (submitted to the kernel, not yet
+  // completed), or completed but not yet reaped via a completion queue entry
+  // (CQE). `addBatch` keeps it at most `ringSize_`, so that a free SQE is
+  // always available and the completion queue (twice as large as the
+  // submission queue) cannot overflow.
   size_t numOutstandingReadRequests_ = 0;
 
   // The same outstanding reads as `numOutstandingReadRequests_`, but broken
   // down per batch: maps a batch handle to the number of its reads that have
-  // not yet been reaped. An entry for a batch (identified by `BatchHandle`) is
-  // removed once `wait()` has observed all of its reads complete.
+  // not yet been reaped. An entry is removed as soon as the last read of its
+  // batch is reaped, which can happen in `addBatch` or in the `wait()` of
+  // another batch.
   ad_utility::HashMap<BatchHandle, size_t> numOutstandingReadRequestsPerBatch_;
 
   // Per-read metadata needed when a completion is reaped: which batch the read
@@ -239,9 +242,14 @@ class IoUringPolicy {
   // read is prepared in `addBatch` and erased when its completion is reaped.
   ad_utility::HashMap<uint64_t, OutstandingRead> outstandingReadsByRequestId_;
 
-  // Block until at least `minComplete` CQEs are ready (capped at the number
-  // of reads the kernel has received), then reap every ready CQE. Throw after
-  // the whole wave is reaped if any read in it failed or was short.
+  // Minimum number of completions to wait for when the ring is full or
+  // `wait()` blocks. Waiting for several CQEs and reaping all ready ones in
+  // one pass amortizes `io_uring_enter` and the CQ-head update over the wave.
+  static constexpr unsigned REAP_WAVE = 8;
+
+  // Block until at least `minComplete` CQEs are ready, then reap every ready
+  // CQE. Throw after the whole wave is reaped if any read in it failed or was
+  // short.
   // `minComplete` must be > 0 and at most `numOutstandingReadRequests_`.
   void drainAtLeast(unsigned minComplete);
 
@@ -250,10 +258,6 @@ class IoUringPolicy {
   // if the read failed or was short, and `nullptr` otherwise.
   [[nodiscard]] const char* processCqe(int numBytesRead, uint64_t requestId);
 
-  // Submit all prepared SQEs to the kernel. Throw if `io_uring_submit`
-  // fails, including the error description in the message.
-  void submitOrThrow();
-
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
   IoUringPolicy& operator=(const IoUringPolicy&) = delete;
@@ -261,11 +265,6 @@ class IoUringPolicy {
   // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
   explicit IoUringPolicy(unsigned ringSize);
   ~IoUringPolicy();
-
-  // Minimum number of completions to wait for when the ring is full or
-  // `wait()` blocks. Waiting for several CQEs and reaping all ready ones in
-  // one pass amortizes `io_uring_enter` and the CQ-head update over the wave.
-  static constexpr unsigned REAP_WAVE = 8;
 
   // Enqueue a batch of read requests and submit them to the kernel. Blocks the
   // calling thread only when the submission queue is full, in order to drain

@@ -18,7 +18,6 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
-#include <limits>
 #include <memory>
 #include <numeric>
 #include <sstream>
@@ -37,6 +36,14 @@
 #include "util/PageCacheReadTestHelpers.h"
 
 namespace {
+
+// `value` in decimal, padded with leading zeros to `width` characters, so that
+// distinct values give distinct, recognizable file chunks.
+std::string zeroPaddedNumber(size_t value, size_t width) {
+  std::string digits = std::to_string(value);
+  AD_CONTRACT_CHECK(digits.size() <= width);
+  return std::string(width - digits.size(), '0') + digits;
+}
 
 using namespace ::testing;
 
@@ -338,7 +345,7 @@ TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanTinyRing) {
   constexpr size_t N = 80;
   SequentialReadScenarioForTesting scenario;
   for (size_t i = 0; i < N; ++i) {
-    scenario.addRead(std::string(4, static_cast<char>('A' + (i % 26))));
+    scenario.addRead(zeroPaddedNumber(i, 4));
   }
   auto [tmp, fd] = makeTempFile(scenario.content());
   TypeParam manager(8);
@@ -347,10 +354,11 @@ TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanTinyRing) {
               ::testing::ElementsAreArray(scenario.expected()));
 }
 
-// Waiting on the last of many single-read batches reaps the CQEs of the other
-// batches in the same wave. The remaining waits then find their batches
-// already complete and must still see the correct bytes. Batch sizes that are
-// not multiples of the reap wave (1, 3, 5, ...) cover partial waves.
+// Waiting on the last of many small batches (1, 3 or 5 reads each) reaps the
+// CQEs of the other batches in the same wave. The remaining waits then find
+// their batches already complete and must still see the correct bytes. Batch
+// sizes that are not multiples of the reap wave (1, 3, 5, ...) cover partial
+// waves.
 TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
   constexpr size_t M = 12;
   std::string fileContent;
@@ -359,7 +367,7 @@ TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
   for (size_t i = 0; i < M; ++i) {
     const size_t numReads = 2 * (i % 3) + 1;
     for (size_t j = 0; j < numReads; ++j) {
-      std::string chunk(3, static_cast<char>('a' + (fileContent.size() % 26)));
+      std::string chunk = zeroPaddedNumber(fileContent.size() / 3, 3);
       batches[i].add(fileContent.size(), chunk.size());
       fileContent.append(chunk);
       expected[i].push_back(std::move(chunk));

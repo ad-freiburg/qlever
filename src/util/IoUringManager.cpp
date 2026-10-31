@@ -222,16 +222,7 @@ IoUringPolicy::~IoUringPolicy() {
   // deliberately do not call `drainAtLeast` here: it throws on I/O errors, and
   // a destructor must not throw. We also stop if `io_uring_wait_cqe` fails, to
   // avoid spinning forever (it would not decrement the outstanding count).
-  //
-  // A failed `io_uring_submit` (see `submitOrThrow`) can leave prepared SQEs
-  // that the kernel has not consumed. They produce no completion, so retry
-  // submitting them once and wait only for the reads the kernel has actually
-  // received; the rest are discarded by `io_uring_queue_exit`.
-  if (io_uring_sq_ready(&ring_) > 0) {
-    io_uring_submit(&ring_);
-  }
-  const size_t numNeverSubmitted = io_uring_sq_ready(&ring_);
-  while (numOutstandingReadRequests_ > numNeverSubmitted) {
+  while (numOutstandingReadRequests_ > 0) {
     io_uring_cqe* cqe = nullptr;
     if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
       break;
@@ -266,7 +257,7 @@ void IoUringPolicy::addBatch(int fd,
       // Wait for a wave of completions instead of one, and reap every ready
       // CQE, so a large batch refills the ring in waves rather than one SQE
       // per reaped CQE.
-      submitOrThrow();
+      io_uring_submit(&ring_);
       while (numOutstandingReadRequests_ >= ringSize_) {
         drainAtLeast(static_cast<unsigned>(
             std::min<size_t>(REAP_WAVE, numOutstandingReadRequests_)));
@@ -297,7 +288,7 @@ void IoUringPolicy::addBatch(int fd,
   // Flush the remaining prepared SQEs to the kernel (the loop above only
   // submits when the submission queue is full, so the last group of SQEs has
   // not yet been submitted).
-  submitOrThrow();
+  io_uring_submit(&ring_);
 }
 
 //______________________________________________________________________________
@@ -316,41 +307,16 @@ void IoUringPolicy::wait(BatchHandle handle) {
 }
 
 //______________________________________________________________________________
-void IoUringPolicy::submitOrThrow() {
-  // `io_uring_submit` returns the number of submitted SQEs or `-errno`. On
-  // failure the prepared SQEs stay in the submission queue; `drainAtLeast`
-  // and the destructor submit them again before waiting for completions.
-  const int ret = io_uring_submit(&ring_);
-  if (ret < 0) {
-    AD_THROW(absl::StrCat("io_uring_submit failed in IoUringPolicy: ",
-                          std::strerror(-ret)));
-  }
-}
-
-//______________________________________________________________________________
 void IoUringPolicy::drainAtLeast(unsigned minComplete) {
   AD_CORRECTNESS_CHECK(minComplete > 0);
   AD_CORRECTNESS_CHECK(minComplete <= numOutstandingReadRequests_);
-  // Submit SQEs that an earlier failed or partial `io_uring_submit` left in
-  // the submission queue. Without this, waiting for their completions would
-  // block forever, because the kernel has never seen them.
-  if (io_uring_sq_ready(&ring_) > 0) {
-    submitOrThrow();
-  }
-  // Only reads the kernel has received can complete, so never wait for more
-  // CQEs than that.
-  const size_t numSubmitted =
-      numOutstandingReadRequests_ - io_uring_sq_ready(&ring_);
-  AD_CORRECTNESS_CHECK(numSubmitted > 0);
-  const unsigned numToWaitFor =
-      static_cast<unsigned>(std::min<size_t>(minComplete, numSubmitted));
 
-  // Block until at least `numToWaitFor` completion queue entries (CQEs) are
+  // Block until at least `minComplete` completion queue entries (CQEs) are
   // ready. This costs at most one `io_uring_enter` for the whole wave.
   io_uring_cqe* cqe = nullptr;
   int ret = 0;
   do {
-    ret = io_uring_wait_cqes(&ring_, &cqe, numToWaitFor, nullptr, nullptr);
+    ret = io_uring_wait_cqes(&ring_, &cqe, minComplete, nullptr, nullptr);
   } while (ret == -EINTR);
   if (ret < 0) {
     AD_THROW(absl::StrCat("io_uring_wait_cqes failed in IoUringPolicy: ",
