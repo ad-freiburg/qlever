@@ -100,6 +100,8 @@ bool pageCacheFastPathIsSupported() noexcept {
 #endif
 }
 
+// The fast-path helpers below only exist where `preadv2(RWF_NOWAIT)` is
+// compiled in; without it, `readPageCacheHits` returns every position.
 #ifdef QL_PAGE_CACHE_FAST_PATH
 namespace {
 // The elements of the range of reads in `readPageCacheHits`: the position of a
@@ -173,6 +175,8 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
   auto reads = ::ranges::views::zip(positions, numBytes, offsets, buffers);
   std::vector<size_t> notServed;
   notServed.reserve(numBytes.size());
+  // One `preadv2` call reads one contiguous range, so reads are grouped
+  // into maximal runs of adjacent file ranges and served run by run.
   for (auto adjacentReads : reads | ::ranges::views::chunk_by(areAdjacent)) {
     // One `preadv2` call takes at most `IOV_MAX` buffers.
     for (auto run :

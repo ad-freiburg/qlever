@@ -348,6 +348,7 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
   for (size_t index : indices) {
     AD_CONTRACT_CHECK(index < size());
   }
+
   std::vector<uint64_t> offsets;
   const auto runs = splitIntoOffsetRuns(indices, offsets);
   readOffsetRuns(manager, offsetsFile_.fd(), runs);

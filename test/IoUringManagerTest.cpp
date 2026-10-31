@@ -690,7 +690,7 @@ int64_t blockingFill(int fd, const ::iovec* iov, int iovcnt,
     auto* base = static_cast<char*>(iovec.iov_base);
     size_t remaining = iovec.iov_len;
     while (remaining > 0) {
-      ssize_t numBytesRead = ::pread(fd, base, remaining, offset + total);
+      const ssize_t numBytesRead = ::pread(fd, base, remaining, offset + total);
       if (numBytesRead < 0) {
         return -1;
       }
@@ -846,7 +846,7 @@ TEST(ReadPageCacheHits, runsAreSplitAtIovMax) {
   auto [tmp, fd] = makeTempFile(content);
   std::vector<std::pair<uint64_t, size_t>> reads;
   reads.reserve(numReads);
-  for (size_t i = 0; i < numReads; ++i) {
+  for (size_t i : ad_utility::integerRange(numReads)) {
     reads.emplace_back(i, 1);
   }
   numPageCacheReads = 0;
