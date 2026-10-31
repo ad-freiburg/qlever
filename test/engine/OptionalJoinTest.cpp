@@ -1380,10 +1380,11 @@ std::shared_ptr<QueryExecutionTree> makeOptionalJoinThatIsResortedOnLimit(
 }
 }  // namespace
 
-// _____________________________________________________________________________
 // Test that an `OptionalJoin` that drops its join columns is not sorted by any
 // column, while one that keeps them is sorted by the join column.
 TEST(OptionalJoin, resultSortedOnDependsOnKeepJoinColumns) {
+  // Two inputs that share the variable `?a` in their first column and are
+  // sorted by it.
   using Vars = std::vector<std::optional<Variable>>;
   auto* qec = ad_utility::testing::getQec();
   auto makeInput = [&](const Variable& otherVariable) {
@@ -1395,6 +1396,7 @@ TEST(OptionalJoin, resultSortedOnDependsOnKeepJoinColumns) {
   auto left = makeInput(Variable{"?b"});
   auto right = makeInput(Variable{"?c"});
 
+  // The join on `?a` is sorted by `?a` only if the join column is kept.
   OptionalJoin keepJoinColumns{qec, left, right};
   EXPECT_THAT(keepJoinColumns.resultSortedOn(), ::testing::ElementsAre(0));
   OptionalJoin dropJoinColumns{qec, left, right, false};
