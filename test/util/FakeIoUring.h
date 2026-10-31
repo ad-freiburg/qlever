@@ -33,8 +33,10 @@ namespace ad_utility::testing {
 // some of the queued SQEs, fails submits with `EINTR` and with bursts of
 // `EAGAIN`, interrupts waits, completes requests in any order, and makes reads
 // short or fail. It checks the contract of `IoUringInterface`: a free SQE for
-// every prepared read, no completion queue overflow, and no wait for more
-// completions than requests in the kernel.
+// every prepared read, no wait for more completions than requests in the
+// kernel, and (in `submit`) that the requests in the simulated kernel plus
+// the unreaped completions never exceed twice the SQ capacity - the bound
+// that keeps a real completion queue from overflowing.
 class FakeIoUring final : public IoUringInterface {
  public:
   // Probabilities of the faults, per call.

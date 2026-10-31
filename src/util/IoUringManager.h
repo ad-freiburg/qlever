@@ -202,7 +202,9 @@ struct SyncIoPolicy {
 // fails submits and completes requests in any order.
 class IoUringInterface {
  public:
-  // A reaped completion: the request id of its SQE and its result (`res`).
+  // A reaped completion: the request id of its SQE and its result (the
+  // CQE's `res`): for a read, the number of bytes read on success, or
+  // `-errno` on failure.
   struct Completion {
     uint64_t requestId;
     int result;

@@ -298,11 +298,10 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
   makeAndWait(8, 4, "CCCC");
 }
 
-// Verify that batch handles can be waited on out of submission order: batches A
-// and B are submitted, then their batch handles are `wait()`ed in reverse
-// (batch B's handle before batch A's handle). Each batch handle must still
-// resolve its own batch's read correctly, so the wait order is independent of
-// the submission order.
+// Batch handles can be waited on out of submission order: batches A and B
+// are added one after the other (each `addBatch` completes its batch before
+// returning), then their handles are `wait()`ed in reverse order. Each
+// handle must still resolve its own batch's reads correctly.
 TYPED_TEST(IoUringManagerTest, WaitOutOfOrder) {
   auto [tmp, fd] = makeTempFile("AAAABBBB");
 
@@ -375,10 +374,11 @@ TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanRing) {
   }
 }
 
-// Many small batches (1, 3 or 5 reads each), waited on in a different order
-// than they were added, all see the correct bytes. Batch sizes that are not
-// multiples of the reap wave (1, 3, 5, ...) cover partial waves.
-TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
+// Many small batches (1, 3 or 5 reads each), each completed by its own
+// `addBatch` and waited on in a different order than they were added, all
+// see the correct bytes. Batch sizes that are not multiples of the reap
+// wave (1, 3, 5, ...) cover partial waves within a batch.
+TYPED_TEST(IoUringManagerTest, ManySmallBatchesCompletedByAddBatch) {
   constexpr size_t M = 12;
   std::string fileContent;
   std::vector<std::vector<std::string>> expected(M);
@@ -416,7 +416,7 @@ TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
 
 // A failed read in one batch does not affect a good batch that was added
 // before it and is waited on after it.
-TYPED_TEST(IoUringManagerTest, ErrorInWaveKeepsOtherBatchesConsistent) {
+TYPED_TEST(IoUringManagerTest, ErrorInOneBatchKeepsOtherBatchesConsistent) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");  // 12 bytes
 
   TypeParam manager(64);
@@ -436,10 +436,11 @@ TYPED_TEST(IoUringManagerTest, ErrorInWaveKeepsOtherBatchesConsistent) {
   EXPECT_THAT(good.result(), ::testing::ElementsAre("AAAA", "BBBB", "CCCC"));
 }
 
-// Verify that many independent `addBatch` calls can be made before any
-// `wait`, and that each batch's read lands in its own buffer. M batches of one
-// read each are added before any `wait`.
-TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
+// Many independent batches of one read each, each added and only then
+// waited on, each see their read in their own buffer. (Every `addBatch`
+// already completes its batch; the `wait`s below are no-ops that must
+// still resolve each handle to its own batch.)
+TYPED_TEST(IoUringManagerTest, MultipleSmallBatches) {
   // M 4-byte chunks; chunk i is filled with the character 'A'+i. Since M <= 26
   // the chunks have distinct contents, so a read whose data lands in the wrong
   // buffer is detected as a mismatch below.
@@ -457,12 +458,12 @@ TYPED_TEST(IoUringManagerTest, MultipleSmallBatchesPipelined) {
 
   TypeParam manager(64);
 
-  // Add all M batches (one read each) before waiting on any of them.
+  // Add all M batches (one read each); each completes inside `addBatch`.
   std::vector<typename TypeParam::BatchHandle> batchHandles(M);
   for (size_t i = 0; i < M; ++i) {
     batchHandles[i] = batches[i].submitTo(manager, fd);
   }
-  // Only now wait on each handle.
+  // Wait on each handle, in submission order.
   for (size_t i = 0; i < M; ++i) {
     manager.wait(batchHandles[i]);
   }
@@ -653,21 +654,23 @@ TEST(LiburingRing, cancelledReadsCompleteAsNoOps) {
   constexpr uint64_t noOp = ad_utility::IoUringPolicy::noOpRequestId();
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");
   auto ring = ad_utility::makeLiburingRing(8);
-  std::vector<std::string> buffers(3, std::string(4, '-'));
-  for (size_t i = 0; i < 3; ++i) {
+  constexpr size_t NUMBER_OF_READS = 3;
+  std::vector<std::string> buffers(NUMBER_OF_READS, std::string(4, '-'));
+  for (size_t i = 0; i < NUMBER_OF_READS; ++i) {
     ASSERT_TRUE(ring->prepareRead(fd, buffers[i].data(), 4, 4 * i, i));
   }
   EXPECT_THAT(ring->cancelQueued(noOp), ElementsAre(0, 1, 2));
   // No-ops that are cancelled again are not reported again.
   EXPECT_THAT(ring->cancelQueued(noOp), IsEmpty());
-  ASSERT_EQ(ring->submit(), 3);
-  ASSERT_EQ(ring->waitForCompletions(3), 0);
+  ASSERT_EQ(ring->submit(), static_cast<int>(NUMBER_OF_READS));
+  ASSERT_EQ(ring->waitForCompletions(NUMBER_OF_READS), 0);
   std::array<Completion, 8> completions{};
-  ASSERT_EQ(ring->popCompletions(completions), 3u);
-  for (const Completion& completion : ql::views::take(completions, 3)) {
-    EXPECT_EQ(completion.requestId, noOp);
-    EXPECT_EQ(completion.result, 0);
-  }
+  ASSERT_EQ(ring->popCompletions(completions), NUMBER_OF_READS);
+  // Every cancelled read completes as a no-op with result 0.
+  EXPECT_THAT(ql::views::take(completions, NUMBER_OF_READS),
+              ::testing::Each(::testing::AllOf(
+                  AD_FIELD(Completion, requestId, ::testing::Eq(noOp)),
+                  AD_FIELD(Completion, result, ::testing::Eq(0)))));
   EXPECT_THAT(buffers, Each(std::string(4, '-')));
 }
 
@@ -729,10 +732,13 @@ TEST(IoUringPolicyModel, randomFaultsNeverLeaveReadsInTheRing) {
       ASSERT_EQ(fake.numReadsInRing(), 0u);
       EXPECT_EQ(threw, fake.injectedReadFault() || fake.cancelled());
       if (!threw) {
+        std::vector<std::string> expected;
+        expected.reserve(numReads);
         for (size_t i = 0; i < numReads; ++i) {
-          EXPECT_EQ(batch.result()[i],
-                    file.substr(batch.offset(i), batch.result()[i].size()));
+          expected.push_back(
+              file.substr(batch.offset(i), batch.result()[i].size()));
         }
+        EXPECT_THAT(batch.result(), ::testing::ElementsAreArray(expected));
       }
     }
     const auto& counts = fake.faultCounts();

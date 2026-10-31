@@ -219,7 +219,7 @@ namespace {
 // used any more: throwing would let the caller free buffers that the kernel
 // still writes into.
 [[noreturn]] void terminateBecauseRingIsUnusable(std::string_view operation,
-                                                 int error) {
+                                                 int error) noexcept {
   const std::string message = absl::StrCat(
       operation, " failed in IoUringPolicy: ", std::strerror(error),
       ". The kernel may still write into the buffers of submitted reads, so "
@@ -284,7 +284,7 @@ class LiburingRing final : public IoUringInterface {
     const unsigned numReady = io_uring_peek_batch_cqe(
         &ring_, cqes.data(),
         static_cast<unsigned>(std::min(cqes.size(), completions.size())));
-    for (unsigned i = 0; i < numReady; ++i) {
+    for (unsigned i : ql::views::iota(0u, numReady)) {
       completions[i] =
           Completion{io_uring_cqe_get_data64(cqes[i]), cqes[i]->res};
     }
@@ -343,7 +343,9 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize)
 IoUringPolicy::IoUringPolicy(unsigned ringSize,
                              std::unique_ptr<IoUringInterface> ring)
     : ring_{std::move(ring)}, ringSize_{ringSize} {
-  AD_CONTRACT_CHECK(ringSize_ > 0 && ring_ != nullptr);
+  AD_CONTRACT_CHECK(ringSize_ > 0 && ring_ != nullptr,
+                    "An IoUringPolicy needs a ring size of at least 1 and "
+                    "a ring to run on.");
 }
 
 //______________________________________________________________________________
@@ -352,7 +354,9 @@ void IoUringPolicy::addBatch(int fd, ql::span<const size_t> numBytesToRead,
                              ql::span<char*> buffers,
                              [[maybe_unused]] BatchHandle handle) {
   AD_CONTRACT_CHECK(offsets.size() == numBytesToRead.size() &&
-                    buffers.size() == numBytesToRead.size());
+                        buffers.size() == numBytesToRead.size(),
+                    "The three spans describe the same reads, so they "
+                    "must have the same length.");
   if (numBytesToRead.empty()) {
     return;
   }
@@ -539,12 +543,13 @@ void IoUringPolicy::reap(Batch& batch, unsigned minComplete) {
       }
       if (result < 0) {
         batch.error =
-            absl::StrCat("I/O error in IoUringPolicy read operation: ",
-                         std::strerror(-result));
+            absl::StrCat("I/O error in IoUringPolicy read operation (read ",
+                         requestId, " of the batch): ", std::strerror(-result));
       } else if (static_cast<size_t>(result) != expectedNumBytes) {
-        batch.error =
-            absl::StrCat("read fewer bytes than requested in IoUringPolicy (",
-                         result, " of ", expectedNumBytes, ")");
+        batch.error = absl::StrCat(
+            "read fewer bytes than requested in IoUringPolicy (read ",
+            requestId, " of the batch: ", result, " of ", expectedNumBytes,
+            ")");
       }
     }
   }
