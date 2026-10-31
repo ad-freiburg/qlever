@@ -626,6 +626,21 @@ struct WktFromGeoPointOrWktVisitor {
   }
 
   std::optional<std::string> operator()(const std::string& wkt) const {
+    // If the input wkt string still contains the WKT literal suffix, we need to
+    // remove the datatype suffix and the surrounding quotes.
+    constexpr std::string_view wktLitSuffix =
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+    if (wkt.ends_with(wktLitSuffix)) {
+      // Remove the datatype suffix.
+      std::string_view wktResult{wkt};
+      wktResult.remove_suffix(wktLitSuffix.size());
+      // Remove the surrounding quotes.
+      if (wktResult.size() >= 2) {
+        wktResult.remove_prefix(1);
+        wktResult.remove_suffix(1);
+      }
+      return std::string{wktResult};
+    }
     return wkt;
   }
 
