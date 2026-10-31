@@ -15,6 +15,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Literal.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace std::literals;
 using namespace ad_utility::testing;
@@ -300,7 +301,7 @@ TEST(TripleComponent, toValueIdOrBounds) {
     auto lve =
         tc.isLiteral()
             ? LocalVocabEntry(tc.getLiteral(), index.getLocalVocabContext())
-            : LocalVocabEntry(tc.getIri(), index.getLocalVocabContext());
+            : localVocabEntry(tc.getIri(), index.getLocalVocabContext());
     LocalVocabEntry::PositionInVocab positionFromBounds{makePos(bounds.first),
                                                         makePos(bounds.second)};
     EXPECT_EQ(lve.positionInVocab(), positionFromBounds);

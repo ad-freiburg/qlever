@@ -13,6 +13,7 @@
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 using TC = TripleComponent;
@@ -90,7 +91,7 @@ TEST(Values, computeResult) {
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
-      LocalVocabEntry::fromStringRepresentation(
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
           "<y>", testQec->getLocalVocabContext()));
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();

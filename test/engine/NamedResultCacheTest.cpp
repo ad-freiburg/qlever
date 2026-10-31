@@ -7,8 +7,11 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
 
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
@@ -27,8 +30,8 @@ TEST(NamedResultCache, basicWorkflow) {
 
   LocalVocab localVocab;
   auto* qec = ad_utility::testing::getQec();
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-      "<bliBlaBlubb>", qec->getLocalVocabContext()));
+  localVocab.getIndexAndAddIfNotContained(
+      iriLocalVocabEntry("<bliBlaBlubb>", qec->getLocalVocabContext()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =
@@ -145,9 +148,9 @@ TEST(NamedResultCache, E2E) {
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   LocalVocab dummyVocab;
-  auto notInVocab = Id::makeFromLocalVocabIndex(
-      dummyVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-          "<notInVocab>", qec->getLocalVocabContext())));
+  auto notInVocab =
+      Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
+          iriLocalVocabEntry("<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
   EXPECT_THAT(result->idTableView(), matchesIdTable(expected));

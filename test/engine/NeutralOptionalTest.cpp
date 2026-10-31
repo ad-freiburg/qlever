@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/NeutralOptional.h"
@@ -280,8 +281,8 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab{};
   localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test\"",
-                                                qec->getLocalVocabContext()));
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"Test\"", qec->getLocalVocabContext()));
 
   {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
