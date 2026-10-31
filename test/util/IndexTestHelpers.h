@@ -17,6 +17,7 @@
 
 #include "AllocatorTestHelpers.h"
 #include "GTestHelpers.h"
+#include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -25,6 +26,7 @@
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
+#include "util/Executor.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -48,6 +50,20 @@ namespace ad_utility::testing {
         previousValue;
   }};
 }
+
+// Return the executor of a single, lazily-initialized thread pool with a single
+// thread, which is shared across all tests. It is meant for the tests that only
+// need an executor to perform their work on, in particular for the
+// `QueryExecutionContext`s of `getQec` (see below).
+qlever::Executor singleThreadExecutor();
+
+// Return the executor of a single, lazily-initialized thread pool with several
+// threads, which is shared across all tests. It is meant for the tests of
+// components whose work runs concurrently on the executor (for example the
+// reading ahead of the `CompressedRelationReader` and the parallel writing of
+// the `CompressedRelationWriter`), such that this concurrency is actually
+// exercised, in particular under the thread sanitizer.
+qlever::Executor multiThreadExecutor();
 
 // Return a pointer to a single, lazily-initialized `EncodedIriManager`
 // instance shared across all tests.

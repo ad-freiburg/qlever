@@ -74,6 +74,21 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     // Add the next word to the vocabulary and return its index.
     uint64_t operator()(std::string_view word, bool isExternalDummy) override;
 
+    // The bulk path of the `VocabularyInternalExternal::BlockWriter`, which
+    // has exactly the same result as adding the words one by one: first
+    // reserve the range of the files for a `block` (which has to hold the
+    // next words of the vocabulary, see `WordBlock::firstPosition_`), which
+    // returns the offset of its data in the file and has to be called in the
+    // order of the blocks, then write the block at that offset, which is
+    // thread-safe (a positioned write) and may happen in any order. All the
+    // writes have to be complete before `finish()`.
+    //
+    // NOTE: The `VocabularyOnDisk` has no `BlockWriter` of its own, because it
+    // is only used as the external part of the `VocabularyInternalExternal`,
+    // whose `BlockWriter` calls these two functions directly.
+    uint64_t reserveBlock(const WordBlock& block);
+    void writeBlockAt(const WordBlock& block, uint64_t dataOffset) const;
+
     ~WordWriter() override;
 
    private:
@@ -190,30 +205,17 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
   // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
-  // With `pageCacheFastPath`, each run of consecutive indices is first read as
-  // one range of the `.offsets` file with `readPageCacheHits`, and only the
-  // pairs of the runs that were not in the page cache go through `manager`.
+  // Each run of consecutive indices is read as one range, because their pairs
+  // overlap in the file.
   std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
-                                          ql::span<const size_t> indices,
-                                          bool pageCacheFastPath) const;
+                                          ql::span<const size_t> indices) const;
 
   // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
   // string data from `file_` into one contiguous buffer in a single batched
   // read via `manager`, and return it as a `VocabBatchLookupResult`.
-  // With `pageCacheFastPath`, the words that are in the page cache are read
-  // with `readPageCacheHits` (adjacent words in one call), and only the others
-  // go through `manager`.
-  VocabBatchLookupResult readStrings(ad_utility::BatchManagerBase& manager,
-                                     ql::span<const OffsetPair> offsetPairs,
-                                     bool pageCacheFastPath) const;
-
-  // Read `numBytes[i]` bytes at `offsets[i]` of `fd` into `buffers[i]` for
-  // every `i` in `positions` through `manager` and wait for them.
-  static void readThroughManager(ad_utility::BatchManagerBase& manager, int fd,
-                                 ql::span<const size_t> numBytes,
-                                 ql::span<const uint64_t> offsets,
-                                 ql::span<char*> buffers,
-                                 ql::span<const size_t> positions);
+  VocabBatchLookupResult readStrings(
+      ad_utility::BatchManagerBase& manager,
+      ql::span<const OffsetPair> offsetPairs) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

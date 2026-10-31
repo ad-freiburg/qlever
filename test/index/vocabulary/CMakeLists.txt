@@ -23,3 +23,4 @@ addLinkAndDiscoverTestNoLibs(VocabularyTypesTest)
 addLinkAndDiscoverTest(VocabularyFileSuffixesTest vocabulary sparqlParser qlever_util)
 
 addLinkAndDiscoverTestNoLibs(BuildFilteredVocabularyTest vocabulary)
+addLinkAndDiscoverTest(BlockWriterTest vocabulary sparqlParser qlever_util)

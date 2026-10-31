@@ -123,6 +123,7 @@ class IndexMetaData {
   }
 
   size_t totalElements() const { return totalElements_; }
+  size_t numDistinctCol0() const { return numDistinctCol0_; }
 
   // Exchange the multiplicities for two permutations that are "twins" (e.g. PSO
   // and POS). This is needed because the multiplicity of the last column is

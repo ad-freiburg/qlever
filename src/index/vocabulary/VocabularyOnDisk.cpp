@@ -162,104 +162,85 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
       }}};
 }
 
-// _____________________________________________________________________________
-void VocabularyOnDisk::readThroughManager(ad_utility::BatchManagerBase& manager,
-                                          int fd,
-                                          ql::span<const size_t> numBytes,
-                                          ql::span<const uint64_t> offsets,
-                                          ql::span<char*> buffers,
-                                          ql::span<const size_t> positions) {
-  if (positions.empty()) {
-    return;
+namespace {
+// A run of consecutive vocabulary indices together with the `size + 1` entries
+// of the `.offsets` file that bound their words. The offsets of consecutive
+// indices overlap, so a run is read as one range.
+struct OffsetRun {
+  ql::span<const size_t> indices_;
+  ql::span<uint64_t> offsets_;
+};
+
+// Split `indices` into runs of consecutive indices and give each run its
+// entries in `offsets`, which is resized to hold all of them.
+std::vector<OffsetRun> splitIntoOffsetRuns(ql::span<const size_t> indices,
+                                           std::vector<uint64_t>& offsets) {
+  auto runs = ::ranges::to<std::vector<ql::span<const size_t>>>(
+      indices | ::ranges::views::chunk_by([](size_t previous, size_t next) {
+        return next == previous + 1;
+      }) |
+      ::ranges::views::transform([](const auto& run) {
+        return ql::span<const size_t>{
+            &*::ranges::begin(run),
+            static_cast<size_t>(::ranges::distance(run))};
+      }));
+  offsets.resize(indices.size() + runs.size());
+  std::vector<OffsetRun> offsetRuns;
+  offsetRuns.reserve(runs.size());
+  uint64_t* nextOffsets = offsets.data();
+  for (ql::span<const size_t> run : runs) {
+    offsetRuns.push_back({run, {nextOffsets, run.size() + 1}});
+    nextOffsets += run.size() + 1;
   }
-  auto select = [&positions](auto values) {
-    return ::ranges::to_vector(
-        positions |
-        ql::views::transform([&values](size_t i) { return values[i]; }));
-  };
-  auto selectedNumBytes = select(numBytes);
-  auto selectedOffsets = select(offsets);
-  auto selectedBuffers = select(buffers);
-  manager.wait(
-      manager.addBatch(fd, selectedNumBytes, selectedOffsets, selectedBuffers));
+  return offsetRuns;
 }
+
+// Read the offsets of all `runs` from the `.offsets` file `fd` in one batch.
+void readOffsetRuns(ad_utility::BatchManagerBase& manager, int fd,
+                    ql::span<const OffsetRun> runs) {
+  auto sizes = ::ranges::to<std::vector<size_t>>(
+      runs | ::ranges::views::transform([](const OffsetRun& run) {
+        return run.offsets_.size_bytes();
+      }));
+  auto fileOffsets = ::ranges::to<std::vector<uint64_t>>(
+      runs | ::ranges::views::transform([](const OffsetRun& run) {
+        return uint64_t{run.indices_.front() * sizeof(uint64_t)};
+      }));
+  auto targets = ::ranges::to<std::vector<char*>>(
+      runs | ::ranges::views::transform([](const OffsetRun& run) {
+        return reinterpret_cast<char*>(run.offsets_.data());
+      }));
+  manager.wait(manager.addBatch(fd, sizes, fileOffsets, targets));
+}
+}  // namespace
 
 // _____________________________________________________________________________
 std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
-    ad_utility::BatchManagerBase& manager, ql::span<const size_t> indices,
-    bool pageCacheFastPath) const {
-  // For each requested index `i`, read its offset together with the next offset
-  // (which bounds the string) as one 16-byte pair from `.offsets`.
-  const size_t numIndices = indices.size();
-  std::vector<OffsetPair> offsetPairs(numIndices);
-  std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
-  std::vector<uint64_t> fileOffsets(numIndices);
-  std::vector<char*> targets(numIndices);
-  for (auto&& [fileOffset, index, target, offsetPair] :
-       ::ranges::views::zip(fileOffsets, indices, targets, offsetPairs)) {
+    ad_utility::BatchManagerBase& manager,
+    ql::span<const size_t> indices) const {
+  for (size_t index : indices) {
     AD_CONTRACT_CHECK(index < size());
-    fileOffset = index * sizeof(uint64_t);
-    target = reinterpret_cast<char*>(&offsetPair);
   }
-  if (!pageCacheFastPath) {
-    manager.wait(
-        manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
-    return offsetPairs;
-  }
+  std::vector<uint64_t> offsets;
+  const auto runs = splitIntoOffsetRuns(indices, offsets);
+  readOffsetRuns(manager, offsetsFile_.fd(), runs);
 
-  // The pairs of consecutive indices overlap in the file, so read each run of
-  // consecutive indices `[runBegins[r], runBegins[r + 1])` as one range of
-  // `runLength + 1` offsets into `runOffsets`.
-  std::vector<size_t> runBegins{0};
-  for (size_t i = 1; i < numIndices; ++i) {
-    if (indices[i] != indices[i - 1] + 1) {
-      runBegins.push_back(i);
+  // Each pair of neighbouring offsets of a run bounds one word.
+  std::vector<OffsetPair> offsetPairs;
+  offsetPairs.reserve(indices.size());
+  for (const OffsetRun& run : runs) {
+    for (auto [offset, nextOffset] : ::ranges::views::zip(
+             run.offsets_, run.offsets_ | ::ranges::views::drop(1))) {
+      offsetPairs.push_back(OffsetPair{offset, nextOffset});
     }
   }
-  runBegins.push_back(numIndices);
-  const size_t numRuns = runBegins.size() - 1;
-  std::vector<uint64_t> runOffsets(numIndices + numRuns);
-  std::vector<size_t> runSizes(numRuns);
-  std::vector<uint64_t> runFileOffsets(numRuns);
-  std::vector<char*> runTargets(numRuns);
-  for (size_t run = 0; run < numRuns; ++run) {
-    const size_t begin = runBegins[run];
-    const size_t length = runBegins[run + 1] - begin;
-    runSizes[run] = (length + 1) * sizeof(uint64_t);
-    runFileOffsets[run] = fileOffsets[begin];
-    runTargets[run] = reinterpret_cast<char*>(runOffsets.data() + begin + run);
-  }
-  auto missedRuns = ad_utility::readPageCacheHits(offsetsFile_.fd(), runSizes,
-                                                  runFileOffsets, runTargets);
-
-  // Fill the pairs of the served runs, and collect the pairs of the missed runs
-  // for `manager`.
-  std::vector<size_t> missedPositions;
-  auto missedRun = missedRuns.begin();
-  for (size_t run = 0; run < numRuns; ++run) {
-    const size_t begin = runBegins[run];
-    const size_t end = runBegins[run + 1];
-    if (missedRun != missedRuns.end() && *missedRun == run) {
-      ++missedRun;
-      for (size_t i = begin; i < end; ++i) {
-        missedPositions.push_back(i);
-      }
-      continue;
-    }
-    const uint64_t* runStart = runOffsets.data() + begin + run;
-    for (size_t i = begin; i < end; ++i) {
-      offsetPairs[i] = OffsetPair{runStart[i - begin], runStart[i - begin + 1]};
-    }
-  }
-  readThroughManager(manager, offsetsFile_.fd(), sizes, fileOffsets, targets,
-                     missedPositions);
   return offsetPairs;
 }
 
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::readStrings(
     ad_utility::BatchManagerBase& manager,
-    ql::span<const OffsetPair> offsetPairs, bool pageCacheFastPath) const {
+    ql::span<const OffsetPair> offsetPairs) const {
   // Read the string data. String `i` starts at `offset_` with length
   // `nextOffset_ - offset_`; the strings are packed contiguously into `buffer`.
   const size_t numIndices = offsetPairs.size();
@@ -284,15 +265,7 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
     bufferOffset += size;
   }
 
-  ql::span<char*> targetSpan{targets};
-  if (pageCacheFastPath) {
-    auto missed = ad_utility::readPageCacheHits(file_.fd(), sizes, fileOffsets,
-                                                targetSpan);
-    readThroughManager(manager, file_.fd(), sizes, fileOffsets, targetSpan,
-                       missed);
-  } else {
-    manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targetSpan));
-  }
+  manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targets));
   return VocabBatchLookupData::asResult(std::move(data));
 }
 
@@ -312,12 +285,12 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
         "`VocabularyOnDisk::lookupBatch`");
   }};
 
-  const bool pageCacheFastPath =
-      getRuntimeParameter<
-          &RuntimeParameters::vocabularyIouringPageCacheFastPath_>() &&
-      ad_utility::pageCacheFastPathIsSupported();
-  auto offsetPairs = readOffsetPairs(*manager, indices, pageCacheFastPath);
-  return readStrings(*manager, offsetPairs, pageCacheFastPath);
+  // The page-cache fast path belongs to the manager; the runtime parameter can
+  // change between two lookups.
+  manager->setPageCacheFastPath(
+      getRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>());
+  auto offsetPairs = readOffsetPairs(*manager, indices);
+  return readStrings(*manager, offsetPairs);
 }
 
 // _____________________________________________________________________________
@@ -341,7 +314,39 @@ uint64_t VocabularyOnDisk::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
+uint64_t VocabularyOnDisk::WordWriter::reserveBlock(const WordBlock& block) {
+  AD_CONTRACT_CHECK(block.firstPosition_ == numWords_);
+  uint64_t dataOffset = currentOffset_;
+  currentOffset_ += block.data().size();
+  numWords_ += block.numWords();
+  return dataOffset;
+}
+
+// _____________________________________________________________________________
+void VocabularyOnDisk::WordWriter::writeBlockAt(const WordBlock& block,
+                                                uint64_t dataOffset) const {
+  const size_t numWords = block.numWords();
+  // The offsets of the block are relative to its data, the ones in the file
+  // are absolute.
+  std::vector<uint64_t> offsets(numWords);
+  for (size_t i = 0; i < numWords; ++i) {
+    offsets[i] = dataOffset + block.offsets()[i];
+  }
+  // NOTE: The positioned `write` throws if not all the bytes could be written.
+  offsetsFile_.write(
+      offsets.data(), numWords * sizeof(uint64_t),
+      static_cast<off_t>(block.firstPosition_ * sizeof(uint64_t)));
+  file_.write(block.data().data(), block.data().size(),
+              static_cast<off_t>(dataOffset));
+}
+
+// _____________________________________________________________________________
 void VocabularyOnDisk::WordWriter::finishImpl() {
+  // The blocks are written with positioned writes (see `writeBlockAt`), which
+  // bypass the position of the files, so the trailer has to go to the end
+  // explicitly. This is a no-op for words that were added one by one.
+  offsetsFile_.seek(0, SEEK_END);
+  file_.seek(0, SEEK_END);
   // End offset of last vocabulary entry, also consistent with the empty
   // vocabulary.
   offsetsFile_.write(&currentOffset_, sizeof(currentOffset_));
@@ -383,7 +388,11 @@ void VocabularyOnDisk::open(const std::string& filename) {
       std::unique_ptr<ad_utility::BatchManagerBase>>>(
       NUM_VOCAB_BATCH_IO_MANAGERS);
   bool preferIoUring = true;
-  for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring));
+  auto makeManager = [&preferIoUring]() {
+    return ad_utility::makeBatchManager(preferIoUring);
+  };
+  for (auto&& manager :
+       ::ranges::views::generate_n(makeManager, NUM_VOCAB_BATCH_IO_MANAGERS)) {
+    ioManagers_->push(std::move(manager));
   }
 }

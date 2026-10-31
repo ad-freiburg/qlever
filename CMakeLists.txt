@@ -194,6 +194,12 @@ else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
+# Clang stores a timestamp in each precompiled header, so `ccache` would never
+# reuse the objects compiled with one. CMake doesn't remove it on its own.
+if (CMAKE_CXX_COMPILER_LAUNCHER MATCHES "ccache" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options("SHELL:-Xclang -fno-pch-timestamp")
+endif ()
+
 # Additionally fall back to `range-v3` whenever the C++ standard library is
 # libstdc++ older than version 12, independent of the compiler. Such versions
 # (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
@@ -311,7 +317,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 0e2a41b61694e823df1b7d77174b139253c7ac39 # branch fork-for-qlever
+        GIT_TAG 9814a99e4458936acdf012eb0bed4fbcd569a181 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -322,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 6540731c0dd7a0e4335474a5e2df28fbbb07ab8b
+        GIT_TAG 1177c1bee6203908b39c4e2dda4765aec5f59dee
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -474,14 +480,21 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# LTO noticeably increases build time, so it is off by default (e.g. for CI and
+# local builds). It is opted into explicitly for the Docker image and the
+# portable binaries published from `master` (see `Dockerfile`,
+# `.github/workflows/docker-publish.yml`, and
+# `.github/scripts/build-portable-binaries.sh`).
+option(QLEVER_ENABLE_LTO "Enable link-time optimization" OFF)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
-# GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
+# GCC 11–16 emit spurious `-Wmaybe-uninitialized` for template instantiations
 # that cross the system-header boundary (e.g. absl containers instantiated with
 # user types, std::variant). Suppress for the affected version range so the
 # flag can be re-enabled easily once GCC fixes the false-positive behavior.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17")
     # False positives from template instantiation crossing system-header boundaries.
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
@@ -539,6 +552,79 @@ endif ()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
+if (QLEVER_ENABLE_LTO)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # `-ffat-lto-objects` makes every object contain both GIMPLE bytecode and
+        # ordinary machine code. All targets link with `-fno-lto` by default and
+        # thus reuse the embedded machine code, and only the targets opted in via
+        # `qlever_enable_lto` (see below) link with `-flto` and get full LTO. In
+        # particular, the (non-shipped) test and benchmark binaries never pay for
+        # a whole-program optimization at link time.
+        #
+        # NOTE 1: GCC disables LTO as soon as `-fno-lto` appears anywhere on the
+        # link command line, so the opted-in targets must not get it at all,
+        # hence the condition on the target property `QLEVER_LTO`.
+        #
+        # NOTE 2: With `BUILD_SHARED_LIBS`, the shared libraries link without
+        # LTO as well, so an opted-in binary only optimizes its own objects.
+        add_compile_options(-flto=auto -ffat-lto-objects)
+        add_link_options($<$<NOT:$<BOOL:$<TARGET_PROPERTY:QLEVER_LTO>>>:-fno-lto>)
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
+        # Unlike GCC, Clang's linkers use the embedded machine code of a fat
+        # object and only run (Thin)LTO on its bitcode when explicitly told to
+        # via `--fat-lto-objects`, which `lld` understands, but e.g. `mold`
+        # silently ignores. So by default every target links the machine code
+        # without paying for LTO, and only the targets opted in via
+        # `qlever_enable_lto` (see below) are linked with `lld` and get ThinLTO.
+        add_compile_options(-flto=thin -ffat-lto-objects)
+        # Ask the compiler driver whether `lld` is available, to fail early
+        # instead of only when linking the first LTO target.
+        execute_process(
+                COMMAND ${CMAKE_CXX_COMPILER} -fuse-ld=lld -Wl,--version
+                OUTPUT_VARIABLE QLEVER_LLD_VERSION
+                ERROR_VARIABLE QLEVER_LLD_VERSION)
+        if (NOT QLEVER_LLD_VERSION MATCHES "LLD")
+            message(FATAL_ERROR "`QLEVER_ENABLE_LTO` with Clang requires the `lld` "
+                    "linker, which was not found.")
+        endif ()
+    else()
+        message(WARNING "`QLEVER_ENABLE_LTO` is ON, but link-time optimization is not "
+                "configured for the compiler `${CMAKE_CXX_COMPILER_ID}`. "
+                "Building without LTO.")
+    endif()
+endif()
+
+# Link the given target with LTO (full LTO with GCC, ThinLTO via `lld` with
+# Clang) if `QLEVER_ENABLE_LTO` is set. All other targets link the machine code
+# of the fat objects without LTO (see above).
+function(qlever_enable_lto target)
+    if (NOT QLEVER_ENABLE_LTO)
+        return()
+    endif ()
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_target_properties(${target} PROPERTIES QLEVER_LTO ON)
+        target_link_options(${target} PRIVATE -flto=auto)
+        # Suppress the false positives that GCC raises in the link-time
+        # optimization phase (`lto1`). They cannot be suppressed via the pragmas
+        # in `CompilerWarnings.h`, because `lto1` takes its warning flags from
+        # the link command line. Without LTO, these diagnostics stay enabled.
+        #
+        # NOTE: The known false positives are `stringop-overflow` in abseil's
+        # `str_cat.cc` inlined into `flag.cc`, `odr` on the compiler-generated
+        # frame types of coroutines (whose fields get different internal names
+        # per translation unit), `maybe-uninitialized` in abseil's
+        # `inlined_vector` inlined through s2's `s2closest_point_query_base.h`,
+        # and `stringop-overread` in s2's `compact_array.h`.
+        target_link_options(${target} PRIVATE -Wno-stringop-overflow -Wno-odr
+                -Wno-maybe-uninitialized -Wno-stringop-overread)
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
+        # `-fuse-ld=lld` comes after `CMAKE_EXE_LINKER_FLAGS` on the link
+        # command line, so it overrides e.g. a `-fuse-ld=mold` from there.
+        target_link_options(${target} PRIVATE -fuse-ld=lld -flto=thin
+                -ffat-lto-objects -Wl,--thinlto-jobs=all)
+    endif ()
+endfunction()
+
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
@@ -578,16 +664,6 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 
-
-if (USE_PARALLEL)
-    include(FindOpenMP)
-    if (OPENMP_FOUND)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-        add_compile_definitions(_PARALLEL_SORT)
-    endif ()
-endif ()
 
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
@@ -708,6 +784,13 @@ if (EMSCRIPTEN)
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
+# The library `pb_util_geo` of `spatialjoin` uses the JSON writer of
+# `pb_util_json`, but does not link against it. With `BUILD_SHARED_LIBS`, the
+# linker of Ubuntu 26.04 (binutils 2.46, and also `mold`) then rejects every
+# executable that links against `libpb_util_geo.so` with "undefined reference
+# to `util::json::Writer::...`".
+target_link_libraries(pb_util_geo PUBLIC pb_util_json)
+
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest
 # of the build can link against the correct one without further case
@@ -720,7 +803,11 @@ else ()
     add_library(antlr4_umbrella ALIAS antlr4_static)
 endif ()
 # Disable some warnings in RE2 and GTEST
-target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
+# NOTE: `-Wno-uninitialized` is needed in addition to `-Wno-maybe-uninitialized`
+# (which it does not imply): GCC 15 and GCC 16 wrongly report the inline storage
+# of the `absl::InlinedVector` inside the priority queue of
+# `S2ClosestPointQueryBase` as definitely used uninitialized.
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
@@ -809,11 +896,22 @@ if (BRANCHLESS_LOGGING)
     add_compile_definitions(QLEVER_BRANCHLESS_LOGGING)
 endif ()
 
+# The conditions of the `AD_CORRECTNESS_CHECK` macro (see `src/util/Exception.h`)
+# are invariants that never fail, so branches inside these conditions (e.g.
+# from `&&` or `||`) can never be fully covered by unit tests. With this option,
+# the condition is evaluated inside a lambda that is excluded from the coverage
+# instrumentation. It is used for the coverage build; see `src/util/Exception.h`
+# for why this option is not set unconditionally.
+option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
+if (COVERAGE_FRIENDLY_CHECKS)
+    add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
+endif ()
+
 ##################################################
 # Warnings about incorrect combination of CMake variables
 
 if (LOGLEVEL_NAME MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE STREQUAL "ENABLED")
-  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL_NAME}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
+  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL_NAME}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but the server still runs a watchdog that decides when to print those messages)")
 endif ()
 
 add_subdirectory(src/parser)
@@ -894,9 +992,9 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
-
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+# The command-line tools are not built for Emscripten (and `qlever-server`
+# cannot be, see `src/engine/CMakeLists.txt`).
+if (NOT EMSCRIPTEN)
     add_executable(qlever-index src/index/IndexBuilderMain.cpp)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
@@ -904,22 +1002,37 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
+        # GCC only uses the precompiled header of `engine` for `qlever-server` if
+        # every definition of `engine` is also defined for `qlever-server`. We
+        # therefore omit the (unused) `engine_EXPORTS`, which CMake defines for
+        # shared libraries.
+        set_target_properties(engine PROPERTIES DEFINE_SYMBOL "")
     endif()
 
     add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
     qlever_target_link_libraries(qlever-upgrade-index index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+
+    qlever_enable_lto(qlever-index)
+    qlever_enable_lto(qlever-server)
+    qlever_enable_lto(qlever-upgrade-index)
 endif()
 
-add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
+# Tools that are only needed natively: `LibQLeverExample` and
+# `VocabularyMergerMain` work on files on the host file system, which a
+# WebAssembly build cannot access, and `PrintIndexVersionMain` is only used by
+# the index version check in CI.
+if (NOT EMSCRIPTEN)
+    add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+    qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
 
-add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
+    add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
+    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser vocabulary Boost::program_options ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+    add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+    qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+endif()
 
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+if (NOT EMSCRIPTEN)
     install(TARGETS
         qlever-index
         qlever-server

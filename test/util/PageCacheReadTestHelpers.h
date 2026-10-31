@@ -21,7 +21,8 @@ namespace pageCacheReadTestHelpers {
 // Replace the `preadv2(RWF_NOWAIT)` call of `ad_utility::readPageCacheHits`
 // with `function` for the lifetime of this object. On destruction the
 // previous function is restored and an injected `EOPNOTSUPP` is undone, so
-// later tests see the fast path as supported again.
+// later tests see the fast path as supported again. A fast path that was
+// already unsupported before stays unsupported.
 class ScopedPageCacheRead {
  public:
   explicit ScopedPageCacheRead(ad_utility::detail::PageCacheRead function)
@@ -29,13 +30,16 @@ class ScopedPageCacheRead {
             std::exchange(ad_utility::detail::pageCacheRead(), function)} {}
   ~ScopedPageCacheRead() {
     ad_utility::detail::pageCacheRead() = previous_;
-    ad_utility::detail::resetPageCacheFastPathSupport();
+    if (wasSupported_) {
+      ad_utility::detail::resetPageCacheFastPathSupport();
+    }
   }
   ScopedPageCacheRead(const ScopedPageCacheRead&) = delete;
   ScopedPageCacheRead& operator=(const ScopedPageCacheRead&) = delete;
 
  private:
   ad_utility::detail::PageCacheRead previous_;
+  bool wasSupported_ = ad_utility::pageCacheFastPathIsSupported();
 };
 
 // A page-cache read that finds nothing cached (`EAGAIN`).

@@ -57,7 +57,7 @@ void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
 
 namespace {
 #ifdef QL_PAGE_CACHE_FAST_PATH
-// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP`. The flag is a
+// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP` or `ENOSYS`. The flag is a
 // best-effort hint without associated data; the default sequential
 // consistency (Sonar cpp:S8417) keeps the publication of the disabled state
 // obvious.
@@ -104,68 +104,78 @@ bool pageCacheFastPathIsSupported() {
 #endif
 }
 
+#ifdef QL_PAGE_CACHE_FAST_PATH
+namespace {
+// The elements of the range of reads in `readPageCacheHits`: the position of a
+// read in its batch, its number of bytes, its file offset and its buffer.
+constexpr auto position = [](const auto& read) { return std::get<0>(read); };
+constexpr auto toIovec = [](const auto& read) {
+  return ::iovec{std::get<3>(read), std::get<1>(read)};
+};
+// True if the file range of `next` starts where the one of `previous` ends.
+constexpr auto areAdjacent = [](const auto& previous, const auto& next) {
+  return std::get<2>(previous) + std::get<1>(previous) == std::get<2>(next);
+};
+
+// Log once that the kernel or file system rejects `RWF_NOWAIT` (`EOPNOTSUPP`)
+// or that `preadv2` does not exist (`ENOSYS`, Linux < 4.6 or a seccomp filter),
+// and switch the fast path off for the rest of the process.
+void disableIfNotSupported(int64_t numBytesRead) {
+  if (numBytesRead < 0 && (errno == EOPNOTSUPP || errno == ENOSYS) &&
+      pageCacheFastPathSupported.exchange(false)) {
+    AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
+                   "vocabulary files; reading them without the "
+                   "page-cache fast path"
+                << std::endl;
+  }
+}
+
+// Read a `run` of adjacent reads with one `preadv2(RWF_NOWAIT)` call and return
+// how many of its reads, from the front, were read completely. `EAGAIN`, a
+// short read and any other error leave the remaining reads unserved.
+template <typename Run>
+size_t serveRun(int fd, Run run) {
+  const auto iovecs = ::ranges::to<std::vector<::iovec>>(
+      run | ::ranges::views::transform(toIovec));
+  const int64_t numBytesRead = detail::pageCacheRead()(
+      fd, iovecs.data(), static_cast<int>(iovecs.size()),
+      static_cast<int64_t>(std::get<2>(*::ranges::begin(run))));
+  disableIfNotSupported(numBytesRead);
+  // The end of each read within the run; a read is served if its end was read.
+  auto readEnds = iovecs | ::ranges::views::transform(&::iovec::iov_len) |
+                  ::ranges::views::partial_sum;
+  return static_cast<size_t>(::ranges::count_if(readEnds, [&](size_t end) {
+    return numBytesRead >= 0 && end <= static_cast<size_t>(numBytesRead);
+  }));
+}
+}  // namespace
+#endif
+
 //______________________________________________________________________________
 std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
                                       ql::span<const uint64_t> offsets,
                                       ql::span<char*> buffers) {
   AD_CONTRACT_CHECK(offsets.size() == numBytes.size() &&
                     buffers.size() == numBytes.size());
-  std::vector<size_t> notServed;
+  auto positions = ::ranges::views::iota(size_t{0}, numBytes.size());
 #ifdef QL_PAGE_CACHE_FAST_PATH
-  const size_t numReads = numBytes.size();
-  std::vector<iovec> iovecs;
-  size_t runBegin = 0;
-  while (runBegin < numReads) {
-    // The run `[runBegin, runEnd)` holds exactly adjacent file ranges, at most
-    // `IOV_MAX` of them (the limit of one `preadv2` call).
-    size_t runEnd = runBegin + 1;
-    while (runEnd < numReads &&
-           runEnd - runBegin < static_cast<size_t>(IOV_MAX) &&
-           offsets[runEnd - 1] + numBytes[runEnd - 1] == offsets[runEnd]) {
-      ++runEnd;
+  auto reads = ::ranges::views::zip(positions, numBytes, offsets, buffers);
+  std::vector<size_t> notServed;
+  for (auto adjacentReads : reads | ::ranges::views::chunk_by(areAdjacent)) {
+    // One `preadv2` call takes at most `IOV_MAX` buffers.
+    for (auto run :
+         adjacentReads | ::ranges::views::chunk(static_cast<size_t>(IOV_MAX))) {
+      const size_t numServed =
+          pageCacheFastPathSupported.load() ? serveRun(fd, run) : 0;
+      ::ranges::push_back(notServed, run | ::ranges::views::drop(numServed) |
+                                         ::ranges::views::transform(position));
     }
-    if (!pageCacheFastPathSupported.load()) {
-      for (size_t i = runBegin; i < numReads; ++i) {
-        notServed.push_back(i);
-      }
-      return notServed;
-    }
-    iovecs.clear();
-    for (size_t i = runBegin; i < runEnd; ++i) {
-      iovecs.push_back(iovec{buffers[i], numBytes[i]});
-    }
-    // See https://man7.org/linux/man-pages/man2/preadv2.2.html: with
-    // `RWF_NOWAIT`, the call fails with `EAGAIN` (or returns fewer bytes)
-    // instead of waiting for the storage device when data is not cached.
-    const int64_t numBytesRead = detail::pageCacheRead()(
-        fd, iovecs.data(), static_cast<int>(iovecs.size()),
-        static_cast<int64_t>(offsets[runBegin]));
-    if (numBytesRead < 0 && errno == EOPNOTSUPP &&
-        pageCacheFastPathSupported.exchange(false)) {
-      AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
-                     "vocabulary files; reading them without the "
-                     "page-cache fast path"
-                  << std::endl;
-    }
-    // Reads that were read completely are served, the others (from the first
-    // incomplete one on) are left to the caller.
-    size_t remaining = numBytesRead < 0 ? 0 : static_cast<size_t>(numBytesRead);
-    size_t i = runBegin;
-    for (; i < runEnd && remaining >= numBytes[i]; ++i) {
-      remaining -= numBytes[i];
-    }
-    for (; i < runEnd; ++i) {
-      notServed.push_back(i);
-    }
-    runBegin = runEnd;
   }
+  return notServed;
 #else
   (void)fd;
-  for (size_t i = 0; i < numBytes.size(); ++i) {
-    notServed.push_back(i);
-  }
+  return ::ranges::to<std::vector<size_t>>(positions);
 #endif
-  return notServed;
 }
 
 //______________________________________________________________________________

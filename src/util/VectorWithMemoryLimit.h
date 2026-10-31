@@ -53,13 +53,13 @@ class VectorWithMemoryLimit
   // `vector` take the allocator as a last parameter)
   // * there must be a constructor of `Base` for the given arguments.
   CPP_template(typename... Args)(
-      requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
-                                 Base>)
-          CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
-              CPP_and concepts::constructible_from<Base, Args&&...>)
-      QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
-      : Base(AD_FWD(args)...) {}
+      requires(sizeof...(Args) > 0) &&
+      CPP_NOT(concepts::derived_from<
+              ql::remove_cvref_t<ad_utility::First<Args...>>, Base>) &&
+      concepts::convertible_to<ad_utility::Last<Args...>, Allocator> &&
+      concepts::constructible_from<Base, Args && ...>)
+  QL_EXPLICIT(sizeof...(Args) == 1)
+  VectorWithMemoryLimit(Args&&... args) : Base(AD_FWD(args)...) {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.

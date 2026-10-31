@@ -117,8 +117,8 @@ class MockIndex {
     ProcessedTriple result;
     if (triple.object_.isLiteral() &&
         triple.object_.getLiteral().hasLanguageTag()) {
-      result.langtag_ = std::string(
-          asStringViewUnsafe(triple.object_.getLiteral().getLanguageTag()));
+      result.langtag_ =
+          std::string(triple.object_.getLiteral().getLanguageTag());
     }
     result.triple_ =
         Triple{std::move(triple.subject_), std::move(triple.predicate_),
@@ -134,9 +134,9 @@ class MockIndex {
     }
     PartialVocabulary vocab;
     ad_utility::HashMap<uint64_t, std::string> wordsByLocalId;
-    for (const auto& [word, idAndFlag] : items.map_) {
+    for (const auto& [word, indexAndFlag] : items.map_) {
       vocab.words_.emplace(word);
-      wordsByLocalId[idAndFlag.id()] = std::string{word};
+      wordsByLocalId[indexAndFlag.index()] = std::string{word};
     }
     for (const auto& row : localIds) {
       StringTriple triple;
