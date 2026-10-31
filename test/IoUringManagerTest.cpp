@@ -766,10 +766,12 @@ TEST(IoUringPolicyModel, spansOfDifferentLengthsThrow) {
       HasSubstr("offsets.size() == numBytesToRead.size()"));
 }
 
-// A submit error other than `EINTR` and `EAGAIN`, and a failed wait, mean that
-// the ring is broken while the kernel may hold reads. Throwing could let the
-// caller free buffers that the kernel still writes into, so the process
-// terminates.
+// A failed wait, and a submit error other than `EINTR` and `EAGAIN` while
+// the kernel holds reads of the batch, mean that the ring is broken while
+// the kernel may hold reads. Throwing could let the caller free buffers
+// that the kernel still writes into, so the process terminates. A fatal
+// submit error before the kernel took any read of the batch is different:
+// nothing was handed to the kernel, so the batch simply fails.
 TEST(IoUringPolicyModel, aBrokenRingTerminates) {
   using ad_utility::testing::FakeIoUring;
   // Avoid warnings and crashes when running all tests at once.
@@ -783,8 +785,11 @@ TEST(IoUringPolicyModel, aBrokenRingTerminates) {
   };
   FakeIoUring::Faults brokenSubmit;
   brokenSubmit.brokenSubmitErrno = EBADF;
-  EXPECT_DEATH_IF_SUPPORTED(readWith(brokenSubmit),
-                            "io_uring_submit failed in IoUringPolicy");
+  // The very first submit already fails, so the kernel holds no read of
+  // the batch: `addBatch` throws instead of terminating.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      readWith(brokenSubmit),
+      HasSubstr("io_uring_submit failed in IoUringPolicy"));
   FakeIoUring::Faults brokenWait;
   brokenWait.brokenWaitErrno = EBADF;
   // Keep both reads in the kernel, so that the policy has to wait.

@@ -428,6 +428,19 @@ void IoUringPolicy::submit(Batch& batch) {
     // A submit that takes nothing although SQEs are queued did not make
     // progress either, so it is retried like `EAGAIN`.
     if (ret != 0 && ret != -EAGAIN) {
+      // A fatal submit error only forces termination while the kernel
+      // holds reads of this batch (it may still write into their
+      // buffers). If it holds none, the queued reads were never handed
+      // to the kernel, so the batch can fail gracefully instead: cancel
+      // its queued reads (their SQEs stay queued as no-ops) and let
+      // `addBatch` throw the error. No-ops in the kernel write nothing,
+      // so they do not force termination either.
+      if (batch.numReadsInKernel() == 0) {
+        cancelQueuedReads(
+            batch, absl::StrCat("io_uring_submit failed in IoUringPolicy: ",
+                                std::strerror(-ret)));
+        return;
+      }
       terminateBecauseRingIsUnusable("io_uring_submit", -ret);
     }
     if (numRetries == MAX_SUBMIT_RETRIES) {
