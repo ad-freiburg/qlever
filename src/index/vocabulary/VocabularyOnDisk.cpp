@@ -320,6 +320,9 @@ std::vector<OffsetRun> splitIntoOffsetRuns(ql::span<const size_t> indices,
 
 // _____________________________________________________________________________
 // Read the offsets of all `runs` from the `.offsets` file `fd` in one batch.
+// Each run's `offsets_` span must have room for the run's offsets (one more
+// than its number of indices) in the caller's offsets buffer, as set up by
+// `splitIntoOffsetRuns`.
 void readOffsetRuns(ad_utility::BatchManagerBase& manager, int fd,
                     ql::span<const OffsetRun> runs) {
   const auto sizes = ::ranges::to<std::vector<size_t>>(
@@ -345,6 +348,7 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
   for (size_t index : indices) {
     AD_CONTRACT_CHECK(index < size());
   }
+
   std::vector<uint64_t> offsets;
   const auto runs = splitIntoOffsetRuns(indices, offsets);
   readOffsetRuns(manager, offsetsFile_.fd(), runs);
@@ -514,7 +518,7 @@ void VocabularyOnDisk::open(const std::string& filename) {
       std::unique_ptr<ad_utility::BatchManagerBase>>>(
       NUM_VOCAB_BATCH_IO_MANAGERS);
   bool preferIoUring = true;
-  auto makeManager = [&preferIoUring]() {
+  const auto makeManager = [&preferIoUring]() {
     return ad_utility::makeBatchManager(preferIoUring);
   };
   for (auto&& manager :
