@@ -40,10 +40,14 @@ struct SplitLayoutIdBitRepresentation {
   // The number of bytes of the two data members above, and the number of bytes
   // that fill a bit representation up to a multiple of the alignment of the
   // payload.
-  static constexpr size_t numDataBytes =
+  static constexpr size_t numSemanticallyUsedBytes =
       sizeof(PayloadType) + sizeof(DatatypeType);
+  static_assert(numSemanticallyUsedBytes == 9);
+
   static constexpr size_t numPaddingBytes =
-      ad_utility::alignUp(numDataBytes, alignof(PayloadType)) - numDataBytes;
+      ad_utility::alignUp(numSemanticallyUsedBytes, alignof(PayloadType)) -
+      numSemanticallyUsedBytes;
+  static_assert(numPaddingBytes == 7);
 
   // Explicit padding bytes, which are always set to zero by the constructor
   // below, s.t. the bytes of a bit representation are deterministic (e.g. for
@@ -135,6 +139,7 @@ struct SplitLayoutIdBitRepresentation {
 static_assert(offsetof(SplitLayoutIdBitRepresentation, payload_) == 0);
 static_assert(offsetof(SplitLayoutIdBitRepresentation, datatype_) ==
               sizeof(SplitLayoutIdBitRepresentation::PayloadType));
+static_assert(sizeof(SplitLayoutIdBitRepresentation) == 16);
 static_assert(
     std::has_unique_object_representations_v<SplitLayoutIdBitRepresentation>);
 }  // namespace columnBasedIdTable::splitLayout
