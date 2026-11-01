@@ -29,14 +29,16 @@ template <typename ColumnType>
 struct TableColumnWithVocab {
   PayloadTable payload_;
   ColumnType startNodes_;
+  ql::span<const Id> targetNodes_;
   LocalVocab vocab_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  TableColumnWithVocab(std::optional<IdTableView<0>> payload,
-                       ColumnType startNodes, LocalVocab vocab)
+  TableColumnWithVocab(std::optional<IdTableView<0>> payload, ColumnType nodes,
+                       LocalVocab vocab, ql::span<const Id> targetNodes = {})
       : payload_{std::move(payload)},
-        startNodes_{std::move(startNodes)},
+        startNodes_{std::move(nodes)},
+        targetNodes_{targetNodes},
         vocab_{std::move(vocab)} {}
 
   // Return a range substituting undefined values with all corresponding values
@@ -83,8 +85,8 @@ class TransitivePathImpl : public TransitivePathBase {
   using TransitivePathBase::TransitivePathBase;
 
   /**
-   * @brief Compute the transitive hull with a bound side.
-   * This function is called when the startSide is bound and
+   * @brief Compute the transitive hull with one or two bound sides.
+   * This function is called when at least the startSide is bound and
    * it is a variable. The other IdTable contains the result
    * of the start side and will be used to get the start nodes.
    *
@@ -102,7 +104,7 @@ class TransitivePathImpl : public TransitivePathBase {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
     auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
-    auto nodes = setupNodes(startSide, std::move(startSideResult));
+    auto nodes = setupNodes(startSide, targetSide, std::move(startSideResult));
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
     // constant overhead, which should be safe to ignore.
@@ -114,7 +116,9 @@ class TransitivePathImpl : public TransitivePathBase {
 
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t numberOfPayloadColumns =
-        tree->getResultWidth() - numJoinColumnsWith(tree, joinColumn);
+        tree->getResultWidth() -
+        numJoinColumnsWith(tree, joinColumn,
+                           targetSide.getJoinColumnIfPresent());
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce,
                                     numberOfPayloadColumns);
@@ -202,26 +206,13 @@ class TransitivePathImpl : public TransitivePathBase {
                                     resultSortedOn()};
   }
 
-  /**
-   * @brief Compute the transitive hull starting at the given nodes,
-   * using the given Map.
-   *
-   * @param edges Adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param edgesVocab The `LocalVocab` holding the vocabulary of the edges.
-   * @param startNodes A range that yields an instantiation of
-   * `TableColumnWithVocab` that can be consumed to create a transitive hull.
-   * @param start Start `TripleComponent`. If it's a variable, and the same as
-   * an optional graph variable, values where these values are not equal are
-   * skipped.
-   * @param target Target `TripleComponent`. If it's not a variable, paths that
-   * don't end with a matching value are discarded.
-   * @param yieldOnce This has to be set to the same value as the consuming
-   * code. When set to true, this will prevent yielding the same LocalVocab over
-   * and over again to make merging faster (because merging with an empty
-   * LocalVocab is a no-op).
-   * @return Map Maps each Id to its connected Ids in the transitive hull
-   */
+  // Compute the transitive Hull starting at the nodes given in the range
+  // `startNodes` with optional targets given in `startNodes.targetNodes_`,
+  // using the map given in `edges`. If no target nodes are given, all nodes
+  // connected to the current start node are returned. The `TripleComponent`s
+  // `start` and `target` are used to specify the variables for the starting and
+  // target side, which, if present, will be matched. Yields matching results in
+  // `NodeWithGraph` objects.
   CPP_template(typename Node)(requires ql::ranges::range<Node>)
   NodeGenerator transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
                                TripleComponent start, TripleComponent target,
@@ -232,6 +223,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // result, so we use a separate local vocabulary.
     LocalVocab targetHelper;
     const auto& index = getIndex();
+
     std::optional<Id> targetId =
         target.isVariable()
             ? std::nullopt
@@ -242,6 +234,8 @@ class TransitivePathImpl : public TransitivePathBase {
         !targetId.has_value() && graphVariable_ == target.getVariable();
     bool startsWithGraphVariable =
         start.isVariable() && graphVariable_ == start.getVariable();
+    bool targetNodesAreBound = lhs_.isBoundVariable() && rhs_.isBoundVariable();
+
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
@@ -262,6 +256,12 @@ class TransitivePathImpl : public TransitivePathBase {
             targetId = startNode;
           } else if (endsWithGraphVariable) {
             targetId = graphId;
+          } else if (targetNodesAreBound) {
+            // We can treat undef targets the same as a nonexistent target.
+            const auto& targetCandidate = tableColumn.targetNodes_[currentRow];
+            targetId = targetCandidate.isUndefined()
+                           ? std::nullopt
+                           : std::optional{targetCandidate};
           }
           edges.setGraphId(graphId);
 
@@ -341,25 +341,25 @@ class TransitivePathImpl : public TransitivePathBase {
     return result;
   }
 
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @param startSide The TransitivePathSide where the edges start
-   * @param startSideResult A `Result` wrapping an `IdTable` containing the Ids
-   * for the startSide
-   * @return ad_utility::InputRangeTypeErased<TableColumnWithVocab> A range for
-   * the transitive hull computation
-   */
+  // Prepare a Map and a nodes vector for the transitive hull
+  // computation. The start and target sides are given in `startSide` and
+  //`targetSide` respectively. The `Result` object for the operation is given
+  // as `startSideResult.Returns a range for the transitive hull computation as
+  // used in `transitiveHull`.
   ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
-      const TransitivePathSide& startSide,
+      const TransitivePathSide& startSide, const TransitivePathSide& targetSide,
       std::shared_ptr<const Result> startSideResult) const {
     using namespace ad_utility;
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
-    size_t cols = tree->getResultWidth();
     std::optional<ColumnIndex> graphColumn = getActualGraphColumnIndex(tree);
+    std::optional<ColumnIndex> targetJoinColumn =
+        targetSide.getJoinColumnIfPresent();
+
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
-        computeColumnsWithoutJoinColumns(joinColumn, cols, graphColumn);
+        computePayloadColumns(tree, joinColumn, targetJoinColumn);
+
+    // From two columns given by their column id, return an iterable range of
+    // their contents.
     auto columnsToRange = [graphColumn = std::move(graphColumn),
                            joinColumn](const auto& idTable) {
       ConstIdColumnRef startNodes = idTable.getColumn(joinColumn);
@@ -369,34 +369,55 @@ class TransitivePathImpl : public TransitivePathBase {
                  : InputRangeTypeErased{padWithMissingGraph(startNodes)};
     };
 
+    // Get a view object of a column of an `IdTable`.
     auto toView = [columnsWithoutJoinColumns = std::move(
                        columnsWithoutJoinColumns)](const auto& idTable) {
       return idTable.asColumnSubsetView(columnsWithoutJoinColumns);
     };
 
+    // If it is bound, get the nodes on the target side inside a simple
+    // `ql::span`. Otherwise, the span is empty.
+    auto targetNodes = [joinColumn, targetJoinColumn](const auto& idTable) {
+      if (!targetJoinColumn.has_value()) {
+        return ql::span<const Id>();
+      }
+      ql::span<const Id> targetNodes =
+          idTable.getColumn(targetJoinColumn.value());
+      AD_CORRECTNESS_CHECK(targetNodes.size() ==
+                           idTable.getColumn(joinColumn).size());
+      return targetNodes;
+    };
+
+    // For fully materialized result sides, create a lazily iterable
+    // `TableColumnWithVocab` object.
     if (startSideResult->isFullyMaterialized()) {
-      return InputRangeTypeErased(lazySingleValueRange(
-          [toView = std::move(toView),
-           columnsToRange = std::move(columnsToRange),
-           startSideResult = std::move(startSideResult)]() {
+      return InputRangeTypeErased(
+          lazySingleValueRange([toView = std::move(toView),
+                                columnsToRange = std::move(columnsToRange),
+                                startSideResult = std::move(startSideResult),
+                                targetNodes = std::move(targetNodes)]() {
             const IdTableView<0>& idTable = startSideResult->idTableView();
-            return TableColumnWithVocab{toView(idTable),
-                                        columnsToRange(idTable),
-                                        startSideResult->getCopyOfLocalVocab()};
+            return TableColumnWithVocab{
+                toView(idTable), columnsToRange(idTable),
+                startSideResult->getCopyOfLocalVocab(), targetNodes(idTable)};
           }));
     }
-
+    // For not fully materialized result sides, cache the `IdTable` of the
+    // `startSideResult` and return a `TableColumnWithVocab` based on that
+    // cached object.
     return InputRangeTypeErased(CachingTransformInputRange(
         startSideResult->idTables(),
         // the lambda uses a buffer to ensure the lifetime of the pointer to
         // the idTable, but releases ownership of the localVocab
         [toView = std::move(toView), columnsToRange = std::move(columnsToRange),
+         targetNodes = std::move(targetNodes),
          buf = std::optional<Result::IdTableVocabPair>{std::nullopt}](
             auto& idTableAndVocab) mutable {
           buf = std::move(idTableAndVocab);
           auto& [idTable, localVocab] = buf.value();
           return TableColumnWithVocab{toView(idTable), columnsToRange(idTable),
-                                      std::move(localVocab)};
+                                      std::move(localVocab),
+                                      targetNodes(idTable)};
         }));
   }
 
@@ -405,24 +426,6 @@ class TransitivePathImpl : public TransitivePathBase {
                           const TransitivePathSide& targetSide) const = 0;
 
  private:
-  // Helper function to filter the join column to not add it twice to the
-  // result.
-  static std::vector<ColumnIndex> computeColumnsWithoutJoinColumns(
-      ColumnIndex joinColumn, size_t totalColumns,
-      std::optional<ColumnIndex> graphColumn) {
-    std::vector<ColumnIndex> columnsWithoutJoinColumn;
-    uint8_t graphPadding = graphColumn.has_value() && joinColumn != graphColumn;
-    AD_CORRECTNESS_CHECK(totalColumns > graphPadding);
-    columnsWithoutJoinColumn.reserve(totalColumns - graphPadding - 1);
-    ql::ranges::copy(
-        ql::views::iota(static_cast<size_t>(0), totalColumns) |
-            ql::views::filter([joinColumn, &graphColumn](size_t i) {
-              return i != joinColumn && i != graphColumn;
-            }),
-        std::back_inserter(columnsWithoutJoinColumn));
-    return columnsWithoutJoinColumn;
-  }
-
   // Create a zipped view that returns `Id::makeUndefined()` for the graph
   // column.
   static auto padWithMissingGraph(ConstIdColumnRef input) {

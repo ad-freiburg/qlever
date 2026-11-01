@@ -234,6 +234,7 @@ class ValuesForTesting : public Operation {
     return m;
   }
 
+ protected:
   // _____________________________________________________________________________
   ValuesForTesting(const ValuesForTesting& other)
       : Operation{other._executionContext},
@@ -286,6 +287,22 @@ class ValuesForTestingCountingDeterminismChecks : public ValuesForTesting {
   bool isDeterministicImpl() const override {
     ++numDeterminismChecks_;
     return true;
+  }
+};
+
+// Count the amounts the tree of this class was cloned.
+class ValuesForTestingCountClones : public ValuesForTesting {
+ public:
+  // Clone counter, must be reset.
+  static inline size_t numClones = 0;
+
+  ValuesForTestingCountClones(QueryExecutionContext* ctx, IdTable table,
+                              std::vector<std::optional<Variable>> variables)
+      : ValuesForTesting{ctx, std::move(table), variables} {}
+
+  std::unique_ptr<Operation> cloneImpl() const override {
+    numClones++;
+    return std::make_unique<ValuesForTestingCountClones>(*this);
   }
 };
 
