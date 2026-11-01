@@ -86,6 +86,7 @@ class GeoPoint {
   // of the 60 bits. A geographic rectangle then only maps to one range per
   // quantized latitude, or, as a single range, to the whole latitude band.
   static constexpr T numDataBits = 60;
+  static constexpr T numTypeBits = 4;
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
   static constexpr T coordinateMaskFreeBits =
       ad_utility::bitMaskForHigherBits(sizeof(T) * 8 - numDataBits);
