@@ -20,6 +20,7 @@
 #include <type_traits>
 
 #include "backports/three_way_comparison.h"
+#include "util/BitUtils.h"
 
 namespace columnBasedIdTable::splitLayout {
 
@@ -38,15 +39,11 @@ struct SplitLayoutIdBitRepresentation {
 
   // The number of bytes of the two data members above, and the number of bytes
   // that fill a bit representation up to a multiple of the alignment of the
-  // payload (computed like for a `SplitLayoutId`).
+  // payload.
   static constexpr size_t numDataBytes =
       sizeof(PayloadType) + sizeof(DatatypeType);
-  // NOTE: Plain arithmetic on purpose: CLion cannot evaluate a function
-  // call (e.g. `ad_utility::alignUp`) in the size of `padding_` and marks
-  // the `static_assert`s below as failed.
   static constexpr size_t numPaddingBytes =
-      (alignof(PayloadType) - numDataBytes % alignof(PayloadType)) %
-      alignof(PayloadType);
+      ad_utility::alignUp(numDataBytes, alignof(PayloadType)) - numDataBytes;
 
   // Explicit padding bytes, which are always set to zero by the constructor
   // below, s.t. the bytes of a bit representation are deterministic (e.g. for
