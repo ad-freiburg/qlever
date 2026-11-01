@@ -2547,6 +2547,12 @@ void QueryPlanner::applyGeoRectanglePrefilters(
         }
         componentFilters.push_back(filters[filterIndex]);
         componentFilterIndex.push_back(filterIndex);
+        // The substitute carries the bit of its index in `filters`; in
+        // `componentFilters` the filter has another index, and a plan with
+        // the substitute must carry that bit, or the component planning
+        // applies the substitute to such a plan a second time.
+        componentFilters.back().substitute_.value()._idsOfIncludedFilters =
+            uint64_t{1} << (componentFilters.size() - 1);
       }
 
       // Plan the component with the replacement plans that lie within it (for

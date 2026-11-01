@@ -1145,3 +1145,31 @@ TEST(GeoRectanglePrefilter, pruningKeyOfPartiallyAppliedFilter) {
   plain._idsOfIncludedFilters = 3;
   EXPECT_EQ(key(plain), key(restricted));
 }
+
+// A spatial join with a fixed side and a regular `FILTER` in the same group,
+// in both orders. The part of the query that is evaluated at planning time
+// is planned with its own numbering of the filters; the substitute of the
+// spatial join must be numbered accordingly (it was applied a second time to
+// a plan that already contained it, when the spatial join came first).
+TEST(GeoRectanglePrefilter, spatialJoinAndRegularFilterInBothOrders) {
+  auto* qec = geoQec(64,
+                     "<lineA> <score> 2 . <lineB> <score> 1 . "
+                     "<pointNear> <score> 3 . ");
+  std::string geoFilter =
+      "FILTER (geof:sfIntersects(\"POLYGON((9 9, 14 9, 14 11, 9 11, 9 9))\""
+      "^^geo:wktLiteral, ?g))";
+  std::string scoreFilter = "FILTER (?s > 1)";
+  for (auto [first, second] :
+       {std::pair{geoFilter, scoreFilter}, std::pair{scoreFilter, geoFilter}}) {
+    std::string query = absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
+        "SELECT * WHERE { ?x <hasType> <T> . ?x <score> ?s . "
+        "?x <hasGeom> ?g . ",
+        first, " ", second, " }");
+    auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+    // Only `<lineA>` is of type `<T>`, in the polygon, and has a score > 1.
+    auto result = qet->getRootOperation()->getResult();
+    EXPECT_EQ(result->idTableView().numRows(), 1u) << query;
+  }
+}
