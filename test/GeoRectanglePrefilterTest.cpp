@@ -10,6 +10,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <functional>
+#include <set>
+
 #include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
@@ -579,6 +582,47 @@ TEST(GeoRectanglePrefilter, runtimeBlockPrefilterThroughSortAndJoin) {
   for (const auto& childRti : sj->runtimeInfo().children_) {
     EXPECT_NE(childRti->status_, RuntimeInformation::Status::notStarted)
         << childRti->descriptor_;
+  }
+
+  // The runtime information of the rebuilt join side is created anew, which
+  // must not duplicate the children of any node.
+  std::function<void(const RuntimeInformation&)> expectNoDuplicateChildren =
+      [&expectNoDuplicateChildren](const RuntimeInformation& rti) {
+        std::set<const RuntimeInformation*> children;
+        for (const auto& child : rti.children_) {
+          EXPECT_TRUE(children.insert(child.get()).second)
+              << "duplicate child " << child->descriptor_ << " of "
+              << rti.descriptor_;
+          expectNoDuplicateChildren(*child);
+        }
+      };
+  ASSERT_EQ(sj->runtimeInfo().children_.size(), 2u);
+  expectNoDuplicateChildren(sj->runtimeInfo());
+}
+
+// `createRuntimeInfoFromEstimates` runs a second time on an operation that
+// a tree rebuilt at execution time shares with the original tree (see
+// `SpatialJoin::prepareJoin`). The children of the runtime information must
+// then be set anew, not appended (before the fix, every such node listed its
+// children twice, and the runtime information of a query with nested spatial
+// joins grew to thousands of nodes, which made every update of it slow).
+TEST(GeoRectanglePrefilter, createRuntimeInfoFromEstimatesTwice) {
+  auto* qec = geoQec();
+  auto scanA = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS, hasGeomTriple(Variable{"?wkt"}));
+  auto scanB = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS, hasGeomTriple(Variable{"?wkt2"}));
+  auto join = ad_utility::makeExecutionTree<Join>(
+      qec, scanA, scanB, scanA->getVariableColumn(Variable{"?s"}),
+      scanB->getVariableColumn(Variable{"?s"}));
+  auto* op = join->getRootOperation().get();
+  for (size_t i = 0; i < 2; ++i) {
+    op->createRuntimeInfoFromEstimates(op->getRuntimeInfoPointer());
+    const auto& rti = op->runtimeInfo();
+    ASSERT_EQ(rti.children_.size(), 2u);
+    for (const auto& sortRti : rti.children_) {
+      EXPECT_EQ(sortRti->children_.size(), 1u) << sortRti->descriptor_;
+    }
   }
 }
 
