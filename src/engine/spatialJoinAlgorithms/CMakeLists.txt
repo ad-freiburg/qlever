@@ -3,7 +3,7 @@ target_sources(engine PRIVATE
         RtreeEntryAlgorithm.cpp
         BaselineAlgorithm.cpp S2GeometryAlgorithm.cpp
         S2PointPolylineAlgorithm.cpp BoundingBoxAlgorithm.cpp
-        LibspatialjoinAlgorithm.cpp)
+        LibspatialjoinAlgorithm.cpp FixedGeometryAlgorithm.cpp)
 
 # GCC 15 and GCC 16 wrongly report the inline storage of the
 # `absl::InlinedVector` inside the priority queue of `S2ClosestPointQueryBase`
