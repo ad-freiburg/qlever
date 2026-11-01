@@ -400,7 +400,7 @@ qlm::vector<QueryExecutionTree*> TransitivePathBase::getChildrenImpl() const {
       continue;
     }
     auto* tree = side->treeAndCol_->first.get();
-    if (ql::ranges::find(res, tree) == res.end()) {
+    if (!ad_utility::contains(res, tree)) {
       res.push_back(tree);
     }
   }
@@ -641,6 +641,8 @@ void TransitivePathBase::setTreeAndChildrenToClone(
   // Don't duplicate trees if both sides are bound at once, instead use the same
   // for both sides.
   if (lhs_.isBoundVariable() && rhs_.isBoundVariable()) {
+    // We assume that the tree is always the same for both children.
+    AD_CORRECTNESS_CHECK(lhs_.treeAndCol_->first == rhs_.treeAndCol_->first);
     copy.rhs_ = rhs_.clone(copy.lhs_.treeAndCol_->first);
   } else {
     copy.rhs_ = rhs_.clone();

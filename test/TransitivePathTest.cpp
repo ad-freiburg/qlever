@@ -990,11 +990,6 @@ TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsStartCol) {
 
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsTargetCol) {
-  std::string index =
-      "<a> <p> <g1> <g1> . "
-      "<g2> <q> <z> <g1> . "
-      "<a> <q> <z> <g2> .";
-
   auto sub = makeIdTableFromVector({
       {1, 10, 10},
   });
@@ -1015,7 +1010,7 @@ TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsTargetCol) {
             sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
             std::move(tableVariant), 0, 1, {Variable{"?x"}, Variable{"?g"}},
             left, right, 1, std::numeric_limits<size_t>::max(),
-            forceFullyMaterialized, Variable{"?g"}, index);
+            forceFullyMaterialized, Variable{"?g"});
 
         auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
         assertResultMatchesIdTable(resultTable, expected);
@@ -2688,7 +2683,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
   }
 }
 
-//_____________________________________________________________________________
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, cloneKeepsSameTreeWhenBothSidesBound) {
   auto sub = makeIdTableFromVector({{1, 2}, {2, 1}});
   auto opTable = makeIdTableFromVector({{2, 2}});
@@ -2705,13 +2700,14 @@ TEST_P(TransitivePathTest, cloneKeepsSameTreeWhenBothSidesBound) {
   ValuesForTestingCountClones::numClones = 0;
   auto bound = T->bindSides(tree, 1, 0);
 
-  auto cloned = bound->clone();
+  // Only the number of clones of the side tree matters here.
+  (void)bound->clone();
 
   // Only once should the tree have been cloned.
   EXPECT_EQ(ValuesForTestingCountClones::numClones, 1);
 }
 
-//_____________________________________________________________________________
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, cloneActuallyClonesChildrenBothSidesBound) {
   auto sub = makeIdTableFromVector({{1, 2}, {2, 1}});
   auto opTable = makeIdTableFromVector({{2, 2}});

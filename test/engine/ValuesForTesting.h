@@ -292,16 +292,13 @@ class ValuesForTestingCountingDeterminismChecks : public ValuesForTesting {
 
 // Count the amounts the tree of this class was cloned.
 class ValuesForTestingCountClones : public ValuesForTesting {
-  std::vector<std::optional<Variable>> vars_;
-
  public:
   // Clone counter, must be reset.
   static inline size_t numClones = 0;
 
   ValuesForTestingCountClones(QueryExecutionContext* ctx, IdTable table,
                               std::vector<std::optional<Variable>> variables)
-      : ValuesForTesting{ctx, std::move(table), variables},
-        vars_{std::move(variables)} {}
+      : ValuesForTesting{ctx, std::move(table), variables} {}
 
   std::unique_ptr<Operation> cloneImpl() const override {
     numClones++;
