@@ -1,25 +1,36 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_SPLITLAYOUTID_H
 #define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_SPLITLAYOUTID_H
-#include <boost/math/tools/numeric_limits.hpp>
 
-#include "SplitLayoutIdBitRepresentation.h"
+#include <cstdint>
+#include <limits>
+
+#include "backports/keywords.h"
+#include "backports/three_way_comparison.h"
+#include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
 #include "global/Datatype.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
+#include "util/Algorithm.h"
+#include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
 #include "util/NBitInteger.h"
+#include "util/Serializer/Serializer.h"
 
 namespace columnBasedIdTable::splitLayout {
 
+// Encode values of different types (the types from the `Datatype` enum in
+// `Datatype.h`) using a full 64-bit word for the value and a separate byte for
+// the datatype. Unlike the legacy `ValueId`, which packs both into a single
+// 64-bit word, no bits of the value are lost.
 class SplitLayoutId {
  public:
   using T = SplitLayoutIdBitRepresentation;
@@ -37,10 +48,9 @@ class SplitLayoutId {
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 
-  // The maximum value for the unsigned types that are used as indices
-  // (currently VocabIndex, LocalVocabIndex and Text). Since the payload now
-  // consists of a full 64-bit word, all values of `PayloadType` are valid
-  // indices.
+  // The maximum value for the unsigned index types (see `global/IndexTypes.h`).
+  // Since the payload consists of a full 64-bit word, all values of
+  // `PayloadType` are valid indices.
   static constexpr PayloadType maxIndex =
       std::numeric_limits<PayloadType>::max();
 
@@ -100,7 +110,8 @@ class SplitLayoutId {
   static_assert(static_cast<size_t>(Datatype::SecondaryVocabIndex) ==
                 static_cast<size_t>(Datatype::LocalVocabIndex) + 1);
 
-  // Assert that an encoded `GeoPoint` fits into the payload of a `ValueId`.
+  // Assert that an encoded `GeoPoint` fits into the payload of a
+  // `SplitLayoutId`.
   static_assert(numDataBits >= GeoPoint::numDataBits);
 
   // A struct that represents the single undefined value. This is required for
@@ -121,21 +132,18 @@ class SplitLayoutId {
   // that fill an `Id` up to a multiple of the alignment of the payload.
   static constexpr size_t numDataBytes =
       sizeof(PayloadType) + sizeof(DatatypeType);
-  // NOTE: Plain arithmetic on purpose: CLion  cannot evaluate a function
-  // call (e.g. `ad_utility::alignUp`) in the size of `padding_` and marks
-  // every `static_assert` on an `Id` as failed.
   static constexpr size_t numPaddingBytes =
-      (alignof(PayloadType) - numDataBytes % alignof(PayloadType)) %
-      alignof(PayloadType);
+      ad_utility::alignUp(numDataBytes, alignof(PayloadType)) - numDataBytes;
 
   // Explicit padding bytes. They are always set to zero by all factory
-  // functions, s.t. all valid `ValueId`s have a deterministic byte
+  // functions, s.t. all valid `SplitLayoutId`s have a deterministic byte
   // representation (e.g. for hashing raw bytes or writing them to disk).
   // Note: Default-constructed `Id`s are deliberately uninitialized (see
   // the default constructor below).
   std::array<uint8_t, numPaddingBytes> padding_;
 
  public:
+  // Default construction of an uninitialized id.
   SplitLayoutId() = default;
 
   // Get the underlying bit representation, e.g. for compression etc.
@@ -144,15 +152,17 @@ class SplitLayoutId {
     return {datatype_, payload_};
   }
 
+  // Get the datatype.
   [[nodiscard]] constexpr Datatype getDatatype() const noexcept {
     return static_cast<Datatype>(datatype_);
   }
 
+  // Get the datatype bits.
   [[nodiscard]] constexpr DatatypeType getDatatypeBits() const noexcept {
     return datatype_;
   }
 
-  // Get only the payload bits (without the datatype byte).
+  // Get the payload bits (without the datatype byte).
   [[nodiscard]] constexpr PayloadType getPayloadBits() const noexcept {
     return payload_;
   }
@@ -164,6 +174,8 @@ class SplitLayoutId {
     return {bits.payload_, bits.datatype_};
   }
 
+  // Combine datatype and payload bits (inverse of `getDatatypeBits` and
+  // `getPayloadBits`). `datatype` must be the bits of an existing `Datatype`.
   static constexpr SplitLayoutId fromBits(const DatatypeType datatype,
                                           const PayloadType payload) noexcept {
     AD_EXPENSIVE_CHECK(
@@ -227,8 +239,7 @@ class SplitLayoutId {
   }
 
   // Obtain the signed integer that this `SplitLayoutId` encodes. If
-  // `getDatatype()
-  // != Int` then the result is unspecified.
+  // `getDatatype() != Int` then the result is unspecified.
   [[nodiscard]] constexpr int64_t getInt() const noexcept {
     return IntegerType::fromNBit(payload_);
   }
@@ -238,8 +249,8 @@ class SplitLayoutId {
     return {static_cast<PayloadType>(b), Datatype::Bool};
   }
 
-  // Create a `ValueId` for a boolean value, represented as "0" or "1" instead
-  // of "false" or "true".
+  // Create a `SplitLayoutId` for a boolean value, represented as "0" or "1"
+  // instead of "false" or "true".
   static constexpr SplitLayoutId makeBoolFromZeroOrOne(bool b) noexcept {
     auto bits = static_cast<PayloadType>(b);
     bits |= static_cast<PayloadType>(true) << 1;
@@ -261,9 +272,9 @@ class SplitLayoutId {
     return getBool() ? "true" : "false";
   }
 
-  // Create a `SplitLayoutId` for an unsigned index of type
-  // `VocabIndex|TextRecordIndex|LocalVocabIndex`. These types can
-  // represent all values of `uint64_t`.
+  // Create a `SplitLayoutId` for an unsigned index of one of the index types
+  // (see `global/IndexTypes.h`). These types can represent all values of
+  // `uint64_t`, so no index is too large.
   static constexpr SplitLayoutId makeFromVocabIndex(VocabIndex index) noexcept {
     return {index.get(), Datatype::VocabIndex};
   }
@@ -356,7 +367,7 @@ class SplitLayoutId {
   }
 
   // An ID is considered trivial, if its datatype is trivial (see
-  // `isDatatypeTrivial` above).
+  // `isDatatypeTrivial` in `Datatype.h`).
   constexpr bool isTrivial() const { return isDatatypeTrivial(getDatatype()); }
 
   // Return true iff `datatype` is one of the datatypes that the position of a
@@ -382,7 +393,7 @@ class SplitLayoutId {
       !isTypeBitwiseComparable_.at(
           static_cast<size_t>(Datatype::LocalVocabIndex));
 
-  // Return the smallest and largest possible `ValueId` wrt the underlying
+  // Return the smallest and largest possible `SplitLayoutId` wrt the underlying
   // representation. Note: The datatype byte of `max()` is `0xFF`, which is
   // not a valid `Datatype`. Such IDs must only be used as sentinel values
   // for comparisons, never as actual values.
@@ -395,11 +406,11 @@ class SplitLayoutId {
   }
 
   // Enable hashing in abseil for `SplitLayoutId` (required by
-  // `ad_utility::HashSet` and `ad_utility::HashMap`
+  // `ad_utility::HashSet` and `ad_utility::HashMap`).
   template <typename H>
   friend H AbslHashValue(H h, const SplitLayoutId& id) {
     // Adding 0/1 to the hash is required to ensure that for two unequal
-    // elements the hash expansions of neither is a suffix of the other.This is
+    // elements the hash expansions of neither is a suffix of the other. This is
     // a property that absl requires for hashes. The hash expansion is the list
     // of simpler values actually being hashed (here: bits or hash expansion of
     // the LocalVocabEntry).
@@ -431,8 +442,8 @@ class SplitLayoutId {
   // TODO<joka921> This currently still has limited functionality because
   // VocabIndex, LocalVocabIndex, TextRecordIndex,  and EncodedVal are all of
   // the same type `uint64_t` and the visitor cannot distinguish between them.
-  // Create strong types for these indices and make the `ValueId` class use
-  // them.
+  // Create strong types for these indices and make the `SplitLayoutId` class
+  // use them.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
     switch (getDatatype()) {
@@ -564,7 +575,7 @@ class SplitLayoutId {
     }
 
     // One of the types is `LocalVocab`, and the other one is a non-string
-    // type like `Integer` or `Undefined. Then the comparison by bits
+    // type like `Integer` or `Undefined`. Then the comparison by bits
     // automatically compares by the datatype.
     return compareBitwiseImpl(other);
   }
@@ -576,11 +587,6 @@ class SplitLayoutId {
   friend QL_CONSTEXPR bool operator==(const SplitLayoutId& left,
                                       const SplitLayoutId& right) {
     return ql::compareThreeWay(left, right) == 0;
-  }
-
-  friend QL_CONSTEXPR bool operator==(const SplitLayoutId& left,
-                                      const uint64_t& right) {
-    return left.datatype_ == right;
   }
 
   friend QL_CONSTEXPR bool operator!=(const SplitLayoutId& left,
@@ -668,8 +674,8 @@ class SplitLayoutId {
   // Private constructors from the payload bits and the datatype (byte). They
   // are used in the implementation of the static factory methods
   // `makeFromDouble()`, `makeFromInt()` etc. Note: The explicit `padding_`
-  // bytes are always initialized to zero, s.t. all valid `ValueId`s have a
-  // deterministic byte representation.
+  // bytes are always initialized to zero, s.t. all valid `SplitLayoutId`s have
+  // a deterministic byte representation.
   constexpr SplitLayoutId(PayloadType payload, DatatypeType datatype)
       : payload_{payload}, datatype_{datatype}, padding_{} {}
 
