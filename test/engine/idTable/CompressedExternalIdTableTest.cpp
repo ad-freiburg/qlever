@@ -109,11 +109,13 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
     ql::ranges::copy(tr, std::back_inserter(result));
     EXPECT_THAT(result, ElementsAreArray(tables));
   };
-  // With 10 bytes per block, the first and second IdTable are split up into
+  // With one `Id` per block, the first and second IdTable are split up into
   // multiple blocks.
-  runTestForBlockSize(10_B);
-  // With 48 bytes, each IdTable is stored in a single block.
-  runTestForBlockSize(48_B);
+  runTestForBlockSize(ad_utility::MemorySize::bytes(BYTES_PER_ID_COLUMN_ENTRY));
+  // With six `Id`s per block, each IdTable (at most three rows) is stored in
+  // a single block.
+  runTestForBlockSize(
+      ad_utility::MemorySize::bytes(6 * BYTES_PER_ID_COLUMN_ENTRY));
 }
 
 template <size_t NumStaticColumns>
@@ -843,7 +845,8 @@ TEST(CompressedExternalIdTable, runsInputForwardsTheBlockMetadata) {
   input.appendToBlock(block, writer.firstRowOfBlock(0, 0));
   ASSERT_EQ(block.numRows(), 1u);
   EXPECT_EQ(block.at(0), writer.firstRowOfBlock(0, 0));
-  EXPECT_EQ(input.memorySizeOfElement(block.at(0)), 3 * 8_B);
+  EXPECT_EQ(input.memorySizeOfElement(block.at(0)),
+            ad_utility::MemorySize::bytes(3 * BYTES_PER_ID_COLUMN_ENTRY));
 }
 
 // _____________________________________________________________________________

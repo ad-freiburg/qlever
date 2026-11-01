@@ -19,9 +19,9 @@
 #include <numeric>
 
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/LocatedTriples.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashSet.h"
