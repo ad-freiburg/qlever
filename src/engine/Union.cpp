@@ -94,7 +94,7 @@ std::vector<ColumnIndex> Union::sortOrderForSubtree(size_t subtreeIndex) const {
 // _____________________________________________________________________________
 bool Union::isSortedByConcatenation() const {
   if (targetOrder_.empty()) {
-    return false;
+    return true;
   }
   auto [leftColumn, rightColumn] = _columnOrigins.at(targetOrder_.at(0));
   if (leftColumn != NO_COLUMN) {
@@ -236,7 +236,7 @@ size_t Union::getCostEstimate() {
   // Magic value that is empirically determined (using commit 59391af) such that
   // costs of distributively applied joins roughly match the actual time.
   uint64_t timeEstimate = std::max(uint64_t{1}, elementsToCopy / 10);
-  if (!targetOrder_.empty() && !isSortedByConcatenation()) {
+  if (!isSortedByConcatenation()) {
     // A sorted UNION is rather expensive the factor 63 is an empirically
     // determined average factor (using commit 59391af) under the assumption
     // that the left and right side are equivalent and thus the whole range
@@ -258,7 +258,7 @@ Result Union::computeResult(bool requestLaziness) {
 
   // Merge the two sorted children, unless their concatenation is already
   // sorted (then the cheap computation below is enough).
-  if (!targetOrder_.empty() && !isSortedByConcatenation()) {
+  if (!isSortedByConcatenation()) {
     auto generator = computeResultKeepOrder(requestLaziness, std::move(subRes1),
                                             std::move(subRes2));
     return requestLaziness ? Result{std::move(generator), resultSortedOn()}

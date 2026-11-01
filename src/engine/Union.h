@@ -124,8 +124,9 @@ class Union : public Operation {
 
   // Return true iff the concatenation of the (sorted) children is already
   // sorted according to `targetOrder_`, so that the merge is not needed. This
-  // is the case if the first sort column is missing in the left child (it is
-  // UNDEF for all of its rows) and can never be UNDEF in the right child.
+  // is the case if `targetOrder_` is empty, or if the first sort column is
+  // missing in the left child (it is UNDEF for all of its rows) and can never
+  // be UNDEF in the right child.
   bool isSortedByConcatenation() const;
 
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
