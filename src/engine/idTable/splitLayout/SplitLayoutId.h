@@ -130,10 +130,11 @@ class SplitLayoutId {
 
   // The number of bytes of the two data members above, and the number of bytes
   // that fill an `Id` up to a multiple of the alignment of the payload.
-  static constexpr size_t numDataBytes =
+  static constexpr size_t numSemanticallyUsedBytes =
       sizeof(PayloadType) + sizeof(DatatypeType);
   static constexpr size_t numPaddingBytes =
-      ad_utility::alignUp(numDataBytes, alignof(PayloadType)) - numDataBytes;
+      ad_utility::alignUp(numSemanticallyUsedBytes, alignof(PayloadType)) -
+      numSemanticallyUsedBytes;
 
   // Explicit padding bytes. They are always set to zero by all factory
   // functions, s.t. all valid `SplitLayoutId`s have a deterministic byte
