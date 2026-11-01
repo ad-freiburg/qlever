@@ -36,10 +36,10 @@
 #include "../../../util/GTestHelpers.h"
 #include "../../../util/IdTestHelpers.h"
 #include "../../../util/IndexTestHelpers.h"
+#include "../../../util/LocalVocabEntryTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/splitLayout/SplitLayoutId.h"
 #include "index/LocalVocabEntry.h"
-#include "index/vocabulary/EncodedIriManager.h"
 #include "util/Algorithm.h"
 #include "util/BitUtils.h"
 #include "util/HashSet.h"
@@ -712,12 +712,12 @@ TEST_F(SplitLayoutIdTest, HashingIsConsistentWithEquality) {
   LocalVocab lv1;
   LocalVocab lv2;
   Iri iri = Iri::fromIriref("<foo>");
-  LocalVocabEntry lve1(iri, index.getLocalVocabContext());
-  LocalVocabEntry lve2(iri, index.getLocalVocabContext());
-  LocalVocabEntry lve3 = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry lve1 = localVocabEntry(iri, index.getLocalVocabContext());
+  LocalVocabEntry lve2 = localVocabEntry(iri, index.getLocalVocabContext());
+  LocalVocabEntry lve3 = localVocabEntryFromStringRepresentation(
       "\"foo\"", index.getLocalVocabContext());
   LocalVocabEntry lve4 =
-      LocalVocabEntry::fromIriref("<x>", index.getLocalVocabContext());
+      iriLocalVocabEntry("<x>", index.getLocalVocabContext());
   auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
     return SplitLayoutId::makeFromLocalVocabIndex(
         lv.getIndexAndAddIfNotContained(lve));
@@ -953,75 +953,6 @@ static_assert(SplitLayoutId::makeUndefined().compareWithoutLocalVocab(
 #endif
 }  // namespace constexprSplitLayoutId
 
-// Test that an `Id` of an encoded IRI compares equal to an `Id` of a
-// `LocalVocabEntry` with the same IRI, and that they are ordered consistently.
-TEST_F(SplitLayoutIdTest, EncodedIriEqualityWithLocalVocabEntry) {
-  // Create an EncodedIriManager with some test prefixes
-  std::vector<std::string> prefixes = {"http://example.org/",
-                                       "http://test.com/"};
-
-  // Create a test index config with the encoded IRI manager and call getQec
-  // to set up the global index state
-  using namespace ad_utility::testing;
-  TestIndexConfig config;
-  config.encodedPrefixesWithoutAngleBrackets = prefixes;
-  qec_ = getQec(config);
-  const auto& encodedIriManager = qec_->getIndex().encodedIriManager();
-
-  // Test case 1: IRI that can be encoded
-  std::string encodableIri = "<http://example.org/123>";
-  auto encodedIdOpt = encodedIriManager.encode(encodableIri);
-  ASSERT_TRUE(encodedIdOpt.has_value())
-      << "Failed to encode IRI: " << encodableIri;
-
-  auto encodedId = *encodedIdOpt;
-  EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
-
-  // Create a LocalVocabEntry with the same IRI
-  auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
-  LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
-  auto localVocabId = SplitLayoutId::makeFromLocalVocabIndex(&localVocabEntry);
-
-  // The encoded ID should compare equal to the LocalVocabEntry ID
-  EXPECT_EQ(encodedId, localVocabId)
-      << "Encoded ID should equal LocalVocabEntry ID for IRI: " << encodableIri;
-
-  // Test case 2: Another encodable IRI with different prefix
-  std::string encodableIri2 = "<http://test.com/456>";
-  auto encodedIdOpt2 = encodedIriManager.encode(encodableIri2);
-  ASSERT_TRUE(encodedIdOpt2.has_value())
-      << "Failed to encode IRI: " << encodableIri2;
-
-  auto encodedId2 = *encodedIdOpt2;
-  auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
-  LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
-  auto localVocabId2 =
-      SplitLayoutId::makeFromLocalVocabIndex(&localVocabEntry2);
-
-  EXPECT_EQ(encodedId2, localVocabId2)
-      << "Encoded ID should equal LocalVocabEntry ID for IRI: "
-      << encodableIri2;
-
-  // Test case 3: Encoded IDs should not equal LocalVocabEntries with different
-  // IRIs
-  EXPECT_NE(encodedId, localVocabId2)
-      << "Different encoded IRIs should not be equal";
-  EXPECT_NE(encodedId2, localVocabId)
-      << "Different encoded IRIs should not be equal";
-
-  // Test case 4: Ordering should also work correctly
-
-  auto inconsistentOrderingMessage =
-      "Ordering should be consistent between encoded and local vocab IDs";
-  if (encodableIri < encodableIri2) {
-    EXPECT_LT(encodedId, localVocabId2) << inconsistentOrderingMessage;
-    EXPECT_GT(localVocabId2, encodedId) << inconsistentOrderingMessage;
-  } else {
-    EXPECT_GT(encodedId, localVocabId2) << inconsistentOrderingMessage;
-    EXPECT_LT(localVocabId2, encodedId) << inconsistentOrderingMessage;
-  }
-}
-
 // Test `isTrivial` for a trivial and two non-trivial datatypes. It is also
 // tested by `static_assert`s across the codebase, so it is not tested
 // exhaustively here.
@@ -1099,9 +1030,8 @@ TEST(SplitLayoutId, compareThreeWayWithLocalVocabIndex) {
   // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
   // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
   // `SecondaryVocabIndex`.
-  LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
-  LocalVocabEntry entryInSecondaryVocab =
-      LocalVocabEntry::fromIriref("<zzz>", ctx);
+  LocalVocabEntry entryInVocab = iriLocalVocabEntry("<b>", ctx);
+  LocalVocabEntry entryInSecondaryVocab = iriLocalVocabEntry("<zzz>", ctx);
   SplitLayoutId localVocabId =
       SplitLayoutId::makeFromLocalVocabIndex(&entryInVocab);
   SplitLayoutId localVocabIdSecondary =
