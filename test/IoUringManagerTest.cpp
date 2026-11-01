@@ -532,10 +532,13 @@ TEST(LiburingRing, cancelledReadsCompleteAsNoOps) {
   std::array<Completion, 8> completions{};
   ASSERT_EQ(ring->popCompletions(completions), NUMBER_OF_READS);
   // Every cancelled read completes as a no-op with result 0.
-  EXPECT_THAT(ql::views::take(completions, NUMBER_OF_READS),
-              ::testing::Each(::testing::AllOf(
-                  AD_FIELD(Completion, requestId, ::testing::Eq(noOp)),
-                  AD_FIELD(Completion, result, ::testing::Eq(0)))));
+  // A vector, not a `take` view: gtest would print the view with range-v3's
+  // `operator<<`, which GCC 11 fails to compile for this element type.
+  const std::vector<Completion> reaped(completions.begin(),
+                                       completions.begin() + NUMBER_OF_READS);
+  EXPECT_THAT(reaped, ::testing::Each(::testing::AllOf(
+                          AD_FIELD(Completion, requestId, ::testing::Eq(noOp)),
+                          AD_FIELD(Completion, result, ::testing::Eq(0)))));
   EXPECT_THAT(buffers, Each(std::string(4, '-')));
 }
 
