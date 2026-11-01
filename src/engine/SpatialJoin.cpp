@@ -374,9 +374,12 @@ uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
     // If we don't limit the number of results, we cannot draw conclusions about
     // the size, other than the worst case `|childLeft| * |childRight|`. However
     // to improve query planning for the average case, we apply a constant
-    // factor (the asymptotic behavior remains unchanged).
-    return (childLeft_->getSizeEstimate() * childRight_->getSizeEstimate()) /
-           SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE;
+    // factor (the asymptotic behavior remains unchanged). The estimate is at
+    // least one: an estimate of zero makes the multiplicities of the
+    // operations above infinite and their size estimates overflow.
+    return std::max<uint64_t>(
+        1, (childLeft_->getSizeEstimate() * childRight_->getSizeEstimate()) /
+               SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE);
   }
   return 1;  // dummy return if not both children are added
 }
@@ -385,7 +388,9 @@ uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
 float SpatialJoin::getMultiplicity(size_t col) {
   auto getDistinctness = [](std::shared_ptr<QueryExecutionTree> child,
                             ColumnIndex ind) {
-    auto size = (u_int)child->getSizeEstimate();
+    // A child with an estimate of zero rows counts as one row, so that the
+    // division below is defined.
+    auto size = std::max<u_int>(1, (u_int)child->getSizeEstimate());
     auto multiplicity = child->getMultiplicity(ind);
     return static_cast<float>(size) / multiplicity;
   };
@@ -418,9 +423,9 @@ float SpatialJoin::getMultiplicity(size_t col) {
       column = filteredColumns.at(column - widthLeft).second.columnIndex_;
     }
     auto distinctnessChild = getDistinctness(child, column);
-    return static_cast<float>(childLeft_->getSizeEstimate() *
-                              childRight_->getSizeEstimate()) /
-           distinctnessChild;
+    return std::max(1.0f, static_cast<float>(childLeft_->getSizeEstimate() *
+                                             childRight_->getSizeEstimate()) /
+                              distinctnessChild);
   } else {
     return 1;
   }

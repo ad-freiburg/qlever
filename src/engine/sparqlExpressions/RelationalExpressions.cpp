@@ -355,8 +355,11 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   // more results if we have more arguments on the right side that can possibly
   // match, so we reduce the `reductionFactor`.
   reductionFactor /= children.size() - 1;
-  auto sizeEstimate =
-      inputSizeEstimate / std::max(reductionFactor, uint64_t{1});
+  // At least one row unless the input is empty: an estimate of zero makes
+  // the multiplicities of the operations above infinite.
+  auto sizeEstimate = std::max<uint64_t>(
+      inputSizeEstimate > 0,
+      inputSizeEstimate / std::max(reductionFactor, uint64_t{1}));
 
   // By default, we have to linearly scan over the input and write the output.
   size_t costEstimate = inputSizeEstimate + sizeEstimate;

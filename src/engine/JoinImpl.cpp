@@ -12,6 +12,7 @@
 
 #include "engine/JoinImpl.h"
 
+#include <cmath>
 #include <sstream>
 #include <vector>
 
@@ -262,9 +263,16 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
 
   double jcMultiplicityInResult = left_->getMultiplicity(leftJoinCol_) *
                                   right_->getMultiplicity(rightJoinCol_);
-  sizeEstimate_ = std::max(
-      size_t(1), static_cast<size_t>(corrFactor * jcMultiplicityInResult *
-                                     nofDistinctInResult));
+  double sizeEstimate =
+      corrFactor * jcMultiplicityInResult * nofDistinctInResult;
+  // A multiplicity of a child that is infinite or NaN (from a size estimate
+  // of zero below) must not turn into a huge estimate here (the cast of such
+  // a value is undefined); the sizes of the children are the fallback then.
+  if (!std::isfinite(sizeEstimate)) {
+    sizeEstimate = static_cast<double>(
+        std::max(left_->getSizeEstimate(), right_->getSizeEstimate()));
+  }
+  sizeEstimate_ = std::max(size_t(1), static_cast<size_t>(sizeEstimate));
 
   AD_LOG_TRACE << "Estimated size as: " << sizeEstimate_ << " := " << corrFactor
                << " * " << jcMultiplicityInResult << " * "
