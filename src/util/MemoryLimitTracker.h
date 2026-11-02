@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "util/Exception.h"
+#include "util/MaybeOwningPtr.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/TransparentFunctors.h"
 
@@ -414,30 +415,24 @@ makeSharedAllocationMemoryLeft(
 }
 
 namespace detail {
+inline namespace QL_LIFETIME_CHECKS_NAMESPACE {
 
 // Shared memory-limit bookkeeping used by both the classical AllocatorWithLimit
-// and the PMR LimitedMemoryResource. It is a thin handle to a shared
+// and the PMR LimitedMemoryResource. It is a thin handle to an
 // `AllocationMemoryLeft`, which holds the budget, the per-thread caches and
-// the clearOnAllocation hook.
+// the clearOnAllocation hook. The handle either shares the ownership of the
+// `AllocationMemoryLeft`, or it is a non-owning copy (see `nonOwningCopy()`),
+// copying which costs no atomic operation. This matters because a tracker is
+// copied on every copy of an allocator (e.g. when copying a string).
 class MemoryLimitTracker {
  private:
-  // Copying a shared_ptr never throws; assert this so that the noexcept move
-  // operations below can copy this member unconditionally. There is only a
-  // single shared pointer, s.t. copying a tracker (which happens on every copy
-  // of an allocator, e.g. when copying a string) costs only one atomic
-  // operation.
-  std::shared_ptr<AllocationMemoryLeft> sharedMemoryLeft_;
-  static_assert(std::is_nothrow_copy_constructible_v<
-                std::shared_ptr<AllocationMemoryLeft>>);
-  static_assert(
-      std::is_nothrow_copy_assignable_v<std::shared_ptr<AllocationMemoryLeft>>);
+  MaybeOwningPtr<AllocationMemoryLeft> memoryLeft_;
 
  public:
-  // Constructor from a shared memory counter.
+  // Constructor from a shared memory counter. The tracker shares its
+  // ownership.
   explicit MemoryLimitTracker(std::shared_ptr<AllocationMemoryLeft> memoryLeft)
-      : sharedMemoryLeft_{std::move(memoryLeft)} {
-    AD_CONTRACT_CHECK(sharedMemoryLeft_);
-  }
+      : memoryLeft_{std::move(memoryLeft)} {}
 
   // Constructor from an initial memory limit and an optional clear hook.
   explicit MemoryLimitTracker(
@@ -445,51 +440,49 @@ class MemoryLimitTracker {
       : MemoryLimitTracker{makeSharedAllocationMemoryLeft(
             limit, std::move(clearOnAllocation))} {}
 
-  // The only member is a shared_ptr, so copying is nothrow and shares the
-  // underlying budget and hook.
+  // Copying is cheap and shares the underlying budget and hook. The move
+  // operations of `MaybeOwningPtr` deliberately COPY the source rather than
+  // steal it, so that a moved-from tracker remains valid and continues to
+  // share the same memory budget and hook. This mirrors the semantics
+  // required by `AllocatorWithLimit` (a moved-from allocator must still hold a
+  // usable tracker).
   MemoryLimitTracker(const MemoryLimitTracker&) = default;
   MemoryLimitTracker& operator=(const MemoryLimitTracker&) = default;
+  MemoryLimitTracker(MemoryLimitTracker&&) noexcept = default;
+  MemoryLimitTracker& operator=(MemoryLimitTracker&&) noexcept = default;
+  ~MemoryLimitTracker() = default;
 
-  // Move operations deliberately COPY the source rather than steal it, so that
-  // the moved-from tracker remains valid and continues to share the same memory
-  // budget and hook. This mirrors the semantics required by
-  // `AllocatorWithLimit` (a moved-from allocator must still hold a usable
-  // tracker).
-  //
-  // These are declared explicitly (rather than left undeclared to fall back
-  // on the copy constructor) together with the destructor below so that all
-  // five special member functions are declared consistently.
-  MemoryLimitTracker(MemoryLimitTracker&& other) noexcept
-      : MemoryLimitTracker(other) {}
-
-  MemoryLimitTracker& operator=(MemoryLimitTracker&& other) noexcept {
-    *this = other;
-    return *this;
+  // Return a tracker for the same budget that does not keep the
+  // `AllocationMemoryLeft` alive. This tracker (or another owning copy of it)
+  // has to outlive the result and all its copies.
+  MemoryLimitTracker nonOwningCopy() const {
+    return MemoryLimitTracker{memoryLeft_.nonOwningCopy()};
   }
 
-  ~MemoryLimitTracker() = default;
+  // Return true iff this tracker keeps its `AllocationMemoryLeft` alive.
+  bool isOwning() const { return memoryLeft_.isOwning(); }
 
   // Reserve `n` bytes or throw AllocationExceedsLimitException, running the
   // clearOnAllocation hook first if the budget is momentarily exceeded.
-  void reserveOrThrow(MemorySize n) { sharedMemoryLeft_->reserveOrThrow(n); }
+  void reserveOrThrow(MemorySize n) { memoryLeft_->reserveOrThrow(n); }
 
   // Releases `n` bytes back to the shared memory counter.
-  void release(MemorySize n) { sharedMemoryLeft_->release(n); }
+  void release(MemorySize n) { memoryLeft_->release(n); }
 
   // Returns the amount of memory still available.
   [[nodiscard]] MemorySize amountMemoryLeft() const {
-    return sharedMemoryLeft_->amountMemoryLeft();
+    return memoryLeft_->amountMemoryLeft();
   }
 
   // Increase the memory limit by `n`.
-  void increaseMemoryLimit(MemorySize n) { sharedMemoryLeft_->increase(n); }
+  void increaseMemoryLimit(MemorySize n) { memoryLeft_->increase(n); }
 
   // Decrease the memory limit by `n`. This requires `n` to be currently free,
   // otherwise an exception is thrown and nothing is changed.
   void decreaseMemoryLimit(MemorySize n) {
     // Bytes cached by the calling thread count as free.
-    sharedMemoryLeft_->flushThreadCache();
-    if (!sharedMemoryLeft_->decreaseIfEnoughLeftOrReturnFalse(n)) {
+    memoryLeft_->flushThreadCache();
+    if (!memoryLeft_->decreaseIfEnoughLeftOrReturnFalse(n)) {
       throw std::runtime_error{absl::StrCat(
           "Cannot reduce the memory limit by ", n.asString(), ", because only ",
           amountMemoryLeft().asString(), " are currently unused")};
@@ -498,10 +491,15 @@ class MemoryLimitTracker {
 
   // Compares whether two trackers share the same memory counter.
   bool operator==(const MemoryLimitTracker& other) const {
-    return sharedMemoryLeft_ == other.sharedMemoryLeft_;
+    return memoryLeft_.get() == other.memoryLeft_.get();
   }
+
+ private:
+  explicit MemoryLimitTracker(MaybeOwningPtr<AllocationMemoryLeft> memoryLeft)
+      : memoryLeft_{std::move(memoryLeft)} {}
 };
 
+}  // namespace QL_LIFETIME_CHECKS_NAMESPACE
 }  // namespace detail
 
 }  // namespace ad_utility

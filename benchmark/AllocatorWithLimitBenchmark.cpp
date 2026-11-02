@@ -147,7 +147,11 @@ class AllocatorWithLimitBenchmark : public BenchmarkInterface {
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
     // A limit that is never reached, as for the server.
+    // The owning allocator is alive during all measurements, so the
+    // non-owning copy can be used, as it is done for the allocator of the
+    // server.
     auto limitedAllocator = ad_utility::makeAllocatorWithLimit<char>(100_GB);
+    auto nonOwningAllocator = limitedAllocator.nonOwningCopy();
     NonElidableAllocator<char> stdAllocator;
 
     auto addTable = [&](const std::string& name, const auto& workload) {
@@ -157,7 +161,8 @@ class AllocatorWithLimitBenchmark : public BenchmarkInterface {
       }
       auto& table = results.addTable(
           name, rowNames,
-          {"", "std::allocator", "AllocatorWithLimit", "Slowdown factor"});
+          {"", "std::allocator", "AllocatorWithLimit (owning)",
+           "AllocatorWithLimit (non-owning)", "Slowdown factor (non-owning)"});
       for (size_t row = 0; row < numThreadsToTest.size(); ++row) {
         size_t numThreads = numThreadsToTest[row];
         table.addMeasurement(row, 1, [&]() {
@@ -166,9 +171,12 @@ class AllocatorWithLimitBenchmark : public BenchmarkInterface {
         table.addMeasurement(row, 2, [&]() {
           runOnThreads(numThreads, limitedAllocator, workload);
         });
+        table.addMeasurement(row, 3, [&]() {
+          runOnThreads(numThreads, nonOwningAllocator, workload);
+        });
         table.setEntry(
-            row, 3,
-            table.getEntry<float>(row, 2) / table.getEntry<float>(row, 1));
+            row, 4,
+            table.getEntry<float>(row, 3) / table.getEntry<float>(row, 1));
       }
     };
 

@@ -330,8 +330,15 @@ class Qlever {
   };
 
  private:
+  // The owner of the memory limit of this instance. It is declared first, so
+  // that it is destroyed last, after all the members that hold copies of
+  // `allocator_` or memory allocated by it (e.g. the results in `cache_`).
+  qlever::Allocator<Id> owningAllocator_;
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
+  // A non-owning copy of `owningAllocator_`, which is passed to the query
+  // engine. Copying it costs no atomic operation, which matters because
+  // allocators are copied very often (e.g. with every string).
   qlever::Allocator<Id> allocator_;
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work, see `executor()`.

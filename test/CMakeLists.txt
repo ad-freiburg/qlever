@@ -327,6 +327,8 @@ addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(MemoryLimitTrackerTest)
 
+addLinkAndDiscoverTestNoLibs(MaybeOwningPtrTest)
+
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)

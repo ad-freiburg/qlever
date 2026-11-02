@@ -423,6 +423,11 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
   // inside the `QueryExecutionContext` remain stable even when moving the
   // `Context`.
   struct Context {
+    // The owner of the memory limit of `qec_`, which only holds a non-owning
+    // copy, so that copying its allocator costs no atomic operation. It is
+    // declared first, so that it outlives all the copies of that allocator
+    // (e.g. those in the results stored in `cache_`).
+    ad_utility::AllocatorWithLimit<Id> owningAllocator_;
     TypeErasedCleanup cleanup_;
     std::shared_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
@@ -430,7 +435,7 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
+            index_, cache_.get(), owningAllocator_.nonOwningCopy(),
             namedCache_.get(), materializedViewsManager_,
             singleThreadExecutor());
   };
@@ -447,7 +452,8 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
                      contextMap.size());
     contextMap.emplace(
         std::pair<TestIndexConfig, std::string>{c, indexBasenamePrefix},
-        Context{TypeErasedCleanup{[testIndexBasename]() {
+        Context{makeAllocator(MemorySize::megabytes(100)),
+                TypeErasedCleanup{[testIndexBasename]() {
                   for (const std::string& indexFilename :
                        getAllIndexFilenames(testIndexBasename)) {
                     // Don't log when a file can't be deleted,
