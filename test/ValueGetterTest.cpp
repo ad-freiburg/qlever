@@ -244,9 +244,9 @@ TEST(CRSTypeValueGetter, OperatorWithId) {
       "\"http://www.opengis.net/def/crs/EPSG/0/3857\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       CRSType::WEB_MERCATOR, unitValueGetter);
-
   checkEnumValueGetterFromId<CRSType>(
-      "\"http://www.opengis.net/def/crs/EPSG/0/5070\"^^<http://www.w3.org/2001/"
+      "\"http://www.opengis.net/def/crs/EPSG/0/unsupported\"^^<http://"
+      "www.w3.org/2001/"
       "XMLSchema#anyURI>",
       CRSType::UNSUPPORTED, unitValueGetter);
 

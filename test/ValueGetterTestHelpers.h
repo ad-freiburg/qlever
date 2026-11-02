@@ -294,6 +294,16 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         "x".
   )";
 
+// Returns the appropriate test context depending on the enum type.
+template <typename EnumT>
+inline TestContextWithGivenTTl getContext() {
+  if constexpr (std::is_same_v<EnumT, UnitOfMeasurement>) {
+    return TestContextWithGivenTTl{unitTtl};
+  } else if constexpr (std::is_same_v<EnumT, ::util::geo::CRSType>) {
+    return TestContextWithGivenTTl{crsTtl};
+  }
+}
+
 // Apply `getter` to `id` in the given context and check the result.
 template <typename EnumT>
 inline void checkEnumValueGetterForId(
@@ -307,7 +317,7 @@ template <typename EnumT>
 inline void checkEnumValueGetterFromId(
     const std::string& fullLiteralOrIri, EnumT expectedResult,
     sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
+  TestContextWithGivenTTl testContext = getContext<EnumT>();
   checkEnumValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
                             expectedResult, getter);
 };
@@ -317,7 +327,7 @@ inline void checkEnumValueGetterFromId(
 template <typename EnumT>
 inline void checkEnumValueGetterFromIdEncodedValue(
     ValueId id, sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
+  TestContextWithGivenTTl testContext = getContext<EnumT>();
   checkEnumValueGetterForId(
       testContext, id,
       sparqlExpression::detail::EnumValueGetter<EnumT>::getUndefined(), getter);
@@ -340,7 +350,7 @@ template <typename EnumT>
 inline void checkEnumValueGetterFromLiteralOrIri(
     const std::string& unitIriWithoutBrackets, EnumT expectedResult,
     sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
+  TestContextWithGivenTTl testContext = getContext<EnumT>();
 
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Iri = ad_utility::triple_component::Iri;

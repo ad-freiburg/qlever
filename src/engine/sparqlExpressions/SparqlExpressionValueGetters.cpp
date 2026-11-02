@@ -452,7 +452,17 @@ T EnumValueGetter<CPP_sfinae_args(T)>::litOrIriToValue(const LiteralOrIri& s) {
     if constexpr (std::is_same_v<T, UnitOfMeasurement>) {
       return ad_utility::detail::iriToUnitOfMeasurement(s.getContent());
     } else if constexpr (std::is_same_v<T, util::geo::CRSType>) {
-      return ::util::geo::getCRSType(std::string{s.getContent()});
+      // `::util::geo::getCRSType` expects the input string to be wrapped in
+      // angle brackets (e.g., <http://...>) and returns a default value
+      // (CRS84) if the opening bracket is missing. We wrap the content here
+      // to ensure that `::util::geo::getCRSType` handles the IRIs correctly.
+      std::string content{s.getContent()};
+      if (content.empty()) {
+        content = "<>";
+      } else if (content.front() != '<') {
+        content = "<" + content + ">";
+      }
+      return ::util::geo::getCRSType(std::string{content});
     } else {
       static_assert(ad_utility::alwaysFalse<T>);
     }
