@@ -34,22 +34,25 @@ namespace ad_utility {
 inline namespace QL_LIFETIME_CHECKS_NAMESPACE {
 
 // A pointer to a `T` that either shares the ownership of the `T` (like a
-// `std::shared_ptr`), or doesn't own it at all (like a raw pointer). Copying an
-// owning `MaybeOwningPtr` increments the reference count of the `shared_ptr`,
-// which is a contended atomic operation if many threads copy pointers to the
-// same object. Copying a non-owning `MaybeOwningPtr` costs no atomic operation.
-// A non-owning `MaybeOwningPtr` is typically obtained via `nonOwningCopy()`
-// from an owning one, which then has to outlive all the non-owning copies. When
-// the lifetime checks are enabled (see above), this is verified when a
-// non-owning copy is destroyed or overwritten.
+// `std::shared_ptr`), or doesn't own it at all (like a raw pointer). A
+// non-owning `MaybeOwningPtr` is typically obtained via `nonOwningCopy()` from
+// an owning one, which then has to outlive all the non-owning copies. When the
+// lifetime checks are enabled (see above), the program terminates if a
+// non-owning copy is destroyed or overwritten after its owner.
 //
-// There are no move operations, so moving falls back to copying. This way, a
-// moved-from `MaybeOwningPtr` still keeps its object alive and remains usable,
-// which is required e.g. for the allocators that hold a `MaybeOwningPtr`.
+// NOTE 1: Copying an owning `MaybeOwningPtr` increments the reference count of
+// the `shared_ptr`, which is a contended atomic operation if many threads copy
+// pointers to the same object. Copying a non-owning `MaybeOwningPtr` costs no
+// atomic operation.
 //
-// NOTE: A non-owning pointer is represented by a `shared_ptr` without a control
-// block that is created via the aliasing constructor (which the standard
-// explicitly allows). This way, a `MaybeOwningPtr` is as large as a
+// NOTE 2: There are no move operations, so moving falls back to copying. This
+// way, a moved-from `MaybeOwningPtr` still keeps its object alive and remains
+// usable, which is required e.g. for the allocators that hold a
+// `MaybeOwningPtr`.
+//
+// NOTE 3: A non-owning pointer is represented by a `shared_ptr` without a
+// control block that is created via the aliasing constructor (which the
+// standard explicitly allows). This way, a `MaybeOwningPtr` is as large as a
 // `shared_ptr` (without the lifetime checks), `get()` needs no branch, and
 // copying a non-owning pointer costs no atomic operation, as there is no
 // reference count to increment.
@@ -60,15 +63,17 @@ class MaybeOwningPtr {
   struct NonOwningTag {};
 
   // The object, `get()` is never `nullptr`. For a non-owning pointer, this
-  // `shared_ptr` has no control block (see the NOTE above).
+  // `shared_ptr` has no control block (see NOTE 3 above).
   std::shared_ptr<T> ptr_;
 #ifdef QL_ENABLE_LIFETIME_CHECKS
   // For a non-owning pointer that was obtained from an owning one, a weak
   // pointer to the owned object, which must not have expired when this pointer
   // is destroyed or overwritten. It is `std::nullopt` for owning pointers and
   // for pointers from `makeUncheckedNonOwning`, which have no owner that could
-  // be checked. (An empty `weak_ptr` would not work for the latter, because it
-  // is reported as expired.)
+  // be checked.
+  //
+  // NOTE: An empty `weak_ptr` would not work for the latter, because it is
+  // reported as expired.
   std::optional<std::weak_ptr<T>> lifetimeCheck_;
 #endif
 

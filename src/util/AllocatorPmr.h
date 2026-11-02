@@ -176,16 +176,18 @@ class PmrAllocator {
   PmrAllocator(const PmrAllocator&) = default;
   PmrAllocator& operator=(const PmrAllocator&) = default;
 
-  // Move construction/assignment deliberately *copy* (rather than steal) the
-  // ownership of the resource. Stealing it would leave the moved-from
-  // allocator with a dangling `resource_`; if that moved-from allocator is
-  // subsequently reused to allocate (e.g. an emptied `IdTable` column that is
-  // filled again) it would produce a buffer whose deallocation no longer keeps
-  // the resource alive, leading to a use-after-free of the `memory_resource`
-  // when the buffer is finally freed. By keeping the ownership intact, *every*
-  // allocator that ever referred to an owned resource keeps that resource alive
-  // for its whole lifetime. This can only extend a resource's lifetime, never
-  // shorten it, so the resource always outlives all buffers allocated from it.
+  // Move construction and assignment deliberately copy (rather than steal) the
+  // ownership of the resource, so that a moved-from allocator stays usable.
+  //
+  // NOTE: Stealing the ownership would leave the moved-from allocator with a
+  // dangling `resource_`. If that allocator is reused to allocate (e.g. an
+  // emptied `IdTable` column that is filled again), the deallocation of the new
+  // buffer would no longer keep the resource alive, a use-after-free of the
+  // `memory_resource` when the buffer is finally freed. By keeping the
+  // ownership intact, every allocator that ever referred to an owned resource
+  // keeps it alive for its whole lifetime. This can only extend a resource's
+  // lifetime, never shorten it, so the resource always outlives all buffers
+  // allocated from it.
   PmrAllocator(PmrAllocator&& other) noexcept : PmrAllocator(other) {}
   PmrAllocator& operator=(PmrAllocator&& other) noexcept {
     return *this = other;
