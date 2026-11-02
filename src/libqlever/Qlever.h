@@ -272,14 +272,15 @@ struct EngineConfig : CommonConfig {
   // separately).
   bool doNotLoadPermutations_ = false;
 
-  // If set, do not load the index from the files with the `baseName_`, but
-  // from the compressed blob in the given file (as written by
-  // `Qlever::serializeVocabAndNamedCacheToCompressedBlob`, see
-  // `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob` for the
-  // details). The blob contains only the vocabulary and the named result
-  // cache, but no permutations. Such an instance can therefore only answer
-  // queries that read from the named result cache (via `SERVICE
-  // ql:cached-result-with-name-...`) or that need no triples at all; it does
+  // If set, load the vocabulary and the named result cache from the
+  // compressed blob in this file instead of loading the index from the files
+  // with the `baseName_`. The blob is written by
+  // `Qlever::serializeVocabAndNamedCacheToCompressedBlob` and read by
+  // `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`.
+  //
+  // NOTE: The blob contains no permutations, so such an instance can only
+  // answer queries that read from the named result cache (via `SERVICE
+  // ql:cached-result-with-name-...`) or that need no triples at all. It does
   // not support updates, materialized views, or index rebuilds. Hence
   // `persistUpdates_`, `loadTextIndex_`, `rebuildIndexStrategy_`, and
   // `preloadMaterializedViews_` must not be set (see `validate`).
@@ -389,16 +390,17 @@ class Qlever {
   static void buildIndex(IndexBuilderConfig config);
 
   // Create a QLever instance for querying using an `EngineConfig` as
-  // explained above. If `skipLoading` is true, no index is loaded from disk
-  // (in particular, none of the on-disk index files, not even the vocabulary
-  // or the `.meta-data.json`, need to exist); the instance must then be
-  // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
-  // before it can answer queries. If `config.compressedBlobFilename_` is set,
-  // the instance is populated from that blob file instead of from the on-disk
-  // index, independent of `skipLoading`. The memory limit from `config` is
-  // enforced
-  // and cache eviction is wired into the allocator. The queries and index
-  // rebuilds of this instance run their parallel work on the `executor`.
+  // explained above. The memory limit from `config` is enforced and cache
+  // eviction is wired into the allocator. The queries and index rebuilds of
+  // this instance run their parallel work on the `executor`.
+  //
+  // If `skipLoading` is true, no index is loaded from disk (in particular,
+  // none of the on-disk index files, not even the vocabulary or the
+  // `.meta-data.json`, need to exist); the instance must then be populated
+  // from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob` before
+  // it can answer queries. If `config.compressedBlobFilename_` is set, the
+  // instance is populated from that blob file instead of from the on-disk
+  // index, independent of `skipLoading`.
   //
   // NOTE: Neither this constructor nor the computation of a query must be
   // called from a thread of the `executor`, because they block while waiting
