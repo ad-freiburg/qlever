@@ -282,11 +282,14 @@ class ChunkwisePermutationWriter
                                        Id col0Id, IdTable rows, bool useQueue);
 
   // Write the sorted `blocks` of the twin of the large relation with the given
-  // `col0Id` with the `writer` (see `writeRowsOfLargeRelation` for `useQueue`),
-  // and return the metadata of the twin.
+  // `col0Id` with the `writer` in the calling thread, and return the metadata
+  // of the twin. This is the counterpart of
+  // `CompressedRelationWriter::addCompleteLargeRelation` for the chunks, which
+  // run on the pool and therefore must neither use the (blocking) block write
+  // queue nor the (not thread-safe) bookkeeping of the `writer`.
   static CompressedRelationMetadata writeSortedBlocksOfLargeRelation(
       CompressedRelationWriter& writer, Id col0Id,
-      ad_utility::InputRangeTypeErased<Block> blocks, bool useQueue);
+      ad_utility::InputRangeTypeErased<Block> blocks);
 
   // Create a twin sorter with the given `filename`.
   std::unique_ptr<TwinSorter> makeTwinSorter(const std::string& filename) const;

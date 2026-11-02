@@ -518,9 +518,8 @@ ChunkwisePermutationWriter::writeTwinOfBoundaryRelation(
     ql::ranges::sort(twinRows, ComparatorForConstCol0{});
     std::vector<Block> blocks;
     blocks.push_back(std::move(twinRows));
-    return writeSortedBlocksOfLargeRelation(
-        *writer2_, col0Id, ad_utility::InputRangeTypeErased{std::move(blocks)},
-        true);
+    return writer2_->addCompleteLargeRelation(
+        col0Id, ad_utility::InputRangeTypeErased<Block>{std::move(blocks)});
   }
   // The runs of the large parts have been finished by their chunks (see
   // `BoundaryPart::twinRuns_`). The twin rows of the small parts are not in
@@ -576,8 +575,12 @@ ChunkwisePermutationWriter::writeTwinOfBoundaryRelation(
       executor_, std::move(input), ComparatorForConstCol0{},
       std::move(storageFactory), std::move(mergeOptions),
       std::make_shared<ad_utility::CancellationHandle<>>());
-  return writeSortedBlocksOfLargeRelation(*writer2_, col0Id, std::move(merged),
-                                          true);
+  // NOTE: The consolidation runs on the driving thread, which is not a thread
+  // of the pool, so it may use the (blocking) bookkeeping and block write queue
+  // of `writer2_`, which the chunks never touch (they only use the thread-safe
+  // `compressAndWriteBlockInCallingThread`).
+  return writer2_->addCompleteLargeRelation(
+      col0Id, ad_utility::InputRangeTypeErased<Block>{std::move(merged)});
 }
 
 // _____________________________________________________________________________
@@ -615,13 +618,13 @@ void ChunkwisePermutationWriter::writeRowsOfLargeRelation(
 CompressedRelationMetadata
 ChunkwisePermutationWriter::writeSortedBlocksOfLargeRelation(
     CompressedRelationWriter& writer, Id col0Id,
-    ad_utility::InputRangeTypeErased<Block> blocks, bool useQueue) {
+    ad_utility::InputRangeTypeErased<Block> blocks) {
   DistinctIdCounter distinctCol1Counter;
   size_t numRows = 0;
   auto writeBlock = [&](Block block) {
     numRows += block.numRows();
     distinctCol1Counter.addBlock(std::as_const(block).getColumn(c1Idx));
-    writeRowsOfLargeRelation(writer, col0Id, std::move(block), useQueue);
+    writeRowsOfLargeRelation(writer, col0Id, std::move(block), false);
   };
   // Equal triples (when disregarding the graph) have to stay in the same
   // block, see `TripleAlignedBlockBuffer`.

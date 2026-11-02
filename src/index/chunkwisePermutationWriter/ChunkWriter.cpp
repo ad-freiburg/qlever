@@ -260,7 +260,7 @@ CompressedRelationMetadata ChunkWriter::writeTwinOfCompleteLargeRelation(
   // several runs, the merge derives the size of its output blocks from the
   // memory of the sorter.
   auto md2 = ChunkwisePermutationWriter::writeSortedBlocksOfLargeRelation(
-      writer2_, col0Id, sorter.getSortedBlocks(std::nullopt), false);
+      writer2_, col0Id, sorter.getSortedBlocks(std::nullopt));
   sorter.clear();
   return md2;
 }
