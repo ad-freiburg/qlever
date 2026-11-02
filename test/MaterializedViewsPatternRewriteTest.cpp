@@ -515,9 +515,10 @@ TEST_F(MaterializedViewsPatternMatchingTest,
     auto cleanupNumAssignments = setRuntimeParameterForTest<
         &RuntimeParameters::materializedViewPatternMatchNumAssignments_>(1);
     EXPECT_TRUE(match(qpc, query).empty());
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr(
-                    "materialized-view-pattern-match-num-assignments"));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::HasSubstr(
+            "materialized-view-pattern-match-num-assignments")));
   }
   {
     auto cleanupNumAssignments = setRuntimeParameterForTest<
@@ -623,9 +624,10 @@ TEST_F(MaterializedViewsPatternMatchingTest, BookkeepingEdgeCases) {
                     "?s <mp2> ?d }")
                   .size(),
               1u);
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr(
-                    "materialized-view-pattern-match-num-assignments"));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::HasSubstr(
+            "materialized-view-pattern-match-num-assignments")));
   }
 
   // More than 64 triples in the user's query disable pattern-based
