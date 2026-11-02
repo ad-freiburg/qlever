@@ -76,17 +76,21 @@ struct RuntimeParameters {
   // (enforced by a parameter constraint).
   SizeT maxNumThreadsPerQuery_{6, "max-num-threads-per-query"};
   // The maximum number of tasks that a runtime index rebuild (see
-  // `IndexRebuilder`) runs at the same time on the global thread pool, for all
-  // of its work together: reading and decompressing the blocks of the old
-  // permutations (also for the recomputation of the statistics), and
-  // compressing and writing the blocks of the new ones. A value of 0 means "no
-  // limit". This is the analogue of `max-num-threads-per-query` for the
-  // rebuild: When the pool is idle, the rebuild uses this many of its threads,
-  // and when the pool is busy, the rebuild shares it with the queries.
+  // `IndexRebuilder`) runs at the same time on the global thread pool. A value
+  // of 0 means "no limit".
   //
-  // NOTE: The limit applies to the rebuild as a whole and not to its
-  // individual scans and writers, so each of them may use as many of the
-  // threads as are currently free within that limit.
+  // NOTE 1: The limit applies to the rebuild as a whole and not to its
+  // individual scans and writers: the reading and decompressing of the blocks
+  // of the old permutations (also for the recomputation of the statistics) and
+  // the compressing and writing of the blocks of the new ones share it, so
+  // each of them may use as many threads as are currently free within it. Not
+  // covered are the threads that remap the triples of each permutation (they
+  // are not on the pool) and the sorting of the twin relations of large
+  // relations (see `PermutationWriter`), which uses the pool directly.
+  //
+  // NOTE 2: This is the analogue of `max-num-threads-per-query` for the
+  // rebuild. When the pool is idle, the rebuild uses this many of its threads,
+  // and when the pool is busy, it shares them with the queries.
   SizeT rebuildIndexMaxNumThreads_{0, "rebuild-index-max-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
   // the internal PSO+POS) that a runtime index rebuild processes in
