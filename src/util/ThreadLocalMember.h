@@ -34,9 +34,9 @@ namespace detail {
 // The global bookkeeping of `ThreadLocalMember` (see below), which connects
 // the objects with the values of the threads: it assigns each object a small
 // id, which is reused after the object is destroyed, and it keeps track of the
-// threads that have values. All member functions are threadsafe, they lock the
-// single `Synchronized` state. They are only called on the slow paths of
-// `ThreadLocalMember`.
+// threads that have values. All member functions are threadsafe. Except for
+// the fast path of `getOrAllocateId`, they lock the single `Synchronized`
+// state. They are only called on the slow paths of `ThreadLocalMember`.
 //
 // `Object` and `Thread` are the types of the objects and of the values of a
 // thread. `Thread` must have the member functions `reset(uint32_t id)`, which
@@ -63,8 +63,16 @@ class ThreadLocalMemberRegistry : public NoCopyNoMove {
   // Return the value of `id`. If it is `noId`, then first assign an unused id
   // to `object` and store it in `id`.
   uint32_t getOrAllocateId(std::atomic<uint32_t>& id, Object* object) {
+    // If the id was already assigned (e.g. by another thread), then return it
+    // without locking. The acquire synchronizes with the release below.
+    uint32_t result = id.load(std::memory_order_acquire);
+    if (result != noId) {
+      return result;
+    }
     auto state = state_.wlock();
-    uint32_t result = id.load(std::memory_order_relaxed);
+    // Check again, because another thread might have assigned the id while
+    // this thread was waiting for the lock.
+    result = id.load(std::memory_order_relaxed);
     if (result != noId) {
       return result;
     }
@@ -77,7 +85,7 @@ class ThreadLocalMemberRegistry : public NoCopyNoMove {
       result = static_cast<uint32_t>(state->objects_.size());
       state->objects_.push_back(object);
     }
-    // The release synchronizes with the acquire in
+    // The release synchronizes with the acquire above and in
     // `ThreadLocalMember::getIfExists`. It makes the resets in a previous
     // `releaseId` of the same id visible to the threads that see the id.
     id.store(result, std::memory_order_release);
@@ -106,16 +114,18 @@ class ThreadLocalMemberRegistry : public NoCopyNoMove {
     thread.resize(size);
   }
 
-  // Call `f(object, id)` for each object that is alive and has an id smaller
-  // than `numIds`, and then unregister the values of the `thread`. The objects
-  // cannot be destroyed concurrently, because `releaseId` waits for the lock.
-  template <typename F>
-  void unregisterThread(Thread* thread, size_t numIds, const F& f) {
+  // Call `forEachLiveObject(object, id)` for each object that is alive and has
+  // an id smaller than `numIds`, and then unregister the values of the
+  // `thread`. The objects cannot be destroyed concurrently, because
+  // `releaseId` waits for the lock.
+  template <typename ForEachLiveObject>
+  void unregisterThread(Thread* thread, size_t numIds,
+                        const ForEachLiveObject& forEachLiveObject) {
     auto state = state_.wlock();
     numIds = std::min(numIds, state->objects_.size());
     for (size_t id = 0; id < numIds; ++id) {
       if (Object* object = state->objects_[id]) {
-        f(*object, static_cast<uint32_t>(id));
+        forEachLiveObject(*object, static_cast<uint32_t>(id));
       }
     }
     auto& threads = state->threads_;
@@ -195,7 +205,7 @@ class ThreadLocalMember : public NoCopyNoMove {
     // The acquire synchronizes with the release in `getOrAllocateId`.
     uint32_t id = id_.load(std::memory_order_acquire);
     const auto& values = fastState_.values_;
-    return id < values.size() ? values.data() + id : nullptr;
+    return id < values.size() ? &values[id] : nullptr;
   }
 
   // Return the value of the calling thread, and create it (as `T{}`) if it
@@ -209,8 +219,13 @@ class ThreadLocalMember : public NoCopyNoMove {
       return nullptr;
     }
     uint32_t id = registry().getOrAllocateId(id_, this);
-    registry().resize(ThreadValues::getForCurrentThread(), size_t{id} + 1);
-    return fastState_.values_.data() + id;
+    // Only lock the registry if the array of this thread is too small. It is
+    // large enough e.g. if this thread already has values of objects with
+    // larger ids, and the id of this object was assigned just now.
+    if (id >= fastState_.values_.size()) {
+      registry().resize(ThreadValues::getForCurrentThread(), size_t{id} + 1);
+    }
+    return &fastState_.values_[id];
   }
 
  private:
