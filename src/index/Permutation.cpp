@@ -108,9 +108,11 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const LocatedTriplesState& locatedTriplesState,
+    const CancellationHandle& cancellationHandle) const {
   return reader().getResultSizeOfScan(
-      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState));
+      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState),
+      cancellationHandle);
 }
 
 // _____________________________________________________________________
