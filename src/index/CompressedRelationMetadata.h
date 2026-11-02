@@ -20,7 +20,6 @@
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "util/Exception.h"
@@ -96,6 +95,10 @@ struct CompressedBlockMetadataNoBlockIndex {
   // the IDs of those graphs are stored here. If there are many different graphs
   // inside this block, `std::nullopt` is stored.
   std::optional<std::vector<Id>> graphInfo_;
+  // Return the `graphInfo_`. Code that may also be called for the metadata of
+  // sub-blocks (see `SubBlockMetadata.h`) uses this function instead of the
+  // member.
+  const GraphInfo& graphInfo() const { return graphInfo_; }
   // True if and only if this block contains (adjacent) triples which only
   // differ in their Graph ID. Those have to be filtered out when scanning the
   // blocks.
@@ -204,15 +207,11 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.blockIndex_;
 }
 
-// `ql::span` containing `CompressedBlockMetadata` values.
-using BlockMetadataSpan = ql::span<const CompressedBlockMetadata>;
-// Iterator with respect to a `CompressedBlockMetadata` value of
-// `std::span<const CompressedBlockMetadata>` (`BlockMetadataSpan`).
-using BlockMetadataIt = BlockMetadataSpan::iterator;
-// Section of relevant blocks as a subrange defined by `BlockMetadataIt`s.
-using BlockMetadataRange = ql::ranges::subrange<BlockMetadataIt>;
-// Vector containing `BlockMetadataRange`s.
-using BlockMetadataRanges = std::vector<BlockMetadataRange>;
+// Return `true` iff the triples `a` and `b` agree on all the columns
+// `< numColumns` (which must be at most 3, the graph is never compared).
+bool permutedTriplesAgreeOnPrefix(
+    const CompressedBlockMetadata::PermutedTriple& a,
+    const CompressedBlockMetadata::PermutedTriple& b, size_t numColumns);
 
 // The metadata of a whole compressed "relation", where relation refers to a
 // maximal sequence of triples with equal first component (e.g., P for the PSO

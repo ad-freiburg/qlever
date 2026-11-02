@@ -22,6 +22,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/MetaDataHandler.h"
+#include "index/SubBlockMetadata.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
 
@@ -120,6 +121,12 @@ class IndexMetaData {
   const BlocksType& blockData() const { return *blockData_; }
   std::shared_ptr<const BlocksType> blockDataShared() const {
     return blockData_;
+  }
+
+  // Return the metadata of the blocks and sub-blocks, which shares the
+  // underlying data with this object.
+  PermutationBlockMetadata permutationBlockMetadata() const {
+    return PermutationBlockMetadata{blockData_};
   }
 
   size_t totalElements() const { return totalElements_; }

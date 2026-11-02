@@ -56,6 +56,21 @@ inline bool hasOnlyOneGraph(const std::optional<std::vector<Id>>& graphs) {
   return graphs.has_value() && graphs->size() == 1;
 }
 
+// Return true iff the rows `[beginRow, endRow)` of the `block` contain
+// duplicates when only considering the actual triple of S, P, and O (that is,
+// the first three columns).
+CPP_template(typename Block)(requires IdTableLike<Block>)
+bool hasDuplicatesIgnoringGraph(const Block& block, size_t beginRow,
+                                size_t endRow) {
+  using C = ColumnIndex;
+  auto withoutGraphAndAdditionalPayload =
+      block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}})
+          .template asStaticView<3>();
+  auto begin = withoutGraphAndAdditionalPayload.begin() + beginRow;
+  auto end = withoutGraphAndAdditionalPayload.begin() + endRow;
+  return ql::ranges::adjacent_find(begin, end) != end;
+}
+
 // Find out whether the sorted `block` contains duplicates and whether it
 // contains only a few distinct graphs such that we can store this information
 // in the block metadata. The `block` may be an owning `IdTable` or a (possibly
@@ -67,12 +82,7 @@ std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.
   auto hasDuplicates = [&block]() {
-    using C = ColumnIndex;
-    auto withoutGraphAndAdditionalPayload =
-        block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}})
-            .template asStaticView<3>();
-    return ql::ranges::adjacent_find(withoutGraphAndAdditionalPayload) !=
-           ql::ranges::end(withoutGraphAndAdditionalPayload);
+    return hasDuplicatesIgnoringGraph(block, 0, block.numRows());
   };
 
   auto graphs =

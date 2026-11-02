@@ -849,7 +849,7 @@ MaterializedView::makeEmptyLocatedTriplesState(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
   emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
-      .setOriginalMetadata(permutation_->metaData().blockDataShared());
+      .setOriginalMetadata(permutation_->metaData().permutationBlockMetadata());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
   LocalVocab emptyVocab;
 

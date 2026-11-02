@@ -610,10 +610,9 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
 }
 
 // _____________________________________________________________________________
-void DeltaTriples::setOriginalMetadata(
-    Permutation::Enum permutation,
-    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
-    bool setInternalMetadata) {
+void DeltaTriples::setOriginalMetadata(Permutation::Enum permutation,
+                                       PermutationBlockMetadata metadata,
+                                       bool setInternalMetadata) {
   auto& locatedTriplesPerBlock =
       setInternalMetadata
           ? locatedTriples_->getLocatedTriplesForPermutation<true>(permutation)

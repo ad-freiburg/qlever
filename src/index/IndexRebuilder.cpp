@@ -276,7 +276,7 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
 // _____________________________________________________________________________
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
-    const BlockMetadataRanges& blockMetadataRanges,
+    const SubBlockMetadataRanges& blockMetadataRanges,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const LocalVocabMapping& localVocabMapping,
     const InsertionPositions& insertionPositions,
@@ -343,7 +343,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
 }
 
 // _____________________________________________________________________________
-size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
+size_t getNumColumns(const SubBlockMetadataRanges& blockMetadataRanges) {
   if (!blockMetadataRanges.empty()) {
     const auto& first = blockMetadataRanges.at(0);
     if (!first.empty()) {
@@ -359,7 +359,7 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges) {
 // _____________________________________________________________________________
 std::pair<size_t, std::vector<ColumnIndex>>
 getNumberOfColumnsAndAdditionalColumns(
-    const BlockMetadataRanges& blockMetadataRanges) {
+    const SubBlockMetadataRanges& blockMetadataRanges) {
   size_t numColumns = getNumColumns(blockMetadataRanges);
   std::vector<ColumnIndex> additionalColumns;
   additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);

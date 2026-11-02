@@ -18,6 +18,7 @@
 #include "global/IdTriple.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
+#include "index/SubBlockMetadata.h"
 #include "util/CancellationHandle.h"
 #include "util/CopyOnWritePtr.h"
 #include "util/HashMap.h"
@@ -146,9 +147,8 @@ class LocatedTriplesPerBlock {
 
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
-  std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
-  std::optional<std::shared_ptr<const std::vector<CompressedBlockMetadata>>>
-      originalMetadata_;
+  std::optional<PermutationBlockMetadata> augmentedMetadata_;
+  std::optional<PermutationBlockMetadata> originalMetadata_;
 
  public:
   void updateAugmentedMetadata();
@@ -170,6 +170,13 @@ class LocatedTriplesPerBlock {
   // might be counted twice between the parts and 2. at this point we do not
   // know whether an insertion or deletion is actually effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
+
+  // The same, but only for the located triples that belong to the given
+  // sub-blocks. Currently, each block consists of exactly one sub-block (see
+  // `SubBlockMetadata.h`), so these are the located triples of the block.
+  NumAddedAndDeleted numTriples(const SubBlockMetadata& subBlocks) const {
+    return numTriples(subBlocks.blockIndex_);
+  }
 
   // Returns an optional reference to update triples for the block with the
   // index `blockIndex`. If no such block exists, return `std::nullopt`.
@@ -198,10 +205,26 @@ class LocatedTriplesPerBlock {
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
 
+  // The same, but only merge the located triples that belong to the given
+  // `subBlocks`, the `block` has to contain exactly the rows of these
+  // sub-blocks. There must be at least one such located triple (see
+  // `containsTriples`).
+  IdTable mergeTriples(const SubBlockMetadata& subBlocks, const IdTable& block,
+                       size_t numIndexColumns, bool includeGraphColumn) const {
+    return mergeTriples(subBlocks.blockIndex_, block, numIndexColumns,
+                        includeGraphColumn);
+  }
+
   // Return true iff there are located triples in the block with the given
   // index.
   bool containsTriples(size_t blockIndex) const {
     return map_.contains(blockIndex);
+  }
+
+  // Return true iff there are located triples that belong to the given
+  // `subBlocks`.
+  bool containsTriples(const SubBlockMetadata& subBlocks) const {
+    return containsTriples(subBlocks.blockIndex_);
   }
 
   // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
@@ -251,23 +274,20 @@ class LocatedTriplesPerBlock {
   // Must be called initially before using the `LocatedTriplesPerBlock` to
   // initialize the original block metadata that is augmented for updated
   // triples. This is currently done in `Permutation::loadFromDisk`.
-  void setOriginalMetadata(
-      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
+  void setOriginalMetadata(PermutationBlockMetadata metadata);
   void setOriginalMetadata(std::vector<CompressedBlockMetadata> metadata) {
-    setOriginalMetadata(
-        std::make_shared<const std::vector<CompressedBlockMetadata>>(
-            std::move(metadata)));
+    setOriginalMetadata(PermutationBlockMetadata{std::move(metadata)});
   }
 
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
   // enlarge the block borders.
-  const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
+  const PermutationBlockMetadata& getAugmentedMetadata() const {
     if (augmentedMetadata_.has_value()) {
       return augmentedMetadata_.value();
     }
     AD_CONTRACT_CHECK(originalMetadata_.has_value());
-    return *originalMetadata_.value();
+    return originalMetadata_.value();
   }
 
   // Remove all located triples.

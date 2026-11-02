@@ -812,7 +812,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     LocatedTriplesPerBlock locatedTriplesPerBlock;
     locatedTriplesPerBlock.setOriginalMetadata(metadata);
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Adding no triples does no changed the augmented metadata.
@@ -821,7 +821,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T1 is before block 0. The beginning of block 0 changes.
@@ -832,7 +832,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T2 is inside block 1. Borders don't change.
@@ -842,7 +842,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T3 is equal to PT4, the beginning of block 2. All update (update and
@@ -853,7 +853,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T4 is before block 4. The beginning of block 4 changes.
@@ -865,7 +865,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Erasing the update of T4 restores the beginning of block 4.
@@ -876,14 +876,14 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // The block 4 has no more updates, so we restore the info about the block
     // having no duplicates from the original metadata.
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = false;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Clearing the updates restores the original block borders.
     locatedTriplesPerBlock.clear();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(metadata));
   }
 
@@ -939,7 +939,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata().blocks(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
   }
   {
@@ -979,7 +979,8 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
-    auto actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    auto actualMetadata =
+        locatedTriplesPerBlock.getAugmentedMetadata().blocks();
     EXPECT_THAT(actualMetadata,
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -1007,7 +1008,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
         handle));
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
-    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata().blocks();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
 
     // Adding one more graph will exceed the maximum.
@@ -1016,7 +1017,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
         keyOrder, true, handle));
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
-    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata().blocks();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
 }
