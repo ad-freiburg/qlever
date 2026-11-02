@@ -159,6 +159,7 @@ inline const std::vector<std::string> secondaryVocabWords{
     "\"someSecondaryType\"^^<someType>",
     "\"withSecondaryLang\"@en",
     "<http://qudt.org/vocab/unit/M>",
+    "<http://www.opengis.net/def/crs/EPSG/0/4326>",
     "<https://example.com/secondary>"};
 
 // Names for the words of `secondaryVocabWords`, to be used with the helpers
@@ -169,7 +170,8 @@ inline const std::string secondaryPlainLiteral = secondaryVocabWords.at(2);
 inline const std::string secondaryTypedLiteral = secondaryVocabWords.at(3);
 inline const std::string secondaryLangLiteral = secondaryVocabWords.at(4);
 inline const std::string secondaryUnitIri = secondaryVocabWords.at(5);
-inline const std::string secondaryIri = secondaryVocabWords.at(6);
+inline const std::string secondaryCrsIri = secondaryVocabWords.at(6);
+inline const std::string secondaryIri = secondaryVocabWords.at(7);
 
 // The words of the vocabulary of the index of `AllDatatypesTestContext`, one
 // per kind of literal and IRI that the value getters distinguish. They are
@@ -256,7 +258,7 @@ inline void checkLiteralContentAndDatatypeFromSecondaryVocabId(
 
 }  // namespace valueGetterTestHelpers
 
-namespace unitVGTestHelpers {
+namespace enumVGTestHelpers {
 
 using namespace valueGetterTestHelpers;
 
@@ -275,48 +277,66 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         "1.5"^^<http://example.com>, 
         "x".
   )";
+const std::string crsTtl = R"(
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+<x> <y> "http://www.opengis.net/def/crs/OGC/1.3/CRS84"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/4326"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/3857"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/unsupported"^^xsd:anyURI, 
+        <http://www.opengis.net/def/crs/OGC/1.3/CRS84>, 
+        <http://www.opengis.net/def/crs/EPSG/0/4326>, 
+        <http://www.opengis.net/def/crs/EPSG/0/3857>,
+        <http://www.opengis.net/def/crs/EPSG/0/unsupported>,
+        "1.5"^^<http://example.com>, 
+        "x".
+  )";
 
 // Apply `getter` to `id` in the given context and check the result.
-inline void checkUnitValueGetterForId(
-    TestContextWithGivenTTl& testContext, Id id,
-    UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+template <typename EnumT>
+inline void checkEnumValueGetterForId(
+    TestContextWithGivenTTl& testContext, Id id, EnumT expectedResult,
+    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
   ASSERT_EQ(getter(id, &testContext.context), expectedResult);
 }
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input
-inline void checkUnitValueGetterFromId(
-    const std::string& fullLiteralOrIri, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+// Helper to test EnumValueGetter using ValueId input
+template <typename EnumT>
+inline void checkEnumValueGetterFromId(
+    const std::string& fullLiteralOrIri, EnumT expectedResult,
+    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
   TestContextWithGivenTTl testContext{unitTtl};
-  checkUnitValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
+  checkEnumValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
                             expectedResult, getter);
 };
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input where the
+// Helper to test EnumValueGetter using ValueId input where the
 // ValueId represents an encoded value
-inline void checkUnitValueGetterFromIdEncodedValue(
-    ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+template <typename EnumT>
+inline void checkEnumValueGetterFromIdEncodedValue(
+    ValueId id, sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
   TestContextWithGivenTTl testContext{unitTtl};
-  checkUnitValueGetterForId(testContext, id, UnitOfMeasurement::UNKNOWN,
-                            getter);
+  checkEnumValueGetterForId(
+      testContext, id,
+      sparqlExpression::detail::EnumValueGetter<EnumT>::getUndefined(), getter);
 }
 
-// Helper to test `UnitOfMeasurementValueGetter` on the given word of a
-// secondary vocabulary, see `checkUnitValueGetterFromId` above. The word has to
+// Helper to test `EnumValueGetter` on the given word of a
+// secondary vocabulary, see `checkEnumValueGetterFromId` above. The word has to
 // be one of `secondaryVocabWords`.
-inline void checkUnitValueGetterFromSecondaryVocabId(
-    const std::string& word, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+template <typename EnumT>
+inline void checkEnumValueGetterFromSecondaryVocabId(
+    const std::string& word, EnumT expectedResult,
+    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
   AllDatatypesTestContext testContext;
-  checkUnitValueGetterForId(testContext, testContext.secondaryVocabId(word),
+  checkEnumValueGetterForId(testContext, testContext.secondaryVocabId(word),
                             expectedResult, getter);
 }
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input
-inline void checkUnitValueGetterFromLiteralOrIri(
-    const std::string& unitIriWithoutBrackets, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+// Helper to test EnumValueGetter using ValueId input
+template <typename EnumT>
+inline void checkEnumValueGetterFromLiteralOrIri(
+    const std::string& unitIriWithoutBrackets, EnumT expectedResult,
+    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
   TestContextWithGivenTTl testContext{unitTtl};
 
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -325,8 +345,11 @@ inline void checkUnitValueGetterFromLiteralOrIri(
   auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
                     bool expectSuccess) {
     auto actualResult = getter(litOrIri, &testContext.context);
-    ASSERT_EQ(actualResult,
-              expectSuccess ? expectedResult : UnitOfMeasurement::UNKNOWN);
+    ASSERT_EQ(
+        actualResult,
+        expectSuccess
+            ? expectedResult
+            : sparqlExpression::detail::EnumValueGetter<EnumT>::getUndefined());
   };
 
   // Test xsd:anyURI literal method
@@ -348,7 +371,7 @@ inline void checkUnitValueGetterFromLiteralOrIri(
          true);
 };
 
-}  // namespace unitVGTestHelpers
+}  // namespace enumVGTestHelpers
 
 namespace geoInfoVGTestHelpers {
 
