@@ -279,9 +279,10 @@ int main(int argc, char** argv) {
   auto hasWordNormalizationDescription = absl::StrCat(
       "The normalization of the words of the `ql:has-word` triples. Literals "
       "are always split at non-alphanumeric characters and the words are "
-      "lowercased; with `lowercase-no-accents`, accents are also removed (e.g. "
-      "\"Café\" becomes \"cafe\"). Accents are all nonspacing marks, which "
-      "in some scripts (e.g. Devanagari or Thai) also include vowel signs. "
+      "lowercased; with `lowercase-no-accents`, all combining marks are also "
+      "removed (e.g. \"Café\" becomes \"cafe\"). The latter is meant for "
+      "text in the Latin, Greek or Cyrillic script; in other scripts it also "
+      "removes marks that are not accents (e.g. the vowel signs of Thai). "
       "Words in queries can be normalized the same way with `ql:normalize`. "
       "One of ",
       ad_utility::HasWordNormalization::getListOfSupportedValues(),

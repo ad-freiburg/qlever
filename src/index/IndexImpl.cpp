@@ -1600,6 +1600,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // The normalization of the words of the `ql:has-word` triples of this index
+  // (an index built before this key existed uses `Lowercase`).
+  loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
+                 ad_utility::HasWordNormalization::Lowercase);
+
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
   // materialized view, for example), so that all permutations of an index have
@@ -2043,17 +2048,6 @@ std::vector<float> IndexImpl::getMultiplicities(
                             numTriples / numDistinctObjects().normal};
   auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::getResultSizeOfScan(
-    const ScanSpecification& scanSpecification,
-    const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  const auto& perm = getPermutation(permutation);
-  return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      locatedTriplesState);
 }
 
 // _____________________________________________________________________________
