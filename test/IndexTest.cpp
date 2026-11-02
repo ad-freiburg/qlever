@@ -1316,26 +1316,6 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
-  // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "no limit") must give the same result. Together with the default
-  // of 1 used by the calls above and below, this exercises the translation of
-  // the runtime parameter to a concurrency-limited executor on both of its
-  // branches. Use a separate base name, so that the permutation that was
-  // already finalized above stays intact.
-  {
-    auto cleanupParameter = setRuntimeParameterForTest<
-        &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
-    index.setOnDiskBase(onDiskBase + ".unthrottled");
-    auto [uniquePredicatesUnthrottled, metaUnthrottled] =
-        index.createPermutationWithoutMetadata(
-            4,
-            ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
-                tables.at(0).clone(), tables.at(1).clone()}},
-            permutation, false, executor());
-    index.setOnDiskBase(onDiskBase);
-    EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
-  }
-
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
           4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,

@@ -155,8 +155,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.cacheMaxSizeSingleEntry_);
   check(params.lazyIndexScanNumBlocksInFlight_);
   check(params.maxNumThreadsPerQuery_);
-  check(params.rebuildIndexScanNumThreads_);
-  check(params.rebuildPermutationWriterNumThreads_);
+  check(params.rebuildIndexMaxNumThreads_);
   check(params.rebuildMaxConcurrentPermutationPairs_);
   check(params.lazyIndexScanMaxSizeMaterialization_);
   check(params.useBinsearchTransitivePath_);
