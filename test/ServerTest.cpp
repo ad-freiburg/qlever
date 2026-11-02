@@ -73,6 +73,12 @@ TEST(ServerTest, chooseBestFittingMediaType) {
   EXPECT_EQ(choose({tsv, csv}, askQuery), sparqlJson);
   EXPECT_EQ(choose({turtle, json}, selectQuery), sparqlJson);
   EXPECT_EQ(choose({octetStream, sparqlJson}, constructQuery), turtle);
+
+  // QLever's binary format is only supported for SELECT queries.
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, selectQuery),
+            binaryQleverExport);
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({binaryQleverExport}, constructQuery), turtle);
 }
 
 // _____________________________________________________________________________
@@ -572,7 +578,8 @@ TEST(ServerTest, pingEndpoint) {
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
   EXPECT_THAT(logStream.str(),
-              testing::HasSubstr("Alive check without message"));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+                  testing::HasSubstr("Alive check without message")));
 
   // With a `msg` parameter; the response is the same regardless of the
   // message, which is only used for logging.
@@ -582,7 +589,8 @@ TEST(ServerTest, pingEndpoint) {
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
   EXPECT_THAT(logStream.str(),
-              testing::HasSubstr("Alive check with message \"hello\""));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+                  testing::HasSubstr("Alive check with message \"hello\"")));
 }
 
 // _____________________________________________________________________________

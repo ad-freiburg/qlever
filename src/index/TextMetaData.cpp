@@ -12,8 +12,12 @@ std::vector<std::reference_wrapper<const TextBlockMetaData>>
 TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
                                       const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
-  assert(_blocks.size() > 0);
-  assert(_blocks.size() == _blockUpperBoundWordIds.size());
+  AD_CORRECTNESS_CHECK(_blocks.size() == _blockUpperBoundWordIds.size());
+  // Without blocks (no text index loaded) there is nothing to find. The
+  // `--it` below would otherwise step before the beginning of an empty vector.
+  if (_blocks.empty()) {
+    return {};
+  }
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto it = std::lower_bound(_blockUpperBoundWordIds.begin(),

@@ -7,10 +7,14 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+
+#include <sstream>
 
 #include "IdColumnTestHelpers.h"
 #include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
+#include "util/HashSet.h"
 
 using namespace columnBasedIdTable::splitLayout;
 using testHelpers::getBitsCompat;
@@ -35,10 +39,39 @@ TEST(SplitLayoutIdBitRepresentationTest, incremented) {
   EXPECT_EQ(incPayload, static_cast<uint64_t>(idValue) + 1);
 
   // The maximal payload carries into the datatype.
-  constexpr SplitLayoutIdBitRepresentation maxPayload{
+  //
+  // NOTE: Keep `maxPayload` non-const. For a `const` object with a constant
+  // initializer, clang evaluates the `constexpr` call at compile time (even
+  // at `-O0`), so the carry would never run at runtime and the coverage report
+  // would not see it.
+  SplitLayoutIdBitRepresentation maxPayload{
       static_cast<uint8_t>(Datatype::Int),
       std::numeric_limits<uint64_t>::max()};
-  constexpr auto carried = maxPayload.incremented();
+  const auto carried = maxPayload.incremented();
   EXPECT_EQ(carried.datatype_, static_cast<uint8_t>(Datatype::Int) + 1);
   EXPECT_EQ(carried.payload_, 0u);
+}
+
+// Test the output via `operator<<` and `absl::StrCat`.
+TEST(SplitLayoutIdBitRepresentationTest, toString) {
+  const SplitLayoutIdBitRepresentation representation{3, 42};
+  std::ostringstream stream;
+  stream << representation;
+  EXPECT_EQ(stream.str(), "3:42");
+  EXPECT_EQ(absl::StrCat(representation), "3:42");
+}
+
+// Test `std::hash` and the hash of abseil: equal representations have the same
+// hash, and both the datatype and the payload change it.
+TEST(SplitLayoutIdBitRepresentationTest, hash) {
+  using Rep = SplitLayoutIdBitRepresentation;
+  const std::hash<Rep> hash;
+  EXPECT_EQ(hash(Rep{3, 42}), hash(Rep{3, 42}));
+  EXPECT_NE(hash(Rep{3, 42}), hash(Rep{4, 42}));
+  EXPECT_NE(hash(Rep{3, 42}), hash(Rep{3, 43}));
+
+  const ad_utility::HashSet<Rep> set{Rep{3, 42}, Rep{3, 42}, Rep{4, 42}};
+  EXPECT_EQ(set.size(), 2u);
+  EXPECT_TRUE(set.contains(Rep{4, 42}));
+  EXPECT_FALSE(set.contains(Rep{3, 43}));
 }

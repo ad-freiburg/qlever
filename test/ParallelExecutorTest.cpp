@@ -5,7 +5,6 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
-#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -67,12 +66,13 @@ TEST(ParallelExecutor, multipleTaskWithOneException) {
     tasks.push_back(std::packaged_task{[&executed, i]() {
       executed.at(i) = true;
       if (i == 5) {
-        throw std::runtime_error("Error");
+        // Note: The task runs on a thread of the executor, so we throw a
+        // `TestException`, see `test/util/TestException.h` for details.
+        throw TestException("Error");
       }
     }});
   }
-  EXPECT_THROW(ad_utility::runTasksInParallel(std::move(tasks)),
-               std::runtime_error);
+  EXPECT_THROW(ad_utility::runTasksInParallel(std::move(tasks)), TestException);
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
   }
@@ -102,13 +102,15 @@ TEST(ParallelExecutor, multipleTaskWithOnlyExceptions) {
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     tasks.push_back(std::packaged_task{[&executed, i]() {
       executed.at(i) = true;
-      throw std::runtime_error(absl::StrCat("Error ", i));
+      // Note: The task runs on a thread of the executor, so we throw a
+      // `TestException`, see `test/util/TestException.h` for details.
+      throw TestException(i == 0 ? "Error 0" : "Error i > 0");
     }});
   }
   // Only the first error should be rethrown for simplicity.
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ad_utility::runTasksInParallel(std::move(tasks)),
-      ::testing::StrEq("Error 0"), std::runtime_error);
+      ::testing::StrEq("Error 0"), TestException);
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
   }
@@ -277,13 +279,15 @@ TEST(ComputeInParallelChunks, exceptionInChunkIsPropagated) {
   // throws.
   auto computeChunk = [](Chunks& chunks, size_t begin, size_t end) {
     if (begin == 0) {
-      throw std::runtime_error("Error in the first chunk");
+      // Note: The chunks are computed on the threads of the `executor`, so we
+      // throw a `TestException`, see `test/util/TestException.h` for details.
+      throw TestException("Error in the first chunk");
     }
     addChunk(chunks, begin, end);
   };
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ad_utility::computeInParallelChunks(executor(), 2, 1, computeChunk),
-      ::testing::StrEq("Error in the first chunk"), std::runtime_error);
+      ::testing::StrEq("Error in the first chunk"), TestException);
 }
 
 // Test that when every chunk throws, one of the exceptions is rethrown, and
@@ -292,13 +296,15 @@ TEST(ComputeInParallelChunks, exceptionInChunkIsPropagated) {
 TEST(ComputeInParallelChunks, exceptionInEveryChunkIsPropagated) {
   // Two chunks on two tasks, both of which throw.
   std::atomic<size_t> numThrown = 0;
+  // Note: The chunks are computed on the threads of the `executor`, so we
+  // throw a `TestException`, see `test/util/TestException.h` for details.
   auto computeChunk = [&numThrown](Chunks&, size_t begin, size_t) {
     ++numThrown;
-    throw std::runtime_error{absl::StrCat("Error in chunk ", begin)};
+    throw TestException(begin == 0 ? "Error in chunk 0" : "Error in chunk 1");
   };
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ad_utility::computeInParallelChunks(executor(), 2, 1, computeChunk, 2),
-      ::testing::StartsWith("Error in chunk "), std::runtime_error);
+      ::testing::StartsWith("Error in chunk "), TestException);
 
   // Both tasks have run (and thrown) before the function returned.
   EXPECT_EQ(numThrown.load(), 2u);

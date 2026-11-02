@@ -8,15 +8,16 @@
 #include <algorithm>
 #include <optional>
 
+#include "global/Constants.h"
 #include "util/Log.h"
 #include "util/Parameters.h"
+#include "util/Synchronized.h"
 
 // A set of parameters that can be accessed with a runtime and a compile time
 // interface. They are currently managed using a synchronized singleton for the
 // complete QLever instance.
 struct RuntimeParameters {
   using Bool = ad_utility::detail::parameterShortNames::Bool;
-  using Double = ad_utility::detail::parameterShortNames::Double;
   template <typename DurationTp>
   using Duration =
       ad_utility::detail::parameterShortNames::DurationParameter<DurationTp>;
@@ -45,12 +46,15 @@ struct RuntimeParameters {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
-  // If the time estimate for a sort operation is larger by more than this
-  // factor than the remaining time, then the sort is canceled with a
-  // timeout exception.
-  Double sortEstimateCancellationFactor_{3.0,
-                                         "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
+
+  // The total amount of memory that may be used for query processing and
+  // caching (the `--memory-for-queries` option of `qlever-server`, called
+  // `MEMORY_FOR_QUERIES` in a Qleverfile). Increasing it at runtime always
+  // succeeds. Decreasing it requires the freed part to be currently unused,
+  // otherwise the change is rejected.
+  MemorySizeParameter memoryForQueries_{DEFAULT_MEM_FOR_QUERIES,
+                                        "memory-for-queries"};
 
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),
                                     "cache-max-size"};
