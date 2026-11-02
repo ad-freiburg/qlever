@@ -12,6 +12,8 @@
 
 #include <queue>
 
+#include "util/ContainersWithAllocator.h"
+
 // ____________________________________________________________________________
 Result BaselineAlgorithm::run() {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -98,7 +100,8 @@ Result BaselineAlgorithm::run() {
     }
   }
   addSkippedRowsWarning(numSkippedLeft, numSkippedRight);
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 #endif
 }

@@ -33,6 +33,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/GeoPointEncoding.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
@@ -91,6 +92,11 @@ struct CommonConfig {
   // each literal, a triple `<literal> ql:has-word "word"` is added for each
   // word in the literal. This is useful for keyword search in literals.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples, see `ad_utility::HasWordNormalization`.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
 };
 
 // Additional configuration used for building an index for a given dataset.
