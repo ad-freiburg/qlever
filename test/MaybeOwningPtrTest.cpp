@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <optional>
+#include <type_traits>
 
 #include "util/MaybeOwningPtr.h"
 
@@ -45,6 +46,8 @@ TEST(MaybeOwningPtr, ownership) {
   EXPECT_EQ(shared.use_count(), 3);
 
   // Moving copies, so the moved-from pointer still owns its object.
+  static_assert(std::is_nothrow_move_constructible_v<MaybeOwningPtr<int>>);
+  static_assert(std::is_nothrow_move_assignable_v<MaybeOwningPtr<int>>);
   auto moved = std::move(owningCopy);
   EXPECT_TRUE(owningCopy.isOwning());
   EXPECT_EQ(owningCopy.get(), shared.get());
