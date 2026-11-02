@@ -549,9 +549,9 @@ class ValueId {
         // already handled above
         AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double>) {
-        // NOTE: `std::to_string` used `%f` for floating-point values before
-        // C++26. Since C++26, it produces the shortest round-trip
-        // representation instead.
+        // NOTE: `%f` is what `std::to_string` did for floating-point values
+        // before C++26. Since C++26, it produces the shortest round-trip
+        // representation instead (`42` instead of `42.000000`).
         ostr << absl::StrFormat("%f", value);
       } else if constexpr (ad_utility::SimilarToAny<T, int64_t, uint64_t>) {
         ostr << std::to_string(value);

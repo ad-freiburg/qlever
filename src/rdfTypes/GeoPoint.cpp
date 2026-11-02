@@ -84,8 +84,11 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
 
 // _____________________________________________________________________________
 std::string GeoPoint::toStringRepresentation() const {
-  // Use `%f` to get more decimals. NOTE: This is what `std::to_string` did
-  // before C++26, which now produces the shortest round-trip representation.
+  // Format both coordinates with `%f` (six decimals).
+  //
+  // NOTE: This is what `std::to_string` did for floating-point values before
+  // C++26. Since C++26, it produces the shortest round-trip representation
+  // instead (`42` instead of `42.000000`), which would change this output.
   return absl::StrFormat("POINT(%f %f)", getLng(), getLat());
 }
 

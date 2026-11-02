@@ -186,8 +186,8 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       return content ? std::string{"true"} : std::string{"false"};
     } else if constexpr (std::is_floating_point_v<T>) {
       // NOTE: `%f` is what `std::to_string` did for floating-point values
-      // before C++26, which now produces the shortest round-trip
-      // representation.
+      // before C++26. Since C++26, it produces the shortest round-trip
+      // representation instead (`42` instead of `42.000000`).
       return absl::StrFormat("%f", content);
     } else if constexpr (std::is_arithmetic_v<T>) {
       return std::to_string(content);
