@@ -723,7 +723,8 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeReportsFailureDetails) {
         compressedBlob);
     EXPECT_THAT(error, isBlobError(expectedType));
     std::string message = error.has_value() ? error.value().message_ : "";
-    EXPECT_THAT(logStream.str(), HasSubstr(message));
+    EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                                     HasSubstr(message)));
     AD_EXPECT_THROW_WITH_MESSAGE(
         target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
         HasSubstr(message));
