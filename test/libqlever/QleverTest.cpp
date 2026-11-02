@@ -1056,7 +1056,8 @@ TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
 }
 
 // Test that a `Qlever` instance with `EngineConfig::compressedBlobFilename_`
-// set is populated from that blob file instead of from the on-disk index.
+// set is populated from that blob file instead of from the on-disk index, and
+// that it rejects the options and operations that it does not support.
 TEST(LibQlever, loadFromCompressedBlobFile) {
   std::string filename = gtestCurrentTestName() + ".blob";
   ad_utility::testing::writeTestBlobFile(filename);
@@ -1067,10 +1068,63 @@ TEST(LibQlever, loadFromCompressedBlobFile) {
   EngineConfig config;
   config.baseName_ = "nonExistingIndexBasename";
   config.compressedBlobFilename_ = filename;
+
+  // `persistUpdates_` is true by default, but not supported for a blob.
+  AD_EXPECT_THROW_WITH_MESSAGE(Qlever{config},
+                               HasSubstr("set `persistUpdates_` to false"));
+  config.persistUpdates_ = false;
+
+  // The other unsupported options.
+  auto expectUnsupported = [&config](auto setOption, std::string_view option,
+                                     ad_utility::source_location l =
+                                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto invalidConfig = config;
+    setOption(invalidConfig);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Qlever{invalidConfig},
+        AllOf(HasSubstr("loaded from a blob"), HasSubstr(option)));
+  };
+  expectUnsupported([](EngineConfig& c) { c.loadTextIndex_ = true; },
+                    "`loadTextIndex_`");
+  expectUnsupported(
+      [](EngineConfig& c) {
+        c.rebuildIndexStrategy_ =
+            RebuildIndexStrategy::parse("automatic:1:2:0.5");
+      },
+      "`rebuildIndexStrategy_`");
+  expectUnsupported(
+      [](EngineConfig& c) { c.preloadMaterializedViews_ = {"someView"}; },
+      "`preloadMaterializedViews_`");
+
+  // The index description is applied also for an index loaded from a blob.
+  config.indexDescription_ = "blob index";
   Qlever qlever{config};
+  EXPECT_TRUE(qlever.isLoadedFromBlob());
   EXPECT_EQ(qlever.query(std::string{ad_utility::testing::testBlobFileQuery},
                          ad_utility::MediaType::tsv),
             ad_utility::testing::testBlobFileQueryResult);
+  EXPECT_EQ(qlever.indexAndViewsSnapshot()->index_.getKbName(), "blob index");
+
+  // Updates, materialized views, and index rebuilds are not supported.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::testing::applyUpdateToEngine(qlever,
+                                               "INSERT DATA { <a> <b> <c> }"),
+      HasSubstr("An update is not supported for an index that is loaded from "
+                "a blob"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.writeMaterializedView("someView", "SELECT * { ?s ?p ?o }"),
+      HasSubstr("Writing a materialized view is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.loadMaterializedView("someView"),
+      HasSubstr("Loading a materialized view is not supported"));
+  auto snapshot = qlever.indexAndViewsSnapshot();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)qlever.rebuildIndexToDisk(
+          snapshot->index_,
+          IndexSwapConfig{"oldSource", "newSource", "oldTarget", "newTarget"},
+          std::make_shared<ad_utility::CancellationHandle<>>()),
+      HasSubstr("An index rebuild is not supported"));
 
   // A blob file that does not exist, or that is a directory, is reported
   // with a readable error message.

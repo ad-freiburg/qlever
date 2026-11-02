@@ -274,8 +274,9 @@ struct EngineConfig : CommonConfig {
   // cache, but no permutations. Such an instance can therefore only answer
   // queries that read from the named result cache (via `SERVICE
   // ql:cached-result-with-name-...`) or that need no triples at all; it does
-  // not support updates or index rebuilds. All other options for loading the
-  // index (like `loadTextIndex_`) are ignored.
+  // not support updates, materialized views, or index rebuilds. Hence
+  // `persistUpdates_`, `loadTextIndex_`, `rebuildIndexStrategy_`, and
+  // `preloadMaterializedViews_` must not be set (see `validate`).
   std::optional<std::string> compressedBlobFilename_;
 
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
@@ -299,6 +300,11 @@ struct EngineConfig : CommonConfig {
   // via the `index-description` and `text-description` API commands.
   std::optional<std::string> indexDescription_;
   std::optional<std::string> textDescription_;
+
+  // Throw if the given configuration is invalid, in particular if
+  // `compressedBlobFilename_` is combined with an option that a `Qlever`
+  // instance that is loaded from a blob does not support.
+  void validate() const;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -362,7 +368,15 @@ class Qlever {
   NamedCachedQueryBlobManager blobManager_;
   friend class NamedCachedQueryBlobManager;
 
+  // True if this instance was populated from the blob file given by
+  // `EngineConfig::compressedBlobFilename_`, see `isLoadedFromBlob`.
+  bool loadedFromBlob_ = false;
+
   FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
+
+  // Throw if `isLoadedFromBlob()`, with a message that says that the given
+  // `operation` is not supported for such an instance.
+  void throwIfLoadedFromBlob(std::string_view operation) const;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -396,6 +410,13 @@ class Qlever {
   // their parallel work (unless a different one is passed to
   // `createQueryExecutionContext`).
   const qlever::Executor& executor() const { return executor_; }
+
+  // Return true if this instance was populated from the blob file given by
+  // `EngineConfig::compressedBlobFilename_`. Such an instance has no
+  // permutations and no files on disk, so `applyUpdate`,
+  // `writeMaterializedView`, `loadMaterializedView`, and `rebuildIndexToDisk`
+  // throw.
+  bool isLoadedFromBlob() const { return loadedFromBlob_; }
 
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see

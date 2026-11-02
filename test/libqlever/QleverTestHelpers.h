@@ -147,9 +147,9 @@ decompressOrFail(ql::span<const char> compressedBlob,
 // given `filename`. The result of querying the pinned result is
 // `testBlobFileQueryResult` below.
 inline void writeTestBlobFile(const std::string& filename) {
-  qlever::Qlever source{qlever::EngineConfig{
-      buildTestIndex("<s> <p> \"blob literal\" .",
-                     ad_utility::VocabularyType::InMemoryUncompressed)}};
+  qlever::Qlever source{
+      buildTestEngineConfig("<s> <p> \"blob literal\" .",
+                            ad_utility::VocabularyType::InMemoryUncompressed)};
   source.queryAndPinResultWithName("blobPin",
                                    "SELECT ?s ?o WHERE { ?s <p> ?o }");
   auto compressedBlob = source.serializeVocabAndNamedCacheToCompressedBlob();

@@ -1251,8 +1251,8 @@ TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
   EXPECT_THAT(lines, testing::IsEmpty());
 }
 
-// Test that a `Server` can be loaded from a blob file, but rejects the options
-// and commands that it does not support in that mode.
+// Test that a `Server` can be loaded from a blob file, but rejects the
+// operations that it does not support in that mode.
 TEST(ServerTest, readFromBlobFile) {
   std::string filename = gtestCurrentTestName() + ".blob";
   writeTestBlobFile(filename);
@@ -1263,20 +1263,6 @@ TEST(ServerTest, readFromBlobFile) {
   auto config =
       serverTestHelpers::getDefaultConfigWithName("nonExistingIndexBasename");
   config.compressedBlobFilename_ = filename;
-
-  // Persisting updates and automatic index rebuilds are not supported.
-  auto configWithPersistUpdates = config;
-  configWithPersistUpdates.persistUpdates_ = true;
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      (Server{4321, 1, "accessToken", configWithPersistUpdates}),
-      testing::HasSubstr("cannot be combined with `--persist-updates`"));
-  auto configWithRebuildStrategy = config;
-  configWithRebuildStrategy.rebuildIndexStrategy_ =
-      qlever::RebuildIndexStrategy::parse("automatic:1:2:0.5");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      (Server{4321, 1, "accessToken", configWithRebuildStrategy}),
-      testing::HasSubstr("cannot be combined with an automatic "
-                         "`--rebuild-index-strategy`"));
 
   // The named cached query from the blob can be answered.
   serverTestHelpers::ServerForTesting server{1, "accessToken", config};
@@ -1289,11 +1275,44 @@ TEST(ServerTest, readFromBlobFile) {
   EXPECT_EQ(serverTestHelpers::responseBodyToString(std::move(response.body())),
             testBlobFileQueryResult);
 
-  // A manual index rebuild is rejected.
-  expectHttpError(
-      [&] {
-        server.process(makeGetRequest("/?cmd=rebuild-index", "accessToken"));
-      },
-      boost::beast::http::status::bad_request,
-      testing::HasSubstr("was loaded from a blob and has no files on disk"));
+  // Updates, materialized views, and index rebuilds are rejected.
+  auto rejectionMessage = [](std::string_view operation) {
+    return absl::StrCat(operation,
+                        " is not supported, because the index of this server "
+                        "was loaded from a blob");
+  };
+  // For an update (like for every SPARQL operation), the error is reported
+  // as a JSON response with the status of the error.
+  auto updateResponse = server.process(
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <a> <b> <c> }"));
+  EXPECT_THAT(updateResponse, StatusIs(http::status::bad_request));
+  EXPECT_THAT(
+      serverTestHelpers::responseBodyToString(std::move(updateResponse.body())),
+      testing::HasSubstr(rejectionMessage("An update")));
+  // The commands throw an `HttpError` with the error message.
+  auto expectRejected = [&server, &rejectionMessage](
+                            const ReqT& request, std::string_view operation,
+                            ad_utility::source_location l =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    expectHttpError([&] { server.process(request); },
+                    boost::beast::http::status::bad_request,
+                    testing::HasSubstr(rejectionMessage(operation)));
+  };
+  expectRejected(makeGetRequest("/?cmd=rebuild-index", "accessToken"),
+                 "An index rebuild");
+  expectRejected(
+      makeRequest(http::verb::post,
+                  "/?cmd=write-materialized-view&view-name=someView",
+                  {{http::field::content_type, "application/sparql-query"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "SELECT * { ?s ?p ?o }"),
+      "Writing a materialized view");
+  expectRejected(
+      makeGetRequest("/?cmd=load-materialized-view&view-name=someView",
+                     "accessToken"),
+      "Loading a materialized view");
 }

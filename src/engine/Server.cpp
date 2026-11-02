@@ -78,22 +78,6 @@ Server::Server(
               : std::make_shared<ad_utility::IndexRebuildIdTracker>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
-  if (config.compressedBlobFilename_.has_value()) {
-    if (config.persistUpdates_) {
-      throw std::runtime_error{
-          "A server that is loaded from a blob does not support persisting "
-          "updates, so `--read-from-blob-file` cannot be combined with "
-          "`--persist-updates`"};
-    }
-    if (config.rebuildIndexStrategy_.has_value()) {
-      throw std::runtime_error{
-          "A server that is loaded from a blob does not support index "
-          "rebuilds, so `--read-from-blob-file` cannot be combined with an "
-          "automatic `--rebuild-index-strategy`"};
-    }
-    loadedFromBlob_ = true;
-  }
-
   initializeServerMetrics(config.memoryLimit_);
 
   if (noAccessCheck_) {
@@ -102,6 +86,18 @@ Server::Server(
   } else {
     AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
                 << "\"" << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+void Server::throwIfLoadedFromBlob(std::string_view operation) const {
+  if (qlever().isLoadedFromBlob()) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        absl::StrCat(operation,
+                     " is not supported, because the index of this server was "
+                     "loaded from a blob (`--read-from-blob-file`) and has no "
+                     "permutations and no files on disk"));
   }
 }
 
@@ -458,6 +454,7 @@ Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
 Awaitable<nlohmann::json> Server::processWriteMaterializedView(
     const ParamValueMap& parameters, const SparqlOperation& operation,
     const ad_utility::Timer& requestTimer) {
+  throwIfLoadedFromBlob("Writing a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
@@ -494,6 +491,7 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
 // _____________________________________________________________________________
 nlohmann::json Server::processLoadMaterializedView(
     const ParamValueMap& parameters, const SharedIndexAndView& indexAndViews) {
+  throwIfLoadedFromBlob("Loading a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
@@ -1393,6 +1391,7 @@ Awaitable<void> Server::processUpdate(
     ad_utility::SharedCancellationHandle cancellationHandle,
     const RequestT& request, SendT&& send,
     std::optional<PlannedQuery>& plannedUpdate) {
+  throwIfLoadedFromBlob("An update");
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
       *metrics_->runningSparqlOperations_, "update"};
@@ -1763,11 +1762,7 @@ CPP_template_def(typename RequestT)(
 Awaitable<Server::ResponseT> Server::processRebuildIndex(
     const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
-  if (loadedFromBlob_) {
-    throw HttpError(boost::beast::http::status::bad_request,
-                    "The index of this server was loaded from a blob and has "
-                    "no files on disk, so it cannot be rebuilt");
-  }
+  throwIfLoadedFromBlob("An index rebuild");
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
                                              std::nullopt),

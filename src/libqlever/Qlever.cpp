@@ -113,6 +113,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
           allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
+  // Reject invalid configurations before loading anything.
+  config.validate();
   // Set runtime parameters relevant for caching and propagate them to the
   // cache.
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
@@ -130,21 +132,11 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   // is bound to nothing.
   globalRuntimeParameters.wlock()->memoryForQueries_.clearOnUpdateAction();
 
-  // If a blob file is given, populate this instance from it instead of from
-  // the on-disk index.
-  if (config.compressedBlobFilename_.has_value()) {
-    const auto& filename = config.compressedBlobFilename_.value();
-    AD_LOG_INFO << "Loading the index from the blob file \"" << filename
-                << "\" ..." << std::endl;
-    deserializeVocabAndNamedCacheFromCompressedBlob(
-        readCompressedBlobFile(filename));
-    return;
-  }
-
   // If `skipLoading` is set, we do not touch the on-disk index at all; the
   // instance is expected to be populated later from a blob (see
-  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
-  if (skipLoading) {
+  // `deserializeVocabAndNamedCacheFromCompressedBlob`). A blob file from the
+  // `config` is loaded in any case (see below).
+  if (skipLoading && !config.compressedBlobFilename_.has_value()) {
     return;
   }
 
@@ -154,19 +146,36 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   auto snapshot = indexAndViewsSnapshot();
   auto& [index, materializedViewsManager] = *snapshot;
 
-  // Load the index from disk.
-  index.usePatterns() = enablePatternTrick_;
-  index.loadAllPermutations() = !config.onlyPsoAndPos_;
-  index.doNotLoadPermutations() = config.doNotLoadPermutations_;
-  index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
-  if (config.loadTextIndex_) {
-    index.addTextFromOnDiskIndex();
+  // Load the index from the blob file if one is given, and from disk
+  // otherwise. A blob has no text index (`validate` has checked that
+  // `loadTextIndex_` is not set in this case).
+  if (config.compressedBlobFilename_.has_value()) {
+    const auto& filename = config.compressedBlobFilename_.value();
+    AD_LOG_INFO << "Loading the index from the blob file \"" << filename
+                << "\" ..." << std::endl;
+    deserializeVocabAndNamedCacheFromCompressedBlob(
+        readCompressedBlobFile(filename));
+    loadedFromBlob_ = true;
+  } else {
+    index.usePatterns() = enablePatternTrick_;
+    index.loadAllPermutations() = !config.onlyPsoAndPos_;
+    index.doNotLoadPermutations() = config.doNotLoadPermutations_;
+    index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
+    if (config.loadTextIndex_) {
+      index.addTextFromOnDiskIndex();
+    }
   }
   if (config.indexDescription_.has_value()) {
     index.setKbName(config.indexDescription_.value());
   }
   if (config.textDescription_.has_value()) {
     index.setTextName(config.textDescription_.value());
+  }
+
+  // An index that is loaded from a blob has no files on disk, and hence no
+  // materialized views (`validate` has checked that none are to be preloaded).
+  if (loadedFromBlob_) {
+    return;
   }
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
@@ -314,6 +323,7 @@ UpdateMetadata Qlever::applyUpdate(
     const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+  throwIfLoadedFromBlob("An update");
   const auto& qet = plannedUpdate.queryExecutionTree();
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
   AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
@@ -506,11 +516,55 @@ void IndexBuilderConfig::validate() const {
 }
 
 // ___________________________________________________________________________
+void EngineConfig::validate() const {
+  if (!compressedBlobFilename_.has_value()) {
+    return;
+  }
+  auto throwUnsupported = [](std::string_view option) {
+    throw std::invalid_argument(absl::StrCat(
+        "An index that is loaded from a blob (`compressedBlobFilename_`, "
+        "`--read-from-blob-file` of `qlever-server`) has no permutations and "
+        "no files on disk, so it cannot be combined with ",
+        option));
+  };
+  if (persistUpdates_) {
+    throwUnsupported(
+        "persisting updates (`persistUpdates_`, `--persist-updates`), set "
+        "`persistUpdates_` to false");
+  }
+  if (loadTextIndex_) {
+    throwUnsupported("loading a text index (`loadTextIndex_`, `--text`)");
+  }
+  if (rebuildIndexStrategy_.has_value()) {
+    throwUnsupported(
+        "automatic index rebuilds (`rebuildIndexStrategy_`, "
+        "`--rebuild-index-strategy`)");
+  }
+  if (!preloadMaterializedViews_.empty()) {
+    throwUnsupported(
+        "preloading materialized views (`preloadMaterializedViews_`, "
+        "`--preload-materialized-views`)");
+  }
+}
+
+// ___________________________________________________________________________
+void Qlever::throwIfLoadedFromBlob(std::string_view operation) const {
+  if (loadedFromBlob_) {
+    throw std::runtime_error(
+        absl::StrCat(operation,
+                     " is not supported for an index that is loaded from a "
+                     "blob, because it has no permutations and no files on "
+                     "disk"));
+  }
+}
+
+// ___________________________________________________________________________
 void Qlever::writeMaterializedView(
     std::string name, std::string query,
     const std::vector<DatasetClause>& datasetClauses,
     SharedCancellationHandle cancellationHandle,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
+  throwIfLoadedFromBlob("Writing a materialized view");
   auto plan = parseAndPlanQuery(std::move(query), datasetClauses,
                                 std::move(cancellationHandle), requestTimer);
   const auto& viewsManager =
@@ -534,6 +588,7 @@ bool Qlever::unloadMaterializedView(const std::string& name) const {
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
+  throwIfLoadedFromBlob("Loading a materialized view");
   auto indexAndViews = indexAndViewsSnapshot();
   auto qec = createQueryExecutionContext(indexAndViews, executor_);
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
@@ -692,6 +747,7 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
 Qlever::RebuildResult Qlever::rebuildIndexToDisk(
     Index& index, const IndexSwapConfig& config,
     const ad_utility::SharedCancellationHandle& handle) const {
+  throwIfLoadedFromBlob("An index rebuild");
   const std::string& indexBaseName = config.newIndexSource();
   ql::filesystem::path directory =
       ql::filesystem::path{indexBaseName}.parent_path();

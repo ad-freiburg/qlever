@@ -79,9 +79,6 @@ class Server {
   friend serverTestHelpers::ServerForTesting;
 
  public:
-  // Throw if `config.compressedBlobFilename_` is set together with
-  // `config.persistUpdates_` or `config.rebuildIndexStrategy_`, because a
-  // server that is loaded from a blob supports neither.
   explicit Server(
       unsigned short port, size_t numThreads, std::string accessToken,
       const qlever::EngineConfig& config, bool noAccessCheck = false,
@@ -135,11 +132,6 @@ class Server {
   // `--rebuild-keep-previous-index-dirs` option of `qlever-server`.
   qlever::KeepPreviousIndexDirs keepPreviousIndexDirs_ =
       qlever::KeepPreviousIndexDirs::OriginalAndMostRecent;
-
-  // True if the index was loaded from a blob (see
-  // `EngineConfig::compressedBlobFilename_`). Such an index has no files on
-  // disk, so it cannot be rebuilt.
-  bool loadedFromBlob_ = false;
 
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
@@ -575,6 +567,13 @@ class Server {
 
   // Completion handler of that coroutine: log the exception, if there is one.
   static void logAutomaticRebuildFailure(std::exception_ptr exception);
+
+  // Throw an `HttpError` (bad request) if the index was loaded from a blob
+  // (see `Qlever::isLoadedFromBlob`), with a message that says that the given
+  // `operation` is not supported for such an index. This reports the error
+  // before any work is done, also for the operations that `Qlever` rejects
+  // itself.
+  void throwIfLoadedFromBlob(std::string_view operation) const;
 
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }

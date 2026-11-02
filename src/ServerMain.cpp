@@ -190,12 +190,11 @@ int main(int argc, char** argv) {
       "only meant for serving a fixed set of precomputed results: the blob "
       "contains no permutations, so only queries that read from the named "
       "result cache (`SERVICE ql:cached-result-with-name-...`) or that need no "
-      "triples at all can be answered. Updates and index rebuilds are not "
-      "supported, so this option cannot be combined with `--persist-updates` "
-      "or an automatic `--rebuild-index-strategy`. The other options for "
-      "loading the index from disk (like `--text`) are ignored. The "
-      "`--index-basename` is still required, it determines the names of the "
-      "log files.");
+      "triples at all can be answered. Updates, materialized views, and index "
+      "rebuilds are not supported, so this option cannot be combined with "
+      "`--persist-updates`, `--text`, an automatic `--rebuild-index-strategy`, "
+      "or `--preload-materialized-views`. The `--index-basename` is still "
+      "required, it determines the names of the log files.");
   add("rebuild-index-strategy",
       po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
       "When to rebuild the index from the current data (including updates). "
