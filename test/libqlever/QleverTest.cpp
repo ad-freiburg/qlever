@@ -160,9 +160,9 @@ TEST(LibQlever, buildIndexWithAnExistingGlobalThreadPool) {
   EXPECT_NO_THROW(Qlever::buildIndex(config));
   EXPECT_THAT(
       logStream.str(),
-      HasSubstr(absl::StrCat("The global thread pool already exists with ",
-                             numThreadsOfPool, " threads, so the ",
-                             numThreadsOfPool + 1, " threads")));
+      ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(HasSubstr(absl::StrCat(
+          "The global thread pool already exists with ", numThreadsOfPool,
+          " threads, so the ", numThreadsOfPool + 1, " threads"))));
   EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsOfPool);
 }
 
