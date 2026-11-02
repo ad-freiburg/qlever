@@ -10,8 +10,14 @@
 
 #include "util/IoUringManager.h"
 
+#include <absl/strings/str_cat.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <array>
+#include <cerrno>
+#include <climits>
+#include <cstring>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -72,24 +78,25 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
 
 //______________________________________________________________________________
 IoUringPolicy::~IoUringPolicy() {
-  if (numInFlightReadRequests_ > 0) {
-    AD_LOG_WARN << "IoUringPolicy destroyed with " << numInFlightReadRequests_
-                << " read request(s) still in flight; all batches should be "
+  if (numOutstandingReadRequests_ > 0) {
+    AD_LOG_WARN << "IoUringPolicy destroyed with "
+                << numOutstandingReadRequests_
+                << " read request(s) still outstanding; all batches should be "
                    "`wait()`ed before destroying the policy. Draining them now "
                    "so the kernel stops writing into the target buffers.\n";
   }
   // Reap the outstanding completions before tearing down the ring, so the
   // kernel is no longer writing into any target buffer once we return. We
-  // deliberately do not call `drainOneCqe` here: it throws on I/O errors, and a
-  // destructor must not throw. We also stop if `io_uring_wait_cqe` fails, to
-  // avoid spinning forever (it would not decrement the in-flight count).
-  while (numInFlightReadRequests_ > 0) {
+  // deliberately do not call `drainAtLeast` here: it throws on I/O errors, and
+  // a destructor must not throw. We also stop if `io_uring_wait_cqe` fails, to
+  // avoid spinning forever (it would not decrement the outstanding count).
+  while (numOutstandingReadRequests_ > 0) {
     io_uring_cqe* cqe = nullptr;
     if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
       break;
     }
     io_uring_cqe_seen(&ring_, cqe);
-    --numInFlightReadRequests_;
+    --numOutstandingReadRequests_;
   }
   io_uring_queue_exit(&ring_);
 }
@@ -105,19 +112,23 @@ void IoUringPolicy::addBatch(int fd,
   if (numReadRequestsToPerform == 0) {
     return;
   }
-  numInFlightReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
+  numOutstandingReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
 
   for (const auto& [numBytesToRead, fileOffset, targetBuf] :
        ::ranges::views::zip(numBytesToReadPerRequest, fileOffsetPerRequest,
                             targetBufferPerRequest)) {
     // The ring has no free slot, so make room: submit what we have prepared so
     // far and block until enough completions have been drained.
-    if (numInFlightReadRequests_ >= ringSize_) {
+    if (numOutstandingReadRequests_ >= ringSize_) {
       // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
+      // Wait for a wave of completions instead of one, and reap every ready
+      // CQE, so a large batch refills the ring in waves rather than one SQE
+      // per reaped CQE.
       io_uring_submit(&ring_);
-      while (numInFlightReadRequests_ >= ringSize_) {
-        drainOneCqe();
+      while (numOutstandingReadRequests_ >= ringSize_) {
+        drainAtLeast(static_cast<unsigned>(
+            std::min<size_t>(REAP_WAVE, numOutstandingReadRequests_)));
       }
     }
 
@@ -135,11 +146,12 @@ void IoUringPolicy::addBatch(int fd,
     // Tag the SQE with a unique request id and record its metadata (the batch
     // it belongs to and how many bytes it should read). io_uring copies the
     // request id (the SQE's `user_data`) verbatim into the matching completion,
-    // so `drainOneCqe` can recover it.
+    // so `processCqe` can recover it.
     const uint64_t requestId = nextRequestIdToAssign_++;
-    inFlightReadsByRequestId_[requestId] = InFlightRead{handle, numBytesToRead};
+    outstandingReadsByRequestId_[requestId] =
+        OutstandingRead{handle, numBytesToRead};
     io_uring_sqe_set_data64(sqe, requestId);
-    numInFlightReadRequests_++;
+    numOutstandingReadRequests_++;
   }
   // Flush the remaining prepared SQEs to the kernel (the loop above only
   // submits when the submission queue is full, so the last group of SQEs has
@@ -149,57 +161,101 @@ void IoUringPolicy::addBatch(int fd,
 
 //______________________________________________________________________________
 void IoUringPolicy::wait(BatchHandle handle) {
-  // Drain completions until this batch is gone. `drainOneCqe` erases a batch as
+  // Drain completions until this batch is gone. `processCqe` erases a batch as
   // soon as its last read completes, so a present entry always still has
-  // outstanding reads.
-  while (numInFlightReadRequestsPerBatch_.find(handle) !=
-         numInFlightReadRequestsPerBatch_.end()) {
-    drainOneCqe();
+  // outstanding reads. Waiting for up to `REAP_WAVE` CQEs never waits longer
+  // than this batch needs: it cannot finish before its own remaining reads
+  // complete, and any CQE (also of other batches) counts towards the wave.
+  for (auto it = numOutstandingReadRequestsPerBatch_.find(handle);
+       it != numOutstandingReadRequestsPerBatch_.end();
+       it = numOutstandingReadRequestsPerBatch_.find(handle)) {
+    drainAtLeast(
+        static_cast<unsigned>(std::min<size_t>(REAP_WAVE, it->second)));
+  }
+  // Throw only now that every read of the batch is reaped, so the kernel no
+  // longer writes into its buffers.
+  if (auto failed = failedBatches_.find(handle);
+      failed != failedBatches_.end()) {
+    const char* errorMessage = failed->second;
+    failedBatches_.erase(failed);
+    AD_THROW(errorMessage);
   }
 }
 
 //______________________________________________________________________________
-void ad_utility::IoUringPolicy::drainOneCqe() {
-  // Block until at least one completion queue entry (CQE) is available.
+void IoUringPolicy::drainAtLeast(unsigned minComplete) {
+  AD_CORRECTNESS_CHECK(minComplete > 0);
+  AD_CORRECTNESS_CHECK(minComplete <= numOutstandingReadRequests_);
+
+  // Block until at least `minComplete` completion queue entries (CQEs) are
+  // ready. This typically costs one `io_uring_enter` for the whole wave (and
+  // one more after each `EINTR`).
   io_uring_cqe* cqe = nullptr;
-  int ret = io_uring_wait_cqe(&ring_, &cqe);
+  int ret = 0;
+  do {
+    ret = io_uring_wait_cqes(&ring_, &cqe, minComplete, nullptr, nullptr);
+  } while (ret == -EINTR);
   if (ret < 0) {
-    AD_THROW("io_uring_wait_cqe failed in IoUringPolicy");
+    AD_THROW(absl::StrCat("io_uring_wait_cqes failed in IoUringPolicy: ",
+                          std::strerror(-ret)));
   }
 
-  // Recover the read's result (`cqe->res`) and the request id we stored in the
-  // SQE, then consume the CQE so its slot is freed. Do this before any throw.
-  const int numBytesRead = cqe->res;
-  const uint64_t requestId = io_uring_cqe_get_data64(cqe);
-  io_uring_cqe_seen(&ring_, cqe);
-  numInFlightReadRequests_--;
+  // Reap every ready CQE in chunks. `io_uring_peek_batch_cqe` does not block;
+  // `io_uring_cq_advance` releases a whole chunk with one CQ-head update
+  // instead of one `io_uring_cqe_seen` per CQE. Every CQE of the wave is
+  // applied to the bookkeeping, so the outstanding counts stay consistent and
+  // no CQE is processed twice.
+  std::array<io_uring_cqe*, 64> cqes{};
+  while (true) {
+    const unsigned n = io_uring_peek_batch_cqe(
+        &ring_, cqes.data(), static_cast<unsigned>(cqes.size()));
+    if (n == 0) {
+      break;
+    }
+    for (const io_uring_cqe* cqe :
+         ql::span<io_uring_cqe* const>(cqes.data(), n)) {
+      // Recover the id via the 64-bit `user_data` field, see `addBatch`.
+      processCqe(cqe->res, io_uring_cqe_get_data64(cqe));
+    }
+    io_uring_cq_advance(&ring_, n);
+  }
+}
 
-  // Every reaped CQE corresponds to exactly one in-flight read whose id we
+//______________________________________________________________________________
+void IoUringPolicy::processCqe(int numBytesRead, uint64_t requestId) {
+  --numOutstandingReadRequests_;
+
+  // Every reaped CQE corresponds to exactly one outstanding read whose id we
   // inserted in `addBatch`, so the entry must be present.
-  auto reqIt = inFlightReadsByRequestId_.find(requestId);
-  AD_CORRECTNESS_CHECK(reqIt != inFlightReadsByRequestId_.end());
-  const InFlightRead inFlightRead = reqIt->second;
-  inFlightReadsByRequestId_.erase(reqIt);
+  auto reqIt = outstandingReadsByRequestId_.find(requestId);
+  AD_CORRECTNESS_CHECK(reqIt != outstandingReadsByRequestId_.end());
+  const OutstandingRead outstandingRead = reqIt->second;
+  outstandingReadsByRequestId_.erase(reqIt);
 
-  // `cqe->res` < 0 is `-errno`.
-  if (numBytesRead < 0) {
-    AD_THROW("I/O error in IoUringPolicy read operation");
-  }
-  // A result smaller than requested (a partial read, or 0 at end of file) means
-  // we read fewer bytes than expected, which we treat as an error.
-  if (static_cast<size_t>(numBytesRead) != inFlightRead.expectedNumBytes) {
-    AD_THROW("read fewer bytes than requested in IoUringPolicy");
-  }
-
-  // Attribute the completion to its batch and decrement that batch's in-flight
-  // count, erasing the batch once its last read completes. The entry must still
-  // be present here: the read we are processing belongs to this batch and was
-  // outstanding, so the batch's count was at least one and it had not yet been
-  // erased.
-  auto it = numInFlightReadRequestsPerBatch_.find(inFlightRead.batchHandle);
-  AD_CORRECTNESS_CHECK(it != numInFlightReadRequestsPerBatch_.end());
+  // Attribute the completion to its batch and decrement that batch's
+  // outstanding count, erasing the batch once its last read is reaped. This
+  // happens also for a failed read, so a batch whose read failed does not stay
+  // outstanding.
+  auto it =
+      numOutstandingReadRequestsPerBatch_.find(outstandingRead.batchHandle);
+  AD_CORRECTNESS_CHECK(it != numOutstandingReadRequestsPerBatch_.end());
   if (--it->second == 0) {
-    numInFlightReadRequestsPerBatch_.erase(it);
+    numOutstandingReadRequestsPerBatch_.erase(it);
+  }
+
+  // `cqe->res` < 0 is `-errno`. A result smaller than requested (a partial
+  // read, or 0 at end of file) means we read fewer bytes than expected, which
+  // we treat as an error.
+  const char* errorMessage = nullptr;
+  if (numBytesRead < 0) {
+    errorMessage = "I/O error in IoUringPolicy read operation";
+  } else if (static_cast<size_t>(numBytesRead) !=
+             outstandingRead.expectedNumBytes) {
+    errorMessage = "read fewer bytes than requested in IoUringPolicy";
+  }
+  if (errorMessage != nullptr) {
+    // Keep the first failure of the batch; `wait()` of that batch throws it.
+    failedBatches_.try_emplace(outstandingRead.batchHandle, errorMessage);
   }
 }
 

@@ -1,6 +1,12 @@
-// Copyright 2016, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2016 - 2026, The QLever Authors, in particular:
+//
+// 2016 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 #define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
@@ -230,8 +236,11 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t nextOffset_;
   };
 
-  // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
-  // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
+  // Phase 1 of `lookupBatch`: for each requested index, return its `OffsetPair`
+  // from the `.offsets` file, read in a single batch via `manager`. The file
+  // stores one `uint64_t` per index, and the pair of index `i` is entries `i`
+  // and `i + 1`, so a run of `k` consecutive indices is read as one range of
+  // `k + 1` entries.
   std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
                                           ql::span<const size_t> indices) const;
 
