@@ -110,9 +110,8 @@ bool contains_if(const Container& container, const Predicate& predicate) {
  * @param source Vector&& to append
  */
 CPP_template(typename T, typename U)(
-    requires ad_utility::SimilarTo<
-        std::vector<T>, U>) void appendVector(std::vector<T>& destination,
-                                              U&& source) {
+    requires ad_utility::SimilarTo<std::vector<T>, U>)
+void appendVector(std::vector<T>& destination, U&& source) {
   destination.insert(destination.end(),
                      ad_utility::makeForwardingIterator<U>(source.begin()),
                      ad_utility::makeForwardingIterator<U>(source.end()));
@@ -182,8 +181,8 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // used to keep track of which values we have already seen. One of these
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
-CPP_template(typename Range)(requires ql::ranges::forward_range<
-                             Range>) auto removeDuplicates(const Range& input)
+CPP_template(typename Range)(requires ql::ranges::forward_range<Range>)
+auto removeDuplicates(const Range& input)
     -> std::vector<typename std::iterator_traits<
         ql::ranges::iterator_t<Range>>::value_type> {
   using T =
@@ -202,12 +201,9 @@ CPP_template(typename Range)(requires ql::ranges::forward_range<
 // Return a new `std::input` that is obtained by applying the `function` to each
 // of the elements of the `input`.
 CPP_template(typename Array, typename Function)(
-    requires ad_utility::isArray<std::decay_t<Array>> CPP_and
-        ql::concepts::invocable<
-            Function,
-            typename Array::value_type>) auto transformArray(Array&& input,
-                                                             Function
-                                                                 function) {
+    requires ad_utility::isArray<std::decay_t<Array>> &&
+    ql::concepts::invocable<Function, typename Array::value_type>)
+auto transformArray(Array&& input, Function function) {
   return std::apply(
       [&function](auto&&... vals) {
         return std::array{std::invoke(function, AD_FWD(vals))...};
@@ -284,8 +280,8 @@ constexpr ForwardIterator
 // calls), while a partition point that is far away still requires only a
 // logarithmic number of calls (a linear scan would need `last - first` calls).
 CPP_template(typename RandomAccessIterator, typename Predicate)(
-    requires ql::concepts::random_access_iterator<
-        RandomAccessIterator>) constexpr RandomAccessIterator
+    requires ql::concepts::random_access_iterator<RandomAccessIterator>)
+constexpr RandomAccessIterator
     gallopingPartitionPoint(RandomAccessIterator first,
                             RandomAccessIterator last, Predicate pred) {
   using DistanceType = ql::iter_difference_t<RandomAccessIterator>;
