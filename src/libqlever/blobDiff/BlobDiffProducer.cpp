@@ -194,8 +194,9 @@ BlobDiffProducer::WeeklyResult stepImpl(const BlobDiffConfig& config,
       ql::span<const char>{baseBytes.data(), baseBytes.size()},
       ql::span<const char>{targetBytes.data(), targetBytes.size()},
       config.diffCompressionLevel_);
-  auto applied =
-      blobDiff::applyBlobDiffToCompressedBase(previousBlob, result.diffFile_);
+  auto applied = blobDiff::applyBlobDiffToCompressedBase(
+      previousBlob, result.diffFile_,
+      ad_utility::MemorySize::bytes(targetBytes.size()));
   if (const auto* error = std::get_if<blobDiff::BlobDiffError>(&applied)) {
     throw std::runtime_error{absl::StrCat(
         "Self-check failed: the diff file cannot be applied to the previous "
@@ -301,7 +302,9 @@ std::string BlobDiffProducer::inspect(
                    " bytes decompressed, SHA-256 of the decompressed blob ",
                    absl::StrJoin(checksum, "", ad_utility::hexFormatter));
   if (diffFile.has_value()) {
-    auto header = blobDiff::readBlobDiffHeader(diffFile.value());
+    // Only the header is inspected, nothing is allocated.
+    auto header = blobDiff::readBlobDiffHeader(diffFile.value(),
+                                               ad_utility::MemorySize::max());
     if (const auto* error = std::get_if<blobDiff::BlobDiffError>(&header)) {
       absl::StrAppend(&result, "\nThe diff file is invalid: ", error->message_);
       return result;

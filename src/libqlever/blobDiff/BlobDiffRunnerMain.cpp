@@ -113,8 +113,11 @@ int runApply(int argc, char** argv) {
       "diff", po::value(&diff)->required(), "The diff file.")(
       "out", po::value(&out)->required(), "Write the new blob here.");
   parse(options, argc, argv);
+  // The runner is used on trusted files, so the size of the target is not
+  // limited.
   auto result = qlever::blobDiff::applyBlobDiffToCompressedBase(
-      readBinaryFile(base), readBinaryFile(diff));
+      readBinaryFile(base), readBinaryFile(diff),
+      ad_utility::MemorySize::max());
   if (const auto* error =
           std::get_if<qlever::blobDiff::BlobDiffError>(&result)) {
     std::cerr << "Error: " << error->message_ << std::endl;

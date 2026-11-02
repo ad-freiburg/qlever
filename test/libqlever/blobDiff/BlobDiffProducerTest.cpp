@@ -234,7 +234,8 @@ std::vector<char> applyOrFail(
     ql::span<const char> baseBlob, ql::span<const char> diffFile,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  auto result = blobDiff::applyBlobDiffToCompressedBase(baseBlob, diffFile);
+  auto result = blobDiff::applyBlobDiffToCompressedBase(
+      baseBlob, diffFile, ad_utility::MemorySize::gigabytes(1));
   if (const auto* error = std::get_if<blobDiff::BlobDiffError>(&result)) {
     ADD_FAILURE() << error->message_;
     return {};
@@ -337,8 +338,8 @@ TEST(BlobDiffProducer, weeklyStepsAreSelfConsistentAndEquivalentToFreshBuilds) {
   EXPECT_THAT(garbageDescription, HasSubstr("The diff file is invalid"));
 
   // The diff of a week only applies to the blob of the week before.
-  auto wrongBase =
-      blobDiff::applyBlobDiffToCompressedBase(weeks.blobs_[0], weeks.diffs_[3]);
+  auto wrongBase = blobDiff::applyBlobDiffToCompressedBase(
+      weeks.blobs_[0], weeks.diffs_[3], ad_utility::MemorySize::gigabytes(1));
   ASSERT_TRUE(std::holds_alternative<blobDiff::BlobDiffError>(wrongBase));
   EXPECT_EQ(std::get<blobDiff::BlobDiffError>(wrongBase).type_,
             blobDiff::BlobDiffErrorType::wrongBase);
