@@ -530,8 +530,8 @@ void EngineConfig::validate() const {
   };
   if (persistUpdates_) {
     throwUnsupported(
-        "persisting updates (`persistUpdates_`, `--persist-updates`), set "
-        "`persistUpdates_` to false");
+        "persisting updates (`persistUpdates_`, which is true by default, or "
+        "`--persist-updates`)");
   }
   if (loadTextIndex_) {
     throwUnsupported("loading a text index (`loadTextIndex_`, `--text`)");

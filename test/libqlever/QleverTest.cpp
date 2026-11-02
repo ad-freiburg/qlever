@@ -1076,8 +1076,10 @@ TEST(LibQlever, loadFromCompressedBlobFile) {
   config.compressedBlobFilename_ = filename;
 
   // `persistUpdates_` is true by default, but not supported for a blob.
-  AD_EXPECT_THROW_WITH_MESSAGE(Qlever{config},
-                               HasSubstr("set `persistUpdates_` to false"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever{config},
+      HasSubstr("(`persistUpdates_`, which is true by default, or "
+                "`--persist-updates`)"));
   config.persistUpdates_ = false;
 
   // The other unsupported options.
