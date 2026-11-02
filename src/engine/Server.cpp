@@ -672,7 +672,8 @@ Server::ResponseT Server::processMetrics(bool accessTokenOk,
 std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     const ParamValueMap& parameters, bool accessTokenOk) const {
   bool parameterChanged = false;
-  for (const auto& key : globalRuntimeParameters.rlock()->getKeys()) {
+  for (const auto& key :
+       globalRuntimeParameters.rlock()->getKeysIncludingAliases()) {
     if (auto value = serverProcessHelpers::checkAndLogParameterSetting(
             parameters, key, accessTokenOk, "setting runtime parameters")) {
       globalRuntimeParameters.wlock()->setFromString(key, value.value());

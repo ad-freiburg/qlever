@@ -202,16 +202,24 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   EXPECT_EQ(totalSize,
             static_cast<size_t>(reinterpret_cast<char*>(&params.runtimeMap_) -
                                 reinterpret_cast<char*>(&params)));
-  // The deprecated aliases registered in the constructor are additional keys.
-  constexpr size_t numAliases = 1;
-  EXPECT_EQ(numParameters + numAliases, keys.size());
+  EXPECT_EQ(numParameters, keys.size());
 }
 
-// Test that a deprecated alias sets the same parameter as its new name.
+// Test that a deprecated alias sets the same parameter as its new name, but is
+// not listed among the parameters.
 TEST(RuntimeParameters, deprecatedAlias) {
+  // The old name of `sparql-results-json-with-meta`.
   RuntimeParameters params;
-  params.setFromString("sparql-results-json-with-time", "false");
+  std::string alias = "sparql-results-json-with-time";
+
+  // Setting the alias sets `sparqlResultsJsonWithMeta_`.
+  params.setFromString(alias, "false");
   EXPECT_FALSE(params.sparqlResultsJsonWithMeta_.get());
-  params.setFromAssignment("sparql-results-json-with-time=true");
+  params.setFromAssignment(alias + "=true");
   EXPECT_TRUE(params.sparqlResultsJsonWithMeta_.get());
+
+  // The alias is listed by `getKeysIncludingAliases` only.
+  EXPECT_THAT(params.getKeys(), ::testing::Not(::testing::Contains(alias)));
+  EXPECT_FALSE(params.toMap().contains(alias));
+  EXPECT_THAT(params.getKeysIncludingAliases(), ::testing::Contains(alias));
 }

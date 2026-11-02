@@ -77,8 +77,9 @@ RuntimeParameters::RuntimeParameters() {
   // Deprecated aliases (old names of renamed parameters), so that existing
   // configurations keep working.
   auto addAlias = [this](std::string alias, auto& parameter) {
-    AD_CONTRACT_CHECK(!ad_utility::contains(runtimeMap_, alias));
-    runtimeMap_[std::move(alias)] = &parameter;
+    AD_CONTRACT_CHECK(!ad_utility::contains(runtimeMap_, alias) &&
+                      !ad_utility::contains(aliasMap_, alias));
+    aliasMap_[std::move(alias)] = &parameter;
   };
   addAlias("sparql-results-json-with-time", sparqlResultsJsonWithMeta_);
 
@@ -129,13 +130,15 @@ RuntimeParameters::toMap() const {
 // _____________________________________________________________________________
 void RuntimeParameters::setFromString(const std::string& name,
                                       const std::string& value) {
-  if (!ad_utility::contains(runtimeMap_, name)) {
+  const auto& map =
+      ad_utility::contains(aliasMap_, name) ? aliasMap_ : runtimeMap_;
+  if (!ad_utility::contains(map, name)) {
     throw std::runtime_error{
         "No parameter with name " + std::string{name} +
         " exists. Available parameters are: " + absl::StrJoin(getKeys(), ", ")};
   }
   try {
-    runtimeMap_.at(name)->setFromString(value);
+    map.at(name)->setFromString(value);
   } catch (const std::exception& e) {
     throw std::runtime_error("Could not set parameter " + std::string{name} +
                              " to value " + value +
@@ -159,5 +162,12 @@ void RuntimeParameters::setFromAssignment(const std::string& assignment) {
 std::vector<std::string> RuntimeParameters::getKeys() const {
   static std::vector<std::string> keys =
       ::ranges::to<std::vector>(runtimeMap_ | ql::views::keys);
+  return keys;
+}
+
+// _____________________________________________________________________________
+std::vector<std::string> RuntimeParameters::getKeysIncludingAliases() const {
+  auto keys = getKeys();
+  ql::ranges::copy(aliasMap_ | ql::views::keys, std::back_inserter(keys));
   return keys;
 }

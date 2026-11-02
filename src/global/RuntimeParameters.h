@@ -291,6 +291,10 @@ struct RuntimeParameters {
 
   std::map<std::string, ad_utility::ParameterBase*, std::less<>> runtimeMap_;
 
+  // Deprecated old names of renamed parameters. They can still be set, but are
+  // listed by neither `toMap` nor `getKeys`.
+  std::map<std::string, ad_utility::ParameterBase*, std::less<>> aliasMap_;
+
   // Constructor: Add all parameters to the map.
   RuntimeParameters();
 
@@ -299,7 +303,7 @@ struct RuntimeParameters {
   // to human users.
   [[nodiscard]] ad_utility::HashMap<std::string, std::string> toMap() const;
 
-  //  Set a parameter from a string.
+  // Set a parameter (given by its name or a deprecated alias) from a string.
   // Throws if the parameter does not exist or if the value is invalid.
   void setFromString(const std::string& parameterName,
                      const std::string& value);
@@ -312,6 +316,10 @@ struct RuntimeParameters {
 
   // Get all parameter names.
   std::vector<std::string> getKeys() const;
+
+  // Get all parameter names and deprecated aliases, that is, all names that
+  // `setFromString` accepts.
+  std::vector<std::string> getKeysIncludingAliases() const;
 
   // Copy and move are disallowed.
   RuntimeParameters(const RuntimeParameters&) = delete;
