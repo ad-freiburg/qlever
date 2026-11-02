@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstring>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -28,8 +29,12 @@
 
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 namespace {
-// Return a `std::string_view` wrapping the passed value.
-std::string_view raw(const std::integral auto& value) {
+// Return a `std::string_view` wrapping the passed value. It is not restricted
+// to integral types, because it is also used for `Id::T`, which is a struct in
+// the split layout.
+template <typename T>
+requires std::is_trivially_copyable_v<T>
+std::string_view raw(const T& value) {
   return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
 }
 }  // namespace
@@ -53,8 +58,12 @@ AD_ALWAYS_INLINE static Id toExportableId(Id originalId,
 // The format transfers the bits of `Id`s directly, so a change of their
 // representation requires increasing `ad_utility::binaryQleverExportVersion`.
 // The following assertions only detect a change of the datatype tags.
+#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
+static_assert(ad_utility::binaryQleverExportVersion == 2);
+#else
 static_assert(ad_utility::binaryQleverExportVersion == 1);
 static_assert(Id::numDatatypeBits == 4);
+#endif
 static constexpr auto datatypesOfVersion1 = []() {
   using enum Datatype;
   return std::to_array({Undefined, Bool, Int, Double, VocabIndex,
@@ -105,7 +114,8 @@ struct Header {
 // The reader reads the first `Id` of each row and compares it to this marker
 // to decide whether a row or a batch of strings follows. This is subtle: it
 // only works because the marker is never the first `Id` of an actual row.
-static constexpr Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
+static constexpr Id::T vocabMarker =
+    Id::fromBits(Datatype::Undefined, 0b10101010).getBits();
 static_assert(Id::fromBits(vocabMarker).getDatatype() == Datatype::Undefined);
 
 // _____________________________________________________________________________
