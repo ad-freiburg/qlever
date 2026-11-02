@@ -676,6 +676,31 @@ TEST(SparqlParser, DataBlock) {
                                              {1, lit("\"f\"")}}));
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
+
+  // String literals in every syntactic form (both quote styles, long strings,
+  // language tag, datatype, escape sequences, multiple lines) are parsed to
+  // the expected `TripleComponent`.
+  auto expectLiteral = [&](std::string_view literal, TripleComponent expected,
+                           ad_utility::source_location l =
+                               AD_CURRENT_SOURCE_LOC()) {
+    expectDataBlock(absl::StrCat("?a { ", literal, " }"),
+                    m::Values({Var{"?a"}}, {{std::move(expected)}}), l);
+  };
+  expectLiteral(R"("foo")", lit("\"foo\""));
+  expectLiteral(R"('foo')", lit("\"foo\""));
+  expectLiteral(R"("")", lit("\"\""));
+  expectLiteral(R"('''a'b''c''')", lit("\"a'b''c\""));
+  expectLiteral(R"("foo"@en-US)", lit("\"foo\"", "@en-US"));
+  expectLiteral(R"("foo"^^<http://www.w3.org/2001/XMLSchema#string>)",
+                lit("\"foo\"", "^^<http://www.w3.org/2001/XMLSchema#string>"));
+  expectLiteral(R"("42"^^<http://www.w3.org/2001/XMLSchema#integer>)", 42);
+  expectLiteral(R"("foo"^^<http://example.org/dt>)",
+                lit("\"foo\"", "^^<http://example.org/dt>"));
+  expectLiteral(R"("a\"b\\c\nz")", lit(R"("a\"b\\c\nz")"));
+  expectLiteral(R"("ä\U0001F600")", lit("\"ä😀\""));
+  expectLiteral(R"("""multi
+"line" ""string""")",
+                lit(R"("multi\n\"line\" \"\"string")"));
 }
 
 TEST(SparqlParser, InlineData) {

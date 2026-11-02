@@ -12,6 +12,8 @@
 
 #include <queue>
 
+#include "util/ContainersWithAllocator.h"
+
 // ____________________________________________________________________________
 Result BaselineAlgorithm::run() {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -47,6 +49,8 @@ Result BaselineAlgorithm::run() {
 
     // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
+      // Each iteration might parse a geometry, which is expensive.
+      throwIfCancelled();
       auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
       // Count each right row only once, not once per left row.
       if (rowLeft == 0) {
@@ -96,7 +100,8 @@ Result BaselineAlgorithm::run() {
     }
   }
   addSkippedRowsWarning(numSkippedLeft, numSkippedRight);
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 #endif
 }

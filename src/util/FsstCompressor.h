@@ -24,8 +24,8 @@ namespace detail {
 // `reinterpret_cast` is safe.
 struct CastToUnsignedPtr {
   CPP_template(typename T)(
-      requires ad_utility::SameAsAny<T, char*, const char*>) auto
-  operator()(T ptr) const {
+      requires ad_utility::SameAsAny<T, char*, const char*>)
+  auto operator()(T ptr) const {
     using Res = std::conditional_t<ql::concepts::same_as<T, const char*>,
                                    const unsigned char*, unsigned char*>;
     return reinterpret_cast<Res>(ptr);
@@ -72,8 +72,8 @@ class FsstDecoder {
   }
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
-      requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
-      allowTrivialSerialization(T, U&&) {
+      requires ql::concepts::same_as<T, FsstDecoder>)
+  friend std::true_type allowTrivialSerialization(T, U&&) {
     return {};
   }
 };

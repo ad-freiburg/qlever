@@ -92,18 +92,24 @@ TEST(StringUtils, utf8ToLowerUpperNoICU) {
             utf8ToUpper("Schindler's List"));
 }
 
-// _____________________________________________________________________________
+// Test that `removeAccentsUtf8` removes exactly the accents.
 TEST(StringUtils, removeAccentsUtf8) {
   using ad_utility::removeAccentsUtf8;
+
+  // Pure ASCII is returned unchanged.
   EXPECT_EQ(removeAccentsUtf8("plain ascii"), "plain ascii");
-  // Composed and decomposed é.
+
+  // Accents are removed from composed and decomposed characters.
   EXPECT_EQ(removeAccentsUtf8("Café"), "Cafe");
   EXPECT_EQ(removeAccentsUtf8("Cafe\xcc\x81"), "Cafe");
   EXPECT_EQ(removeAccentsUtf8("äöüñçÅ"), "aouncA");
-  // ß and ø have no decomposition and are kept.
+
+  // "ß" and "ø" have no decomposition and are kept.
   EXPECT_EQ(removeAccentsUtf8("ßø"), "ßø");
+
   // Hangul syllables decompose into jamo (not marks) and are recomposed.
   EXPECT_EQ(removeAccentsUtf8("한"), "한");
+
   // Without ICU, the input is returned unchanged.
   EXPECT_EQ(removeAccentsUtf8<false>("Café"), "Café");
 }

@@ -188,7 +188,7 @@ std::optional<std::string> normalizeString(std::optional<std::string> s,
     return std::nullopt;
   }
   return absl::StrJoin(
-      context->_qec.getIndex().getImpl().getHasWordWords(s.value()), " ");
+      context->_qec.getIndex().getImpl().getNormalizedWords(s.value()), " ");
 }
 }  // namespace
 
@@ -519,9 +519,9 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 //______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
     requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
-             concepts::same_as<std::optional<std::string>, T>)) T
-    getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
-             ValueGetter& valueGetter) {
+             concepts::same_as<std::optional<std::string>, T>))
+T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
+           ValueGetter& valueGetter) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:

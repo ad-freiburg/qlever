@@ -456,6 +456,11 @@ void IndexImpl::prepareIndexBuild() {
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+  // The normalization of the words of the `ql:has-word` triples is stored so
+  // that the server can later normalize the words of queries and updates in
+  // the same way.
+  configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
+      hasWordNormalization_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1591,6 +1596,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // The normalization of the words of the `ql:has-word` triples of this index
+  // (an index built before this key existed uses `Lowercase`).
+  loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
+                 ad_utility::HasWordNormalization::Lowercase);
+
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
   // materialized view, for example), so that all permutations of an index have
@@ -1615,6 +1625,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                    geoCellGridScheme);
     vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
         static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
   }
 
   // Initialize BlankNodeManager
@@ -1630,6 +1647,23 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 }
 
 // ___________________________________________________________________________
+std::vector<std::string> IndexImpl::getNormalizedWords(
+    std::string_view text) const {
+  // With `LowercaseNoAccents`, remove the accents before the tokenization
+  // (combining marks are not alphanumeric and would otherwise split words).
+  // `textWithoutAccents` owns the result, so that `text` stays valid during
+  // the tokenization.
+  std::string textWithoutAccents;
+  if (hasWordNormalization_ ==
+      ad_utility::HasWordNormalization::LowercaseNoAccents) {
+    textWithoutAccents = ad_utility::removeAccentsUtf8(text);
+    text = textWithoutAccents;
+  }
+  return ::ranges::to<std::vector<std::string>>(
+      tokenizeAndNormalizeText(text, vocab_.getLocaleManager()));
+}
+
+// ___________________________________________________________________________
 ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   ProcessedTriple result;
   auto& resultTriple = result.triple_;
@@ -1641,19 +1675,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = lit.getContent();
-      // Remove the accents before tokenizing: combining marks are not
-      // alphanumeric, so they would otherwise split words.
-      // Owns the content if the accents are removed, so that `content` stays
-      // valid during the tokenization.
-      std::string contentWithoutAccents;
-      if (hasWordNormalization_ ==
-          ad_utility::HasWordNormalization::LowercaseNoAccents) {
-        contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
-        content = contentWithoutAccents;
-      }
-      for (auto&& word :
-           tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+      for (auto& word : getNormalizedWords(lit.getContent())) {
         ++result.wordFrequencies_[std::move(word)];
       }
     }
@@ -2022,17 +2044,6 @@ std::vector<float> IndexImpl::getMultiplicities(
                             numTriples / numDistinctObjects().normal};
   auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::getResultSizeOfScan(
-    const ScanSpecification& scanSpecification,
-    const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  const auto& perm = getPermutation(permutation);
-  return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      locatedTriplesState);
 }
 
 // _____________________________________________________________________________

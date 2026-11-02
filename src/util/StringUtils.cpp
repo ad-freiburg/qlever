@@ -243,8 +243,12 @@ template std::string utf8ToUpper<false>(std::string_view, const char*);
 template <bool useICU>
 std::string removeAccentsUtf8(std::string_view s) {
   if constexpr (useICU) {
+    // Only use ICU if `s` contains non-ASCII characters (pure ASCII has no
+    // accents and is returned unchanged below).
     if (!ql::ranges::all_of(s, [](unsigned char c) { return c < 0x80; })) {
       QLEVER_UNICODE_ONLY("removeAccentsUtf8", {
+        // Get the NFD and NFC normalizers (singletons owned by ICU, so this is
+        // cheap) and throw if an ICU call fails.
         auto raise = [](UErrorCode err) {
           if (U_FAILURE(err)) {
             throw std::runtime_error(u_errorName(err));
@@ -255,6 +259,9 @@ std::string removeAccentsUtf8(std::string_view s) {
         raise(err);
         const icu::Normalizer2* nfc = icu::Normalizer2::getNFCInstance(err);
         raise(err);
+
+        // Decompose `s`, so that each accent becomes a separate nonspacing
+        // mark, and drop these marks.
         icu::UnicodeString decomposed =
             nfd->normalize(icu::UnicodeString::fromUTF8(icu::StringPiece{
                                s.data(), static_cast<int32_t>(s.size())}),
@@ -268,6 +275,9 @@ std::string removeAccentsUtf8(std::string_view s) {
           }
           i += U16_LENGTH(c);
         }
+
+        // Recompose the remaining characters (otherwise, e.g. Hangul syllables
+        // would stay decomposed into their jamo) and convert back to UTF-8.
         icu::UnicodeString recomposed = nfc->normalize(stripped, err);
         raise(err);
         std::string result;

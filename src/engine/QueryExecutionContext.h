@@ -23,6 +23,7 @@
 #include "index/SortConfig.h"
 #include "util/AllocateShared.h"
 #include "util/Cache.h"
+#include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
 #include "util/Executor.h"
 
@@ -53,9 +54,8 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  CPP_template(typename IdTableT)(
-      requires IdTableLike<IdTableT>) static ad_utility::MemorySize
-      getSize(const IdTableT& idTable) {
+  CPP_template(typename IdTableT)(requires IdTableLike<IdTableT>)
+  static ad_utility::MemorySize getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
                                          BYTES_PER_ID_COLUMN_ENTRY);
   }
@@ -118,7 +118,9 @@ class QueryExecutionContext
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
       DisableCaching = DisableCaching::FromRuntimeParameter,
-      bool disableMaterializedViewRewriting = false);
+      bool disableMaterializedViewRewriting = false,
+      ad_utility::SharedCancellationHandle cancellationHandle =
+          std::make_shared<ad_utility::CancellationHandle<>>());
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -266,13 +268,25 @@ class QueryExecutionContext
   const qlever::Executor& executor() const { return executor_; }
 
   // How the in-memory sorts of this query run in parallel (see
-  // `IdTableUtils::sort`), created by `makeSortConfig(executor())` when this
-  // context is constructed.
+  // `IdTableUtils::sort`), created by
+  // `makeSortConfig(executor(), cancellationHandle())` when this context is
+  // constructed, such that the sorts can be cancelled together with the query.
   const SortConfig& sortConfig() const { return sortConfig_; }
 
   // Return a `SortConfig` for sorting on the `executor`, the number of tasks
-  // of which is the runtime parameter `sort-num-tasks-in-flight`.
-  static SortConfig makeSortConfig(qlever::Executor executor);
+  // of which is the runtime parameter `sort-num-tasks-in-flight`, and which
+  // checks the `cancellationHandle`.
+  static SortConfig makeSortConfig(
+      qlever::Executor executor,
+      ad_utility::SharedCancellationHandle cancellationHandle);
+
+  // The cancellation handle of the query that is executed using this context.
+  // All operations of the query (including the ones that are created during
+  // its execution) check this handle. By default (see the constructor), this
+  // is a handle that is never cancelled.
+  const ad_utility::SharedCancellationHandle& cancellationHandle() const {
+    return cancellationHandle_;
+  }
 
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
@@ -347,7 +361,11 @@ class QueryExecutionContext
   qlever::Executor executor_;
 
   // See the documentation for the getter with the same name above.
-  SortConfig sortConfig_ = makeSortConfig(executor_);
+  ad_utility::SharedCancellationHandle cancellationHandle_;
+
+  // See the documentation for the getter with the same name above. Declared
+  // after `executor_` and `cancellationHandle_`, from which it is created.
+  SortConfig sortConfig_ = makeSortConfig(executor_, cancellationHandle_);
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
