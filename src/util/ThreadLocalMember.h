@@ -22,9 +22,11 @@
 #include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 
@@ -130,7 +132,7 @@ class ThreadLocalMemberRegistry : public NoCopyNoMove {
       }
     }
     auto& threads = state->threads_;
-    threads.erase(std::find(threads.begin(), threads.end(), thread));
+    threads.erase(ql::ranges::find(threads, thread));
   }
 };
 
@@ -203,7 +205,9 @@ class ThreadLocalMember : public NoCopyNoMove {
     // There are no concurrent users of an object that is being destroyed.
     uint32_t id = id_.load(std::memory_order_relaxed);
     if (id != Registry::noId) {
-      registry().releaseId(id);
+      ad_utility::terminateIfThrows(
+          [id] { registry().releaseId(id); },
+          "Releasing the id of a `ThreadLocalMember`");
     }
   }
 
@@ -257,12 +261,18 @@ class ThreadLocalMember : public NoCopyNoMove {
 
     // Call the `OnThreadExit` callbacks and unregister.
     ~ThreadValues() {
-      registry().unregisterThread(
-          this, values_.size(), [this](ThreadLocalMember& object, uint32_t id) {
-            if (object.onThreadExit_) {
-              object.onThreadExit_(values_[id]);
-            }
-          });
+      ad_utility::terminateIfThrows(
+          [this] {
+            registry().unregisterThread(
+                this, values_.size(),
+                [this](ThreadLocalMember& object, uint32_t id) {
+                  if (object.onThreadExit_) {
+                    object.onThreadExit_(values_[id]);
+                  }
+                });
+          },
+          "Unregistering the values of an exiting thread from a "
+          "`ThreadLocalMember`");
       fastState_ = {{}, true};
     }
 
@@ -274,13 +284,12 @@ class ThreadLocalMember : public NoCopyNoMove {
       return values;
     }
 
-    // Make sure that there are at least `size` values. Only called via
-    // `Registry::resize`.
+    // Grow to at least `size` values, which must be more than the current
+    // number of values. Only called via `Registry::resize`.
     void resize(size_t size) {
-      if (size > values_.size()) {
-        values_.resize(std::max(size, 2 * values_.size()));
-        fastState_.values_ = values_;
-      }
+      AD_CORRECTNESS_CHECK(size > values_.size());
+      values_.resize(std::max(size, 2 * values_.size()));
+      fastState_.values_ = values_;
     }
 
     // Reset the value with the given `id`, the object of which is being
