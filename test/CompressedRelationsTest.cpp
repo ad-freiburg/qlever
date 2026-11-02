@@ -853,6 +853,25 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   test({V(4)}, {block2, block3}, 2);
   test({V(6)}, {block3}, 2);
 
+  // A long join column, each value twice, with gaps. The binary search that
+  // skips the entries smaller than the next block then has many entries to
+  // search, and the result must be the same as for the short columns above.
+  auto longColumn = [](const std::vector<int64_t>& excluded) {
+    std::vector<Id> column;
+    for (int64_t i = 0; i < 100; ++i) {
+      if (!ad_utility::contains(excluded, i)) {
+        column.insert(column.end(), {V(i), V(i)});
+      }
+    }
+    return column;
+  };
+  // Values smaller than `block2` and larger than `block3`, nothing in between.
+  test(longColumn({3, 4, 5, 6}), {}, 2);
+  // Additionally the value 5, which lies in `block3` only.
+  test(longColumn({3, 4, 6}), {block3}, 2);
+  // All values, so both blocks match.
+  test(longColumn({}), {block2, block3}, 2);
+
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
   scanSpec.setCol1Id(V(4));
