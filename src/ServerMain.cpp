@@ -310,7 +310,8 @@ int main(int argc, char** argv) {
             std::string_view{"help"})) {
       std::cout << "Available runtime parameters and their default values:\n";
       auto parameters = globalRuntimeParameters.rlock()->toMap();
-      for (const auto& name : globalRuntimeParameters.rlock()->getKeys()) {
+      auto keys = globalRuntimeParameters.rlock()->getKeys();
+      for (const auto& name : keys) {
         std::cout << "  " << name << " = " << parameters.at(name) << '\n';
       }
       return EXIT_SUCCESS;
