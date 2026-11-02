@@ -815,8 +815,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # `const&` in `PropertyMatcher::MatchAndExplainImpl` (`gmock-matchers.h`)
     # as used uninitialized, for every use of `::testing::Property`. The warning
     # is emitted in the translation units of the tests, so it has to be
-    # disabled for all the targets that use `gmock`. This still happens with the
-    # `main` branch of `googletest` as of 2026-10-30, so updating it is no fix.
+    # disabled for all the targets that use `gmock`. This is a bug in GCC (not
+    # in `googletest`), see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124380.
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
         CMAKE_CXX_STANDARD GREATER_EQUAL 26)
         target_compile_options(gmock INTERFACE -Wno-uninitialized)
