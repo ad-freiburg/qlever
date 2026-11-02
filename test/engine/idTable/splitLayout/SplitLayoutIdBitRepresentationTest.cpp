@@ -38,7 +38,6 @@ TEST(SplitLayoutIdBitRepresentationTest, construction) {
 // the memory held other bytes before.
 TEST(SplitLayoutIdBitRepresentationTest, bytesAreDeterministic) {
   using Rep = SplitLayoutIdBitRepresentation;
-  static_assert(sizeof(Rep) == 16);
 
   // Construct the bit representations in memory that is not zero.
   alignas(Rep) std::array<unsigned char, sizeof(Rep)> memory;

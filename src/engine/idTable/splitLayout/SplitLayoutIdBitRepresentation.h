@@ -49,9 +49,9 @@ struct SplitLayoutIdBitRepresentation {
       numSemanticallyUsedBytes;
   static_assert(numPaddingBytes == 7);
 
-  // Explicit padding bytes, which are always set to zero by the constructor
-  // below, s.t. the bytes of a bit representation are deterministic (e.g. for
-  // writing them to disk). With them, the layout is the same as the one of a
+  // Explicit padding bytes, always set to zero by the constructor below, so
+  // that the bytes of a bit representation are deterministic (e.g. for writing
+  // them to disk). With them, the layout is the same as the one of the upcoming
   // `SplitLayoutId`.
   std::array<uint8_t, numPaddingBytes> padding_;
 
@@ -66,10 +66,12 @@ struct SplitLayoutIdBitRepresentation {
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
       SplitLayoutIdBitRepresentation)
 
-  // The datatype-major comparison: first compare the datatype byte, then the
-  // payload bits as unsigned integers, analogously to the bitwise comparison
-  // of a `SplitLayoutId`. NOTE: The defaulted comparison would compare the
-  // members in the order of their declaration, so first the `payload_`.
+  // Compare the datatype byte first and then the payload bits as unsigned
+  // integers, analogously to the bitwise comparison of the upcoming
+  // `SplitLayoutId`.
+  //
+  // NOTE: The defaulted comparison would compare the members in the order of
+  // their declaration, so first the `payload_`.
   [[nodiscard]] constexpr ql::strong_ordering compareThreeWay(
       const SplitLayoutIdBitRepresentation& other) const {
     const auto typeComparison = ql::compareThreeWay(datatype_, other.datatype_);
@@ -77,11 +79,13 @@ struct SplitLayoutIdBitRepresentation {
                                : ql::compareThreeWay(payload_, other.payload_);
   }
 
-  // Compare the datatype first and then the payload, like `compareThreeWay`
-  // above. NOTE: Not defaulted, because in C++20 the defaulted equality would
-  // compare the members in the order of their declaration and also the
-  // `padding_`, but in C++17 (the macro with a tie) only the listed members,
-  // and both should behave exactly the same.
+  // Equal iff the datatype and the payload are equal, like `compareThreeWay`
+  // above.
+  //
+  // NOTE: Not defaulted, because a defaulted equality would also compare the
+  // `padding_` in C++20, but only the listed members with the C++17 macro
+  // (`QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL`), and both modes must
+  // behave the same.
   constexpr bool operator==(const SplitLayoutIdBitRepresentation& other) const {
     return datatype_ == other.datatype_ && payload_ == other.payload_;
   }
