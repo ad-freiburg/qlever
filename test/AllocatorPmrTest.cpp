@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <optional>
 
 #include "backports/memory_resource.h"
 #include "util/AllocatorPmr.h"
@@ -157,4 +158,57 @@ TEST(AllocatorPmr, FromResourceNoLimit) {
   int* p = alloc.allocate(10);
   ASSERT_NE(p, nullptr);
   alloc.deallocate(p, 10);
+}
+
+// A non-owning copy shares the resource of its owner. Copies of a non-owning
+// allocator (also rebound ones) are non-owning, too.
+TEST(AllocatorPmr, NonOwningCopy) {
+  static_assert(sizeof(int) == 4);
+  auto owner = makePmrAllocatorWithLimit<int>(8_B);
+  EXPECT_TRUE(owner.isOwning());
+  auto nonOwning = owner.nonOwningCopy();
+  EXPECT_FALSE(nonOwning.isOwning());
+  EXPECT_EQ(nonOwning, owner);
+  EXPECT_EQ(nonOwning.resource(), owner.resource());
+
+  int* p = nonOwning.allocate(1);
+  EXPECT_EQ(owner.amountMemoryLeft(), 4_B);
+
+  PmrAllocator<int> copy{nonOwning};
+  EXPECT_FALSE(copy.isOwning());
+  auto moved = std::move(copy);
+  EXPECT_FALSE(moved.isOwning());
+  auto rebound = nonOwning.as<char>();
+  EXPECT_FALSE(rebound.isOwning());
+  EXPECT_EQ(rebound.amountMemoryLeft(), 4_B);
+
+  // A non-owning copy of a non-owning copy is fine as well.
+  auto nonOwning2 = moved.nonOwningCopy();
+  EXPECT_FALSE(nonOwning2.isOwning());
+  nonOwning2.deallocate(p, 1);
+  EXPECT_EQ(owner.amountMemoryLeft(), 8_B);
+
+  // An allocator for a platform resource is non-owning from the start.
+  ql::pmr::monotonic_buffer_resource platformPool;
+  auto platformAlloc = makePmrAllocatorFromResource<int>(&platformPool);
+  EXPECT_FALSE(platformAlloc.isOwning());
+  EXPECT_EQ(platformAlloc.nonOwningCopy().resource(), &platformPool);
+}
+
+// A non-owning copy that outlives its owner terminates the program when the
+// lifetime checks are enabled.
+TEST(AllocatorPmr, NonOwningCopyOutlivesOwner) {
+#ifdef QL_ENABLE_LIFETIME_CHECKS
+  auto outliveOwner = []() {
+    std::optional<PmrAllocator<int>> nonOwning;
+    {
+      auto owner = makePmrAllocatorWithLimit<int>(8_B);
+      nonOwning.emplace(owner.nonOwningCopy());
+    }
+    nonOwning.reset();
+  };
+  EXPECT_DEATH(outliveOwner(), "outlived the owner");
+#else
+  GTEST_SKIP() << "The lifetime checks are disabled in this build";
+#endif
 }
