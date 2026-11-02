@@ -1114,6 +1114,13 @@ TEST(LibQlever, loadFromCompressedBlobFile) {
             ad_utility::testing::testBlobFileQueryResult);
   EXPECT_EQ(qlever.indexAndViewsSnapshot()->index_.getKbName(), "blob index");
 
+  // A query that needs a permutation fails with a readable message (the
+  // permutations of such an instance are never loaded).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.query("SELECT * { ?s <p> ?o }", ad_utility::MediaType::tsv),
+      AllOf(HasSubstr("This query requires the permutation"),
+            HasSubstr("which was not loaded")));
+
   // Updates, materialized views, and index rebuilds are not supported.
   AD_EXPECT_THROW_WITH_MESSAGE(
       ad_utility::testing::applyUpdateToEngine(qlever,
