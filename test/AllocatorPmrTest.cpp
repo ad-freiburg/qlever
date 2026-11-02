@@ -160,8 +160,8 @@ TEST(AllocatorPmr, FromResourceNoLimit) {
   alloc.deallocate(p, 10);
 }
 
-// A non-owning copy shares the resource of its owner. Copies of a non-owning
-// allocator (also rebound ones) are non-owning, too.
+// Test that a non-owning copy shares the resource of its owner and that copies
+// of a non-owning allocator (also rebound ones) are non-owning, too.
 TEST(AllocatorPmr, NonOwningCopy) {
   static_assert(sizeof(int) == 4);
   auto owner = makePmrAllocatorWithLimit<int>(8_B);
@@ -195,8 +195,8 @@ TEST(AllocatorPmr, NonOwningCopy) {
   EXPECT_EQ(platformAlloc.nonOwningCopy().resource(), &platformPool);
 }
 
-// A non-owning copy that outlives its owner terminates the program when the
-// lifetime checks are enabled.
+// Test that a non-owning copy that outlives its owner terminates the program
+// when the lifetime checks are enabled.
 TEST(AllocatorPmr, NonOwningCopyOutlivesOwner) {
 #ifdef QL_ENABLE_LIFETIME_CHECKS
   auto outliveOwner = []() {
