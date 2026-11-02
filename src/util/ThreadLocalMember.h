@@ -22,6 +22,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/NoCopyNoMove.h"
@@ -186,9 +187,16 @@ class ThreadLocalMember : public NoCopyNoMove {
   OnThreadExit onThreadExit_;
 
  public:
-  // Construct with the given callback for exiting threads.
-  explicit ThreadLocalMember(OnThreadExit onThreadExit = [](T&) {})
-      : onThreadExit_{std::move(onThreadExit)} {}
+  // Construct without a callback for exiting threads.
+  ThreadLocalMember() = default;
+
+  // Construct with the given callback for exiting threads. The callback is
+  // constructed in place: moving an `absl::AnyInvocable` that stores a
+  // stateless lambda triggers a false positive `-Wuninitialized` in GCC 13+.
+  CPP_template(typename F)(
+      requires std::is_constructible_v<OnThreadExit, F &&>)
+  explicit ThreadLocalMember(F&& onThreadExit)
+      : onThreadExit_{std::forward<F>(onThreadExit)} {}
 
   // Reset the values of all threads.
   ~ThreadLocalMember() {
@@ -251,7 +259,9 @@ class ThreadLocalMember : public NoCopyNoMove {
     ~ThreadValues() {
       registry().unregisterThread(
           this, values_.size(), [this](ThreadLocalMember& object, uint32_t id) {
-            object.onThreadExit_(values_[id]);
+            if (object.onThreadExit_) {
+              object.onThreadExit_(values_[id]);
+            }
           });
       fastState_ = {{}, true};
     }
