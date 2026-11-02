@@ -596,6 +596,7 @@ void Qlever::loadMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 void Qlever::deleteMaterializedView(std::string name) const {
+  throwIfLoadedFromBlob("Deleting a materialized view");
   const auto indexAndViews = indexAndViewsSnapshot();
   indexAndViews->materializedViewsManager_.deleteView(name);
 }

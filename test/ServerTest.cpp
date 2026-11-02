@@ -1315,4 +1315,8 @@ TEST(ServerTest, readFromBlobFile) {
       makeGetRequest("/?cmd=load-materialized-view&view-name=someView",
                      "accessToken"),
       "Loading a materialized view");
+  expectRejected(
+      makeGetRequest("/?cmd=delete-materialized-view&view-name=someView",
+                     "accessToken"),
+      "Deleting a materialized view");
 }

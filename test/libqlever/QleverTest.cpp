@@ -1118,6 +1118,9 @@ TEST(LibQlever, loadFromCompressedBlobFile) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlever.loadMaterializedView("someView"),
       HasSubstr("Loading a materialized view is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.deleteMaterializedView("someView"),
+      HasSubstr("Deleting a materialized view is not supported"));
   auto snapshot = qlever.indexAndViewsSnapshot();
   AD_EXPECT_THROW_WITH_MESSAGE(
       (void)qlever.rebuildIndexToDisk(

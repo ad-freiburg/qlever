@@ -505,6 +505,7 @@ nlohmann::json Server::processLoadMaterializedView(
 // _____________________________________________________________________________
 nlohmann::json Server::processDeleteMaterializedView(
     const ParamValueMap& parameters) const {
+  throwIfLoadedFromBlob("Deleting a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
