@@ -51,6 +51,7 @@ struct CallFunctionAndPassToHandler {
       };
       net::post(net::bind_executor(handlerExec, std::move(doCall)));
     };
+    std::exception_ptr exception;
     try {
       // If `function_()` throws no exception, we have no
       // exception_ptr and the return value as the second argument.
@@ -60,16 +61,28 @@ struct CallFunctionAndPassToHandler {
       } else {
         callHandler(std::exception_ptr{}, function_());
       }
+      return;
     } catch (...) {
-      // If `function_()` throws, we propagate the exception to the
-      // handler, and have no return value.
-      if constexpr (isVoid) {
-        callHandler(std::current_exception());
-      } else {
-        // Unfortunately we need to pass a `Value{}` even in the case of an
-        // error. This is due to a limitation in Boost::Asio.
-        callHandler(std::current_exception(), Value{});
-      }
+      exception = std::current_exception();
+    }
+    // If `function_()` throws, we propagate the exception to the handler, and
+    // have no return value.
+    //
+    // NOTE: The handler is posted only after the `catch` block has been left.
+    // Otherwise, the handler could already run on another thread (and e.g.
+    // read and release the exception) while this thread still holds the
+    // reference of the `catch` block. Then this thread would free the exception
+    // when leaving the `catch` block. This is correct, but the reference count
+    // of the exception is maintained inside `libstdc++`, which is not
+    // instrumented, so ThreadSanitizer would report the freeing as a data race
+    // (see `misc/tsan-suppressions.txt`). This way, all the references of this
+    // thread are released before the handler is posted.
+    if constexpr (isVoid) {
+      callHandler(std::move(exception));
+    } else {
+      // Unfortunately we need to pass a `Value{}` even in the case of an
+      // error. This is due to a limitation in Boost::Asio.
+      callHandler(std::move(exception), Value{});
     }
   }
 };
