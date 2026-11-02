@@ -422,8 +422,8 @@ class Qlever {
   // Return true if this instance was populated from the blob file given by
   // `EngineConfig::compressedBlobFilename_`. Such an instance has no
   // permutations and no files on disk, so `applyUpdate`,
-  // `writeMaterializedView`, `loadMaterializedView`, `deleteMaterializedView`,
-  // and `rebuildIndexToDisk` throw.
+  // `vacuumDeltaTriples`, `writeMaterializedView`, `loadMaterializedView`,
+  // `deleteMaterializedView`, and `rebuildIndexToDisk` throw.
   bool isLoadedFromBlob() const { return loadedFromBlob_; }
 
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`

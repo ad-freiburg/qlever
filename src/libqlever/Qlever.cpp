@@ -388,6 +388,7 @@ DeltaTriplesCount Qlever::clearDeltaTriples() const {
 // _____________________________________________________________________________
 nlohmann::json Qlever::vacuumDeltaTriples(
     SharedCancellationHandle handle) const {
+  throwIfLoadedFromBlob("Vacuuming the delta triples");
   auto snapshot = indexAndViewsSnapshot();
   return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
       [handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });

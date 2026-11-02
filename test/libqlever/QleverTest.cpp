@@ -1128,6 +1128,10 @@ TEST(LibQlever, loadFromCompressedBlobFile) {
       HasSubstr("An update is not supported for an index that is loaded from "
                 "a blob"));
   AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.vacuumDeltaTriples(
+          std::make_shared<ad_utility::CancellationHandle<>>()),
+      HasSubstr("Vacuuming the delta triples is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
       qlever.writeMaterializedView("someView", "SELECT * { ?s ?p ?o }"),
       HasSubstr("Writing a materialized view is not supported"));
   AD_EXPECT_THROW_WITH_MESSAGE(

@@ -1321,4 +1321,6 @@ TEST(ServerTest, readFromBlobFile) {
       makeGetRequest("/?cmd=delete-materialized-view&view-name=someView",
                      "accessToken"),
       "Deleting a materialized view");
+  expectRejected(makeGetRequest("/?cmd=vacuum-delta-triples", "accessToken"),
+                 "Vacuuming the delta triples");
 }

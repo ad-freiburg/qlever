@@ -439,6 +439,7 @@ Awaitable<DeltaTriplesCount> Server::processClearDeltaTriples() {
 // _____________________________________________________________________________
 Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
     std::optional<std::string_view> userTimeout, bool accessTokenOk) {
+  throwIfLoadedFromBlob("Vacuuming the delta triples");
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   TimeLimit timeLimit =
       verifyUserSubmittedQueryTimeout(userTimeout, accessTokenOk);
