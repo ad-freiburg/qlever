@@ -41,6 +41,7 @@
 #include "../../util/ParallelBlockMergeTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 
 using parallelBlockMergeTestHelpers::asyncGetNextBlock;
@@ -784,7 +785,8 @@ TEST(CompressedIdTableBlockStorage, theUncompressedSpillFileHasTheExactSize) {
   // handing out the end-of-chunk sentinel deletes the file of that chunk, see
   // `aFinishedChunkReclaimsItsSpillFile`.
   EXPECT_EQ(ql::filesystem::file_size(filename),
-            4 * numColumns * BYTES_PER_ID_COLUMN_ENTRY);
+            4 * numColumns *
+                ad_utility::idColumnByteIO::CompressFormat::numBytesPerId);
   GetOutcomes gets;
   runAndPoll(ioContext, [&] { get(storage, 0, gets, true); });
   EXPECT_THAT(gets.blocks_,

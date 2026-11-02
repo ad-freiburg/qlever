@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "engine/idTable/IdColumnByteIO.h"
 #include "global/RuntimeParameters.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/LocatedTriples.h"
@@ -792,12 +793,14 @@ template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
     Iterator iterator) {
-  auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
-      compressedBlock.data(), compressedBlock.size(), iterator,
-      numRowsToRead * sizeof(*iterator));
-  static_assert(BYTES_PER_ID_COLUMN_ENTRY == sizeof(*iterator));
-  AD_CORRECTNESS_CHECK(numRowsToRead * BYTES_PER_ID_COLUMN_ENTRY ==
-                       numBytesActuallyRead);
+  ad_utility::idColumnByteIO::CompressFormat::decode(
+      IdColumnRef{iterator, numRowsToRead},
+      [&compressedBlock](ql::span<char> bytes) {
+        auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
+            compressedBlock.data(), compressedBlock.size(), bytes.data(),
+            bytes.size());
+        AD_CORRECTNESS_CHECK(numBytesActuallyRead == bytes.size());
+      });
 }
 
 // ____________________________________________________________________________

@@ -17,6 +17,7 @@
 #include <cmath>
 #include <functional>
 
+#include "engine/idTable/IdColumnByteIO.h"
 #include "global/RuntimeParameters.h"
 #include "index/GraphComputation.h"
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
@@ -55,9 +56,11 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
-  static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * sizeof(column[0]));
+  std::vector<char> compressedBlock =
+      ad_utility::idColumnByteIO::CompressFormat::encode(
+          column, [](ql::span<const char> bytes) {
+            return ZstdWrapper::compress(bytes.data(), bytes.size());
+          });
   auto compressedSize = compressedBlock.size();
   // Reserve a range of the file and write to it with the positioned
   // `File::write`, which needs a shared lock only. The compression above and
