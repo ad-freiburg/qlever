@@ -13,6 +13,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -20,6 +21,7 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
+using ad_utility::testing::iriLocalVocabEntry;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
@@ -86,7 +88,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
   LocalVocab localVocab;
   [[maybe_unused]] auto local =
-      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
           "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
@@ -200,11 +202,11 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/1>", localVocabContext));
+      iriLocalVocabEntry("<http://example.org/1>", localVocabContext));
 
   LocalVocab vocab2;
   vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/2>", localVocabContext));
+      iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
   cache.store("query-1", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table1.clone()),
@@ -534,7 +536,7 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+  localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
       "<http://example.org/test>", qec_->getLocalVocabContext()));
   ASSERT_EQ(localVocab.size(), 1);
 

@@ -15,6 +15,7 @@
 #include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "./SpatialJoinPrefilterTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/SpatialJoinConfig.h"
@@ -158,8 +159,8 @@ TEST(SpatialJoinParser, InvalidWktIsSkipped) {
                    "LINESTRING(1 1, 3 3, 4 a)", "not wkt",
                    "<http://example.com/crs> POINT(1 2)"}) {
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(lit(wkt),
-                                                  qec->getLocalVocabContext()));
+        ad_utility::testing::localVocabEntryFromStringRepresentation(
+            lit(wkt), qec->getLocalVocabContext()));
     parser.addValueIdToQueue(Id::makeFromLocalVocabIndex(idx), row++, false,
                              std::nullopt);
   }
