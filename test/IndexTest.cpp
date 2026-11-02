@@ -34,6 +34,7 @@
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
+#include "index/SortConfig.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
@@ -546,8 +547,8 @@ TEST(IndexTest, emptyTextIndex) {
     auto* qec = ad_utility::testing::getQec(std::move(config));
     // Building an empty text index must succeed, and scanning it for any word
     // must yield no postings.
-    IdTable result =
-        qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
+    IdTable result = qec->getIndex().getWordPostingsForTerm(
+        "*", qec->getAllocator(), qec->sortConfig());
     EXPECT_EQ(result.size(), 0);
   }
 }
@@ -689,14 +690,46 @@ TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
       std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
                 createDocsFileLineAsString(1, "dummy")};
   auto* qec = ad_utility::testing::getQec(std::move(config));
-  IdTable helloResult =
-      qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
+  IdTable helloResult = qec->getIndex().getWordPostingsForTerm(
+      "hello", qec->getAllocator(), qec->sortConfig());
   ASSERT_EQ(helloResult.size(), 1u);
 
-  IdTable polygonResult =
-      qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
+  IdTable polygonResult = qec->getIndex().getWordPostingsForTerm(
+      "polygon", qec->getAllocator(), qec->sortConfig());
   ASSERT_EQ(polygonResult.size(), 1u);
   EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
+}
+
+// Test that the text index scans check the cancellation handle of the
+// `SortConfig` that they are given, before the first block is read.
+TEST(IndexTest, textIndexScansAreCancellable) {
+  ad_utility::testing::TestIndexConfig config{"<a> <b> \"hello world\" ."};
+  config.createTextIndex = true;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
+                createDocsFileLineAsString(1, "dummy")};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  const auto& index = qec->getIndex();
+  const auto& allocator = qec->getAllocator();
+
+  // With a cancelled handle, both kinds of scans throw.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  SortConfig sortConfig{qec->sortConfig().executor_, 1, handle};
+  EXPECT_THROW(index.getWordPostingsForTerm("hello", allocator, sortConfig),
+               ad_utility::CancellationException);
+  EXPECT_THROW(index.getEntityMentionsForWord("hello", allocator, sortConfig),
+               ad_utility::CancellationException);
+
+  // With the `SortConfig` of the query, whose handle is not cancelled, the
+  // scans succeed.
+  EXPECT_EQ(index.getWordPostingsForTerm("hello", allocator, qec->sortConfig())
+                .size(),
+            1u);
+  EXPECT_EQ(
+      index.getEntityMentionsForWord("hello", allocator, qec->sortConfig())
+          .size(),
+      1u);
 }
 
 // The text of a docsfile line is stored verbatim, so exporting a text record

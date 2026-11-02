@@ -343,10 +343,13 @@ class CompressedRelationReader {
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
-  // of the relevant blocks.
+  // of the relevant blocks, which reads the first and the last block of the
+  // scan and all the blocks that contain located triples. The
+  // `cancellationHandle` is checked before each of these reads.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle) const;
 
   // Get a lower and an upper bound for the size of the result of the scan. For
   // this call, it is enough that each located triple knows the block to which
@@ -357,11 +360,12 @@ class CompressedRelationReader {
 
  private:
   // Common implementation of `getResultSizeOfScan` and `getSizeEstimateForScan`
-  // above.
+  // above. The `cancellationHandle` is only checked if `exactSize` is true.
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle) const;
 
  public:
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
