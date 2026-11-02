@@ -92,10 +92,11 @@ class AllocatorWithLimit {
 
  public:
   // Obtain a shared `AllocationMemoryLeft` by calls to
-  // `makeSharedAllocationMemoryLeft()`, which also takes the
-  // `ClearOnAllocation` hook.
-  explicit AllocatorWithLimit(std::shared_ptr<detail::AllocationMemoryLeft> ml)
-      : tracker_{std::move(ml)} {}
+  // `makeSharedAllocationMemoryLeft()`.
+  explicit AllocatorWithLimit(
+      std::shared_ptr<detail::AllocationMemoryLeft> ml,
+      ClearOnAllocation clearOnAllocation = ad_utility::noop)
+      : tracker_{std::move(ml), std::move(clearOnAllocation)} {}
 
   // Obtain an AllocatorWithLimit<OtherType> that refers to the same limit.
   template <typename U>
@@ -104,7 +105,7 @@ class AllocatorWithLimit {
   }
 
   // Return an allocator with the same limit that doesn't keep the shared
-  // `AllocationMemoryLeft` alive, so that copying it costs no atomic
+  // memory limit alive, so that copying it costs no atomic
   // operation. This allocator (or another owning copy of it) has to outlive the
   // result, all its copies, and all memory allocated by them. This is checked
   // when the expensive checks are enabled (see `util/MaybeOwningPtr.h`). Use
@@ -202,8 +203,8 @@ class AllocatorWithLimit {
   static AllocatorWithLimit makeLimited(
       MemorySize limit,
       ClearOnAllocation clearOnAllocation = ad_utility::noop) {
-    return AllocatorWithLimit{
-        makeSharedAllocationMemoryLeft(limit, std::move(clearOnAllocation))};
+    return AllocatorWithLimit{makeSharedAllocationMemoryLeft(limit),
+                              std::move(clearOnAllocation)};
   }
 
  private:

@@ -18,7 +18,7 @@
 #include "util/AllocatorWithLimitImpl.h"
 #include "util/MemoryLimitTracker.h"
 
-// Tests for the per-thread caches of `AllocationMemoryLeft`. The accounting
+// Tests for the per-thread caches of `SharedMemoryLimit`. The accounting
 // that is visible from a single thread is also tested for both allocator
 // backends in `AllocatorBackendTest.cpp`.
 
@@ -27,12 +27,12 @@ namespace {
 using namespace ad_utility::memory_literals;
 using ad_utility::MemorySize;
 using ad_utility::detail::AllocationExceedsLimitException;
-using ad_utility::detail::AllocationMemoryLeft;
+using ad_utility::detail::SharedMemoryLimit;
 using Alloc = ad_utility::allocatorImpl::AllocatorWithLimit<char>;
 
-constexpr size_t maxSmall = AllocationMemoryLeft::maxCachedAllocationSize;
-constexpr size_t refill = AllocationMemoryLeft::cacheRefillSize;
-constexpr size_t maxCached = AllocationMemoryLeft::maxCachedBytes;
+constexpr size_t maxSmall = SharedMemoryLimit::maxCachedAllocationSize;
+constexpr size_t refill = SharedMemoryLimit::cacheRefillSize;
+constexpr size_t maxCached = SharedMemoryLimit::maxCachedBytes;
 
 // Return `alloc.amountMemoryLeft()` as seen from a fresh thread, which has no
 // cache for the pool of `alloc`. This is the value of the shared counter.
