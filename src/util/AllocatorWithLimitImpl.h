@@ -90,11 +90,10 @@ class AllocatorWithLimit {
 
  public:
   // Obtain a shared `AllocationMemoryLeft` by calls to
-  // `makeSharedAllocationMemoryLeft()`.
-  explicit AllocatorWithLimit(
-      std::shared_ptr<detail::AllocationMemoryLeft> ml,
-      ClearOnAllocation clearOnAllocation = ad_utility::noop)
-      : tracker_{std::move(ml), std::move(clearOnAllocation)} {}
+  // `makeSharedAllocationMemoryLeft()`, which also takes the
+  // `ClearOnAllocation` hook.
+  explicit AllocatorWithLimit(std::shared_ptr<detail::AllocationMemoryLeft> ml)
+      : tracker_{std::move(ml)} {}
 
   // Obtain an AllocatorWithLimit<OtherType> that refers to the same limit.
   template <typename U>
@@ -184,8 +183,8 @@ class AllocatorWithLimit {
   static AllocatorWithLimit makeLimited(
       MemorySize limit,
       ClearOnAllocation clearOnAllocation = ad_utility::noop) {
-    return AllocatorWithLimit{makeSharedAllocationMemoryLeft(limit),
-                              std::move(clearOnAllocation)};
+    return AllocatorWithLimit{
+        makeSharedAllocationMemoryLeft(limit, std::move(clearOnAllocation))};
   }
 };
 

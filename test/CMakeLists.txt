@@ -325,6 +325,8 @@ addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
+addLinkAndDiscoverTestNoLibs(MemoryLimitTrackerTest)
+
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
