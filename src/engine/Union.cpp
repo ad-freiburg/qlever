@@ -92,25 +92,36 @@ std::vector<ColumnIndex> Union::sortOrderForSubtree(size_t subtreeIndex) const {
 }
 
 // _____________________________________________________________________________
+bool Union::isDecidingColumn(ColumnIndex column) const {
+  auto [leftColumn, rightColumn] = _columnOrigins.at(column);
+  if (leftColumn != NO_COLUMN && rightColumn != NO_COLUMN) {
+    return false;
+  }
+  bool missingInLeft = leftColumn == NO_COLUMN;
+  const auto& info = _subtrees.at(missingInLeft ? 1 : 0)
+                         ->getVariableAndInfoByColumnIndex(
+                             missingInLeft ? rightColumn : leftColumn)
+                         .second;
+  return info.mightContainUndef_ ==
+         ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+}
+
+// _____________________________________________________________________________
 bool Union::isSortedByConcatenation() const {
   if (targetOrder_.empty()) {
     return true;
   }
-  auto [leftColumn, rightColumn] = _columnOrigins.at(targetOrder_.at(0));
-  if (leftColumn != NO_COLUMN) {
-    return false;
-  }
-  // The first sort column is UNDEF for all rows of the left child. If it can
-  // also be UNDEF in the right child, those rows would have to be merged with
-  // the rows of the left child, so the concatenation is not sorted then.
-  const auto& rightVariableColumns = _subtrees.at(1)->getVariableColumns();
-  auto it = ql::ranges::find_if(
-      rightVariableColumns, [rightColumn](const auto& entry) {
-        return entry.second.columnIndex_ == rightColumn;
-      });
-  AD_CORRECTNESS_CHECK(it != rightVariableColumns.end());
-  return it->second.mightContainUndef_ ==
-         ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  ColumnIndex firstColumn = targetOrder_.at(0);
+  return _columnOrigins.at(firstColumn).at(0) == NO_COLUMN &&
+         isDecidingColumn(firstColumn);
+}
+
+// _____________________________________________________________________________
+ql::span<const ColumnIndex> Union::comparatorOrder() const {
+  auto end = ql::ranges::find_if(targetOrder_, [this](ColumnIndex column) {
+    return isDecidingColumn(column);
+  });
+  return {targetOrder_.begin(), end == targetOrder_.end() ? end : end + 1};
 }
 
 std::string Union::getCacheKeyImpl() const {
@@ -511,18 +522,25 @@ Result::LazyResult Union::computeResultKeepOrder(
   Range leftRange = toRange(result1);
   Range rightRange = toRange(result2);
 
+  // NOTE: The comparison has to consider all columns of `targetOrder_` up to
+  // the first deciding column (see `isDecidingColumn`). A column that is
+  // missing in one of the inputs, but can be UNDEF in the other input, is not
+  // deciding, because two UNDEFs are equal and the following columns then
+  // still decide.
+  ql::span<const ColumnIndex> trimmedTargetOrder = comparatorOrder();
+
   auto applyPermutation = [this](IdTable idTable,
                                  const std::vector<ColumnIndex>& permutation) {
     return transformToCorrectColumnFormat(std::move(idTable), permutation);
   };
 
   return std::visit(
-      [this, requestLaziness, &result1, &result2, &applyPermutation](
-          auto left, auto right) {
+      [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
+       &applyPermutation](auto left, auto right) {
         return ad_utility::callFixedSizeVi(
-            targetOrder_.size(),
+            trimmedTargetOrder.size(),
             [this, requestLaziness, &result1, &result2, &left, &right,
-             &applyPermutation](auto COMPARATOR_WIDTH) {
+             &trimmedTargetOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
               constexpr size_t extent =
                   COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),
@@ -531,15 +549,10 @@ Result::LazyResult Union::computeResultKeepOrder(
               sortedUnion::IterationData rightData{std::move(result2),
                                                    std::move(right),
                                                    computePermutation<false>()};
-              // NOTE: The comparison has to consider all columns of
-              // `targetOrder_`, also those after a column that is missing in
-              // one of the inputs. Such a column is UNDEF, which can be equal
-              // to an UNDEF in the other input, so the following columns can
-              // still decide.
               return Result::LazyResult{sortedUnion::SortedUnionImpl{
                   std::move(leftData), std::move(rightData), requestLaziness,
                   _columnOrigins, allocator(),
-                  ql::span<const ColumnIndex, extent>{targetOrder_},
+                  ql::span<const ColumnIndex, extent>{trimmedTargetOrder},
                   std::move(applyPermutation)}};
             });
       },

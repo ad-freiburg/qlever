@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -56,6 +57,23 @@ void testSortedUnion(
             : aggregateTables(result->idTables(), expected.numColumns()).first;
     EXPECT_EQ(actual, expected);
   }
+}
+
+// Create a `UNION` sorted by `targetOrder` of a left child with the columns
+// `?a ?b` and a right child with the columns `?a ?c ?d`, where `?c` can be
+// UNDEF and all other columns are always defined. The result columns are
+// `?a ?b ?c ?d`.
+Union makeUnionForDecidingColumns(QueryExecutionContext* qec,
+                                  std::vector<ColumnIndex> targetOrder) {
+  using Var = Variable;
+  auto right = makeIdTableFromVector({{1, 0, 3}});
+  right(0, 1) = Id::makeUndefined();
+  return Union{qec,
+               makeSortedValues(qec, makeIdTableFromVector({{1, 2}}),
+                                Vars{Var{"?a"}, Var{"?b"}}),
+               makeSortedValues(qec, std::move(right),
+                                Vars{Var{"?a"}, Var{"?c"}, Var{"?d"}}),
+               std::move(targetOrder)};
 }
 }  // namespace
 
@@ -403,6 +421,101 @@ TEST(Union, sortedMergeWithFirstSortColumnMissingOnOneSide) {
   // The column `?a` is missing in the right child (result columns `?a ?c`).
   testSortedUnion(qec, withA(), withoutA(7), {0, 1},
                   makeIdTableFromVector({{U, 5}, {U, 7}, {1, 2}}));
+}
+
+// Test which columns are deciding (missing in one child and never UNDEF in the
+// other child), and that the comparator of the merge stops after the first
+// deciding column of the sort order.
+TEST(Union, isDecidingColumnAndComparatorOrder) {
+  using ::testing::ElementsAre;
+  auto* qec = ad_utility::testing::getQec();
+
+  // The column `?a` is present in both children, `?c` is missing in the left
+  // child but can be UNDEF in the right child, so neither is deciding. The
+  // columns `?b` and `?d` are missing in one child and always defined in the
+  // other, so they are deciding.
+  auto unionOperation = makeUnionForDecidingColumns(qec, {});
+  EXPECT_FALSE(unionOperation.isDecidingColumn(0));
+  EXPECT_TRUE(unionOperation.isDecidingColumn(1));
+  EXPECT_FALSE(unionOperation.isDecidingColumn(2));
+  EXPECT_TRUE(unionOperation.isDecidingColumn(3));
+
+  // Without a deciding column, the comparator uses the complete sort order.
+  EXPECT_THAT(makeUnionForDecidingColumns(qec, {0, 2}).comparatorOrder(),
+              ElementsAre(0, 2));
+
+  // With a deciding column, the comparator stops right after it.
+  EXPECT_THAT(makeUnionForDecidingColumns(qec, {0, 2, 3, 1}).comparatorOrder(),
+              ElementsAre(0, 2, 3));
+  EXPECT_THAT(makeUnionForDecidingColumns(qec, {1, 0, 2, 3}).comparatorOrder(),
+              ElementsAre(1));
+}
+
+// Test when the concatenation of the two children is already sorted, so that
+// the merge can be skipped.
+TEST(Union, isSortedByConcatenation) {
+  auto* qec = ad_utility::testing::getQec();
+  auto isSorted = [qec](std::vector<ColumnIndex> targetOrder) {
+    return makeUnionForDecidingColumns(qec, std::move(targetOrder))
+        .isSortedByConcatenation();
+  };
+
+  // Without a sort order, any concatenation is fine.
+  EXPECT_TRUE(isSorted({}));
+
+  // The first sort column `?d` is UNDEF for all rows of the left child and
+  // never UNDEF in the right child, so the left child comes first.
+  EXPECT_TRUE(isSorted({3, 0}));
+
+  // The first sort column `?a` is present in both children.
+  EXPECT_FALSE(isSorted({0, 3}));
+
+  // The first sort column `?c` is missing in the left child, but can be UNDEF
+  // in the right child.
+  EXPECT_FALSE(isSorted({2, 0}));
+
+  // The first sort column `?b` is missing in the RIGHT child and never UNDEF in
+  // the left child. The constructor of `Union` then swaps the two children, so
+  // the concatenation is sorted as well.
+  EXPECT_TRUE(isSorted({1, 0}));
+}
+
+// Test the sorted merge and the concatenation when a sort column is deciding,
+// that is, missing in one of the children and never UNDEF in the other child.
+// The following sort columns then do not matter.
+TEST(Union, sortedMergeWithDecidingColumn) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto U = Id::makeUndefined();
+
+  // A child with the columns `?a ?b ?c`, where `?b` is always defined, and a
+  // child with the columns `?a ?c` only. The values of `?c` are chosen such
+  // that a comparison of `?c` would give the wrong order.
+  auto withB = [&]() {
+    return makeSortedValues(qec, makeIdTableFromVector({{1, 4, 0}, {2, 4, 5}}),
+                            Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}});
+  };
+  auto withoutB = [&]() {
+    return makeSortedValues(qec, makeIdTableFromVector({{1, 9}, {2, 0}}),
+                            Vars{Var{"?a"}, Var{"?c"}});
+  };
+
+  // The column `?b` is missing in the left child (result columns `?a ?c ?b`),
+  // the sort order is `?a ?b ?c`.
+  testSortedUnion(
+      qec, withoutB(), withB(), {0, 2, 1},
+      makeIdTableFromVector({{1, 9, U}, {1, 0, 4}, {2, 0, U}, {2, 5, 4}}));
+
+  // The column `?b` is missing in the right child (result columns `?a ?b ?c`).
+  testSortedUnion(
+      qec, withB(), withoutB(), {0, 1, 2},
+      makeIdTableFromVector({{1, U, 9}, {1, 4, 0}, {2, U, 0}, {2, 4, 5}}));
+
+  // The FIRST sort column `?b` is missing in the left child (result columns
+  // `?a ?c ?b`), so the children are simply concatenated.
+  testSortedUnion(
+      qec, withoutB(), withB(), {2, 0, 1},
+      makeIdTableFromVector({{1, 9, U}, {2, 0, U}, {1, 0, 4}, {2, 5, 4}}));
 }
 
 // _____________________________________________________________________________
