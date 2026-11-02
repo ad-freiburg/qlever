@@ -24,6 +24,13 @@
 // in turn requires this header (see the note on `IdProxy` below).
 class LocalVocabContext;
 
+// The only class that may call the private constructors of `LocalVocabEntry`
+// (see there). It is defined in `index/TripleComponentConversions.cpp` and must
+// not be used anywhere else.
+namespace localVocabEntryDetail::onlyForTripleComponentConversions {
+class LocalVocabEntryFactory;
+}
+
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
 // the entry would be in the global vocabulary of the Index. This position is
@@ -36,10 +43,10 @@ class LocalVocabContext;
 // *internal* order, see `ValueId::compareThreeWay`). Without a secondary
 // vocabulary (see `index/vocabulary/SecondaryVocabulary.h`) that order
 // coincides with the semantic (that is, by string value) order, except for the
-// encoded IRIs
-// (see `LocalVocabContext::encodeAsId`), which are ordered by their encoding
-// (a pre-existing deviation that is tracked separately, see the note at
-// `compareThreeWay` below). As soon as an index has such a vocabulary, the two
+// encoded IRIs (see `LocalVocabContext::encodeAsId`), which are ordered by
+// their encoding (a pre-existing deviation that is tracked separately, see the
+// note at `valueIdComparators::detail::compareIdsImpl`). As soon as an index
+// has such a vocabulary, the two
 // orders differ much more fundamentally: a word of the secondary vocabulary is
 // positioned after *all* words of the main vocabulary, no matter what it is. An
 // entry whose word is stored in the secondary vocabulary therefore compares
@@ -99,6 +106,16 @@ class alignas(16) LocalVocabEntry
  public:
   LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
       : Base{std::move(literal)}, context_{&context} {}
+
+ private:
+  // The constructors that can store an IRI are private, because an IRI that can
+  // be encoded directly in an `Id` (see `LocalVocabContext::encodeAsId`) must
+  // never be stored in a `LocalVocabEntry`. Create such entries via
+  // `toIdOrLocalVocabEntry` (see `index/TripleComponentConversions.h`), which
+  // checks this and then calls them via `LocalVocabEntryFactory`.
+  friend class localVocabEntryDetail::onlyForTripleComponentConversions::
+      LocalVocabEntryFactory;
+
   LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
       : Base{std::move(iri)}, context_{&context} {}
 
@@ -139,19 +156,15 @@ class alignas(16) LocalVocabEntry
                                         IdProxy::make(upper.getBits())}));
   }
 
+ public:
   LocalVocabEntry(const LocalVocabEntry&) = default;
   LocalVocabEntry(LocalVocabEntry&&) noexcept = default;
   LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
   LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
 
   // Convenience functions that delegate to the corresponding static functions
-  // of `IriT` and `LiteralT`.
-  static LocalVocabEntry fromStringRepresentation(std::string s,
-                                                  const LocalVocabContext& ctx);
-
-  static LocalVocabEntry fromIriref(std::string_view view,
-                                    const LocalVocabContext& ctx);
-
+  // of `LiteralT`. Unlike the private constructors above, they are public,
+  // because they can only create literals, never IRIs.
   static LocalVocabEntry literalWithoutQuotes(std::string_view view,
                                               const LocalVocabContext& ctx);
 
@@ -177,14 +190,16 @@ class alignas(16) LocalVocabEntry
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   //
-  // The bounds are `Id`s of type `VocabIndex`, `EncodedVal`, or
-  // `SecondaryVocabIndex` (the latter only if the index has a secondary
-  // vocabulary that contains this word, see the warning in the class comment
-  // above), and this entry compares exactly like an `Id` at that position.
+  // The bounds are `Id`s of type `VocabIndex` or `SecondaryVocabIndex` (the
+  // latter only if the index has a secondary vocabulary that contains this
+  // word, see the warning in the class comment above), and this entry compares
+  // exactly like an `Id` at that position. They are never of type `EncodedVal`,
+  // because an IRI that is encoded directly in an `Id` is never stored in a
+  // `LocalVocabEntry` (see `toIdOrLocalVocabEntry`).
   // NOTE: An `Id` of an unrelated datatype (like `Int` or `Date`) is
   // deliberately *not* compared to this position, but to the datatype bits of
-  // the `LocalVocabIndex`, which yields the same result unless the bounds are
-  // of type `EncodedVal`, see the note at `ValueId::compareThreeWay`.
+  // the `LocalVocabIndex`, which yields the same result, see the note at
+  // `ValueId::compareThreeWay`.
   struct PositionInVocab {
     IdProxy lowerBound_;
     IdProxy upperBound_;
@@ -232,12 +247,8 @@ class alignas(16) LocalVocabEntry
   // `LocalVocab` to each other, and never to an `Id` of the index (which needs
   // the position anyway).
   //
-  // NOTE: This shortcut also means that an entry whose word is an encoded IRI
-  // (see `LocalVocabContext::encodeAsId`) is compared by its string value here,
-  // but by its encoding when the corresponding `Id`s are compared. That
-  // inconsistency is pre-existing and tracked separately, see the note at
-  // `valueIdComparators::detail::compareIdsImpl`. Note also that `operator==`
-  // below never looks up the position, no matter which vocabularies exist.
+  // NOTE: `operator==` below never looks up the position, no matter which
+  // vocabularies exist.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 

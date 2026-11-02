@@ -405,6 +405,13 @@ TEST(LibQlever, disableCaching) {
   }
 }
 
+namespace {
+// The memory that `numIds` `Id`s occupy.
+ad_utility::MemorySize memoryOfIds(size_t numIds) {
+  return ad_utility::MemorySize::bytes(numIds * sizeof(Id));
+}
+}  // namespace
+
 // Test that the runtime parameter `memory-for-queries` mirrors and controls
 // the memory limit of the engine's allocator.
 TEST(LibQlever, memoryForQueriesRuntimeParameter) {
@@ -430,7 +437,7 @@ TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft + 50_MB);
 
   // Decreasing works as long as the freed part is currently unused, i.e. not
-  // below the 32 MB allocated here (plus what the engine itself has
+  // below the `Id`s allocated here (plus what the engine itself has
   // allocated).
   Id* chunk = engine.allocator().allocate(4'000'000);
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -440,7 +447,7 @@ TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
             100_MB);
   EXPECT_EQ(engine.allocator().amountMemoryLeft(),
-            initialMemoryLeft + 50_MB - 32_MB);
+            initialMemoryLeft + 50_MB - memoryOfIds(4'000'000));
 
   engine.allocator().deallocate(chunk, 4'000'000);
   setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB);
@@ -955,9 +962,8 @@ TEST(LibQlever, allocatorGetter) {
   const auto memoryLeftBefore = constEngine.allocator().amountMemoryLeft();
   constexpr size_t numIds = 16;
   Id* ptr = allocator.allocate(numIds);
-  EXPECT_EQ(
-      constEngine.allocator().amountMemoryLeft(),
-      memoryLeftBefore - ad_utility::MemorySize::bytes(numIds * sizeof(Id)));
+  EXPECT_EQ(constEngine.allocator().amountMemoryLeft(),
+            memoryLeftBefore - memoryOfIds(numIds));
   allocator.deallocate(ptr, numIds);
   EXPECT_EQ(constEngine.allocator().amountMemoryLeft(), memoryLeftBefore);
 }

@@ -39,6 +39,7 @@
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
 
@@ -769,6 +770,51 @@ TEST(IndexTest, processTriple) {
   }
 }
 
+// Test the words of the `ql:has-word` triples with the different
+// normalizations.
+TEST(IndexTest, processTripleHasWordNormalization) {
+  // A literal with "café" composed, decomposed, uppercased and in plural, and
+  // a function that returns its words with the given normalization.
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.addHasWordTriples() = true;
+    index.setHasWordNormalization(normalization);
+    TurtleTriple turtleTriple{
+        iri("<subject>"), iri("<predicate>"),
+        lit("\"Café cafe, CAFE\xcc\x81! cafe\xcc\x81s\"")};
+    return index.processTriple(std::move(turtleTriple)).wordFrequencies_;
+  };
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // With `Lowercase`, the composed "é" is kept, and the combining mark of the
+  // decomposed "é" splits the words (it is not alphanumeric).
+  EXPECT_THAT(
+      getWords(ad_utility::HasWordNormalization::Lowercase),
+      UnorderedElementsAre(Pair("café", 1), Pair("cafe", 3), Pair("s", 1)));
+
+  // With `LowercaseNoAccents`, all accents are removed before the
+  // tokenization.
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              UnorderedElementsAre(Pair("cafe", 3), Pair("cafes", 1)));
+}
+
+// Test the names of the normalizations in the option of `qlever-index`.
+TEST(IndexTest, hasWordNormalizationNames) {
+  using ad_utility::HasWordNormalization;
+
+  // Both names are parsed to their normalization.
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase"),
+            HasWordNormalization::Lowercase);
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase-no-accents"),
+            HasWordNormalization::LowercaseNoAccents);
+
+  // An unknown name throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HasWordNormalization::fromString("uppercase"),
+      ::testing::HasSubstr("is not a valid has-word normalization"));
+}
+
 // _____________________________________________________________________________
 // The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
 // therefore have to start with `<`) and must be valid regular expressions;
@@ -1168,8 +1214,8 @@ TEST(IndexImpl, recomputeStatistics) {
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
     LocalVocabEntry zzz =
-        LocalVocabEntry::fromIriref("<zzz>", indexImpl.getLocalVocabContext());
-    LocalVocabEntry literal = LocalVocabEntry::fromStringRepresentation(
+        iriLocalVocabEntry("<zzz>", indexImpl.getLocalVocabContext());
+    LocalVocabEntry literal = localVocabEntryFromStringRepresentation(
         "\"test\"@en", indexImpl.getLocalVocabContext());
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
@@ -1789,6 +1835,40 @@ TEST(IndexImpl, applyConfigurationMissingLocaleKey) {
               ::testing::HasSubstr(
                   "Key \"locale\" is missing in the metadata. This is probably "
                   "an old index build that is no longer supported"));
+}
+
+// Test that the normalization of the words of the `ql:has-word` triples is
+// recorded in the configuration of a built index and applied when an index is
+// loaded, with `Lowercase` for an index that was built before the key existed.
+TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex) {
+  using ad_utility::HasWordNormalization;
+  const std::string key{ad_utility::HAS_WORD_NORMALIZATION_KEY};
+
+  // An index built with either normalization records it in its configuration.
+  for (auto normalization : {HasWordNormalization::Lowercase,
+                             HasWordNormalization::LowercaseNoAccents}) {
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
+    config.addHasWordTriples = true;
+    config.hasWordNormalization = normalization;
+    auto index =
+        makeTestIndex(absl::StrCat("hasWordNormalization.", normalization),
+                      std::move(config));
+    EXPECT_EQ(index.getImpl().configurationJson()[key],
+              std::string{normalization.toString()});
+  }
+
+  // Loading a configuration applies the recorded normalization, and a
+  // configuration without the key (an older index) gives `Lowercase`.
+  auto configuration = minimalValidConfiguration();
+  configuration[key] = "lowercase-no-accents";
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordNormalization_,
+            HasWordNormalization::LowercaseNoAccents);
+  configuration.erase(key);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordNormalization_, HasWordNormalization::Lowercase);
 }
 
 // _____________________________________________________________________________
