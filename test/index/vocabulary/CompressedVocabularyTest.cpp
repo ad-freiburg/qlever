@@ -18,6 +18,7 @@
 namespace {
 
 using namespace vocabulary_test;
+using namespace std::string_view_literals;
 using namespace ad_utility::vocabulary;
 // A stateless "compressor" that applies a trivial transformation to a string
 struct DummyDecoder {
@@ -382,8 +383,7 @@ TEST(CompressedVocabularyWithHoles, endIndexAndGetPositionOfWord) {
   // In an empty vocabulary, every word yields the empty range at index 0.
   auto emptyVocab = createVocabularyWithHoles(filename, {}, {});
   EXPECT_EQ(emptyVocab.endIndex(), 0);
-  EXPECT_EQ(emptyVocab.getPositionOfWord(std::string_view{"alpha"},
-                                         ql::ranges::less{}),
+  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha"sv, ql::ranges::less{}),
             (std::pair<uint64_t, uint64_t>{0, 0}));
 }
 
