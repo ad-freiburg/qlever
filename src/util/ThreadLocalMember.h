@@ -162,6 +162,11 @@ class ThreadLocalMember : public NoCopyNoMove {
   // while the registry is locked, and must not throw. It might also
   // be called with a default-constructed value for a thread that never
   // accessed the object.
+  //
+  // NOTE: A thread may exit while the `ThreadLocalMember` is being destroyed,
+  // so the callback can run until the destructor has released the id. It must
+  // therefore only use state that outlives the `ThreadLocalMember`, e.g. the
+  // members of the owning object that are declared before it.
   using OnThreadExit = absl::AnyInvocable<void(T&)>;
 
  private:
@@ -223,6 +228,11 @@ class ThreadLocalMember : public NoCopyNoMove {
   // Return the value of the calling thread, and create it (as `T{}`) if it
   // doesn't exist yet. Return `nullptr` if the values of the calling thread
   // were already destroyed because the thread is exiting.
+  //
+  // NOTE: The returned pointer (also that of `getIfExists()`) is invalidated
+  // when the calling thread creates the value of another `ThreadLocalMember`
+  // with the same `T`, because the array of the thread might grow, and when
+  // the thread exits.
   T* getOrCreate() {
     if (T* value = getIfExists()) {
       return value;
