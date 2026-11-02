@@ -37,8 +37,8 @@ void runOnThread(F f) {
   std::thread{std::move(f)}.join();
 }
 
-// Each thread and each object has its own value, which is only created by
-// `getOrCreate()`.
+// Test that each thread and each object has its own value, which is only
+// created by `getOrCreate()`.
 TEST(ThreadLocalMember, valuesPerThreadAndObject) {
   ThreadLocalMember<int> a{[](int&) {}};
   ThreadLocalMember<int> b{[](int&) {}};
@@ -61,8 +61,8 @@ TEST(ThreadLocalMember, valuesPerThreadAndObject) {
   EXPECT_EQ(*b.getIfExists(), 5);
 }
 
-// When a thread exits, the callback of each object is called with the value of
-// that thread.
+// Test that when a thread exits, the callback of each object is called with
+// the value of that thread.
 TEST(ThreadLocalMember, onThreadExit) {
   std::atomic<int> sum = 0;
   ThreadLocalMember<int> member{[&sum](int& value) { sum += value; }};
@@ -76,9 +76,9 @@ TEST(ThreadLocalMember, onThreadExit) {
   EXPECT_EQ(sum, 55);
 }
 
-// Destroying an object discards its values in all threads, so that a new
-// object, which might reuse its id, starts with fresh values, and the callback
-// of the destroyed object is not called anymore.
+// Test that destroying an object discards its values in all threads, so that
+// a new object, which might reuse its id, starts with fresh values, and the
+// callback of the destroyed object is not called anymore.
 TEST(ThreadLocalMember, destructionResetsValues) {
   std::atomic<int> step = 0;
   std::atomic<int> numCallbacks = 0;
@@ -119,8 +119,8 @@ struct AccessesInDestructor {
   }
 };
 
-// After the values of a thread were destroyed at thread exit, no value is
-// created anymore.
+// Test that after the values of a thread were destroyed at thread exit, no
+// value is created anymore.
 TEST(ThreadLocalMember, accessAfterThreadValuesWereDestroyed) {
   ThreadLocalMember<int> member{[](int&) {}};
   bool gotValue = true;
@@ -134,8 +134,95 @@ TEST(ThreadLocalMember, accessAfterThreadValuesWereDestroyed) {
   EXPECT_FALSE(gotValue);
 }
 
-// The registry assigns small ids, reuses the ids of released objects, and
-// stores the assigned id.
+// Test that concurrent use is free of races (run under ThreadSanitizer in the
+// CI): worker threads use long-lived objects, whose values must never change,
+// while other threads create and destroy objects (which allocates, releases
+// and reuses ids and resets values in all threads) and short-lived threads
+// exit (which calls the callbacks).
+TEST(ThreadLocalMember, concurrentUseWithChurn) {
+  constexpr size_t numWorkers = 4;
+  constexpr size_t numObjects = 3;
+  constexpr size_t numIterations = 50'000;
+  std::atomic<size_t> exitSum = 0;
+  auto onExit = [&exitSum](size_t& value) { exitSum += value; };
+
+  // The long-lived objects, each value is set once by each worker thread.
+  std::vector<std::unique_ptr<ThreadLocalMember<size_t>>> objects;
+  for (size_t i = 0; i < numObjects; ++i) {
+    objects.push_back(std::make_unique<ThreadLocalMember<size_t>>(onExit));
+  }
+  std::atomic<bool> valueChanged = false;
+  std::atomic<bool> staleValue = false;
+  std::atomic<bool> stop = false;
+  std::atomic<size_t> numChurnIterations = 0;
+
+  // Each worker checks its values and spawns short-lived threads, each of
+  // which sets the value 1 in one object and exits.
+  std::vector<std::thread> workers;
+  for (size_t t = 0; t < numWorkers; ++t) {
+    workers.emplace_back([&, t]() {
+      for (size_t it = 0; it < numIterations; ++it) {
+        for (size_t i = 0; i < numObjects; ++i) {
+          size_t expected = 1000 * (t + 1) + i;
+          size_t* value = objects[i]->getOrCreate();
+          if (*value == 0) {
+            *value = expected;
+          } else if (*value != expected) {
+            valueChanged = true;
+          }
+          if (objects[i]->getIfExists() != value) {
+            valueChanged = true;
+          }
+        }
+        if (it % 1'000 == 0) {
+          runOnThread([&]() { *objects[it % numObjects]->getOrCreate() = 1; });
+        }
+      }
+    });
+  }
+
+  // Two threads create and destroy objects. A new object (which reuses the id
+  // of a destroyed one) must never see a stale value. Its callback is called
+  // with 1 when the short-lived thread exits, but not for the value 7 of the
+  // churner thread, which is alive when the object is destroyed.
+  std::vector<std::thread> churners;
+  for (size_t c = 0; c < 2; ++c) {
+    churners.emplace_back([&]() {
+      while (!stop) {
+        ThreadLocalMember<size_t> object{onExit};
+        if (*object.getOrCreate() != 0) {
+          staleValue = true;
+        }
+        *object.getOrCreate() = 7;
+        runOnThread([&object]() { *object.getOrCreate() = 1; });
+        ++numChurnIterations;
+      }
+    });
+  }
+  for (auto& worker : workers) {
+    worker.join();
+  }
+  stop = true;
+  for (auto& churner : churners) {
+    churner.join();
+  }
+  EXPECT_FALSE(valueChanged);
+  EXPECT_FALSE(staleValue);
+
+  // The callbacks received the values of the workers (when they exited), 1
+  // from each short-lived thread of the workers, and 1 per churner iteration.
+  size_t workerSum = 0;
+  for (size_t t = 0; t < numWorkers; ++t) {
+    for (size_t i = 0; i < numObjects; ++i) {
+      workerSum += 1000 * (t + 1) + i;
+    }
+  }
+  size_t shortLivedSum = numWorkers * (numIterations / 1'000);
+  EXPECT_EQ(exitSum, workerSum + shortLivedSum + numChurnIterations);
+}
+
+// Test that the registry assigns small ids, reuses the ids of released
+// objects, and stores the assigned id.
 TEST(ThreadLocalMemberRegistry, ids) {
   Registry registry;
   int a = 0;
@@ -155,9 +242,9 @@ TEST(ThreadLocalMemberRegistry, ids) {
   EXPECT_EQ(idC, 0u);
 }
 
-// Releasing an id resets it in all registered threads, the callback of
-// `unregisterThread` sees exactly the live objects below the given bound, and
-// unregistered threads are not reset anymore.
+// Test that releasing an id resets it in all registered threads, that the
+// callback of `unregisterThread` sees exactly the live objects below the given
+// bound, and that unregistered threads are not reset anymore.
 TEST(ThreadLocalMemberRegistry, threads) {
   Registry registry;
   MockThread thread1;
@@ -194,8 +281,8 @@ TEST(ThreadLocalMemberRegistry, threads) {
   EXPECT_THAT(thread2.resetIds_, ::testing::ElementsAre(1u));
 }
 
-// Many threads concurrently allocate and release ids. At no time do two live
-// objects share an id.
+// Test that when many threads concurrently allocate and release ids, at no
+// time two live objects share an id.
 TEST(ThreadLocalMemberRegistry, concurrentIds) {
   Registry registry;
   constexpr size_t numThreads = 8;
