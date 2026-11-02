@@ -411,6 +411,8 @@ TEST(LibQlever, disableCaching) {
 // would access the destroyed engine (which AddressSanitizer reports).
 TEST(LibQlever, destructorUnbindsRuntimeParameters) {
   using namespace ad_utility::memory_literals;
+
+  // While the engine lives, its cache follows the parameters.
   {
     Qlever engine{buildTestEngineConfig("<s> <p> <o> .")};
     auto cleanupMaxSize =
@@ -420,6 +422,9 @@ TEST(LibQlever, destructorUnbindsRuntimeParameters) {
     EXPECT_EQ(engine.cache().getMaxSize(), 3_MB);
     EXPECT_EQ(engine.cache().getMaxSizeSingleEntry(), 2_MB);
   }
+
+  // After the engine is destroyed, changing the parameters must not touch it
+  // (the cleanups restore the default values at the end of the test).
   auto cleanupMaxNumEntries =
       setRuntimeParameterForTest<&RuntimeParameters::cacheMaxNumEntries_>(42);
   auto cleanupMaxSize =
