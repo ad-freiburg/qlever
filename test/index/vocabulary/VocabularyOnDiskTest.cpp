@@ -317,6 +317,14 @@ TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
   EXPECT_ANY_THROW(vocab->lookupBatch(indices));
 }
 
+// Test that `lookupBatch` on a vocabulary that was never opened fails with a
+// contract violation that names `open()`.
+TEST(VocabularyOnDisk, LookupBatchRequiresOpen) {
+  const VocabularyOnDisk vocab;
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(std::vector<size_t>{0}),
+                               ::testing::HasSubstr("open()"));
+}
+
 // Each batch yielded by `lookupBatchesStreamed` must equal the individual
 // `vocab[]` lookups for that batch's indices, and the batches must be yielded
 // in input order.
