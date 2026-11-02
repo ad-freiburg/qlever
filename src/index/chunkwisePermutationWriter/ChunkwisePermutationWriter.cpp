@@ -143,19 +143,23 @@ ChunkwisePermutationWriter::ChunkwisePermutationWriter(
       options_{options},
       callbacks_{std::move(callbacks)},
       executor_{ad_utility::globalExecutor()},
-      callbackPermits_{
-          executor_, std::max<size_t>(1, options.numCallbackBlocksInFlight_)} {
+      callbackPermits_{executor_,
+                       std::max<size_t>(1, options.numCallbackBlocksInFlight_)},
+      context_{
+          *writer1_,
+          *writer2_,
+          permutation_.keys().at(0),
+          ChunkWriterContext::makePermutedColIndices(permutation_, numColumns_),
+          options.removeDuplicates_,
+          basename_,
+          options.twinSorterMemoryPerChunk_,
+          executor_} {
   // This logic only works for permutations that have the graph as the fourth
   // column.
   AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
   AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
   AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
   AD_CORRECTNESS_CHECK(blocksize_ > 0);
-  auto [c0, c1, c2, c3] = permutation_.keys();
-  permutedColIndices_ = {c0, c1, c2};
-  for (size_t colIdx = 3; colIdx < numColumns_; ++colIdx) {
-    permutedColIndices_.push_back(colIdx);
-  }
   // The blocks of small relations of `writer1_` are passed on to `writer2_`
   // (see `AddBlockOfSmallRelationsToSwitched`), which therefore also has to
   // use the same pool of block buffers.
@@ -190,28 +194,13 @@ ChunkwisePermutationWriter::makeSink(size_t numChunks) {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<TwinSorter> ChunkwisePermutationWriter::makeTwinSorter(
-    const std::string& filename) const {
-  auto sorter = std::make_unique<TwinSorter>(
-      filename, numColumns_, options_.twinSorterMemoryPerChunk_,
-      ad_utility::makeUnlimitedAllocator<Id>());
-  // A parallelism of one makes the sorter merge serially in the consuming
-  // thread, which is what a chunk needs: it runs on a thread of the pool and
-  // must never wait for other tasks of that pool. (The runs of the sorters of
-  // the boundary parts are merged by a parallel merge of the consolidation
-  // instead, see `writeTwinOfBoundaryRelation`.)
-  sorter->setMergeExecutor(executor_, 1);
-  return sorter;
-}
-
-// _____________________________________________________________________________
 ChunkWriter& ChunkwisePermutationWriter::chunkWriter(size_t chunkIndex) {
   // NOTE: The vector is never resized after `makeSink`, and the slot of a
   // chunk is only ever touched by the (single) operation of that chunk which
   // is currently in flight, so no lock is needed here.
   auto& writer = chunkWriters_.at(chunkIndex);
   if (writer == nullptr) {
-    writer = std::make_unique<ChunkWriter>(*this, chunkIndex);
+    writer = std::make_unique<ChunkWriter>(context_, chunkIndex, numChunks_);
   }
   return *writer;
 }
@@ -365,7 +354,7 @@ ChunkResult ChunkwisePermutationWriter::takeChunkResult(size_t chunkIndex) {
 
 // _____________________________________________________________________________
 void ChunkwisePermutationWriter::reportProgress() {
-  numRowsForProgressBar_ = numRowsProcessed_.load();
+  numRowsForProgressBar_ = context_.numRowsProcessed_.load();
   // NOTE: The counter may have advanced by several batches since the last
   // report, hence the loop.
   while (progressBar_.update()) {
@@ -478,7 +467,8 @@ void ChunkwisePermutationWriter::writeBoundaryRelation(
     pending.insertAtEnd(part.rows_, 0, part.rows_.numRows());
     if (part.isLarge()) {
       if (!pending.empty()) {
-        writeRowsOfLargeRelation(*writer1_, col0Id, std::move(pending), true);
+        ChunkWriter::writeRowsOfLargeRelation(*writer1_, col0Id,
+                                              std::move(pending), true);
         pending = writer1_->takeBlockBuffer();
       }
       if (part.tail_.has_value()) {
@@ -487,7 +477,8 @@ void ChunkwisePermutationWriter::writeBoundaryRelation(
     }
   }
   if (!pending.empty()) {
-    writeRowsOfLargeRelation(*writer1_, col0Id, std::move(pending), true);
+    ChunkWriter::writeRowsOfLargeRelation(*writer1_, col0Id, std::move(pending),
+                                          true);
   }
   auto md1 = CompressedRelationWriter::makeLargeRelationMetadata(
       col0Id, numRows, distinctCol1Counter.getAndReset());
@@ -537,7 +528,7 @@ ChunkwisePermutationWriter::writeTwinOfBoundaryRelation(
   for (const auto& part : parts) {
     if (!part.isLarge()) {
       if (sorterForSmallParts == nullptr) {
-        sorterForSmallParts = makeTwinSorter(absl::StrCat(
+        sorterForSmallParts = context_.makeTwinSorter(absl::StrCat(
             basename_, ".twin-boundary-small-parts.", col0Id.getBits()));
       }
       auto twinRows = part.rows_.asStaticView<0>();
@@ -584,64 +575,6 @@ ChunkwisePermutationWriter::writeTwinOfBoundaryRelation(
 }
 
 // _____________________________________________________________________________
-void ChunkwisePermutationWriter::writeRowsOfLargeRelation(
-    CompressedRelationWriter& writer, Id col0Id, IdTable rows, bool useQueue) {
-  const size_t numRows = rows.numRows();
-  if (numRows == 0) {
-    return;
-  }
-  auto write = [&writer, col0Id, useQueue](BlockToWrite block) {
-    // These are blocks of a large relation, so the `smallBlocksCallback_` is
-    // not invoked, hence the last argument is `false`.
-    if (useQueue) {
-      writer.compressAndWriteBlock(col0Id, col0Id, std::move(block), false);
-    } else {
-      writer.compressAndWriteBlockInCallingThread(col0Id, col0Id,
-                                                  std::move(block), false);
-    }
-  };
-  const size_t blocksize = writer.blocksize();
-  if (numRows <= blocksize) {
-    write(BlockToWrite{std::move(rows)});
-    return;
-  }
-  // The slices are views into the `rows`, which are shared among them.
-  auto owner = std::make_shared<const IdTable>(std::move(rows));
-  auto view = owner->asStaticView<0>();
-  forEachSliceOfLargeBlock(
-      view, blocksize, [&write, &view, &owner](size_t begin, size_t end) {
-        write(BlockToWrite{view.subView(begin, end - begin), owner});
-      });
-}
-
-// _____________________________________________________________________________
-CompressedRelationMetadata
-ChunkwisePermutationWriter::writeSortedBlocksOfLargeRelation(
-    CompressedRelationWriter& writer, Id col0Id,
-    ad_utility::InputRangeTypeErased<Block> blocks) {
-  DistinctIdCounter distinctCol1Counter;
-  size_t numRows = 0;
-  auto writeBlock = [&](Block block) {
-    numRows += block.numRows();
-    distinctCol1Counter.addBlock(std::as_const(block).getColumn(c1Idx));
-    writeRowsOfLargeRelation(writer, col0Id, std::move(block), false);
-  };
-  // Equal triples (when disregarding the graph) have to stay in the same
-  // block, see `TripleAlignedBlockBuffer`.
-  TripleAlignedBlockBuffer<Block> alignedBlocks;
-  for (Block& block : blocks) {
-    if (auto complete = alignedBlocks.push(std::move(block))) {
-      writeBlock(std::move(complete).value());
-    }
-  }
-  if (auto last = alignedBlocks.finish()) {
-    writeBlock(std::move(last).value());
-  }
-  return CompressedRelationWriter::makeLargeRelationMetadata(
-      col0Id, numRows, distinctCol1Counter.getAndReset());
-}
-
-// _____________________________________________________________________________
 PermutationPairResult ChunkwisePermutationWriter::finish(
     std::future<void> mergeCompletion) {
   AD_CONTRACT_CHECK(numChunks_ > 0,
@@ -669,14 +602,14 @@ PermutationPairResult ChunkwisePermutationWriter::finish(
   writer2_->finish();
 
   if (options_.removeDuplicates_) {
-    AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputRows_.load()
-                << '\n';
-    AD_LOG_INFO << "Number of unique elements: " << numUniqueRows_.load()
-                << std::endl;
+    AD_LOG_INFO << "Number of inputs to `uniqueView`: "
+                << context_.numInputRows_.load() << '\n';
+    AD_LOG_INFO << "Number of unique elements: "
+                << context_.numUniqueRows_.load() << std::endl;
   }
-  numRowsForProgressBar_ = numRowsProcessed_.load();
+  numRowsForProgressBar_ = context_.numRowsProcessed_.load();
   AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
-  AD_CORRECTNESS_CHECK(numRows_ == numRowsProcessed_.load());
+  AD_CORRECTNESS_CHECK(numRows_ == context_.numRowsProcessed_.load());
   AD_LOG_TIMING << "Total time of the chunks of the permutation writer "
                 << ad_utility::Timer::toSeconds(chunkTimer_.msecs()) << "s"
                 << std::endl;

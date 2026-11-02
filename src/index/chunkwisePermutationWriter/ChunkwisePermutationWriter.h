@@ -96,7 +96,6 @@ class ChunkwisePermutationWriter
     : public std::enable_shared_from_this<ChunkwisePermutationWriter>,
       public ad_utility::NoCopyNoMove {
  private:
-  friend class ChunkWriter;
   using BlockToWrite = CompressedRelationWriter::BlockToWrite;
   using Semaphore = ad_utility::AsyncResourcePool<void>;
   using Permit = Semaphore::Handle;
@@ -106,7 +105,6 @@ class ChunkwisePermutationWriter
   std::unique_ptr<CompressedRelationWriter> writer2_;
   compressedRelationHelpers::PairMetadataWriter writeMetadata_;
   qlever::KeyOrder permutation_;
-  std::vector<ColumnIndex> permutedColIndices_;
   const size_t blocksize_;
   const size_t numColumns_;
   Options options_;
@@ -115,6 +113,9 @@ class ChunkwisePermutationWriter
   net::any_io_executor executor_;
   // Bounds the number of blocks for which the callbacks are in flight.
   Semaphore callbackPermits_;
+  // The state that is shared by all the `ChunkWriter`s (including the
+  // statistics that they count).
+  ChunkWriterContext context_;
 
   // The state that is shared between the chunks and the driving thread, all of
   // it protected by `mutex_` (except for the atomics).
@@ -134,13 +135,10 @@ class ChunkwisePermutationWriter
   // The number of blocks for which the callbacks are currently in flight.
   size_t numCallbackBlocksInFlight_ = 0;
 
-  // Statistics. The `numRowsProcessed_` are counted by the chunks, and the
-  // driving thread reports them via the `progressBar_` while it waits for the
-  // chunks (see `takeChunkResult`), by copying them into
+  // Statistics. The `ChunkWriterContext::numRowsProcessed_` are counted by the
+  // chunks, and the driving thread reports them via the `progressBar_` while it
+  // waits for the chunks (see `takeChunkResult`), by copying them into
   // `numRowsForProgressBar_` (the progress bar needs a plain counter).
-  std::atomic<size_t> numInputRows_{0};
-  std::atomic<size_t> numUniqueRows_{0};
-  std::atomic<size_t> numRowsProcessed_{0};
   size_t numRowsForProgressBar_ = 0;
   ad_utility::ProgressBar progressBar_{numRowsForProgressBar_,
                                        "Triples sorted: "};
@@ -184,7 +182,7 @@ class ChunkwisePermutationWriter
 
   // The number of rows that were pushed to this writer before the removal of
   // duplicates (which is the number of rows that the sorter yields).
-  size_t numInputRows() const { return numInputRows_.load(); }
+  size_t numInputRows() const { return context_.numInputRows_.load(); }
 
   // The interface of the sink, see `parallelBlockMerge::SinkConcept`.
   bool stopRequested() const noexcept { return stopRequested_.load(); }
@@ -268,31 +266,6 @@ class ChunkwisePermutationWriter
   CompressedRelationMetadata writeTwinOfBoundaryRelation(
       Id col0Id, std::vector<BoundaryPart>& parts);
   void waitForCallbacks();
-
-  // Helpers that are shared by the chunks and the consolidation. All of them
-  // are thread-safe (they only use the thread-safe parts of the writers).
-
-  // Write the `rows` of the large relation with the given `col0Id` as blocks
-  // of (about) the blocksize of the `writer`, such that rows which agree in
-  // their first three columns are never split across blocks. If `useQueue` is
-  // `true`, then the blocks are compressed and written by the queue of the
-  // `writer` (which is only allowed for the driving thread), otherwise in the
-  // calling thread.
-  static void writeRowsOfLargeRelation(CompressedRelationWriter& writer,
-                                       Id col0Id, IdTable rows, bool useQueue);
-
-  // Write the sorted `blocks` of the twin of the large relation with the given
-  // `col0Id` with the `writer` in the calling thread, and return the metadata
-  // of the twin. This is the counterpart of
-  // `CompressedRelationWriter::addCompleteLargeRelation` for the chunks, which
-  // run on the pool and therefore must neither use the (blocking) block write
-  // queue nor the (not thread-safe) bookkeeping of the `writer`.
-  static CompressedRelationMetadata writeSortedBlocksOfLargeRelation(
-      CompressedRelationWriter& writer, Id col0Id,
-      ad_utility::InputRangeTypeErased<Block> blocks);
-
-  // Create a twin sorter with the given `filename`.
-  std::unique_ptr<TwinSorter> makeTwinSorter(const std::string& filename) const;
 };
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

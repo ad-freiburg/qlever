@@ -15,7 +15,6 @@
 
 #include <algorithm>
 
-#include "index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h"
 #include "util/views/UniqueBlockView.h"
 
 namespace chunkwisePermutationWriter {
@@ -24,14 +23,41 @@ using namespace compressedRelationHelpers;
 using BlockToWrite = CompressedRelationWriter::BlockToWrite;
 
 // _____________________________________________________________________________
-ChunkWriter::ChunkWriter(ChunkwisePermutationWriter& shared, size_t chunkIndex)
-    : Base{shared.blocksize_, shared.writer1_->takeBlockBuffer()},
-      shared_{shared},
+std::vector<ColumnIndex> ChunkWriterContext::makePermutedColIndices(
+    const qlever::KeyOrder& permutation, size_t numColumns) {
+  auto [c0, c1, c2, c3] = permutation.keys();
+  std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
+  for (size_t colIdx = 3; colIdx < numColumns; ++colIdx) {
+    permutedColIndices.push_back(colIdx);
+  }
+  return permutedColIndices;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<TwinSorter> ChunkWriterContext::makeTwinSorter(
+    const std::string& filename) const {
+  auto sorter = std::make_unique<TwinSorter>(
+      filename, permutedColIndices_.size(), twinSorterMemory_,
+      ad_utility::makeUnlimitedAllocator<Id>());
+  // A parallelism of one makes the sorter merge serially in the consuming
+  // thread, which is what a chunk needs: it runs on a thread of the pool and
+  // must never wait for other tasks of that pool. (The runs of the sorters of
+  // the boundary parts are merged by a parallel merge of the consolidation
+  // instead, see `ChunkwisePermutationWriter::writeTwinOfBoundaryRelation`.)
+  sorter->setMergeExecutor(executor_, 1);
+  return sorter;
+}
+
+// _____________________________________________________________________________
+ChunkWriter::ChunkWriter(ChunkWriterContext& context, size_t chunkIndex,
+                         size_t numChunks)
+    : Base{context.writer1_.blocksize(), context.writer1_.takeBlockBuffer()},
+      context_{context},
       chunkIndex_{chunkIndex},
-      isLastChunk_{chunkIndex + 1 == shared.numChunks_},
-      writer1_{*shared.writer1_},
-      writer2_{*shared.writer2_},
-      numColumns_{shared.numColumns_},
+      isLastChunk_{chunkIndex + 1 == numChunks},
+      writer1_{context.writer1_},
+      writer2_{context.writer2_},
+      numColumns_{context.writer1_.numColumns()},
       inFirstRelation_{chunkIndex > 0},
       smallRelations_{writer1_.takeBlockBuffer(), blocksize_} {}
 
@@ -44,21 +70,21 @@ ChunkWriter::~ChunkWriter() {
 
 // _____________________________________________________________________________
 void ChunkWriter::removeDuplicates(Block& block) {
-  shared_.numInputRows_.fetch_add(block.numRows());
+  context_.numInputRows_.fetch_add(block.numRows());
   ad_utility::removeDuplicatesFromBlock(block, lastRowOfPreviousBlock_);
   if (!block.empty()) {
     lastRowOfPreviousBlock_ = block.back();
   }
-  shared_.numUniqueRows_.fetch_add(block.numRows());
+  context_.numUniqueRows_.fetch_add(block.numRows());
 }
 
 // _____________________________________________________________________________
 SharedBlock ChunkWriter::processBlock(Block block) {
   AD_CORRECTNESS_CHECK(block.numColumns() == numColumns_);
-  if (shared_.options_.removeDuplicates_) {
+  if (context_.removeDuplicates_) {
     removeDuplicates(block);
   } else {
-    shared_.numInputRows_.fetch_add(block.numRows());
+    context_.numInputRows_.fetch_add(block.numRows());
   }
   if (block.empty()) {
     return nullptr;
@@ -72,10 +98,9 @@ SharedBlock ChunkWriter::processBlock(Block block) {
   }
   const size_t numRows = block.numRows();
   this->addInputBlock(std::make_shared<const Block>(std::move(block)),
-                      shared_.permutation_.keys().at(0),
-                      shared_.permutedColIndices_);
+                      context_.col0Column_, context_.permutedColIndices_);
   result_.numRows_ += numRows;
-  shared_.numRowsProcessed_.fetch_add(numRows);
+  context_.numRowsProcessed_.fetch_add(numRows);
   return std::exchange(inputBlock_, nullptr);
 }
 
@@ -129,9 +154,9 @@ void ChunkWriter::countRowsOfCurrentRelation(IdTableView<0> rows) {
 // _____________________________________________________________________________
 TwinSorter& ChunkWriter::twinSorter() {
   if (twinSorter_ == nullptr) {
-    twinSorter_ = shared_.makeTwinSorter(
-        absl::StrCat(shared_.basename_, ".twin-sorter-chunk-", chunkIndex_, "-",
-                     numTwinSortersCreated_++));
+    twinSorter_ = context_.makeTwinSorter(
+        absl::StrCat(context_.twinSorterBasename_, ".twin-sorter-chunk-",
+                     chunkIndex_, "-", numTwinSortersCreated_++));
   }
   return *twinSorter_;
 }
@@ -259,7 +284,7 @@ CompressedRelationMetadata ChunkWriter::writeTwinOfCompleteLargeRelation(
   // the blocks of the permutation without copying. For a relation with
   // several runs, the merge derives the size of its output blocks from the
   // memory of the sorter.
-  auto md2 = ChunkwisePermutationWriter::writeSortedBlocksOfLargeRelation(
+  auto md2 = writeSortedBlocksOfLargeRelation(
       writer2_, col0Id, sorter.getSortedBlocks(std::nullopt));
   sorter.clear();
   return md2;
@@ -366,6 +391,64 @@ ChunkResult ChunkWriter::finishChunk() {
     }
   }
   return std::move(result_);
+}
+
+// _____________________________________________________________________________
+void ChunkWriter::writeRowsOfLargeRelation(CompressedRelationWriter& writer,
+                                           Id col0Id, IdTable rows,
+                                           bool useQueue) {
+  const size_t numRows = rows.numRows();
+  if (numRows == 0) {
+    return;
+  }
+  auto write = [&writer, col0Id, useQueue](BlockToWrite block) {
+    // These are blocks of a large relation, so the `smallBlocksCallback_` is
+    // not invoked, hence the last argument is `false`.
+    if (useQueue) {
+      writer.compressAndWriteBlock(col0Id, col0Id, std::move(block), false);
+    } else {
+      writer.compressAndWriteBlockInCallingThread(col0Id, col0Id,
+                                                  std::move(block), false);
+    }
+  };
+  const size_t blocksize = writer.blocksize();
+  if (numRows <= blocksize) {
+    write(BlockToWrite{std::move(rows)});
+    return;
+  }
+  // The slices are views into the `rows`, which are shared among them.
+  auto owner = std::make_shared<const IdTable>(std::move(rows));
+  auto view = owner->asStaticView<0>();
+  forEachSliceOfLargeBlock(
+      view, blocksize, [&write, &view, &owner](size_t begin, size_t end) {
+        write(BlockToWrite{view.subView(begin, end - begin), owner});
+      });
+}
+
+// _____________________________________________________________________________
+CompressedRelationMetadata ChunkWriter::writeSortedBlocksOfLargeRelation(
+    CompressedRelationWriter& writer, Id col0Id,
+    ad_utility::InputRangeTypeErased<Block> blocks) {
+  DistinctIdCounter distinctCol1Counter;
+  size_t numRows = 0;
+  auto writeBlock = [&](Block block) {
+    numRows += block.numRows();
+    distinctCol1Counter.addBlock(std::as_const(block).getColumn(c1Idx));
+    writeRowsOfLargeRelation(writer, col0Id, std::move(block), false);
+  };
+  // Equal triples (when disregarding the graph) have to stay in the same
+  // block, see `TripleAlignedBlockBuffer`.
+  TripleAlignedBlockBuffer<Block> alignedBlocks;
+  for (Block& block : blocks) {
+    if (auto complete = alignedBlocks.push(std::move(block))) {
+      writeBlock(std::move(complete).value());
+    }
+  }
+  if (auto last = alignedBlocks.finish()) {
+    writeBlock(std::move(last).value());
+  }
+  return CompressedRelationWriter::makeLargeRelationMetadata(
+      col0Id, numRows, distinctCol1Counter.getAndReset());
 }
 
 }  // namespace chunkwisePermutationWriter

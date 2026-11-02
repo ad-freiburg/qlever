@@ -10,18 +10,24 @@
 #ifndef QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_CHUNKWRITER_H
 #define QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_CHUNKWRITER_H
 
+#include <atomic>
+#include <boost/asio/any_io_executor.hpp>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
+#include "index/KeyOrder.h"
 #include "index/chunkwisePermutationWriter/Options.h"
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "index/compressedRelationWriter/RelationBlockCutter.h"
 #include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
+#include "util/InputRangeUtils.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -106,7 +112,49 @@ struct ChunkResult {
   size_t numRows_ = 0;
 };
 
-class ChunkwisePermutationWriter;
+// The state that all the `ChunkWriter`s of a single merge share. All of it is
+// either constant while the chunks run or thread-safe.
+struct ChunkWriterContext {
+  // The writers of the permutation and of its twin. The chunks only use their
+  // thread-safe parts, see `ChunkWriter`. The blocks of small relations of the
+  // `writer1_` have to be passed on to the `writer2_` by its
+  // `smallBlocksCallback_` (see
+  // `CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched`).
+  CompressedRelationWriter& writer1_;
+  CompressedRelationWriter& writer2_;
+  // The column of the input blocks that contains the `col0` IDs, and the
+  // indices of all their columns in the order in which they are stored in the
+  // permutation (so there is one index per column), see
+  // `makePermutedColIndices`.
+  ColumnIndex col0Column_;
+  std::vector<ColumnIndex> permutedColIndices_;
+  // If `true`, then the chunks remove consecutive duplicate rows from their
+  // input blocks, see `Options::removeDuplicates_`.
+  bool removeDuplicates_ = false;
+  // The prefix of the names of the files of the twin sorters, their memory
+  // limit, and the executor on which they run.
+  std::string twinSorterBasename_;
+  ad_utility::MemorySize twinSorterMemory_;
+  boost::asio::any_io_executor executor_;
+
+  // Statistics that are counted by all the chunks together: the number of
+  // input rows (before the removal of duplicates), the number of rows after
+  // the removal of duplicates (only if `removeDuplicates_` is set), and the
+  // number of rows that have been processed so far (e.g. for a progress bar).
+  std::atomic<size_t> numInputRows_{0};
+  std::atomic<size_t> numUniqueRows_{0};
+  std::atomic<size_t> numRowsProcessed_{0};
+
+  // Return the indices of the columns of the input blocks in the order in
+  // which they are stored in the `permutation`, for input blocks with
+  // `numColumns` columns.
+  static std::vector<ColumnIndex> makePermutedColIndices(
+      const qlever::KeyOrder& permutation, size_t numColumns);
+
+  // Create a twin sorter with the given `filename`, which merges serially in
+  // the consuming thread (see the implementation).
+  std::unique_ptr<TwinSorter> makeTwinSorter(const std::string& filename) const;
+};
 
 // The writer of a single chunk of the merge. It is driven by a single thread
 // at a time (the chunk's coroutine of the merge), but by different threads for
@@ -125,7 +173,7 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   friend Base;
   using DistinctIdCounter = compressedRelationHelpers::DistinctIdCounter;
 
-  ChunkwisePermutationWriter& shared_;
+  ChunkWriterContext& context_;
   size_t chunkIndex_;
   // Whether this is the last chunk of the merge, whose last relation is
   // complete (see `ChunkResult::lastPart_`).
@@ -166,7 +214,9 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   ChunkResult result_;
 
  public:
-  ChunkWriter(ChunkwisePermutationWriter& shared, size_t chunkIndex);
+  // Create the writer of the chunk with the given `chunkIndex` of a merge with
+  // `numChunks` chunks.
+  ChunkWriter(ChunkWriterContext& context, size_t chunkIndex, size_t numChunks);
   // Give the block buffers back to the pool.
   ~ChunkWriter();
 
@@ -178,6 +228,29 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   // Finish the chunk after its last block and return everything that the
   // consolidation needs.
   ChunkResult finishChunk();
+
+  // Helpers that are shared by the chunks and by the consolidation of their
+  // results. All of them are thread-safe (they only use the thread-safe parts
+  // of the `writer`).
+
+  // Write the `rows` of the large relation with the given `col0Id` as blocks
+  // of (about) the blocksize of the `writer`, such that rows which agree in
+  // their first three columns are never split across blocks. If `useQueue` is
+  // `true`, then the blocks are compressed and written by the queue of the
+  // `writer` (which is only allowed for a thread that is not a thread of the
+  // pool), otherwise in the calling thread.
+  static void writeRowsOfLargeRelation(CompressedRelationWriter& writer,
+                                       Id col0Id, IdTable rows, bool useQueue);
+
+  // Write the sorted `blocks` of the twin of the large relation with the given
+  // `col0Id` with the `writer` in the calling thread, and return the metadata
+  // of the twin. This is the counterpart of
+  // `CompressedRelationWriter::addCompleteLargeRelation` for the chunks, which
+  // run on the pool and therefore must neither use the (blocking) block write
+  // queue nor the (not thread-safe) bookkeeping of the `writer`.
+  static CompressedRelationMetadata writeSortedBlocksOfLargeRelation(
+      CompressedRelationWriter& writer, Id col0Id,
+      ad_utility::InputRangeTypeErased<Block> blocks);
 
  private:
   // Remove consecutive duplicate rows from the `block`, also with respect to
