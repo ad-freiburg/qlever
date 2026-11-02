@@ -211,7 +211,11 @@ class CompressedRelationReader {
     // actually yield.
     size_t numElementsRead_ = 0;
     size_t numElementsYielded_ = 0;
-    std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
+    // The time that the consumer waited for the blocks. It is stored in
+    // microseconds (the precision of `ad_utility::Timer`), because when the
+    // metadata of many short scans is added up (see `aggregate`), rounding each
+    // of them to milliseconds would lose most of the time.
+    std::chrono::microseconds blockingTime_ = std::chrono::microseconds::zero();
 
     // Update this metadata, given the metadata from `blockAndMetadata`.
     // Currently updates: `numBlocksPostprocessed_`, `numBlocksWithUpdate_`,

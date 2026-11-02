@@ -242,7 +242,7 @@ CompressedRelationReader::lazyScan(
         blockingTimer_.cont();
         auto blockAndStats = blocks_->get();
         blockingTimer_.stop();
-        details().blockingTime_ = blockingTimer_.msecs();
+        details().blockingTime_ = blockingTimer_.value();
         cancellationHandle_->throwIfCancelled();
         if (!blockAndStats.has_value()) {
           AD_CORRECTNESS_CHECK(numBlocks_ ==
