@@ -908,11 +908,16 @@ if (COVERAGE_FRIENDLY_CHECKS)
 endif ()
 
 # Use the `SplitLayoutId` (a full 64-bit payload and a datatype byte) instead of
-# the legacy `ValueId` as `Id`, see `src/global/Id.h`. Atomics of the 16 bytes
-# of such an `Id` need `libatomic`, except on Apple.
+# the legacy `ValueId` as `Id`, see `src/global/Id.h`.
 option(USE_SPLIT_LAYOUT "Use SplitLayoutId instead of ValueId as Id" OFF)
 if (USE_SPLIT_LAYOUT)
     add_compile_definitions(QLEVER_USE_ID_SPLIT_LAYOUT)
+    # `LocalVocabEntry` caches its position in the vocabulary in atomics of the
+    # bit representation of an `Id`, which has 16 bytes in the split layout.
+    # On Linux (for example with GCC), atomics of 16 bytes are calls into
+    # `libatomic`. Apple Clang inlines them, so no library is needed there.
+    # This is only needed until these atomics are replaced (see the TODO at
+    # `LocalVocabEntry::lowerBoundInVocab_`).
     if (NOT APPLE)
         link_libraries(atomic)
     endif ()
