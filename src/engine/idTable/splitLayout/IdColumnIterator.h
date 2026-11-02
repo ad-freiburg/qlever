@@ -63,8 +63,8 @@ class BasicIdColumnIterator {
   // Implicit conversion from the mutable to the const iterator, like
   // `iterator` -> `const_iterator` of the standard containers.
   CPP_template(typename = void)(requires IsConst)
-      /*implicit*/ BasicIdColumnIterator(
-          const BasicIdColumnIterator<false>& other)  // NOSONAR, intended
+  /*implicit*/ BasicIdColumnIterator(
+      const BasicIdColumnIterator<false>& other)  // NOSONAR, intended
       : payload_{other.payload_}, datatype_{other.datatype_} {}
 
   reference_restricted operator*() const { return {payload_, datatype_}; }

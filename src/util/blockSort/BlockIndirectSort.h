@@ -233,10 +233,9 @@ void blockIndirectSortImpl(
 // In C++17 mode (no coroutines), this always sorts single-threaded in the
 // calling thread; `numThreads` and `exec` are then not used.
 CPP_template(typename Range, typename Compare)(
-    requires ql::ranges::random_access_range<
-        Range>) void blockIndirectSort(Range&& range, Compare comp,
-                                       uint32_t numThreads,
-                                       ql::any_io_executor exec) {
+    requires ql::ranges::random_access_range<Range>)
+void blockIndirectSort(Range&& range, Compare comp, uint32_t numThreads,
+                       ql::any_io_executor exec) {
   detail::blockIndirectSortImpl(AD_FWD(range), std::move(comp), numThreads,
                                 std::move(exec), ad_utility::noop);
 }
@@ -255,12 +254,10 @@ CPP_template(typename Range, typename Compare)(
 //
 // NOTE: In C++17 mode, the sort can't be cancelled.
 CPP_template(typename Range, typename Compare)(
-    requires ql::ranges::random_access_range<
-        Range>) void blockIndirectSort(Range&& range, Compare comp,
-                                       uint32_t numThreads,
-                                       ql::any_io_executor exec,
-                                       ad_utility::SharedCancellationHandle
-                                           cancellationHandle) {
+    requires ql::ranges::random_access_range<Range>)
+void blockIndirectSort(
+    Range&& range, Compare comp, uint32_t numThreads, ql::any_io_executor exec,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   AD_CONTRACT_CHECK(cancellationHandle != nullptr);
   detail::blockIndirectSortImpl(
       AD_FWD(range), std::move(comp), numThreads, std::move(exec),
@@ -296,23 +293,22 @@ net::awaitable<void> blockIndirectSortAsyncImpl(
 //
 // NOTE: `range` is only accessed once the result is awaited, so it has to stay
 // alive until then. Temporaries in `co_await blockIndirectSortAsync(...)` do.
-CPP_template(typename Range,
-             typename Compare)(requires ql::ranges::random_access_range<Range>)
-    boost::asio::awaitable<void> blockIndirectSortAsync(
-        Range&& range, Compare comp, uint32_t numThreads,
-        ql::any_io_executor exec) {
+CPP_template(typename Range, typename Compare)(
+    requires ql::ranges::random_access_range<Range>)
+boost::asio::awaitable<void> blockIndirectSortAsync(Range&& range, Compare comp,
+                                                    uint32_t numThreads,
+                                                    ql::any_io_executor exec) {
   return detail::blockIndirectSortAsyncImpl(AD_FWD(range), std::move(comp),
                                             numThreads, std::move(exec),
                                             ad_utility::noop);
 }
 
 // Like above, but cancellable, see the second overload of `blockIndirectSort`.
-CPP_template(typename Range,
-             typename Compare)(requires ql::ranges::random_access_range<Range>)
-    boost::asio::awaitable<void> blockIndirectSortAsync(
-        Range&& range, Compare comp, uint32_t numThreads,
-        ql::any_io_executor exec,
-        ad_utility::SharedCancellationHandle cancellationHandle) {
+CPP_template(typename Range, typename Compare)(
+    requires ql::ranges::random_access_range<Range>)
+boost::asio::awaitable<void> blockIndirectSortAsync(
+    Range&& range, Compare comp, uint32_t numThreads, ql::any_io_executor exec,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   AD_CONTRACT_CHECK(cancellationHandle != nullptr);
   return detail::blockIndirectSortAsyncImpl(
       AD_FWD(range), std::move(comp), numThreads, std::move(exec),

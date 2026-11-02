@@ -88,8 +88,7 @@ class BasicIdRefImpl {
     // for rvalues: `column[i] = id;` writes, while `auto ref = column[i]; ref =
     // id;` does not compile.
     CPP_template(typename = void)(requires(!IsConst))
-        BasicIdRefWithRestrictedAccess&
-        operator=(const Id id) && {
+    BasicIdRefWithRestrictedAccess& operator=(const Id id) && {
       *payload_ = id.getPayloadBits();
       *datatype_ = id.getDatatypeBits();
       return *this;
@@ -113,16 +112,15 @@ class BasicIdRefImpl {
     // details see the note at the end of
     // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable` and the
     // same overload for rows in `IdTableRow.h`.
-    CPP_template(typename = void)(requires(!IsConst)) const
-        BasicIdRefWithRestrictedAccess&
-        operator=(const Id id) const&&;
+    CPP_template(typename = void)(requires(!IsConst))
+    const BasicIdRefWithRestrictedAccess& operator=(const Id id) const&&;
 
     // Swap the referenced values (not the pointers), but only for rvalues, like
     // for rows in `IdTableRow.h`. This is what `std::iter_swap` and thus
     // `std::reverse` or `ranges::sort` call with the result of `*it`.
-    CPP_template(typename = void)(requires(!IsConst)) friend void swap(
-        BasicIdRefWithRestrictedAccess&& lhs,
-        BasicIdRefWithRestrictedAccess&& rhs) noexcept {
+    CPP_template(typename = void)(requires(!IsConst))
+    friend void swap(BasicIdRefWithRestrictedAccess&& lhs,
+                     BasicIdRefWithRestrictedAccess&& rhs) noexcept {
       std::swap(*lhs.payload_, *rhs.payload_);
       std::swap(*lhs.datatype_, *rhs.datatype_);
     }
@@ -329,8 +327,8 @@ class BasicIdRef
   // Assign a new `Id` to the referenced slot (`IdRef` only). Like for any proxy
   // reference, this writes through to the referenced slot and does not rebind
   // the proxy.
-  CPP_template(typename = void)(requires(!IsConst)) BasicIdRef& operator=(
-      const Id id) {
+  CPP_template(typename = void)(requires(!IsConst))
+  BasicIdRef& operator=(const Id id) {
     *this->payload_ = id.getPayloadBits();
     *this->datatype_ = id.getDatatypeBits();
     return *this;

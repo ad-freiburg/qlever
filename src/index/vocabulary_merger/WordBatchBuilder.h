@@ -79,23 +79,23 @@ class WordBatchBuilder {
   // This order is only checked if the expensive checks are enabled (see
   // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
   // costly.
-  CPP_template(typename W, typename F)(
-      requires WordComparator<W>&& WordBatchCallback<
-          F>) void addMergedWords(std::vector<QueueWord> buffer,
-                                  const W& comparator, const F& batchCallback);
+  CPP_template(typename W, typename F)(requires WordComparator<W> &&
+                                             WordBatchCallback<F>)
+  void addMergedWords(std::vector<QueueWord> buffer, const W& comparator,
+                      const F& batchCallback);
 
   // Signal that no more words will be added, and hand the remaining words
   // (including the word that is still held back, see the class comment) to the
   // `batchCallback`. After a call to `finish()`, no more words may be added.
-  CPP_template(typename F)(requires WordBatchCallback<F>) void finish(
-      const F& batchCallback);
+  CPP_template(typename F)(requires WordBatchCallback<F>)
+  void finish(const F& batchCallback);
 
  private:
   // Hand the current (typically only partially filled) batch to the
   // `batchCallback` and start a new batch. Do nothing if the current batch is
   // empty.
-  CPP_template(typename F)(requires WordBatchCallback<F>) void flush(
-      const F& batchCallback);
+  CPP_template(typename F)(requires WordBatchCallback<F>)
+  void flush(const F& batchCallback);
 
   // Add the `pendingWord_` and its `pendingMappings_` to the `currentBatch_`.
   // This must only be called once it is known that no further occurrence of

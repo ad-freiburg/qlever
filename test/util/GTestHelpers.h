@@ -249,9 +249,9 @@ class CopyShield {
   explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)
-      CopyShield&
-      operator=(Ts&& ts) {
+  CPP_template(typename Ts)(
+      requires ql::concepts::constructible_from<T, Ts &&>)
+  CopyShield& operator=(Ts&& ts) {
     pointer_ = std::make_shared<T>(AD_FWD(ts));
     return *this;
   }

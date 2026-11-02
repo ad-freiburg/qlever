@@ -65,8 +65,9 @@ CPP_concept ValueAsNumericId =
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
 // point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
-CPP_template(bool NanOrInfToUndef = false,
-             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+CPP_template(bool NanOrInfToUndef = false, typename T)(
+    requires ValueAsNumericId<T>)
+Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
   } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
@@ -389,8 +390,8 @@ struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
 // `IriValueGetter` returns an
 // `std::optional<ad_utility::triple_component::Iri>` object. If the
 // `LiteralOrIri` object contains an `Iri`, the Iri is returned. This
-// ValueGetter is currently used in `StringExpressions.cpp` within the
-// implementation of `STRDT()`.
+// ValueGetter is currently used in `StrLangAndStrDtExpressions.cpp` within
+// the implementation of `STRDT()`.
 struct IriValueGetter : Mixin<IriValueGetter> {
   using Value = OptIri;
   using Mixin<IriValueGetter>::operator();
@@ -487,9 +488,8 @@ struct ParsedUriGetter : Mixin<ParsedUriGetter> {
 // calculated, when requesting the centroid).
 
 CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
-        RequestedInfo>) struct GeometryInfoValueGetter
-    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Value = std::optional<RequestedInfo>;
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(

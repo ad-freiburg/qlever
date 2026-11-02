@@ -19,9 +19,9 @@
 #include <numeric>
 
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/LocatedTriples.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashSet.h"
@@ -242,7 +242,7 @@ CompressedRelationReader::lazyScan(
         blockingTimer_.cont();
         auto blockAndStats = blocks_->get();
         blockingTimer_.stop();
-        details().blockingTime_ = blockingTimer_.msecs();
+        details().blockingTime_ = blockingTimer_.value();
         cancellationHandle_->throwIfCancelled();
         if (!blockAndStats.has_value()) {
           AD_CORRECTNESS_CHECK(numBlocks_ ==

@@ -69,10 +69,10 @@ bool ConfigManager::HashMapEntry::holdsSubManager() const {
 
 // ____________________________________________________________________________
 CPP_template_def(typename ReturnType, typename InstanceType)(
-    requires SimilarToAnyTypeIn<ReturnType, ConfigManager::HashMapEntry::Data>
-        CPP_and_def std::is_object_v<ReturnType>
-            CPP_and_def ad_utility::SimilarTo<ConfigManager::HashMapEntry,
-                                              InstanceType>)
+    requires SimilarToAnyTypeIn<ReturnType,
+                                ConfigManager::HashMapEntry::Data> &&
+    std::is_object_v<ReturnType> &&
+    ad_utility::SimilarTo<ConfigManager::HashMapEntry, InstanceType>)
 std::optional<ReturnType*> ConfigManager::HashMapEntry::
     getConfigOptionOrSubManager(InstanceType& instance) {
   using DecayReturnType = std::decay_t<ReturnType>;
@@ -112,14 +112,14 @@ std::optional<const ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
 
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor)(
-    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
-        ql::concepts::invocable<Visitor, ConfigManager&>)
+    requires ql::concepts::invocable<Visitor, ConfigOption&> &&
+    ql::concepts::invocable<Visitor, ConfigManager&>)
 decltype(auto) ConfigManager::HashMapEntry::visit(Visitor&& vis) {
   return visitImpl(AD_FWD(vis), data_);
 }
 CPP_template_def(typename Visitor)(
-    requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and_def
-        ql::concepts::invocable<Visitor, ConfigManager&>)
+    requires ql::concepts::invocable<Visitor, ConfigOption&> &&
+    ql::concepts::invocable<Visitor, ConfigManager&>)
 decltype(auto) ConfigManager::HashMapEntry::visit(Visitor&& vis) const {
   return visitImpl(AD_FWD(vis), data_);
 }
@@ -158,9 +158,9 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor)(
     requires ad_utility::InvocableWithExactReturnType<
-        Visitor, void, std::string_view, ConfigManager&>
-        CPP_and_def ad_utility::InvocableWithExactReturnType<
-            Visitor, void, std::string_view, ConfigOption&>)
+        Visitor, void, std::string_view, ConfigManager&> &&
+    ad_utility::InvocableWithExactReturnType<Visitor, void, std::string_view,
+                                             ConfigOption&>)
 void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
                                         std::string_view pathPrefix) const {
   // For less code duplication.
@@ -263,10 +263,9 @@ auto ConfigManager::allHashMapEntries(HashMapType& hashMap,
 
 // ____________________________________________________________________________
 CPP_template_def(typename ConfigOptions, typename ReturnReference)(
-    requires SameAsAny<ReturnReference, ConfigOption&, const ConfigOption&>
-        CPP_and_def SimilarTo<
-            ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
-            ConfigOptions>)
+    requires SameAsAny<ReturnReference, ConfigOption&, const ConfigOption&> &&
+    SimilarTo<ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
+              ConfigOptions>)
 std::vector<std::pair<std::string, ReturnReference>> ConfigManager::
     configurationOptionsImpl(ConfigOptions& configurationOptions) {
   return ad_utility::transform(

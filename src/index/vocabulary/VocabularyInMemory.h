@@ -43,9 +43,8 @@ class VocabularyInMemory
   // returned vocabulary is only valid as long as the memory backing
   // `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          S>) static VocabularyInMemory
-      fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+  static VocabularyInMemory fromZeroCopyDeserializer(S& serializer) {
     return VocabularyInMemory{Words::fromZeroCopyDeserializer(serializer)};
   }
 
