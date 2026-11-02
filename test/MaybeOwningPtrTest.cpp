@@ -20,6 +20,12 @@ namespace {
 
 using ad_utility::MaybeOwningPtr;
 
+// Without the lifetime checks, a `MaybeOwningPtr` is as large as a
+// `shared_ptr`.
+#ifndef QL_ENABLE_LIFETIME_CHECKS
+static_assert(sizeof(MaybeOwningPtr<int>) == sizeof(std::shared_ptr<int>));
+#endif
+
 // An owning pointer keeps its object alive, a non-owning copy doesn't.
 TEST(MaybeOwningPtr, ownership) {
   auto shared = std::make_shared<int>(42);
@@ -71,10 +77,13 @@ TEST(MaybeOwningPtr, uncheckedNonOwning) {
   EXPECT_EQ(copy.get(), &value);
 }
 
-// The pointer must not be null.
+// The pointer must not be null, and an owning pointer needs a control block.
 TEST(MaybeOwningPtr, nullptrIsRejected) {
   EXPECT_ANY_THROW(MaybeOwningPtr<int>{std::shared_ptr<int>{}});
   EXPECT_ANY_THROW(MaybeOwningPtr<int>::makeUncheckedNonOwning(nullptr));
+  int value = 42;
+  std::shared_ptr<int> withoutControlBlock{std::shared_ptr<int>{}, &value};
+  EXPECT_ANY_THROW(MaybeOwningPtr<int>{withoutControlBlock});
 }
 
 // Destroying or overwriting a non-owning pointer that outlived its owner
@@ -85,8 +94,8 @@ TEST(MaybeOwningPtr, lifetimeCheck) {
     MaybeOwningPtr<int> owner{std::make_shared<int>(1)};
     return std::optional{owner.nonOwningCopy()};
   };
-  EXPECT_DEATH(makeDangling().reset(), "outlived the owner");
-  EXPECT_DEATH(
+  EXPECT_DEATH_IF_SUPPORTED(makeDangling().reset(), "outlived the owner");
+  EXPECT_DEATH_IF_SUPPORTED(
       {
         auto dangling = makeDangling();
         MaybeOwningPtr<int> other{std::make_shared<int>(2)};

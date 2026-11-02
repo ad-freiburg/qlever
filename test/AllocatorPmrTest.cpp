@@ -207,7 +207,7 @@ TEST(AllocatorPmr, NonOwningCopyOutlivesOwner) {
     }
     nonOwning.reset();
   };
-  EXPECT_DEATH(outliveOwner(), "outlived the owner");
+  EXPECT_DEATH_IF_SUPPORTED(outliveOwner(), "outlived the owner");
 #else
   GTEST_SKIP() << "The lifetime checks are disabled in this build";
 #endif
