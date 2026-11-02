@@ -24,6 +24,7 @@
 #include "../../util/GTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "libqlever/BlobCompression.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/BlobDiff.h"
@@ -321,10 +322,14 @@ TEST(BlobDiffProducer, weeklyStepsAreSelfConsistentAndEquivalentToFreshBuilds) {
       weeks.blobs_[3], ql::span<const char>{weeks.diffs_[3]});
   EXPECT_THAT(description, HasSubstr("Blob: "));
   EXPECT_THAT(description, HasSubstr("SHA-256"));
-  EXPECT_THAT(description, HasSubstr("The diff yields this blob."));
+  // Without checksums in the diff (the default), only the sizes are compared.
+  EXPECT_THAT(description,
+              HasSubstr("The diff probably yields this blob (same size)."));
+  EXPECT_THAT(description, HasSubstr("checksums: none"));
+  EXPECT_THAT(description, HasSubstr("compressed with level 1"));
   EXPECT_THAT(BlobDiffProducer::inspect(weeks.blobs_[2],
                                         ql::span<const char>{weeks.diffs_[3]}),
-              HasSubstr("The diff applies to this blob."));
+              HasSubstr("The diff probably applies to this blob (same size)."));
   EXPECT_THAT(BlobDiffProducer::inspect(weeks.blobs_[0],
                                         ql::span<const char>{weeks.diffs_[3]}),
               HasSubstr("The diff is unrelated to this blob."));
@@ -632,13 +637,26 @@ TEST(BlobDiffProducer, stateDirectoryBookkeeping) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       BlobDiffProducer::step(otherConfig, snapshotFile(3), stateDir),
       HasSubstr("config differs"));
-  // The compaction thresholds, the number of threads, and the compression
-  // level of the diffs do not matter.
+  // The compaction thresholds, the number of threads, the compression levels,
+  // and the checksums of the diffs do not matter, and can change between two
+  // weeks.
   auto sameConfig = snapshotConfig();
   sameConfig.maxGeoSegments_ = 3;
   sameConfig.numThreads_ = 1;
   sameConfig.diffCompressionLevel_ = 3;
+  sameConfig.blobCompressionLevel_ = 5;
+  sameConfig.diffChecksumType_ = blobDiff::BlobChecksumType::sha256;
   EXPECT_EQ(sameConfig.fingerprint(), config.fingerprint());
+  auto changed = BlobDiffProducer::step(sameConfig, snapshotFile(3), stateDir);
+  EXPECT_EQ(applyOrFail(next.blob_, changed.diffFile_), changed.blob_);
+  auto index = blobCompression::readBlobIndex(changed.blob_);
+  ASSERT_TRUE(index.has_value());
+  EXPECT_EQ(index->encoding_.compressionLevel_, 5);
+  auto description = BlobDiffProducer::inspect(
+      changed.blob_, ql::span<const char>{changed.diffFile_});
+  EXPECT_THAT(description, HasSubstr("The diff yields this blob."));
+  EXPECT_THAT(description, HasSubstr("checksums: sha256"));
+  EXPECT_THAT(description, HasSubstr("compressed with level 5"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       BlobDiffProducer::step(config, snapshotFile(3), stateDir + "_missing"),
       HasSubstr("Run `init` first"));

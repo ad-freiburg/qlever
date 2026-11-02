@@ -18,6 +18,7 @@
 
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "libqlever/BlobCompression.h"
 #include "util/AlignedAllocator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UninitializedAllocator.h"
@@ -84,6 +85,18 @@ struct BlobSerializationConfig {
     double maxDeadShapeRatio_ = 0.3;
   };
   std::optional<IncrementalBase> incremental_;
+
+  // The ZSTD compression level of the blob (see
+  // `blobCompression::BlobEncoding`).
+  int compressionLevel_ = blobCompression::defaultCompressionLevel;
+
+  // If true, then the start of the blob (the header, the index metadata, and
+  // the vocabulary) is compressed as a stable prefix (see
+  // `BlobCompression.h`). This makes the compression slower, but the stable
+  // prefix does not have to be compressed again when a blob with the same
+  // vocabulary is computed from this blob (see
+  // `blobDiff::applyBlobDiffToCompressedBase`).
+  bool writeStablePrefix_ = false;
 };
 
 // Serialize and deserialize the vocabulary and the `NamedResultCache` of a
@@ -261,8 +274,11 @@ class NamedCachedQueryBlobManager {
   // format. They are exposed publicly so that they can be unit-tested in
   // isolation.
 
-  // Compress `uncompressedBlob` into a single ZSTD frame.
-  static std::vector<char> compressBlob(ql::span<const char> uncompressedBlob);
+  // Compress `uncompressedBlob` into a single ZSTD frame with the given
+  // `encoding` (see `blobCompression::compressBlob`).
+  static std::vector<char> compressBlob(
+      ql::span<const char> uncompressedBlob,
+      const blobCompression::BlobEncoding& encoding = {});
 
   // Inverse of `compressBlob`: decompress `compressedBlob` into a freshly
   // allocated buffer that uses `allocator` for its storage (see

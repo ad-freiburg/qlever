@@ -116,14 +116,32 @@ BlobDiffConfig parseConfig(const YAML::Node& yaml) {
   }
   if (hasKey(yaml, "blob")) {
     const YAML::Node blob = yaml["blob"];
-    checkKeys(blob, "blob", {"excludedEntryRegexes", "diffCompressionLevel"});
+    checkKeys(blob, "blob",
+              {"excludedEntryRegexes", "compressionLevel",
+               "diffCompressionLevel", "diffChecksum"});
     config.excludedEntryRegexes_ = getOr<std::vector<std::string>>(
         blob, "excludedEntryRegexes", "blob", {});
+    config.blobCompressionLevel_ = getOr<int>(blob, "compressionLevel", "blob",
+                                              config.blobCompressionLevel_);
+    if (config.blobCompressionLevel_ < -100 ||
+        config.blobCompressionLevel_ > 22) {
+      configError("`blob.compressionLevel` has to be in [-100, 22].");
+    }
     config.diffCompressionLevel_ = getOr<int>(
         blob, "diffCompressionLevel", "blob", config.diffCompressionLevel_);
     if (config.diffCompressionLevel_ < 1 || config.diffCompressionLevel_ > 22) {
       configError("`blob.diffCompressionLevel` has to be in [1, 22].");
     }
+    auto checksum = getOr<std::string>(
+        blob, "diffChecksum", "blob",
+        std::string{blobDiff::toString(config.diffChecksumType_)});
+    auto checksumType = blobDiff::blobChecksumTypeFromString(checksum);
+    if (!checksumType.has_value()) {
+      configError(absl::StrCat("`blob.diffChecksum` has to be one of `none`, ",
+                               "`crc32c`, and `sha256`, but is `", checksum,
+                               "`."));
+    }
+    config.diffChecksumType_ = checksumType.value();
   }
   if (hasKey(yaml, "geoCompaction")) {
     const YAML::Node geo = yaml["geoCompaction"];
@@ -206,7 +224,10 @@ YAML::Node toNode(const BlobDiffConfig& config) {
   index["settingsFile"] = config.settingsFile_;
   YAML::Node blob = yaml["blob"];
   blob["excludedEntryRegexes"] = config.excludedEntryRegexes_;
+  blob["compressionLevel"] = config.blobCompressionLevel_;
   blob["diffCompressionLevel"] = config.diffCompressionLevel_;
+  blob["diffChecksum"] =
+      std::string{blobDiff::toString(config.diffChecksumType_)};
   YAML::Node geo = yaml["geoCompaction"];
   geo["maxSegments"] = config.maxGeoSegments_;
   geo["maxDeadShapeRatio"] = config.maxDeadShapeRatio_;
@@ -266,10 +287,13 @@ std::string BlobDiffConfig::toYaml() const { return emit(toNode(*this)); }
 std::string BlobDiffConfig::fingerprint() const {
   auto yaml = toNode(*this);
   yaml.remove("geoCompaction");
-  // The number of threads does not influence the content of the index, and
-  // the compression level of the diffs does not influence the blobs.
+  // The number of threads does not influence the content of the index, the
+  // compression levels do not influence the decompressed blobs, and the
+  // checksums of the diffs do not influence the blobs at all.
   yaml["index"].remove("numThreads");
+  yaml["blob"].remove("compressionLevel");
   yaml["blob"].remove("diffCompressionLevel");
+  yaml["blob"].remove("diffChecksum");
   auto digest = ad_utility::HashSha256{}(emit(yaml));
   return absl::StrJoin(digest, "", ad_utility::hexFormatter);
 }

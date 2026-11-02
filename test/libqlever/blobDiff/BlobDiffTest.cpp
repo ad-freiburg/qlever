@@ -10,7 +10,9 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
+#include <zstd.h>
 
+#include <algorithm>
 #include <cstring>
 #include <random>
 #include <string>
@@ -20,6 +22,7 @@
 #include "../../util/GTestHelpers.h"
 #include "../QleverTestHelpers.h"
 #include "backports/algorithm.h"
+#include "libqlever/BlobCompression.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/BlobDiff.h"
 
@@ -36,10 +39,19 @@ using ErrorType = BlobDiffErrorType;
 // The offsets of some fields of the header of a diff file (see the file format
 // in `BlobDiff.h`), used to corrupt them.
 constexpr size_t versionOffset = 8;
-constexpr size_t targetSizeOffset = versionOffset + 2 + 8 + 32;
+constexpr size_t checksumTypeOffset = versionOffset + 2;
+constexpr size_t targetSizeOffset = checksumTypeOffset + 1 + 8 + 32;
 constexpr size_t targetChecksumOffset = targetSizeOffset + 8;
-constexpr size_t payloadSizeOffset = targetChecksumOffset + 32;
+constexpr size_t payloadSizeOffset = targetChecksumOffset + 32 + 4 + 8;
 constexpr size_t payloadOffset = payloadSizeOffset + 8;
+
+// The options of `computeBlobDiff` with the given checksum `type` (and the
+// default values otherwise).
+BlobDiffOptions withChecksums(BlobChecksumType type) {
+  BlobDiffOptions options;
+  options.checksumType_ = type;
+  return options;
+}
 
 // The `maxTargetSize` that is passed to the functions in `BlobDiff.h`, unless a
 // test checks the limit itself. It is much larger than all targets in the
@@ -118,19 +130,28 @@ auto isDecompressedBlob(ql::span<const char> expected) {
 // Compute the diff of `base` and `target`, check that applying it to `base`
 // yields `target` and that the header is consistent, and return it.
 Bytes diffAndCheck(ql::span<const char> base, ql::span<const char> target,
-                   int compressionLevel = defaultBlobDiffCompressionLevel,
+                   const BlobDiffOptions& options = {},
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  auto diff = computeBlobDiff(base, target, compressionLevel);
+  auto diff = computeBlobDiff(base, target, options);
   EXPECT_THAT(applyBlobDiffToDecompressedBase(base, diff, maxTargetSize),
               isDecompressedBlob(target));
+  auto type = options.checksumType_;
   EXPECT_THAT(
       readBlobDiffHeader(diff, maxTargetSize),
       VariantWith<BlobDiffHeader>(AllOf(
+          AD_FIELD(BlobDiffHeader, checksumType_, Eq(type)),
           AD_FIELD(BlobDiffHeader, baseSize_, Eq(base.size())),
           AD_FIELD(BlobDiffHeader, targetSize_, Eq(target.size())),
-          AD_FIELD(BlobDiffHeader, baseChecksum_, Eq(blobChecksum(base))),
-          AD_FIELD(BlobDiffHeader, targetChecksum_, Eq(blobChecksum(target))),
+          AD_FIELD(BlobDiffHeader, baseChecksum_, Eq(blobChecksum(base, type))),
+          AD_FIELD(BlobDiffHeader, targetChecksum_,
+                   Eq(blobChecksum(target, type))),
+          AD_FIELD(
+              BlobDiffHeader, targetEncoding_,
+              AllOf(AD_FIELD(blobCompression::BlobEncoding, compressionLevel_,
+                             Eq(options.targetEncoding_.compressionLevel_)),
+                    AD_FIELD(blobCompression::BlobEncoding, stablePrefixSize_,
+                             Eq(options.targetEncoding_.stablePrefixSize_)))),
           AD_FIELD(BlobDiffHeader, payloadSize_,
                    AllOf(Gt(0u), Eq(diff.size() - payloadOffset))))));
   return diff;
@@ -184,10 +205,49 @@ TEST(BlobDiff, syntheticBytes) {
   auto zeros = Bytes(10'000'000, '\0');
   EXPECT_LT(diffAndCheck({}, zeros).size(), 2'000u);
 
-  // All compression levels work.
+  // All compression levels, checksum types, and target encodings work.
   for (int level : {1, 3, 9, 22}) {
-    diffAndCheck(base, target, level);
+    BlobDiffOptions options;
+    options.compressionLevel_ = level;
+    diffAndCheck(base, target, options);
   }
+  for (auto type : {BlobChecksumType::none, BlobChecksumType::crc32c,
+                    BlobChecksumType::sha256}) {
+    BlobDiffOptions options = withChecksums(type);
+    options.targetEncoding_ = {-5, 12345};
+    diffAndCheck(base, target, options);
+  }
+}
+
+// Test the names of the checksum types, and the checksums themselves.
+TEST(BlobDiff, checksumTypes) {
+  for (auto type : {BlobChecksumType::none, BlobChecksumType::crc32c,
+                    BlobChecksumType::sha256}) {
+    EXPECT_THAT(blobChecksumTypeFromString(toString(type)), Optional(type));
+  }
+  EXPECT_EQ(toString(BlobChecksumType::crc32c), "crc32c");
+  EXPECT_EQ(blobChecksumTypeFromString("md5"), std::nullopt);
+
+  // The checksums of an empty input: only the first 4 bytes of a CRC32C are
+  // used, and nothing of `none`.
+  Bytes empty;
+  BlobDiffHeader::Checksum zeros{};
+  EXPECT_EQ(blobChecksum(empty, BlobChecksumType::none), zeros);
+  EXPECT_EQ(blobChecksum(empty, BlobChecksumType::crc32c), zeros);
+  std::string abc = "abc";
+  ql::span<const char> abcSpan{abc.data(), abc.size()};
+  auto crc = blobChecksum(abcSpan, BlobChecksumType::crc32c);
+  // The CRC32C of `abc` is `0x364B3FB7`.
+  uint32_t value;
+  std::memcpy(&value, crc.data(), sizeof(value));
+  EXPECT_EQ(value, 0x364B3FB7u);
+  EXPECT_TRUE(
+      std::all_of(crc.begin() + 4, crc.end(), [](char c) { return c == 0; }));
+  // The SHA-256 of `abc` starts with `ba7816bf`.
+  auto sha = blobChecksum(abcSpan, BlobChecksumType::sha256);
+  EXPECT_EQ(sha, blobChecksum(abcSpan));
+  EXPECT_EQ(static_cast<uint8_t>(sha[0]), 0xBAu);
+  EXPECT_EQ(static_cast<uint8_t>(sha[1]), 0x78u);
 }
 
 // Test that a wrong base, garbage, a wrong version, a truncated or extended
@@ -196,20 +256,48 @@ TEST(BlobDiff, syntheticBytes) {
 TEST(BlobDiff, invalidInputsAreReported) {
   auto base = randomBytes(10'000, 1);
   auto other = randomBytes(10'000, 2);
-  auto target = randomBytes(10'000, 3);
-  auto diff = diffAndCheck(base, target);
-  Bytes garbage(100, 'x');
+  // The target consists of pieces of the base, so applying the diff to the
+  // wrong base yields a wrong result (which is detected).
+  Bytes target{base.begin() + 5'000, base.end()};
+  target.insert(target.end(), base.begin(), base.begin() + 5'000);
+  auto diff =
+      diffAndCheck(base, target, withChecksums(BlobChecksumType::sha256));
+  Bytes garbage(200, 'x');
 
-  // The diff only fits its base (same size, different content).
+  // The diff only fits its base (same size, different content), which is
+  // detected by the checksums. Without checksums, it is detected by the
+  // checksum of the payload.
   EXPECT_THAT(
       applyBlobDiffToDecompressedBase(other, diff, maxTargetSize),
       isError(ErrorType::wrongBase, "does not belong to the given base"));
+  auto crcDiff =
+      diffAndCheck(base, target, withChecksums(BlobChecksumType::crc32c));
+  EXPECT_THAT(
+      applyBlobDiffToDecompressedBase(other, crcDiff, maxTargetSize),
+      isError(ErrorType::wrongBase, "does not belong to the given base"));
+  auto noChecksums = diffAndCheck(base, target);
+  EXPECT_THAT(
+      applyBlobDiffToDecompressedBase(other, noChecksums, maxTargetSize),
+      isError(ErrorType::corruptedPayload, "cannot be decompressed"));
+  // A base of the wrong size is always detected.
+  EXPECT_THAT(
+      applyBlobDiffToDecompressedBase(randomBytes(9'999, 1), noChecksums,
+                                      maxTargetSize),
+      isError(ErrorType::wrongBase, "does not belong to the given base"));
+  // An unknown checksum type.
+  auto wrongType = diff;
+  wrongType[checksumTypeOffset] = 3;
+  EXPECT_THAT(
+      readBlobDiffHeader(wrongType, maxTargetSize),
+      isError(ErrorType::invalidChecksumType, "unknown checksum type 3"));
   // Garbage instead of a diff, also when applied.
   EXPECT_THAT(readBlobDiffHeader(garbage, maxTargetSize),
               isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
   EXPECT_THAT(applyBlobDiffToDecompressedBase(base, garbage, maxTargetSize),
               isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
   EXPECT_THAT(readBlobDiffHeader(Bytes(5, 'x'), maxTargetSize),
+              isError(ErrorType::invalidMagicBytes, "too small"));
+  EXPECT_THAT(readBlobDiffHeader(Bytes(110, 'x'), maxTargetSize),
               isError(ErrorType::invalidMagicBytes, "too small"));
   AD_EXPECT_THROW_WITH_MESSAGE(describeBlobDiff(garbage),
                                HasSubstr("not a blob diff file"));
@@ -360,13 +448,69 @@ TEST(BlobDiff, realBlobsAfterUpdate) {
   EXPECT_THAT(
       applyBlobDiffToCompressedBase(targetCompressed, diff, maxTargetSize),
       isError(ErrorType::wrongBase, "does not belong to the given base"));
-  Bytes garbage(100, 'x');
+  Bytes garbage(200, 'x');
   EXPECT_THAT(applyBlobDiffToCompressedBase(garbage, diff, maxTargetSize),
               isError(ErrorType::baseNotDecompressible,
                       "base blob cannot be decompressed"));
   EXPECT_THAT(
       applyBlobDiffToCompressedBase(baseCompressed, garbage, maxTargetSize),
       isError(ErrorType::invalidMagicBytes, "not a blob diff file"));
+}
+
+// Test that applying a diff to a compressed base copies the compressed stable
+// prefix of the base (see `BlobCompression.h`), and yields the compressed
+// target that was written with the same settings byte for byte.
+TEST(BlobDiff, stablePrefixIsCopied) {
+  auto config = buildTestIndex(
+      manyTriples(2000), ad_utility::VocabularyType::InMemoryUncompressed);
+  Qlever source{EngineConfig{config}};
+  BlobSerializationConfig serializationConfig;
+  serializationConfig.writeStablePrefix_ = true;
+  serializationConfig.compressionLevel_ = 2;
+  source.queryAndPinResultWithName(
+      "all", "SELECT ?s ?p ?o WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o");
+  auto baseCompressed =
+      source.serializeVocabAndNamedCacheToCompressedBlob(serializationConfig);
+  // An update without new words keeps the vocabulary (and thereby the stable
+  // prefix) unchanged.
+  ad_utility::testing::applyUpdateToEngine(source,
+                                           "INSERT DATA { <s10> <q> <o20> }");
+  ad_utility::testing::applyUpdateToEngine(source,
+                                           "DELETE DATA { <s5> <p> <o5> }");
+  source.queryAndPinResultWithName(
+      "all", "SELECT ?s ?p ?o WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o");
+  auto targetCompressed =
+      source.serializeVocabAndNamedCacheToCompressedBlob(serializationConfig);
+
+  auto targetIndex = blobCompression::readBlobIndex(targetCompressed);
+  ASSERT_TRUE(targetIndex.has_value());
+  EXPECT_EQ(targetIndex->encoding_.compressionLevel_, 2);
+  BlobDiffOptions options;
+  options.targetEncoding_ = targetIndex->encoding_;
+  auto diff = diffAndCheck(decompressToBytes(baseCompressed),
+                           decompressToBytes(targetCompressed), options);
+  auto result =
+      applyBlobDiffToCompressedBase(baseCompressed, diff, maxTargetSize);
+  ASSERT_THAT(result, isBlob(targetCompressed));
+
+  // The stable prefix requires the sequence API of ZSTD 1.5.5 (see
+  // `BlobCompression.h`).
+  if (ZSTD_versionNumber() < 10505) {
+    EXPECT_EQ(targetIndex->encoding_.stablePrefixSize_, 0u);
+    return;
+  }
+  // The compressed stable prefix of the result is the one of the base.
+  auto prefixEnd = targetIndex->stablePrefixBlocksEnd_;
+  EXPECT_GT(targetIndex->encoding_.stablePrefixSize_, 4096u);
+  auto baseIndex = blobCompression::readBlobIndex(baseCompressed);
+  ASSERT_TRUE(baseIndex.has_value());
+  EXPECT_EQ(baseIndex->stablePrefixBlocksEnd_, prefixEnd);
+  // The frame headers (13 bytes) differ in the size of the content.
+  const auto& resultBytes = std::get<Bytes>(result);
+  constexpr size_t frameHeaderSize = 13;
+  EXPECT_TRUE(std::equal(resultBytes.begin() + frameHeaderSize,
+                         resultBytes.begin() + prefixEnd,
+                         baseCompressed.begin() + frameHeaderSize));
 }
 
 // Test that `applyBlobDiffToCompressedBase` validates the diff before the
@@ -376,8 +520,9 @@ TEST(BlobDiff, compressedBaseIsCheckedAfterTheDiff) {
   using Manager = qlever::NamedCachedQueryBlobManager;
   auto base = randomBytes(10'000, 1);
   auto target = randomBytes(10'000, 3);
-  auto diff = diffAndCheck(base, target);
-  Bytes garbage(100, 'x');
+  auto diff =
+      diffAndCheck(base, target, withChecksums(BlobChecksumType::crc32c));
+  Bytes garbage(200, 'x');
 
   // The diff is validated before the base, so an invalid diff is reported even
   // if the base is garbage as well.

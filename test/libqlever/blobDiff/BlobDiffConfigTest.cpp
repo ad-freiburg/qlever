@@ -32,6 +32,9 @@ TEST(BlobDiffConfig, parsing) {
   EXPECT_DOUBLE_EQ(config.maxDeadShapeRatio_, 0.3);
   EXPECT_EQ(config.diffCompressionLevel_,
             blobDiff::defaultBlobDiffCompressionLevel);
+  EXPECT_EQ(config.blobCompressionLevel_,
+            blobCompression::defaultCompressionLevel);
+  EXPECT_EQ(config.diffChecksumType_, blobDiff::BlobChecksumType::none);
   ASSERT_EQ(config.namedQueries_.size(), 5u);
   EXPECT_EQ(config.namedQueries_[2].name_, "streetGeometries");
   EXPECT_EQ(config.namedQueries_[2].geoIndexVar_, "?wkt");
@@ -45,6 +48,8 @@ TEST(BlobDiffConfig, parsing) {
   // of the fingerprint, all others are.
   roundTrip.numThreads_ = 1;
   roundTrip.diffCompressionLevel_ = 3;
+  roundTrip.blobCompressionLevel_ = 7;
+  roundTrip.diffChecksumType_ = blobDiff::BlobChecksumType::sha256;
   roundTrip.maxGeoSegments_ = 2;
   roundTrip.maxDeadShapeRatio_ = 0.9;
   EXPECT_EQ(roundTrip.fingerprint(), config.fingerprint());
@@ -132,6 +137,34 @@ TEST(BlobDiffConfig, parsing) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse("blob:\n  diffCompressionLevel: 23\nnamedQueries: []"),
       HasSubstr("diffCompressionLevel"));
+  // The compression level of the blobs, also a negative one.
+  for (int level : {-100, -3, 1, 22}) {
+    EXPECT_EQ(parse(absl::StrCat("blob:\n  compressionLevel: ", level,
+                                 "\nnamedQueries: []"))
+                  .blobCompressionLevel_,
+              level);
+  }
+  for (int level : {-101, 23}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("blob:\n  compressionLevel: ", level,
+                           "\nnamedQueries: []")),
+        HasSubstr("`blob.compressionLevel` has to be in [-100, 22]"));
+  }
+  // The checksums of the diffs.
+  for (auto type :
+       {blobDiff::BlobChecksumType::none, blobDiff::BlobChecksumType::crc32c,
+        blobDiff::BlobChecksumType::sha256}) {
+    auto parsed =
+        parse(absl::StrCat("blob:\n  diffChecksum: ", blobDiff::toString(type),
+                           "\nnamedQueries: []"));
+    EXPECT_EQ(parsed.diffChecksumType_, type);
+    EXPECT_EQ(BlobDiffConfig::fromYaml(parsed.toYaml()).diffChecksumType_,
+              type);
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("blob:\n  diffChecksum: md5\nnamedQueries: []"),
+      HasSubstr("`blob.diffChecksum` has to be one of `none`, `crc32c`, and "
+                "`sha256`, but is `md5`"));
   AD_EXPECT_THROW_WITH_MESSAGE(parse("namedQueries: [unterminated"),
                                HasSubstr("the config is not valid YAML"));
 

@@ -20,6 +20,7 @@
 #include <variant>
 
 #include "backports/filesystem.h"
+#include "libqlever/BlobCompression.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/BlobDiff.h"
@@ -140,6 +141,8 @@ std::vector<char> serializeWithoutBase(const Qlever& qlever,
   BlobSerializationConfig serializationConfig;
   serializationConfig.excludedEntryRegexes_ = config.excludedEntryRegexes_;
   serializationConfig.alwaysUseNewFormat_ = true;
+  serializationConfig.compressionLevel_ = config.blobCompressionLevel_;
+  serializationConfig.writeStablePrefix_ = true;
   return qlever.serializeVocabAndNamedCacheToCompressedBlob(
       serializationConfig);
 }
@@ -180,6 +183,8 @@ BlobDiffProducer::WeeklyResult stepImpl(const BlobDiffConfig& config,
   double maxDeadRatio = forceCompaction ? 0.0 : config.maxDeadShapeRatio_;
   serializationConfig.incremental_ = BlobSerializationConfig::IncrementalBase{
       &base, maxSegments, maxDeadRatio};
+  serializationConfig.compressionLevel_ = config.blobCompressionLevel_;
+  serializationConfig.writeStablePrefix_ = true;
   result.blob_ =
       qlever.serializeVocabAndNamedCacheToCompressedBlob(serializationConfig);
 
@@ -187,13 +192,21 @@ BlobDiffProducer::WeeklyResult stepImpl(const BlobDiffConfig& config,
   // verifies the checksum of the decompressed result, so the comparison of the
   // compressed bytes only checks that the recompression is deterministic (it
   // is, because the same ZSTD version compresses the same bytes with the same
-  // parameters in this process).
+  // parameters in this process, and copying the stable prefix of the previous
+  // blob yields the same bytes as compressing it again).
   auto baseBytes = decompressOrThrow(previousBlob);
   auto targetBytes = decompressOrThrow(result.blob_);
+  blobDiff::BlobDiffOptions diffOptions;
+  diffOptions.compressionLevel_ = config.diffCompressionLevel_;
+  diffOptions.checksumType_ = config.diffChecksumType_;
+  // The blob was just written with an index (see `blobCompression`).
+  auto targetIndex = blobCompression::readBlobIndex(result.blob_);
+  AD_CORRECTNESS_CHECK(targetIndex.has_value());
+  diffOptions.targetEncoding_ = targetIndex->encoding_;
   result.diffFile_ = blobDiff::computeBlobDiff(
       ql::span<const char>{baseBytes.data(), baseBytes.size()},
       ql::span<const char>{targetBytes.data(), targetBytes.size()},
-      config.diffCompressionLevel_);
+      diffOptions);
   auto applied = blobDiff::applyBlobDiffToCompressedBase(
       previousBlob, result.diffFile_,
       ad_utility::MemorySize::bytes(targetBytes.size()));
@@ -301,6 +314,12 @@ std::string BlobDiffProducer::inspect(
       absl::StrCat("Blob: ", blob.size(), " bytes compressed, ", bytes.size(),
                    " bytes decompressed, SHA-256 of the decompressed blob ",
                    absl::StrJoin(checksum, "", ad_utility::hexFormatter));
+  if (auto index = blobCompression::readBlobIndex(blob)) {
+    absl::StrAppend(&result, ", compressed with level ",
+                    index->encoding_.compressionLevel_,
+                    " and a stable prefix of ",
+                    index->encoding_.stablePrefixSize_, " bytes");
+  }
   if (diffFile.has_value()) {
     // Only the header is inspected, nothing is allocated.
     auto header = blobDiff::readBlobDiffHeader(diffFile.value(),
@@ -310,10 +329,22 @@ std::string BlobDiffProducer::inspect(
       return result;
     }
     const auto& validHeader = std::get<blobDiff::BlobDiffHeader>(header);
+    // Without checksums, only the sizes can be compared.
+    auto diffChecksum = blobDiff::blobChecksum(span, validHeader.checksumType_);
+    auto matches = [&bytes, &diffChecksum](uint64_t size,
+                                           const auto& expectedChecksum) {
+      return size == bytes.size() && expectedChecksum == diffChecksum;
+    };
+    bool hasChecksums =
+        validHeader.checksumType_ != blobDiff::BlobChecksumType::none;
     std::string_view relation =
-        validHeader.targetChecksum_ == checksum ? "yields this blob"
-        : validHeader.baseChecksum_ == checksum ? "applies to this blob"
-                                                : "is unrelated to this blob";
+        matches(validHeader.targetSize_, validHeader.targetChecksum_)
+            ? (hasChecksums ? "yields this blob"
+                            : "probably yields this blob (same size)")
+        : matches(validHeader.baseSize_, validHeader.baseChecksum_)
+            ? (hasChecksums ? "applies to this blob"
+                            : "probably applies to this blob (same size)")
+            : "is unrelated to this blob";
     absl::StrAppend(&result, "\n", blobDiff::describeBlobDiff(diffFile.value()),
                     "\nThe diff ", relation, ".");
   }

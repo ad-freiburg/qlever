@@ -33,7 +33,9 @@ namespace qlever {
 //   settingsFile: ""
 // blob:
 //   excludedEntryRegexes: []
+//   compressionLevel: 1
 //   diffCompressionLevel: 19
+//   diffChecksum: none
 // geoCompaction:
 //   maxSegments: 8
 //   maxDeadShapeRatio: 0.3
@@ -69,9 +71,16 @@ struct BlobDiffConfig {
   // The vocabulary entries that are left out of the blob, see
   // `BlobSerializationConfig::excludedEntryRegexes_`.
   std::vector<std::string> excludedEntryRegexes_;
+  // The ZSTD compression level of the blobs (-100 to 22, the negative levels
+  // are the fast levels of ZSTD), see `BlobSerializationConfig`.
+  int blobCompressionLevel_ = blobCompression::defaultCompressionLevel;
   // The ZSTD compression level of the diff files (1 to 22), see
   // `blobDiff::computeBlobDiff`.
   int diffCompressionLevel_ = blobDiff::defaultBlobDiffCompressionLevel;
+  // The checksums that are stored in the diff files (`none`, `crc32c`, or
+  // `sha256`), see `blobDiff::BlobChecksumType`.
+  blobDiff::BlobChecksumType diffChecksumType_ =
+      blobDiff::BlobChecksumType::none;
 
   // The compaction thresholds for the geo indices, see
   // `BlobSerializationConfig::IncrementalBase`.
@@ -93,9 +102,10 @@ struct BlobDiffConfig {
   std::string toYaml() const;
 
   // Return a hex string that identifies all settings that influence the
-  // content of the index and of the blob (everything except the geo
-  // compaction thresholds). It is stored in the state of the producer to detect
-  // that the config changed between two weeks.
+  // content of the index and of the decompressed blob (everything except the
+  // geo compaction thresholds, the number of threads, the compression levels,
+  // and the checksums of the diffs). It is stored in the state of the producer
+  // to detect that the config changed between two weeks.
   std::string fingerprint() const;
 };
 

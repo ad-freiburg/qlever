@@ -12,11 +12,14 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 #include "backports/span.h"
+#include "libqlever/BlobCompression.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/UninitializedAllocator.h"
 
@@ -41,26 +44,61 @@ namespace qlever::blobDiff {
 // FILE FORMAT (all integers in the native byte order, which is little endian
 // on all platforms that QLever currently supports):
 //   8 bytes   the magic bytes `QLVRBDIF`
-//   uint16_t  the format version (currently 2; version 1 was a layout-based
-//             diff of a prototype, which is not supported)
+//   uint16_t  the format version (currently 3; the versions 1 and 2 were
+//             written by prototypes, and are not supported)
+//   uint8_t   the `BlobChecksumType` of the two checksums below
 //   uint64_t  the size of the decompressed base
-//   32 bytes  the SHA-256 checksum of the decompressed base
+//   32 bytes  the checksum of the decompressed base
 //   uint64_t  the size of the decompressed target
-//   32 bytes  the SHA-256 checksum of the decompressed target
+//   32 bytes  the checksum of the decompressed target
+//   int32_t   the compression level of the compressed target (see
+//             `blobCompression::BlobEncoding`)
+//   uint64_t  the size of the stable prefix of the compressed target
 //   uint64_t  the size of the payload
 //   payload   a ZSTD frame of the decompressed target, compressed with the
 //             decompressed base as reference
 // The checksums identify the base (a diff applies to exactly one base) and
-// verify the result of applying the diff (the ZSTD frame itself only stores a
-// 32-bit checksum, which detects a wrong base only with high probability).
+// verify the result of applying the diff. The payload itself stores a 32-bit
+// checksum of the target (see `ZstdWrapper::compressWithReference`), which
+// detects a corrupted payload or a wrong base with high probability, also if
+// the diff has no checksums (`BlobChecksumType::none`).
+//
+// The encoding of the compressed target is stored, so that applying the diff
+// to the compressed base yields the same compressed target as on the side
+// that computed the diff (provided that both use the same version of ZSTD),
+// and can copy the stable prefix of the compressed base (see
+// `BlobCompression.h`).
+
+// The kind of the checksums of the base and the target of a diff. Computing
+// a SHA-256 checksum takes a significant part of the time to apply a diff, so
+// it is optional.
+enum class BlobChecksumType : uint8_t {
+  // No checksums. A wrong base is then only detected by its size, or by the
+  // checksum of the payload (with a `corruptedPayload` error).
+  none = 0,
+  // The CRC32C checksum (hardware accelerated on most platforms).
+  crc32c = 1,
+  // The SHA-256 checksum.
+  sha256 = 2
+};
+
+// Return the name of the `type` (`none`, `crc32c`, or `sha256`).
+std::string_view toString(BlobChecksumType type);
+
+// Return the `BlobChecksumType` with the given `name` (see `toString`), or
+// `std::nullopt` if there is none.
+std::optional<BlobChecksumType> blobChecksumTypeFromString(
+    std::string_view name);
 
 // The fields of the header of a diff file (see the file format above).
 struct BlobDiffHeader {
   using Checksum = std::array<char, 32>;
+  BlobChecksumType checksumType_ = BlobChecksumType::none;
   uint64_t baseSize_ = 0;
   Checksum baseChecksum_{};
   uint64_t targetSize_ = 0;
   Checksum targetChecksum_{};
+  blobCompression::BlobEncoding targetEncoding_;
   uint64_t payloadSize_ = 0;
 };
 
@@ -70,14 +108,31 @@ struct BlobDiffHeader {
 // diff of a blob of a few hundred megabytes still takes only seconds.
 constexpr int defaultBlobDiffCompressionLevel = 19;
 
-// Compute the SHA-256 checksum of `bytes`.
-BlobDiffHeader::Checksum blobChecksum(ql::span<const char> bytes);
+// Compute the checksum of the given `type` of `bytes`. The checksum fills
+// only the first bytes of the `Checksum` (4 bytes for `crc32c`, none for
+// `none`), the remaining bytes are zero.
+BlobDiffHeader::Checksum blobChecksum(
+    ql::span<const char> bytes,
+    BlobChecksumType type = BlobChecksumType::sha256);
+
+// The options of `computeBlobDiff`.
+struct BlobDiffOptions {
+  // The ZSTD compression level of the payload.
+  int compressionLevel_ = defaultBlobDiffCompressionLevel;
+  // The kind of the checksums of the base and the target.
+  BlobChecksumType checksumType_ = BlobChecksumType::none;
+  // The encoding of the compressed target. It is used when the diff is applied
+  // to a compressed base (see `applyBlobDiffToCompressedBase`), and should be
+  // the one of the compressed target on the side that computes the diff (see
+  // `blobCompression::readBlobIndex`).
+  blobCompression::BlobEncoding targetEncoding_;
+};
 
 // Compute the diff file that turns the decompressed blob `base` into the
 // decompressed blob `target`.
-std::vector<char> computeBlobDiff(
-    ql::span<const char> base, ql::span<const char> target,
-    int compressionLevel = defaultBlobDiffCompressionLevel);
+std::vector<char> computeBlobDiff(ql::span<const char> base,
+                                  ql::span<const char> target,
+                                  const BlobDiffOptions& options = {});
 
 // The reasons why reading or applying a diff file fails (see
 // `BlobDiffError`).
@@ -88,6 +143,8 @@ enum class BlobDiffErrorType {
   // The magic bytes are correct, but the format version is not the supported
   // one.
   invalidVersion,
+  // The checksum type in the header is none of the `BlobChecksumType`s.
+  invalidChecksumType,
   // The size of the payload that is stored in the header does not match the
   // number of bytes that follow the header (the diff file is truncated or has
   // trailing bytes).
@@ -102,7 +159,9 @@ enum class BlobDiffErrorType {
   // `applyBlobDiffToCompressedBase`).
   baseNotDecompressible,
   // The diff does not belong to the given base (the size or the checksum of
-  // the base differs from the one that is stored in the header).
+  // the base differs from the one that is stored in the header). If the diff
+  // has no checksums, then a base with the correct size is not detected as
+  // wrong here, but by the checksum of the payload (`corruptedPayload`).
   wrongBase,
   // The payload cannot be decompressed, or the result does not have the
   // checksum of the target that is stored in the header.
@@ -143,17 +202,21 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile,
 // Apply `diffFile` to the decompressed blob `base` and return the decompressed
 // target blob. Report an error if the header of `diffFile` is invalid (see
 // `readBlobDiffHeader`), if the diff does not belong to the `base` (size or
-// checksum differ), or if the payload is corrupted (it cannot be decompressed,
-// or the result does not have the checksum that is stored in the diff). For the
-// meaning of `maxTargetSize` see `readBlobDiffHeader`. Do not throw for any
-// input, except if the target cannot be allocated.
+// checksum differ, see `BlobChecksumType`), or if the payload is corrupted (it
+// cannot be decompressed, or the result does not have the checksum that is
+// stored in the diff or in the payload). For the meaning of `maxTargetSize`
+// see `readBlobDiffHeader`. Do not throw for any input, except if the target
+// cannot be allocated.
 DecompressedBlobOrError applyBlobDiffToDecompressedBase(
     ql::span<const char> base, ql::span<const char> diffFile,
     ad_utility::MemorySize maxTargetSize);
 
 // Apply `diffFile` to the compressed blob `compressedBase` and return the
 // compressed target blob (a standard blob that can be loaded by
-// `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`). Report an error
+// `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`). The target is
+// compressed with the `targetEncoding_` of the diff, and the compressed stable
+// prefix of the `compressedBase` is copied if it is also the stable prefix of
+// the target (see `blobCompression::compressBlob`). Report an error
 // if the base cannot be decompressed, or in the cases of
 // `applyBlobDiffToDecompressedBase`. The `maxTargetSize` limits the size of the
 // decompressed target (see `readBlobDiffHeader`). Do not throw for any input,
