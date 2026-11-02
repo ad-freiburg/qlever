@@ -160,12 +160,7 @@ ChunkwisePermutationWriter::ChunkwisePermutationWriter(
   AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
   AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
   AD_CORRECTNESS_CHECK(blocksize_ > 0);
-  // The blocks of small relations of `writer1_` are passed on to `writer2_`
-  // (see `AddBlockOfSmallRelationsToSwitched`), which therefore also has to
-  // use the same pool of block buffers.
-  writer1_->smallBlocksCallback_ =
-      CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched{*writer2_};
-  writer2_->shareBlockBufferPoolWith(*writer1_);
+  ChunkWriter::connectTwinWriters(*writer1_, *writer2_);
 }
 
 // _____________________________________________________________________________

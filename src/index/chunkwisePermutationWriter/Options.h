@@ -15,6 +15,7 @@
 #include <memory>
 
 #include "engine/idTable/IdTable.h"
+#include "index/chunkwisePermutationWriter/ChunkWriter.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -24,11 +25,6 @@ namespace chunkwisePermutationWriter {
 
 using WriterAndCallback = CompressedRelationWriter::WriterAndCallback;
 using PermutationPairResult = CompressedRelationWriter::PermutationPairResult;
-
-// The blocks of sorted triples that the writer consumes, and a block that is
-// shared with the callbacks, which may hold on to it asynchronously.
-using Block = IdTableStatic<0>;
-using SharedBlock = std::shared_ptr<const Block>;
 
 // A callback that is invoked for every input block, from the thread of the
 // chunk that the block belongs to. It has to be thread-safe, because it is

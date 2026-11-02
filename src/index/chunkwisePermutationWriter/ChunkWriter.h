@@ -21,7 +21,6 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "index/KeyOrder.h"
-#include "index/chunkwisePermutationWriter/Options.h"
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "index/compressedRelationWriter/RelationBlockCutter.h"
@@ -30,8 +29,39 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 
+namespace chunkwisePermutationWriter {
+// The blocks of sorted triples that the writer consumes, and a block that is
+// shared with other consumers, which may hold on to it asynchronously.
+//
+// NOTE: These types are also available in the C++17 mode of the build (unlike
+// the rest of this file), so that code which exists in both modes can refer
+// to them.
+using Block = IdTableStatic<0>;
+using SharedBlock = std::shared_ptr<const Block>;
+}  // namespace chunkwisePermutationWriter
+
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+// The writer of a single chunk of a pair of twin permutations (e.g. PSO and
+// POS), for the case that the sorted triples are produced by a parallel merge
+// (see `parallelBlockMerge::parallelBlockMergeToSink`) that splits its output
+// into consecutive chunks, which are produced concurrently. Every chunk is
+// handed to a `ChunkWriter` of its own, which writes the blocks of the
+// permutation (and of its twin) right away, without waiting for the previous
+// chunks:
+//
+// * All the relations that start and end inside of the chunk are handled
+//   exactly like the classical `CompressedRelationWriter::PermutationWriter`
+//   handles them: small relations are batched into blocks of small relations,
+//   large relations are written as blocks of their own, and the twin of a large
+//   relation is sorted with a twin sorter that is private to the chunk (and
+//   that merges serially, in the thread of the chunk). The metadata of these
+//   relations is collected in the `ChunkResult`.
+// * The first and the last relation of a chunk may continue in the neighboring
+//   chunks, so the chunk returns them as a `BoundaryPart` (see below) instead
+//   of writing them completely. The parts of the same relation of consecutive
+//   chunks then have to be consolidated in the order of the chunks, which is
+//   the job of the user of this class.
 namespace chunkwisePermutationWriter {
 
 // The sorter that sorts the twin rows of a large relation (where `col0` is
@@ -40,8 +70,8 @@ using TwinSorter = ad_utility::CompressedExternalIdTableSorter<
     compressedRelationHelpers::ComparatorForConstCol0, 0>;
 
 // The part of a relation that lies at the beginning or at the end of a chunk
-// (or that covers a whole chunk), see the explanation at the top of
-// `ChunkwisePermutationWriter.h`.
+// (or that covers a whole chunk), see the explanation at the top of this
+// file.
 // All the rows of a part are rows of the same relation (the one with the
 // `col0Id_`), and the parts of a relation are consolidated in the order of
 // their chunks.
@@ -129,7 +159,8 @@ struct ChunkWriterContext {
   ColumnIndex col0Column_;
   std::vector<ColumnIndex> permutedColIndices_;
   // If `true`, then the chunks remove consecutive duplicate rows from their
-  // input blocks, see `Options::removeDuplicates_`.
+  // input blocks (which the merge of an external sorter may yield). This is
+  // correct per chunk, because a merge never splits equal rows across chunks.
   bool removeDuplicates_ = false;
   // The prefix of the names of the files of the twin sorters, their memory
   // limit, and the executor on which they run.
@@ -222,12 +253,21 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
 
   // Process the next input block of this chunk, which has to be sorted and
   // not empty. Return the block (with duplicates removed, if configured) for
-  // the callbacks, or `nullptr` if nothing is left of it.
+  // further consumers (e.g. the sorter of the next permutation), or `nullptr`
+  // if nothing is left of it.
   SharedBlock processBlock(Block block);
 
   // Finish the chunk after its last block and return everything that the
   // consolidation needs.
   ChunkResult finishChunk();
+
+  // Set up the `writer1` and the `writer2` of a pair of twin permutations for
+  // the `ChunkWriter`s: the blocks of small relations of the `writer1` are
+  // passed on to the `writer2` (see
+  // `CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched`), which
+  // therefore also has to use the same pool of block buffers.
+  static void connectTwinWriters(CompressedRelationWriter& writer1,
+                                 CompressedRelationWriter& writer2);
 
   // Helpers that are shared by the chunks and by the consolidation of their
   // results. All of them are thread-safe (they only use the thread-safe parts

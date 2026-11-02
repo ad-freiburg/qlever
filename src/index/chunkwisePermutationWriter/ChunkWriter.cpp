@@ -15,6 +15,7 @@
 
 #include <algorithm>
 
+#include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
 #include "util/views/UniqueBlockView.h"
 
 namespace chunkwisePermutationWriter {
@@ -43,7 +44,7 @@ std::unique_ptr<TwinSorter> ChunkWriterContext::makeTwinSorter(
   // thread, which is what a chunk needs: it runs on a thread of the pool and
   // must never wait for other tasks of that pool. (The runs of the sorters of
   // the boundary parts are merged by a parallel merge of the consolidation
-  // instead, see `ChunkwisePermutationWriter::writeTwinOfBoundaryRelation`.)
+  // instead.)
   sorter->setMergeExecutor(executor_, 1);
   return sorter;
 }
@@ -449,6 +450,16 @@ CompressedRelationMetadata ChunkWriter::writeSortedBlocksOfLargeRelation(
   }
   return CompressedRelationWriter::makeLargeRelationMetadata(
       col0Id, numRows, distinctCol1Counter.getAndReset());
+}
+
+// _____________________________________________________________________________
+void ChunkWriter::connectTwinWriters(CompressedRelationWriter& writer1,
+                                     CompressedRelationWriter& writer2) {
+  AD_CONTRACT_CHECK(writer1.blocksize() == writer2.blocksize());
+  AD_CONTRACT_CHECK(writer1.numColumns() == writer2.numColumns());
+  writer1.smallBlocksCallback_ =
+      CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched{writer2};
+  writer2.shareBlockBufferPoolWith(writer1);
 }
 
 }  // namespace chunkwisePermutationWriter
