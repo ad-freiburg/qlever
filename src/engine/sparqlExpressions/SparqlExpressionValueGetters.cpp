@@ -15,6 +15,7 @@
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "rdfTypes/Literal.h"
 #include "util/ParsedUri.h"
 
@@ -418,39 +419,64 @@ OptIri IriValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    ValueId id, const EvaluationContext* context) const {
+CPP_template_out_def(typename T)(requires IriEnum<T>)
+T EnumValueGetter<CPP_sfinae_args(T)>::operator()(
+    ValueId id, const EvaluationContext * context) const {
   // Use cache to remember fully parsed units for reoccurring ValueIds
-  return cache_.getOrCompute(
-      id, [&context](const ValueId& value) -> UnitOfMeasurement {
-        // Get string content of ValueId
-        auto str = idToLiteralOrIri(value, context, true);
-        // Use LiteralOrIri overload for actual computation
-        if (str.has_value()) {
-          return UnitOfMeasurementValueGetter{}(str.value(), context);
-        }
-        return UnitOfMeasurement::UNKNOWN;
-      });
+  return cache_.getOrCompute(id, [&context](const ValueId& value) -> T {
+    // Get string content of ValueId
+    auto str = idToLiteralOrIri(value, context, true);
+    // Use LiteralOrIri overload for actual computation
+    if (str.has_value()) {
+      return EnumValueGetter<T>{}(str.value(), context);
+    }
+    return EnumValueGetter<T>::getUndefined();
+  });
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s, const EvaluationContext*) const {
-  return litOrIriToUnit(s);
+CPP_template_out_def(typename T)(requires IriEnum<T>)
+T EnumValueGetter<CPP_sfinae_args(T)>::operator()(
+    const LiteralOrIri & s, const EvaluationContext*) const {
+  return litOrIriToValue(s);
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
-    const LiteralOrIri& s) {
+CPP_template_out_def(typename T)(requires IriEnum<T>)
+T EnumValueGetter<CPP_sfinae_args(T)>::litOrIriToValue(const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
-  // of measurement. Because this is a rather obscure requirement, we support
-  // IRIs also.
+  // of measurement and CRS types. Because this is a rather obscure requirement,
+  // we support IRIs also.
   if (s.isIri() || (s.isLiteral() && s.getLiteral().hasDatatype() &&
                     s.getLiteral().getDatatype() == XSD_ANYURI_TYPE)) {
-    return ad_utility::detail::iriToUnitOfMeasurement(s.getContent());
+    if constexpr (std::is_same_v<T, UnitOfMeasurement>) {
+      return ad_utility::detail::iriToUnitOfMeasurement(s.getContent());
+    } else if constexpr (std::is_same_v<T, util::geo::CRSType>) {
+      return ::util::geo::getCRSType(std::string{s.getContent()});
+    } else {
+      static_assert(ad_utility::alwaysFalse<T>);
+    }
   }
-  return UnitOfMeasurement::UNKNOWN;
+  return EnumValueGetter<T>::getUndefined();
 }
+
+// _____________________________________________________________________________
+CPP_template_out_def(typename T)(requires IriEnum<T>)
+T EnumValueGetter<CPP_sfinae_args(T)>::getUndefined() {
+  if constexpr (std::is_same_v<T, UnitOfMeasurement>) {
+    return UnitOfMeasurement::UNKNOWN;
+  } else if constexpr (std::is_same_v<T, util::geo::CRSType>) {
+    return ::util::geo::CRSType::UNSUPPORTED;
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>);
+  }
+}
+
+// Explicit instantiations
+namespace sparqlExpression::detail {
+template struct EnumValueGetter<UnitOfMeasurement>;
+template struct EnumValueGetter<util::geo::CRSType>;
+}  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________
 std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(

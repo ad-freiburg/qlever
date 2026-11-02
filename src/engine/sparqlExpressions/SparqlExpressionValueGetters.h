@@ -402,23 +402,36 @@ struct IriValueGetter : Mixin<IriValueGetter> {
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
-struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
+// Concept for the `EnumValueGetter` template parameter: the types for which the
+// enum value can be extracted from an IRI.
+template <typename T>
+CPP_concept IriEnum =
+    ad_utility::SameAsAny<T, UnitOfMeasurement, util::geo::CRSType>;
+
+// `EnumValueGetter` is a templated `ValueGetter` that returns an enum contained
+// in `EnumT`.
+CPP_template(typename T)(requires IriEnum<T>)
+struct EnumValueGetter : Mixin<EnumValueGetter<T>> {
   // Set the size of this cache to at least the number of supported units.
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
-  using Value = UnitOfMeasurement;
-  using Mixin<UnitOfMeasurementValueGetter>::operator();
-  UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
-  UnitOfMeasurement operator()(const LiteralOrIri& s,
-                               const EvaluationContext*) const;
+  // TODO<yarox-1> Find a way to extract the right size for each enum.
+  mutable ad_utility::util::LRUCache<ValueId, T> cache_{10};
+  using Value = T;
+  using Mixin<EnumValueGetter<T>>::operator();
+  T operator()(ValueId id, const EvaluationContext*) const;
+  T operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 
   // The actual implementation for a given `LiteralOrIri` which is guaranteed
   // not to use the `EvaluationContext`. This method can be used to convert
-  // `LiteralOrIri` objects holding a unit of measurement, even when no
+  // `LiteralOrIri` objects holding an Enum `T`, even when no
   // `EvaluationContext` is available. Currently used for `geof:distance` filter
   // substitution during query planning.
-  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+  static T litOrIriToValue(const LiteralOrIri& s);
+  // Get the unsupported/invalid enum value.
+  static T getUndefined();
 };
+
+using UnitOfMeasurementValueGetter = EnumValueGetter<UnitOfMeasurement>;
+using CRSTypeValueGetter = EnumValueGetter<util::geo::CRSType>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.
