@@ -212,9 +212,8 @@ struct RuntimeParameters {
   Bool treatDefaultGraphAsNamedGraph_{false,
                                       "treat-default-graph-as-named-graph"};
 
-  // If set, each `sparql-results+json` results will include a top-level "meta"
-  // field with information about query execution time, result size, and
-  // warnings.
+  // If set, each `sparql-results+json` result includes a top-level "meta" field
+  // with the query execution time, the result size, and the warnings.
   Bool sparqlResultsJsonWithMeta_{true, "sparql-results-json-with-meta"};
 
   // Memory limit for sorting rows during the writing of materialized views.
