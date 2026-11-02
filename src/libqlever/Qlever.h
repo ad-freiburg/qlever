@@ -386,6 +386,10 @@ class Qlever : public ad_utility::NoCopyNoMove {
 
   // Remove the actions that the constructors registered on the global runtime
   // parameters, as they refer to this instance.
+  //
+  // NOTE: The parameters are global, so only the most recently constructed
+  // instance is bound to them, and destroying any instance unbinds all of
+  // them.
   ~Qlever();
 
   // The executor on which the queries and index rebuilds of this instance run
