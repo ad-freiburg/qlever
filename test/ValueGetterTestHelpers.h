@@ -26,7 +26,10 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/TypeTraits.h"
+
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace valueGetterTestHelpers {
 
@@ -223,8 +226,8 @@ struct AllDatatypesTestContext : TestContextWithGivenTTl {
   // place.
   Id localVocabId(const std::string& word) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(
-            word, qec->getLocalVocabContext())));
+        localVocabEntryFromStringRepresentation(word,
+                                                qec->getLocalVocabContext())));
   }
 
  private:
@@ -384,7 +387,7 @@ class ValueGetterTester {
     TestContextWithGivenTTl testContext{""};
     LocalVocab localVocab;
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(
+        localVocabEntryFromStringRepresentation(
             std::move(literal), testContext.qec->getLocalVocabContext()));
     checkImpl(testContext, ValueId::makeFromLocalVocabIndex(idx), expected);
   }
