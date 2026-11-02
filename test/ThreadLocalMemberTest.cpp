@@ -21,6 +21,16 @@ namespace {
 
 using ad_utility::ThreadLocalMember;
 
+// A stand-in for the values of a thread, which records the calls of the
+// registry.
+struct MockThread {
+  std::vector<uint32_t> resetIds_;
+  size_t size_ = 0;
+  void reset(uint32_t id) { resetIds_.push_back(id); }
+  void resize(size_t size) { size_ = size; }
+};
+using Registry = ad_utility::detail::ThreadLocalMemberRegistry<int, MockThread>;
+
 // Run `f` on a new thread and wait for it to finish.
 template <typename F>
 void runOnThread(F f) {
@@ -122,6 +132,96 @@ TEST(ThreadLocalMember, accessAfterThreadValuesWereDestroyed) {
     *member.getOrCreate() = 1;
   });
   EXPECT_FALSE(gotValue);
+}
+
+// The registry assigns small ids, reuses the ids of released objects, and
+// stores the assigned id.
+TEST(ThreadLocalMemberRegistry, ids) {
+  Registry registry;
+  int a = 0;
+  int b = 0;
+  int c = 0;
+  std::atomic<uint32_t> idA = Registry::noId;
+  std::atomic<uint32_t> idB = Registry::noId;
+  std::atomic<uint32_t> idC = Registry::noId;
+  EXPECT_EQ(registry.getOrAllocateId(idA, &a), 0u);
+  EXPECT_EQ(idA, 0u);
+  // An assigned id is returned unchanged.
+  EXPECT_EQ(registry.getOrAllocateId(idA, &a), 0u);
+  EXPECT_EQ(registry.getOrAllocateId(idB, &b), 1u);
+  registry.releaseId(0);
+  // The released id is reused.
+  EXPECT_EQ(registry.getOrAllocateId(idC, &c), 0u);
+  EXPECT_EQ(idC, 0u);
+}
+
+// Releasing an id resets it in all registered threads, the callback of
+// `unregisterThread` sees exactly the live objects below the given bound, and
+// unregistered threads are not reset anymore.
+TEST(ThreadLocalMemberRegistry, threads) {
+  Registry registry;
+  MockThread thread1;
+  MockThread thread2;
+  registry.registerThread(&thread1);
+  registry.registerThread(&thread2);
+  registry.resize(thread1, 3);
+  EXPECT_EQ(thread1.size_, 3u);
+
+  std::vector<int> objects(3);
+  std::vector<std::atomic<uint32_t>> ids(3);
+  for (size_t i = 0; i < 3; ++i) {
+    ids[i] = Registry::noId;
+    EXPECT_EQ(registry.getOrAllocateId(ids[i], &objects[i]), i);
+  }
+  registry.releaseId(1);
+  EXPECT_THAT(thread1.resetIds_, ::testing::ElementsAre(1u));
+  EXPECT_THAT(thread2.resetIds_, ::testing::ElementsAre(1u));
+
+  std::vector<std::pair<int*, uint32_t>> visited;
+  auto visit = [&visited](int& object, uint32_t id) {
+    visited.emplace_back(&object, id);
+  };
+  // The bound may also exceed the number of ids.
+  registry.unregisterThread(&thread1, 10, visit);
+  EXPECT_THAT(visited, ::testing::ElementsAre(std::pair{&objects[0], 0u},
+                                              std::pair{&objects[2], 2u}));
+  visited.clear();
+  registry.unregisterThread(&thread2, 1, visit);
+  EXPECT_THAT(visited, ::testing::ElementsAre(std::pair{&objects[0], 0u}));
+
+  registry.releaseId(2);
+  EXPECT_THAT(thread1.resetIds_, ::testing::ElementsAre(1u));
+  EXPECT_THAT(thread2.resetIds_, ::testing::ElementsAre(1u));
+}
+
+// Many threads concurrently allocate and release ids. At no time do two live
+// objects share an id.
+TEST(ThreadLocalMemberRegistry, concurrentIds) {
+  Registry registry;
+  constexpr size_t numThreads = 8;
+  // For each id, the number of objects that currently hold it.
+  std::vector<std::atomic<int>> holders(numThreads);
+  std::atomic<bool> sharedId = false;
+  std::vector<std::thread> threads;
+  for (size_t t = 0; t < numThreads; ++t) {
+    threads.emplace_back([&]() {
+      int object = 0;
+      for (size_t i = 0; i < 10'000; ++i) {
+        std::atomic<uint32_t> id = Registry::noId;
+        uint32_t assigned = registry.getOrAllocateId(id, &object);
+        // At most `numThreads` objects are alive at the same time.
+        if (assigned >= numThreads || holders[assigned]++ != 0) {
+          sharedId = true;
+        }
+        --holders[std::min<size_t>(assigned, numThreads - 1)];
+        registry.releaseId(assigned);
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  EXPECT_FALSE(sharedId);
 }
 
 }  // namespace
