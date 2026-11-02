@@ -10,8 +10,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H
-#define QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H
+#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONWRITER_H
+#define QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONWRITER_H
 
 #include <gtest/gtest_prod.h>
 
@@ -30,6 +30,7 @@
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
+#include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Executor.h"
 #include "util/File.h"
@@ -39,10 +40,6 @@
 #include "util/Synchronized.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
-
-// This type is used to buffer small relations that will be stored in the same
-// block.
-using SmallRelationsBuffer = IdTable;
 
 /// Manage the compression and serialization of relations during the index
 /// build.
@@ -59,20 +56,16 @@ class CompressedRelationWriter {
   std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
       blockBuffer_;
-  // If multiple small relations are stored in the same block, keep track of the
-  // first and last `col0Id`.
-  Id currentBlockFirstCol0_ = Id::makeUndefined();
-  Id currentBlockLastCol0_ = Id::makeUndefined();
-
   // The actual number of columns that is stored by this writer. Is 2 if there
   // are no additional special payloads.
   size_t numColumns_;
 
   ad_utility::AllocatorWithLimit<Id> allocator_ =
       ad_utility::makeUnlimitedAllocator<Id>();
-  // A buffer for small relations that will be stored in the same block.
-  SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
   size_t rowsPerBlock_;
+  // The small relations that will be stored in the same block.
+  SmallRelationsBlockBuilder smallRelations_{IdTable{numColumns_, allocator_},
+                                             rowsPerBlock_};
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
@@ -154,7 +147,7 @@ class CompressedRelationWriter {
   // elsewhere. The latter allows writing a block of a large relation directly
   // from the input block in which its rows reside, without copying them into
   // an intermediate buffer first, see
-  // `PermutationWriter::addRowsOfCurrentRelation`.
+  // `RelationBlockCutter::addRowsOfCurrentRelation`.
   using BlockToWrite = ad_utility::IdTableOrSharedIdTableView;
 
   // The `PermutationWriter` can be used to write single or pair permutations.
@@ -268,6 +261,11 @@ class CompressedRelationWriter {
   static float computeMultiplicity(size_t numElements,
                                    size_t numDistinctElements);
 
+  // Create the metadata of a large relation with the given `col0Id`, which has
+  // `numRows` rows and `numDistinctCol1` distinct IDs in its column 1.
+  static CompressedRelationMetadata makeLargeRelationMetadata(
+      Id col0Id, size_t numRows, size_t numDistinctCol1);
+
   // Return the blocksize (in number of triples) of this writer. Note that the
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
@@ -285,9 +283,10 @@ class CompressedRelationWriter {
     outfile_.wlock()->close();
   }
 
-  // Compress the contents of `smallRelationsBuffer_` into a single
-  // block and write it to outfile_. Update `currentBlockData_` with the meta
-  // data of the written block. Then clear `smallRelationsBuffer_`.
+  // If the block of small relations that is currently being built by
+  // `smallRelations_` is not empty, compress it and write it to the `outfile_`
+  // (asynchronously, see `compressAndWriteBlock`), and start the next block of
+  // small relations.
   void writeBufferedRelationsToSingleBlock();
 
   // Compress the `column` and write it to the `outfile_`. Return the offset and
@@ -335,55 +334,16 @@ class CompressedRelationWriter {
   // writer (and not from the global executor).
   void prepareBlockForLargeRelation(Id col0Id, size_t numRows);
 
-  // Return the number of rows that a single block of small relations may hold
-  // at most.
-  //
-  // Note: The `blocksize()` is only a soft target which blocks may exceed in
-  // two independent ways. First, a block of small relations is filled up to
-  // the 1.5-fold of the `blocksize()` (which is exactly the capacity returned
-  // here), and it is only completed once the rows that are to be added next
-  // don't fit into it anymore, so the last relation that is added to a block
-  // may push it even beyond that capacity. Second, a block of a large relation
-  // grows beyond the `blocksize()` whenever equal triples (when disregarding
-  // the graph and the payload columns) would otherwise be split across two
-  // blocks, see `PermutationWriter::addRowsOfCurrentRelation`.
-  //
-  // NOTE: there are some unit tests that rely on the factor `3 / 2` below.
-  size_t smallRelationBlockCapacity() const { return (3 * blocksize()) / 2; }
-
-  // Return the number of rows that can still be added to the current block of
-  // small relations without starting a new block. May be zero.
-  size_t numRowsUntilSmallRelationBlockIsFull() const {
-    size_t capacity = smallRelationBlockCapacity();
-    size_t numBuffered = smallRelationsBuffer_.numRows();
-    return numBuffered >= capacity ? 0 : capacity - numBuffered;
-  }
-
   // Add a batch of one or more small relations that will be stored in a single
-  // block, possibly together with other small relations. The rows
-  // `[beginIdx, endIdx)` of `relations` have to consist of the complete rows of
-  // those relations, in ascending order of their `col0` ID, where `firstCol0Id`
-  // and `lastCol0Id` are the `col0` IDs of the first and of the last of them.
-  // The individual relations don't have to be delimited any further, because a
-  // block of small relations only stores the first and the last `col0` ID (see
-  // `writeBufferedRelationsToSingleBlock`). The `relations` may be an
-  // arbitrary kind of `IdTable`, in particular a view. That way a range of
-  // rows of a larger table can be added directly, without materializing it in
-  // an intermediate buffer first.
-  //
-  // Note: For all current callers the `col0` IDs are stored in column 0 of
-  // `relations`, so that `firstCol0Id == relations(beginIdx, 0)` and
-  // `lastCol0Id == relations(endIdx - 1, 0)` (this is checked below). They are
-  // still passed explicitly, because the callers have them at hand anyway, and
-  // because the function otherwise doesn't depend on the layout of the
-  // arbitrary `Table`.
+  // block, possibly together with other small relations, see
+  // `SmallRelationsBlockBuilder::add` for the requirements on the arguments.
   //
   // Note: A new block is started if the complete batch doesn't fit into the
   // current one. The resulting blocks are therefore exactly the same as if the
   // relations of the batch were added one by one, provided that the caller has
   // limited the batch to the number of rows reported by
-  // `numRowsUntilSmallRelationBlockIsFull` above (see
-  // `PermutationWriter::writeCompleteSmallRelations`).
+  // `SmallRelationsBlockBuilder::capacityForBatch` (see
+  // `RelationBlockCutter::writeCompleteSmallRelations`).
   //
   // Note: In contrast to `finishLargeRelation` this function computes no
   // `CompressedRelationMetadata`, because no metadata is persisted for small
@@ -392,29 +352,14 @@ class CompressedRelationWriter {
   template <typename Table>
   void addSmallRelations(Id firstCol0Id, Id lastCol0Id, const Table& relations,
                          size_t beginIdx, size_t endIdx) {
-    AD_CORRECTNESS_CHECK(beginIdx < endIdx && endIdx <= relations.numRows());
-    AD_CORRECTNESS_CHECK(firstCol0Id == relations(beginIdx, 0) &&
-                         lastCol0Id == relations(endIdx - 1, 0));
-    size_t numRows = endIdx - beginIdx;
+    AD_CORRECTNESS_CHECK(beginIdx < endIdx);
     // Make sure that the blocks don't become too large: If the previously
     // buffered small relations together with the new relations would exceed
     // the capacity of a block, then we start a new block for the batch.
-    if (numRows + smallRelationsBuffer_.numRows() >
-        smallRelationBlockCapacity()) {
+    if (!smallRelations_.fits(endIdx - beginIdx)) {
       writeBufferedRelationsToSingleBlock();
     }
-    // We have to keep track of the first and last `col0` of each block.
-    if (smallRelationsBuffer_.numRows() == 0) {
-      currentBlockFirstCol0_ = firstCol0Id;
-    }
-    currentBlockLastCol0_ = lastCol0Id;
-
-    // Note: `insertAtEnd` appends the columns of the input contiguously, which
-    // is much faster than appending the rows one by one, because the
-    // `IdTable`s are stored column-based. Appending a whole batch of relations
-    // at once is therefore much more efficient than appending each of them
-    // separately.
-    smallRelationsBuffer_.insertAtEnd(relations, beginIdx, endIdx);
+    smallRelations_.add(firstCol0Id, lastCol0Id, relations, beginIdx, endIdx);
   }
 
   // Add a single small relation. This is the special case of
@@ -512,4 +457,4 @@ class CompressedRelationWriter {
               largeRelationBlockQueueFollowsTheWriter);
 };
 
-#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H
+#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONWRITER_H

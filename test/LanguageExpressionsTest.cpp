@@ -12,6 +12,7 @@
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -21,6 +22,7 @@ using ad_utility::testing::IntId;
 using ad_utility::triple_component::LiteralOrIri;
 using strOpt = std::optional<std::string>;
 using LanguageTagGetter = sparqlExpression::detail::LanguageTagValueGetter;
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto T = ad_utility::testing::BoolId(true);
@@ -84,7 +86,7 @@ struct TestContext {
     auto add = [this, &localVocabContext](const std::string& s) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromStringRepresentation(s, localVocabContext)));
+              localVocabEntryFromStringRepresentation(s, localVocabContext)));
     };
     locVocIri1 = add("<https:://some_example/iri>");
     locVocIri2 = add("<http://www.w3.org/2001/XMLSchema#integer>");
@@ -120,7 +122,7 @@ struct TestContext {
 auto localVocabEntry =
     [](const std::string& literal,
        const LocalVocabContext& context) -> IdOrLocalVocabEntry {
-  return LocalVocabEntry::fromStringRepresentation(
+  return localVocabEntryFromStringRepresentation(
       absl::StrCat("\""sv, literal, "\""sv), context);
 };
 

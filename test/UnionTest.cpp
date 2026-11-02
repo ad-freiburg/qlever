@@ -17,7 +17,10 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -353,7 +356,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
 
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+  vocab1.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test1\"", qec->getLocalVocabContext()));
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -361,7 +364,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+  vocab2.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
