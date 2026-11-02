@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 #include "./util/GTestHelpers.h"
@@ -146,4 +147,42 @@ TEST(UniqueBlockView, manyBlocksInFlight) {
     distinctExpected.push_back({3 * i, 3 * i + 1, 3 * i + 2});
   }
   expectUniqueBlocks(distinctInput, distinctExpected);
+}
+
+namespace {
+// Call `removeDuplicatesFromBlock` on a copy of the `block` and return the
+// result.
+std::vector<int> removeDuplicates(std::vector<int> block,
+                                  std::optional<int> lastOfPrevious) {
+  ad_utility::removeDuplicatesFromBlock(block, lastOfPrevious);
+  return block;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(RemoveDuplicatesFromBlock, withoutPreviousBlock) {
+  using ::testing::ElementsAre;
+  using ::testing::IsEmpty;
+  EXPECT_THAT(removeDuplicates({}, std::nullopt), IsEmpty());
+  EXPECT_THAT(removeDuplicates({3}, std::nullopt), ElementsAre(3));
+  EXPECT_THAT(removeDuplicates({1, 1, 2, 3, 3, 3, 4}, std::nullopt),
+              ElementsAre(1, 2, 3, 4));
+  EXPECT_THAT(removeDuplicates({5, 5, 5}, std::nullopt), ElementsAre(5));
+}
+
+// _____________________________________________________________________________
+TEST(RemoveDuplicatesFromBlock, withPreviousBlock) {
+  using ::testing::ElementsAre;
+  using ::testing::IsEmpty;
+  // An empty block stays empty.
+  EXPECT_THAT(removeDuplicates({}, 3), IsEmpty());
+  // The last element of the previous block differs from the first element.
+  EXPECT_THAT(removeDuplicates({4, 4, 5}, 3), ElementsAre(4, 5));
+  // A prefix of the block repeats the last element of the previous block.
+  EXPECT_THAT(removeDuplicates({3, 3, 4, 4, 5}, 3), ElementsAre(4, 5));
+  // The block consists only of duplicates of that element.
+  EXPECT_THAT(removeDuplicates({3, 3, 3}, 3), IsEmpty());
+  // A single repetition of that element, followed by duplicates inside the
+  // block.
+  EXPECT_THAT(removeDuplicates({3, 4, 5, 5}, 3), ElementsAre(4, 5));
 }
