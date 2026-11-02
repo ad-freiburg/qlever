@@ -2667,11 +2667,14 @@ TEST(RdfParserTest, getBatchRethrowsOnTooLargeBufferWithPendingException) {
   EXPECT_THROW(parser.getBatch(), TurtleParser<Tokenizer>::ParseException);
 
   const std::string log = logStream.str();
-  EXPECT_THAT(log, ::testing::HasSubstr("Could not parse"));
-  EXPECT_THAT(log, ::testing::HasSubstr("of Turtle input"));
   EXPECT_THAT(log,
-              ::testing::HasSubstr("Logging first 1000 unparsed characters"));
-  EXPECT_THAT(log, ::testing::HasSubstr("@prefix : <http://x/>"));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                  ::testing::AllOf(::testing::HasSubstr("Could not parse"),
+                                   ::testing::HasSubstr("of Turtle input"))));
+  EXPECT_THAT(
+      log, ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::AllOf(
+               ::testing::HasSubstr("Logging first 1000 unparsed characters"),
+               ::testing::HasSubstr("@prefix : <http://x/>"))));
 }
 
 // _____________________________________________________________________________
@@ -2708,11 +2711,14 @@ TEST(RdfParserTest, getBatchRaisesOnTooLargeBufferWithoutPendingException) {
           "Too many bytes parsed without finishing a turtle statement"));
 
   const std::string log = logStream.str();
-  EXPECT_THAT(log, ::testing::HasSubstr("Could not parse"));
-  EXPECT_THAT(log, ::testing::HasSubstr("of Turtle input"));
   EXPECT_THAT(log,
-              ::testing::HasSubstr("Logging first 1000 unparsed characters"));
-  EXPECT_THAT(log, ::testing::HasSubstr("<a> <b> <c>"));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                  ::testing::AllOf(::testing::HasSubstr("Could not parse"),
+                                   ::testing::HasSubstr("of Turtle input"))));
+  EXPECT_THAT(
+      log, ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::AllOf(
+               ::testing::HasSubstr("Logging first 1000 unparsed characters"),
+               ::testing::HasSubstr("<a> <b> <c>"))));
 }
 
 // _____________________________________________________________________________
@@ -2747,15 +2753,15 @@ TEST(RdfParserTest, getBatchLogsRemainingUnparsedBytesWhenInputExhausted) {
   EXPECT_FALSE(parser.getBatch().has_value());
 
   std::string log = logStream.str();
-  EXPECT_THAT(log, ::testing::HasSubstr(
-                       "Parsing of line has Failed, but parseInput is not "
-                       "yet exhausted"));
-  EXPECT_THAT(log,
-              ::testing::HasSubstr("Remaining bytes: " +
-                                   std::to_string(trailingGarbage.size())));
-  EXPECT_THAT(log,
-              ::testing::HasSubstr("Logging first 1000 unparsed characters"));
-  EXPECT_THAT(log, ::testing::HasSubstr(trailingGarbage));
+  EXPECT_THAT(
+      log, ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::AllOf(
+               ::testing::HasSubstr(
+                   "Parsing of line has Failed, but parseInput is not "
+                   "yet exhausted"),
+               ::testing::HasSubstr("Remaining bytes: " +
+                                    std::to_string(trailingGarbage.size())),
+               ::testing::HasSubstr("Logging first 1000 unparsed characters"),
+               ::testing::HasSubstr(trailingGarbage))));
 }
 
 // _____________________________________________________________________________

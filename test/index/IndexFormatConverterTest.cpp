@@ -720,8 +720,9 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
     std::string numTriplesTotal = ad_utility::withThousandSeparators(
         permutations.size() * numTriples.normal + 2 * numTriples.internal);
     EXPECT_THAT(conversionLog,
-                HasSubstr(absl::StrCat("Triples converted: ", numTriplesTotal,
-                                       " of ", numTriplesTotal, " (100.0%)")));
+                ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(HasSubstr(
+                    absl::StrCat("Triples converted: ", numTriplesTotal, " of ",
+                                 numTriplesTotal, " (100.0%)"))));
     EXPECT_THAT(conversionLog, ::testing::Not(HasSubstr("Registered ")));
     EXPECT_THAT(conversionLog, ::testing::Not(HasSubstr("Triples sorted")));
 
