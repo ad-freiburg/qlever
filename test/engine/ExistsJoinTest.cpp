@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/ExistsJoin.h"
@@ -196,9 +197,9 @@ TEST(ExistsJoin, computeResult) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
@@ -253,9 +254,9 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
