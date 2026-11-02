@@ -9,9 +9,10 @@
 
 #include "parser/RowNumberQuery.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <variant>
 
-#include "absl/strings/str_cat.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/ParsedQuery.h"

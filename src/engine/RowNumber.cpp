@@ -9,12 +9,13 @@
 
 #include "engine/RowNumber.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-#include "absl/strings/str_cat.h"
 #include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
