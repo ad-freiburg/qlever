@@ -55,6 +55,14 @@ class BasicLiteral {
   // datatypes.
   std::size_t beginOfSuffix_;
 
+  // Like the constructor below, but without its checks. Only for a `content`
+  // and a `beginOfSuffix` that are taken from a valid literal (see
+  // `viewWithStorage` and `toOwned`), because `viewWithStorage` is called for
+  // each word that is added to a `LocalVocab`.
+  struct UncheckedTag {};
+  BasicLiteral(UncheckedTag, StorageType content, size_t beginOfSuffix)
+      : storage_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {}
+
  protected:
   // Create a new literal without any descriptor.
   explicit BasicLiteral(StorageType content, size_t beginOfSuffix);
@@ -239,13 +247,15 @@ template <bool isOwning>
 LiteralView BasicLiteral<isOwning>::viewWithStorage(
     std::string_view storage) const {
   AD_EXPENSIVE_CHECK(storage == std::string_view{storage_});
-  return LiteralView{BasicLiteral<false>{storage, beginOfSuffix_}};
+  return LiteralView{BasicLiteral<false>{
+      typename BasicLiteral<false>::UncheckedTag{}, storage, beginOfSuffix_}};
 }
 
 // _____________________________________________________________________________
 template <bool isOwning>
 Literal BasicLiteral<isOwning>::toOwned() const {
-  return Literal{BasicLiteral<true>{std::string{storage_}, beginOfSuffix_}};
+  return Literal{BasicLiteral<true>{typename BasicLiteral<true>::UncheckedTag{},
+                                    std::string{storage_}, beginOfSuffix_}};
 }
 
 }  // namespace ad_utility::triple_component

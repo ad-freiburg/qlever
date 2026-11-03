@@ -12,7 +12,9 @@
 
 #include <absl/container/flat_hash_set.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <iterator>
 #include <new>
@@ -28,6 +30,86 @@
 namespace ad_utility {
 
 namespace stableHashSet::detail {
+
+// A monotonic arena: memory is handed out by bumping a pointer through blocks
+// that are allocated from an upstream resource, and it is only freed when the
+// arena is destroyed. Unlike `monotonic_buffer_resource`, the size of the
+// blocks grows only up to `maxBlockSize`: with unbounded growth, the blocks
+// quickly become so large that the system allocator (e.g. jemalloc) serves
+// each of them with freshly mapped memory, which costs a page fault per page
+// on first use.
+class Arena final : public ql::pmr::memory_resource, ad_utility::NoCopyNoMove {
+ public:
+  static constexpr size_t minBlockSize = 1024;
+  static constexpr size_t maxBlockSize = 1024 * 1024;
+
+ private:
+  // The header of each block, the blocks form a singly linked list.
+  struct alignas(std::max_align_t) Block {
+    Block* next_;
+    size_t size_;
+  };
+  ql::pmr::memory_resource* upstream_;
+  Block* blocks_ = nullptr;
+  char* current_ = nullptr;
+  char* end_ = nullptr;
+  size_t nextBlockSize_ = minBlockSize;
+
+ public:
+  explicit Arena(ql::pmr::memory_resource* upstream) : upstream_{upstream} {}
+
+  ~Arena() override {
+    while (blocks_ != nullptr) {
+      Block* next = blocks_->next_;
+      upstream_->deallocate(blocks_, blocks_->size_, alignof(Block));
+      blocks_ = next;
+    }
+  }
+
+  // Allocate `bytes` with the given `alignment` (at most the alignment of
+  // `std::max_align_t`). Throws if the upstream throws, the arena then remains
+  // unchanged.
+  void* allocateBytes(size_t bytes, size_t alignment) {
+    auto current = reinterpret_cast<uintptr_t>(current_);
+    uintptr_t aligned = (current + alignment - 1) & ~(alignment - 1);
+    if (aligned + bytes <= reinterpret_cast<uintptr_t>(end_)) {
+      current_ = reinterpret_cast<char*>(aligned + bytes);
+      return reinterpret_cast<void*>(aligned);
+    }
+    return allocateInNewBlock(bytes, alignment);
+  }
+
+ private:
+  void* allocateInNewBlock(size_t bytes, size_t alignment) {
+    AD_CONTRACT_CHECK(alignment <= alignof(Block));
+    // Large allocations get a block of their own, such that the rest of the
+    // current block is not wasted.
+    bool ownBlock = bytes > maxBlockSize / 4;
+    size_t size =
+        sizeof(Block) + (ownBlock ? bytes : std::max(bytes, nextBlockSize_));
+    auto* block =
+        static_cast<Block*>(upstream_->allocate(size, alignof(Block)));
+    block->next_ = blocks_;
+    block->size_ = size;
+    blocks_ = block;
+    char* begin = reinterpret_cast<char*>(block + 1);
+    if (!ownBlock) {
+      current_ = begin + bytes;
+      end_ = reinterpret_cast<char*>(block) + size;
+      nextBlockSize_ = std::min(2 * nextBlockSize_, maxBlockSize);
+    }
+    return begin;
+  }
+
+  void* do_allocate(size_t bytes, size_t alignment) override {
+    return allocateBytes(bytes, alignment);
+  }
+  void do_deallocate(void*, size_t, size_t) override {}
+  bool do_is_equal(
+      const ql::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+};
 
 // The state that is shared by all copies of an `IndexAllocator` (see below).
 struct IndexAllocationState {
@@ -145,7 +227,7 @@ class StableHashSet : ad_utility::NoCopyNoMove {
   // declared before the `index_`, which points into it. The arena only frees
   // its memory when it is destroyed, which is fine because elements are never
   // erased.
-  ql::pmr::monotonic_buffer_resource arena_;
+  stableHashSet::detail::Arena arena_;
   IndexAllocationState indexAllocationState_;
   absl::flat_hash_set<const T*, IndexHash, IndexEqual, IndexAllocator> index_;
 
@@ -192,7 +274,7 @@ class StableHashSet : ad_utility::NoCopyNoMove {
     // Everything that can throw happens before the `index_` is modified.
     ql::pmr::memory_resource& arena = arena_;
     T value = std::forward<MakeElement>(makeElement)(arena);
-    void* memory = arena_.allocate(sizeof(T), alignof(T));
+    void* memory = arena_.allocateBytes(sizeof(T), alignof(T));
     const T* element = new (memory) T(std::move(value));
     AD_EXPENSIVE_CHECK(IndexEqual{}(element, key));
     index_.insert(element);
