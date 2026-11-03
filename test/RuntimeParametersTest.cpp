@@ -11,7 +11,6 @@
 #include <gtest/gtest.h>
 
 #include "global/RuntimeParameters.h"
-#include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
 
 using ::testing::AllOf;
@@ -204,35 +203,4 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
             static_cast<size_t>(reinterpret_cast<char*>(&params.runtimeMap_) -
                                 reinterpret_cast<char*>(&params)));
   EXPECT_EQ(numParameters, keys.size());
-}
-
-// Test that a deprecated alias sets the same parameter as its new name, is not
-// listed among the parameters, and must not be set together with its new name.
-TEST(RuntimeParameters, deprecatedAlias) {
-  // The old name of `sparql-results-json-with-meta`.
-  RuntimeParameters params;
-  std::string alias = "sparql-results-json-with-time";
-
-  // Setting the alias sets `sparqlResultsJsonWithMeta_`.
-  params.setFromString(alias, "false");
-  EXPECT_FALSE(params.sparqlResultsJsonWithMeta_.get());
-  params.setFromAssignment(alias + "=true");
-  EXPECT_TRUE(params.sparqlResultsJsonWithMeta_.get());
-
-  // The alias is listed by `getKeysIncludingAliases` only.
-  EXPECT_THAT(params.getKeys(), ::testing::Not(::testing::Contains(alias)));
-  EXPECT_FALSE(params.toMap().contains(alias));
-  EXPECT_THAT(params.getKeysIncludingAliases(), ::testing::Contains(alias));
-
-  // Setting the alias together with its new name throws, setting only one of
-  // them doesn't.
-  auto isSetAmong = [](std::vector<std::string> names) {
-    return [names = std::move(names)](const std::string& name) {
-      return ad_utility::contains(names, name);
-    };
-  };
-  AD_EXPECT_THROW_WITH_MESSAGE(params.throwIfAliasAndNameAreBothSet(isSetAmong(
-                                   {alias, "sparql-results-json-with-meta"})),
-                               HasSubstr("but not both"));
-  EXPECT_NO_THROW(params.throwIfAliasAndNameAreBothSet(isSetAmong({alias})));
 }

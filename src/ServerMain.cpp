@@ -346,26 +346,17 @@ int main(int argc, char** argv) {
   // `po::notify` above, so for parameters that can also be set by a dedicated
   // option (like `--service-max-redirects`), the value given here wins. A bad
   // name or value fails the startup with a readable message, before the index
-  // is loaded, as does an assignment to both a parameter and its deprecated
-  // alias.
-  try {
-    globalRuntimeParameters.rlock()->throwIfAliasAndNameAreBothSet(
-        [&runtimeParameterAssignments](const std::string& name) {
-          return ql::ranges::any_of(
-              runtimeParameterAssignments,
-              [&name](const std::string& assignment) {
-                return assignment.substr(0, assignment.find('=')) == name;
-              });
-        });
-    for (const auto& assignment : runtimeParameterAssignments) {
+  // is loaded.
+  for (const auto& assignment : runtimeParameterAssignments) {
+    try {
       globalRuntimeParameters.wlock()->setFromAssignment(assignment);
-      AD_LOG_INFO << "Runtime parameter set from the command line: "
-                  << assignment << std::endl;
+    } catch (const std::exception& e) {
+      AD_LOG_ERROR << "Invalid argument to --set-runtime-parameter: "
+                   << e.what() << std::endl;
+      return EXIT_FAILURE;
     }
-  } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Invalid argument to --set-runtime-parameter: " << e.what()
-                 << std::endl;
-    return EXIT_FAILURE;
+    AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
+                << std::endl;
   }
 
   // The memory limit is bound to the runtime parameter `memory-for-queries`

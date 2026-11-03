@@ -8,7 +8,6 @@
 
 #include "global/RuntimeParameters.h"
 
-#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
 #include "backports/algorithm.h"
@@ -75,10 +74,6 @@ RuntimeParameters::RuntimeParameters() {
   add(logLevel_);
   add(constructDeduplication_);
 
-  // Deprecated aliases (old names of renamed parameters), so that existing
-  // configurations keep working.
-  aliases_["sparql-results-json-with-time"] = sparqlResultsJsonWithMeta_.name();
-
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is
   // in sync with the parameter default from the start.
@@ -126,25 +121,13 @@ RuntimeParameters::toMap() const {
 // _____________________________________________________________________________
 void RuntimeParameters::setFromString(const std::string& name,
                                       const std::string& value) {
-  // Resolve a deprecated alias to the new name, with a warning (so that the
-  // configuration gets updated before the alias is removed).
-  auto newName = ad_utility::findOptional(aliases_, name);
-  if (newName) {
-    AD_LOG_WARN << "The runtime parameter \"" << name
-                << "\" is deprecated, use \"" << newName.get() << "\" instead"
-                << std::endl;
-  }
-
-  // Look up the parameter, throw if it doesn't exist.
-  auto parameter =
-      ad_utility::findOptional(runtimeMap_, newName ? newName.get() : name);
-  if (!parameter) {
+  if (!ad_utility::contains(runtimeMap_, name)) {
     throw std::runtime_error{
         "No parameter with name " + std::string{name} +
         " exists. Available parameters are: " + absl::StrJoin(getKeys(), ", ")};
   }
   try {
-    parameter.get()->setFromString(value);
+    runtimeMap_.at(name)->setFromString(value);
   } catch (const std::exception& e) {
     throw std::runtime_error("Could not set parameter " + std::string{name} +
                              " to value " + value +
@@ -165,27 +148,8 @@ void RuntimeParameters::setFromAssignment(const std::string& assignment) {
 }
 
 // _____________________________________________________________________________
-void RuntimeParameters::throwIfAliasAndNameAreBothSet(
-    const std::function<bool(const std::string&)>& isSet) const {
-  for (const auto& [alias, name] : aliases_) {
-    if (isSet(alias) && isSet(name)) {
-      throw std::runtime_error{absl::StrCat(
-          "Specify either the runtime parameter \"", name,
-          "\" or its deprecated alias \"", alias, "\", but not both")};
-    }
-  }
-}
-
-// _____________________________________________________________________________
 std::vector<std::string> RuntimeParameters::getKeys() const {
   static std::vector<std::string> keys =
       ::ranges::to<std::vector>(runtimeMap_ | ql::views::keys);
-  return keys;
-}
-
-// _____________________________________________________________________________
-std::vector<std::string> RuntimeParameters::getKeysIncludingAliases() const {
-  auto keys = getKeys();
-  ql::ranges::copy(aliases_ | ql::views::keys, std::back_inserter(keys));
   return keys;
 }

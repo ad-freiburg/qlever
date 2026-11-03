@@ -671,17 +671,8 @@ Server::ResponseT Server::processMetrics(bool accessTokenOk,
 // _____________________________________________________________________________
 std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     const ParamValueMap& parameters, bool accessTokenOk) const {
-  // Reject a request that sets both a parameter and its deprecated alias (the
-  // alias would silently win, because the aliases are set last).
-  globalRuntimeParameters.rlock()->throwIfAliasAndNameAreBothSet(
-      [&parameters](const std::string& name) {
-        return ad_utility::contains(parameters, name);
-      });
-
-  // Set each parameter (or deprecated alias) that occurs in the request.
   bool parameterChanged = false;
-  for (const auto& key :
-       globalRuntimeParameters.rlock()->getKeysIncludingAliases()) {
+  for (const auto& key : globalRuntimeParameters.rlock()->getKeys()) {
     if (auto value = serverProcessHelpers::checkAndLogParameterSetting(
             parameters, key, accessTokenOk, "setting runtime parameters")) {
       globalRuntimeParameters.wlock()->setFromString(key, value.value());
