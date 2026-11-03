@@ -10,6 +10,7 @@
 #include "engine/raster/RasterFile.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <gdal_alg.h>
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
@@ -19,6 +20,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 
@@ -529,6 +532,28 @@ std::vector<Pixel> RasterFile::lookupGeometry(std::string_view wktLiteral,
         }
       },
       geometry.value());
+}
+
+// _____________________________________________________________________________
+std::string rasterFilePath(std::string_view datasetName) {
+  // The returned path always comes from the folder, never from `datasetName`,
+  // so a name like "../secret" cannot reach a file outside the folder.
+  std::vector<std::string> availableNames;
+  for (const auto& entry : ql::directoryRange(QLEVER_RASTER_DIR)) {
+    const ql::filesystem::path& path = entry.path();
+    if (path.extension() != ".tif") {
+      continue;
+    }
+    std::string name = path.stem().string();
+    if (name == datasetName) {
+      return path.string();
+    }
+    availableNames.push_back(std::move(name));
+  }
+  ql::ranges::sort(availableNames);
+  throw std::runtime_error(
+      absl::StrCat("Unknown raster \"", datasetName,
+                   "\", available: ", absl::StrJoin(availableNames, ", ")));
 }
 
 }  // namespace qlever::raster
