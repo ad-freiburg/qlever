@@ -56,8 +56,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
-  std::vector<char> compressedBlock = ad_utility::idColumnByteIO::encode(
-      column, [](ql::span<const char> bytes) {
+  std::vector<char> compressedBlock =
+      ad_utility::idColumnByteIO::encode(column, [](auto bytes) {
         return ZstdWrapper::compress(bytes.data(), bytes.size());
       });
   auto compressedSize = compressedBlock.size();
