@@ -279,7 +279,7 @@ TEST(RegexExpression, prefixRegexRejectsVocabEntriesById) {
 TEST(RegexExpression, prefixRegexOnLocalVocabEntries) {
   TestContext ctx;
   const auto& localVocabContext = ctx.qec->getLocalVocabContext();
-  auto local = [&ctx, &localVocabContext](const LocalVocabEntry& entry) {
+  auto local = [&ctx](const LocalVocabEntry& entry) {
     return Id::makeFromLocalVocabIndex(
         ctx.localVocab.getIndexAndAddIfNotContained(entry));
   };
