@@ -567,8 +567,11 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Floats) {
+  // The large double is `-42019234865.781e12` with the lowest 4 bits of the
+  // mantissa cleared, so the legacy `Id` (which drops these bits) and the split
+  // `Id` (which keeps them) export it identically.
   std::string kg =
-      "<s> <p> 42.2 . <s> <p> -42019234865.781e12 ."
+      "<s> <p> 42.2 . <s> <p> -42019234865780982022144e0 ."
       " <s> <p> 100.0 . <s> <p> 960000.06 ."
       " <s> <p> 123456.00000001 . <s> <p> 1e-10 ."
       " <s> <p> 4.012934858173560e-12 ."
@@ -1468,6 +1471,15 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
     <binding name="o"><literal>)",
                          RdfEscaping::escapeForXml(text),
                          "</literal></binding>\n  </result>", xmlTrailer));
+}
+
+// Test that a SELECT query can be exported in QLever's binary format.
+TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
+  // The format itself is tested in `engine/BinaryExportTest.cpp`.
+  auto result = runQueryStreamableResult(
+      "<s> <p> <o> .", "SELECT ?o WHERE { <s> <p> ?o }",
+      ad_utility::MediaType::binaryQleverExport);
+  EXPECT_THAT(result, HasSubstr("QLEVER.EXPORT"));
 }
 
 // ____________________________________________________________________________

@@ -1,6 +1,12 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_GEOMETRYINFO_H
 #define QLEVER_SRC_UTIL_GEOMETRYINFO_H
@@ -19,6 +25,16 @@
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
+
+// Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
+// included in this header).
+//
+// NOTE: The underlying type must match the definition in the util's
+// `geo/Geo.h`. A mismatch does not compile, because `GeometryInfo.cpp`
+// includes both declarations.
+namespace util::geo {
+enum class CRSType : uint8_t;
+}
 
 namespace ad_utility {
 
@@ -103,6 +119,7 @@ struct SourceCrsType {
 
  public:
   explicit SourceCrsType(uint16_t type);
+  explicit SourceCrsType(::util::geo::CRSType type);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Required for `bit_cast`.
   SourceCrsType() = default;
@@ -310,9 +327,8 @@ class GeometryInfo {
   // to the strict parsing mode of `pb_util`. This is a purely syntactic check.
   //
   // NOTE: A valid literal does not necessarily yield a geometry in
-  // `fromWktLiteral`. In particular, `EMPTY` geometries (except `POINT EMPTY`,
-  // which the strict mode rejects), an unsupported CRS IRI, and coordinates
-  // out of range are all valid.
+  // `fromWktLiteral`. In particular, `EMPTY` geometries, an unsupported CRS
+  // IRI, and coordinates out of range are all valid.
   static bool isValidWktStrict(std::string_view wkt);
 
   // Create geometry info for a GeoPoint object.
@@ -377,12 +393,12 @@ class GeometryInfo {
   // stored in this object (see `getSourceCrsType`).
   CPP_template(typename RequestedInfo = GeometryInfo)(
       requires RequestedInfoT<RequestedInfo>)
-      std::optional<RequestedInfo> getRequestedInfo() const;
+  std::optional<RequestedInfo> getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
   CPP_template(typename RequestedInfo = GeometryInfo)(
-      requires RequestedInfoT<RequestedInfo>) static std::
-      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+      requires RequestedInfoT<RequestedInfo>)
+  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit

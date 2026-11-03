@@ -110,21 +110,22 @@ using Triple =
 
 // The index of a word within a partial vocabulary and the corresponding bool
 // that indicates if it belongs to the external vocabulary.
-// The `isExternal` bool is encoded in the most significant bit of the id which
-// can never be used anyway because this is occupied by the datatype bits of the
-// final `Id`.
+// The `isExternal` bool is encoded in the most significant bit, so that both
+// fit into a single 64-bit integer. For the `FoldedValueId`, this bit is one of
+// the datatype bits, for the `SplitLayoutId` it is the highest bit of the
+// payload.
 class PartialVocabIndexWithExternalFlag {
   uint64_t encodedIndex_;
 
  public:
   PartialVocabIndexWithExternalFlag(uint64_t index, bool isExternal)
       : encodedIndex_{(uint64_t(isExternal) << 63) | index} {
-    // The top four bits of any partial-vocab index must be zero: in the final
-    // `Id` they are occupied by the datatype tag (see `ValueId::numDataBits`).
-    // This guard catches future regressions that funnel a tagged value or an
-    // underflowed counter through here, which would otherwise silently
-    // collide with the `isExternal` bit and corrupt the vocabulary mapping.
-    AD_EXPENSIVE_CHECK(index < (uint64_t{1} << ValueId::numDataBits));
+    // The `index` must not collide with the `isExternal` bit. For the
+    // `FoldedValueId`, it must not reach the datatype bits
+    // (`ValueId::maxIndex`), for the `SplitLayoutId` it must not use the
+    // highest bit of the payload.
+    AD_EXPENSIVE_CHECK(index <= std::min<uint64_t>(ValueId::maxIndex,
+                                                   (uint64_t{1} << 63) - 1));
   }
 
   PartialVocabIndexWithExternalFlag() = default;

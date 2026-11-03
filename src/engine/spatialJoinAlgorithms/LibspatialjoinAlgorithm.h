@@ -64,6 +64,8 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
     size_t numGeomsParsed_;
     // Number of geometries dropped by prefilter
     size_t numGeomsDropped_;
+    // Number of parsed geometries skipped because they are invalid WKT
+    size_t numGeomsInvalid_;
     // Actual number of threads used (might be lower than result of
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;

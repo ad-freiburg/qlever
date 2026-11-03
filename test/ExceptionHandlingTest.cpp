@@ -102,6 +102,17 @@ TEST(ExceptionCollector, isNoOpWhenEmpty) {
   EXPECT_NO_THROW(collector.rethrowIfException());
 }
 
+// Test that `hasException` reports a captured exception until it is
+// rethrown.
+TEST(ExceptionCollector, hasException) {
+  ad_utility::ExceptionCollector collector;
+  EXPECT_FALSE(collector.hasException());
+  collector(std::make_exception_ptr(std::runtime_error{"captured"}));
+  EXPECT_TRUE(collector.hasException());
+  EXPECT_THROW(collector.rethrowIfException(), std::runtime_error);
+  EXPECT_FALSE(collector.hasException());
+}
+
 // _____________________________________________________________________________
 TEST(ExceptionCollector, asCompletionHandler) {
   auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
@@ -119,10 +130,10 @@ TEST(ExceptionCollector, asCompletionHandler) {
   } catch (...) {
     collector(std::current_exception());
   }
-  EXPECT_THAT(
-      logStream.str(),
-      ::testing::AllOf(::testing::HasSubstr("Additional exception captured"),
-                       ::testing::HasSubstr("second")));
+  EXPECT_THAT(logStream.str(),
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::AllOf(
+                  ::testing::HasSubstr("Additional exception captured"),
+                  ::testing::HasSubstr("second"))));
 
   // Reset stream.
   logStream.str("");
@@ -134,9 +145,9 @@ TEST(ExceptionCollector, asCompletionHandler) {
   } catch (...) {
     collector(std::current_exception());
   }
-  EXPECT_THAT(
-      logStream.str(),
-      ::testing::HasSubstr("Additional exception of unknown type captured"));
+  EXPECT_THAT(logStream.str(),
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::HasSubstr(
+                  "Additional exception of unknown type captured")));
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
                                         ::testing::StrEq("first"),

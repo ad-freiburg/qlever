@@ -191,8 +191,8 @@ class BinaryDiffApplier {
   // chosen for a call `apply(base, someBuffer)`, which is the overload below.
   CPP_template(typename Allocator = std::allocator<char>)(
       requires(!std::is_convertible<Allocator&, ql::span<char>>::value))
-      std::vector<char, Allocator> apply(ql::span<const char> base,
-                                         Allocator allocator = {}) const {
+  std::vector<char, Allocator> apply(ql::span<const char> base,
+                                     Allocator allocator = {}) const {
     // NOTE: Validate before the target is allocated, so that a `targetSize()`
     // that comes from a corrupted diff cannot lead to a bogus allocation.
     checkApplicable(base);

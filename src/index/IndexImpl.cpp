@@ -425,15 +425,25 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files, size_t numThreads) {
+  // The settings file (read by `prepareIndexBuild`) may set
+  // `useParallelParser_`, so it must be read before the file specifications
+  // are updated.
+  prepareIndexBuild();
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
-                  numThreads);
+  createFromFilesAfterPreparation(
+      ad_utility::InputRangeTypeErased{std::move(files)}, numThreads);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
+  prepareIndexBuild();
+  createFromFilesAfterPreparation(std::move(files), numThreads);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::prepareIndexBuild() {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -446,6 +456,11 @@ void IndexImpl::createFromFiles(
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+  // The normalization of the words of the `ql:has-word` triples is stored so
+  // that the server can later normalize the words of queries and updates in
+  // the same way.
+  configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
+      hasWordNormalization_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -460,7 +475,12 @@ void IndexImpl::createFromFiles(
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
+}
 
+// _____________________________________________________________________________
+void IndexImpl::createFromFilesAfterPreparation(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
 
@@ -1582,6 +1602,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // The normalization of the words of the `ql:has-word` triples of this index
+  // (an index built before this key existed uses `Lowercase`).
+  loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
+                 ad_utility::HasWordNormalization::Lowercase);
+
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
   // materialized view, for example), so that all permutations of an index have
@@ -1606,6 +1631,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                    geoCellGridScheme);
     vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
         static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
   }
 
   // Initialize BlankNodeManager
@@ -1633,6 +1665,16 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // count their term frequencies.
     if (addHasWordTriples_) {
       std::string_view content = lit.getContent();
+      // With `LowercaseNoAccents`, remove the accents before the tokenization
+      // (combining marks are not alphanumeric and would otherwise split
+      // words). `contentWithoutAccents` owns the result, so that `content`
+      // stays valid during the tokenization.
+      std::string contentWithoutAccents;
+      if (hasWordNormalization_ ==
+          ad_utility::HasWordNormalization::LowercaseNoAccents) {
+        contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
+        content = contentWithoutAccents;
+      }
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
         ++result.wordFrequencies_[std::move(word)];
@@ -1764,7 +1806,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count("parallel-parsing")) {
     useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
   }
-  if (useParallelParser_) {
+  if (useParallelParser_.value_or(false)) {
     AD_LOG_INFO << WARNING_PARALLEL_PARSING << std::endl;
   }
 
@@ -2003,17 +2045,6 @@ std::vector<float> IndexImpl::getMultiplicities(
                             numTriples / numDistinctObjects().normal};
   auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::getResultSizeOfScan(
-    const ScanSpecification& scanSpecification,
-    const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  const auto& perm = getPermutation(permutation);
-  return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      locatedTriplesState);
 }
 
 // _____________________________________________________________________________

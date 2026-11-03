@@ -1164,6 +1164,19 @@ TEST(IdTable, cornerCases) {
   }
 }
 
+namespace {
+// Match an allocator with the memory limit from which exactly `numIds`
+// entries of an `Id` column are allocated.
+MATCHER_P2(hasAllocatedIds, numIds, limit,
+           (negation ? "has not " : "has ") + std::to_string(numIds) +
+               " Ids allocated") {
+  const auto memoryLeft = arg.amountMemoryLeft();
+  *result_listener << "which has " << memoryLeft.getBytes() << " bytes left";
+  return memoryLeft == limit - ad_utility::MemorySize::bytes(
+                                   numIds * BYTES_PER_ID_COLUMN_ENTRY);
+}
+}  // namespace
+
 TEST(IdTable, shrinkToFit) {
   // Note: The behavior of the following test case depends on the implementation
   // of `std::vector::reserve` and `std::vector::push_back`. It might be
@@ -1171,21 +1184,23 @@ TEST(IdTable, shrinkToFit) {
   // different behavior, but this is unlikely due to ABI stability goals between
   // library versions.
   using namespace ad_utility::memory_literals;
-  auto allocator = qlever::makeAllocatorWithLimit<Id>(1_kB);
+  const auto limit = 1_kB;
+  auto allocator = qlever::makeAllocatorWithLimit<Id>(limit);
   IdTable table{2, allocator};
-  ASSERT_EQ(allocator.amountMemoryLeft(), 1_kB);
+  ASSERT_THAT(allocator, hasAllocatedIds(0, limit));
+  // Reserving 20 rows allocates 20 rows of 2 columns, and two `emplace_back`s
+  // do not change that.
   table.reserve(20);
   ASSERT_TRUE(table.empty());
-  // 20 rows * 2 columns * 8 bytes per ID were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 680_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(allocator.amountMemoryLeft(), 680_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
+  // `shrinkToFit` releases all but the 2 rows of 2 columns.
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
-  // Now only 2 rows * 2 columns * 8 bytes were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 968_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(2 * 2, limit));
 }
 
 TEST(IdTable, staticAsserts) {
@@ -1567,6 +1582,45 @@ TEST(IdTable, rowReferenceWithMutableAndConstProxies) {
   *row[0].id_ = V(5);
   EXPECT_EQ(*constRow[0].id_, V(5));
   EXPECT_EQ(*constRow[1].id_, V(4));
+}
+
+// Test that `clone` and `moveOrClone` copy the table in chunks of the given
+// size, call the `chunkOperation` once per chunk and column, and propagate its
+// exceptions.
+TEST(IdTable, cloneWithChunkOperation) {
+  IdTable table{2, makeAllocator()};
+  for (size_t i = 0; i < 10; ++i) {
+    table.push_back({V(i), V(100 + i)});
+  }
+  size_t numCalls = 0;
+  auto countCalls = [&numCalls]() { ++numCalls; };
+
+  // 10 rows in chunks of 3 rows are 4 chunks per column.
+  IdTable clone = table.clone(countCalls, 3);
+  EXPECT_EQ(clone, table);
+  EXPECT_EQ(numCalls, 8);
+
+  // The same for a view, which results in an owning table.
+  numCalls = 0;
+  IdTable cloneOfView = table.asStaticView<0>().clone(countCalls, 100);
+  EXPECT_EQ(cloneOfView, table);
+  EXPECT_EQ(numCalls, 2);
+
+  // `moveOrClone` only calls the `chunkOperation` if it actually clones.
+  numCalls = 0;
+  EXPECT_EQ(table.moveOrClone(countCalls, 3), table);
+  EXPECT_EQ(numCalls, 8);
+  numCalls = 0;
+  EXPECT_EQ(table.asStaticView<0>().moveOrClone(countCalls, 3), table);
+  EXPECT_EQ(numCalls, 8);
+  numCalls = 0;
+  IdTable moved = std::move(clone).moveOrClone(countCalls, 3);
+  EXPECT_EQ(moved, table);
+  EXPECT_EQ(numCalls, 0);
+
+  // Exceptions from the `chunkOperation` are propagated.
+  auto throwException = []() { throw std::runtime_error{"cancelled"}; };
+  EXPECT_THROW(table.clone(throwException), std::runtime_error);
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

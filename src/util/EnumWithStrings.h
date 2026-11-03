@@ -50,9 +50,9 @@ namespace ad_utility {
 // compile time
 struct EnumWithStringsBaseTag {};
 
-CPP_template(typename Derived,
-             typename Enum)(requires std::is_enum_v<Enum>) class EnumWithStrings
-    : public EnumWithStringsBaseTag {
+CPP_template(typename Derived, typename Enum)(
+    requires std::is_enum_v<Enum>)
+class EnumWithStrings : public EnumWithStringsBaseTag {
  private:
   Enum value_{};
 
@@ -157,8 +157,8 @@ CPP_template(typename Derived,
 
   // Hashing
   CPP_template_2(typename H, typename D)(
-      requires ql::concepts::same_as<D, Derived>) friend H
-      AbslHashValue(H h, const D& derived) {
+      requires ql::concepts::same_as<D, Derived>)
+  friend H AbslHashValue(H h, const D& derived) {
     return H::combine(std::move(h), static_cast<Enum>(derived));
   }
 

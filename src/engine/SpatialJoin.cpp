@@ -34,6 +34,7 @@
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
@@ -42,10 +43,10 @@
 #include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/RuntimeParameters.h"
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -58,6 +59,11 @@ SpatialJoin::SpatialJoin(
     : Operation(qec),
       config_{std::move(config)},
       substitutesFilterOp_{substitutesFilterOp} {
+  AD_CONTRACT_CHECK(
+      config_.distanceUnit_.has_value() ==
+          config_.distanceVariable_.has_value(),
+      "A spatial join must have a distance unit iff it has a distance "
+      "variable.");
   if (childLeft.has_value()) {
     childLeft_ = std::move(childLeft.value());
   }
@@ -113,12 +119,9 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     AD_THROW("variable does not match");
   }
 
-  // If the `SpatialJoin` is now fully constructed and query rewriting is
-  // allowed, try to push down `BIND`s to retrieve bounding box columns from the
-  // children.
-  if (sj->isConstructed() &&
-      getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+  // If the `SpatialJoin` is now fully constructed, try to push down `BIND`s to
+  // retrieve bounding box columns from the children.
+  if (sj->isConstructed()) {
     if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
       sj = sjWithBoundingBoxes.value();
     }
@@ -206,6 +209,8 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable\n";
+      os << "distanceUnit: " << static_cast<int>(config_.distanceUnit_.value())
+         << "\n";
     }
 
     // Selected payload variables
@@ -455,7 +460,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
       if (varColMap.contains(var)) {
         newVarColMap.insert_or_assign(var, varColMap.at(var));
       } else {
-        addWarningOrThrow(
+        addUnboundVariableWarningOrThrow(
             absl::StrCat("Variable '", var.name(),
                          "' selected as payload to spatial join but not "
                          "present in right child."));
@@ -504,7 +509,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // taken into account. Also note that here `childLeft_` not `childLeft` is
   // used, because `leftSelectedCols` and `rightSelectedCols` are applied after
   // swapping tables back in case of a `WITHIN` join.
-  std::vector<ColumnIndex> leftSelectedCols;
+  qlm::vector<ColumnIndex> leftSelectedCols{allocator()};
   for (auto [var, colInfo] :
        copySortedByColumnIndex(childLeft_->getVariableColumns())) {
     leftSelectedCols.push_back(colInfo.columnIndex_);
@@ -512,7 +517,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  std::vector<ColumnIndex> rightSelectedCols;
+  qlm::vector<ColumnIndex> rightSelectedCols{allocator()};
   for (const auto& [var, colInfo] : varsAndColInfo) {
     rightSelectedCols.push_back(colInfo.columnIndex_);
   }
@@ -661,6 +666,10 @@ std::unique_ptr<Operation> SpatialJoin::cloneWithNewChildren(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  if (auto result = makeTreeWithDistanceVariable(bind)) {
+    return result;
+  }
+
   // The left child keeps all its columns.
   if (childLeft_ != nullptr) {
     if (auto result = pushDownBindToChild(bind, {childLeft_, childRight_}, 0)) {
@@ -688,6 +697,41 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   return SpatialJoin{_executionContext, std::move(config), childLeft_,
                      childRight_, substitutesFilterOp_}
       .pushDownBindToChild(bind, {childLeft_, childRight_}, 1);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const {
+  // Only `libspatialjoin` with `WITHIN_DIST` computes the exact distances.
+  if (!isConstructed() || config_.distanceVariable_.has_value() ||
+      getAlgorithm() != SpatialJoinAlgorithm::LIBSPATIALJOIN ||
+      getJoinType() != SpatialJoinType::WITHIN_DIST) {
+    return std::nullopt;
+  }
+
+  // The `BIND` expression must be the distance between the two join variables
+  // (in any order) in a unit of length.
+  auto call = sparqlExpression::getGeoDistanceExpressionParameters(
+      *bind._expression.getPimpl());
+  if (!call.has_value() || !call->left_.isVariable() ||
+      !call->right_.isVariable() ||
+      !ad_utility::detail::isLengthUnit(call->unit_)) {
+    return std::nullopt;
+  }
+  const auto& left = call->left_.getVariable();
+  const auto& right = call->right_.getVariable();
+  if (!(left == config_.left_ && right == config_.right_) &&
+      !(left == config_.right_ && right == config_.left_)) {
+    return std::nullopt;
+  }
+
+  auto config = config_;
+  config.distanceVariable_ = bind._target;
+  config.distanceUnit_ = call->unit_;
+  return _executionContext->makeShared<QueryExecutionTree>(
+      _executionContext, std::make_unique<SpatialJoin>(
+                             _executionContext, std::move(config), childLeft_,
+                             childRight_, substitutesFilterOp_));
 }
 
 // _____________________________________________________________________________

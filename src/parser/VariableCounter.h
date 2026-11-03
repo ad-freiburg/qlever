@@ -34,8 +34,8 @@ struct VariableCounter {
 
   // Count variables from a view or range, e.g. `std::vector<GraphPattern>`.
   CPP_template(typename T)(
-      requires ql::ranges::input_range<ql::remove_cvref_t<T>>) void
-  operator()(T&& range) {
+      requires ql::ranges::input_range<ql::remove_cvref_t<T>>)
+  void operator()(T&& range) {
     for (const auto& elem : range) {
       (*this)(elem);
     }
@@ -54,8 +54,8 @@ struct VariableCounter {
   // convert it to `GraphPatternOperation` and we would have a stack overflow.
   // Therefore we prevent implicit conversion here.
   CPP_template(typename T)(
-      requires std::is_same_v<T, GraphPatternOperation>) void
-  operator()(const T& gpo) {
+      requires std::is_same_v<T, GraphPatternOperation>)
+  void operator()(const T& gpo) {
     gpo.visit(*this);
   }
 

@@ -33,23 +33,6 @@ std::optional<size_t> RtreeEntryAlgorithm::getAnyGeometry(
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
-  auto printWarning = [this, &spatialJoin = spatialJoin_]() {
-    if (this->numFailedParsedGeometries_ == 0) {
-      std::string warning =
-          "The input to a spatial join contained at least one element, "
-          "that is not a Point, Linestring, Polygon, MultiPoint, "
-          "MultiLinestring or MultiPolygon geometry and is thus skipped. Note "
-          "that QLever currently only accepts those geometries for "
-          "the spatial joins";
-      AD_LOG_WARN << warning << std::endl;
-      this->numFailedParsedGeometries_ += 1;
-      if (spatialJoin.has_value()) {
-        AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
-        spatialJoin.value()->addWarning(warning);
-      }
-    }
-  };
-
   // unfortunately, the current implementation requires the fully materialized
   // string. In the future this might get changed. When only the bounding box
   // is needed, one could store it in an ID similar to GeoPoint (but with less
@@ -64,7 +47,6 @@ std::optional<size_t> RtreeEntryAlgorithm::getAnyGeometry(
     bg::read_wkt(str, geometry);
     geometries_.push_back(std::move(geometry));
   } catch (...) {
-    printWarning();
     return std::nullopt;
   }
   return geometries_.size() - 1;  // index of the last element

@@ -193,6 +193,6 @@ template class DeviationAggExpression<AvgOperation, StdevFinalOperation>;
       Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>
 INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
 INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
-INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);
-INSTANTIATE_AGG_EXP(MaxLambdaForAllTypes, ActualValueGetter);
+INSTANTIATE_AGG_EXP(MinForAllTypes, ActualValueGetter);
+INSTANTIATE_AGG_EXP(MaxForAllTypes, ActualValueGetter);
 }  // namespace sparqlExpression::detail

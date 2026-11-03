@@ -7,17 +7,22 @@
 #include <vector>
 
 #include "./engine/ValuesForTesting.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
 #include "engine/Sort.h"
+#include "engine/SortedUnionImpl.h"
 #include "engine/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -353,7 +358,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
 
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+  vocab1.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test1\"", qec->getLocalVocabContext()));
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -361,7 +366,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+  vocab2.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
@@ -817,7 +822,7 @@ TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
 
   // The limit is small enough to make the left input of the `OptionalJoin`
   // smaller than its right input.
-  unionOperation.applyLimitOffset({2});
+  unionOperation.applyLimitOffset({2}, false);
   expectChildrenAreSorted();
 }
 
@@ -855,7 +860,7 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
   {
     // Both children only have to supply `limit + offset` rows.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({2, 3});
+    unionOperation.applyLimitOffset({2, 3}, false);
     expectChildLimits(unionOperation, 5);
     // The `Union` still has to apply the `LIMIT`/`OFFSET` to its own result.
     expectResult(unionOperation, makeIdTableFromVector({{4}, {5}}));
@@ -866,23 +871,90 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
     // too much. Here the result consists of the rows 5 and 6 of the union, so
     // the children still have to supply 7 rows.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({10, 5});
+    unionOperation.applyLimitOffset({10, 5}, false);
     expectChildLimits(unionOperation, 15);
-    unionOperation.applyLimitOffset({2, 0});
+    unionOperation.applyLimitOffset({2, 0}, false);
     expectChildLimits(unionOperation, 7);
     expectResult(unionOperation, makeIdTableFromVector({{6}, {7}}));
   }
   {
     // Adding up the limit and the offset must not overflow.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    unionOperation.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1},
+                                    false);
     expectChildLimits(unionOperation, std::nullopt);
   }
   {
     // Without a limit there is no bound that could be pushed down.
     auto unionOperation = makeUnion();
-    unionOperation.applyLimitOffset({std::nullopt, 8});
+    unionOperation.applyLimitOffset({std::nullopt, 8}, false);
     expectChildLimits(unionOperation, std::nullopt);
     expectResult(unionOperation, makeIdTableFromVector({{9}, {10}}));
   }
+}
+
+// Test that `SortedUnionImpl` requires a cancellation handle.
+TEST(Union, sortedUnionImplRequiresCancellationHandle) {
+  auto* qec = ad_utility::testing::getQec();
+  using Range = std::vector<Result::IdTableVocabPair>;
+  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
+  std::vector<ColumnIndex> targetOrder{0};
+  auto makeUnion = [&](ad_utility::SharedCancellationHandle handle) {
+    sortedUnion::SortedUnionImpl sortedUnion{
+        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
+        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
+        false,
+        columnOrigins,
+        qec->getAllocator(),
+        ql::span<const ColumnIndex>{targetOrder},
+        [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
+        std::move(handle)};
+  };
+  EXPECT_NO_THROW(
+      makeUnion(std::make_shared<ad_utility::CancellationHandle<>>()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeUnion(nullptr),
+      ::testing::HasSubstr("cancellationHandle_ != nullptr"));
+}
+
+// Test that the non-lazy merge of a sorted union checks for cancellation
+// after every `Union::chunkSize` merged rows.
+TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
+  auto* qec = ad_utility::testing::getQec();
+  using Range = std::vector<Result::IdTableVocabPair>;
+  // The inputs interleave, so the merge loop (and not the final append of the
+  // remaining rows) produces more than `Union::chunkSize` rows.
+  size_t numRows = Union::chunkSize / 2 + 1;
+  auto makeInput = [qec, numRows](size_t offset) {
+    IdTable table{1, qec->getAllocator()};
+    table.resize(numRows);
+    for (size_t i = 0; i < numRows; ++i) {
+      table(i, 0) = V(2 * i + offset);
+    }
+    Range range;
+    range.emplace_back(std::move(table), LocalVocab{});
+    return sortedUnion::IterationData<Range>{nullptr, std::move(range), {0}};
+  };
+  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
+  std::vector<ColumnIndex> targetOrder{0};
+  auto makeUnion = [&](ad_utility::SharedCancellationHandle handle) {
+    return sortedUnion::SortedUnionImpl{
+        makeInput(0),
+        makeInput(1),
+        false,
+        columnOrigins,
+        qec->getAllocator(),
+        ql::span<const ColumnIndex>{targetOrder},
+        [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
+        std::move(handle)};
+  };
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto result = makeUnion(handle).get();
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result->idTable_.size(), 2 * numRows);
+  EXPECT_TRUE(ql::ranges::is_sorted(result->idTable_.getColumn(0)));
+
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(makeUnion(handle).get(), ad_utility::CancellationException);
 }

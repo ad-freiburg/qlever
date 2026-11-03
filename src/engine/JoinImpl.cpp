@@ -323,7 +323,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
+      1, aPermuted, bPermuted, std::move(*result), cancellationHandle(),
       keepJoinColumn_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
@@ -341,7 +341,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
   std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
 
-  auto cancellationCallback = [this]() { checkCancellation(); };
+  auto cancellationCallback = cancellationChecker();
 
   // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
@@ -734,7 +734,7 @@ ad_utility::AddCombinedRowToIdTable JoinImpl::makeRowAdder(
   return ad_utility::AddCombinedRowToIdTable{
       1,
       IdTable{getResultWidth(), allocator()},
-      cancellationHandle_,
+      cancellationHandle(),
       keepJoinColumn_,
       CHUNK_SIZE,
       std::move(callback)};

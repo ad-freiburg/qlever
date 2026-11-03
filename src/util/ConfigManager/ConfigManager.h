@@ -92,18 +92,18 @@ class ConfigManager {
 
     // Wrapper for calling `std::visit` on the saved `Data`.
     CPP_template(typename Visitor)(
-        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
-            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
-        visit(Visitor&& vis);
+        requires ql::concepts::invocable<Visitor, ConfigOption&> &&
+        ql::concepts::invocable<Visitor, ConfigManager&>)
+    decltype(auto) visit(Visitor&& vis);
     CPP_template(typename Visitor)(
-        requires ql::concepts::invocable<Visitor, ConfigOption&> CPP_and
-            ql::concepts::invocable<Visitor, ConfigManager&>) decltype(auto)
-        visit(Visitor&& vis) const;
+        requires ql::concepts::invocable<Visitor, ConfigOption&> &&
+        ql::concepts::invocable<Visitor, ConfigManager&>)
+    decltype(auto) visit(Visitor&& vis) const;
 
    private:
     // Implementation for `holdsConfigOption` and `holdsSubManager`.
-    CPP_template(typename T)(
-        requires SameAsAnyTypeIn<T, Data>) bool implHolds() const;
+    CPP_template(typename T)(requires SameAsAnyTypeIn<T, Data>)
+    bool implHolds() const;
 
     /*
     @brief Implementation for `getConfigOption` and `getSubManager`. You can
@@ -116,12 +116,11 @@ class ConfigManager {
     you want this from.
     */
     CPP_template(typename ReturnType, typename InstanceType)(
-        requires SimilarToAnyTypeIn<ReturnType, Data> CPP_and
-            std::is_object_v<ReturnType>
-                CPP_and ad_utility::SimilarTo<HashMapEntry,
-                                              InstanceType>) static std::
-        optional<ReturnType*> getConfigOptionOrSubManager(
-            InstanceType& instance);
+        requires SimilarToAnyTypeIn<ReturnType, Data> &&
+        std::is_object_v<ReturnType> &&
+        ad_utility::SimilarTo<HashMapEntry, InstanceType>)
+    static std::optional<ReturnType*> getConfigOptionOrSubManager(
+        InstanceType& instance);
 
     /*
     @brief The implementation for `visit`. Follows the same signature as
@@ -129,16 +128,14 @@ class ConfigManager {
     */
     CPP_template(typename Visitor, typename PointerType)(
         requires ad_utility::SimilarTo<
-            std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-            CPP_and ql::concepts::invocable<
-                Visitor, std::conditional_t<std::is_const_v<PointerType>,
-                                            const ConfigOption&, ConfigOption&>>
-                CPP_and ql::concepts::invocable<
-                    Visitor,
-                    std::conditional_t<std::is_const_v<PointerType>,
-                                       const ConfigManager&,
-                                       ConfigManager&>>) static decltype(auto)
-        visitImpl(Visitor&& vis, PointerType& data);
+            std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType> &&
+        ql::concepts::invocable<
+            Visitor, std::conditional_t<std::is_const_v<PointerType>,
+                                        const ConfigOption&, ConfigOption&>> &&
+        ql::concepts::invocable<
+            Visitor, std::conditional_t<std::is_const_v<PointerType>,
+                                        const ConfigManager&, ConfigManager&>>)
+    static decltype(auto) visitImpl(Visitor&& vis, PointerType& data);
   };
 
   /*
@@ -182,10 +179,10 @@ class ConfigManager {
   */
   CPP_template(typename OptionType)(
       requires SupportedConfigOptionType<OptionType>)
-      ConstConfigOptionProxy<OptionType> addOption(
-          const std::vector<std::string>& pathToOption,
-          std::string_view optionDescription,
-          OptionType* variableToPutValueOfTheOptionIn) {
+  ConstConfigOptionProxy<OptionType> addOption(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::nullopt));
@@ -210,13 +207,13 @@ class ConfigManager {
   will stay valid, even after adding more options.
   */
   CPP_template(typename OptionType, typename DefaultValueType = OptionType)(
-      requires SupportedConfigOptionType<OptionType> CPP_and
-          ql::concepts::same_as<OptionType, DefaultValueType>)
-      ConstConfigOptionProxy<OptionType> addOption(
-          const std::vector<std::string>& pathToOption,
-          std::string_view optionDescription,
-          OptionType* variableToPutValueOfTheOptionIn,
-          DefaultValueType defaultValue) {
+      requires SupportedConfigOptionType<OptionType> &&
+      ql::concepts::same_as<OptionType, DefaultValueType>)
+  ConstConfigOptionProxy<OptionType> addOption(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      DefaultValueType defaultValue) {
     return addOptionImpl(pathToOption, optionDescription,
                          variableToPutValueOfTheOptionIn,
                          std::optional<OptionType>(std::move(defaultValue)));
@@ -232,9 +229,9 @@ class ConfigManager {
   */
   CPP_template(typename OptionType)(
       requires SupportedConfigOptionType<OptionType>)
-      ConstConfigOptionProxy<OptionType> addOption(
-          std::string optionName, std::string_view optionDescription,
-          OptionType* variableToPutValueOfTheOptionIn) {
+  ConstConfigOptionProxy<OptionType> addOption(
+      std::string optionName, std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn);
@@ -249,12 +246,12 @@ class ConfigManager {
   will stay valid, even after adding more options.
   */
   CPP_template(typename OptionType, typename DefaultValueType = OptionType)(
-      requires SupportedConfigOptionType<OptionType> CPP_and
-          ql::concepts::same_as<OptionType, DefaultValueType>)
-      ConstConfigOptionProxy<OptionType> addOption(
-          std::string optionName, std::string_view optionDescription,
-          OptionType* variableToPutValueOfTheOptionIn,
-          DefaultValueType defaultValue) {
+      requires SupportedConfigOptionType<OptionType> &&
+      ql::concepts::same_as<OptionType, DefaultValueType>)
+  ConstConfigOptionProxy<OptionType> addOption(
+      std::string optionName, std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      DefaultValueType defaultValue) {
     return addOption<OptionType>(
         std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn, std::move(defaultValue));
@@ -326,16 +323,12 @@ class ConfigManager {
   keep the same order.
   */
   CPP_template(typename ValidatorFunc, typename... ValidatorParameterTypes)(
-      requires(sizeof...(ValidatorParameterTypes) > 0) CPP_and ValidatorFunction<
-          ValidatorFunc,
-          ValidatorParameterTypes...>) void addValidator(ValidatorFunc
-                                                             validatorFunction,
-                                                         std::string
-                                                             errorMessage,
-                                                         std::string
-                                                             validatorDescriptor,
-                                                         ConstConfigOptionProxy<
-                                                             ValidatorParameterTypes>... configOptionsToBeChecked) {
+      requires(sizeof...(ValidatorParameterTypes) > 0) &&
+      ValidatorFunction<ValidatorFunc, ValidatorParameterTypes...>)
+  void addValidator(ValidatorFunc validatorFunction, std::string errorMessage,
+                    std::string validatorDescriptor,
+                    ConstConfigOptionProxy<
+                        ValidatorParameterTypes>... configOptionsToBeChecked) {
     addValidatorImpl(
         "addValidator",
         [](auto opt) {
@@ -368,14 +361,14 @@ class ConfigManager {
   */
   CPP_template(typename ExceptionalValidatorFunc,
                typename... ExceptionValidatorParameterTypes)(
-      requires(sizeof...(ExceptionValidatorParameterTypes) > 0) CPP_and ExceptionValidatorFunction<
-          ExceptionalValidatorFunc,
-          ExceptionValidatorParameterTypes...>) void addValidator(ExceptionalValidatorFunc
-                                                                      exceptionValidatorFunction,
-                                                                  std::string
-                                                                      exceptionValidatorDescriptor,
-                                                                  ConstConfigOptionProxy<
-                                                                      ExceptionValidatorParameterTypes>... configOptionsToBeChecked) {
+      requires(sizeof...(ExceptionValidatorParameterTypes) > 0) &&
+      ExceptionValidatorFunction<ExceptionalValidatorFunc,
+                                 ExceptionValidatorParameterTypes...>)
+  void addValidator(
+      ExceptionalValidatorFunc exceptionValidatorFunction,
+      std::string exceptionValidatorDescriptor,
+      ConstConfigOptionProxy<
+          ExceptionValidatorParameterTypes>... configOptionsToBeChecked) {
     addValidatorImpl(
         "addValidator",
         [](auto opt) {
@@ -400,12 +393,12 @@ class ConfigManager {
   will be passed to the validator function as function arguments. Will keep the
   same order.
   */
-  CPP_template(typename ValidatorFunc, typename... ConfigOptions)(requires(
-      sizeof...(ConfigOptions) >
-      0)) auto addOptionValidator(ValidatorFunc validatorFunction,
-                                  std::string errorMessage,
-                                  std::string validatorDescriptor,
-                                  ConfigOptions&&... configOptionsToBeChecked)
+  CPP_template(typename ValidatorFunc, typename... ConfigOptions)(
+              requires(sizeof...(ConfigOptions) > 0))
+  auto addOptionValidator(ValidatorFunc validatorFunction,
+                          std::string errorMessage,
+                          std::string validatorDescriptor,
+                          ConfigOptions&&... configOptionsToBeChecked)
       -> CPP_ret(void)(
           requires(ValidatorFunction<
                    ValidatorFunc,
@@ -433,13 +426,11 @@ class ConfigManager {
   will be passed to the validator function as function arguments. Will keep the
   same order.
   */
-  CPP_template(typename ExceptionValidatorT,
-               typename... ConfigOptions)(requires(
-      sizeof...(ConfigOptions) >
-      0)) auto addOptionValidator(ExceptionValidatorT
-                                      exceptionValidatorFunction,
-                                  std::string exceptionValidatorDescriptor,
-                                  ConfigOptions&&... configOptionsToBeChecked)
+  CPP_template(typename ExceptionValidatorT, typename... ConfigOptions)(
+              requires(sizeof...(ConfigOptions) > 0))
+  auto addOptionValidator(ExceptionValidatorT exceptionValidatorFunction,
+                          std::string exceptionValidatorDescriptor,
+                          ConfigOptions&&... configOptionsToBeChecked)
       -> CPP_ret(void)(
           requires(ExceptionValidatorFunction<
                    ExceptionValidatorT,
@@ -480,13 +471,11 @@ class ConfigManager {
   */
   CPP_template(typename Visitor)(
       requires ad_utility::InvocableWithExactReturnType<
-          Visitor, void, std::string_view, ConfigManager&>
-          CPP_and ad_utility::InvocableWithExactReturnType<
-              Visitor, void, std::string_view,
-              ConfigOption&>) void visitHashMapEntries(Visitor&& vis,
-                                                       bool sortByCreationOrder,
-                                                       std::string_view
-                                                           pathPrefix) const;
+          Visitor, void, std::string_view, ConfigManager&> &&
+      ad_utility::InvocableWithExactReturnType<Visitor, void, std::string_view,
+                                               ConfigOption&>)
+  void visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
+                           std::string_view pathPrefix) const;
 
   /*
   @brief Collect all `HashMapEntry` contained in the `hashMap`, including the
@@ -501,18 +490,17 @@ class ConfigManager {
   */
   CPP_template(typename HashMapType, typename Callable)(
       requires SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>,
-                         HashMapType>
-          CPP_and std::is_object_v<HashMapType>) static std::
-      conditional_t<
-          std::is_const_v<HashMapType>,
-          const std::vector<std::pair<const std::string, const HashMapEntry&>>,
-          std::vector<std::pair<
-              std::string, HashMapEntry&>>> allHashMapEntries(HashMapType&
-                                                                  hashMap,
-                                                              std::string_view
-                                                                  pathPrefix,
-                                                              const Callable&
-                                                                  predicate);
+                         HashMapType> &&
+      std::is_object_v<HashMapType>)
+  static std::conditional_t<
+      std::is_const_v<HashMapType>,
+      const std::vector<std::pair<const std::string, const HashMapEntry&>>,
+      std::vector<std::pair<
+          std::string, HashMapEntry&>>> allHashMapEntries(HashMapType& hashMap,
+                                                          std::string_view
+                                                              pathPrefix,
+                                                          const Callable&
+                                                              predicate);
 
   /*
   @brief Creates the string representation of a valid `nlohmann::json` pointer
@@ -565,14 +553,15 @@ class ConfigManager {
   @return A reference to the newly created configuration option. Will stay
   valid, even after more options.
   */
-  CPP_template(typename OptionType)(requires ad_utility::SameAsAnyTypeIn<
-                                    OptionType, ConfigOption::AvailableTypes>)
-      ConstConfigOptionProxy<OptionType> addOptionImpl(
-          const std::vector<std::string>& pathToOption,
-          std::string_view optionDescription,
-          OptionType* variableToPutValueOfTheOptionIn,
-          std::optional<OptionType> defaultValue =
-              std::optional<OptionType>(std::nullopt)) {
+  CPP_template(typename OptionType)(
+      requires ad_utility::SameAsAnyTypeIn<OptionType,
+                                           ConfigOption::AvailableTypes>)
+  ConstConfigOptionProxy<OptionType> addOptionImpl(
+      const std::vector<std::string>& pathToOption,
+      std::string_view optionDescription,
+      OptionType* variableToPutValueOfTheOptionIn,
+      std::optional<OptionType> defaultValue =
+          std::optional<OptionType>(std::nullopt)) {
     verifyPath(pathToOption);
 
     /*
@@ -606,9 +595,9 @@ class ConfigManager {
   ConfigOption&`.
   */
   CPP_template(typename ConfigOptions, typename ReturnReference)(
-      requires SameAsAny<ReturnReference, ConfigOption&, const ConfigOption&>
-          CPP_and SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>,
-                            ConfigOptions>) static std::
+      requires SameAsAny<ReturnReference, ConfigOption&, const ConfigOption&> &&
+      SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>, ConfigOptions>)
+  static std::
       vector<std::pair<std::string, ReturnReference>> configurationOptionsImpl(
           ConfigOptions& configurationOptions);
 
@@ -741,11 +730,9 @@ class ConfigManager {
     @brief Add a validator to the list of validators, that are assigned to a
     `ConfigOption`/`ConfigManager`.
     */
-    CPP_template(typename T)(
-        requires ConfigOptionOrManager<
-            T>) void addEntryUnderKey(const T& key,
-                                      const ConfigOptionValidatorManager&
-                                          manager);
+    CPP_template(typename T)(requires ConfigOptionOrManager<T>)
+    void addEntryUnderKey(const T& key,
+                          const ConfigOptionValidatorManager& manager);
 
     /*
     @brief Retrieve the list of validators, that are assigned to a
@@ -754,21 +741,20 @@ class ConfigManager {
     @returns If there is no entry for `Key`, return an empty `std::vector`.
     */
     CPP_template(typename T)(requires ConfigOptionOrManager<T>)
-        ValueGetterReturnType getEntriesUnderKey(const T& key) const;
+    ValueGetterReturnType getEntriesUnderKey(const T& key) const;
 
    private:
     // Return either `configOption_` or `configManager_`, based on type.
-    CPP_template(typename T)(requires ConfigOptionOrManager<T>) constexpr const
-        MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
+    CPP_template(typename T)(requires ConfigOptionOrManager<T>)
+    constexpr const MemoryAdressHashMap<T>& getHashMapBasedOnType() const {
       if constexpr (ql::concepts::same_as<T, ConfigOption>) {
         return configOption_;
       } else if constexpr (ql::concepts::same_as<T, ConfigManager>) {
         return configManager_;
       }
     }
-    CPP_template(typename T)(
-        requires ConfigOptionOrManager<
-            T>) constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
+    CPP_template(typename T)(requires ConfigOptionOrManager<T>)
+    constexpr MemoryAdressHashMap<T>& getHashMapBasedOnType() {
       if constexpr (ql::concepts::same_as<T, ConfigOption>) {
         return configOption_;
       } else if constexpr (ql::concepts::same_as<T, ConfigManager>) {

@@ -98,14 +98,15 @@ class CountAvailablePredicates : public Operation {
    * obtained via a scan of the `ql:has-pattern` predicate.
    * @param executor The executor on which the counting runs in parallel (see
    *                 `ad_utility::computeInParallelChunks`).
+   * @param cancellationHandle Is checked once per chunk of the computation.
    */
   template <size_t I>
-  static void computePatternTrick(const IdTableView<0>& input, IdTable* result,
-                                  const CompactVectorOfStrings<Id>& patterns,
-                                  size_t subjectColumnIdx,
-                                  size_t patternColumnIdx,
-                                  RuntimeInformation& runtimeInfo,
-                                  const qlever::Executor& executor);
+  static void computePatternTrick(
+      const IdTableView<0>& input, IdTable* result,
+      const CompactVectorOfStrings<Id>& patterns, size_t subjectColumnIdx,
+      size_t patternColumnIdx, RuntimeInformation& runtimeInfo,
+      const qlever::Executor& executor,
+      const ad_utility::SharedCancellationHandle& cancellationHandle);
 
   // Special implementation for the full pattern trick. Count and expand the
   // patterns in the `patternColumn` of the `subresult`, which is the (possibly

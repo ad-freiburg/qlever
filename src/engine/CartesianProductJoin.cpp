@@ -280,7 +280,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() &&
         childTree->handlesLimitOffset() != LimitOffsetHandling::NONE) {
-      childTree->applyLimitOffset(limitIfPresent.value());
+      childTree->applyLimitOffset(limitIfPresent.value(), false);
       forbiddenToRecompute_ = true;
     }
     auto& child = *childTree->getRootOperation();

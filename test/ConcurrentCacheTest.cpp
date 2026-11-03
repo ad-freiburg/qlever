@@ -81,6 +81,45 @@ using SimpleConcurrentLruCache =
 
 namespace {
 auto returnTrue = [](const auto&) { return true; };
+
+// A very particular helper for the following tests.
+// On construction, it captures the number of references to
+// the `inProgressMap` of the `cache` at the `key`.
+// It then has a method to block until that use count changes,
+// which means that another thread is waiting for the same
+// result.
+struct UseCounter {
+  SimpleConcurrentLruCache& cache_;
+  int key_;
+  long useCount_;
+  explicit UseCounter(SimpleConcurrentLruCache& cache, int key = 0)
+      : cache_{cache},
+        key_{key},
+        useCount_{
+            cache.getStorage().wlock()->_inProgress[key].second.use_count()} {}
+  void waitForChange() {
+    while (cache_.getStorage().wlock()->_inProgress[key_].second.use_count() <=
+           useCount_) {
+      std::this_thread::sleep_for(1ms);
+    }
+  }
+};
+
+// Return a thread that lets the computation that waits for the
+// `mayFinishSignal_` of the `signal` finish as soon as another thread waits for
+// the result of that computation (which is in progress for the `key`). Simply
+// notifying the `signal` before starting the waiting computation would be a
+// race: if the first computation finishes (or fails) before the second one
+// starts, then the second one does not wait for the first one, but finds the
+// result in the cache or computes it itself.
+[[nodiscard]] ad_utility::JThread allowToFinishOnceWaitedFor(
+    SimpleConcurrentLruCache& cache, int key, StartStopSignal& signal) {
+  return ad_utility::JThread{
+      [useCounter = UseCounter{cache, key}, &signal]() mutable {
+        useCounter.waitForChange();
+        signal.mayFinishSignal_.notify();
+      }};
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -197,7 +236,7 @@ TEST(ConcurrentCache, concurrentComputation) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
   // is cached.
@@ -226,7 +265,7 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
 
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
@@ -257,7 +296,7 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
 
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
@@ -292,7 +331,7 @@ TEST(ConcurrentCache, abort) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
@@ -317,7 +356,7 @@ TEST(ConcurrentCache, abortPinned) {
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
@@ -350,29 +389,6 @@ TEST(ConcurrentCache, isNotCachedIfUnsuitable) {
   EXPECT_EQ(cache.numPinnedEntries(), 0);
   EXPECT_THAT(result._resultPointer, Pointee("abc"s));
 }
-
-namespace {
-// A very particular helper for the following tests.
-// On construction, it captures the number of references to
-// the `inProgressMap` of the `cache` at the key `0`.
-// It then has a method to block until that use count changes,
-// which means that another thread is waiting for the same
-// result.
-struct UseCounter {
-  SimpleConcurrentLruCache& cache_;
-  long useCount_;
-  explicit UseCounter(SimpleConcurrentLruCache& cache)
-      : cache_{cache},
-        useCount_{
-            cache.getStorage().wlock()->_inProgress[0].second.use_count()} {}
-  void waitForChange() {
-    while (cache_.getStorage().wlock()->_inProgress[0].second.use_count() <=
-           useCount_) {
-      std::this_thread::sleep_for(1ms);
-    }
-  }
-};
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(ConcurrentCache, isNotCachedIfUnsuitableWhenWaitingForPendingComputation) {

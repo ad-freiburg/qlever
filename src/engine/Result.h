@@ -78,8 +78,8 @@ class Result : public ad_utility::NoCopy {
     explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
     CPP_template(typename Range)(
-        requires std::is_constructible_v<
-            LazyResult, Range>) explicit GenContainer(Range range)
+        requires std::is_constructible_v<LazyResult, Range>)
+    explicit GenContainer(Range range)
         : generator_{LazyResult{std::move(range)}} {}
   };
 
@@ -268,8 +268,13 @@ class Result : public ad_utility::NoCopy {
   const IdTableView<0>& idTableView() const;
 
   // Return a clone of the materialized table. Throw if not fully materialized.
-  // This operation is potentially expensive as it copies all data.
-  IdTable cloneIdTable() const;
+  // This operation is potentially expensive as it copies all data, so it calls
+  // `chunkOperation` (e.g. a cancellation check) regularly, see
+  // `IdTable::clone`.
+  template <typename ChunkOperation = ad_utility::Noop>
+  IdTable cloneIdTable(ChunkOperation chunkOperation = {}) const {
+    return idTableView().clone(std::move(chunkOperation));
+  }
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
@@ -313,10 +318,9 @@ class Result : public ad_utility::NoCopy {
 
   // Overload for more than two `Results`
   CPP_template(typename R)(
-      requires ql::ranges::forward_range<R> CPP_and ql::concepts::
-          convertible_to<ql::ranges::range_value_t<R>,
-                         const Result&>) static SharedLocalVocabWrapper
-      getMergedLocalVocab(R&& subResults) {
+      requires ql::ranges::forward_range<R> &&
+      ql::concepts::convertible_to<ql::ranges::range_value_t<R>, const Result&>)
+  static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());

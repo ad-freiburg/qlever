@@ -254,10 +254,9 @@ class SpatialJoinCachedIndex {
   // an index with a single segment and a simplification (see
   // `NamedCachedQueryBlobManager::serialize`).
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::WriteSerializer<
-          Serializer>) void writeToSerializer(Serializer& serializer,
-                                              uint16_t entriesFormatVersion)
-      const {
+      requires ad_utility::serialization::WriteSerializer<Serializer>)
+  void writeToSerializer(Serializer& serializer,
+                         uint16_t entriesFormatVersion) const {
     AD_CONTRACT_CHECK(entriesFormatVersion ==
                           namedResultCacheSerializer::legacyFormatVersion ||
                       entriesFormatVersion ==
@@ -297,8 +296,8 @@ class SpatialJoinCachedIndex {
   // an index with one segment and no simplification. `numRows` is the number of
   // rows of the `IdTable` that the index refers to.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::ReadSerializer<
-          Serializer>) static SpatialJoinCachedIndex
+      requires ad_utility::serialization::ReadSerializer<Serializer>)
+  static SpatialJoinCachedIndex
       readFromSerializer(Serializer& serializer, size_t numRows,
                          uint16_t entriesFormatVersion) {
     AD_CONTRACT_CHECK(entriesFormatVersion ==

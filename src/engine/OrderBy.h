@@ -72,6 +72,10 @@ class OrderBy : public Operation {
 
   size_t getResultWidth() const override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
+
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{subtree_.get()}, allocator()};

@@ -11,6 +11,7 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/TripleComponentConversions.h"
+#include "util/ChunkedForLoop.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
@@ -100,26 +101,30 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 // A helper function for the recursive BFS. Return those `Id`s from `input` (an
 // `IdTable` with one column) that are blank nodes and not in `alreadySeen`,
 // with duplicates removed. The returned `Id`s are added to `alreadySeen`.
-template <typename Allocator>
+// `checkCancellation` is called regularly.
+template <typename Allocator, typename CheckCancellation>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
-    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-    ConstIdColumnRef input) {
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ConstIdColumnRef input,
+    CheckCancellation checkCancellation) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);
   size_t i = 0;
-  for (Id id : input) {
-    if (id.getDatatype() != Datatype::BlankNodeIndex) {
-      continue;
-    }
-    auto [it, isNew] = alreadySeen.emplace(id);
-    if (!isNew) {
-      continue;
-    }
-    resultColumn[i] = id;
-    ++i;
-  }
+  ad_utility::chunkedForEach(
+      input,
+      [&alreadySeen, &resultColumn, &i](Id id) {
+        if (id.getDatatype() != Datatype::BlankNodeIndex) {
+          return;
+        }
+        auto [it, isNew] = alreadySeen.emplace(id);
+        if (!isNew) {
+          return;
+        }
+        resultColumn[i] = id;
+        ++i;
+      },
+      std::move(checkCancellation));
   result.resize(i);
   return result;
 }
@@ -145,8 +150,8 @@ void Describe::recursivelyAddBlankNodes(
   finalResult.insertAtEnd(table);
 
   // Compute the set of newly found blank nodes and recurse.
-  auto newBlankNodes =
-      getNewBlankNodes(allocator(), alreadySeen, table.getColumn(2));
+  auto newBlankNodes = getNewBlankNodes(
+      allocator(), alreadySeen, table.getColumn(2), cancellationChecker());
   recursivelyAddBlankNodes(finalResult, localVocab, alreadySeen,
                            std::move(newBlankNodes));
 }
@@ -190,7 +195,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // case the `selectColumns` operation is a no-op. Note sure when this is not
   // the case, but better safe than sorry.
   auto result = join->getResult();
-  IdTable resultTable = result->cloneIdTable();
+  IdTable resultTable = result->cloneIdTable(cancellationChecker());
   ColumnIndex s = join->getVariableColumn(V{"?subject"});
   ColumnIndex p = join->getVariableColumn(V{"?predicate"});
   ColumnIndex o = join->getVariableColumn(V{"?object"});
@@ -223,9 +228,14 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       if (!column.has_value()) {
         continue;
       }
-      ql::ranges::copy_if(result.idTableView().getColumn(column.value()),
-                          std::inserter(idsToDescribe, idsToDescribe.end()),
-                          Id::isDefinedL);
+      ad_utility::chunkedForEach(
+          result.idTableView().getColumn(column.value()),
+          [&idsToDescribe](Id id) {
+            if (Id::isDefinedL(id)) {
+              idsToDescribe.insert(id);
+            }
+          },
+          cancellationChecker());
     }
   }
 
@@ -253,7 +263,8 @@ Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   // Recursively follow all blank nodes.
   ad_utility::HashSetWithMemoryLimit<Id> alreadySeen{allocator()};
   auto blankNodes =
-      getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2));
+      getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2),
+                       cancellationChecker());
   recursivelyAddBlankNodes(resultTable, localVocab, alreadySeen,
                            std::move(blankNodes));
 

@@ -114,7 +114,8 @@ class Union : public Operation {
   }
 
  private:
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
   // The columns that the subtree with index `subtreeIndex` has to be sorted on,
   // such that merging the two subtrees yields a result that is sorted according

@@ -61,6 +61,7 @@ class LocalVocabContextImpl : public LocalVocabContext {
       std::string_view word) const override;
   std::optional<Id> encodeAsId(std::string_view word) const override;
   ad_utility::BlankNodeManager* getBlankNodeManager() const override;
+  std::pair<VocabIndex, VocabIndex> getRangeOfIrisInVocabulary() const override;
 };
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABCONTEXTIMPL_H

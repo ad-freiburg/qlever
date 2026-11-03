@@ -46,7 +46,8 @@ class OptionalJoin : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   // We propagate part of the `LimitOffsetClause` to the child operation to

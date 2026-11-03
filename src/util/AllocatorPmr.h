@@ -128,6 +128,18 @@ class PmrAllocator {
   template <typename U>
   friend class PmrAllocator;
 
+  // Return the underlying `LimitedMemoryResource`, or throw if the underlying
+  // resource is of a different type.
+  LimitedMemoryResource& limitedResourceOrThrow() const {
+    auto* limited = dynamic_cast<LimitedMemoryResource*>(resource_);
+    if (limited == nullptr) {
+      throw std::runtime_error{
+          "The memory limit cannot be changed, because this allocator does not "
+          "enforce one"};
+    }
+    return *limited;
+  }
+
  public:
   using value_type = T;
 
@@ -202,6 +214,17 @@ class PmrAllocator {
       return limited->tracker_.amountMemoryLeft();
     }
     return MemorySize::max();
+  }
+
+  // Increase or decrease the memory limit by `n`, with the same semantics as
+  // the corresponding functions of `AllocatorWithLimit`. Throw if the
+  // underlying resource is not a `LimitedMemoryResource`, because such a
+  // resource enforces no limit that could be changed.
+  void increaseMemoryLimit(MemorySize n) {
+    limitedResourceOrThrow().tracker_.increaseMemoryLimit(n);
+  }
+  void decreaseMemoryLimit(MemorySize n) {
+    limitedResourceOrThrow().tracker_.decreaseMemoryLimit(n);
   }
 
   ql::pmr::memory_resource* resource() const { return resource_; }

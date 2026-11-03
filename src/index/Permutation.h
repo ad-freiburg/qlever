@@ -225,10 +225,12 @@ class Permutation {
 
   // Get the exact size of the result of a scan, taking into account the
   // given located triples. This requires an exact location of the delta
-  // triples within the respective blocks.
+  // triples within the respective blocks (see
+  // `CompressedRelationReader::getResultSizeOfScan`).
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const LocatedTriplesState& locatedTriplesState,
+      const CancellationHandle& cancellationHandle) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that

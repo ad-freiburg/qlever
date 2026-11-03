@@ -23,6 +23,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/GeoPointEncoding.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
@@ -124,6 +125,9 @@ struct TestIndexConfig {
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.
   bool addHasWordTriples = false;
+  // The normalization of the words of the `ql:has-word` triples.
+  ad_utility::HasWordNormalization hasWordNormalization =
+      ad_utility::HasWordNormalization::Lowercase;
   // The words of the secondary vocabulary of the index (see
   // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
   // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not

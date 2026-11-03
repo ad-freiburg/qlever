@@ -46,7 +46,8 @@ TEST(IdMapWriter, writeAndReadBack) {
   // Far more entries than fit into the internal buffer of the writer, such
   // that the buffer has to be flushed many times.
   const size_t numPairs = 200'000;
-  ASSERT_GT(numPairs * 16, 10 * idMapWriterBufferSize.getBytes());
+  ASSERT_GT(numPairs * sizeof(IdMapEntry),
+            10 * idMapWriterBufferSize.getBytes());
   IdMap expected;
   expected.reserve(numPairs);
   for (size_t i = 0; i < numPairs; ++i) {
@@ -64,9 +65,10 @@ TEST(IdMapWriter, writeAndReadBack) {
   EXPECT_THAT(getIdMapFromFile(filename),
               ::testing::ElementsAreArray(expected));
   // The file consists of the number of entries (8 bytes), followed by the
-  // entries (16 bytes each). This is exactly the format of a serialized
-  // `IdMap`.
-  EXPECT_EQ(ql::filesystem::file_size(filename), 8 + 16 * numPairs);
+  // entries (`sizeof(IdMapEntry)` bytes each). This is exactly the format of a
+  // serialized `IdMap`.
+  EXPECT_EQ(ql::filesystem::file_size(filename),
+            8 + sizeof(IdMapEntry) * numPairs);
 }
 
 // _____________________________________________________________________________
