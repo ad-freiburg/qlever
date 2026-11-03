@@ -51,7 +51,6 @@
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
-#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
@@ -153,8 +152,8 @@ class IndexImpl {
 
   // If not empty, the `ql:has-word` triples are only added for literals that
   // are the object of a triple with one of these predicates (IRIs in the format
-  // of `Iri::toStringRepresentation`).
-  ad_utility::HashSet<std::string> hasWordRestrictPredicates_;
+  // of `Iri::toStringRepresentation`, sorted and without duplicates).
+  std::vector<std::string> hasWordRestrictPredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 

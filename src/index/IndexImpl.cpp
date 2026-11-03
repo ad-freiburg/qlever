@@ -462,13 +462,10 @@ void IndexImpl::prepareIndexBuild() {
   configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
       hasWordNormalization_;
   // The predicates to which the `ql:has-word` triples are restricted are
-  // stored (sorted, for a deterministic configuration) so that updates can
-  // later restrict their `ql:has-word` triples in the same way.
-  std::vector<std::string> hasWordRestrictPredicates(
-      hasWordRestrictPredicates_.begin(), hasWordRestrictPredicates_.end());
-  ql::ranges::sort(hasWordRestrictPredicates);
+  // stored so that updates can later restrict their `ql:has-word` triples in
+  // the same way.
   configurationJson_["has-word-restrict-predicates"] =
-      std::move(hasWordRestrictPredicates);
+      hasWordRestrictPredicates_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1611,11 +1608,12 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 
   // The predicates to which the `ql:has-word` triples of this index are
   // restricted (an index built before this key existed has no restriction).
-  std::vector<std::string> hasWordRestrictPredicates;
-  loadDataMember("has-word-restrict-predicates", hasWordRestrictPredicates,
+  // They were stored sorted and without duplicates.
+  loadDataMember("has-word-restrict-predicates", hasWordRestrictPredicates_,
                  std::vector<std::string>{});
-  hasWordRestrictPredicates_ = {hasWordRestrictPredicates.begin(),
-                                hasWordRestrictPredicates.end()};
+  AD_CORRECTNESS_CHECK(ql::ranges::adjacent_find(hasWordRestrictPredicates_,
+                                                 std::greater_equal<>{}) ==
+                       hasWordRestrictPredicates_.end());
 
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
@@ -1671,15 +1669,26 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
+    // Check if the predicate is one of the `hasWordRestrictPredicates_` (or
+    // none are set). The predicate is an `Id` if the parser has encoded it, see
+    // `EncodedIriManager`.
+    auto predicateAllowsHasWord = [this, &predicate = triple.predicate_]() {
+      if (hasWordRestrictPredicates_.empty()) {
+        return true;
+      }
+      if (predicate.isIri()) {
+        return ql::ranges::binary_search(
+            hasWordRestrictPredicates_,
+            predicate.getIri().toStringRepresentation());
+      }
+      return ql::ranges::binary_search(
+          hasWordRestrictPredicates_,
+          encodedIriManager().toString(predicate.getId()));
+    };
+
     // Extract the words of the literal for the `ql:has-word` triples and count
-    // their term frequencies (only if the predicate is one of the
-    // `hasWordRestrictPredicates_`, if any are set).
-    bool predicateAllowsHasWord =
-        hasWordRestrictPredicates_.empty() ||
-        (triple.predicate_.isIri() &&
-         hasWordRestrictPredicates_.contains(
-             triple.predicate_.getIri().toStringRepresentation()));
-    if (addHasWordTriples_ && predicateAllowsHasWord) {
+    // their term frequencies.
+    if (addHasWordTriples_ && predicateAllowsHasWord()) {
       std::string_view content = lit.getContent();
       // With `LowercaseNoAccents`, remove the accents before the tokenization
       // (combining marks are not alphanumeric and would otherwise split
@@ -2238,10 +2247,17 @@ void IndexImpl::setHasWordRestrictPredicates(
     const std::vector<std::string>& predicates) {
   hasWordRestrictPredicates_.clear();
   for (const std::string& predicate : predicates) {
-    hasWordRestrictPredicates_.insert(
+    hasWordRestrictPredicates_.push_back(
         ad_utility::triple_component::Iri::fromIrirefValidated(predicate)
             .toStringRepresentation());
   }
+
+  // Sort and remove duplicates (for the binary search in `processTriple`).
+  ql::ranges::sort(hasWordRestrictPredicates_);
+  hasWordRestrictPredicates_.erase(
+      std::unique(hasWordRestrictPredicates_.begin(),
+                  hasWordRestrictPredicates_.end()),
+      hasWordRestrictPredicates_.end());
 }
 
 // _____________________________________________________________________________

@@ -851,24 +851,32 @@ TEST(IndexTest, hasWordNormalizationNames) {
 // Test that `setHasWordRestrictPredicates` restricts the `ql:has-word` triples
 // to literals that are the object of one of the given predicates.
 TEST(IndexTest, hasWordRestrictPredicates) {
-  // An index with `ql:has-word` triples and a function that returns the number
+  // An index with `ql:has-word` triples in which the IRIs with prefix
+  // `http://e/` are encoded as `Id`s, and a function that returns the number
   // of words extracted from `"Café"` as the object of `predicate`.
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.addHasWordTriples() = true;
-  auto numWords = [&index](std::string predicate) {
+  index.setPrefixesForEncodedValues({"http://e/"});
+  auto numWords = [&index](TripleComponent predicate) {
     return index
-        .processTriple(TurtleTriple{iri("<s>"), iri(std::move(predicate)),
-                                    lit("\"Café\"")})
+        .processTriple(
+            TurtleTriple{iri("<s>"), std::move(predicate), lit("\"Café\"")})
         .wordFrequencies_.size();
+  };
+  auto encoded = [&index](std::string_view predicate) {
+    return index.encodedIriManager().encode(predicate).value();
   };
 
   // By default, the triples are added for all predicates.
-  EXPECT_EQ(numWords("<p>"), 1);
+  EXPECT_EQ(numWords(iri("<p>")), 1);
 
-  // With predicates set, the triples are only added for these predicates.
-  index.setHasWordRestrictPredicates({"<p>", "<q>"});
-  EXPECT_EQ(numWords("<q>"), 1);
-  EXPECT_EQ(numWords("<r>"), 0);
+  // With predicates set, the triples are only added for these predicates, also
+  // if the parser has encoded the predicate as an `Id`.
+  index.setHasWordRestrictPredicates({"<q>", "<http://e/1>", "<p>"});
+  EXPECT_EQ(numWords(iri("<q>")), 1);
+  EXPECT_EQ(numWords(iri("<r>")), 0);
+  EXPECT_EQ(numWords(encoded("<http://e/1>")), 1);
+  EXPECT_EQ(numWords(encoded("<http://e/2>")), 0);
 
   // A predicate that is not a valid IRI in angle brackets is rejected.
   AD_EXPECT_THROW_WITH_MESSAGE(
