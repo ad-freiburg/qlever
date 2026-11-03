@@ -24,13 +24,14 @@
 // `offset, offset + 1, ...` to the result of its child. It is created via the
 // `RowNumberQuery` magic SERVICE.
 //
-// NOTE: The row numbers are unique, so the result is sorted by the row number
+// NOTE 1: The row numbers are unique, so the result is sorted by the row number
 // column followed by any other columns. By default, these are the sort columns
 // of the child, but `makeSortedTree` provides any other order that starts with
-// the row number column for free. The row number column is the first column,
-// such that joins on the row number and further variables (which choose their
-// join columns in the order of the column indices) require no additional
-// sorting.
+// the row number column for free.
+//
+// NOTE 2: The row number column is the first column, such that joins on the
+// row number and further variables (which choose their join columns in the
+// order of the column indices) require no additional sorting.
 class RowNumber : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> child_;
