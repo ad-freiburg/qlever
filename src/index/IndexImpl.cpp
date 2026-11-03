@@ -1609,6 +1609,10 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 
   // The predicates to which the `ql:has-word` triples of this index are
   // restricted. They were stored sorted and without duplicates.
+  //
+  // NOTE: `std::greater_equal` finds the first pair that is not strictly
+  // increasing, so the check covers both the sortedness (needed for the binary
+  // search in `processTriple`) and the uniqueness.
   loadDataMember(ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY,
                  hasWordRestrictPredicates_, std::vector<std::string>{});
   AD_CORRECTNESS_CHECK(ql::ranges::adjacent_find(hasWordRestrictPredicates_,
@@ -1671,14 +1675,19 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     }
     // Check if the predicate is one of the `hasWordRestrictPredicates_` (or
     // none are set). The predicate is an `Id` if the parser has encoded it, see
-    // `EncodedIriManager`.
+    // `EncodedIriManager`. In this case, `decodedPredicate` owns its string, so
+    // that `needle` is a reference in both cases (no copy of the IRI).
     auto predicateAllowsHasWord = [this, &predicate = triple.predicate_]() {
-      return hasWordRestrictPredicates_.empty() ||
-             ql::ranges::binary_search(
-                 hasWordRestrictPredicates_,
-                 predicate.isIri()
-                     ? predicate.getIri().toStringRepresentation()
-                     : encodedIriManager().toString(predicate.getId()));
+      if (hasWordRestrictPredicates_.empty()) {
+        return true;
+      }
+      std::string decodedPredicate;
+      const std::string& needle =
+          predicate.isIri()
+              ? predicate.getIri().toStringRepresentation()
+              : (decodedPredicate =
+                     encodedIriManager().toString(predicate.getId()));
+      return ql::ranges::binary_search(hasWordRestrictPredicates_, needle);
     };
 
     // Extract the words of the literal for the `ql:has-word` triples and count
