@@ -54,11 +54,12 @@ TEST(StringMapping, remapId) {
   LocalVocabEntry duplicateWord = localVocabEntryFromStringRepresentation(
       "<b>", index.getLocalVocabContext());
   StringMapping mapping{index};
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
-  Id id2 = Id::makeFromLocalVocabIndex(&testWord);
+  Id id2 = getLocalVocabId(testWord);
   Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
-  Id id5 = Id::makeFromLocalVocabIndex(&duplicateWord);
+  Id id5 = getLocalVocabId(duplicateWord);
 
   // The indices start at zero, a repeated ID keeps its index.
   binaryEq(mapping.remapId(id1), toMappedId(0));
@@ -116,9 +117,10 @@ TEST(StringMapping, takeStrings) {
   // IDs of all datatypes that point to strings.
   LocalVocabEntry testWord = localVocabEntryFromStringRepresentation(
       "\"abc\"", index.getLocalVocabContext());
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
-  Id id2 = Id::makeFromLocalVocabIndex(&testWord);
+  Id id2 = getLocalVocabId(testWord);
   Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
 

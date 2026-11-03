@@ -23,6 +23,9 @@
 
 namespace ad_utility::triple_component {
 
+class Iri;
+class IriView;
+
 // A class template to hold IRIs. When `isOwning = true` (the default), storage
 // is `std::string`. When `isOwning = false`, storage is `std::string_view` and
 // all mutating/allocating functions are disabled. Use the `Iri` and `IriView`
@@ -44,6 +47,10 @@ class BasicIri {
   static constexpr std::string_view schemePattern = "://";
 
  private:
+  // Required for `viewWithStorage` and `toOwned` below.
+  template <bool>
+  friend class BasicIri;
+
   // Store the string value of the IRI including the angle brackets.
   StorageType iri_;
 
@@ -63,6 +70,14 @@ class BasicIri {
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
+
+  // Return an `IriView` that is equal to this IRI, but refers to `storage`,
+  // which must have exactly the contents of `toStringRepresentation()`
+  // (typically it is a copy of it at a stable address).
+  IriView viewWithStorage(std::string_view storage) const;
+
+  // Return an owning copy of this IRI.
+  Iri toOwned() const;
 
   // Build an `Iri` from a string that is already in QLever's internal
   // normalized format (see the class comment). The string is stored verbatim
@@ -113,6 +128,8 @@ class Iri : public BasicIri<true> {
   using BasicIri<true>::BasicIri;
 
  private:
+  template <bool>
+  friend class BasicIri;
   explicit Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
 
   // The implementation of the `fromIriref` overload for owned strings (see
@@ -206,6 +223,8 @@ class IriView : public BasicIri<false> {
   using BasicIri<false>::BasicIri;
 
  private:
+  template <bool>
+  friend class BasicIri;
   explicit IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
 
  public:
@@ -218,6 +237,19 @@ class IriView : public BasicIri<false> {
     return IriView{BasicIri<false>::fromStringRepresentation(sv)};
   }
 };
+
+// _____________________________________________________________________________
+template <bool isOwning>
+IriView BasicIri<isOwning>::viewWithStorage(std::string_view storage) const {
+  AD_EXPENSIVE_CHECK(storage == std::string_view{iri_});
+  return IriView{BasicIri<false>{storage}};
+}
+
+// _____________________________________________________________________________
+template <bool isOwning>
+Iri BasicIri<isOwning>::toOwned() const {
+  return Iri{BasicIri<true>{std::string{iri_}}};
+}
 
 }  // namespace ad_utility::triple_component
 

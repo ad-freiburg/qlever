@@ -466,6 +466,8 @@ addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
 
 addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
 
+addLinkAndDiscoverTest(StableHashSetTest)
+
 addLinkAndDiscoverTestNoLibs(CopyOnWritePtrTest)
 
 addLinkAndDiscoverTestNoLibs(CopyOnWriteChunkedVectorTest)

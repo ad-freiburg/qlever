@@ -197,7 +197,9 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
-      return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
+      return localVocab.getWord(id.getLocalVocabIndex())
+          .asLiteralOrIri()
+          .toOwned();
     case Datatype::VocabIndex: {
       auto getEntity = [&index, id]() {
         return index.indexToString(id.getVocabIndex());

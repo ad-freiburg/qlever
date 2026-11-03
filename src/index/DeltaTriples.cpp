@@ -754,7 +754,7 @@ DeltaTriples::copyLocalVocab() const {
   std::vector<LocalVocabIndex> entries = ::ranges::to_vector(
       localVocab_.primaryWordSet() |
       ql::views::transform(
-          [](const LocalVocabEntry& entry) { return &entry; }));
+          [](const LocalVocabEntryView& entry) { return &entry; }));
   return std::make_pair(std::move(entries),
                         localVocab_.getOwnedLocalBlankNodeBlocks());
 }

@@ -22,6 +22,9 @@
 #include "util/Forward.h"
 
 namespace ad_utility::triple_component {
+
+class LiteralOrIri;
+class LiteralOrIriView;
 static constexpr char literalPrefixChar = '"';
 static constexpr char iriPrefixChar = '<';
 static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
@@ -103,6 +106,15 @@ class alignas(16) BasicLiteralOrIri {
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteralOrIri, data_)
+
+  // Return a `LiteralOrIriView` that is equal to this object, but refers to
+  // `storage`, which must have exactly the contents of
+  // `toStringRepresentation()` (typically it is a copy of it at a stable
+  // address, see `LocalVocab`).
+  LiteralOrIriView viewWithStorage(std::string_view storage) const;
+
+  // Return an owning copy of this object.
+  LiteralOrIri toOwned() const;
 
   // Return true if object contains an Iri object.
   bool isIri() const;
@@ -209,6 +221,24 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
     return LiteralOrIriView{Base::fromStringRepresentation(sv)};
   }
 };
+
+// _____________________________________________________________________________
+template <bool isOwning>
+LiteralOrIriView BasicLiteralOrIri<isOwning>::viewWithStorage(
+    std::string_view storage) const {
+  return std::visit(
+      [storage](const auto& value) {
+        return LiteralOrIriView{value.viewWithStorage(storage)};
+      },
+      data_);
+}
+
+// _____________________________________________________________________________
+template <bool isOwning>
+LiteralOrIri BasicLiteralOrIri<isOwning>::toOwned() const {
+  return std::visit(
+      [](const auto& value) { return LiteralOrIri{value.toOwned()}; }, data_);
+}
 
 }  // namespace ad_utility::triple_component
 

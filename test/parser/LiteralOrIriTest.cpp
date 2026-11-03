@@ -694,6 +694,36 @@ TEST(NonOwningTest, LiteralOrIriView) {
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));
 }
 
+// _____________________________________________________________________________
+TEST(LiteralOrIri, viewWithStorageAndToOwned) {
+  // A literal with a datatype that contains a quote, for which the position of
+  // the datatype can't be determined from the string representation alone.
+  auto literal = LiteralOrIri{Literal::literalWithoutQuotes(
+      "x", Iri::fromStringRepresentation("<a\"b>"))};
+  auto iri = LiteralOrIri::iriref("<http://example.org/>");
+  for (const auto& word : {literal, iri}) {
+    // A copy of the string representation at a different address.
+    std::string storage{word.toStringRepresentation()};
+    LiteralOrIriView view = word.viewWithStorage(storage);
+    EXPECT_EQ(view.toStringRepresentation().data(), storage.data());
+    EXPECT_EQ(view.isIri(), word.isIri());
+    EXPECT_EQ(view.getContent(), word.getContent());
+
+    LiteralOrIri owned = view.toOwned();
+    EXPECT_EQ(owned, word);
+    EXPECT_NE(owned.toStringRepresentation().data(), storage.data());
+    // Converting an owning object directly yields a copy.
+    EXPECT_EQ(word.toOwned(), word);
+  }
+  auto view = literal.viewWithStorage(literal.toStringRepresentation());
+  EXPECT_EQ(view.getLiteral().getContent(), "x");
+  EXPECT_EQ(view.getLiteral().getDatatype(), "a\"b");
+  // Parsing the string representation can't find the correct datatype, which
+  // is why `viewWithStorage` is needed.
+  EXPECT_ANY_THROW(
+      LiteralView::fromStringRepresentation(literal.toStringRepresentation()));
+}
+
 using LitTypes =
     ::testing::Types<LiteralOrIri, LiteralOrIriView, Literal, LiteralView>;
 

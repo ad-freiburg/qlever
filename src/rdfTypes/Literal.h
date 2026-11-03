@@ -25,6 +25,9 @@
 
 namespace ad_utility::triple_component {
 
+class Literal;
+class LiteralView;
+
 // A class template to hold literal values. When `isOwning = true` (the
 // default), storage is `std::string`. When `isOwning = false`, storage is
 // `std::string_view` and all mutating/allocating functions are disabled. Use
@@ -37,6 +40,10 @@ class BasicLiteral {
       std::conditional_t<isOwning, std::string, std::string_view>;
 
  private:
+  // Required for `viewWithStorage` and `toOwned` below.
+  template <bool>
+  friend class BasicLiteral;
+
   // Store the normalized version of the literal, including possible datatypes
   // and descriptors.
   //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
@@ -76,6 +83,16 @@ class BasicLiteral {
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,
                                               beginOfSuffix_)
+
+  // Return a `LiteralView` that is equal to this literal, but refers to
+  // `storage`, which must have exactly the contents of
+  // `toStringRepresentation()` (typically it is a copy of it at a stable
+  // address). Unlike `LiteralView::fromStringRepresentation`, this doesn't have
+  // to determine the position of the datatype or language tag again.
+  LiteralView viewWithStorage(std::string_view storage) const;
+
+  // Return an owning copy of this literal.
+  Literal toOwned() const;
 
   std::conditional_t<isOwning, const std::string&, std::string_view>
   toStringRepresentation() const& {
@@ -124,6 +141,9 @@ class Literal : public BasicLiteral<true> {
   using BasicLiteral<true>::BasicLiteral;
 
  private:
+  template <bool>
+  friend class BasicLiteral;
+
   explicit Literal(BasicLiteral<true>&& base)
       : BasicLiteral<true>(std::move(base)) {}
 
@@ -196,6 +216,9 @@ class LiteralView : public BasicLiteral<false> {
   using BasicLiteral<false>::BasicLiteral;
 
  private:
+  template <bool>
+  friend class BasicLiteral;
+
   explicit LiteralView(BasicLiteral<false>&& base)
       : BasicLiteral<false>(std::move(base)) {}
 
@@ -210,6 +233,20 @@ class LiteralView : public BasicLiteral<false> {
     return LiteralView{BasicLiteral<false>::fromStringRepresentation(internal)};
   }
 };
+
+// _____________________________________________________________________________
+template <bool isOwning>
+LiteralView BasicLiteral<isOwning>::viewWithStorage(
+    std::string_view storage) const {
+  AD_EXPENSIVE_CHECK(storage == std::string_view{storage_});
+  return LiteralView{BasicLiteral<false>{storage, beginOfSuffix_}};
+}
+
+// _____________________________________________________________________________
+template <bool isOwning>
+Literal BasicLiteral<isOwning>::toOwned() const {
+  return Literal{BasicLiteral<true>{std::string{storage_}, beginOfSuffix_}};
+}
 
 }  // namespace ad_utility::triple_component
 

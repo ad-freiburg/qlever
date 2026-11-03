@@ -27,12 +27,30 @@ using valueIdComparators::Comparison;
 // input types.
 
 // For the various `SingleExpressionResult`s the `idGenerator` function returns
-// a generator that yields `targetSize` many `ValueId`s.
+// a generator that yields `targetSize` many `ValueId`s. A `LocalVocabEntry` of
+// the `input` is yielded as a `LocalVocabEntryView` of it (in a
+// `std::variant<ValueId, LocalVocabEntryView>`), as a `ValueId` can only point
+// to such a view, which then has to be alive (see `compareIdsOrStrings`).
 CPP_template(typename S)(requires SingleExpressionResult<S>)
 auto idGenerator(S&& input, size_t targetSize,
                  const EvaluationContext* context) {
   [[maybe_unused]] auto makeId = [context](const auto& el) {
-    return makeValueId(el, context);
+    using T = std::decay_t<decltype(el)>;
+    if constexpr (ad_utility::isSimilar<T, LocalVocabEntry>) {
+      return LocalVocabEntryView{el};
+    } else if constexpr (ad_utility::isSimilar<T, IdOrLocalVocabEntry>) {
+      return std::visit(
+          [](const auto& x) -> std::variant<Id, LocalVocabEntryView> {
+            if constexpr (ad_utility::isSimilar<decltype(x), Id>) {
+              return x;
+            } else {
+              return LocalVocabEntryView{x};
+            }
+          },
+          el);
+    } else {
+      return makeValueId(el, context);
+    }
   };
   if constexpr (isConstantResult<S>) {
     return ::ranges::views::repeat_n(makeId(input), targetSize);
@@ -166,16 +184,19 @@ ExpressionResult
   // stuff.
   if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
     auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
-      auto valueId = makeValueId(value2, context);
-      if (auto column = context->getSortedColumnOrNullopt(value1);
-          column.has_value()) {
-        auto result = evaluateWithBinarySearch<Comp>(column.value(), valueId);
-        if (result.has_value()) {
-          return std::move(result.value());
-        }
-      }
-      context->cancellationHandle_->throwIfCancelled();
-      return std::nullopt;
+      return withValueId(
+          value2, context, [&](Id valueId) -> std::optional<ExpressionResult> {
+            if (auto column = context->getSortedColumnOrNullopt(value1);
+                column.has_value()) {
+              auto result =
+                  evaluateWithBinarySearch<Comp>(column.value(), valueId);
+              if (result.has_value()) {
+                return std::move(result.value());
+              }
+            }
+            context->cancellationHandle_->throwIfCancelled();
+            return std::nullopt;
+          });
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
     if constexpr (ad_utility::isSimilar<S2, IdOrLocalVocabEntry>) {

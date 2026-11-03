@@ -7,19 +7,21 @@
 #define QLEVER_SRC_ENGINE_LOCALVOCAB_H
 
 #include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_set.h>
 
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "global/Id.h"
 #include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
+#include "util/StableHashSet.h"
 
 // A class for maintaining a local vocabulary, which conceptually is a set of
 // `LiteralOrIri`s that are not part of the original vocabulary (which stems
@@ -34,14 +36,66 @@
 // cannot be modified by this class. A `LocalVocabEntry` lives exactly as long
 // as it is contained in at least one of the (primary or other) sets of a
 // `LocalVocab`.
+//
+// The words of a set are stored as `LocalVocabEntryView`s, which, together with
+// their characters, are allocated from a monotonic arena that is owned by the
+// set. Words are never removed from a set, so the arena never has to free
+// memory before the set is destroyed. A `LocalVocabIndex` is the address of
+// such a `LocalVocabEntryView`.
 class LocalVocab {
+ public:
+  // A set of words, see above.
+  class WordSet {
+   private:
+    // Hash and compare the words by their string representation, which also
+    // allows to look them up via a `std::string_view`.
+    static std::string_view toView(std::string_view word) { return word; }
+    static std::string_view toView(const LocalVocabEntryView& word) {
+      return word.toStringRepresentation();
+    }
+    struct Hash {
+      using is_transparent = void;
+      template <typename Word>
+      size_t operator()(const Word& word) const {
+        return absl::Hash<std::string_view>{}(toView(word));
+      }
+    };
+    struct Equal {
+      using is_transparent = void;
+      template <typename A, typename B>
+      bool operator()(const A& a, const B& b) const {
+        return toView(a) == toView(b);
+      }
+    };
+    // The characters of the words are stored in the arena of the set.
+    ad_utility::StableHashSet<LocalVocabEntryView, Hash, Equal> words_;
+
+   public:
+    // If a word that is equal to `word` (a `LocalVocabEntry` or a
+    // `LocalVocabEntryView`) is already contained, return its address and
+    // `false`. Else add a copy of `word` and return its address and `true`.
+    template <typename WordT>
+    std::pair<LocalVocabIndex, bool> insert(const WordT& word);
+
+    // Return the address of the word with the given string representation, or
+    // `nullptr` if there is no such word.
+    LocalVocabIndex find(std::string_view word) const {
+      return words_.find(word);
+    }
+
+    size_t size() const { return words_.size(); }
+    bool empty() const { return words_.empty(); }
+
+    // Iterate over the words (as `const LocalVocabEntryView&`) in no
+    // particular order.
+    auto begin() const { return words_.begin(); }
+    auto end() const { return words_.end(); }
+  };
+
  private:
+  using Set = WordSet;
+
   // The primary set of `LocalVocabEntry`s, which can grow dynamically.
-  //
-  // NOTE: This is a `absl::node_hash_set` because we hand out pointers to
-  // the `LocalVocabEntry`s and it is hence essential that their addresses
-  // remain stable over their lifetime in the hash set.
-  using Set = absl::node_hash_set<LocalVocabEntry>;
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
   using LocalBlankNodeManager =
@@ -81,11 +135,13 @@ class LocalVocab {
   LocalVocab& operator=(LocalVocab&&) = default;
 
   // For a given `LocalVocabEntry`, return the corresponding `LocalVocabIndex`
-  // (which is just the address of the `LocalVocabEntry`). If the
-  // `LocalVocabEntry` is not contained in any of the sets, add it to the
-  // primary.
+  // (which is just the address of the stored `LocalVocabEntryView`). If the
+  // `LocalVocabEntry` is not contained in the primary set, add a copy of it
+  // to the primary set.
   LocalVocabIndex getIndexAndAddIfNotContained(const LocalVocabEntry& word);
-  LocalVocabIndex getIndexAndAddIfNotContained(LocalVocabEntry&& word);
+  // Overload for words that are already stored in some `LocalVocab`, see
+  // above.
+  LocalVocabIndex getIndexAndAddIfNotContained(const LocalVocabEntryView& word);
 
   // Return an `Id` for `word`. If `word` has a representation that doesn't
   // reference a local vocab at all, return that and leave this local vocab
@@ -97,11 +153,14 @@ class LocalVocab {
   // of the vocabulary of the index, and would then get a different `Id` than
   // the same word coming from the data.
   Id getIdAndAddIfNotContained(const LocalVocabEntry& word);
+  Id getIdAndAddIfNotContained(const LocalVocabEntryView& word);
 
   // Like `getIndexAndAddIfNotContained`, but if the `LocalVocabEntry` is not
   // contained in any of the sets, do not add it and return `std::nullopt`.
   std::optional<LocalVocabIndex> getIndexOrNullopt(
       const LocalVocabEntry& word) const;
+  std::optional<LocalVocabIndex> getIndexOrNullopt(
+      const LocalVocabEntryView& word) const;
 
   // The number of words in this local vocabulary.
   size_t size() const {
@@ -125,7 +184,7 @@ class LocalVocab {
   //
   // NOTE: This used to be a more complex function but is now a simple
   // dereference. It could be thrown out in the future.
-  const LocalVocabEntry& getWord(LocalVocabIndex localVocabIndex) const;
+  const LocalVocabEntryView& getWord(LocalVocabIndex localVocabIndex) const;
 
   // Add all sets (primary and other) of the given local vocabs as other sets
   // to this local vocab. The purpose is to keep all the contained
@@ -236,10 +295,13 @@ class LocalVocab {
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
 
-  // Common implementation for the two methods `getIndexAndAddIfNotContained`
-  // and `getIndexOrNullopt` above.
+  // Common implementation of the overloads of `getIndexAndAddIfNotContained`
+  // and `getIdAndAddIfNotContained` above.
   template <typename WordT>
-  LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
+  LocalVocabIndex getIndexAndAddIfNotContainedImpl(const WordT& word);
+  template <typename WordT>
+  Id getIdAndAddIfNotContainedImpl(const WordT& word);
+  std::optional<LocalVocabIndex> getIndexOrNullopt(std::string_view word) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H

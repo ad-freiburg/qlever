@@ -30,7 +30,27 @@ void LocalVocab::mergeWith(const LocalVocab& other) {
 
 // _____________________________________________________________________________
 template <typename WordT>
-LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
+std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
+    const WordT& word) {
+  std::string_view representation = word.toStringRepresentation();
+  return words_.insertWith(
+      representation, [&](ql::pmr::memory_resource& arena) {
+        auto* characters = static_cast<char*>(
+            arena.allocate(representation.size(), alignof(char)));
+        ql::ranges::copy(representation, characters);
+        return LocalVocabEntryView{
+            word, std::string_view{characters, representation.size()}};
+      });
+}
+template std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
+    const LocalVocabEntry&);
+template std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
+    const LocalVocabEntryView&);
+
+// _____________________________________________________________________________
+template <typename WordT>
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(
+    const WordT& word) {
   // We can't modify the word set after it has been copied, otherwise we will
   // silently alter the size of other `LocalVocab`s leading to assertion errors
   // and data races. Please note that this check does not ensure thread safety!
@@ -38,11 +58,9 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // still might end up with data races but it helps to find wrong
   // implementations.
   AD_CORRECTNESS_CHECK(!copied_->load());
-  auto [wordIterator, isNewWord] = primaryWordSet().insert(AD_FWD(word));
+  auto [index, isNewWord] = primaryWordSet().insert(word);
   size_ += static_cast<size_t>(isNewWord);
-  // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
-  // the MacOS build.
-  return &(*wordIterator);
+  return index;
 }
 
 // _____________________________________________________________________________
@@ -53,12 +71,13 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
 
 // _____________________________________________________________________________
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
-    LocalVocabEntry&& word) {
-  return getIndexAndAddIfNotContainedImpl(std::move(word));
+    const LocalVocabEntryView& word) {
+  return getIndexAndAddIfNotContainedImpl(word);
 }
 
 // _____________________________________________________________________________
-Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntry& word) {
+template <typename WordT>
+Id LocalVocab::getIdAndAddIfNotContainedImpl(const WordT& word) {
   // `positionInVocab` returns a half-open range that is at most one wide, so
   // `lowerBound != upperBound` means that `word` does have a representation
   // outside of a local vocab, and the bits of `lowerBound` then are exactly the
@@ -73,20 +92,40 @@ Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntry& word) {
 }
 
 // _____________________________________________________________________________
+Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntry& word) {
+  return getIdAndAddIfNotContainedImpl(word);
+}
+
+// _____________________________________________________________________________
+Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntryView& word) {
+  return getIdAndAddIfNotContainedImpl(word);
+}
+
+// _____________________________________________________________________________
 std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
-    const LocalVocabEntry& word) const {
+    std::string_view word) const {
   auto localVocabIndex = primaryWordSet().find(word);
-  if (localVocabIndex != primaryWordSet().end()) {
-    // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
-    // the MacOS build.
-    return &(*localVocabIndex);
+  if (localVocabIndex != nullptr) {
+    return localVocabIndex;
   } else {
     return std::nullopt;
   }
 }
 
 // _____________________________________________________________________________
-const LocalVocabEntry& LocalVocab::getWord(
+std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
+    const LocalVocabEntry& word) const {
+  return getIndexOrNullopt(std::string_view{word.toStringRepresentation()});
+}
+
+// _____________________________________________________________________________
+std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
+    const LocalVocabEntryView& word) const {
+  return getIndexOrNullopt(std::string_view{word.toStringRepresentation()});
+}
+
+// _____________________________________________________________________________
+const LocalVocabEntryView& LocalVocab::getWord(
     LocalVocabIndex localVocabIndex) const {
   return *localVocabIndex;
 }
@@ -94,9 +133,14 @@ const LocalVocabEntry& LocalVocab::getWord(
 // _____________________________________________________________________________
 std::vector<LocalVocabEntry> LocalVocab::getAllWordsForTesting() const {
   std::vector<LocalVocabEntry> result;
-  ql::ranges::copy(primaryWordSet(), std::back_inserter(result));
+  auto copyWords = [&result](const Set& set) {
+    for (const LocalVocabEntryView& word : set) {
+      result.push_back(word.toOwned());
+    }
+  };
+  copyWords(primaryWordSet());
   for (const auto& previous : otherWordSets_) {
-    ql::ranges::copy(*previous, std::back_inserter(result));
+    copyWords(*previous);
   }
   return result;
 }

@@ -10,10 +10,13 @@
 #ifndef QLEVER_TEST_UTIL_LOCALVOCABENTRYTESTHELPERS_H
 #define QLEVER_TEST_UTIL_LOCALVOCABENTRYTESTHELPERS_H
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <variant>
 
+#include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "index/LocalVocabContext.h"
 #include "index/LocalVocabEntry.h"
 #include "index/TripleComponentConversions.h"
@@ -58,6 +61,21 @@ inline LocalVocabEntry localVocabEntryFromStringRepresentation(
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           std::move(s)),
       context);
+}
+
+// Return a function that maps a `LocalVocabEntry` to an `Id` of type
+// `LocalVocabIndex`. The words are stored in a `LocalVocab` that is owned by
+// the function (and shared by its copies), so the `Id`s are valid as long as
+// the function lives. Equal entries are mapped to the same `Id`. This is useful
+// for tests that need such `Id`s, but don't have a `LocalVocab` at hand. NOTE:
+// The `Id` is always of type `LocalVocabIndex`, even if the word is contained
+// in the vocabulary of the index (unlike for `getIdAndAddIfNotContained`).
+inline auto makeGetLocalVocabId() {
+  return [localVocab =
+              std::make_shared<LocalVocab>()](const LocalVocabEntry& entry) {
+    return Id::makeFromLocalVocabIndex(
+        localVocab->getIndexAndAddIfNotContained(entry));
+  };
 }
 
 }  // namespace ad_utility::testing
