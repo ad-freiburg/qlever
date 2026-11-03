@@ -288,8 +288,8 @@ int main(int argc, char** argv) {
       ", the default is `lowercase`.");
   add("has-word-normalization", po::value(&config.hasWordNormalization_),
       hasWordNormalizationDescription.c_str());
-  add("word-triple-predicates",
-      po::value(&config.wordTriplePredicates_)->composing()->multitoken(),
+  add("has-word-restrict-predicates",
+      po::value(&config.hasWordRestrictPredicates_)->composing()->multitoken(),
       "Space-separated list of predicate IRIs in angle brackets. If "
       "specified, the `ql:has-word` triples are only added for literals that "
       "are the object of a triple with one of these predicates.");

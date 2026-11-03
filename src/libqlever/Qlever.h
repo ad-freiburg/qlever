@@ -100,7 +100,7 @@ struct CommonConfig {
 
   // If not empty, only add the `ql:has-word` triples for literals that are the
   // object of a triple with one of these predicates.
-  std::vector<std::string> wordTriplePredicates_;
+  std::vector<std::string> hasWordRestrictPredicates_;
 };
 
 // Additional configuration used for building an index for a given dataset.
