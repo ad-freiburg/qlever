@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
