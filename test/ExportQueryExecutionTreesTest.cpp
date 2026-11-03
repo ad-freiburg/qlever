@@ -2273,48 +2273,41 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
 // query time, the result size, and the warnings if and only if the runtime
 // parameter `sparql-results-json-with-meta` is enabled.
 TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
-  // A knowledge graph with a single triple and a query that matches it.
+  // A knowledge graph with a single triple, a query that matches it, and the
+  // parameter enabled.
   std::string kg = "<x> <y> <z>";
   std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
   using enum ad_utility::MediaType;
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
 
   // With the parameter enabled, `meta` contains the query time, the result
   // size, and an empty list of warnings.
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
-    auto result = runJSONQuery(kg, query, sparqlJson);
-    const auto& meta = result.at("meta");
-    EXPECT_GE(meta.at("query-time-ms").get<int64_t>(), 0);
-    EXPECT_EQ(meta.at("result-size-total").get<int64_t>(), 1);
-    EXPECT_THAT(meta.at("warnings"), ElementsAre());
-  }
+  auto result = runJSONQuery(kg, query, sparqlJson);
+  const auto& meta = result.at("meta");
+  EXPECT_GE(meta.at("query-time-ms").get<int64_t>(), 0);
+  EXPECT_EQ(meta.at("result-size-total").get<int64_t>(), 1);
+  EXPECT_THAT(meta.at("warnings"), ::testing::IsEmpty());
 
   // A warning from the query planning is part of `meta`.
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
-    auto result = runJSONQuery(
-        kg, "SELECT (COUNT(?s) AS ?c) WHERE {?s ?p ?o} ORDER BY ?c",
-        sparqlJson);
-    EXPECT_THAT(result.at("meta").at("warnings"),
-                ElementsAre(HasSubstr("The ORDER BY clause has no effect")));
-  }
+  EXPECT_THAT(
+      runJSONQuery(kg, "SELECT (COUNT(?s) AS ?c) WHERE {?s ?p ?o} ORDER BY ?c",
+                   sparqlJson)
+          .at("meta")
+          .at("warnings"),
+      ElementsAre(HasSubstr("The ORDER BY clause has no effect")));
 
   // A warning that is added during the lazy computation of the result is also
   // part of `meta` (because `meta` is written after the result).
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
-    auto result = runJSONQuery(
-        kg, "SELECT * WHERE {VALUES ?s {UNDEF} ?s <y>* ?o}", sparqlJson);
-    EXPECT_THAT(result.at("meta").at("warnings"),
-                ElementsAre(HasSubstr("contains UNDEF values")));
-  }
+  EXPECT_THAT(runJSONQuery(kg, "SELECT * WHERE {VALUES ?s {UNDEF} ?s <y>* ?o}",
+                           sparqlJson)
+                  .at("meta")
+                  .at("warnings"),
+              ElementsAre(HasSubstr("contains UNDEF values")));
 
   // With the parameter disabled, there is no `meta` field.
   {
-    auto cleanup = setRuntimeParameterForTest<
+    auto cleanupDisabled = setRuntimeParameterForTest<
         &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
     EXPECT_FALSE(runJSONQuery(kg, query, sparqlJson).contains("meta"));
   }

@@ -617,6 +617,38 @@ TEST(ServerTest, setRuntimeParameters) {
   EXPECT_THAT(body.value().at("strip-columns"), testing::Eq("true"));
 }
 
+// Test that a runtime parameter can be set via HTTP by its deprecated alias,
+// but not by its alias and its new name in the same request.
+TEST(ServerTest, setRuntimeParameterByDeprecatedAlias) {
+  // A server and the parameter `sparql-results-json-with-meta` (with the
+  // deprecated alias `sparql-results-json-with-time`) set to `true`.
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
+
+  // Setting the alias sets the parameter, which the response reports under its
+  // new name.
+  auto response = server.process(
+      makeGetRequest("/?sparql-results-json-with-time=false", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_FALSE(
+      globalRuntimeParameters.rlock()->sparqlResultsJsonWithMeta_.get());
+  auto body = responseBodyAsJson(std::move(response));
+  ASSERT_TRUE(body.has_value());
+  EXPECT_THAT(body.value().at("sparql-results-json-with-meta"),
+              testing::Eq("false"));
+
+  // Setting both the alias and the new name throws and changes nothing.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.process(makeGetRequest("/?sparql-results-json-with-meta=true&"
+                                    "sparql-results-json-with-time=true",
+                                    "accessToken")),
+      testing::HasSubstr("but not both"));
+  EXPECT_FALSE(
+      globalRuntimeParameters.rlock()->sparqlResultsJsonWithMeta_.get());
+}
+
 // _____________________________________________________________________________
 TEST(ServerTest, setIndexAndTextDescription) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});

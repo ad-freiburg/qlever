@@ -291,9 +291,9 @@ struct RuntimeParameters {
 
   std::map<std::string, ad_utility::ParameterBase*, std::less<>> runtimeMap_;
 
-  // Deprecated old names of renamed parameters. They can still be set, but are
-  // listed by neither `toMap` nor `getKeys`.
-  std::map<std::string, ad_utility::ParameterBase*, std::less<>> aliasMap_;
+  // Deprecated old names of renamed parameters, mapped to their new names. They
+  // can still be set, but are listed by neither `toMap` nor `getKeys`.
+  std::map<std::string, std::string, std::less<>> aliases_;
 
   // Constructor: Add all parameters to the map.
   RuntimeParameters();

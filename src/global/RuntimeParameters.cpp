@@ -76,12 +76,7 @@ RuntimeParameters::RuntimeParameters() {
 
   // Deprecated aliases (old names of renamed parameters), so that existing
   // configurations keep working.
-  auto addAlias = [this](std::string alias, auto& parameter) {
-    AD_CONTRACT_CHECK(!ad_utility::contains(runtimeMap_, alias) &&
-                      !ad_utility::contains(aliasMap_, alias));
-    aliasMap_[std::move(alias)] = &parameter;
-  };
-  addAlias("sparql-results-json-with-time", sparqlResultsJsonWithMeta_);
+  aliases_["sparql-results-json-with-time"] = sparqlResultsJsonWithMeta_.name();
 
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is
@@ -130,15 +125,25 @@ RuntimeParameters::toMap() const {
 // _____________________________________________________________________________
 void RuntimeParameters::setFromString(const std::string& name,
                                       const std::string& value) {
-  const auto& map =
-      ad_utility::contains(aliasMap_, name) ? aliasMap_ : runtimeMap_;
-  if (!ad_utility::contains(map, name)) {
+  // Resolve a deprecated alias to the new name, with a warning (so that the
+  // configuration gets updated before the alias is removed).
+  auto newName = ad_utility::findOptional(aliases_, name);
+  if (newName) {
+    AD_LOG_WARN << "The runtime parameter \"" << name
+                << "\" is deprecated, use \"" << newName.get() << "\" instead"
+                << std::endl;
+  }
+
+  // Look up the parameter, throw if it doesn't exist.
+  auto parameter =
+      ad_utility::findOptional(runtimeMap_, newName ? newName.get() : name);
+  if (!parameter) {
     throw std::runtime_error{
         "No parameter with name " + std::string{name} +
         " exists. Available parameters are: " + absl::StrJoin(getKeys(), ", ")};
   }
   try {
-    map.at(name)->setFromString(value);
+    parameter.get()->setFromString(value);
   } catch (const std::exception& e) {
     throw std::runtime_error("Could not set parameter " + std::string{name} +
                              " to value " + value +
@@ -168,6 +173,6 @@ std::vector<std::string> RuntimeParameters::getKeys() const {
 // _____________________________________________________________________________
 std::vector<std::string> RuntimeParameters::getKeysIncludingAliases() const {
   auto keys = getKeys();
-  ql::ranges::copy(aliasMap_ | ql::views::keys, std::back_inserter(keys));
+  ql::ranges::copy(aliases_ | ql::views::keys, std::back_inserter(keys));
   return keys;
 }
