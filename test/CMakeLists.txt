@@ -26,22 +26,15 @@ if (EMSCRIPTEN)
             -sPROXY_TO_PTHREAD -sEXIT_RUNTIME=1 -sGROWABLE_ARRAYBUFFERS=2 -O1)
 endif ()
 
-# Needed for creating the `testUil`-library.
+# Needed for creating the `testUtil` library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
-# Link binary ${basename} against a `main` function, the threading library, the
-# general test utilities and all libraries that are specified as additional
-# arguments. The tests that link against `testUtil` (basically all of QLever)
-# use QLever's own `main` (see `util/QleverTestMain.cpp`), which also checks
-# that the tests reset the runtime parameters. The other tests don't use the
-# runtime parameters and use `gmock_main`.
+# Link binary ${basename} against QLever's own `main` function (see
+# `util/QleverTestMain.cpp`, it also checks that the tests reset the runtime
+# parameters), the threading library, the general test utilities and all
+# libraries that are specified as additional arguments.
 function(linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest ${CMAKE_THREAD_LIBS_INIT} global)
-    if ("testUtil" IN_LIST ARGN)
-        qlever_target_link_libraries(${basename} qleverTestMain GTest::gmock)
-    else ()
-        qlever_target_link_libraries(${basename} GTest::gmock_main)
-    endif ()
+    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock qleverTestMain ${CMAKE_THREAD_LIBS_INIT} global)
     # Reuse the precompiled headers of `testUtil`. This requires the same
     # compiler flags and definitions as `testUtil`, so only tests that link
     # against `testUtil` qualify (otherwise, e.g., the definitions of
