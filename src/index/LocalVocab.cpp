@@ -33,14 +33,22 @@ template <typename WordT>
 std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
     const WordT& word) {
   std::string_view representation = word.toStringRepresentation();
-  return words_.insertWith(
-      representation, [&](ql::pmr::memory_resource& arena) {
-        auto* characters = static_cast<char*>(
-            arena.allocate(representation.size(), alignof(char)));
-        ql::ranges::copy(representation, characters);
-        return LocalVocabEntryView{
-            word, std::string_view{characters, representation.size()}};
-      });
+  if (auto it = findIterator(representation); it != words_.end()) {
+    // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
+    // the MacOS build.
+    return {&(*it), false};
+  }
+  // If the insertion below throws, the characters remain unreachable in the
+  // arena, but the set is unchanged.
+  auto* characters =
+      static_cast<char*>(arena_.allocate(representation.size(), alignof(char)));
+  ql::ranges::copy(representation, characters);
+  auto [it, isNew] = words_.insert(LocalVocabEntryView{
+      word, std::string_view{characters, representation.size()}});
+  AD_CORRECTNESS_CHECK(isNew);
+  // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
+  // the MacOS build.
+  return {&(*it), true};
 }
 template std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
     const LocalVocabEntry&);

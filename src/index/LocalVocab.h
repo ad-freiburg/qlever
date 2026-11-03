@@ -8,10 +8,17 @@
 
 #include <absl/container/flat_hash_set.h>
 
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 108200
+#include <boost/unordered/unordered_node_set.hpp>
+#else
+#include <boost/unordered_set.hpp>
+#endif
 #include <cstdlib>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -21,7 +28,7 @@
 #include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
-#include "util/StableHashSet.h"
+#include "util/NoCopyNoMove.h"
 
 // A class for maintaining a local vocabulary, which conceptually is a set of
 // `LiteralOrIri`s that are not part of the original vocabulary (which stems
@@ -45,7 +52,7 @@
 class LocalVocab {
  public:
   // A set of words, see above.
-  class WordSet {
+  class WordSet : ad_utility::NoCopyNoMove {
    private:
     // Hash and compare the words by their string representation, which also
     // allows to look them up via a `std::string_view`.
@@ -55,6 +62,8 @@ class LocalVocab {
     }
     struct Hash {
       using is_transparent = void;
+      // `absl::Hash` already mixes the bits well, so Boost doesn't have to.
+      using is_avalanching = std::true_type;
       template <typename Word>
       size_t operator()(const Word& word) const {
         return absl::Hash<std::string_view>{}(toView(word));
@@ -67,8 +76,35 @@ class LocalVocab {
         return toView(a) == toView(b);
       }
     };
-    // The characters of the words are stored in the arena of the set.
-    ad_utility::StableHashSet<LocalVocabEntryView, Hash, Equal> words_;
+
+    // The arena holds the words, their characters, and the internal arrays of
+    // `words_` (the arrays that `words_` replaces when it grows remain in the
+    // arena until the set is destroyed).
+    ql::pmr::monotonic_buffer_resource arena_;
+
+    // Both set types never move their elements, and leave the set unchanged
+    // when the insertion of an element throws. `boost::unordered_node_set` is
+    // faster, but only available since Boost 1.82.
+#if BOOST_VERSION >= 108200
+    template <typename... Ts>
+    using NodeSet = boost::unordered_node_set<Ts...>;
+#else
+    template <typename... Ts>
+    using NodeSet = boost::unordered_set<Ts...>;
+#endif
+    using Words = NodeSet<LocalVocabEntryView, Hash, Equal,
+                          ql::pmr::polymorphic_allocator<LocalVocabEntryView>>;
+    Words words_{0, Hash{}, Equal{}, Words::allocator_type{&arena_}};
+
+    // Find the word with the given string representation.
+    Words::const_iterator findIterator(std::string_view word) const {
+#if BOOST_VERSION >= 108200
+      return words_.find(word);
+#else
+      // The heterogeneous `find` of older Boost versions.
+      return words_.find(word, Hash{}, Equal{});
+#endif
+    }
 
    public:
     // If a word that is equal to `word` (a `LocalVocabEntry` or a
@@ -80,7 +116,10 @@ class LocalVocab {
     // Return the address of the word with the given string representation, or
     // `nullptr` if there is no such word.
     LocalVocabIndex find(std::string_view word) const {
-      return words_.find(word);
+      auto it = findIterator(word);
+      // TODO<Libc++18> Use std::to_address (more idiomatic, but currently
+      // breaks the MacOS build.
+      return it == words_.end() ? nullptr : &(*it);
     }
 
     size_t size() const { return words_.size(); }
