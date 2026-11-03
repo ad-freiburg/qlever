@@ -604,6 +604,8 @@ class IndexImpl {
 
   bool& addHasWordTriples();
 
+  bool addHasWordTriples() const;
+
   bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -943,6 +945,12 @@ class IndexImpl {
   //    together with their term frequencies
   // 3. If the IRI or literal can be encoded directly into an `Id`, do so
   ProcessedTriple processTriple(TurtleTriple&& triple) const;
+
+  // Return the distinct words of the `content` of a literal together with their
+  // term frequencies. These are the words of the `ql:has-word` triples of the
+  // literal, normalized according to `hasWordNormalization_`.
+  ad_utility::HashMap<std::string, size_t> computeHasWordFrequencies(
+      std::string_view content) const;
 
  protected:
   /**

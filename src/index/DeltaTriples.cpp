@@ -25,7 +25,6 @@
 #include "index/IndexRebuilder.h"
 #include "index/LocatedTriples.h"
 #include "index/TripleComponentConversions.h"
-#include "parser/WordsAndDocsFileParser.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
@@ -238,20 +237,19 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   // the internal triples on the initial index build.
   Triples internalTriples;
 
-  // Initialize the predicate ids on first use. The index has `ql:has-word`
-  // triples if and only if `ql:has-word` is in its vocabulary.
+  // Initialize the predicate ids on first use (`ql:has-word` only if the index
+  // has `ql:has-word` triples).
   if (languagePredicate_.isUndefined()) {
     languagePredicate_ = toValueId(
         TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)},
         index_, localVocab_);
   }
-  if (!hasWordPredicate_.has_value()) {
-    hasWordPredicate_ =
-        toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                      HAS_WORD_PREDICATE)},
-                  index_)
-            .value_or(Id::makeUndefined());
+  if (index_.addHasWordTriples() && hasWordPredicate_.isUndefined()) {
+    hasWordPredicate_ = toValueId(
+        TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)},
+        index_, localVocab_);
   }
 
   ad_utility::HashSet<Id> addedObjects;
@@ -274,7 +272,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     // internal triples will always join these internal triples with a regular
     // index scan.
     bool isNewObject = insertion && addedObjects.insert(objectId).second;
-    if (isNewObject && !hasWordPredicate_.value().isUndefined()) {
+    if (isNewObject && index_.addHasWordTriples()) {
       addHasWordTriples(objectId, literal, internalTriples);
     }
     if (!literal.hasLanguageTag()) {
@@ -322,17 +320,10 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
 void DeltaTriples::addHasWordTriples(
     Id literalId, const ad_utility::triple_component::Literal& literal,
     Triples& internalTriples) {
-  // Count the occurrences of each word in the literal, with the same
-  // tokenization and normalization as in the index builder (see
-  // `IndexImpl::processTriple`).
-  ad_utility::HashMap<std::string, size_t> wordFrequencies;
-  for (auto&& word : tokenizeAndNormalizeText(
-           literal.getContent(), index_.getVocab().getLocaleManager())) {
-    ++wordFrequencies[std::move(word)];
-  }
-
-  // Add the triple `<literal> ql:has-word "word"` for each distinct word.
-  for (const auto& [word, termFrequency] : wordFrequencies) {
+  // Add the triple `<literal> ql:has-word "word"` for each distinct word (with
+  // the same normalization as in the index builder).
+  for (const auto& [word, termFrequency] :
+       index_.computeHasWordFrequencies(literal.getContent())) {
     Id wordId = wordCache_.getOrCompute(word, [this](const std::string& key) {
       return toValueId(
           TripleComponent{
@@ -340,7 +331,7 @@ void DeltaTriples::addHasWordTriples(
           index_, localVocab_);
     });
     internalTriples.push_back(IdTriple<0>{
-        std::array{literalId, hasWordPredicate_.value(), wordId,
+        std::array{literalId, hasWordPredicate_, wordId,
                    Id::makeFromInt(static_cast<int64_t>(termFrequency))}});
   }
 }

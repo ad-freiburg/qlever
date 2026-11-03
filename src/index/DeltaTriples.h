@@ -144,11 +144,10 @@ class DeltaTriples {
   ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
       predicateCache_{predicateCacheSize_};
 
-  // Store the id of the `ql:has-word` predicate to avoid repeated disk lookups,
-  // or `Id::makeUndefined()` if the index has no `ql:has-word` triples (see the
-  // option `--add-has-word-triples`). This is initialized on first use, before
-  // that it is `std::nullopt`.
-  std::optional<Id> hasWordPredicate_;
+  // Store the id of the `ql:has-word` predicate to avoid repeated disk lookups.
+  // It is initialized on first use, and only if the index has `ql:has-word`
+  // triples (see the option `--add-has-word-triples`).
+  Id hasWordPredicate_ = Id::makeUndefined();
 
   // Store commonly used words of the `ql:has-word` triples to avoid repeated
   // disk lookups.

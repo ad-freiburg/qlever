@@ -461,6 +461,10 @@ void IndexImpl::prepareIndexBuild() {
   // the same way.
   configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
       hasWordNormalization_;
+  // Whether the index has `ql:has-word` triples is stored so that the server
+  // can later add them for the literals that are inserted by an update.
+  configurationJson_[std::string{ad_utility::ADD_HAS_WORD_TRIPLES_KEY}] =
+      addHasWordTriples_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1289,6 +1293,9 @@ bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 bool& IndexImpl::addHasWordTriples() { return addHasWordTriples_; }
 
 // _____________________________________________________________________________
+bool IndexImpl::addHasWordTriples() const { return addHasWordTriples_; }
+
+// _____________________________________________________________________________
 bool& IndexImpl::doNotLoadPermutations() { return doNotLoadPermutations_; }
 
 // ____________________________________________________________________________
@@ -1601,6 +1608,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
                  ad_utility::HasWordNormalization::Lowercase);
 
+  // Whether this index has `ql:has-word` triples (an index built before this
+  // key existed is treated as having none).
+  loadDataMember(ad_utility::ADD_HAS_WORD_TRIPLES_KEY, addHasWordTriples_,
+                 false);
+
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
   // materialized view, for example), so that all permutations of an index have
@@ -1646,6 +1658,29 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                  GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 1));
 }
 
+// _____________________________________________________________________________
+ad_utility::HashMap<std::string, size_t> IndexImpl::computeHasWordFrequencies(
+    std::string_view content) const {
+  // With `LowercaseNoAccents`, remove the accents before the tokenization
+  // (combining marks are not alphanumeric and would otherwise split words).
+  // `contentWithoutAccents` owns the result, so that `content` stays valid
+  // during the tokenization.
+  std::string contentWithoutAccents;
+  if (hasWordNormalization_ ==
+      ad_utility::HasWordNormalization::LowercaseNoAccents) {
+    contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
+    content = contentWithoutAccents;
+  }
+
+  // Count the occurrences of each normalized word.
+  ad_utility::HashMap<std::string, size_t> wordFrequencies;
+  for (auto&& word :
+       tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+    ++wordFrequencies[std::move(word)];
+  }
+  return wordFrequencies;
+}
+
 // ___________________________________________________________________________
 ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   ProcessedTriple result;
@@ -1658,21 +1693,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = lit.getContent();
-      // With `LowercaseNoAccents`, remove the accents before the tokenization
-      // (combining marks are not alphanumeric and would otherwise split
-      // words). `contentWithoutAccents` owns the result, so that `content`
-      // stays valid during the tokenization.
-      std::string contentWithoutAccents;
-      if (hasWordNormalization_ ==
-          ad_utility::HasWordNormalization::LowercaseNoAccents) {
-        contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
-        content = contentWithoutAccents;
-      }
-      for (auto&& word :
-           tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
-        ++result.wordFrequencies_[std::move(word)];
-      }
+      result.wordFrequencies_ = computeHasWordFrequencies(lit.getContent());
     }
   }
 
