@@ -851,6 +851,8 @@ TEST(IndexTest, hasWordNormalizationNames) {
 // Test that `setHasWordRestrictPredicates` restricts the `ql:has-word` triples
 // to literals that are the object of one of the given predicates.
 TEST(IndexTest, hasWordRestrictPredicates) {
+  // An index with `ql:has-word` triples and a function that returns the number
+  // of words extracted from `"Café"` as the object of `predicate`.
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.addHasWordTriples() = true;
   auto numWords = [&index](std::string predicate) {
@@ -859,6 +861,7 @@ TEST(IndexTest, hasWordRestrictPredicates) {
                                     lit("\"Café\"")})
         .wordFrequencies_.size();
   };
+
   // By default, the triples are added for all predicates.
   EXPECT_EQ(numWords("<p>"), 1);
 
@@ -867,10 +870,13 @@ TEST(IndexTest, hasWordRestrictPredicates) {
   EXPECT_EQ(numWords("<q>"), 1);
   EXPECT_EQ(numWords("<r>"), 0);
 
-  // A predicate that is not an IRI in angle brackets is rejected.
+  // A predicate that is not a valid IRI in angle brackets is rejected.
   AD_EXPECT_THROW_WITH_MESSAGE(
       index.setHasWordRestrictPredicates({"<p>", "q"}),
-      ::testing::HasSubstr("is not an IRI in angle brackets"));
+      ::testing::HasSubstr("is not a valid IRI reference"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setHasWordRestrictPredicates({"<a b>"}),
+      ::testing::HasSubstr("is not a valid IRI reference"));
 }
 
 // _____________________________________________________________________________

@@ -152,8 +152,8 @@ class IndexImpl {
       ad_utility::HasWordNormalization::Lowercase};
 
   // If not empty, the `ql:has-word` triples are only added for literals that
-  // are the object of a triple with one of these predicates (IRIs in angle
-  // brackets).
+  // are the object of a triple with one of these predicates (IRIs in the format
+  // of `Iri::toStringRepresentation`).
   ad_utility::HashSet<std::string> hasWordRestrictPredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
@@ -459,8 +459,8 @@ class IndexImpl {
     hasWordNormalization_ = normalization;
   }
 
-  // Set the `hasWordRestrictPredicates_`. Throw if one of them is not an IRI in
-  // angle brackets.
+  // Set the `hasWordRestrictPredicates_`. Throw if one of them is not a valid
+  // IRI in angle brackets.
   void setHasWordRestrictPredicates(const std::vector<std::string>& predicates);
 
   // __________________________________________________________________________

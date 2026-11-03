@@ -461,6 +461,14 @@ void IndexImpl::prepareIndexBuild() {
   // the same way.
   configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
       hasWordNormalization_;
+  // The predicates to which the `ql:has-word` triples are restricted are
+  // stored (sorted, for a deterministic configuration) so that updates can
+  // later restrict their `ql:has-word` triples in the same way.
+  std::vector<std::string> hasWordRestrictPredicates(
+      hasWordRestrictPredicates_.begin(), hasWordRestrictPredicates_.end());
+  ql::ranges::sort(hasWordRestrictPredicates);
+  configurationJson_["has-word-restrict-predicates"] =
+      std::move(hasWordRestrictPredicates);
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1601,6 +1609,14 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
                  ad_utility::HasWordNormalization::Lowercase);
 
+  // The predicates to which the `ql:has-word` triples of this index are
+  // restricted (an index built before this key existed has no restriction).
+  std::vector<std::string> hasWordRestrictPredicates;
+  loadDataMember("has-word-restrict-predicates", hasWordRestrictPredicates,
+                 std::vector<std::string>{});
+  hasWordRestrictPredicates_ = {hasWordRestrictPredicates.begin(),
+                                hasWordRestrictPredicates.end()};
+
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
   // materialized view, for example), so that all permutations of an index have
@@ -1655,13 +1671,14 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
+    // Extract the words of the literal for the `ql:has-word` triples and count
+    // their term frequencies (only if the predicate is one of the
+    // `hasWordRestrictPredicates_`, if any are set).
     bool predicateAllowsHasWord =
         hasWordRestrictPredicates_.empty() ||
         (triple.predicate_.isIri() &&
          hasWordRestrictPredicates_.contains(
              triple.predicate_.getIri().toStringRepresentation()));
-    // Extract words from the literal content for ql:has-word triples and
-    // count their term frequencies.
     if (addHasWordTriples_ && predicateAllowsHasWord) {
       std::string_view content = lit.getContent();
       // With `LowercaseNoAccents`, remove the accents before the tokenization
@@ -2221,14 +2238,9 @@ void IndexImpl::setHasWordRestrictPredicates(
     const std::vector<std::string>& predicates) {
   hasWordRestrictPredicates_.clear();
   for (const std::string& predicate : predicates) {
-    if (!predicate.starts_with('<') || !predicate.ends_with('>')) {
-      throw std::runtime_error{
-          absl::StrCat("The predicate \"", predicate,
-                       "\" passed to `--has-word-restrict-predicates` is not "
-                       "an IRI in angle "
-                       "brackets")};
-    }
-    hasWordRestrictPredicates_.insert(predicate);
+    hasWordRestrictPredicates_.insert(
+        ad_utility::triple_component::Iri::fromIrirefValidated(predicate)
+            .toStringRepresentation());
   }
 }
 
