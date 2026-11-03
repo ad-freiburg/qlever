@@ -9,7 +9,11 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/unordered_set.hpp>
+#include <memory>
+#include <string_view>
 #include <type_traits>
+#include <vector>
 
 #include "backports/memory.h"
 
@@ -53,4 +57,36 @@ TEST(MakeUniqueForOverwrite, nonTrivialTypeIsDefaultConstructed) {
   auto array = ql::make_unique_for_overwrite<S[]>(3);
   EXPECT_EQ(array[0].value_, 42);
   EXPECT_EQ(array[2].value_, 42);
+}
+
+// _____________________________________________________________________________
+TEST(ToAddress, rawPointer) {
+  int value = 42;
+  EXPECT_EQ(ql::to_address(&value), &value);
+  const int* null = nullptr;
+  EXPECT_EQ(ql::to_address(null), nullptr);
+}
+
+// _____________________________________________________________________________
+TEST(ToAddress, iterators) {
+  std::vector<int> vector{1, 2, 3};
+  EXPECT_EQ(ql::to_address(vector.begin() + 1), &vector[1]);
+  static_assert(std::is_same_v<decltype(ql::to_address(vector.begin())), int*>);
+
+  std::string_view view = "abc";
+  EXPECT_EQ(ql::to_address(view.begin()), view.data());
+  static_assert(
+      std::is_same_v<decltype(ql::to_address(view.begin())), const char*>);
+
+  // The iterator of a node-based set (as used by `LocalVocab`).
+  boost::unordered_set<int> set{42};
+  EXPECT_EQ(ql::to_address(set.begin()), &(*set.begin()));
+  static_assert(
+      std::is_same_v<decltype(ql::to_address(set.begin())), const int*>);
+}
+
+// _____________________________________________________________________________
+TEST(ToAddress, smartPointer) {
+  auto pointer = std::make_unique<int>(42);
+  EXPECT_EQ(ql::to_address(pointer), pointer.get());
 }

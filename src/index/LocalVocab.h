@@ -7,6 +7,7 @@
 #define QLEVER_SRC_ENGINE_LOCALVOCAB_H
 
 #include <absl/container/flat_hash_set.h>
+#include <absl/hash/hash.h>
 
 #include <boost/version.hpp>
 #if BOOST_VERSION >= 108200
@@ -15,13 +16,14 @@
 #include <boost/unordered_set.hpp>
 #endif
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/memory.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "global/Id.h"
@@ -54,29 +56,6 @@ class LocalVocab {
   // A set of words, see above.
   class WordSet : ad_utility::NoCopyNoMove {
    private:
-    // Hash and compare the words by their string representation, which also
-    // allows to look them up via a `std::string_view`.
-    static std::string_view toView(std::string_view word) { return word; }
-    static std::string_view toView(const LocalVocabEntryView& word) {
-      return word.toStringRepresentation();
-    }
-    struct Hash {
-      using is_transparent = void;
-      // `absl::Hash` already mixes the bits well, so Boost doesn't have to.
-      using is_avalanching = std::true_type;
-      template <typename Word>
-      size_t operator()(const Word& word) const {
-        return absl::Hash<std::string_view>{}(toView(word));
-      }
-    };
-    struct Equal {
-      using is_transparent = void;
-      template <typename A, typename B>
-      bool operator()(const A& a, const B& b) const {
-        return toView(a) == toView(b);
-      }
-    };
-
     // The arena holds the words, their characters, and the internal arrays of
     // `words_` (the arrays that `words_` replaces when it grows remain in the
     // arena until the set is destroyed).
@@ -92,19 +71,10 @@ class LocalVocab {
     template <typename... Ts>
     using NodeSet = boost::unordered_set<Ts...>;
 #endif
-    using Words = NodeSet<LocalVocabEntryView, Hash, Equal,
+    using Words = NodeSet<LocalVocabEntryView, absl::Hash<LocalVocabEntryView>,
+                          std::equal_to<LocalVocabEntryView>,
                           ql::pmr::polymorphic_allocator<LocalVocabEntryView>>;
-    Words words_{0, Hash{}, Equal{}, Words::allocator_type{&arena_}};
-
-    // Find the word with the given string representation.
-    Words::const_iterator findIterator(std::string_view word) const {
-#if BOOST_VERSION >= 108200
-      return words_.find(word);
-#else
-      // The heterogeneous `find` of older Boost versions.
-      return words_.find(word, Hash{}, Equal{});
-#endif
-    }
+    Words words_{Words::allocator_type{&arena_}};
 
    public:
     // If a word that is equal to `word` (a `LocalVocabEntry` or a
@@ -113,13 +83,11 @@ class LocalVocab {
     template <typename WordT>
     std::pair<LocalVocabIndex, bool> insert(const WordT& word);
 
-    // Return the address of the word with the given string representation, or
-    // `nullptr` if there is no such word.
-    LocalVocabIndex find(std::string_view word) const {
-      auto it = findIterator(word);
-      // TODO<Libc++18> Use std::to_address (more idiomatic, but currently
-      // breaks the MacOS build.
-      return it == words_.end() ? nullptr : &(*it);
+    // Return the address of the word that is equal to `word`, or `nullptr` if
+    // there is no such word.
+    LocalVocabIndex find(const LocalVocabEntryView& word) const {
+      auto it = words_.find(word);
+      return it == words_.end() ? nullptr : ql::to_address(it);
     }
 
     size_t size() const { return words_.size(); }
@@ -340,7 +308,6 @@ class LocalVocab {
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(const WordT& word);
   template <typename WordT>
   Id getIdAndAddIfNotContainedImpl(const WordT& word);
-  std::optional<LocalVocabIndex> getIndexOrNullopt(std::string_view word) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H

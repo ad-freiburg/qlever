@@ -37,7 +37,6 @@ class LocalVocabEntryFactory;
 
 class LocalVocabEntry;
 class LocalVocabEntryView;
-class TripleComponent_toValueId_Test;
 
 namespace localVocabEntryDetail {
 // Note: The values here actually are `Id`s, but we cannot store the `Id` type
@@ -61,8 +60,8 @@ struct PositionInVocab {
 // `LocalVocabEntryView` (which doesn't, and is the type of the words that are
 // stored in a `LocalVocab`, see below). It consists of a `LiteralOrIriT` (a
 // `LiteralOrIri` or a `LiteralOrIriView`) and a cache to store the position,
-// where the entry would be in the global vocabulary of the Index. This position is
-// used for efficient comparisons between entries in the local and global
+// where the entry would be in the global vocabulary of the Index. This position
+// is used for efficient comparisons between entries in the local and global
 // vocabulary because we only have to look up the position once per
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
 //
@@ -102,9 +101,6 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   using Base = LiteralOrIriT;
   using IdProxy = localVocabEntryDetail::IdProxy;
 
-  // The test inspects the cached position of the words of a `LocalVocab`.
-  friend class ::TripleComponent_toValueId_Test;
-
  private:
   // The owning and the non-owning entries copy each other's caches.
   template <typename>
@@ -112,6 +108,8 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
 
   // Pointer to keep this object assignable.
   const LocalVocabContext* context_;
+
+ protected:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -133,8 +131,7 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  protected:
-  BasicLocalVocabEntry(Base base, const LocalVocabContext& context) noexcept(
-      std::is_nothrow_move_constructible_v<Base>)
+  BasicLocalVocabEntry(Base base, const LocalVocabContext& context) noexcept
       : Base{std::move(base)}, context_{&context} {}
 
   // Constructor for when the position in the vocab is already known. Note that
@@ -228,7 +225,8 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   // `LocalVocabEntry` and a `LocalVocabEntryView` of the same word are equal.
   template <typename H, typename V>
   friend auto AbslHashValue(H h, const V& entry)
-      -> CPP_ret(H)(requires ql::concepts::derived_from<V, BasicLocalVocabEntry>) {
+      -> CPP_ret(H)(
+          requires ql::concepts::derived_from<V, BasicLocalVocabEntry>) {
     return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
@@ -283,14 +281,16 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   // also allow comparisons against a plain `LiteralOrIri` or
   // `LiteralOrIriView`, which are equal if their string representations are.
   template <bool isOwning>
-  bool operator==(const ad_utility::triple_component::BasicLiteralOrIri<isOwning>&
-                      rhs) const {
+  bool operator==(
+      const ad_utility::triple_component::BasicLiteralOrIri<isOwning>& rhs)
+      const {
     return std::string_view{this->toStringRepresentation()} ==
            std::string_view{rhs.toStringRepresentation()};
   }
   template <bool isOwning>
-  bool operator!=(const ad_utility::triple_component::BasicLiteralOrIri<isOwning>&
-                      rhs) const {
+  bool operator!=(
+      const ad_utility::triple_component::BasicLiteralOrIri<isOwning>& rhs)
+      const {
     return !(*this == rhs);
   }
 
@@ -317,8 +317,6 @@ class alignas(16) LocalVocabEntry
   using Base = EntryBase::Base;
   using IdProxy = EntryBase::IdProxy;
   using PositionInVocab = EntryBase::PositionInVocab;
-
-  FRIEND_TEST(TripleComponent, toValueId);
 
   LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
       : EntryBase{Base{std::move(literal)}, context} {}
@@ -353,8 +351,9 @@ class alignas(16) LocalVocabEntry
 
   // See the corresponding constructor of `BasicLocalVocabEntry`.
   template <typename Other>
-  LocalVocabEntry(Base base,
-                  const localVocabEntryDetail::BasicLocalVocabEntry<Other>& other)
+  LocalVocabEntry(
+      Base base,
+      const localVocabEntryDetail::BasicLocalVocabEntry<Other>& other)
       : EntryBase{std::move(base), other} {}
 
  public:
@@ -393,6 +392,9 @@ class alignas(16) LocalVocabEntryView
   using IdProxy = EntryBase::IdProxy;
   using PositionInVocab = EntryBase::PositionInVocab;
 
+  // The test inspects the cached position of the words of a `LocalVocab`.
+  FRIEND_TEST(TripleComponent, toValueId);
+
   // Create a view of `entry` (a `LocalVocabEntry` or another view), the
   // characters of which are stored in `storage`, which must have exactly the
   // contents of `entry.toStringRepresentation()`.
@@ -426,5 +428,17 @@ class alignas(16) LocalVocabEntryView
 // The words of a `LocalVocab` are stored in memory that is never freed
 // individually, so the views must not need a destructor.
 static_assert(std::is_trivially_destructible_v<LocalVocabEntryView>);
+
+// The defaulted copy and move operations above are silently deleted if a member
+// can't be copied or moved, so check that they exist (and that the moves don't
+// throw).
+static_assert(std::is_copy_constructible_v<LocalVocabEntry> &&
+              std::is_copy_assignable_v<LocalVocabEntry> &&
+              std::is_nothrow_move_constructible_v<LocalVocabEntry> &&
+              std::is_nothrow_move_assignable_v<LocalVocabEntry>);
+static_assert(std::is_copy_constructible_v<LocalVocabEntryView> &&
+              std::is_copy_assignable_v<LocalVocabEntryView> &&
+              std::is_nothrow_move_constructible_v<LocalVocabEntryView> &&
+              std::is_nothrow_move_assignable_v<LocalVocabEntryView>);
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

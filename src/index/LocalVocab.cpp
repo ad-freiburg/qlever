@@ -32,23 +32,23 @@ void LocalVocab::mergeWith(const LocalVocab& other) {
 template <typename WordT>
 std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
     const WordT& word) {
-  std::string_view representation = word.toStringRepresentation();
-  if (auto it = findIterator(representation); it != words_.end()) {
-    // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
-    // the MacOS build.
-    return {&(*it), false};
+  // Look up a view of `word`, which doesn't copy its characters.
+  if (auto it = words_.find(LocalVocabEntryView{word}); it != words_.end()) {
+    return {ql::to_address(it), false};
   }
+  std::string_view representation = word.toStringRepresentation();
   // If the insertion below throws, the characters remain unreachable in the
   // arena, but the set is unchanged.
   auto* characters =
       static_cast<char*>(arena_.allocate(representation.size(), alignof(char)));
-  ql::ranges::copy(representation, characters);
+  // NOTE: Deliberately use `std::copy` instead of `ql::ranges::copy`, which is
+  // not turned into a `std::memmove` by libstdc++ before version 13.4 (GCC bug
+  // 116754) and by `range-v3`.
+  std::copy(representation.begin(), representation.end(), characters);
   auto [it, isNew] = words_.insert(LocalVocabEntryView{
       word, std::string_view{characters, representation.size()}});
   AD_CORRECTNESS_CHECK(isNew);
-  // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
-  // the MacOS build.
-  return {&(*it), true};
+  return {ql::to_address(it), true};
 }
 template std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
     const LocalVocabEntry&);
@@ -111,25 +111,19 @@ Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntryView& word) {
 
 // _____________________________________________________________________________
 std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
-    std::string_view word) const {
+    const LocalVocabEntry& word) const {
+  return getIndexOrNullopt(LocalVocabEntryView{word});
+}
+
+// _____________________________________________________________________________
+std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
+    const LocalVocabEntryView& word) const {
   auto localVocabIndex = primaryWordSet().find(word);
   if (localVocabIndex != nullptr) {
     return localVocabIndex;
   } else {
     return std::nullopt;
   }
-}
-
-// _____________________________________________________________________________
-std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
-    const LocalVocabEntry& word) const {
-  return getIndexOrNullopt(std::string_view{word.toStringRepresentation()});
-}
-
-// _____________________________________________________________________________
-std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
-    const LocalVocabEntryView& word) const {
-  return getIndexOrNullopt(std::string_view{word.toStringRepresentation()});
 }
 
 // _____________________________________________________________________________

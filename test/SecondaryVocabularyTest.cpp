@@ -117,7 +117,7 @@ class SecondaryVocabIndexTest : public ::testing::Test {
   }
 
   // The `Id` that refers to (a copy of) the given entry.
-  std::function<Id(const LocalVocabEntry&)> idOf =
+  decltype(ad_utility::testing::makeGetLocalVocabId()) idOf =
       ad_utility::testing::makeGetLocalVocabId();
 };
 
