@@ -19,9 +19,9 @@
 #include <numeric>
 
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/LocatedTriples.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashSet.h"
@@ -251,7 +251,7 @@ CompressedRelationReader::lazyScan(
         blockingTimer_.cont();
         auto blockAndStats = blocks_->get();
         blockingTimer_.stop();
-        details().blockingTime_ = blockingTimer_.msecs();
+        details().blockingTime_ = blockingTimer_.value();
         cancellationHandle_->throwIfCancelled();
         if (!blockAndStats.has_value()) {
           AD_CORRECTNESS_CHECK(numBlocks_ ==
@@ -430,7 +430,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 template <bool exactSize>
 std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const CancellationHandle& cancellationHandle) const {
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
   auto beginBlock = ql::ranges::begin(blocks);
   auto endBlock = ql::ranges::end(blocks);
@@ -449,6 +450,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
     if (exactSize) {
+      cancellationHandle->throwIfCancelled();
       numResults +=
           readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
                                       locatedTriplesPerBlock)
@@ -495,6 +497,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
         } else {
           // TODO<joka921> We could cache the exact size as soon as we
           // have merged the block once since the last update.
+          cancellationHandle->throwIfCancelled();
           auto b = readAndDecompressBlock(block, config);
           numResults += b.has_value() ? b.value().block_.numRows() : 0u;
         }
@@ -506,15 +509,21 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock);
+  // Without `exactSize`, no blocks are read, so there is nothing to cancel and
+  // a handle that is never cancelled suffices.
+  static const CancellationHandle neverCancelled =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock,
+                                  neverCancelled);
 }
 
 // ____________________________________________________________________________
 size_t CompressedRelationReader::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  auto [lower, upper] =
-      getResultSizeImpl<true>(scanSpecAndBlocks, locatedTriplesPerBlock);
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const CancellationHandle& cancellationHandle) const {
+  auto [lower, upper] = getResultSizeImpl<true>(
+      scanSpecAndBlocks, locatedTriplesPerBlock, cancellationHandle);
   AD_CORRECTNESS_CHECK(lower == upper);
   return lower;
 }
@@ -546,8 +555,8 @@ CompressedRelationReader::getDistinctCol0Ids(
   auto scanConfig = getScanConfig(scanSpecAndBlocks.scanSpec_,
                                   additionalColumns, locatedTriplesPerBlock);
   auto [blocksToRead, fromMetadata] =
-      BlockSelector{scanConfig.graphFilter_, addGraphColumn, idFilter,
-                    locatedTriplesPerBlock, allocator_}
+      BlockSelector{scanConfig.graphFilter_, addGraphColumn,     idFilter,
+                    locatedTriplesPerBlock,  cancellationHandle, allocator_}
           .select(scanSpecAndBlocks);
 
   // Let the inner scan write its statistics (most importantly the number of
