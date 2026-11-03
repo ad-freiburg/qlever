@@ -61,6 +61,16 @@ namespace ad_utility {
 
 namespace detail {
 
+// Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
+// included in this header).
+//
+// NOTE: The underlying type must match the definition in the util's
+// `geo/Geo.h`. A mismatch does not compile, because `GeoSparqlHelpers.cpp`
+// includes both declarations.
+namespace util::geo {
+enum class CRSType : uint8_t;
+}
+
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
 
@@ -91,6 +101,9 @@ const auto wktLiteralIri =
 // Calculate geographic distance between geometries in meters using `pb_util`.
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b);
+
+// Convert a unit IRI string to CRS type.
+::util::geo::CRSType iriToCrsType(const std::string_view& uri);
 
 }  // namespace detail
 

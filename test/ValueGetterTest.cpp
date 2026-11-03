@@ -14,6 +14,7 @@
 #include "../test/printers/UnitOfMeasurementPrinters.h"
 #include "./ValueGetterTestHelpers.h"
 #include "GeometryInfoTestHelpers.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 
 namespace {
@@ -21,6 +22,9 @@ namespace {
 using namespace valueGetterTestHelpers;
 using namespace enumVGTestHelpers;
 using namespace geoInfoVGTestHelpers;
+
+using CRSTypeValueGetter = sparqlExpression::detail::EnumValueGetter<
+    &ad_utility::detail::iriToCrsType, ::util::geo::CRSType::UNSUPPORTED>;
 
 // One input for the two `LiteralValueGetter`s below, together with the content
 // that each of them is expected to extract from it. The two getters see exactly
@@ -125,192 +129,247 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
 // _____________________________________________________________________________
 TEST(UnitOfMeasurementValueGetter, OperatorWithId) {
   sparqlExpression::detail::UnitOfMeasurementValueGetter unitValueGetter;
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "<http://qudt.org/vocab/unit/M>", UnitOfMeasurement::METERS,
       unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "<http://qudt.org/vocab/unit/KiloM>", UnitOfMeasurement::KILOMETERS,
       unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "<http://qudt.org/vocab/unit/MI>", UnitOfMeasurement::MILES,
       unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::METERS, unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::KILOMETERS, unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "\"http://qudt.org/vocab/unit/MI\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::MILES, unitValueGetter);
 
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "\"http://qudt.org/vocab/unit/example\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::UNKNOWN, unitValueGetter);
 
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "\"http://example.com\"^^<http://www.w3.org/2001/XMLSchema#anyURI>",
       UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "\"x\"", UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>("\"1.5\"^^<http://example.com>",
-                                                UnitOfMeasurement::UNKNOWN,
-                                                unitValueGetter);
-  checkEnumValueGetterFromId<UnitOfMeasurement>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
+      "\"1.5\"^^<http://example.com>", UnitOfMeasurement::UNKNOWN,
+      unitValueGetter);
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToUnitOfMeasurement,
+                             UnitOfMeasurement::UNKNOWN>(
       "\"http://qudt.org/vocab/unit/MI\"", UnitOfMeasurement::UNKNOWN,
       unitValueGetter);
 
   // A word of a secondary vocabulary is resolved just like a word of the
   // vocabulary of the main index.
-  checkEnumValueGetterFromSecondaryVocabId<UnitOfMeasurement>(
+  checkEnumValueGetterFromSecondaryVocabId<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       secondaryUnitIri, UnitOfMeasurement::METERS, unitValueGetter);
-  checkEnumValueGetterFromSecondaryVocabId<UnitOfMeasurement>(
+  checkEnumValueGetterFromSecondaryVocabId<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       secondaryIri, UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkEnumValueGetterFromSecondaryVocabId<UnitOfMeasurement>(
+  checkEnumValueGetterFromSecondaryVocabId<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       secondaryPlainLiteral, UnitOfMeasurement::UNKNOWN, unitValueGetter);
 }
 
 // _____________________________________________________________________________
 TEST(UnitOfMeasurementValueGetter, OperatorWithIdSkipEncodedValue) {
   sparqlExpression::detail::UnitOfMeasurementValueGetter getter;
-  checkEnumValueGetterFromIdEncodedValue<UnitOfMeasurement>(
+  checkEnumValueGetterFromIdEncodedValue<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       ValueId::makeFromBool(true), getter);
-  checkEnumValueGetterFromIdEncodedValue<UnitOfMeasurement>(
+  checkEnumValueGetterFromIdEncodedValue<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       ValueId::makeFromBool(false), getter);
-  checkEnumValueGetterFromIdEncodedValue<UnitOfMeasurement>(
+  checkEnumValueGetterFromIdEncodedValue<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       ValueId::makeFromInt(-50), getter);
-  checkEnumValueGetterFromIdEncodedValue<UnitOfMeasurement>(
+  checkEnumValueGetterFromIdEncodedValue<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       ValueId::makeFromInt(1000), getter);
-  checkEnumValueGetterFromIdEncodedValue<UnitOfMeasurement>(
+  checkEnumValueGetterFromIdEncodedValue<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       ValueId::makeFromDouble(1000.5), getter);
-  checkEnumValueGetterFromIdEncodedValue<UnitOfMeasurement>(
+  checkEnumValueGetterFromIdEncodedValue<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       ValueId::makeFromGeoPoint(GeoPoint{20.0, 20.0}), getter);
 }
 
 // _____________________________________________________________________________
 TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
   sparqlExpression::detail::UnitOfMeasurementValueGetter unitValueGetter;
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "http://qudt.org/vocab/unit/M", UnitOfMeasurement::METERS,
       unitValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "http://qudt.org/vocab/unit/MI", UnitOfMeasurement::MILES,
       unitValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "http://qudt.org/vocab/unit/KiloM", UnitOfMeasurement::KILOMETERS,
       unitValueGetter);
 
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "http://qudt.org/vocab/unit/m", UnitOfMeasurement::UNKNOWN,
       unitValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "http://qudt.org/vocab/unit/", UnitOfMeasurement::UNKNOWN,
       unitValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "http://example.com/", UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "", UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<UnitOfMeasurement>(
+  checkEnumValueGetterFromLiteralOrIri<
+      &ad_utility::detail::iriToUnitOfMeasurement, UnitOfMeasurement::UNKNOWN>(
       "x", UnitOfMeasurement::UNKNOWN, unitValueGetter);
 }
 
 // _____________________________________________________________________________
 TEST(CRSTypeValueGetter, OperatorWithId) {
-  sparqlExpression::detail::CRSTypeValueGetter unitValueGetter;
+  CRSTypeValueGetter unitValueGetter;
   using CRSType = ::util::geo::CRSType;
-  checkEnumValueGetterFromId<CRSType>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
       "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>", CRSType::CRS84,
       unitValueGetter);
-  checkEnumValueGetterFromId<CRSType>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
       "<http://www.opengis.net/def/crs/EPSG/0/4326>", CRSType::WGS84,
       unitValueGetter);
-  checkEnumValueGetterFromId<CRSType>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
       "<http://www.opengis.net/def/crs/EPSG/0/3857>", CRSType::WEB_MERCATOR,
       unitValueGetter);
-  checkEnumValueGetterFromId<CRSType>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
       "\"http://www.opengis.net/def/crs/OGC/1.3/CRS84\"^^<http://www.w3.org/"
       "2001/"
       "XMLSchema#anyURI>",
       CRSType::CRS84, unitValueGetter);
-  checkEnumValueGetterFromId<CRSType>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
       "\"http://www.opengis.net/def/crs/EPSG/0/4326\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       CRSType::WGS84, unitValueGetter);
-  checkEnumValueGetterFromId<CRSType>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
       "\"http://www.opengis.net/def/crs/EPSG/0/3857\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       CRSType::WEB_MERCATOR, unitValueGetter);
-  checkEnumValueGetterFromId<CRSType>(
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
       "\"http://www.opengis.net/def/crs/EPSG/0/unsupported\"^^<http://"
       "www.w3.org/2001/"
       "XMLSchema#anyURI>",
       CRSType::UNSUPPORTED, unitValueGetter);
 
-  checkEnumValueGetterFromId<CRSType>("\"x\"", CRSType::UNSUPPORTED,
-                                      unitValueGetter);
-  checkEnumValueGetterFromId<CRSType>("\"1.5\"^^<http://example.com>",
-                                      CRSType::UNSUPPORTED, unitValueGetter);
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
+      "\"x\"", CRSType::UNSUPPORTED, unitValueGetter);
+  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
+                             CRSType::UNSUPPORTED>(
+      "\"1.5\"^^<http://example.com>", CRSType::UNSUPPORTED, unitValueGetter);
 
   // A word of a secondary vocabulary is resolved just like a word of the
   // vocabulary of the main index.
-  checkEnumValueGetterFromSecondaryVocabId<CRSType>(
+  checkEnumValueGetterFromSecondaryVocabId<&ad_utility::detail::iriToCrsType,
+                                           CRSType::UNSUPPORTED>(
       secondaryCrsIri, CRSType::WGS84, unitValueGetter);
-  checkEnumValueGetterFromSecondaryVocabId<CRSType>(
+  checkEnumValueGetterFromSecondaryVocabId<&ad_utility::detail::iriToCrsType,
+                                           CRSType::UNSUPPORTED>(
       secondaryUnitIri, CRSType::UNSUPPORTED, unitValueGetter);
-  checkEnumValueGetterFromSecondaryVocabId<CRSType>(
+  checkEnumValueGetterFromSecondaryVocabId<&ad_utility::detail::iriToCrsType,
+                                           CRSType::UNSUPPORTED>(
       secondaryIri, CRSType::UNSUPPORTED, unitValueGetter);
-  checkEnumValueGetterFromSecondaryVocabId<CRSType>(
+  checkEnumValueGetterFromSecondaryVocabId<&ad_utility::detail::iriToCrsType,
+                                           CRSType::UNSUPPORTED>(
       secondaryPlainLiteral, CRSType::UNSUPPORTED, unitValueGetter);
 }
 
 // _____________________________________________________________________________
 TEST(CRSTypeValueGetter, OperatorWithIdSkipEncodedValue) {
-  sparqlExpression::detail::CRSTypeValueGetter getter;
+  CRSTypeValueGetter getter;
   using CRSType = ::util::geo::CRSType;
-  checkEnumValueGetterFromIdEncodedValue<CRSType>(ValueId::makeFromBool(true),
-                                                  getter);
-  checkEnumValueGetterFromIdEncodedValue<CRSType>(ValueId::makeFromBool(false),
-                                                  getter);
-  checkEnumValueGetterFromIdEncodedValue<CRSType>(ValueId::makeFromInt(-50),
-                                                  getter);
-  checkEnumValueGetterFromIdEncodedValue<CRSType>(ValueId::makeFromInt(1000),
-                                                  getter);
-  checkEnumValueGetterFromIdEncodedValue<CRSType>(
+  checkEnumValueGetterFromIdEncodedValue<&ad_utility::detail::iriToCrsType,
+                                         CRSType::UNSUPPORTED>(
+      ValueId::makeFromBool(true), getter);
+  checkEnumValueGetterFromIdEncodedValue<&ad_utility::detail::iriToCrsType,
+                                         CRSType::UNSUPPORTED>(
+      ValueId::makeFromBool(false), getter);
+  checkEnumValueGetterFromIdEncodedValue<&ad_utility::detail::iriToCrsType,
+                                         CRSType::UNSUPPORTED>(
+      ValueId::makeFromInt(-50), getter);
+  checkEnumValueGetterFromIdEncodedValue<&ad_utility::detail::iriToCrsType,
+                                         CRSType::UNSUPPORTED>(
+      ValueId::makeFromInt(1000), getter);
+  checkEnumValueGetterFromIdEncodedValue<&ad_utility::detail::iriToCrsType,
+                                         CRSType::UNSUPPORTED>(
       ValueId::makeFromDouble(1000.5), getter);
-  checkEnumValueGetterFromIdEncodedValue<CRSType>(
+  checkEnumValueGetterFromIdEncodedValue<&ad_utility::detail::iriToCrsType,
+                                         CRSType::UNSUPPORTED>(
       ValueId::makeFromGeoPoint(GeoPoint{20.0, 20.0}), getter);
 }
 
 // _____________________________________________________________________________
 TEST(CRSTypeValueGetter, OperatorWithLiteralOrIri) {
-  sparqlExpression::detail::CRSTypeValueGetter crsValueGetter;
+  CRSTypeValueGetter crsValueGetter;
   using CRSType = ::util::geo::CRSType;
-  checkEnumValueGetterFromLiteralOrIri<CRSType>(
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
       "http://www.opengis.net/def/crs/OGC/1.3/CRS84", CRSType::CRS84,
       crsValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<CRSType>(
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
       "http://www.opengis.net/def/crs/EPSG/0/4326", CRSType::WGS84,
       crsValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<CRSType>(
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
       "http://www.opengis.net/def/crs/EPSG/0/3857", CRSType::WEB_MERCATOR,
       crsValueGetter);
 
-  checkEnumValueGetterFromLiteralOrIri<CRSType>(
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
       "http://www.opengis.net/def/crs/EPSG/0/unsupported", CRSType::UNSUPPORTED,
       crsValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<CRSType>(
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
       "http://www.opengis.net/def/crs/EPSG/0/", CRSType::UNSUPPORTED,
       crsValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<CRSType>(
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
       "http://example.com/", CRSType::UNSUPPORTED, crsValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<CRSType>("", CRSType::UNSUPPORTED,
-                                                crsValueGetter);
-  checkEnumValueGetterFromLiteralOrIri<CRSType>("x", CRSType::UNSUPPORTED,
-                                                crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
+      "", CRSType::UNSUPPORTED, crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
+                                       CRSType::UNSUPPORTED>(
+      "x", CRSType::UNSUPPORTED, crsValueGetter);
 }
 
 // _____________________________________________________________________________

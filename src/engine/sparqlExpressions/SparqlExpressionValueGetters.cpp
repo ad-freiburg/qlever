@@ -419,73 +419,58 @@ OptIri IriValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-CPP_template_out_def(typename T)(requires IriEnum<T>)
-T EnumValueGetter<CPP_sfinae_args(T)>::operator()(
-    ValueId id, const EvaluationContext * context) const {
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        ValueId id, const EvaluationContext * context) const {
   // Use cache to remember fully parsed units for reoccurring ValueIds
-  return cache_.getOrCompute(id, [&context](const ValueId& value) -> T {
-    // Get string content of ValueId
-    auto str = idToLiteralOrIri(value, context, true);
-    // Use LiteralOrIri overload for actual computation
-    if (str.has_value()) {
-      return EnumValueGetter<T>{}(str.value(), context);
-    }
-    return EnumValueGetter<T>::getUndefined();
-  });
+  return cache_.getOrCompute(
+      id, [&context](const ValueId& value) -> decltype(undefined) {
+        // Get string content of ValueId
+        auto str = idToLiteralOrIri(value, context, true);
+        // Use LiteralOrIri overload for actual computation
+        if (str.has_value()) {
+          return EnumValueGetter<iriToValue, undefined>{}(str.value(), context);
+        }
+        return undefined;
+      });
 }
 
 // _____________________________________________________________________________
-CPP_template_out_def(typename T)(requires IriEnum<T>)
-T EnumValueGetter<CPP_sfinae_args(T)>::operator()(
-    const LiteralOrIri & s, const EvaluationContext*) const {
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        const LiteralOrIri & s, const EvaluationContext*) const {
   return litOrIriToValue(s);
 }
 
 // _____________________________________________________________________________
-CPP_template_out_def(typename T)(requires IriEnum<T>)
-T EnumValueGetter<CPP_sfinae_args(T)>::litOrIriToValue(const LiteralOrIri& s) {
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::litOrIriToValue(
+        const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
   // of measurement and CRS types. Because this is a rather obscure requirement,
   // we support IRIs also.
   if (s.isIri() || (s.isLiteral() && s.getLiteral().hasDatatype() &&
                     s.getLiteral().getDatatype() == XSD_ANYURI_TYPE)) {
-    if constexpr (std::is_same_v<T, UnitOfMeasurement>) {
-      return ad_utility::detail::iriToUnitOfMeasurement(s.getContent());
-    } else if constexpr (std::is_same_v<T, util::geo::CRSType>) {
-      // `::util::geo::getCRSType` expects the input string to be wrapped in
-      // angle brackets (e.g., <http://...>) and returns a default value
-      // (CRS84) if the opening bracket is missing. We wrap the content here
-      // to ensure that `::util::geo::getCRSType` handles the IRIs correctly.
-      std::string content{s.getContent()};
-      if (content.empty()) {
-        content = "<>";
-      } else if (content.front() != '<') {
-        content = "<" + content + ">";
-      }
-      return ::util::geo::getCRSType(std::string{content});
-    } else {
-      static_assert(ad_utility::alwaysFalse<T>);
-    }
+    return iriToValue(s.getContent());
   }
-  return EnumValueGetter<T>::getUndefined();
-}
-
-// _____________________________________________________________________________
-CPP_template_out_def(typename T)(requires IriEnum<T>)
-T EnumValueGetter<CPP_sfinae_args(T)>::getUndefined() {
-  if constexpr (std::is_same_v<T, UnitOfMeasurement>) {
-    return UnitOfMeasurement::UNKNOWN;
-  } else if constexpr (std::is_same_v<T, util::geo::CRSType>) {
-    return ::util::geo::CRSType::UNSUPPORTED;
-  } else {
-    static_assert(ad_utility::alwaysFalse<T>);
-  }
+  return undefined;
 }
 
 // Explicit instantiations
 namespace sparqlExpression::detail {
-template struct EnumValueGetter<UnitOfMeasurement>;
-template struct EnumValueGetter<util::geo::CRSType>;
+template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                                UnitOfMeasurement::UNKNOWN>;
+template struct EnumValueGetter<&ad_utility::detail::iriToCrsType,
+                                ::util::geo::CRSType::UNSUPPORTED>;
 }  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________

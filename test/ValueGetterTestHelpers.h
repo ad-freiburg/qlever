@@ -305,52 +305,53 @@ inline TestContextWithGivenTTl getContext() {
 }
 
 // Apply `getter` to `id` in the given context and check the result.
-template <typename EnumT>
+template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterForId(
-    TestContextWithGivenTTl& testContext, Id id, EnumT expectedResult,
-    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
+    TestContextWithGivenTTl& testContext, Id id,
+    decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
   ASSERT_EQ(getter(id, &testContext.context), expectedResult);
 }
 
 // Helper to test EnumValueGetter using ValueId input
-template <typename EnumT>
+template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromId(
-    const std::string& fullLiteralOrIri, EnumT expectedResult,
-    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
-  TestContextWithGivenTTl testContext = getContext<EnumT>();
+    const std::string& fullLiteralOrIri, decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
   checkEnumValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
                             expectedResult, getter);
 };
 
 // Helper to test EnumValueGetter using ValueId input where the
 // ValueId represents an encoded value
-template <typename EnumT>
+template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromIdEncodedValue(
-    ValueId id, sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
-  TestContextWithGivenTTl testContext = getContext<EnumT>();
-  checkEnumValueGetterForId(
-      testContext, id,
-      sparqlExpression::detail::EnumValueGetter<EnumT>::getUndefined(), getter);
+    ValueId id,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
+  checkEnumValueGetterForId(testContext, id, undefined, getter);
 }
 
 // Helper to test `EnumValueGetter` on the given word of a
 // secondary vocabulary, see `checkEnumValueGetterFromId` above. The word has to
 // be one of `secondaryVocabWords`.
-template <typename EnumT>
+template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromSecondaryVocabId(
-    const std::string& word, EnumT expectedResult,
-    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
+    const std::string& word, decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
   AllDatatypesTestContext testContext;
   checkEnumValueGetterForId(testContext, testContext.secondaryVocabId(word),
                             expectedResult, getter);
 }
 
 // Helper to test EnumValueGetter using ValueId input
-template <typename EnumT>
+template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromLiteralOrIri(
-    const std::string& unitIriWithoutBrackets, EnumT expectedResult,
-    sparqlExpression::detail::EnumValueGetter<EnumT> getter) {
-  TestContextWithGivenTTl testContext = getContext<EnumT>();
+    const std::string& unitIriWithoutBrackets,
+    decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
 
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Iri = ad_utility::triple_component::Iri;
@@ -358,11 +359,7 @@ inline void checkEnumValueGetterFromLiteralOrIri(
   auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
                     bool expectSuccess) {
     auto actualResult = getter(litOrIri, &testContext.context);
-    ASSERT_EQ(
-        actualResult,
-        expectSuccess
-            ? expectedResult
-            : sparqlExpression::detail::EnumValueGetter<EnumT>::getUndefined());
+    ASSERT_EQ(actualResult, expectSuccess ? expectedResult : undefined);
   };
 
   // Test xsd:anyURI literal method
