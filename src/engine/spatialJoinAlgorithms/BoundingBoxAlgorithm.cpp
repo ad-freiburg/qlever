@@ -14,6 +14,7 @@
 #include <set>
 
 #include "backports/three_way_comparison.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/VectorWithMemoryLimit.h"
 
@@ -279,6 +280,9 @@ Result BoundingBoxAlgorithm::run() {
              bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value> >
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
+  // Rows skipped because their value is not a supported geometry.
+  size_t numSkippedSmaller = 0;
+  size_t numSkippedOther = 0;
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     throwIfCancelled();
 
@@ -286,9 +290,7 @@ Result BoundingBoxAlgorithm::run() {
     std::optional<RtreeEntry> entry =
         getRtreeEntry(smallerResult, i, smallerResJoinCol);
     if (!entry) {
-      // nothing to do. When parsing a point or an area fails, a warning
-      // message gets printed at another place and the point/area just gets
-      // skipped
+      ++numSkippedSmaller;
       continue;
     }
     rtree.insert(std::pair(entry.value().boundingBox_.value(),
@@ -303,9 +305,7 @@ Result BoundingBoxAlgorithm::run() {
     std::optional<RtreeEntry> entry =
         getRtreeEntry(otherResult, i, otherResJoinCol);
     if (!entry) {
-      // nothing to do. When parsing a point or an area fails, a warning
-      // message gets printed at another place and the point/area just gets
-      // skipped
+      ++numSkippedOther;
       continue;
     }
     std::vector<Box> queryBox = getQueryBox(entry);
@@ -316,7 +316,7 @@ Result BoundingBoxAlgorithm::run() {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    std::set<AddedPair> pairs;
+    qlm::set<AddedPair> pairs{qec_->getAllocator()};
     ql::ranges::for_each(results, [&](Value& res) {
       size_t rowLeft = res.second.row_;
       size_t rowRight = i;
@@ -341,8 +341,10 @@ Result BoundingBoxAlgorithm::run() {
       }
     });
   }
+  addSkippedRowsWarning(leftResSmaller ? numSkippedSmaller : numSkippedOther,
+                        leftResSmaller ? numSkippedOther : numSkippedSmaller);
   auto resTable =
-      Result(std::move(result), std::vector<ColumnIndex>{},
+      Result(std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
              Result::getMergedLocalVocab(*resultLeft, *resultRight));
   return resTable;
 #endif

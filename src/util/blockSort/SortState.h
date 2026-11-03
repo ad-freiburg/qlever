@@ -36,6 +36,7 @@
 #include "backports/asio.h"
 #include "backports/iterator.h"
 #include "util/Exception.h"
+#include "util/Math.h"
 #include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 #include "util/Views.h"
@@ -171,8 +172,8 @@ constexpr size_t BLOCKS_PER_TASK = 64;
 // rounds up, so that the last part is the smallest (like the last chunk of
 // `ad_utility::chunkedIotaView`) instead of the largest.
 constexpr size_t partSize(size_t numBlocks) {
-  size_t numParts = (numBlocks + BLOCKS_PER_TASK - 1) / BLOCKS_PER_TASK;
-  return (numBlocks + numParts - 1) / numParts;
+  size_t numParts = ad_utility::ceilDiv(numBlocks, BLOCKS_PER_TASK);
+  return ad_utility::ceilDiv(numBlocks, numParts);
 }
 
 // The tuning parameters of a sort. The public interface derives them from the
@@ -275,7 +276,7 @@ class BlockSortState : public SortState<Compare, CheckCancellation> {
         globalRange_{begin, end},
         blockSize_{params.blockSize},
         numElements_{static_cast<size_t>(end - begin)},
-        numBlocks_{(numElements_ + blockSize_ - 1) / blockSize_},
+        numBlocks_{ad_utility::ceilDiv(numElements_, blockSize_)},
         index_{::ranges::to<std::vector<bsd::block_pos>>(
             ad_utility::integerRange(numBlocks_))},
         tailRange_{numElements_ % blockSize_ == 0

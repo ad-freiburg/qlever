@@ -15,7 +15,11 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
+using ad_utility::testing::localVocabEntry;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -83,8 +87,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager, executor());
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         expectExecuteUpdateHelper(update, qec, *index);
         index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -105,8 +109,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
-                                  SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager, executor());
+                                  &namedResultCache, materializedViewsManager,
+                                  executor());
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };
@@ -304,7 +308,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto LVI = [&localVocab, qec](std::string_view iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromIriref(iri, qec->getLocalVocabContext())));
+              iriLocalVocabEntry(iri, qec->getLocalVocabContext())));
     };
 
     expectComputeGraphUpdateQuads(
@@ -451,7 +455,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
-                  LocalVocabEntry{literalOrIri, index.getLocalVocabContext()});
+                  localVocabEntry(literalOrIri, index.getLocalVocabContext()));
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),

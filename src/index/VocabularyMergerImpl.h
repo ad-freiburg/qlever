@@ -23,6 +23,7 @@
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
+#include "util/Math.h"
 #include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -57,9 +58,9 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   options.parallelismHint = ad_utility::globalExecutorNumThreads();
   const size_t inputPerChunk = VOCAB_MERGER_INPUT_PER_CHUNK.getBytes();
   const size_t numChunks =
-      std::max<size_t>(1, (numInputBytes + inputPerChunk - 1) / inputPerChunk);
+      std::max<size_t>(1, ad_utility::ceilDiv(numInputBytes, inputPerChunk));
   options.targetChunksPerThread = std::max<size_t>(
-      1, (numChunks + options.parallelism() - 1) / options.parallelism());
+      1, ad_utility::ceilDiv(numChunks, options.parallelism()));
   // The blocks in memory are larger than their serialized form (a
   // `InputWord` per word next to the bytes, and the output of a chunk copies
   // the words), by up to a factor of two.
