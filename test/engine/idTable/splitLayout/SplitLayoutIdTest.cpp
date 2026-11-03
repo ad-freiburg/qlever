@@ -214,10 +214,10 @@ auto fromDatatype = [](Datatype datatype, uint64_t payload) {
   return SplitLayoutId::fromBits(datatype, payload);
 };
 
-// Test an overload of `fromBits` (see above) that accepts the first
-// `numAcceptedDatatypes` values of the datatype byte.
+// Test an overload of `fromBits` (see above), which accepts every value of the
+// datatype byte.
 template <typename FromBits>
-void testFromBits(FromBits fromBits, size_t numAcceptedDatatypes) {
+void testFromBits(FromBits fromBits) {
   for (const auto& [id, datatype, payload] : makeKnownIds()) {
     auto rebuilt = fromBits(datatype, payload);
     EXPECT_EQ(rebuilt, id);
@@ -226,7 +226,7 @@ void testFromBits(FromBits fromBits, size_t numAcceptedDatatypes) {
 
   // Every datatype can be combined with every payload, and the two parts do
   // not influence each other.
-  for (size_t datatype = 0; datatype < numAcceptedDatatypes; ++datatype) {
+  for (size_t datatype = 0; datatype < numDatatypeByteValues; ++datatype) {
     for (uint64_t payload : examplePayloads) {
       auto id = fromBits(static_cast<Datatype>(datatype), payload);
       EXPECT_EQ(uint64_t{id.getDatatypeBits()}, datatype);
@@ -437,12 +437,12 @@ TEST_F(SplitLayoutIdTest, getDatatypeBitsAndGetPayloadBits) {
 }
 
 // Test `fromBits(bits)`, the counterpart of `getBits()`. It accepts every byte
-// as the datatype, see `fromBitsChecksThatTheDatatypeExists`.
+// as the datatype, see `fromBitsAcceptsEveryDatatypeByte`.
 TEST_F(SplitLayoutIdTest, fromBitsWithBitRepresentation) {
   for (auto id : makeRandomIds()) {
     EXPECT_EQ(SplitLayoutId::fromBits(id.getBits()).getBits(), id.getBits());
   }
-  testFromBits(fromBitRepresentation, numDatatypeByteValues);
+  testFromBits(fromBitRepresentation);
 }
 
 // Test `fromBits(datatype, payload)` with the number of the datatype, the
@@ -453,7 +453,7 @@ TEST_F(SplitLayoutIdTest, fromBitsWithDatatypeBitsAndPayload) {
                   .getBits(),
               id.getBits());
   }
-  testFromBits(fromDatatypeBits, numDatatypes);
+  testFromBits(fromDatatypeBits);
 
   // Plain integers select this overload and not the one for the `Datatype`.
   EXPECT_EQ(SplitLayoutId::fromBits(0, 0), SplitLayoutId::makeUndefined());
@@ -469,7 +469,7 @@ TEST_F(SplitLayoutIdTest, fromBitsWithDatatype) {
                   .getBits(),
               id.getBits());
   }
-  testFromBits(fromDatatype, numDatatypes);
+  testFromBits(fromDatatype);
 }
 
 // Test the overload of `fromBits` that takes a single integer. It creates an
@@ -484,35 +484,26 @@ TEST_F(SplitLayoutIdTest, fromBitsWithSingleInteger) {
             SplitLayoutId::makeUndefined());
 }
 
-// Test that the overloads of `fromBits` that take a datatype reject one that
-// does not exist (the datatype byte can hold more values than there are
-// datatypes). Like all expensive checks, this only happens if they are enabled
-// (in `Debug` builds or via `ENABLE_EXPENSIVE_CHECKS`). The functions are
-// `noexcept`, so a failed check terminates the process.
-TEST(SplitLayoutId, fromBitsChecksThatTheDatatypeExists) {
+// Test that the overloads of `fromBits` accept every value of the datatype
+// byte, also one that is not a `Datatype`, like `fromBits` of the legacy
+// `ValueId` for the values of its 4 datatype bits.
+TEST(SplitLayoutId, fromBitsAcceptsEveryDatatypeByte) {
   const auto largest = static_cast<uint8_t>(Datatype::MaxValue);
   const auto invalid = static_cast<uint8_t>(largest + 1);
 
-  // The largest existing datatype is always accepted.
   EXPECT_EQ(SplitLayoutId::fromBits(largest, 0).getDatatype(),
             Datatype::MaxValue);
   EXPECT_EQ(SplitLayoutId::fromBits(Datatype::MaxValue, 0).getDatatype(),
             Datatype::MaxValue);
+  EXPECT_EQ(SplitLayoutId::fromBits(invalid, 0).getDatatypeBits(), invalid);
+  EXPECT_EQ(SplitLayoutId::fromBits(uint8_t{0xFF}, 0).getDatatypeBits(), 0xFF);
+  EXPECT_EQ(SplitLayoutId::fromBits(static_cast<Datatype>(invalid), 0)
+                .getDatatypeBits(),
+            invalid);
 
-  if constexpr (ad_utility::areExpensiveChecksEnabled) {
-    EXPECT_DEATH(SplitLayoutId::fromBits(invalid, 0),
-                 "The datatype does not exist");
-    EXPECT_DEATH(SplitLayoutId::fromBits(uint8_t{0xFF}, 0),
-                 "The datatype does not exist");
-    EXPECT_DEATH(SplitLayoutId::fromBits(static_cast<Datatype>(invalid), 0),
-                 "The datatype does not exist");
-  } else {
-    EXPECT_EQ(SplitLayoutId::fromBits(invalid, 0).getDatatypeBits(), invalid);
-  }
-
-  // The overload for the bits is not checked, so that every bit representation
-  // of an `Id` can be turned into an `Id` again, also the one of the largest
-  // `Id`, whose datatype byte is not a datatype.
+  // So does the overload for the bits, such that every bit representation of
+  // an `Id` can be turned into an `Id` again, also the one of the largest `Id`,
+  // whose datatype byte is not a datatype.
   const auto maxBits = SplitLayoutId::max().getBits();
   EXPECT_EQ(SplitLayoutId::fromBits(maxBits).getBits(), maxBits);
 }

@@ -125,8 +125,9 @@ class SplitLayoutId {
   PayloadType payload_;
   DatatypeType datatype_;
 
-  // The `datatype_` must be able to hold all `numDatatypeBits` bits.
-  static_assert(numDatatypeBits <= 8 * sizeof(DatatypeType));
+  // The `datatype_` has exactly `numDatatypeBits` bits, so every value of
+  // `DatatypeType` fits into the datatype bits (see `fromBits`).
+  static_assert(numDatatypeBits == 8 * sizeof(DatatypeType));
 
   // The number of bytes of the two data members above, and the number of bytes
   // that fill an `Id` up to a multiple of the alignment of the payload.
@@ -176,12 +177,12 @@ class SplitLayoutId {
   }
 
   // Combine datatype and payload bits (inverse of `getDatatypeBits` and
-  // `getPayloadBits`). `datatype` must be the bits of an existing `Datatype`.
+  // `getPayloadBits`). As for the legacy `ValueId`, the `datatype` only has to
+  // fit into the datatype bits, which every `DatatypeType` does (see the
+  // `static_assert` at `datatype_`). It is not checked that the datatype
+  // exists.
   static constexpr SplitLayoutId fromBits(const DatatypeType datatype,
                                           const PayloadType payload) noexcept {
-    AD_EXPENSIVE_CHECK(
-        datatype <= static_cast<DatatypeType>(Datatype::MaxValue),
-        "The datatype does not exist");
     return {payload, datatype};
   }
 
