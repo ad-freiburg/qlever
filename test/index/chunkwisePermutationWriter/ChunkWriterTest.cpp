@@ -13,19 +13,19 @@
 
 #include <algorithm>
 #include <optional>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
+#include "../../util/IndexTestHelpers.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationReader.h"
 #include "index/LocatedTriples.h"
 #include "index/chunkwisePermutationWriter/ChunkWriter.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/File.h"
-#include "util/GlobalExecutor.h"
+#include "util/HashSet.h"
 
 // NOTE: The `ChunkWriter` only exists in the C++20 mode of the build.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -132,14 +132,14 @@ class TwinWriters {
       : basename_{std::move(basename)},
         writer1_{makeWriter(basename_ + ".perm1")},
         writer2_{makeWriter(basename_ + ".perm2")},
-        context_{
-            *writer1_,
-            *writer2_,
-            keyOrder.keys().at(0),
-            ChunkWriterContext::makePermutedColIndices(keyOrder, NUM_COLUMNS),
-            removeDuplicates,
-            basename_,
-            ad_utility::MemorySize::kilobytes(100)} {}
+        context_{*writer1_,
+                 *writer2_,
+                 keyOrder.keys().at(0),
+                 compressedRelationHelpers::permutedColIndices(keyOrder,
+                                                               NUM_COLUMNS),
+                 removeDuplicates,
+                 basename_,
+                 ad_utility::MemorySize::kilobytes(100)} {}
 
   ~TwinWriters() {
     ad_utility::deleteFile(basename_ + ".perm1", false);
@@ -167,7 +167,7 @@ class TwinWriters {
         CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
         std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
         std::make_shared<ad_utility::CancellationHandle<>>(),
-        emptyLocatedTriples, ad_utility::globalExecutor());
+        emptyLocatedTriples, ad_utility::testing::multiThreadExecutor());
     TestRows rows;
     for (size_t i = 0; i < scanned.numRows(); ++i) {
       TestRow row{col0};
@@ -195,7 +195,7 @@ class TwinWriters {
       const std::string& filename) {
     return std::make_unique<CompressedRelationWriter>(
         NUM_COLUMNS, ad_utility::File{filename, "w"}, BLOCKSIZE,
-        ad_utility::globalExecutor());
+        ad_utility::testing::multiThreadExecutor());
   }
 };
 
@@ -259,7 +259,7 @@ void expectBoundaryPart(const BoundaryPart& part, int64_t col0,
   EXPECT_TRUE(writers.scan(col0, true).empty());
 
   // The distinct `col1` IDs of the part.
-  std::set<int64_t> col1Values;
+  ad_utility::HashSet<int64_t> col1Values;
   for (const auto& row : rows) {
     col1Values.insert(row[1]);
   }
@@ -281,8 +281,8 @@ void expectMetadataOfLargeRelation(
   EXPECT_EQ(md2.col0Id_, V(col0));
   EXPECT_EQ(md1.numRows_, rows.size());
   EXPECT_EQ(md2.numRows_, rows.size());
-  std::set<int64_t> col1Values;
-  std::set<int64_t> col2Values;
+  ad_utility::HashSet<int64_t> col1Values;
+  ad_utility::HashSet<int64_t> col2Values;
   for (const auto& row : rows) {
     col1Values.insert(row[1]);
     col2Values.insert(row[2]);
@@ -589,7 +589,7 @@ TEST(ChunkWriter, contextChecksTheWriters) {
   auto makeWriter = [](const std::string& filename, size_t blocksize) {
     return CompressedRelationWriter{NUM_COLUMNS,
                                     ad_utility::File{filename, "w"}, blocksize,
-                                    ad_utility::globalExecutor()};
+                                    ad_utility::testing::multiThreadExecutor()};
   };
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] {
@@ -602,8 +602,8 @@ TEST(ChunkWriter, contextChecksTheWriters) {
   auto makeContext = [&](size_t numColumns) {
     return std::make_unique<ChunkWriterContext>(
         writer1, writer2, 0,
-        ChunkWriterContext::makePermutedColIndices(keyOrder, numColumns), false,
-        filename, ad_utility::MemorySize::kilobytes(100));
+        compressedRelationHelpers::permutedColIndices(keyOrder, numColumns),
+        false, filename, ad_utility::MemorySize::kilobytes(100));
   };
   // The writers have different blocksizes.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -613,18 +613,6 @@ TEST(ChunkWriter, contextChecksTheWriters) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       makeContext(NUM_COLUMNS + 1),
       ::testing::HasSubstr("permutedColIndices_.size()"));
-}
-
-// _____________________________________________________________________________
-TEST(ChunkWriter, makePermutedColIndices) {
-  using ::testing::ElementsAre;
-  EXPECT_THAT(ChunkWriterContext::makePermutedColIndices(
-                  qlever::KeyOrder{1, 0, 2, 3}, 5),
-              ElementsAre(1, 0, 2, 3, 4));
-  // The graph column must not be permuted.
-  AD_EXPECT_THROW_WITH_MESSAGE(ChunkWriterContext::makePermutedColIndices(
-                                   qlever::KeyOrder{0, 1, 3, 2}, 4),
-                               ::testing::HasSubstr("graph column"));
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

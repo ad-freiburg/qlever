@@ -167,6 +167,20 @@ TEST(CompressedRelationWriter, makeLargeRelationMetadata) {
       ::testing::HasSubstr("numRows != 0"));
 }
 
+// _____________________________________________________________________________
+TEST(CompressedRelationHelpers, permutedColIndices) {
+  using compressedRelationHelpers::permutedColIndices;
+  using ::testing::ElementsAre;
+  EXPECT_THAT(permutedColIndices(qlever::KeyOrder{1, 0, 2, 3}, 5),
+              ElementsAre(1, 0, 2, 3, 4));
+  EXPECT_THAT(permutedColIndices(qlever::KeyOrder{2, 0, 1, 3}, 4),
+              ElementsAre(2, 0, 1, 3));
+  // The graph column must not be permuted.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      permutedColIndices(qlever::KeyOrder{0, 1, 3, 2}, 4),
+      ::testing::HasSubstr("graph column"));
+}
+
 // Test the capacity rules and the checks of the `SmallRelationsBlockBuilder`.
 TEST(SmallRelationsBlockBuilder, buildBlocks) {
   // Three small relations with the `col0` IDs 1, 2, and 3.

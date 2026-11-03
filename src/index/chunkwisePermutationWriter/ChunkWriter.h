@@ -60,7 +60,11 @@ using SharedBlock = std::shared_ptr<const Block>;
 //   chunks, so the chunk returns them as a `BoundaryPart` (see below) instead
 //   of writing them completely. The parts of the same relation of consecutive
 //   chunks then have to be consolidated in the order of the chunks, which is
-//   the job of the user of this class.
+//   the job of the user of this class. The two cases are symmetric: as the
+//   chunks run concurrently, a chunk knows neither whether its last relation
+//   continues in the next chunk, nor whether its first relation started in the
+//   previous chunk (see `ChunkWriter::inFirstRelation_` for the consequences
+//   for the first relation).
 namespace chunkwisePermutationWriter {
 
 // The sorter that sorts the twin rows of a large relation (where `col0` is
@@ -173,7 +177,7 @@ struct ChunkWriterContext {
   // The column of the input blocks that contains the `col0` IDs, and the
   // indices of all their columns in the order in which they are stored in the
   // permutation (so there is one index per column), see
-  // `makePermutedColIndices`.
+  // `compressedRelationHelpers::permutedColIndices`.
   ColumnIndex col0Column_;
   std::vector<ColumnIndex> permutedColIndices_;
   // If `true`, then the chunks remove consecutive duplicate rows from their
@@ -207,12 +211,6 @@ struct ChunkWriterContext {
                      std::vector<ColumnIndex> permutedColIndices,
                      bool removeDuplicates, std::string twinSorterBasename,
                      ad_utility::MemorySize twinSorterMemoryPerChunk);
-
-  // Return the indices of the columns of the input blocks in the order in
-  // which they are stored in the `permutation`, for input blocks with
-  // `numColumns` columns.
-  static std::vector<ColumnIndex> makePermutedColIndices(
-      const qlever::KeyOrder& permutation, size_t numColumns);
 
   // The number of columns of the input blocks and of the permutations.
   size_t numColumns() const { return permutedColIndices_.size(); }
@@ -258,11 +256,22 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   Id lastCol1CurrentRel_ = Id::makeUndefined();
 
   // Whether the current relation is the first relation of the chunk, which
-  // becomes a boundary part. Its first block of rows (the `head_`) is kept in
-  // memory instead of being written, because it has to be consolidated with
-  // the end of the previous chunk. The first chunk has no previous chunk, so
-  // this is `false` from the start for it, and its first relation is handled
-  // like any other relation (e.g. it may be written as a small relation).
+  // becomes a boundary part. As the chunks run concurrently, this chunk
+  // doesn't know whether the relation started in the previous chunk, which
+  // has two consequences:
+  //
+  // * The relation is never written as a small relation, because together
+  //   with the rows from the previous chunk it might be large.
+  // * Its first block of rows (the `head_`) is kept in memory instead of being
+  //   written, because the remaining rows of the relation at the end of the
+  //   previous chunk (less than a block) have to precede it. Writing the head
+  //   directly would leave those rows as a tiny block of their own in front of
+  //   it, and could split rows that agree in their first three columns
+  //   across blocks. Only the blocks after the head are written directly.
+  //
+  // The first chunk has no previous chunk, so this is `false` from the start
+  // for it, and its first relation is handled like any other relation (e.g.
+  // it may be written as a small relation).
   bool inFirstRelation_;
   std::optional<IdTable> head_;
 
@@ -368,7 +377,7 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   // Account for a block of rows of the current relation that has been
   // finalized (a block written directly, the head, the tail, or the rows of a
   // small part): count the rows and the distinct `col1` IDs.
-  void countRowsOfCurrentRelation(IdTableView<0> rows);
+  void countRowsOfCurrentRelation(const IdTableView<0>& rows);
 
   // Write a block of the current large relation with `writer1_`, push its twin
   // rows to the twin sorter, and account for it.
@@ -377,7 +386,8 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
       CompressedRelationWriter::BlockToWrite::Owner owner);
 
   // Push the twin rows (columns 1 and 2 swapped) of the `rows` to the twin
-  // sorter of this chunk, which is created if necessary.
+  // sorter of this chunk, which is created if necessary. The `rows` are taken
+  // by value, because their columns are swapped in place.
   void pushTwinRows(IdTableView<0> rows);
   TwinSorter& twinSorter();
 

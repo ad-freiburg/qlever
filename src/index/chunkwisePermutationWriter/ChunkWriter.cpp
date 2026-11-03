@@ -51,20 +51,6 @@ ChunkWriterContext::ChunkWriterContext(
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> ChunkWriterContext::makePermutedColIndices(
-    const qlever::KeyOrder& permutation, size_t numColumns) {
-  auto [c0, c1, c2, c3] = permutation.keys();
-  AD_CORRECTNESS_CHECK(c3 == 3,
-                       "The fourth column of a permutation must always be the "
-                       "graph column, which is never permuted.");
-  std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
-  for (size_t colIdx = 3; colIdx < numColumns; ++colIdx) {
-    permutedColIndices.push_back(colIdx);
-  }
-  return permutedColIndices;
-}
-
-// _____________________________________________________________________________
 std::unique_ptr<TwinSorter> ChunkWriterContext::makeTwinSorter(
     const std::string& filename) const {
   auto sorter = std::make_unique<TwinSorter>(
@@ -120,13 +106,12 @@ SharedBlock ChunkWriter::processBlock(Block block) {
   if (block.empty()) {
     return nullptr;
   }
-  if (!col0IdCurrentRelation_.has_value()) {
-    // This can only happen for the very first block of the chunk; afterwards
-    // the current relation is reset only by
-    // `RelationBlockCutter::writeCompleteSmallRelations`, which also means
-    // that the first relation of the chunk is over.
-    AD_CORRECTNESS_CHECK(!inFirstRelation_ || result_.numRows_ == 0);
-  }
+  // If there is no current relation, then this is the very first block of the
+  // chunk; afterwards the current relation is reset only by
+  // `RelationBlockCutter::writeCompleteSmallRelations`, which also means that
+  // the first relation of the chunk is over.
+  AD_CORRECTNESS_CHECK(col0IdCurrentRelation_.has_value() ||
+                       !inFirstRelation_ || result_.numRows_ == 0);
   const size_t numRows = block.numRows();
   this->addInputBlock(std::make_shared<const Block>(std::move(block)),
                       context_.col0Column_, context_.permutedColIndices_);
@@ -172,7 +157,7 @@ void ChunkWriter::writeBufferedSmallRelationsToSingleBlock() {
 }
 
 // _____________________________________________________________________________
-void ChunkWriter::countRowsOfCurrentRelation(IdTableView<0> rows) {
+void ChunkWriter::countRowsOfCurrentRelation(const IdTableView<0>& rows) {
   AD_CORRECTNESS_CHECK(!rows.empty());
   numRowsCurrentRel_ += rows.numRows();
   auto col1 = rows.getColumn(c1Idx);
@@ -195,9 +180,8 @@ TwinSorter& ChunkWriter::twinSorter() {
 
 // _____________________________________________________________________________
 void ChunkWriter::pushTwinRows(IdTableView<0> rows) {
-  IdTableView<0> twinRows = rows;
-  twinRows.swapColumns(c1Idx, c2Idx);
-  twinSorter().pushBlock(twinRows);
+  rows.swapColumns(c1Idx, c2Idx);
+  twinSorter().pushBlock(rows);
 }
 
 // _____________________________________________________________________________
@@ -214,7 +198,7 @@ void ChunkWriter::writeBlockOfLargeRelation(IdTableView<0> block,
   // This is a block of a large relation, so the `smallBlocksCallback_` is not
   // invoked, hence the last argument is `false`.
   context_.writer1_.compressAndWriteBlockInCallingThread(
-      col0Id, col0Id, BlockToWrite{block, std::move(owner)}, false);
+      col0Id, col0Id, BlockToWrite{std::move(block), std::move(owner)}, false);
 }
 
 // _____________________________________________________________________________
@@ -243,7 +227,7 @@ void ChunkWriter::addBlockForLargeRelation() {
       context_.writer1_.blockBufferPool(), std::move(relation_));
   auto block = owner->template asStaticView<0>();
   relation_ = context_.writer1_.takeBlockBuffer();
-  writeBlockOfLargeRelation(block, std::move(owner));
+  writeBlockOfLargeRelation(std::move(block), std::move(owner));
 }
 
 // _____________________________________________________________________________
@@ -251,7 +235,7 @@ void ChunkWriter::addBlockOfLargeRelationWithoutCopying(IdTableView<0> block) {
   AD_CORRECTNESS_CHECK(relation_.empty() && !block.empty());
   // The rows of the `block` are owned by the `inputBlock_`, which stays alive
   // until the block has been written (which happens synchronously).
-  writeBlockOfLargeRelation(block, inputBlock_);
+  writeBlockOfLargeRelation(std::move(block), inputBlock_);
 }
 
 // _____________________________________________________________________________
@@ -463,7 +447,8 @@ CompressedRelationMetadata ChunkWriter::writeSortedBlocksOfLargeRelation(
     ad_utility::InputRangeTypeErased<Block> blocks) {
   DistinctIdCounter distinctCol1Counter;
   size_t numRows = 0;
-  auto writeBlock = [&](Block block) {
+  auto writeBlock = [&numRows, &distinctCol1Counter, &writer,
+                     col0Id](Block block) {
     numRows += block.numRows();
     distinctCol1Counter.addBlock(std::as_const(block).getColumn(c1Idx));
     writeRowsOfLargeRelation(writer, col0Id, std::move(block), false);
