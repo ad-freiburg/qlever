@@ -8,6 +8,7 @@
 
 #include "global/RuntimeParameters.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
 #include "backports/algorithm.h"
@@ -161,6 +162,18 @@ void RuntimeParameters::setFromAssignment(const std::string& assignment) {
   }
   setFromString(assignment.substr(0, positionOfEquals),
                 assignment.substr(positionOfEquals + 1));
+}
+
+// _____________________________________________________________________________
+void RuntimeParameters::throwIfAliasAndNameAreBothSet(
+    const std::function<bool(const std::string&)>& isSet) const {
+  for (const auto& [alias, name] : aliases_) {
+    if (isSet(alias) && isSet(name)) {
+      throw std::runtime_error{absl::StrCat(
+          "Specify either the runtime parameter \"", name,
+          "\" or its deprecated alias \"", alias, "\", but not both")};
+    }
+  }
 }
 
 // _____________________________________________________________________________

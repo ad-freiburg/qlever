@@ -6,6 +6,7 @@
 #define QLEVER_RUNTIMEPARAMETERS_H
 
 #include <algorithm>
+#include <functional>
 #include <optional>
 
 #include "global/Constants.h"
@@ -313,6 +314,11 @@ struct RuntimeParameters {
   // does not exist, or if the value is invalid. Used for the
   // `--set-runtime-parameter` option of `qlever-server`.
   void setFromAssignment(const std::string& assignment);
+
+  // Throw if `isSet` holds for both a deprecated alias and its new name (when
+  // both are set, one of the two values would silently win).
+  void throwIfAliasAndNameAreBothSet(
+      const std::function<bool(const std::string&)>& isSet) const;
 
   // Get all parameter names.
   std::vector<std::string> getKeys() const;

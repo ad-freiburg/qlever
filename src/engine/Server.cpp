@@ -673,17 +673,10 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     const ParamValueMap& parameters, bool accessTokenOk) const {
   // Reject a request that sets both a parameter and its deprecated alias (the
   // alias would silently win, because the aliases are set last).
-  {
-    auto runtimeParameters = globalRuntimeParameters.rlock();
-    for (const auto& [alias, name] : runtimeParameters->aliases_) {
-      if (ad_utility::contains(parameters, alias) &&
-          ad_utility::contains(parameters, name)) {
-        throw std::runtime_error{absl::StrCat(
-            "Specify either the runtime parameter \"", name,
-            "\" or its deprecated alias \"", alias, "\", but not both")};
-      }
-    }
-  }
+  globalRuntimeParameters.rlock()->throwIfAliasAndNameAreBothSet(
+      [&parameters](const std::string& name) {
+        return ad_utility::contains(parameters, name);
+      });
 
   // Set each parameter (or deprecated alias) that occurs in the request.
   bool parameterChanged = false;
