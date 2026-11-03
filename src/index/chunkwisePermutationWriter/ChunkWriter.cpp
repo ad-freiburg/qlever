@@ -74,7 +74,7 @@ std::unique_ptr<TwinSorter> ChunkWriterContext::makeTwinSorter(
   // of that pool, so the sorter sorts, writes, and merges in the thread of the
   // chunk. (The runs of the sorters of the boundary parts are merged by a
   // parallel merge of the consolidation instead.)
-  sorter->runInCallingThread();
+  sorter->setDoAllWorkInCallingThread();
   return sorter;
 }
 

@@ -986,9 +986,9 @@ struct SortByOSPInCallingThread {
 };
 }  // namespace
 
-// With `runInCallingThread`, the sorter sorts its blocks and merges them in
-// the calling thread, and yields the same result as without it.
-TEST(CompressedExternalIdTable, sorterRunInCallingThread) {
+// With `setDoAllWorkInCallingThread`, the sorter sorts its blocks and merges
+// them in the calling thread, and yields the same result as without it.
+TEST(CompressedExternalIdTable, sorterDoAllWorkInCallingThread) {
   using Comp = SortByOSPInCallingThread;
   Comp::callingThread_ = std::this_thread::get_id();
   Comp::otherThreadWasSeen_ = false;
@@ -997,7 +997,7 @@ TEST(CompressedExternalIdTable, sorterRunInCallingThread) {
   IdTable input = createRandomlyFilledIdTable(10'000, NUM_COLS);
   ad_utility::CompressedExternalIdTableSorter<Comp, 0> sorter{
       filename, NUM_COLS, 10_kB, ad_utility::testing::makeAllocator(), 5_kB};
-  sorter.runInCallingThread();
+  sorter.setDoAllWorkInCallingThread();
   sorter.pushBlock(input);
   auto blocks = sorter.getSortedBlocks<0>();
   auto result = idTableFromBlockGenerator(blocks);
@@ -1005,7 +1005,7 @@ TEST(CompressedExternalIdTable, sorterRunInCallingThread) {
   EXPECT_THAT(result, ::testing::ElementsAreArray(input));
   EXPECT_FALSE(Comp::otherThreadWasSeen_);
   // The mode can only be set before the first row is pushed.
-  EXPECT_ANY_THROW(sorter.runInCallingThread());
+  EXPECT_ANY_THROW(sorter.setDoAllWorkInCallingThread());
 }
 
 // _____________________________________________________________________________

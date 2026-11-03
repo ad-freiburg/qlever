@@ -1134,7 +1134,7 @@ inline std::atomic<bool>
 // If `inCallingThread` is `true`, then the sort runs completely in the calling
 // thread instead, without using the global thread pool. Then none of the above
 // restrictions applies, see
-// `CompressedExternalIdTableSorter::runInCallingThread`.
+// `CompressedExternalIdTableSorter::setDoAllWorkInCallingThread`.
 template <typename Range, typename Comparator>
 void sortBlockRange(
     Range& block, const Comparator& comparator,
@@ -1296,7 +1296,7 @@ class CompressedExternalIdTableSorter
     this->setAsyncPushExecutor(mergeExecutor_);
   }
 
-  // Run all the work of this sorter in the thread that calls its member
+  // Make this sorter do all its work in the thread that calls its member
   // functions (`push`, `pushBlock`, `getSortedBlocks`,
   // `finishAndGetRunsInput`, ...): the sorting, compressing, and writing of the
   // blocks (instead of on the dedicated background thread and on the global
@@ -1313,7 +1313,7 @@ class CompressedExternalIdTableSorter
   //
   // PRECONDITION: No `asyncPushBlock` is in flight, and no block has been
   // pushed yet.
-  void runInCallingThread() {
+  void setDoAllWorkInCallingThread() {
     AD_CONTRACT_CHECK(this->numElementsPushed_ == 0);
     this->blockTransformation_.inCallingThread_ = true;
     this->transformInCallingThread_ = true;
