@@ -231,6 +231,94 @@ TEST(RegexExpression, prefixRegexRunsRealRegex) {
   test("?vocab", "^[aä]lpha", {F, T, T});
 }
 
+// A prefix regex rejects vocabulary entries outside the range of the prefix via
+// their `Id`. Test that the result is still that of the actual regex.
+TEST(RegexExpression, prefixRegexRejectsVocabEntriesById) {
+  auto test = testNonPrefixRegex;
+  // ?vocab column is `"Beta", "alpha", "älpha"`.
+  test("?vocab", "^Be", {T, F, F}, true);
+  test("?vocab", "^al", {F, T, F}, true);
+  test("?vocab", "^Alpha", {F, F, F});
+  test("?vocab", "^Alpha", {F, F, F}, true);
+  // Prefixes which are smaller or larger than all entries of the vocabulary.
+  test("?vocab", "^0", {F, F, F});
+  test("?vocab", "^zzz", {F, F, F}, true);
+
+  // Case variants lie in the same range of the prefix.
+  auto testWithFlags = [](std::string variable, std::string regex,
+                          std::string flags, const std::vector<Id>& expected,
+                          bool childAsStr = false,
+                          source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(std::move(l), "testWithFlags");
+    auto expr = makeRegexExpression(std::move(variable), std::move(regex),
+                                    std::move(flags), childAsStr);
+    testWithExplicitResult(*expr, expected);
+  };
+  testWithFlags("?vocab", "^bE", "i", {T, F, F});
+  testWithFlags("?vocab", "^ALP", "i", {F, T, F}, true);
+  testWithFlags("?vocab", "^ÄLP", "i", {F, F, T});
+
+  // ?mixed column is `1, -0.1, <x>`. Without `STR()`, the IRI yields UNDEF.
+  test("?mixed", "^x", {U, U, U});
+  test("?mixed", "^x", {F, F, T}, true);
+  test("?mixed", "^y", {F, F, F}, true);
+  test("?mixed", "^1", {T, F, F}, true);
+  test("?mixed", "^-0\\\\.1", {F, T, F}, true);
+
+  // ?localVocab column is `"notInVocabA", "notInVocabB", <notInVocabD>`.
+  test("?localVocab", "^notInVocabB", {F, T, U});
+  test("?localVocab", "^notInVocab[BD]", {F, T, T}, true);
+
+  // ?everything column is `<notInVocabC>, "alpha", UNDEF`.
+  test("?everything", "^al", {U, T, U});
+  test("?everything", "^notInVocabC", {T, F, U}, true);
+}
+
+// Local vocab entries are never rejected via their `Id`, also not when they
+// share the prefix with entries of the vocabulary.
+TEST(RegexExpression, prefixRegexOnLocalVocabEntries) {
+  TestContext ctx;
+  const auto& localVocabContext = ctx.qec->getLocalVocabContext();
+  auto local = [&ctx, &localVocabContext](const LocalVocabEntry& entry) {
+    return Id::makeFromLocalVocabIndex(
+        ctx.localVocab.getIndexAndAddIfNotContained(entry));
+  };
+  auto localLiteral = [&](std::string_view s) {
+    return local(LocalVocabEntry::literalWithoutQuotes(s, localVocabContext));
+  };
+  auto localIri = [&](std::string_view s) {
+    return local(ad_utility::testing::iriLocalVocabEntry(s, localVocabContext));
+  };
+  // Mix local vocab entries with "alpha" and "Beta" from the vocabulary.
+  ctx.table.clear();
+  ctx.table.setNumColumns(1);
+  for (Id id : {ctx.alpha, localLiteral("alphabet"), localLiteral("Alphabet"),
+                localIri("<alphabet>"), localLiteral("Bet"), ctx.Beta}) {
+    ctx.table.push_back({id});
+  }
+  ctx.context._inputTable = ctx.table.asStaticView<0>();
+  ctx.context._endIndex = ctx.table.size();
+  ctx.varToColMap.clear();
+  ctx.varToColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+
+  auto test = [&ctx](std::string regex, std::optional<std::string> flags,
+                     bool childAsStr, const std::vector<Id>& expected,
+                     source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(std::move(l), "test");
+    auto expr = makeRegexExpression("?x", std::move(regex), std::move(flags),
+                                    childAsStr);
+    auto result = expr->evaluate(&ctx.context);
+    ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result));
+    EXPECT_THAT(std::get<VectorWithMemoryLimit<Id>>(result),
+                ::testing::ElementsAreArray(expected));
+  };
+  test("^alpha", std::nullopt, false, {T, T, F, U, F, F});
+  test("^alpha", std::nullopt, true, {T, T, F, T, F, F});
+  test("^ALPHA", "i", false, {T, T, T, U, F, F});
+  test("^Bet", std::nullopt, true, {F, F, F, F, T, T});
+  test("^Beta", std::nullopt, true, {F, F, F, F, F, T});
+}
+
 // Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
   auto* qec = ad_utility::testing::getQec();
@@ -491,12 +579,12 @@ TEST(RegexExpression, getEstimatesForFilterExpression) {
       nonPrefixExpression->getEstimatesForFilterExpression(10000, std::nullopt),
       hasEstimate(10000, 10000));
 
-  // The same holds for a prefix regex on `STR(?a)`, which cannot be
-  // prefiltered either.
+  // A prefix regex on `STR(?a)` cannot be prefiltered, but is estimated the
+  // same way, as the values outside the range are still rejected cheaply.
   auto strExpression = makeRegexExpression("?a", "^abc", std::nullopt, true);
   EXPECT_THAT(
       strExpression->getEstimatesForFilterExpression(10000, Variable{"?a"}),
-      hasEstimate(10000, 10000));
+      hasEstimate(10, 10010));
 
   // Constant flags are merged into the regex before the prefix is derived, so a
   // prefix regex with flags is prefiltered (and estimated) as well. The `i`

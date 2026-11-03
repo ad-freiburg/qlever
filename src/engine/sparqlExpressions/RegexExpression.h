@@ -17,10 +17,11 @@ namespace sparqlExpression {
 
 // Make a standard SPARQL `REGEX` expression. The resulting expression always
 // evaluates the actual regex (using Google's RE2 library). If the regex is a
-// prefix regex (e.g. `^prefix` or `^prefix[0-9]`) on a plain variable, the
-// expression additionally supports prefiltering via
-// `getPrefilterExpressionForMetadata`, but each value that passes the prefilter
-// is still checked against the actual regex.
+// prefix regex (e.g. `^prefix` or `^prefix[0-9]`) on a plain variable
+// (optionally wrapped in `STR()`), vocabulary entries outside the range of the
+// prefix are rejected via their `Id`. Without `STR()`, the expression also
+// supports prefiltering via `getPrefilterExpressionForMetadata`. All remaining
+// values are still checked against the actual regex.
 SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
                                           SparqlExpression::Ptr regex,
                                           SparqlExpression::Ptr flags);
