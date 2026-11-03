@@ -941,6 +941,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
   FRIEND_TEST(IndexImpl, dateOfIndexBuild);
   FRIEND_TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex);
+  FRIEND_TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex);
 
   bool isLiteral(std::string_view object) const;
 

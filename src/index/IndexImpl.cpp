@@ -462,9 +462,10 @@ void IndexImpl::prepareIndexBuild() {
   configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
       hasWordNormalization_;
   // The predicates to which the `ql:has-word` triples are restricted are
-  // stored so that updates can later restrict their `ql:has-word` triples in
-  // the same way.
-  configurationJson_["has-word-restrict-predicates"] =
+  // stored, so that the configuration of the index records for which literals
+  // it has `ql:has-word` triples.
+  configurationJson_[std::string{
+      ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY}] =
       hasWordRestrictPredicates_;
 
   // Use the encoding of the index for all points that the index build creates
@@ -1607,10 +1608,9 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                  ad_utility::HasWordNormalization::Lowercase);
 
   // The predicates to which the `ql:has-word` triples of this index are
-  // restricted (an index built before this key existed has no restriction).
-  // They were stored sorted and without duplicates.
-  loadDataMember("has-word-restrict-predicates", hasWordRestrictPredicates_,
-                 std::vector<std::string>{});
+  // restricted. They were stored sorted and without duplicates.
+  loadDataMember(ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY,
+                 hasWordRestrictPredicates_, std::vector<std::string>{});
   AD_CORRECTNESS_CHECK(ql::ranges::adjacent_find(hasWordRestrictPredicates_,
                                                  std::greater_equal<>{}) ==
                        hasWordRestrictPredicates_.end());
@@ -1673,17 +1673,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // none are set). The predicate is an `Id` if the parser has encoded it, see
     // `EncodedIriManager`.
     auto predicateAllowsHasWord = [this, &predicate = triple.predicate_]() {
-      if (hasWordRestrictPredicates_.empty()) {
-        return true;
-      }
-      if (predicate.isIri()) {
-        return ql::ranges::binary_search(
-            hasWordRestrictPredicates_,
-            predicate.getIri().toStringRepresentation());
-      }
-      return ql::ranges::binary_search(
-          hasWordRestrictPredicates_,
-          encodedIriManager().toString(predicate.getId()));
+      return hasWordRestrictPredicates_.empty() ||
+             ql::ranges::binary_search(
+                 hasWordRestrictPredicates_,
+                 predicate.isIri()
+                     ? predicate.getIri().toStringRepresentation()
+                     : encodedIriManager().toString(predicate.getId()));
     };
 
     // Extract the words of the literal for the `ql:has-word` triples and count
@@ -2245,19 +2240,22 @@ void IndexImpl::setPrefixesForEncodedValues(
 // _____________________________________________________________________________
 void IndexImpl::setHasWordRestrictPredicates(
     const std::vector<std::string>& predicates) {
-  hasWordRestrictPredicates_.clear();
+  // Validate the predicates (which throws for an invalid one, before anything
+  // is changed).
+  std::vector<std::string> validated;
   for (const std::string& predicate : predicates) {
-    hasWordRestrictPredicates_.push_back(
+    validated.push_back(
         ad_utility::triple_component::Iri::fromIrirefValidated(predicate)
             .toStringRepresentation());
   }
 
-  // Sort and remove duplicates (for the binary search in `processTriple`).
-  ql::ranges::sort(hasWordRestrictPredicates_);
-  hasWordRestrictPredicates_.erase(
-      std::unique(hasWordRestrictPredicates_.begin(),
-                  hasWordRestrictPredicates_.end()),
-      hasWordRestrictPredicates_.end());
+  // Sort them (for the binary search in `processTriple`) and remove duplicates
+  // (the stored predicates are checked to be strictly increasing when they are
+  // loaded, see `applyConfiguration`).
+  ql::ranges::sort(validated);
+  validated.erase(std::unique(validated.begin(), validated.end()),
+                  validated.end());
+  hasWordRestrictPredicates_ = std::move(validated);
 }
 
 // _____________________________________________________________________________

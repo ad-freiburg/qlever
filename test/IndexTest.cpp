@@ -878,13 +878,13 @@ TEST(IndexTest, hasWordRestrictPredicates) {
   EXPECT_EQ(numWords(encoded("<http://e/1>")), 1);
   EXPECT_EQ(numWords(encoded("<http://e/2>")), 0);
 
-  // A predicate that is not a valid IRI in angle brackets is rejected.
+  // A predicate that is not a valid IRI in angle brackets is rejected, and the
+  // previously set predicates stay in effect.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      index.setHasWordRestrictPredicates({"<p>", "q"}),
+      index.setHasWordRestrictPredicates({"<r>", "q"}),
       ::testing::HasSubstr("is not a valid IRI reference"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      index.setHasWordRestrictPredicates({"<a b>"}),
-      ::testing::HasSubstr("is not a valid IRI reference"));
+  EXPECT_EQ(numWords(iri("<r>")), 0);
+  EXPECT_EQ(numWords(iri("<q>")), 1);
 }
 
 // _____________________________________________________________________________
@@ -1936,6 +1936,38 @@ TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex) {
   configuration.erase(key);
   indexImpl.applyConfiguration(configuration);
   EXPECT_EQ(indexImpl.hasWordNormalization_, HasWordNormalization::Lowercase);
+}
+
+// Test that the predicates to which the `ql:has-word` triples are restricted
+// are recorded in the configuration of a built index and applied when loading.
+TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex) {
+  const std::string key{ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY};
+  using Predicates = std::vector<std::string>;
+
+  // An index built with unsorted predicates and a duplicate records them sorted
+  // and without the duplicate.
+  TestIndexConfig config{"<a> <b> \"Café\" ."};
+  config.addHasWordTriples = true;
+  config.hasWordRestrictPredicates = {"<q>", "<b>", "<q>"};
+  auto index = makeTestIndex("hasWordRestrictPredicates", std::move(config));
+  EXPECT_EQ(index.getImpl().configurationJson()[key],
+            (Predicates{"<b>", "<q>"}));
+
+  // Loading a configuration applies the recorded predicates, and a
+  // configuration without the key (an older index) gives no restriction.
+  auto configuration = minimalValidConfiguration();
+  configuration[key] = Predicates{"<b>", "<q>"};
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordRestrictPredicates_, (Predicates{"<b>", "<q>"}));
+  configuration.erase(key);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_TRUE(indexImpl.hasWordRestrictPredicates_.empty());
+
+  // Recorded predicates that are not sorted are rejected.
+  configuration[key] = Predicates{"<q>", "<b>"};
+  EXPECT_ANY_THROW(indexImpl.applyConfiguration(configuration));
 }
 
 // _____________________________________________________________________________

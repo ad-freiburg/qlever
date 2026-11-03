@@ -247,6 +247,12 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be between"));
 
   c = IndexBuilderConfig{};
+  c.hasWordRestrictPredicates_ = {"<p>"};
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("require the option"));
+  c.addHasWordTriples_ = true;
+  EXPECT_NO_THROW(c.validate());
+
+  c = IndexBuilderConfig{};
   c.numThreads_ = 0;
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be at least 1"));
 

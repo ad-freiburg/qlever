@@ -449,6 +449,12 @@ void IndexBuilderConfig::validate() const {
         "must be between 1 and ",
         MAX_INDEX_ROWS_PER_BLOCK));
   }
+  if (!hasWordRestrictPredicates_.empty() && !addHasWordTriples_) {
+    throw std::invalid_argument(
+        "The predicates to which the `ql:has-word` triples are restricted "
+        "(`has-word-restrict-predicates`) require the option "
+        "`add-has-word-triples`");
+  }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
   }
