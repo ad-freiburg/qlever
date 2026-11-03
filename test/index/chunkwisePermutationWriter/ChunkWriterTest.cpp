@@ -139,10 +139,7 @@ class TwinWriters {
             ChunkWriterContext::makePermutedColIndices(keyOrder, NUM_COLUMNS),
             removeDuplicates,
             basename_,
-            ad_utility::MemorySize::kilobytes(100),
-            ad_utility::globalExecutor()} {
-    ChunkWriter::connectTwinWriters(*writer1_, *writer2_);
-  }
+            ad_utility::MemorySize::kilobytes(100)} {}
 
   ~TwinWriters() {
     ad_utility::deleteFile(basename_ + ".perm1", false);
@@ -244,12 +241,12 @@ void expectBoundaryPart(const BoundaryPart& part, int64_t col0,
   EXPECT_EQ(part.numRows_, rows.size());
   EXPECT_EQ(part.isLarge(), isLarge);
   EXPECT_EQ(part.twinRuns_.has_value(), isLarge);
-  TestRows written = toTestRows(part.rows_);
+  TestRows written = toTestRows(part.rowsBeforeWrittenBlocks_);
   auto direct = writers.scan(col0, false);
   written.insert(written.end(), direct.begin(), direct.end());
-  if (part.tail_.has_value()) {
+  if (part.rowsAfterWrittenBlocks_.has_value()) {
     EXPECT_TRUE(isLarge);
-    auto tail = toTestRows(part.tail_.value());
+    auto tail = toTestRows(part.rowsAfterWrittenBlocks_.value());
     written.insert(written.end(), tail.begin(), tail.end());
   }
   EXPECT_EQ(written, rows);
@@ -385,7 +382,7 @@ TEST(ChunkWriter, middleChunkReturnsItsBoundaryParts) {
     expectBoundaryPart(result.lastPart_.value(), 13, last, true, writers);
     // The last part was started inside the chunk, so all its rows before its
     // first block have been written directly.
-    EXPECT_TRUE(result.lastPart_->rows_.empty());
+    EXPECT_TRUE(result.lastPart_->rowsBeforeWrittenBlocks_.empty());
   }
 }
 
@@ -411,8 +408,8 @@ TEST(ChunkWriter, largeFirstRelationKeepsItsHead) {
     const auto& firstPart = result.firstPart_.value();
     // The head (the first block of rows) is kept in memory, and the relation
     // ends inside the chunk, so there is no tail.
-    EXPECT_EQ(firstPart.rows_.numRows(), BLOCKSIZE);
-    EXPECT_FALSE(firstPart.tail_.has_value());
+    EXPECT_EQ(firstPart.rowsBeforeWrittenBlocks_.numRows(), BLOCKSIZE);
+    EXPECT_FALSE(firstPart.rowsAfterWrittenBlocks_.has_value());
     expectBoundaryPart(firstPart, 20, first, true, writers);
     expectBoundaryPart(result.lastPart_.value(), 22, last, false, writers);
     writers.expectCompleteRelation(21, r21);
@@ -443,7 +440,7 @@ TEST(ChunkWriter, chunkWithASingleRelation) {
     // The relation reaches the end of the chunk, so a large part keeps its
     // last rows as the tail.
     if (isLarge) {
-      EXPECT_TRUE(result.firstPart_->tail_.has_value());
+      EXPECT_TRUE(result.firstPart_->rowsAfterWrittenBlocks_.has_value());
     }
   }
 }
@@ -588,7 +585,7 @@ TEST(ChunkWriter, writeSortedBlocksOfLargeRelation) {
 }
 
 // _____________________________________________________________________________
-TEST(ChunkWriter, connectTwinWritersChecksTheWriters) {
+TEST(ChunkWriter, contextChecksTheWriters) {
   auto makeWriter = [](const std::string& filename, size_t blocksize) {
     return CompressedRelationWriter{NUM_COLUMNS,
                                     ad_utility::File{filename, "w"}, blocksize,
@@ -601,7 +598,33 @@ TEST(ChunkWriter, connectTwinWritersChecksTheWriters) {
   };
   auto writer1 = makeWriter(filename + ".1", BLOCKSIZE);
   auto writer2 = makeWriter(filename + ".2", BLOCKSIZE + 1);
-  EXPECT_ANY_THROW(ChunkWriter::connectTwinWriters(writer1, writer2));
+  qlever::KeyOrder keyOrder{0, 1, 2, 3};
+  auto makeContext = [&](size_t numColumns) {
+    return std::make_unique<ChunkWriterContext>(
+        writer1, writer2, 0,
+        ChunkWriterContext::makePermutedColIndices(keyOrder, numColumns), false,
+        filename, ad_utility::MemorySize::kilobytes(100));
+  };
+  // The writers have different blocksizes.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeContext(NUM_COLUMNS),
+      ::testing::HasSubstr("writer1.blocksize() == writer2.blocksize()"));
+  // The column indices don't match the number of columns of the writers.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeContext(NUM_COLUMNS + 1),
+      ::testing::HasSubstr("permutedColIndices_.size()"));
+}
+
+// _____________________________________________________________________________
+TEST(ChunkWriter, makePermutedColIndices) {
+  using ::testing::ElementsAre;
+  EXPECT_THAT(ChunkWriterContext::makePermutedColIndices(
+                  qlever::KeyOrder{1, 0, 2, 3}, 5),
+              ElementsAre(1, 0, 2, 3, 4));
+  // The graph column must not be permuted.
+  AD_EXPECT_THROW_WITH_MESSAGE(ChunkWriterContext::makePermutedColIndices(
+                                   qlever::KeyOrder{0, 1, 3, 2}, 4),
+                               ::testing::HasSubstr("graph column"));
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

@@ -11,7 +11,6 @@
 #define QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_CHUNKWRITER_H
 
 #include <atomic>
-#include <boost/asio/any_io_executor.hpp>
 #include <memory>
 #include <optional>
 #include <string>
@@ -55,7 +54,7 @@ using SharedBlock = std::shared_ptr<const Block>;
 //   handles them: small relations are batched into blocks of small relations,
 //   large relations are written as blocks of their own, and the twin of a large
 //   relation is sorted with a twin sorter that is private to the chunk (and
-//   that merges serially, in the thread of the chunk). The metadata of these
+//   that does all its work in the thread of the chunk). The metadata of these
 //   relations is collected in the `ChunkResult`.
 // * The first and the last relation of a chunk may continue in the neighboring
 //   chunks, so the chunk returns them as a `BoundaryPart` (see below) instead
@@ -74,38 +73,56 @@ using TwinSorter = ad_utility::CompressedExternalIdTableSorter<
 // file.
 // All the rows of a part are rows of the same relation (the one with the
 // `col0Id_`), and the parts of a relation are consolidated in the order of
-// their chunks.
+// their chunks. A chunk with several relations has two separate parts (its
+// `ChunkResult::firstPart_` and `ChunkResult::lastPart_`), each with its own
+// `col0Id_`.
+//
+// The rows of a part are either written by the chunk directly, as complete
+// blocks of the permutation (the "written blocks" below), or kept in memory
+// for the consolidation, which is only possible for the rows before and after
+// the written blocks:
+//
+// * A small part (see `isLarge`) has no written blocks, all its rows are in
+//   the `rowsBeforeWrittenBlocks_`.
+// * A large first part of a chunk keeps its first block of rows (which
+//   might have to be merged with the end of the previous chunk) in the
+//   `rowsBeforeWrittenBlocks_`, and writes the rest. If the part reaches the
+//   end of its chunk, then the rows after the last written block are kept in
+//   the `rowsAfterWrittenBlocks_`.
+// * A large last part of a chunk has started inside the chunk, so all its
+//   blocks are written directly, the `rowsBeforeWrittenBlocks_` are empty, and
+//   the remaining rows are kept in the `rowsAfterWrittenBlocks_`.
 struct BoundaryPart {
   Id col0Id_;
-  // The rows of the part that precede the first block which the chunk has
-  // written directly. For a small part (see `isLarge`) these are all the rows
-  // of the part.
-  IdTable rows_;
-  // The rows of the part that follow the last block which the chunk has
-  // written directly. Only present if the part is large and reaches the end of
-  // its chunk.
-  std::optional<IdTable> tail_;
-  // The total number of rows of the part, including the ones in the blocks
-  // that were written directly.
+  // The rows of the part that precede its written blocks, see above.
+  IdTable rowsBeforeWrittenBlocks_;
+  // The rows of the part that follow its written blocks, see above. Only
+  // present if the part is large, reaches the end of its chunk, and has such
+  // rows.
+  std::optional<IdTable> rowsAfterWrittenBlocks_;
+  // The number of rows of the relation `col0Id_` inside this chunk, including
+  // the ones in the written blocks.
   size_t numRows_ = 0;
   // The number of distinct `col1` IDs of all the rows of the part (in order),
   // together with the first and the last of them, so that the counts of the
   // parts of a relation can be folded, see `DistinctIdCounter`.
   compressedRelationHelpers::DistinctIdCountOfBlock distinctCol1_;
   // The sorter that holds the twin rows (columns 1 and 2 swapped) of *all* the
-  // rows of the part, including the `rows_` and the `tail_`. Only present if
-  // the part is large.
+  // rows of the part, including the `rowsBeforeWrittenBlocks_` and the
+  // `rowsAfterWrittenBlocks_`. Only present if the part is large.
   std::unique_ptr<TwinSorter> twinSorter_;
-  // The sorted runs of the `twinSorter_`, which the chunk finishes before it
-  // hands the part over (see `ChunkWriter::finishChunk`), so that a part that
-  // waits for the consolidation only holds the runs on disk (and the `rows_`
-  // and `tail_`) in memory. Present iff the `twinSorter_` is.
+  // The sorted runs of the `twinSorter_`, which the chunk finishes as soon as
+  // the part is complete (see `ChunkWriter::finishTwinSorterOfPart`), so that
+  // a part that waits for the consolidation only holds the runs on disk (and
+  // the `rowsBeforeWrittenBlocks_` and `rowsAfterWrittenBlocks_`) in memory.
+  // Present iff the `twinSorter_` is.
   std::optional<ad_utility::CompressedIdTableRunsInput<0>> twinRuns_;
 
   // Construct a part from the relation it belongs to and from the rows that
-  // precede the first directly written block, see `rows_`.
-  BoundaryPart(Id col0Id, IdTable rows)
-      : col0Id_{col0Id}, rows_{std::move(rows)} {}
+  // precede its written blocks, see `rowsBeforeWrittenBlocks_`.
+  BoundaryPart(Id col0Id, IdTable rowsBeforeWrittenBlocks)
+      : col0Id_{col0Id},
+        rowsBeforeWrittenBlocks_{std::move(rowsBeforeWrittenBlocks)} {}
 
   // A part is large if the chunk has decided that its relation is large,
   // because the part alone has more rows than fit into a block. A large part
@@ -136,7 +153,8 @@ struct ChunkResult {
   std::vector<std::pair<CompressedRelationMetadata, CompressedRelationMetadata>>
       middleMetadata_;
   // The number of relations that start and end inside the chunk (excluding
-  // the boundary parts).
+  // the boundary parts). Unlike the `middleMetadata_`, this also counts the
+  // small relations.
   size_t numMiddleRelations_ = 0;
   // The number of rows of the chunk (after the removal of duplicates).
   size_t numRows_ = 0;
@@ -147,9 +165,9 @@ struct ChunkResult {
 struct ChunkWriterContext {
   // The writers of the permutation and of its twin. The chunks only use their
   // thread-safe parts, see `ChunkWriter`. The blocks of small relations of the
-  // `writer1_` have to be passed on to the `writer2_` by its
-  // `smallBlocksCallback_` (see
-  // `CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched`).
+  // `writer1_` are passed on to the `writer2_` by its `smallBlocksCallback_`
+  // (see `CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched`),
+  // which the constructor sets up.
   CompressedRelationWriter& writer1_;
   CompressedRelationWriter& writer2_;
   // The column of the input blocks that contains the `col0` IDs, and the
@@ -162,11 +180,14 @@ struct ChunkWriterContext {
   // input blocks (which the merge of an external sorter may yield). This is
   // correct per chunk, because a merge never splits equal rows across chunks.
   bool removeDuplicates_ = false;
-  // The prefix of the names of the files of the twin sorters, their memory
-  // limit, and the executor on which they run.
+  // The prefix of the names of the files of the twin sorters.
   std::string twinSorterBasename_;
-  ad_utility::MemorySize twinSorterMemory_;
-  boost::asio::any_io_executor executor_;
+  // The memory limit of a single twin sorter. Every chunk has at most one twin
+  // sorter that holds rows in memory at a time (the ones of its finished
+  // boundary parts only hold their runs on disk, see
+  // `BoundaryPart::twinRuns_`), so this is the memory of the twin sorters per
+  // running chunk.
+  ad_utility::MemorySize twinSorterMemoryPerChunk_;
 
   // Statistics that are counted by all the chunks together: the number of
   // input rows (before the removal of duplicates), the number of rows after
@@ -176,15 +197,35 @@ struct ChunkWriterContext {
   std::atomic<size_t> numUniqueRows_{0};
   std::atomic<size_t> numRowsProcessed_{0};
 
+  // Create the context from its members (see above), and connect the
+  // `writer1` and the `writer2`: the blocks of small relations of the
+  // `writer1` are passed on to the `writer2`, which therefore also has to use
+  // the same pool of block buffers. The two writers must have the same
+  // blocksize and the same number of columns.
+  ChunkWriterContext(CompressedRelationWriter& writer1,
+                     CompressedRelationWriter& writer2, ColumnIndex col0Column,
+                     std::vector<ColumnIndex> permutedColIndices,
+                     bool removeDuplicates, std::string twinSorterBasename,
+                     ad_utility::MemorySize twinSorterMemoryPerChunk);
+
   // Return the indices of the columns of the input blocks in the order in
   // which they are stored in the `permutation`, for input blocks with
   // `numColumns` columns.
   static std::vector<ColumnIndex> makePermutedColIndices(
       const qlever::KeyOrder& permutation, size_t numColumns);
 
-  // Create a twin sorter with the given `filename`, which merges serially in
-  // the consuming thread (see the implementation).
+  // The number of columns of the input blocks and of the permutations.
+  size_t numColumns() const { return permutedColIndices_.size(); }
+
+  // Create a twin sorter with the given `filename`, which does all its work
+  // in the calling thread (see the implementation).
   std::unique_ptr<TwinSorter> makeTwinSorter(const std::string& filename) const;
+
+ private:
+  // Set up the `writer1` and the `writer2` for the `ChunkWriter`s, see the
+  // constructor.
+  static void connectTwinWriters(CompressedRelationWriter& writer1,
+                                 CompressedRelationWriter& writer2);
 };
 
 // The writer of a single chunk of the merge. It is driven by a single thread
@@ -209,9 +250,6 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   // Whether this is the last chunk of the merge, whose last relation is
   // complete (see `ChunkResult::lastPart_`).
   const bool isLastChunk_;
-  CompressedRelationWriter& writer1_;
-  CompressedRelationWriter& writer2_;
-  const size_t numColumns_;
 
   // The statistics of the current relation so far.
   size_t numRowsCurrentRel_ = 0;
@@ -223,7 +261,8 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   // becomes a boundary part. Its first block of rows (the `head_`) is kept in
   // memory instead of being written, because it has to be consolidated with
   // the end of the previous chunk. The first chunk has no previous chunk, so
-  // this is `false` from the start for it.
+  // this is `false` from the start for it, and its first relation is handled
+  // like any other relation (e.g. it may be written as a small relation).
   bool inFirstRelation_;
   std::optional<IdTable> head_;
 
@@ -261,14 +300,6 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   // consolidation needs.
   ChunkResult finishChunk();
 
-  // Set up the `writer1` and the `writer2` of a pair of twin permutations for
-  // the `ChunkWriter`s: the blocks of small relations of the `writer1` are
-  // passed on to the `writer2` (see
-  // `CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched`), which
-  // therefore also has to use the same pool of block buffers.
-  static void connectTwinWriters(CompressedRelationWriter& writer1,
-                                 CompressedRelationWriter& writer2);
-
   // Helpers that are shared by the chunks and by the consolidation of their
   // results. All of them are thread-safe (they only use the thread-safe parts
   // of the `writer`).
@@ -279,6 +310,14 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   // `true`, then the blocks are compressed and written by the queue of the
   // `writer` (which is only allowed for a thread that is not a thread of the
   // pool), otherwise in the calling thread.
+  //
+  // PRECONDITIONS: The `rows` are sorted, all of them belong to the relation
+  // `col0Id`, and they directly follow the rows of that relation that have
+  // previously been written with the `writer` (they need not be the complete
+  // relation). This function only writes the blocks: counting the rows and the
+  // distinct `col1` IDs, creating the metadata of the relation (see
+  // `CompressedRelationWriter::makeLargeRelationMetadata`), and handling the
+  // twin rows are the job of the caller.
   static void writeRowsOfLargeRelation(CompressedRelationWriter& writer,
                                        Id col0Id, IdTable rows, bool useQueue);
 
@@ -293,9 +332,10 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
       ad_utility::InputRangeTypeErased<Block> blocks);
 
  private:
-  // Remove consecutive duplicate rows from the `block`, also with respect to
-  // the last row of the previous block.
-  void removeDuplicates(Block& block);
+  // If the `context_` says so, remove consecutive duplicate rows from the
+  // `block`, also with respect to the last row of the previous block. Update
+  // the statistics of the `context_` accordingly.
+  void removeDuplicatesIfNecessary(Block& block);
 
   // The hooks of the `RelationBlockCutter`, see there and the respective
   // functions of `CompressedRelationWriter::PermutationWriter`.
@@ -309,14 +349,20 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   const SmallRelationsBlockBuilder& smallRelationsBlockBuilder() const {
     return smallRelations_;
   }
+  // Return `true` iff the current relation is the first relation of a chunk
+  // that is not the first one (see `inFirstRelation_`), and it is not yet
+  // decided whether its part is large: it has fewer rows than a block so far,
+  // and all of them are still in the `relation_` buffer. Once a block is
+  // complete, the part is large and that block becomes its `head_`.
+  bool sizeOfFirstRelationIsUndecided() const {
+    return inFirstRelation_ && !head_.has_value();
+  }
   // The first block of the first relation of the chunk is kept in memory (see
   // `head_`), so it must never be written directly from the input block.
-  bool mayWriteDirectly() const {
-    return !inFirstRelation_ || head_.has_value();
-  }
+  bool mayWriteDirectly() const { return !sizeOfFirstRelationIsUndecided(); }
   // The first relation of the chunk is never written as a small relation by
   // the chunk, because it may continue the last relation of the previous
-  // chunk.
+  // chunk. This doesn't apply to the very first chunk, see `inFirstRelation_`.
   bool mayWriteCompleteSmallRelations() const { return !inFirstRelation_; }
 
   // Account for a block of rows of the current relation that has been
@@ -337,12 +383,19 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
 
   // The first relation of the chunk is complete (it ends inside the chunk if
   // `reachesChunkEnd` is `false`, otherwise it is also the last relation):
-  // turn it into a boundary part.
+  // turn it into a boundary part, which is then stored in
+  // `result_.firstPart_`.
   void finishFirstRelation(bool reachesChunkEnd);
 
   // The current relation (which is not the first one) is still open when the
-  // chunk ends: turn it into a boundary part.
+  // chunk ends: turn it into a boundary part, which is then stored in
+  // `result_.lastPart_`.
   void finishLastRelation();
+
+  // All the twin rows of the `part` have been pushed: if it is large, then
+  // finish the input phase of its twin sorter (which sorts and writes its last
+  // block), see `BoundaryPart::twinRuns_`.
+  static void finishTwinSorterOfPart(BoundaryPart& part);
 
   // Turn the statistics of the current relation into the
   // `DistinctIdCountOfBlock` of its part, and reset everything for the next
@@ -351,11 +404,19 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   distinctCol1OfCurrentRelation();
   void resetCurrentRelation();
 
-  // The equivalents of the respective functions of `CompressedRelationWriter`
-  // for the chunk-local `smallRelations_`.
+  // Append the rows `[beginIdx, endIdx)` of the `relations`, which are one or
+  // more complete small relations from `firstCol0Id` to `lastCol0Id`, to the
+  // current block of small relations (`smallRelations_`). If they don't fit,
+  // then the current block is written first, see
+  // `writeBufferedSmallRelationsToSingleBlock`.
   template <typename Table>
   void addSmallRelations(Id firstCol0Id, Id lastCol0Id, const Table& relations,
                          size_t beginIdx, size_t endIdx);
+
+  // Compress and write the current block of small relations (if it is not
+  // empty) with the `writer1` of the `context_` in the calling thread. The
+  // `smallBlocksCallback_` of that writer also writes the twin of the block to
+  // the `writer2`, see `ChunkWriterContext`.
   void writeBufferedSmallRelationsToSingleBlock();
 
   // Write the twin of the current large relation, which is complete, from the

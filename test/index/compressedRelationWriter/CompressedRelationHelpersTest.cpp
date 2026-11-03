@@ -237,6 +237,14 @@ TEST(SmallRelationsBlockBuilder, buildBlocks) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       smallBuilder.takeBlock(IdTable{2, relations.getAllocator()}),
       ::testing::HasSubstr("freshBuffer.numColumns()"));
+
+  // The buffer can only be released if it is empty.
+  AD_EXPECT_THROW_WITH_MESSAGE(std::move(smallBuilder).releaseBuffer(),
+                               ::testing::HasSubstr("empty()"));
+  SmallRelationsBlockBuilder emptyBuilder{freshBuffer(), 4};
+  IdTable released = std::move(emptyBuilder).releaseBuffer();
+  EXPECT_TRUE(released.empty());
+  EXPECT_EQ(released.numColumns(), 3);
 }
 
 namespace {

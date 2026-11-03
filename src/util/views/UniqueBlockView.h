@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/shift.h"
 #include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -40,8 +41,15 @@ void removeDuplicatesFromBlock(Block& block,
           ? ql::ranges::find_if(block, [&p = lastOfPrevious.value()](
                                            const auto& el) { return el != p; })
           : block.begin();
-  block.erase(std::unique(beg, block.end()), block.end());
-  block.erase(block.begin(), beg);
+  // Move the remaining elements to the front and deduplicate them there, so
+  // that a single `erase` at the end (which is cheap) suffices. If all
+  // elements are duplicates of `lastOfPrevious`, then `shiftedEnd` is the
+  // `begin()` of the `block`.
+  auto shiftedEnd =
+      beg == block.begin()
+          ? block.end()
+          : ql::shift_left(block.begin(), block.end(), beg - block.begin());
+  block.erase(std::unique(block.begin(), shiftedEnd), block.end());
 }
 
 // The default number of blocks that `uniqueBlockView` (see below) hands to the
