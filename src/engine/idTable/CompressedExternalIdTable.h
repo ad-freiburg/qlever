@@ -240,8 +240,7 @@ class CompressedExternalIdTableWriter {
     size_t lower = blockIdx * layout.blockSize_;
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
-    using CompressFormat = idColumnByteIO::CompressFormat;
-    auto compressed = CompressFormat::encode(
+    auto compressed = idColumnByteIO::encode(
         column.subspan(lower, upper - lower),
         [](const ql::span<const char> bytes) {
           return ZstdWrapper::compress(bytes.data(), bytes.size());
@@ -251,7 +250,7 @@ class CompressedExternalIdTableWriter {
     // NOTE: This throws if not all the bytes could be written.
     file_.rlock()->write(compressed.data(), compressed.size(), offset);
 
-    auto uncompressedSize = (upper - lower) * CompressFormat::numBytesPerId;
+    auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     blocksPerColumn_.at(columnIdx).at(layout.firstBlockIdx_ + blockIdx) =
         CompressedBlockMetadata{compressed.size(), uncompressedSize,
                                 static_cast<size_t>(offset)};
@@ -350,7 +349,7 @@ class CompressedExternalIdTableWriter {
   // The number of rows in the block with the given global index.
   size_t numRowsInBlock(size_t blockIdx) const {
     return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ /
-           idColumnByteIO::CompressFormat::numBytesPerId;
+           BYTES_PER_ID_COLUMN_ENTRY;
   }
 
   // The index (in the `ColumnMetadata` of a single column) of the first block
@@ -407,12 +406,11 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    idColumnByteIO::CompressFormat::decode(
-        col, [&compressed](ql::span<char> bytes) {
-          auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
-              compressed.data(), compressed.size(), bytes.data(), bytes.size());
-          AD_CORRECTNESS_CHECK(numBytesDecompressed == bytes.size());
-        });
+    idColumnByteIO::decode(col, [&compressed](ql::span<char> bytes) {
+      auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
+          compressed.data(), compressed.size(), bytes.data(), bytes.size());
+      AD_CORRECTNESS_CHECK(numBytesDecompressed == bytes.size());
+    });
   }
 
   // Allocate and size an IdTableStatic for the block at `blockIdx`.

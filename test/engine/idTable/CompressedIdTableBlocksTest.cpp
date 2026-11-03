@@ -19,7 +19,6 @@
 #include "../../util/GTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/CompressedIdTableBlocks.h"
-#include "engine/idTable/IdColumnByteIO.h"
 
 namespace {
 
@@ -230,8 +229,7 @@ TEST(CompressedIdTableBlocks, theMetadataDescribesTheBlock) {
     size_t expectedOffset = 0;
     for (const auto& column : metadata.columns_) {
       EXPECT_EQ(column.uncompressedSize_,
-                metadata.numRows_ *
-                    ad_utility::idColumnByteIO::CompressFormat::numBytesPerId);
+                metadata.numRows_ * BYTES_PER_ID_COLUMN_ENTRY);
       // The columns are stored one after the other, without gaps or overlaps.
       EXPECT_EQ(column.offsetInFile_, expectedOffset);
       expectedOffset += column.compressedSize_;

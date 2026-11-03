@@ -793,7 +793,7 @@ template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
     Iterator iterator) {
-  ad_utility::idColumnByteIO::CompressFormat::decode(
+  ad_utility::idColumnByteIO::decode(
       IdColumnRef{iterator, numRowsToRead},
       [&compressedBlock](ql::span<char> bytes) {
         auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(

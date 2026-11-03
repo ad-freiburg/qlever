@@ -60,7 +60,7 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
   for (const auto& column : table.getColumns()) {
-    metadata.columns_.push_back(idColumnByteIO::CompressFormat::encode(
+    metadata.columns_.push_back(idColumnByteIO::encode(
         column.subspan(beginRow, endRow - beginRow),
         [&file](ql::span<const char> bytes) {
           return file.appendBlock(bytes.data(), bytes.size());
@@ -84,11 +84,10 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
   for (auto [columnMetadata, column] :
        ::ranges::views::zip(metadata.columns_, block.getColumns())) {
     AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
-    idColumnByteIO::CompressFormat::decode(
-        column,
-        [&file, &columnMetadata = columnMetadata](ql::span<char> bytes) {
-          file.readBlock(columnMetadata, bytes.data());
-        });
+    idColumnByteIO::decode(column, [&file, &columnMetadata = columnMetadata](
+                                       ql::span<char> bytes) {
+      file.readBlock(columnMetadata, bytes.data());
+    });
   }
   return block;
 }
