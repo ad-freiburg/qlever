@@ -23,9 +23,6 @@ using namespace valueGetterTestHelpers;
 using namespace enumVGTestHelpers;
 using namespace geoInfoVGTestHelpers;
 
-using CRSTypeValueGetter = sparqlExpression::detail::EnumValueGetter<
-    &ad_utility::detail::iriToCrsType, ::util::geo::CRSType::UNSUPPORTED>;
-
 // One input for the two `LiteralValueGetter`s below, together with the content
 // that each of them is expected to extract from it. The two getters see exactly
 // the same inputs and differ only in those expectations, so they share this
@@ -252,7 +249,7 @@ TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
 
 // _____________________________________________________________________________
 TEST(CRSTypeValueGetter, OperatorWithId) {
-  CRSTypeValueGetter unitValueGetter;
+  sparqlExpression::detail::CRSTypeValueGetter unitValueGetter;
   using CRSType = ::util::geo::CRSType;
   checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
                              CRSType::UNSUPPORTED>(
@@ -314,7 +311,7 @@ TEST(CRSTypeValueGetter, OperatorWithId) {
 
 // _____________________________________________________________________________
 TEST(CRSTypeValueGetter, OperatorWithIdSkipEncodedValue) {
-  CRSTypeValueGetter getter;
+  sparqlExpression::detail::CRSTypeValueGetter getter;
   using CRSType = ::util::geo::CRSType;
   checkEnumValueGetterFromIdEncodedValue<&ad_utility::detail::iriToCrsType,
                                          CRSType::UNSUPPORTED>(
@@ -338,7 +335,7 @@ TEST(CRSTypeValueGetter, OperatorWithIdSkipEncodedValue) {
 
 // _____________________________________________________________________________
 TEST(CRSTypeValueGetter, OperatorWithLiteralOrIri) {
-  CRSTypeValueGetter crsValueGetter;
+  sparqlExpression::detail::CRSTypeValueGetter crsValueGetter;
   using CRSType = ::util::geo::CRSType;
   checkEnumValueGetterFromLiteralOrIri<&ad_utility::detail::iriToCrsType,
                                        CRSType::UNSUPPORTED>(

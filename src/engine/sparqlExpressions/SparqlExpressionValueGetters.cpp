@@ -5,6 +5,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 #include <absl/strings/str_format.h>
+#include <util/geo/Geo.h>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
@@ -18,6 +19,9 @@
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "rdfTypes/Literal.h"
 #include "util/ParsedUri.h"
+
+static_assert(sparqlExpression::detail::crsTypeUnsupported ==
+              ::util::geo::CRSType::UNSUPPORTED);
 
 using namespace sparqlExpression::detail;
 

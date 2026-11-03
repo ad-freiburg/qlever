@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/Iterators.h"
@@ -27,7 +28,19 @@
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
 
+// Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
+// included in this header).
+//
+// NOTE: The underlying type must match the definition in the util's
+// `geo/Geo.h`. A mismatch does not compile, because
+// `SparqlExpressionValueGetters.cpp` includes both declarations.
+namespace util::geo {
+enum class CRSType : uint8_t;
+}
+
 namespace sparqlExpression::detail {
+
+constexpr inline util::geo::CRSType crsTypeUnsupported{0};
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
@@ -426,9 +439,8 @@ struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
 using UnitOfMeasurementValueGetter =
     EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
                     UnitOfMeasurement::UNKNOWN>;
-/*using CRSTypeValueGetter =
-      EnumValueGetter<&ad_utility::detail::iriToCrsType,
-                      util::geo::CRSType::UNSUPPORTED>; */
+using CRSTypeValueGetter =
+    EnumValueGetter<&ad_utility::detail::iriToCrsType, crsTypeUnsupported>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.
