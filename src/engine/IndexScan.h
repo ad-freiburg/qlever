@@ -336,6 +336,16 @@ class IndexScan final : public Operation {
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
+  // Return the result of
+  // `getSortedVariableAndMetadataColumnIndexForPrefiltering` if the blocks of
+  // this scan can be restricted (by prefiltering or by
+  // `makeCopyWithSelectedBlocks`), else `std::nullopt`. They cannot be
+  // restricted if the scan has a `LIMIT`/`OFFSET` of its own (which is applied
+  // while scanning all blocks, see `getLazyScan`), if there are no blocks, or
+  // if the scan has no variable to restrict by.
+  std::optional<std::pair<Variable, ColumnIndex>>
+  getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted() const;
+
   // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
   // `Permutation` class.
   ScanSpecAndBlocks getScanSpecAndBlocks() const;

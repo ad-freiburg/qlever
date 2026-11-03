@@ -96,10 +96,12 @@ class OrderBy : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  // Return true iff there is a single sort column and the subtree's result is
-  // sorted by it (in the internal order of the `Id`s). This is the part of the
-  // precondition of the fast path below that is known at planning time.
-  bool hasSingleSortColumnWithSortedInput() const;
+  // Return true iff the fast path below may be used, that is, iff there is a
+  // single sort column and the subtree's result is sorted by it (in the
+  // internal order of the `Id`s). This is the part of the precondition of the
+  // fast path that is known at planning time; whether the column contains only
+  // `Int`s or only `Double`s is only known at runtime.
+  bool mayUseFastPathForSortedNumericInput() const;
 
   // Fast path for a single sort column, where the `input` is already sorted by
   // that column in the internal order and the column contains only integers or

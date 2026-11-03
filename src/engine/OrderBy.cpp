@@ -84,7 +84,7 @@ size_t OrderBy::getCostEstimate() {
   // it does not, the cost is underestimated, and the input is sorted as
   // before. In the worst case, the planner then prefers a sorted subtree that
   // is more expensive than an unsorted alternative.
-  if (hasSingleSortColumnWithSortedInput()) {
+  if (mayUseFastPathForSortedNumericInput()) {
     return size + subcost;
   }
 
@@ -99,7 +99,7 @@ size_t OrderBy::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-bool OrderBy::hasSingleSortColumnWithSortedInput() const {
+bool OrderBy::mayUseFastPathForSortedNumericInput() const {
   const auto& sortedOn = subtree_->resultSortedOn();
   return sortIndices_.size() == 1 && !sortedOn.empty() &&
          sortedOn.front() == sortIndices_.front().first;
@@ -108,7 +108,7 @@ bool OrderBy::hasSingleSortColumnWithSortedInput() const {
 // _____________________________________________________________________________
 std::optional<IdTable> OrderBy::computeResultForSortedInput(
     const IdTableView<0>& input) const {
-  if (!hasSingleSortColumnWithSortedInput()) {
+  if (!mayUseFastPathForSortedNumericInput()) {
     return std::nullopt;
   }
   auto [column, isDescending] = sortIndices_.front();
@@ -205,9 +205,10 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_LOG_DEBUG << "OrderBy result computation done." << endl;
   Result result{std::move(idTable), resultSortedOn(),
                 subRes->getSharedLocalVocab()};
-  // If this operation was promised to handle the `LIMIT`/`OFFSET` itself (see
-  // `handlesLimitOffset`), but the fast path did not apply, apply it here.
-  if (handlesLimitOffset() == LimitOffsetHandling::FULL) {
+  // If the fast path might have been used, this operation handles the
+  // `LIMIT`/`OFFSET` itself (see `handlesLimitOffset`), so it has to apply it
+  // here, where the fast path turned out not to apply.
+  if (mayUseFastPathForSortedNumericInput()) {
     result.applyLimitOffset(getLimitOffset(), ad_utility::noop);
   }
   return result;
@@ -215,15 +216,18 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 LimitOffsetHandling OrderBy::handlesLimitOffset() const {
-  return hasSingleSortColumnWithSortedInput() ? LimitOffsetHandling::FULL
-                                              : LimitOffsetHandling::NONE;
+  return mayUseFastPathForSortedNumericInput() ? LimitOffsetHandling::FULL
+                                               : LimitOffsetHandling::NONE;
 }
 
 // _____________________________________________________________________________
 void OrderBy::onLimitOffsetChanged(const LimitOffsetClause&, bool) {
-  // The complete `LIMIT`/`OFFSET` of this operation (all calls merged).
+  // Only the fast path can work on a subset of the blocks of an `IndexScan`
+  // (see `orderByOnSortedNumericInput::selectBlocksForLimit`), and only a
+  // `LIMIT` makes it possible to skip blocks. `getLimitOffset()` is the
+  // complete `LIMIT`/`OFFSET` of this operation (all calls merged).
   const auto& limitOffset = getLimitOffset();
-  if (handlesLimitOffset() != LimitOffsetHandling::FULL ||
+  if (!mayUseFastPathForSortedNumericInput() ||
       !limitOffset._limit.has_value()) {
     return;
   }

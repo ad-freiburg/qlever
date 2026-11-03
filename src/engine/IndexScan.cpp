@@ -273,19 +273,10 @@ bool IndexScan::isDistinctByImpl(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
-  // If there is a LIMIT or OFFSET clause that constrains the scan, we cannot
-  // apply prefiltering. Also, if there is no block metadata, there is nothing
-  // to prefilter.
-  if (!getLimitOffset().isUnconstrained() ||
-      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
-    return std::nullopt;
-  }
-
   // Get the variable by which this `IndexScan` is sorted, and its
-  // corresponding column index. If there is no variable, we cannot apply
-  // prefiltering (and there typically is no need to).
+  // corresponding column index, if prefiltering is possible at all.
   auto sortedVarAndColIndex =
-      getSortedVariableAndMetadataColumnIndexForPrefiltering();
+      getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted();
   if (!sortedVarAndColIndex.has_value()) {
     return std::nullopt;
   }
@@ -362,16 +353,8 @@ static BlockMetadataRanges getRangesOfSelectedBlocks(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeCopyWithSelectedBlocks(BlockSelector selectBlocks) const {
-  // The same preconditions as for
-  // `getUpdatedQueryExecutionTreeWithPrefilterApplied` above: a
-  // `LIMIT`/`OFFSET` of the scan itself is applied while scanning all blocks
-  // (see `getLazyScan`), and without a variable there is nothing to select by.
-  if (!getLimitOffset().isUnconstrained() ||
-      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
-    return std::nullopt;
-  }
   auto sortedVarAndColIndex =
-      getSortedVariableAndMetadataColumnIndexForPrefiltering();
+      getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted();
   if (!sortedVarAndColIndex.has_value()) {
     return std::nullopt;
   }
@@ -671,6 +654,17 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   const auto& tripleComp = permutedTriple.at(colIdx);
   AD_CORRECTNESS_CHECK(tripleComp->isVariable());
   return std::make_pair(tripleComp->getVariable(), colIdx);
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<Variable, ColumnIndex>>
+IndexScan::getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted()
+    const {
+  if (!getLimitOffset().isUnconstrained() ||
+      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
+    return std::nullopt;
+  }
+  return getSortedVariableAndMetadataColumnIndexForPrefiltering();
 }
 
 // ___________________________________________________________________________
