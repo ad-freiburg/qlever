@@ -24,11 +24,12 @@ namespace net = boost::asio;
 namespace detail {
 // Call `function()`. If this call doesn't throw, call the handler with
 // `std::exception_ptr{}` and, unless `Value` is `void`, the result of the call.
-// Else call it with `std::current_exception()` and, unless `Value` is `void`, a
-// default-constructed `Value` (see the NOTE at `runFunctionOnExecutor` below
-// for why that value has to be passed at all). The function is called directly,
-// but the invocation of the handler is posted to the associated executor of the
-// `handler`, or to the `executor` if no such associated executor exists.
+// Else call it with the `std::exception_ptr` of the thrown exception and,
+// unless `Value` is `void`, a default-constructed `Value` (see the NOTE at
+// `runFunctionOnExecutor` below for why that value has to be passed at all).
+// The function is called directly, but the invocation of the handler is posted
+// to the associated executor of the `handler`, or to the `executor` if no such
+// associated executor exists.
 CPP_template(typename Executor, typename Function, typename Handler)(
     requires ql::concepts::invocable<Function>)
 struct CallFunctionAndPassToHandler {
@@ -66,17 +67,19 @@ struct CallFunctionAndPassToHandler {
       exception = std::current_exception();
     }
     // If `function_()` throws, we propagate the exception to the handler, and
-    // have no return value.
+    // have no return value. The handler is posted only after the `catch` block
+    // has been left, so that this thread holds no reference to the exception
+    // anymore when the handler runs.
     //
-    // NOTE: The handler is posted only after the `catch` block has been left.
-    // Otherwise, the handler could already run on another thread (and e.g.
-    // read and release the exception) while this thread still holds the
-    // reference of the `catch` block. Then this thread would free the exception
-    // when leaving the `catch` block. This is correct, but the reference count
-    // of the exception is maintained inside `libstdc++`, which is not
-    // instrumented, so ThreadSanitizer would report the freeing as a data race
-    // (see `misc/tsan-suppressions.txt`). This way, all the references of this
-    // thread are released before the handler is posted.
+    // NOTE: Otherwise, the handler could run on another thread, read the
+    // exception and release its reference while this thread still holds the
+    // reference of the `catch` block, so that this thread would free the
+    // exception when leaving the block.
+    //
+    // That is correct, but the reference count is maintained inside
+    // `libstdc++`, which is not instrumented, so ThreadSanitizer reports the
+    // freeing as a data race (see the entry for `exception_ptr::_M_release` in
+    // `misc/tsan-suppressions.txt`, which does not match this case).
     if constexpr (isVoid) {
       callHandler(std::move(exception));
     } else {
