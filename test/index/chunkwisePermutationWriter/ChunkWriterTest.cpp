@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <future>
 #include <optional>
 #include <string>
 #include <utility>
@@ -708,6 +709,66 @@ TEST(ChunkWriter, destroyUnfinishedChunk) {
   writers.finish();
   EXPECT_TRUE(writers.blocks1_.empty());
   EXPECT_TRUE(writers.blocks2_.empty());
+}
+
+// Test that several chunks which run on different threads at the same time
+// share the two writers correctly: every relation that starts and ends inside
+// its chunk is complete in both permutations, and the boundary parts of all
+// the chunks are right.
+TEST(ChunkWriter, concurrentChunksShareTheWriters) {
+  constexpr size_t NUM_CHUNKS = 8;
+  // Chunk `i` consists of the relations `10 * i + 1` to `10 * i + 5`: a small
+  // first relation, a large, a small, and a large middle relation, and a large
+  // last relation.
+  auto relationsOfChunk = [](size_t i) {
+    auto c = static_cast<int64_t>(10 * i);
+    return std::vector<TestRows>{relation(c + 1, 5), relation(c + 2, 50),
+                                 relation(c + 3, 3), relation(c + 4, 30),
+                                 relation(c + 5, 45)};
+  };
+  TwinWriters writers{gtestCurrentTestName()};
+  std::vector<std::future<ChunkResult>> futures;
+  for (size_t i = 0; i < NUM_CHUNKS; ++i) {
+    futures.push_back(
+        std::async(std::launch::async, [&writers, &relationsOfChunk, i] {
+          ChunkWriter writer{writers.context_, i, NUM_CHUNKS};
+          return processRows(writer, concat(relationsOfChunk(i)), 7);
+        }));
+  }
+  std::vector<ChunkResult> results;
+  for (auto& future : futures) {
+    results.push_back(future.get());
+  }
+  writers.finish();
+
+  // The first relation of a chunk is a boundary part unless the chunk is the
+  // first one, the last relation unless the chunk is the last one. All the
+  // other relations are complete.
+  for (size_t i = 0; i < NUM_CHUNKS; ++i) {
+    auto relations = relationsOfChunk(i);
+    const auto& result = results.at(i);
+    const bool isFirstChunk = i == 0;
+    const bool isLastChunk = i + 1 == NUM_CHUNKS;
+    EXPECT_EQ(result.firstPart_.has_value(), !isFirstChunk);
+    EXPECT_EQ(result.lastPart_.has_value(), !isLastChunk);
+    EXPECT_EQ(result.numMiddleRelations_, 3 + isFirstChunk + isLastChunk);
+    for (size_t r = 0; r < relations.size(); ++r) {
+      bool isBoundary = (r == 0 && !isFirstChunk) ||
+                        (r + 1 == relations.size() && !isLastChunk);
+      if (!isBoundary) {
+        writers.expectCompleteRelation(relations[r].front()[0], relations[r]);
+      }
+    }
+    auto c = static_cast<int64_t>(10 * i);
+    if (!isFirstChunk) {
+      expectBoundaryPart(result.firstPart_.value(), c + 1, relations.front(),
+                         false, writers);
+    }
+    if (!isLastChunk) {
+      expectBoundaryPart(result.lastPart_.value(), c + 5, relations.back(),
+                         true, writers);
+    }
+  }
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
