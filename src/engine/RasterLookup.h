@@ -11,24 +11,10 @@
 #define QLEVER_SRC_ENGINE_RASTERLOOKUP_H
 
 #include <memory>
-#include <optional>
 #include <string>
 
 #include "engine/Operation.h"
-#include "rdfTypes/Variable.h"
-
-// What a `RasterLookup` needs to know, filled from the SERVICE by the parser.
-struct RasterLookupConfiguration {
-  // The name of the raster, see `qlever::raster::rasterFilePath`.
-  std::string dataset_;
-  // Numbered from 1, as in GDAL. The parser sets the default.
-  int band_;
-  // The child's column with the geometries.
-  Variable geometry_;
-  // The new columns: the pixel value and, if wanted, the pixel center.
-  Variable value_;
-  std::optional<Variable> center_;
-};
+#include "engine/RasterLookupConfig.h"
 
 // For each row of the child, looks up the pixels under its geometry and
 // returns one row per pixel: the child's columns plus value (and center).
