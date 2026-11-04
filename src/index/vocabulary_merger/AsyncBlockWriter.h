@@ -28,12 +28,12 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MemoryBudget.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
-#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
 #include "util/ParseableDuration.h"
+#include "util/RunFunctionOnExecutor.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
@@ -172,10 +172,14 @@ class AsyncBlockWriterPerSubVocabulary {
   absl::AnyInvocable<AppendBlock()> makePreparationLambda(BlockPieces block) {
     return [this, block = std::move(block)]() mutable {
       auto measurement = sharedState_.prepareBusyTime_.startMeasurement();
-      WordBlock words = gatherWords(block);
       // The pieces keep (parts of) their segments alive, which are no longer
-      // needed once the words are gathered.
-      block = BlockPieces{};
+      // needed once the words are gathered. They are moved into a local, so
+      // that they are also released if `gatherWords` throws, before the
+      // completion handler is posted (which may let the writer and the memory
+      // budget be destroyed).
+      BlockPieces pieces = std::move(block);
+      WordBlock words = gatherWords(pieces);
+      pieces = BlockPieces{};
       // With the pieces, the reservations of their segments may be gone, so
       // the gathered `words` are accounted for here, until `prepare` has
       // consumed them (this keeps `prepare` independent of the budget). The
