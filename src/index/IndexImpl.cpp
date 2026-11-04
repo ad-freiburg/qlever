@@ -42,7 +42,6 @@
 #endif
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CancellationHandle.h"
-#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/FilesystemHelpers.h"
 #include "util/GlobalExecutor.h"
 #include "util/HashMap.h"
@@ -966,16 +965,8 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
   std::string fileName = getFilenameForPermutation(permutation, internal);
-  // This function is only used by the runtime index rebuild (see
-  // `IndexRebuilder`), which by default throttles the compress/write threads
-  // of its permutation writers so that a rebuild on a live server leaves most
-  // of the CPU to concurrent queries. A value of 0 means "no limit".
   auto metaData = createPermutationImpl(
-      numColumns, fileName, std::move(sortedTriples),
-      ad_utility::makeConcurrencyLimitedExecutor(
-          std::move(executor),
-          getRuntimeParameterAsOptional<
-              &RuntimeParameters::rebuildPermutationWriterNumThreads_>()));
+      numColumns, fileName, std::move(sortedTriples), std::move(executor));
 
   auto& [numDistinctCol0, meta] = metaData;
   meta.calculateStatistics(numDistinctCol0);
@@ -2355,18 +2346,10 @@ std::packaged_task<void()> computeStatistics(
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-    // The statistics are only recomputed as part of a runtime index rebuild
-    // (see `IndexRebuilder`), so this scan is also throttled by
-    // `rebuild-index-scan-num-threads` (several permutations are
-    // scanned in parallel, so without the throttle this short phase has a high
-    // peak CPU). A value of 0 means "no limit".
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
-        ad_utility::makeConcurrencyLimitedExecutor(
-            std::move(executor),
-            getRuntimeParameterAsOptional<
-                &RuntimeParameters::rebuildIndexScanNumThreads_>()));
+        std::move(executor));
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);

@@ -856,8 +856,7 @@ class IndexImpl {
   // `permutation` specifies which permutation to write.
   // `internal` specifies whether this is an internal permutation and adjusts
   // the filename of the generated file on disk accordingly.
-  // The blocks are compressed and written on the `executor`, by at most
-  // `rebuild-permutation-writer-num-threads` threads at the same time.
+  // The blocks are compressed and written on the `executor`.
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
   // OSP/OPS) and the metadata for the written permutation.
@@ -1131,9 +1130,8 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state. The permutations are scanned on the `executor`, each
-  // scan by at most `rebuild-index-scan-num-threads` threads at the
-  // same time. `progress` is called (possibly from several threads) with the
+  // triples shared state. The permutations are scanned on the `executor`.
+  // `progress` is called (possibly from several threads) with the
   // number of newly scanned rows; this is used by the index rebuild for
   // progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
