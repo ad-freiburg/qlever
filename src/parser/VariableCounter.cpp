@@ -178,4 +178,12 @@ void VariableCounter::operator()(const ExternalValuesQuery& op) {
   (*this)(op.variables_);
 }
 
+// _____________________________________________________________________________
+void VariableCounter::operator()(const RasterQuery& op) {
+  (*this)(op.geometry_);
+  (*this)(op.value_);
+  (*this)(op.center_);
+  (*this)(op.childGraphPattern_);
+}
+
 }  // namespace parsedQuery

@@ -89,8 +89,7 @@ RasterLookupConfiguration RasterQuery::toRasterLookupConfiguration() const {
   AD_CORRECTNESS_CHECK(dataset_.has_value() && geometry_.has_value() &&
                        value_.has_value());
   return RasterLookupConfiguration{dataset_.value(), band_.value_or(1),
-                                   geometry_.value(), value_.value(),
-                                   center_};
+                                   geometry_.value(), value_.value(), center_};
 }
 
 }  // namespace parsedQuery
