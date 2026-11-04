@@ -26,6 +26,8 @@ add_library(engine
 add_subdirectory(spatialJoinAlgorithms)
 if (USE_GDAL)
     add_subdirectory(raster)
+    target_sources(engine PRIVATE RasterLookup.cpp)
+    target_link_libraries(engine PUBLIC raster)
 endif ()
 
 # `Boost::program_options` is not used inside `engine` itself, but the

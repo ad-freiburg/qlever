@@ -17,10 +17,10 @@
 
 #include <array>
 #include <cmath>
+#include <map>
 #include <stdexcept>
 #include <vector>
 
-#include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
@@ -536,24 +536,42 @@ std::vector<Pixel> RasterFile::lookupGeometry(std::string_view wktLiteral,
 
 // _____________________________________________________________________________
 std::string rasterFilePath(std::string_view datasetName) {
+  // The folder is scanned only on the first call. A `std::map` keeps the names
+  // sorted for the error message.
+  static const std::map<std::string, std::string> pathsByName = [] {
+    std::map<std::string, std::string> result;
+    // Without the folder there are no rasters. Throwing here instead would
+    // repeat the initialization (and the exception) on every call.
+    if (!ql::filesystem::exists(QLEVER_RASTER_DIR)) {
+      return result;
+    }
+    for (const auto& entry : ql::directoryRange(QLEVER_RASTER_DIR)) {
+      const ql::filesystem::path& path = entry.path();
+      if (path.extension() == ".tif") {
+        result[path.stem().string()] = path.string();
+      }
+    }
+    return result;
+  }();
+
   // The returned path always comes from the folder, never from `datasetName`,
   // so a name like "../secret" cannot reach a file outside the folder.
-  std::vector<std::string> availableNames;
-  for (const auto& entry : ql::directoryRange(QLEVER_RASTER_DIR)) {
-    const ql::filesystem::path& path = entry.path();
-    if (path.extension() != ".tif") {
-      continue;
-    }
-    std::string name = path.stem().string();
-    if (name == datasetName) {
-      return path.string();
-    }
-    availableNames.push_back(std::move(name));
+  auto match = pathsByName.find(std::string{datasetName});
+  if (match != pathsByName.end()) {
+    return match->second;
   }
-  ql::ranges::sort(availableNames);
+  if (pathsByName.empty()) {
+    throw std::runtime_error(absl::StrCat(
+        "Unknown raster \"", datasetName,
+        "\": no raster files are available (the \"rasters\" folder of the "
+        "QLever source tree is missing or has no .tif files)"));
+  }
   throw std::runtime_error(
-      absl::StrCat("Unknown raster \"", datasetName,
-                   "\", available: ", absl::StrJoin(availableNames, ", ")));
+      absl::StrCat("Unknown raster \"", datasetName, "\", available: ",
+                   absl::StrJoin(pathsByName, ", ",
+                                 [](std::string* out, const auto& nameAndPath) {
+                                   out->append(nameAndPath.first);
+                                 })));
 }
 
 }  // namespace qlever::raster

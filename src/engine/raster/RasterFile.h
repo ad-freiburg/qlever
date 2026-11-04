@@ -63,7 +63,8 @@ class RasterFile {
 
 // The path of the raster file for `datasetName`, which is the name of a `.tif`
 // file in the `rasters/` folder of the source tree, without `.tif`. Throws if
-// there is no such file, so that a query can never choose a path itself.
+// there is no such file, so that a query can never choose a path itself. The
+// folder is read once, so changes to it need a restart of the server.
 std::string rasterFilePath(std::string_view datasetName);
 
 }  // namespace qlever::raster
