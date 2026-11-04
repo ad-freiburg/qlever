@@ -15,6 +15,7 @@
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Literal.h"
 #include "util/BitUtils.h"
+#include "util/EnumSize.h"
 #include "util/SourceLocation.h"
 
 /// Exception type for construction of GeoPoints that have invalid values
@@ -53,6 +54,7 @@ enum class GeoPointEncodingEnum : uint8_t {
   // `Id`s of an index) from before that date.
   LatMajor = 1,
 };
+QLEVER_ENUM_SIZE(GeoPointEncodingEnum, 2);
 
 /// A GeoPoint represents a pair of geographical coordinates on earth consisting
 /// of latitude (lat) and longitude (lng).

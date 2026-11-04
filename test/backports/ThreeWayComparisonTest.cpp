@@ -424,3 +424,70 @@ TEST(ThreeWayComparisonTest, TypeTraits) {
                                  TestClassWithExternalCompareThreeWay>);
 }
 #endif
+
+#ifdef QL_HAS_REFLECTION
+namespace reflectionCheck {
+struct Base {
+  int b_;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Base, b_)
+};
+struct OtherBase {};
+// The following classes deliberately don't use the comparison macros, because
+// those would fail to compile. Instead the check that the macros perform is
+// called directly.
+struct TwoMembers {
+  int a_;
+  int b_;
+};
+struct WithCArray {
+  int a_[3];
+};
+struct Derived : Base {
+  int c_;
+};
+struct DerivedFromTwo : Base, OtherBase {};
+template <typename T>
+struct Template {
+  T t_;
+  int u_;
+};
+}  // namespace reflectionCheck
+
+// Test the compile-time check of the DEFAULTED comparison macros, which is only
+// performed if C++26 reflection is supported.
+TEST(ThreeWayComparisonTest, ReflectionCheckOfComparedMembers) {
+  using namespace reflectionCheck;
+  using ql::reflection::checkComparedMembers;
+  // All members in declaration order, independent of the whitespace.
+  static_assert(checkComparedMembers<TwoMembers>("a_, b_").empty());
+  static_assert(checkComparedMembers<TwoMembers>("a_,b_").empty());
+  static_assert(checkComparedMembers<TwoMembers>("a_,\n   b_").empty());
+  static_assert(checkComparedMembers<Template<int>>("t_, u_").empty());
+  static_assert(checkComparedMembers<OtherBase>("").empty());
+  static_assert(checkComparedMembers<Derived, Base>("c_").empty());
+
+  // Missing members, wrong order, or members that don't exist.
+  using ::testing::HasSubstr;
+  EXPECT_THAT(checkComparedMembers<TwoMembers>("a_"),
+              HasSubstr("which are `a_, b_`"));
+  EXPECT_THAT(checkComparedMembers<TwoMembers>("b_, a_"),
+              HasSubstr("not exactly the data members"));
+  EXPECT_THAT(checkComparedMembers<TwoMembers>("a_, b_, c_"),
+              HasSubstr("not exactly the data members"));
+  EXPECT_THAT(checkComparedMembers<Template<int>>("t_"),
+              HasSubstr("`Template<int>`"));
+
+  // C arrays.
+  EXPECT_THAT(checkComparedMembers<WithCArray>("a_"),
+              HasSubstr("`a_` is a C array"));
+
+  // Missing, wrong, or too many base classes.
+  EXPECT_THAT(checkComparedMembers<Derived>("c_"), HasSubstr("base classes"));
+  EXPECT_THAT(checkComparedMembers<Derived>("b_, c_"),
+              HasSubstr("base classes"));
+  EXPECT_THAT((checkComparedMembers<Derived, OtherBase>("c_")),
+              HasSubstr("base classes"));
+  EXPECT_THAT((checkComparedMembers<DerivedFromTwo, Base>("")),
+              HasSubstr("base classes"));
+}
+#endif

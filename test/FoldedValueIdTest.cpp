@@ -288,7 +288,7 @@ TEST_F(ValueIdTest, fromBitsWithDatatype) {
 
   // The `Datatype` overload yields the same bits as the overload that takes the
   // number of the datatype, for every datatype and a few payloads.
-  for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
+  for (size_t i = 0; i < qlever::enumSize<Datatype>; ++i) {
     const auto datatype = static_cast<Datatype>(i);
     for (uint64_t payload :
          {uint64_t{0}, uint64_t{1}, uint64_t{123456789}, payloadMask}) {

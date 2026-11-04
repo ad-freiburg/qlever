@@ -11,6 +11,7 @@
 #include <absl/strings/str_join.h>
 
 #include "backports/algorithm.h"
+#include "backports/reflection.h"
 #include "util/Algorithm.h"
 
 // _____________________________________________________________________________
@@ -73,6 +74,29 @@ RuntimeParameters::RuntimeParameters() {
   add(disableCaching_);
   add(logLevel_);
   add(constructDeduplication_);
+
+#ifdef QL_HAS_REFLECTION
+  // Check that all the parameters above were added. Without reflection, a
+  // missing `add` is only detected by `RuntimeParametersTest`, if at all.
+  static constexpr auto members =
+      std::define_static_array(std::meta::nonstatic_data_members_of(
+          ^^RuntimeParameters, std::meta::access_context::unchecked()));
+  template for (constexpr auto member : members) {
+    using Type = typename[:std::meta::type_of(member):];
+    if constexpr (std::is_base_of_v<ad_utility::ParameterBase, Type>) {
+      const ad_utility::ParameterBase* parameter = &this->[:member:];
+      static constexpr std::string_view name = std::meta::identifier_of(member);
+      AD_CORRECTNESS_CHECK(
+          ql::ranges::any_of(runtimeMap_,
+                             [parameter](const auto& nameAndParameter) {
+                               return nameAndParameter.second == parameter;
+                             }),
+          "The runtime parameter `", name,
+          "` was not registered via `add()` in the constructor of "
+          "`RuntimeParameters`");
+    }
+  }
+#endif
 
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is

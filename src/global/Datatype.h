@@ -15,12 +15,13 @@
 
 #include "backports/keywords.h"
 #include "util/Algorithm.h"
+#include "util/EnumSize.h"
 #include "util/Exception.h"
 
 // The different datatypes that an `Id` (see `Id.h`) can encode.
 //
-// NOTE: If you add a datatype, keep `MaxValue` equal to the last member and
-// check whether the new datatype belongs into `isDatatypeTrivial` below.
+// NOTE: If you add a datatype, update the `QLEVER_ENUM_SIZE` below and check
+// whether the new datatype belongs into `isDatatypeTrivial` below.
 enum struct Datatype {
   Undefined = 0,
   Bool,
@@ -42,11 +43,9 @@ enum struct Datatype {
   GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
-  EncodedVal,
-  // Always the last member (there is no easy way to get the number of members
-  // of an enum, and other code sizes its arrays by `MaxValue`).
-  MaxValue = EncodedVal
+  EncodedVal
 };
+QLEVER_ENUM_SIZE(Datatype, 13);
 
 // Return true iff `datatype` is trivial, that is, IDs with this datatype
 // directly encode the value they represent and do not point to an external
@@ -70,7 +69,7 @@ constexpr bool isDatatypeTrivial(Datatype datatype) {
 template <size_t N>
 constexpr bool isListOfAllDatatypesInOrder(
     const std::array<Datatype, N>& datatypes) {
-  if (N != static_cast<size_t>(Datatype::MaxValue) + 1) {
+  if (N != qlever::enumSize<Datatype>) {
     return false;
   }
   for (size_t i = 0; i < N; ++i) {

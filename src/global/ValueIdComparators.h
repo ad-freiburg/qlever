@@ -12,6 +12,7 @@
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
+#include "util/EnumSize.h"
 #include "util/Log.h"
 #include "util/OverloadCallOperator.h"
 
@@ -19,6 +20,7 @@ namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
+QLEVER_ENUM_SIZE(Comparison, 6);
 
 // The result of the comparisons is actually ternary because we sometimes
 // distinguish between "false" and "type mismatch" (see the comment directly

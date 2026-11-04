@@ -143,16 +143,11 @@ class DeltaTriples {
   ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
       predicateCache_{predicateCacheSize_};
 
-  // Assert that the Permutation Enum values have the expected int values.
-  // This is used to store and lookup items that exist for permutation in an
-  // array.
-  static_assert(static_cast<int>(Permutation::Enum::PSO) == 0);
-  static_assert(static_cast<int>(Permutation::Enum::POS) == 1);
-  static_assert(static_cast<int>(Permutation::Enum::SPO) == 2);
-  static_assert(static_cast<int>(Permutation::Enum::SOP) == 3);
-  static_assert(static_cast<int>(Permutation::Enum::OPS) == 4);
-  static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
-  static_assert(Permutation::ALL.size() == 6);
+  // Assert that `Permutation::ALL` contains all the values of the
+  // `Permutation::Enum` in the order of their int values. This is used to store
+  // and lookup items that exist for permutation in an array.
+  static_assert(ql::ranges::equal(Permutation::ALL,
+                                  qlever::allEnumValues<Permutation::Enum>));
 
   // Generic state wrapper to avoid code duplication for internal and regular
   // triples.

@@ -33,6 +33,7 @@
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
+#include "util/EnumSize.h"
 #include "util/Exception.h"
 #include "util/GenericCharTraits.h"
 #include "util/StringUtils.h"
@@ -54,6 +55,7 @@ class LocaleManagerBase {
     // different byte representation never compare equal.
     TOTAL = 5
   };
+  QLEVER_NESTED_ENUM_SIZE(Level, 6);
 
   // A strong typedef for a string that contains unicode collation weights for
   // another string. The actual storage can be a `std::string` or a
@@ -106,7 +108,8 @@ class LocaleManagerICU : public LocaleManagerBase {
   /* One collator for each collation Level to make this class threadsafe.
    * Needed because setting the collation level and comparing strings are 2
    * different steps in icu. */
-  std::array<std::unique_ptr<icu::Collator>, 6> collators_;
+  std::array<std::unique_ptr<icu::Collator>, qlever::enumSize<Level>>
+      collators_;
   UColAttributeValue ignorePunctuationStatus_ =
       UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 

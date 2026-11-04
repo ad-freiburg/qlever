@@ -372,7 +372,7 @@ TEST(ConcurrentCache, cacheStatusToString) {
   EXPECT_EQ(toString(notInCacheAndNotComputed), "not_in_cache_not_computed");
 
   auto outOfBounds = static_cast<ad_utility::CacheStatus>(
-      static_cast<int>(notInCacheAndNotComputed) + 1);
+      qlever::enumSize<ad_utility::CacheStatus>);
   EXPECT_ANY_THROW(toString(outOfBounds));
 }
 

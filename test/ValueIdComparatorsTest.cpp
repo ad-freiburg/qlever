@@ -284,5 +284,6 @@ TEST_F(ValueIdComparators, undefinedWithItself) {
 TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
   // Invalid value for the `Comparison` enum.
-  ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
+  ASSERT_ANY_THROW((
+      compareIds(u, u, static_cast<Comparison>(qlever::enumSize<Comparison>))));
 }

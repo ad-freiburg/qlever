@@ -500,6 +500,23 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
     add_compile_options(-Wno-misleading-indentation)
 endif()
+# Enable C++26 static reflection (P2996) if the compiler supports it. QLever
+# doesn't require reflection, but uses it (see `backports/reflection.h`) to
+# check at compile time some invariants that the C++17/C++20 code has to state
+# redundantly, e.g. that the comparison macros of
+# `backports/three_way_comparison.h` list all the members of a class, or that
+# `QLEVER_ENUM_SIZE` states the correct number of enumerators. Currently, only
+# GCC 16 in C++26 mode supports reflection (behind the `-freflection` flag).
+option(QLEVER_USE_REFLECTION "Use C++26 reflection for additional compile-time checks if the compiler supports it" ON)
+if (QLEVER_USE_REFLECTION AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
+    CMAKE_CXX_STANDARD GREATER_EQUAL 26)
+    MESSAGE(STATUS "C++26 reflection is enabled via `-freflection`")
+    # GCC rejects `-freflection` for C++ standards before C++26, which some of
+    # the dependencies explicitly set for their targets.
+    add_compile_options(
+        "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<VERSION_GREATER_EQUAL:$<TARGET_PROPERTY:CXX_STANDARD>,26>>:-freflection>")
+endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
