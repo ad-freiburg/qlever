@@ -173,26 +173,24 @@ inline void checkRequestedInfoForWktLiteral(
             GeometryInfo::getRequestedInfo<SerializationType>(wkt));
 
   // Test Requests `WithSourceCrs`.
-  std::optional<WithSourceCrs<Centroid>> expectedCentroid =
-      ad_utility::detail::getWithSourceCrs(gi.getCentroid(),
-                                           gi.getSourceCrsType());
+  std::optional<Centroid> expectedCentroid = GeometryInfo::getCentroid(wkt);
+  std::optional<SourceCrsType> expectedCrs =
+      GeometryInfo::getSourceCrsType(wkt);
   std::optional<WithSourceCrs<Centroid>> requestedCentroid =
       gi.getRequestedInfo<WithSourceCrs<Centroid>>(wkt);
+  ASSERT_TRUE(expectedCrs.has_value());
   ASSERT_TRUE(expectedCentroid.has_value());
   ASSERT_TRUE(requestedCentroid.has_value());
-  EXPECT_CENTROID_NEAR(expectedCentroid.value().info_,
-                       requestedCentroid.value().info_);
-  EXPECT_EQ(expectedCentroid.value().crs_, requestedCentroid.value().crs_);
-  std::optional<WithSourceCrs<BoundingBox>> expectedBBox =
-      ad_utility::detail::getWithSourceCrs(gi.getBoundingBox(),
-                                           gi.getSourceCrsType());
+  EXPECT_CENTROID_NEAR(requestedCentroid.value().info_,
+                       expectedCentroid.value());
+  EXPECT_EQ(requestedCentroid.value().crs_, expectedCrs.value());
+  std::optional<BoundingBox> expectedBBox = GeometryInfo::getBoundingBox(wkt);
   std::optional<WithSourceCrs<BoundingBox>> requestedBBox =
       gi.getRequestedInfo<WithSourceCrs<BoundingBox>>(wkt);
   ASSERT_TRUE(expectedBBox.has_value());
   ASSERT_TRUE(requestedBBox.has_value());
-  EXPECT_BOUNDINGBOX_NEAR(expectedBBox.value().info_,
-                          requestedBBox.value().info_);
-  EXPECT_EQ(expectedBBox.value().crs_, requestedBBox.value().crs_);
+  EXPECT_BOUNDINGBOX_NEAR(requestedBBox.value().info_, expectedBBox.value());
+  EXPECT_EQ(requestedBBox.value().crs_, expectedCrs.value());
 }
 
 // ____________________________________________________________________________

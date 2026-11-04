@@ -190,9 +190,8 @@ struct MetricArea {
 // are WKT literals, see the rules at `GEOMETRY_INFO_VERSION`.
 enum class SerializationType : uint16_t { WKT };
 
-// Concept for the `WithSourceCrs` template parameter: the types for which the
-// source CRS can be attached. These are exactly those that are projected back
-// to the source CRS in the result (see `WithSourceCrs`).
+// Concept for the `WithSourceCrs` template parameter: any of these types can be
+// requested with the source CRS of the underlying geometry.
 template <typename T>
 CPP_concept WithSourceCrsT = SameAsAny<T, Centroid, BoundingBox>;
 
@@ -218,9 +217,8 @@ class InvalidPolygonError : public std::runtime_error {
 class GeometryInfo;
 
 // Concept for the `RequestedInfo` template parameter: any of these types is
-// allowed to be requested. `WithSourceCrs` itself is constrained to
-// `Centroid`/`BoundingBox`, therefore only those two can be requested with
-// their `SourceCrsType`.
+// allowed to be requested. Types satisfying `WithSourceCrsT` can additionally
+// be requested wrapped in `WithSourceCrs`.
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
