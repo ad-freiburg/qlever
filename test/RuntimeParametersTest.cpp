@@ -185,7 +185,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.spatialJoinTmpDir_);
   check(params.enableDistributiveUnion_);
   check(params.treatDefaultGraphAsNamedGraph_);
-  check(params.sparqlResultsJsonWithTime_);
+  check(params.sparqlResultsJsonWithMeta_);
   check(params.materializedViewWriterMemory_);
   check(params.defaultQueryTimeout_);
   check(params.sortInMemoryThreshold_);

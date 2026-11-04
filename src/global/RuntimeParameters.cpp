@@ -59,7 +59,7 @@ RuntimeParameters::RuntimeParameters() {
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
-  add(sparqlResultsJsonWithTime_);
+  add(sparqlResultsJsonWithMeta_);
   add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
