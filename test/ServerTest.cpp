@@ -10,6 +10,7 @@
 #include <optional>
 #include <thread>
 
+#include "./libqlever/QleverTestHelpers.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
@@ -21,6 +22,7 @@
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
 #include "parser/SparqlParser.h"
+#include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -1249,4 +1251,187 @@ TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
   });
 
   EXPECT_THAT(lines, testing::IsEmpty());
+}
+
+namespace {
+// Occupy the (single) thread of the `pool` until the returned promise is
+// fulfilled, and return only once the thread is occupied.
+std::shared_ptr<std::promise<void>> occupyPool(
+    boost::asio::static_thread_pool& pool) {
+  auto release = std::make_shared<std::promise<void>>();
+  auto occupied = std::make_shared<std::promise<void>>();
+  boost::asio::post(pool,
+                    [release = release->get_future().share(), occupied]() {
+                      occupied->set_value();
+                      release.wait();
+                    });
+  occupied->get_future().wait();
+  return release;
+}
+
+// Wait until all tasks that were posted to the (single-threaded) `pool` before
+// this call have run.
+void waitForPool(boost::asio::static_thread_pool& pool) {
+  std::promise<void> done;
+  boost::asio::post(pool, [&done]() { done.set_value(); });
+  done.get_future().wait();
+}
+}  // namespace
+
+// Test that a query which waits longer than `query-queue-max-wait` for a free
+// thread of the query thread pool is rejected with the status code
+// `query-queue-full-status-code` and a `Retry-After` header, that this is
+// logged with status "rejected" in the query event log and counted in the
+// metrics, and that a query with a valid access token waits indefinitely.
+TEST(ServerTest, queryQueueFull) {
+  using namespace std::chrono_literals;
+  auto cleanupMaxWait =
+      setRuntimeParameterForTest<&RuntimeParameters::queryQueueMaxWait_>(50ms);
+  auto cleanupStatusCode =
+      setRuntimeParameterForTest<&RuntimeParameters::queryQueueFullStatusCode_>(
+          503);
+  auto cleanupRetryAfter =
+      setRuntimeParameterForTest<&RuntimeParameters::queryQueueFullRetryAfter_>(
+          7s);
+
+  // Only queries without a valid access token have a maximal queue wait, and
+  // the value 0 means "wait indefinitely".
+  EXPECT_EQ(Server::queryQueueMaxWait(false), 50ms);
+  EXPECT_EQ(Server::queryQueueMaxWait(true), std::nullopt);
+  {
+    auto cleanupZero =
+        setRuntimeParameterForTest<&RuntimeParameters::queryQueueMaxWait_>(0ms);
+    EXPECT_EQ(Server::queryQueueMaxWait(false), std::nullopt);
+  }
+
+  auto queryRequest = [](bool withAccessToken) {
+    ad_utility::HashMap<http::field, std::string> headers{
+        {http::field::content_type, "application/sparql-query"}};
+    if (withAccessToken) {
+      headers[http::field::authorization] = "Bearer accessToken";
+    }
+    return makeRequest(http::verb::post, "/", headers,
+                       "SELECT * WHERE { ?s ?p ?o }");
+  };
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto [path, cleanupLog] = ad_utility::testing::filenameForTesting();
+  {
+    ServerForTesting server{
+        1, "accessToken",
+        getDefaultConfigWithName(qec->getIndex().getOnDiskBase()), false,
+        ad_utility::metrics::initialize(true)};
+    server.configureQueryEventLog(path);
+    auto& pool = server.server().queryThreadPool_;
+
+    // The single thread is busy: the query is rejected after 50 ms with the
+    // configured status code, a `Retry-After` header and an explanation.
+    auto release = occupyPool(pool);
+    auto response = server.process(queryRequest(false));
+    EXPECT_THAT(response, StatusIs(http::status::service_unavailable));
+    EXPECT_THAT(response,
+                HeaderFieldIs(http::field::retry_after, testing::StrEq("7")));
+    EXPECT_THAT(responseBodyToString(std::move(response.body())),
+                testing::HasSubstr("all 1 threads for processing queries were "
+                                   "busy for more than 50ms"));
+    release->set_value();
+    waitForPool(pool);
+
+    // The same query with a valid access token waits for the thread (here
+    // clearly longer than 50 ms) and then succeeds.
+    release = occupyPool(pool);
+    auto responseWithToken = std::async(std::launch::async, [&]() {
+      return server.process(queryRequest(true));
+    });
+    EXPECT_EQ(responseWithToken.wait_for(200ms), std::future_status::timeout);
+    release->set_value();
+    EXPECT_THAT(responseWithToken.get(), StatusIs(http::status::ok));
+
+    // The rejection is counted in the metrics.
+    auto metrics = server.process(makeGetRequest("/metrics", "accessToken"));
+    EXPECT_THAT(metrics, StatusIs(http::status::ok));
+    EXPECT_THAT(responseBodyToString(std::move(metrics.body())),
+                MetricIs("qlever_sparql_operation_errors_total", "1",
+                         Label{"type", "queue_full"}));
+  }
+
+  // The rejected query is logged with status "rejected", the one with the
+  // access token with status "ok".
+  auto events = parseEventLog(ad_utility::testing::readLines(path));
+  ASSERT_EQ(events.size(), 4u);
+  EXPECT_EQ(events[0].at("event").get<std::string>(), "start");
+  EXPECT_EQ(events[1].at("event").get<std::string>(), "end");
+  EXPECT_EQ(events[1].at("status").get<std::string>(), "rejected");
+  EXPECT_EQ(events[3].at("status").get<std::string>(), "ok");
+}
+
+// Test that a `Server` can be loaded from a blob file, but rejects the
+// operations that it does not support in that mode.
+TEST(ServerTest, readFromBlobFile) {
+  std::string filename = gtestCurrentTestName() + ".blob";
+  writeTestBlobFile(filename);
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  // The index basename deliberately does not exist, to verify that nothing is
+  // loaded from disk.
+  auto config =
+      serverTestHelpers::getDefaultConfigWithName("nonExistingIndexBasename");
+  config.compressedBlobFilename_ = filename;
+
+  // The named cached query from the blob can be answered.
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+  auto response = server.process(
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-query"},
+                   {http::field::accept, "text/tab-separated-values"}},
+                  std::string{testBlobFileQuery}));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_EQ(serverTestHelpers::responseBodyToString(std::move(response.body())),
+            testBlobFileQueryResult);
+
+  // Updates, materialized views, and index rebuilds are rejected.
+  auto rejectionMessage = [](std::string_view operation) {
+    return absl::StrCat(operation,
+                        " is not supported, because the index of this server "
+                        "was loaded from a blob");
+  };
+  // For an update (like for every SPARQL operation), the error is reported
+  // as a JSON response with the status of the error.
+  auto updateResponse = server.process(
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <a> <b> <c> }"));
+  EXPECT_THAT(updateResponse, StatusIs(http::status::bad_request));
+  EXPECT_THAT(
+      serverTestHelpers::responseBodyToString(std::move(updateResponse.body())),
+      testing::HasSubstr(rejectionMessage("An update")));
+  // The commands throw an `HttpError` with the error message.
+  auto expectRejected = [&server, &rejectionMessage](
+                            const ReqT& request, std::string_view operation,
+                            ad_utility::source_location l =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    expectHttpError([&] { server.process(request); },
+                    boost::beast::http::status::bad_request,
+                    testing::HasSubstr(rejectionMessage(operation)));
+  };
+  expectRejected(makeGetRequest("/?cmd=rebuild-index", "accessToken"),
+                 "An index rebuild");
+  expectRejected(
+      makeRequest(http::verb::post,
+                  "/?cmd=write-materialized-view&view-name=someView",
+                  {{http::field::content_type, "application/sparql-query"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "SELECT * { ?s ?p ?o }"),
+      "Writing a materialized view");
+  expectRejected(
+      makeGetRequest("/?cmd=load-materialized-view&view-name=someView",
+                     "accessToken"),
+      "Loading a materialized view");
+  expectRejected(
+      makeGetRequest("/?cmd=delete-materialized-view&view-name=someView",
+                     "accessToken"),
+      "Deleting a materialized view");
+  expectRejected(makeGetRequest("/?cmd=vacuum-delta-triples", "accessToken"),
+                 "Vacuuming the delta triples");
 }

@@ -8,7 +8,11 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include <atomic>
 #include <boost/asio/experimental/awaitable_operators.hpp>
+#include <optional>
+#include <stdexcept>
+#include <variant>
 
 #include "backports/atomic_flag.h"
 #include "global/Constants.h"
@@ -24,11 +28,12 @@ namespace net = boost::asio;
 namespace detail {
 // Call `function()`. If this call doesn't throw, call the handler with
 // `std::exception_ptr{}` and, unless `Value` is `void`, the result of the call.
-// Else call it with `std::current_exception()` and, unless `Value` is `void`, a
-// default-constructed `Value` (see the NOTE at `runFunctionOnExecutor` below
-// for why that value has to be passed at all). The function is called directly,
-// but the invocation of the handler is posted to the associated executor of the
-// `handler`, or to the `executor` if no such associated executor exists.
+// Else call it with the `std::exception_ptr` of the thrown exception and,
+// unless `Value` is `void`, a default-constructed `Value` (see the NOTE at
+// `runFunctionOnExecutor` below for why that value has to be passed at all).
+// The function is called directly, but the invocation of the handler is posted
+// to the associated executor of the `handler`, or to the `executor` if no such
+// associated executor exists.
 CPP_template(typename Executor, typename Function, typename Handler)(
     requires ql::concepts::invocable<Function>)
 struct CallFunctionAndPassToHandler {
@@ -51,6 +56,7 @@ struct CallFunctionAndPassToHandler {
       };
       net::post(net::bind_executor(handlerExec, std::move(doCall)));
     };
+    std::exception_ptr exception;
     try {
       // If `function_()` throws no exception, we have no
       // exception_ptr and the return value as the second argument.
@@ -60,16 +66,30 @@ struct CallFunctionAndPassToHandler {
       } else {
         callHandler(std::exception_ptr{}, function_());
       }
+      return;
     } catch (...) {
-      // If `function_()` throws, we propagate the exception to the
-      // handler, and have no return value.
-      if constexpr (isVoid) {
-        callHandler(std::current_exception());
-      } else {
-        // Unfortunately we need to pass a `Value{}` even in the case of an
-        // error. This is due to a limitation in Boost::Asio.
-        callHandler(std::current_exception(), Value{});
-      }
+      exception = std::current_exception();
+    }
+    // If `function_()` throws, we propagate the exception to the handler, and
+    // have no return value. The handler is posted only after the `catch` block
+    // has been left, so that this thread holds no reference to the exception
+    // anymore when the handler runs.
+    //
+    // NOTE: Otherwise, the handler could run on another thread, read the
+    // exception and release its reference while this thread still holds the
+    // reference of the `catch` block, so that this thread would free the
+    // exception when leaving the block.
+    //
+    // That is correct, but the reference count is maintained inside
+    // `libstdc++`, which is not instrumented, so ThreadSanitizer reports the
+    // freeing as a data race (see the entry for `exception_ptr::_M_release` in
+    // `misc/tsan-suppressions.txt`, which does not match this case).
+    if constexpr (isVoid) {
+      callHandler(std::move(exception));
+    } else {
+      // Unfortunately we need to pass a `Value{}` even in the case of an
+      // error. This is due to a limitation in Boost::Asio.
+      callHandler(std::move(exception), Value{});
     }
   }
 };
@@ -193,6 +213,117 @@ inline net::awaitable<T> interruptible(
                        std::promise<std::function<void()>>{}, std::move(loc));
 }
 
+// Thrown by `runOnThreadPoolWithQueueDeadline` below when no thread of the pool
+// has picked the function up before the deadline.
+class ThreadPoolQueueDeadlineError : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
+// Run `function` on the `threadPool` and return its result, like
+// `ad_utility::runFunctionOnExecutor` with `net::use_awaitable`, but give up
+// when no thread of the pool has picked the function up within `maxQueueWait`.
+// Then throw a `ThreadPoolQueueDeadlineError` with the `errorMessage` right
+// away, and the pool skips the function when it eventually gets to it (so the
+// thread is free again at once and no work is done for a caller that has
+// already given up). Once the function has been picked up, wait for it without
+// a deadline.
+//
+// NOTE: The coroutine has to run on a strand (or a single-threaded executor),
+// like `ad_utility::interruptible`, because the pool thread cancels the
+// `timer` via `net::dispatch` on the executor of this coroutine.
+template <typename Function, typename T = std::invoke_result_t<Function>>
+net::awaitable<T> runOnThreadPoolWithQueueDeadline(
+    net::static_thread_pool& threadPool, Function function,
+    std::chrono::milliseconds maxQueueWait, std::string errorMessage) {
+  // The state shared between this coroutine and the task on the pool. The task
+  // moves it from `PENDING` to `STARTED` when it picks the function up and to
+  // `DONE` when the function has returned. This coroutine moves it from
+  // `PENDING` to `ABANDONED` when the deadline has passed first (or when it is
+  // cancelled while waiting, see below).
+  enum class State { PENDING, STARTED, DONE, ABANDONED };
+  static constexpr bool isVoid = std::is_void_v<T>;
+  using Result = std::conditional_t<isVoid, std::monostate, T>;
+  struct Shared {
+    std::atomic<State> state_{State::PENDING};
+    std::optional<Result> result_;
+    std::exception_ptr exception_;
+  };
+  auto shared = std::make_shared<Shared>();
+
+  // The `timer` doubles as the event that wakes this coroutine up when the task
+  // is done. It is owned by this coroutine only, so that the task never touches
+  // an executor that may be gone when the coroutine has already returned.
+  struct Timer {
+    net::any_io_executor executor_;
+    net::steady_timer timer_;
+    explicit Timer(net::any_io_executor executor)
+        : executor_{executor}, timer_{executor} {}
+  };
+  auto timer = std::make_shared<Timer>(co_await net::this_coro::executor);
+  net::post(threadPool, [shared, weakTimer = std::weak_ptr{timer},
+                         function = std::move(function)]() mutable {
+    auto expected = State::PENDING;
+    if (!shared->state_.compare_exchange_strong(expected, State::STARTED)) {
+      AD_CORRECTNESS_CHECK(expected == State::ABANDONED);
+      return;
+    }
+    try {
+      if constexpr (isVoid) {
+        std::invoke(std::move(function));
+        shared->result_.emplace();
+      } else {
+        shared->result_.emplace(std::invoke(std::move(function)));
+      }
+    } catch (...) {
+      shared->exception_ = std::current_exception();
+    }
+    shared->state_.store(State::DONE);
+    if (auto timer = weakTimer.lock()) {
+      // The executor is copied before the `timer` is moved into the handler
+      // (the order in which the arguments are evaluated is unspecified).
+      auto executor = timer->executor_;
+      net::dispatch(executor,
+                    [timer = std::move(timer)]() { timer->timer_.cancel(); });
+    }
+  });
+
+  // Wait until the deadline has passed or the task is done, whichever comes
+  // first. If the task has not even started by then, abandon it.
+  timer->timer_.expires_after(maxQueueWait);
+  auto [deadlineError] =
+      co_await timer->timer_.async_wait(net::as_tuple(net::use_awaitable));
+  if (!deadlineError) {
+    auto expected = State::PENDING;
+    if (shared->state_.compare_exchange_strong(expected, State::ABANDONED)) {
+      throw ThreadPoolQueueDeadlineError{std::move(errorMessage)};
+    }
+  }
+
+  // Wait until the task is done. A wait ends early only when the task is done
+  // or this coroutine has been cancelled (see `ad_utility::interruptible`,
+  // whose own exception then supersedes the one thrown here). In the latter
+  // case, abandon the task if it has not started yet, so that it does not
+  // occupy a thread later on.
+  while (shared->state_.load() != State::DONE) {
+    auto cancellationState = co_await net::this_coro::cancellation_state;
+    if (cancellationState.cancelled() != net::cancellation_type::none) {
+      auto expected = State::PENDING;
+      shared->state_.compare_exchange_strong(expected, State::ABANDONED);
+      throw ad_utility::CancellationException{
+          ad_utility::CancellationState::MANUAL,
+          "Cancelled while waiting for a free thread of the query thread pool"};
+    }
+    timer->timer_.expires_at(std::chrono::steady_clock::time_point::max());
+    co_await timer->timer_.async_wait(net::as_tuple(net::use_awaitable));
+  }
+  if (shared->exception_) {
+    std::rethrow_exception(shared->exception_);
+  }
+  if constexpr (!isVoid) {
+    co_return std::move(shared->result_.value());
+  }
+}
 /// Helper function to wait for an awaitable that is supposed to be run on an io
 /// context.
 template <typename T>

@@ -304,6 +304,13 @@ class Permutation {
       ColumnIndex col) const;
 
  private:
+  // Throw a `std::runtime_error` that names this permutation if it was not
+  // loaded (see `loadFromDisk`), for example for a `Qlever` instance that was
+  // loaded from a blob of the named result cache. Called by the entry points
+  // of the scans, so that such queries fail with a readable message instead of
+  // an assertion deep inside the scan.
+  void throwIfNotLoaded() const;
+
   // Common implementation of the two `lazyScan` overloads above. Performs the
   // scan through the given `reader`, which may either be this permutation's
   // shared reader or an independently created one.

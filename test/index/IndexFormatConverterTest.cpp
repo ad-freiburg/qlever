@@ -207,8 +207,8 @@ TEST(IndexFormatConverter, convertIdPreservesTheOrder) {
       convertedIds.push_back(convertId(oldFormatId(datatypeBits, value)));
     }
   }
-  EXPECT_TRUE(ql::ranges::is_sorted(convertedIds));
-  EXPECT_TRUE(ql::ranges::adjacent_find(convertedIds) == convertedIds.end());
+  EXPECT_TRUE(ql::ranges::adjacent_find(convertedIds, std::greater_equal<>{}) ==
+              convertedIds.end());
 }
 
 // _____________________________________________________________________________

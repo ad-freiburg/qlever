@@ -20,6 +20,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/Iterators.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/OwnedOrViewedVector.h"
 #include "util/Serializer/FileSerializer.h"
@@ -176,6 +177,14 @@ class CompactVectorOfStrings {
   size_t size() const { return ready() ? offsetsSpan().size() - 1 : 0; }
 
   bool ready() const { return !offsetsSpan().empty(); }
+
+  // Return the memory that the data and the offsets occupy (also if they are
+  // only viewed, not owned).
+  ad_utility::MemorySize memorySize() const {
+    return ad_utility::MemorySize::bytes(dataSpan().size() * sizeof(data_type) +
+                                         offsetsSpan().size() *
+                                             sizeof(offset_type));
+  }
 
   /**
    * @brief operator []

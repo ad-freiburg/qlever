@@ -76,6 +76,9 @@ class ParsedQuery {
   std::vector<SparqlFilter> _havingClauses;
   std::vector<VariableOrderKey> _orderBy;
   IsInternalSort _isInternalSort = IsInternalSort::False;
+  // If true, the `QueryPlanner` throws for a variable of the `ORDER BY` clause
+  // that is not bound, instead of ignoring it (required by `RowNumberQuery`).
+  bool orderByVariablesMustBeBound_ = false;
   std::vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   std::string _originalString;

@@ -41,6 +41,14 @@ std::shared_ptr<const Segment> makeSegmentOfBlocks(
       buildSegment(std::move(blocks), writer, ad_utility::RegexSet{},
                    numPartialVocabularies, lessThan));
 }
+
+// A copy of the ID map entries of the `segment`, as `IdMapWriters::write`
+// takes them.
+std::shared_ptr<const SegmentIdMapEntries> entriesOf(
+    const std::shared_ptr<const Segment>& segment) {
+  return std::make_shared<const SegmentIdMapEntries>(
+      segment->idMapEntries_.clone());
+}
 }  // namespace
 
 // Test that the entries of the segments are written to the map of their
@@ -70,10 +78,11 @@ TEST(IdMapWriters, writeSegments) {
     EXPECT_EQ(writers.numPartialVocabularies(), 5u);
     // Two groups of three and two maps.
     EXPECT_EQ(writers.numGroups(), 2u);
-    writers.write(segment0, converter0);
-    writers.write(segment1, converter1);
+    writers.write(entriesOf(segment0), converter0);
+    writers.write(entriesOf(segment1), converter1);
     EXPECT_FALSE(writers.hasFailed());
     writers.finish();
+    EXPECT_EQ(writers.numPendingTasks(), 0u);
   }
 
   // Each partial vocabulary has a single word with the local index `0`, whose
@@ -107,7 +116,7 @@ TEST(IdMapWriters, writeChecksNumPartialVocabularies) {
   auto segment = makeSegmentOfBlocks(
       makeMergedBlocks({{{"\"a\"", true, 4, 0}}}), 5, writer);
   IdMapWriters writers{partialVocabularyIdMapFilenames(basename, 3), 1};
-  EXPECT_ANY_THROW(writers.write(segment, IdConverterForSegment{}));
+  EXPECT_ANY_THROW(writers.write(entriesOf(segment), IdConverterForSegment{}));
   writers.finish();
 }
 
@@ -167,9 +176,10 @@ TEST(IdMapWriters, failedTaskSkipsRemainingSegments) {
   allBlocked.get_future().wait();
 
   // The task of `segment0` fails, so the one of `segment1` must be skipped.
-  writers.write(segment0, overflowingConverter);
-  writers.write(segment1, IdConverterForSegment{});
+  writers.write(entriesOf(segment0), overflowingConverter);
+  writers.write(entriesOf(segment1), IdConverterForSegment{});
   EXPECT_FALSE(writers.hasFailed());
+  EXPECT_EQ(writers.numPendingTasks(), 2u);
   releaseBlockers();
 
   // Wait until the failure has been observed. A further `write` then doesn't
@@ -177,7 +187,7 @@ TEST(IdMapWriters, failedTaskSkipsRemainingSegments) {
   while (!writers.hasFailed()) {
     std::this_thread::yield();
   }
-  writers.write(segment1, IdConverterForSegment{});
+  writers.write(entriesOf(segment1), IdConverterForSegment{});
   AD_EXPECT_THROW_WITH_MESSAGE(
       writers.finish(), ::testing::HasSubstr("SegmentLocalId::maxIndex"));
   EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]), ::testing::IsEmpty());
