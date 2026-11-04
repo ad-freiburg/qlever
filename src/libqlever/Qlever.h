@@ -362,8 +362,9 @@ class Qlever {
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
   qlever::Allocator<Id> allocator_;
-  // The executor on which the queries and index rebuilds of this instance run
-  // their parallel work, see `executor()`.
+  // The executor on which the queries of this instance run their parallel
+  // work, see `executor()`. An index rebuild uses a thread pool of its own
+  // (see `materializeToIndex`).
   qlever::Executor executor_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
@@ -418,9 +419,8 @@ class Qlever {
   Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
          qlever::Executor executor = ad_utility::globalExecutor());
 
-  // The executor on which the queries and index rebuilds of this instance run
-  // their parallel work (unless a different one is passed to
-  // `createQueryExecutionContext`).
+  // The executor on which the queries of this instance run their parallel
+  // work (unless a different one is passed to `createQueryExecutionContext`).
   const qlever::Executor& executor() const { return executor_; }
 
   // Return true if this instance was populated from the blob file given by

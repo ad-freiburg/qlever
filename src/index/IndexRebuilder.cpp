@@ -41,9 +41,9 @@
 #include "index/LocalVocabEntry.h"
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
-#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/GlobalExecutor.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -444,6 +444,13 @@ boost::asio::awaitable<void> createPermutationWriterTask(
   co_await (asCoroutine(makeFinalizerTasks(metaA, permutationA)) &&
             asCoroutine(makeFinalizerTasks(metaB, permutationB)));
 }
+
+// _____________________________________________________________________________
+size_t getRebuildIndexNumThreads() {
+  auto numThreads =
+      getRuntimeParameter<&RuntimeParameters::rebuildIndexMaxNumThreads_>();
+  return numThreads == 0 ? ad_utility::globalExecutorNumThreads() : numThreads;
+}
 }  // namespace qlever::indexRebuilder
 
 // _____________________________________________________________________________
@@ -454,17 +461,21 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::vector<LocalVocabIndex>& entries,
     const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    qlever::Executor executor, const std::string& logFileName) {
+    const std::string& logFileName) {
   using namespace indexRebuilder;
+  namespace net = boost::asio;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
-  // All the work of the rebuild on the `executor` (the scans of the old
-  // permutations and the writers of the new ones) shares a single limit, see
-  // the runtime parameter `rebuild-index-max-num-threads`.
-  executor = ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
-      getRuntimeParameterAsOptional<
-          &RuntimeParameters::rebuildIndexMaxNumThreads_>());
+  // All the work of the rebuild that is posted to an executor (the scans of
+  // the old permutations and the writers of the new ones) runs on a thread
+  // pool of its own, so that it never queues up in front of the tasks of
+  // concurrent queries. Its size is the runtime parameter
+  // `rebuild-index-max-num-threads`.
+  //
+  // NOTE: The pool is declared before everything that its tasks use, so that
+  // its destructor (which joins its threads) runs last.
+  net::thread_pool rebuildPool{getRebuildIndexNumThreads()};
+  qlever::Executor executor = rebuildPool.get_executor();
 
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration
@@ -576,8 +587,6 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   if (maxConcurrentPairs == 0 || maxConcurrentPairs > numberOfPairs) {
     maxConcurrentPairs = numberOfPairs;
   }
-  namespace net = boost::asio;
-
   // Collect the first exception thrown by any worker so it can be rethrown to
   // the caller after `threadPool.join()`. Without this, exceptions escaping a
   // `net::post` handler call `std::terminate` and exceptions from a detached
@@ -633,6 +642,9 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   }
 
   threadPool.join();
+  // Wait for the tasks that are still pending on the `rebuildPool` (for
+  // example, the read-ahead of the scans).
+  rebuildPool.join();
   exceptionCollector.rethrowIfException();
   REBUILD_LOG_INFO << permutationsProgress.getFinalProgressString()
                    << std::flush;
