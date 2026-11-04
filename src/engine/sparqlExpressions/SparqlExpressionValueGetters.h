@@ -40,8 +40,6 @@ enum class CRSType : uint8_t;
 
 namespace sparqlExpression::detail {
 
-constexpr inline util::geo::CRSType crsTypeUnsupported{0};
-
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
 
@@ -439,6 +437,10 @@ struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
 using UnitOfMeasurementValueGetter =
     EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
                     UnitOfMeasurement::UNKNOWN>;
+
+// As `util` is not included in this file, we use this constant instead of
+// `util::geo::CRSType::UNSUPPORTED`.
+constexpr inline util::geo::CRSType crsTypeUnsupported{0};
 using CRSTypeValueGetter =
     EnumValueGetter<&ad_utility::detail::iriToCrsType, crsTypeUnsupported>;
 

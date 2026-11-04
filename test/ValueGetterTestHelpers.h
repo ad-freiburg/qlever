@@ -301,6 +301,8 @@ inline TestContextWithGivenTTl getContext() {
     return TestContextWithGivenTTl{unitTtl};
   } else if constexpr (std::is_same_v<EnumT, ::util::geo::CRSType>) {
     return TestContextWithGivenTTl{crsTtl};
+  } else {
+    static_assert(ad_utility::alwaysFalse<EnumT>);
   }
 }
 

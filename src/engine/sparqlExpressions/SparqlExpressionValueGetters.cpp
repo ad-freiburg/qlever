@@ -16,10 +16,14 @@
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "rdfTypes/Literal.h"
 #include "util/ParsedUri.h"
 
+// `util` is only included in this file and not in
+// `SparqlExpressionValueGetters.h`. There, `CRSTypeValueGetter` can only be
+// declared using a forward declaration of `util::geo::CRSType` and a constant
+// `crsTypeUnsupported`. We need to check that the constant actually matches
+// `CRSType::UNSUPPORTED`.
 static_assert(sparqlExpression::detail::crsTypeUnsupported ==
               ::util::geo::CRSType::UNSUPPORTED);
 
@@ -753,6 +757,7 @@ template struct TypeErasedValueGetter<ToNumericValueGetter>;
 template struct TypeErasedValueGetter<DatatypeValueGetter>;
 template struct TypeErasedValueGetter<IriValueGetter>;
 template struct TypeErasedValueGetter<UnitOfMeasurementValueGetter>;
+template struct TypeErasedValueGetter<CRSTypeValueGetter>;
 template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
 template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;

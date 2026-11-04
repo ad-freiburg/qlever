@@ -61,16 +61,6 @@ namespace ad_utility {
 
 namespace detail {
 
-// Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
-// included in this header).
-//
-// NOTE: The underlying type must match the definition in the util's
-// `geo/Geo.h`. A mismatch does not compile, because `GeoSparqlHelpers.cpp`
-// includes both declarations.
-namespace util::geo {
-enum class CRSType : uint8_t;
-}
-
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
 
