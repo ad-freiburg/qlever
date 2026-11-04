@@ -123,6 +123,28 @@ TEST(TaskQueueOnExecutor, destructorWaitsForAllTasks) {
   EXPECT_EQ(counter.load(), numTasks);
 }
 
+// Test that the captures of a task are destroyed before `finish()` returns, so
+// that they may refer to objects that are destroyed right after the queue (for
+// example a reservation of a `MemoryBudget` in the vocabulary merger).
+TEST(TaskQueueOnExecutor, capturesAreDestroyedBeforeFinishReturns) {
+  net::thread_pool pool{4};
+  std::atomic<size_t> numDestroyedCaptures = 0;
+  constexpr size_t numTasks = 10;
+  TaskQueueOnExecutor queue{pool.get_executor(), 3, "capturesAreDestroyed"};
+  for (size_t i = 0; i < numTasks; ++i) {
+    // The deleter of the `shared_ptr` runs once, when the last copy of the
+    // capture is destroyed. It sleeps first, so that a `finish()` that does
+    // not wait for the destruction of the captures returns too early.
+    std::shared_ptr<void> capture{nullptr, [&numDestroyedCaptures](void*) {
+                                    std::this_thread::sleep_for(shortTimeout);
+                                    ++numDestroyedCaptures;
+                                  }};
+    queue.push([capture = std::move(capture)]() {});
+  }
+  queue.finish();
+  EXPECT_EQ(numDestroyedCaptures.load(), numTasks);
+}
+
 // _____________________________________________________________________________
 TEST(TaskQueueOnExecutor, inFlightBoundIsRespected) {
   // A single thread, so that at most one task runs at a time, and a bound of
