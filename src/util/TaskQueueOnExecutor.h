@@ -132,9 +132,16 @@ class TaskQueueOnExecutor {
   // escapes the worker thread). Use `submit` below if the exception should
   // instead be propagated to the pushing thread. The *scheduling* of the task
   // also terminates if it throws, see below.
+  //
+  // NOTE: The task (and thus everything it has captured) is destroyed before
+  // its slot is released. Once `finish()` (or the destructor) has returned, no
+  // thread of the executor therefore still touches anything that a task of
+  // this queue has captured, so the captures may refer to objects that are
+  // destroyed right after the queue.
   void push(Task task) {
     pushAsync([task = std::move(task)](Done done) mutable {
       task();
+      task = nullptr;
       std::invoke(std::move(done));
     });
   }
