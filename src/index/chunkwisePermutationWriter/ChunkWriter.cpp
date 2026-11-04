@@ -16,6 +16,7 @@
 #include <algorithm>
 
 #include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
+#include "util/ExceptionHandling.h"
 #include "util/views/UniqueBlockView.h"
 
 namespace chunkwisePermutationWriter {
@@ -76,14 +77,18 @@ ChunkWriter::ChunkWriter(ChunkWriterContext& context, size_t chunkIndex,
 
 // _____________________________________________________________________________
 ChunkWriter::~ChunkWriter() {
-  const auto& pool = context_.writer1_.blockBufferPool();
-  pool->giveBack(std::move(relation_));
-  // The `smallRelations_` are empty if the chunk was finished (see
-  // `finishChunk`), but not if it was destroyed early (e.g. because of an
-  // exception), in which case its buffer is simply freed.
-  if (smallRelations_.empty()) {
-    pool->giveBack(std::move(smallRelations_).releaseBuffer());
-  }
+  ad_utility::terminateIfThrows(
+      [this] {
+        const auto& pool = context_.writer1_.blockBufferPool();
+        pool->giveBack(std::move(relation_));
+        // The `smallRelations_` are empty if the chunk was finished (see
+        // `finishChunk`), but not if it was destroyed early (e.g. because of
+        // an exception), in which case its buffer is simply freed.
+        if (smallRelations_.empty()) {
+          pool->giveBack(std::move(smallRelations_).releaseBuffer());
+        }
+      },
+      "Destroying a `ChunkWriter` failed.");
 }
 
 // _____________________________________________________________________________
