@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -95,6 +96,32 @@ TEST(RuntimeParameters, permutationWriterNumBlocksInFlightIsStrictlyPositive) {
   EXPECT_NO_THROW(
       params.setFromAssignment("permutation-writer-num-blocks-in-flight=1"));
   EXPECT_EQ(params.permutationWriterNumBlocksInFlight_.get(), 1u);
+}
+
+// Test the defaults of the parameters for rejecting queries that wait too long
+// for a free thread of the query thread pool, and that the status code must be
+// a known HTTP error code (an unknown code would be sent as status 0).
+TEST(RuntimeParameters, queryQueueFullStatusCodeIsKnownErrorCode) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.queryQueueMaxWait_.get(), std::chrono::milliseconds{1000});
+  EXPECT_EQ(params.queryQueueFullStatusCode_.get(), 429u);
+  EXPECT_EQ(params.queryQueueFullRetryAfter_.get(), std::chrono::seconds{5});
+
+  // Known error codes of class 4xx and 5xx are accepted.
+  EXPECT_NO_THROW(params.setFromAssignment("query-queue-full-status-code=503"));
+  EXPECT_EQ(params.queryQueueFullStatusCode_.get(), 503u);
+  EXPECT_NO_THROW(params.setFromAssignment("query-queue-full-status-code=429"));
+
+  // A success code, a code of another class and an unknown code are rejected.
+  for (std::string_view code : {"200", "302", "499", "600", "0"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        params.setFromAssignment(
+            absl::StrCat("query-queue-full-status-code=", code)),
+        AllOf(HasSubstr("query-queue-full-status-code"),
+              HasSubstr("known HTTP status code of class 4xx or 5xx")),
+        std::runtime_error);
+  }
+  EXPECT_EQ(params.queryQueueFullStatusCode_.get(), 429u);
 }
 
 // Test the default of `sort-num-tasks-in-flight` and that the value `0` is
@@ -187,6 +214,9 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.sparqlResultsJsonWithMeta_);
   check(params.materializedViewWriterMemory_);
   check(params.defaultQueryTimeout_);
+  check(params.queryQueueMaxWait_);
+  check(params.queryQueueFullStatusCode_);
+  check(params.queryQueueFullRetryAfter_);
   check(params.sortInMemoryThreshold_);
   check(params.prefilteredOptionalJoin_);
   check(params.enableMaterializedViewQueryRewrite_);

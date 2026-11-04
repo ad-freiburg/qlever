@@ -14,6 +14,7 @@
 #include <absl/strings/str_join.h>
 
 #include <array>
+#include <atomic>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -876,8 +877,9 @@ Awaitable<void> Server::processSparqlOperation(
         // request, so build the execution context from that snapshot here.
         auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
-                              cancellationHandle, *qecPtr, std::move(request),
-                              send, plannedQuery);
+                              cancellationHandle,
+                              queryQueueMaxWait(accessTokenOk), *qecPtr,
+                              std::move(request), send, plannedQuery);
       }
       queryStatus->store(OK);
       co_return;
@@ -885,6 +887,9 @@ Awaitable<void> Server::processSparqlOperation(
       queryStatus->store(e.state() == ad_utility::CancellationState::TIMEOUT
                              ? TIMEOUT
                              : CANCELLED);
+      throw;
+    } catch (const QueryQueueFullError&) {
+      queryStatus->store(REJECTED);
       throw;
     }
   };
@@ -1136,7 +1141,8 @@ CPP_template_def(typename RequestT, typename SendT)(
 Awaitable<void> Server::sendStreamableResponse(
     const RequestT& request, SendT& send, MediaType mediaType,
     const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-    SharedCancellationHandle cancellationHandle) {
+    SharedCancellationHandle cancellationHandle,
+    std::optional<TimeLimit> maxQueueWait) {
   // `computeResult` already computes the first block of the result (see
   // `convertStreamGeneratorForChunkedTransfer`), which might take arbitrarily
   // long, so it must not run on the threads of the `HttpServer`. For the same
@@ -1149,7 +1155,7 @@ Awaitable<void> Server::sendStreamableResponse(
             plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(),
             mediaType, requestTimer, cancellationHandle);
       },
-      cancellationHandle);
+      cancellationHandle, maxQueueWait);
   auto responseGenerator = co_await std::move(coroutine);
 
   auto response = ad_utility::httpUtils::createOkResponse(
@@ -1251,7 +1257,8 @@ Awaitable<void> Server::processQuery(
     const ParamValueMap& params, ParsedQuery&& query,
     const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
-    QueryExecutionContext& qec, const RequestT& request, SendT&& send,
+    std::optional<TimeLimit> maxQueueWait, QueryExecutionContext& qec,
+    const RequestT& request, SendT&& send,
     std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
   ad_utility::metrics::ActiveCounterGuard queryGuard{
@@ -1280,7 +1287,7 @@ Awaitable<void> Server::processQuery(
       [this, &query, &requestTimer, &qec]() -> std::optional<PlannedQuery> {
         return this->planQuery(std::move(query), qec, requestTimer);
       },
-      cancellationHandle);
+      cancellationHandle, maxQueueWait);
   plannedQuery = co_await std::move(coroutine);
   auto qet = plannedQuery.value().queryExecutionTree();
 
@@ -1305,7 +1312,7 @@ Awaitable<void> Server::processQuery(
   // requested format.
   co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
                                   plannedQuery.value(), requestTimer,
-                                  cancellationHandle);
+                                  cancellationHandle, maxQueueWait);
   // Print the runtime info. This needs to be done after the query
   // was computed.
   AD_LOG_INFO << "Done processing query and sending result"
@@ -1544,8 +1551,18 @@ Awaitable<void> Server::processOperation(
   // optional `exceptionErrorMsg`.
   std::optional<std::string> exceptionErrorMsg;
   std::optional<ExceptionMetadata> metadata;
+  // Set for a rejected query (see `QueryQueueFullError`), which tells the
+  // client when to retry.
+  std::optional<std::chrono::seconds> retryAfter;
   try {
     co_return co_await std::visit(visitor, std::move(operation));
+  } catch (const QueryQueueFullError& e) {
+    responseStatus = http::int_to_status(static_cast<unsigned>(
+        getRuntimeParameter<&RuntimeParameters::queryQueueFullStatusCode_>()));
+    retryAfter = std::chrono::seconds{
+        getRuntimeParameter<&RuntimeParameters::queryQueueFullRetryAfter_>()};
+    exceptionErrorMsg = e.what();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::queueFull});
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
@@ -1595,6 +1612,10 @@ Awaitable<void> Server::processOperation(
     }
     auto errResponse =
         createJsonResponse(errorResponseJson, request, responseStatus);
+    if (retryAfter.has_value()) {
+      errResponse.set(http::field::retry_after,
+                      absl::StrCat(std::max(retryAfter->count(), int64_t{0})));
+    }
     co_return co_await send(std::move(errResponse),
                             co_await net::this_coro::executor);
   }
@@ -1605,7 +1626,8 @@ CPP_template_def(typename Function, typename T)(
     requires ql::concepts::invocable<Function>)
 Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
                                         Function function,
-                                        SharedCancellationHandle handle) {
+                                        SharedCancellationHandle handle,
+                                        std::optional<TimeLimit> maxQueueWait) {
   // `interruptible` will set the shared state of this promise
   // with a function that can be used to cancel the timer.
   std::promise<std::function<void()>> cancelTimerPromise{};
@@ -1620,6 +1642,20 @@ Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
     cancelTimerFuture.get()();
     return std::invoke(std::move(function));
   };
+  // With a `maxQueueWait`, the wait for a free thread is bounded, and the
+  // `interruptible` only has to check the cancellation handle meanwhile.
+  if (maxQueueWait.has_value()) {
+    return ad_utility::interruptible(
+        ad_utility::runOnThreadPoolWithQueueDeadline(
+            threadPool, std::move(inner), maxQueueWait.value(),
+            absl::StrCat(
+                "The query was rejected because all ", numThreads_,
+                " threads for processing queries were busy for more than ",
+                ad_utility::ParseableDuration{maxQueueWait.value()}.toString(),
+                " (see the runtime parameter `query-queue-max-wait`). Please "
+                "retry later")),
+        std::move(handle), std::move(cancelTimerPromise));
+  }
   // interruptible doesn't make the awaitable return faster when
   // cancelled, this might still block. However it will make the code
   // check the cancellation handle while waiting for a thread in the
@@ -1628,6 +1664,19 @@ Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
       ad_utility::runFunctionOnExecutor(threadPool.get_executor(),
                                         std::move(inner), net::use_awaitable),
       std::move(handle), std::move(cancelTimerPromise));
+}
+
+// _____________________________________________________________________________
+std::optional<Server::TimeLimit> Server::queryQueueMaxWait(bool accessTokenOk) {
+  if (accessTokenOk) {
+    return std::nullopt;
+  }
+  TimeLimit maxQueueWait =
+      getRuntimeParameter<&RuntimeParameters::queryQueueMaxWait_>();
+  if (maxQueueWait <= TimeLimit::zero()) {
+    return std::nullopt;
+  }
+  return maxQueueWait;
 }
 
 // _____________________________________________________________________________
