@@ -556,6 +556,15 @@ TEST(ChunkWriter, writeRowsOfLargeRelation) {
       EXPECT_EQ(block.lastTriple_.graphId_, V(1));
     }
   }
+  // Writing no rows at all writes no block.
+  for (bool useQueue : {false, true}) {
+    TwinWriters writers{
+        absl::StrCat(gtestCurrentTestName(), ".empty.", useQueue)};
+    ChunkWriter::writeRowsOfLargeRelation(writers.context_.writer1_, V(50),
+                                          makeBlock({}), useQueue);
+    writers.finish();
+    EXPECT_TRUE(writers.blocks1_.empty());
+  }
 }
 
 // _____________________________________________________________________________
@@ -586,33 +595,108 @@ TEST(ChunkWriter, writeSortedBlocksOfLargeRelation) {
 
 // _____________________________________________________________________________
 TEST(ChunkWriter, contextChecksTheWriters) {
-  auto makeWriter = [](const std::string& filename, size_t blocksize) {
-    return CompressedRelationWriter{NUM_COLUMNS,
-                                    ad_utility::File{filename, "w"}, blocksize,
+  auto makeWriter = [](const std::string& filename, size_t blocksize,
+                       size_t numColumns = NUM_COLUMNS) {
+    return CompressedRelationWriter{numColumns, ad_utility::File{filename, "w"},
+                                    blocksize,
                                     ad_utility::testing::multiThreadExecutor()};
   };
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename + ".1", false);
     ad_utility::deleteFile(filename + ".2", false);
+    ad_utility::deleteFile(filename + ".3", false);
   };
   auto writer1 = makeWriter(filename + ".1", BLOCKSIZE);
   auto writer2 = makeWriter(filename + ".2", BLOCKSIZE + 1);
+  auto writer3 = makeWriter(filename + ".3", BLOCKSIZE, NUM_COLUMNS + 1);
   qlever::KeyOrder keyOrder{0, 1, 2, 3};
-  auto makeContext = [&](size_t numColumns) {
+  auto makeContext = [&](CompressedRelationWriter& twin, size_t numColumns) {
     return std::make_unique<ChunkWriterContext>(
-        writer1, writer2, 0,
+        writer1, twin, 0,
         compressedRelationHelpers::permutedColIndices(keyOrder, numColumns),
         false, filename, ad_utility::MemorySize::kilobytes(100));
   };
   // The writers have different blocksizes.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      makeContext(NUM_COLUMNS),
+      makeContext(writer2, NUM_COLUMNS),
       ::testing::HasSubstr("writer1.blocksize() == writer2.blocksize()"));
   // The column indices don't match the number of columns of the writers.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      makeContext(NUM_COLUMNS + 1),
+      makeContext(writer2, NUM_COLUMNS + 1),
       ::testing::HasSubstr("permutedColIndices_.size()"));
+  // The writers have different numbers of columns.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeContext(writer3, NUM_COLUMNS),
+      ::testing::HasSubstr("writer1.numColumns() == writer2.numColumns()"));
+}
+
+// _____________________________________________________________________________
+TEST(ChunkWriter, smallRelationsFillSeveralBlocks) {
+  // The small relations of a chunk together have more rows than a single block
+  // of small relations can hold, so they are written as several blocks, both
+  // when they are batched directly from the input blocks and when they are
+  // buffered first.
+  std::vector<TestRows> relations;
+  for (int64_t col0 = 70; col0 < 76; ++col0) {
+    relations.push_back(relation(col0, 6));
+  }
+  auto rows = concat(relations);
+  for (size_t inputBlockSize : {5ul, 1000ul}) {
+    TwinWriters writers{
+        absl::StrCat(gtestCurrentTestName(), ".", inputBlockSize)};
+    ChunkResult result;
+    {
+      ChunkWriter writer{writers.context_, 0, 1};
+      result = processRows(writer, rows, inputBlockSize);
+    }
+    writers.finish();
+    EXPECT_EQ(result.numMiddleRelations_, relations.size());
+    EXPECT_TRUE(result.middleMetadata_.empty());
+    EXPECT_GE(writers.blocks1_.size(), 2);
+    EXPECT_GE(writers.blocks2_.size(), 2);
+    for (const auto& rel : relations) {
+      writers.expectCompleteRelation(rel.front()[0], rel);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ChunkWriter, emptyChunk) {
+  // A chunk without any input (for example because all its rows were removed
+  // as duplicates) has no parts and writes nothing.
+  for (size_t chunkIndex : {0ul, 1ul, 2ul}) {
+    TwinWriters writers{absl::StrCat(gtestCurrentTestName(), ".", chunkIndex)};
+    ChunkResult result;
+    {
+      ChunkWriter writer{writers.context_, chunkIndex, 3};
+      result = writer.finishChunk();
+    }
+    writers.finish();
+    EXPECT_FALSE(result.firstPart_.has_value());
+    EXPECT_FALSE(result.lastPart_.has_value());
+    EXPECT_EQ(result.numRows_, 0);
+    EXPECT_EQ(result.numMiddleRelations_, 0);
+    EXPECT_TRUE(result.middleMetadata_.empty());
+    EXPECT_TRUE(writers.blocks1_.empty());
+    EXPECT_TRUE(writers.blocks2_.empty());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ChunkWriter, destroyUnfinishedChunk) {
+  // A chunk that is destroyed before `finishChunk` (e.g. because of an
+  // exception) while it still buffers small relations must neither throw nor
+  // write the buffered relations.
+  auto rows = concat({relation(80, 6), relation(81, 6), relation(82, 6)});
+  TwinWriters writers{gtestCurrentTestName()};
+  {
+    ChunkWriter writer{writers.context_, 0, 1};
+    EXPECT_NE(writer.processBlock(makeBlock(rows)), nullptr);
+  }
+  writers.finish();
+  EXPECT_TRUE(writers.blocks1_.empty());
+  EXPECT_TRUE(writers.blocks2_.empty());
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

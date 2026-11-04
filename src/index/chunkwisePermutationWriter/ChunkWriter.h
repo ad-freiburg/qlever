@@ -335,7 +335,8 @@ class ChunkWriter : public RelationBlockCutter<ChunkWriter>,
   // of the twin. This is the counterpart of
   // `CompressedRelationWriter::addCompleteLargeRelation` for the chunks, which
   // run on the pool and therefore must neither use the (blocking) block write
-  // queue nor the (not thread-safe) bookkeeping of the `writer`.
+  // queue nor the (not thread-safe) bookkeeping of the `writer`. The `blocks`
+  // must contain at least one row.
   static CompressedRelationMetadata writeSortedBlocksOfLargeRelation(
       CompressedRelationWriter& writer, Id col0Id,
       ad_utility::InputRangeTypeErased<Block> blocks);

@@ -203,9 +203,11 @@ void ChunkWriter::writeBlockOfLargeRelation(IdTableView<0> block,
 
 // _____________________________________________________________________________
 void ChunkWriter::addBlockForLargeRelation() {
-  if (relation_.empty()) {
-    return;
-  }
+  // NOTE: Unlike the general contract of the hook (see `RelationBlockCutter`),
+  // the buffer is never empty here: the cutter only writes a block directly
+  // from the input if the relation continues after it, so the last rows of a
+  // relation always end up in the buffer.
+  AD_CORRECTNESS_CHECK(!relation_.empty());
   if (sizeOfFirstRelationIsUndecided()) {
     // The first block of the first relation of the chunk is kept in memory,
     // because it has to be consolidated with the end of the previous chunk.
@@ -322,13 +324,14 @@ void ChunkWriter::finishFirstRelation(bool reachesChunkEnd) {
     // `addBlockForLargeRelation` would otherwise capture them as a new head.
     std::optional<IdTable> tail;
     if (reachesChunkEnd) {
-      if (!relation_.empty()) {
-        auto tailView = relation_.asStaticView<0>();
-        countRowsOfCurrentRelation(tailView);
-        pushTwinRows(tailView);
-        tail = std::move(relation_);
-        relation_ = context_.writer1_.takeBlockBuffer();
-      }
+      // The last rows of a relation are always buffered, see
+      // `addBlockForLargeRelation`.
+      AD_CORRECTNESS_CHECK(!relation_.empty());
+      auto tailView = relation_.asStaticView<0>();
+      countRowsOfCurrentRelation(tailView);
+      pushTwinRows(tailView);
+      tail = std::move(relation_);
+      relation_ = context_.writer1_.takeBlockBuffer();
     } else {
       // The relation ends inside this chunk, so its remaining rows are its
       // last block, which can be written directly.
@@ -367,13 +370,14 @@ void ChunkWriter::finishLastRelation() {
     // been written directly, so there are no rows before the first block.
     part.emplace(col0Id,
                  IdTable{context_.numColumns(), relation_.getAllocator()});
-    if (!relation_.empty()) {
-      auto tailView = relation_.asStaticView<0>();
-      countRowsOfCurrentRelation(tailView);
-      pushTwinRows(tailView);
-      part->rowsAfterWrittenBlocks_ = std::move(relation_);
-      relation_ = context_.writer1_.takeBlockBuffer();
-    }
+    // The last rows of a relation are always buffered, see
+    // `addBlockForLargeRelation`.
+    AD_CORRECTNESS_CHECK(!relation_.empty());
+    auto tailView = relation_.asStaticView<0>();
+    countRowsOfCurrentRelation(tailView);
+    pushTwinRows(tailView);
+    part->rowsAfterWrittenBlocks_ = std::move(relation_);
+    relation_ = context_.writer1_.takeBlockBuffer();
     part->twinSorter_ = std::move(twinSorter_);
     AD_CORRECTNESS_CHECK(part->twinSorter_ != nullptr);
   }
@@ -461,9 +465,10 @@ CompressedRelationMetadata ChunkWriter::writeSortedBlocksOfLargeRelation(
       writeBlock(std::move(complete).value());
     }
   }
-  if (auto last = alignedBlocks.finish()) {
-    writeBlock(std::move(last).value());
-  }
+  // A large relation is never empty, so there always is a last block.
+  auto last = alignedBlocks.finish();
+  AD_CORRECTNESS_CHECK(last.has_value());
+  writeBlock(std::move(last).value());
   return CompressedRelationWriter::makeLargeRelationMetadata(
       col0Id, numRows, distinctCol1Counter.getAndReset());
 }
