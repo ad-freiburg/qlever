@@ -39,8 +39,6 @@ constexpr std::string_view litPointWGS84 =
 constexpr std::string_view litPointWebMerc =
     "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.4723798207 "
     "445640.10965602624)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-constexpr std::string_view litPointOutOfRange =
-    "\"POINT(200 200)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
     "\"LINESTRING(2 2,4 4)\""
@@ -657,12 +655,11 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   // No CRS type given.
   EXPECT_FALSE(getWithSourceCrs<Centroid>(centroidExp1, std::nullopt));
   EXPECT_FALSE(getWithSourceCrs<BoundingBox>(bbExp1, std::nullopt));
-  // Parse result = `std::nullopt`.
-  EXPECT_FALSE(getWithSourceCrs<Centroid>(litPointEmpty));
-  EXPECT_FALSE(getWithSourceCrs<BoundingBox>(litPointEmpty));
-  // Coordinates out of range for Centroid.
-  EXPECT_FALSE(getWithSourceCrs<Centroid>(litPointOutOfRange));
-  EXPECT_FALSE(getWithSourceCrs<BoundingBox>(litPointOutOfRange));
+  // No `Centroid`/`BoundingBox` given.
+  EXPECT_FALSE(
+      getWithSourceCrs<Centroid>(std::nullopt, SourceCrsType{CRSType::CRS84}));
+  EXPECT_FALSE(getWithSourceCrs<BoundingBox>(std::nullopt,
+                                             SourceCrsType{CRSType::CRS84}));
 }
 
 // ____________________________________________________________________________

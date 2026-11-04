@@ -374,11 +374,9 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
     return getMetricArea();
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return getSerializationType();
-  } else if constexpr (std::is_same_v<RequestedInfo, WithSourceCrs<Centroid>>) {
-    return detail::getWithSourceCrs(getCentroid(), getSourceCrsType());
-  } else if constexpr (std::is_same_v<RequestedInfo,
-                                      WithSourceCrs<BoundingBox>>) {
-    return detail::getWithSourceCrs(getBoundingBox(), getSourceCrsType());
+  } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
+    return detail::getWithSourceCrs(
+        getRequestedInfo<decltype(RequestedInfo::info_)>(), getSourceCrsType());
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -431,11 +429,10 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
     return GeometryInfo::getMetricArea(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return GeometryInfo::getSerializationType(wkt);
-  } else if constexpr (std::is_same_v<RequestedInfo, WithSourceCrs<Centroid>>) {
-    return detail::getWithSourceCrs<Centroid>(wkt);
-  } else if constexpr (std::is_same_v<RequestedInfo,
-                                      WithSourceCrs<BoundingBox>>) {
-    return detail::getWithSourceCrs<BoundingBox>(wkt);
+  } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
+    return detail::getWithSourceCrs(
+        getRequestedInfo<decltype(RequestedInfo::info_)>(wkt),
+        getSourceCrsType(wkt));
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }

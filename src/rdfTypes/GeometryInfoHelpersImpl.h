@@ -280,36 +280,13 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
 // Helper for `getRequestedInfo()` that constructs the result `WithSourceCrs<T>`
 // with T = `Centroid` or `BoundingBox`. This is supposed to be used with
 // `getCentroid/BoundingBox` and `getSourceCrsType` as inputs.
-CPP_template(typename T)(requires WithSourceCrsT<T>)
+template <typename T>
 inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
-    T info, std::optional<SourceCrsType> crs) {
-  if (!crs.has_value()) {
+    std::optional<T> info, std::optional<SourceCrsType> crs) {
+  if (!info.has_value() || !crs.has_value()) {
     return std::nullopt;
   }
-  return WithSourceCrs<T>{info, crs.value()};
-}
-
-// Helper for `getRequestedInfo(std::string_view wkt)` to construct a
-// `WithSourceCrs<T>` with T = `Centroid` or `BoundingBox`.
-CPP_template(typename T)(requires WithSourceCrsT<T>)
-inline std::optional<WithSourceCrs<T>> getWithSourceCrs(std::string_view wkt) {
-  auto parseResult = detail::parseWkt(wkt);
-  if (!parseResult.parsedWkt_.has_value()) {
-    return std::nullopt;
-  }
-  std::optional<T> result;
-  if constexpr (std::is_same_v<T, Centroid>) {
-    result = detail::centroidAsGeoPoint(parseResult.parsedWkt_.value());
-  } else if constexpr (std::is_same_v<T, BoundingBox>) {
-    result = detail::boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
-  } else {
-    static_assert(ad_utility::alwaysFalse<T>);
-  }
-  if (!result.has_value()) {
-    return std::nullopt;
-  }
-  return WithSourceCrs<T>{result.value(),
-                          SourceCrsType{parseResult.sourceCrs_}};
+  return WithSourceCrs<T>{info.value(), crs.value()};
 }
 
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
