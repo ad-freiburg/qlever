@@ -19,10 +19,6 @@
 // of its language tag
 constexpr inline size_t MAX_INTERNAL_LITERAL_BYTES = 1'000'000;
 
-// How many lines are parsed at once during index creation.
-// Reduce to save RAM
-constexpr inline int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
-
 // That many triples does the turtle parser have to buffer before the call to
 // `getBatch` returns (unless our input reaches EOF). This makes parsing from
 // streams faster.

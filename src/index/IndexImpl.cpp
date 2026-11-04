@@ -83,8 +83,7 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
-  auto indexBuilderData =
-      passFileForVocabulary(std::move(files), numTriplesPerBatch_, numThreads);
+  auto indexBuilderData = passFileForVocabulary(std::move(files), numThreads);
 
   auto isQleverInternalTriple = [&indexBuilderData](const auto& triple) {
     auto internal = [&indexBuilderData](Id id) {
@@ -577,18 +576,24 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    size_t linesPerPartial, size_t numThreads) {
+    size_t numThreads) {
   AD_CONTRACT_CHECK(numThreads > 0,
                     "The number of threads for the index build must be at "
                     "least 1");
 
-  AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
-                 "per batch, using "
+  AD_LOG_INFO << "Parsing input triples and creating partial vocabularies "
+                 "using "
               << numThreads << " threads ..." << std::endl;
 
   using namespace qlever::partialVocabularyBuilder;
+  FirstPassMemoryBudget budget{
+      computeMemoryPerTaskChain(memoryLimitIndexBuilding(), parserBufferSize(),
+                                numThreads),
+      maxTriplesPerPartialVocabularyOnlyForTesting_};
+  AD_LOG_DEBUG << "Memory per thread for the partial vocabularies: "
+               << budget.memoryPerTaskChain_.asString() << std::endl;
   FirstPassSharedState<IndexImpl> shared{this, &vocab_.getCaseComparator(),
-                                         linesPerPartial};
+                                         budget};
   // The thread pool and the parser are owned by `runTaskChains`, which only
   // returns once no asynchronous operation is left.
   runTaskChains(shared, numThreads,
@@ -626,9 +631,8 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 // _____________________________________________________________________________
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    size_t linesPerPartial, size_t numThreads) {
-  auto parsedTriples =
-      buildPartialVocabularies(std::move(files), linesPerPartial, numThreads);
+    size_t numThreads) {
+  auto parsedTriples = buildPartialVocabularies(std::move(files), numThreads);
   size_t numPartialVocabularies = parsedTriples.numPartialVocabularies_;
 
   size_t sizeInternalVocabulary = 0;
@@ -660,9 +664,6 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   deletePartialVocabularyWordsFiles(
       onDiskBase_, numPartialVocabularies,
       [this](const std::string& filename) { deleteTemporaryFile(filename); });
-
-  AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
-               << std::endl;
 
   return {std::move(mergeRes), std::move(parsedTriples)};
 }
@@ -796,21 +797,13 @@ auto IndexImpl::convertPartialToGlobalIds(
 
   // Each worker repeatedly claims the next partial vocabulary from a shared
   // counter and holds the ID map and all the triples of that partial
-  // vocabulary in RAM. Their number is therefore bounded by `numThreads`, and
-  // additionally such that the triples of all the workers together fit into
-  // the memory limit of the index build (the ID maps are much smaller than the
-  // triples and are not accounted for). There is always at least one worker.
-  // NOTE: For the usual batch sizes (5 to 10 million triples) and the default
-  // memory limit, the memory bound is far above the usual number of threads
-  // and hence irrelevant.
+  // vocabulary in RAM. Their number is bounded by `numThreads`. This also
+  // keeps the memory within the limit of the index build: in the first pass,
+  // the same number of threads held the same triples together with their
+  // partial vocabularies (which are much larger than the ID maps), see
+  // `buildPartialVocabularies`. There is always at least one worker.
   std::atomic<size_t> nextPartialVocabIdx = 0;
-  size_t triplesBytesPerWorker =
-      numTriplesPerBatch_ * NumColumnsIndexBuilding * BYTES_PER_ID_COLUMN_ENTRY;
-  size_t numWorkersThatFitInMemory =
-      std::max<size_t>(1, memoryLimitIndexBuilding().getBytes() /
-                              std::max<size_t>(1, triplesBytesPerWorker));
-  size_t numWorkers = std::min(
-      {data.numPartialVocabularies_, numThreads, numWorkersThatFitInMemory});
+  size_t numWorkers = std::min(data.numPartialVocabularies_, numThreads);
   auto tasks =
       ad_utility::integerRange(numWorkers) |
       ql::views::transform([&convertTriplesOfPartialVocabulary,
@@ -1830,12 +1823,15 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     AD_LOG_INFO << WARNING_PARALLEL_PARSING << std::endl;
   }
 
+  // The size of the partial vocabularies of the first pass is determined by
+  // the memory limit of the index build, the `num-triples-per-batch` setting
+  // is ignored.
   if (j.count("num-triples-per-batch")) {
-    numTriplesPerBatch_ = size_t{j["num-triples-per-batch"]};
-    AD_LOG_INFO
-        << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
-        << "\", choose a lower value if the index builder runs out of memory"
-        << std::endl;
+    AD_LOG_WARN << "The setting \"num-triples-per-batch\" is deprecated and "
+                   "ignored; the size of the partial vocabularies is now "
+                   "determined by the memory limit of the index build "
+                   "(command-line option `--stxxl-memory`)"
+                << std::endl;
   }
 
   std::string overflowingIntegersThrow = "overflowing-integers-throw";

@@ -51,7 +51,7 @@ qlever::Executor multiThreadExecutor() {
 // ______________________________________________________________
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.setNumTriplesPerBatch(2);
+  index.setMaxTriplesPerPartialVocabularyOnlyForTesting(2);
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but

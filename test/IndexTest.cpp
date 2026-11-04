@@ -446,9 +446,9 @@ TEST(IndexTest, emptyIndex) {
 // `IndexImpl::buildPartialVocabularies`) with the number of threads set to `1`
 // (a single task chain, i.e. no racing for batches from the parser) and to `3`
 // (several task chains racing for batches). Together with the
-// `numTriplesPerBatch_` of `2` that `IndexTestHelpers.cpp` sets for all test
-// indices, the 7 triples below already span several partial vocabularies for
-// both configurations.
+// `maxTriplesPerPartialVocabularyOnlyForTesting_` of `2` that
+// `IndexTestHelpers.cpp` sets for all test indices, the 7 triples below already
+// span several partial vocabularies for both configurations.
 // _____________________________________________________________________________
 TEST(IndexTest, buildPartialVocabulariesFirstPassNumThreads) {
   using enum Permutation::Enum;
@@ -1199,6 +1199,38 @@ TEST(IndexTest, parallelParsingFromSettingsFile) {
   EXPECT_NO_THROW(buildIndex(false));
   AD_EXPECT_THROW_WITH_MESSAGE(buildIndex(true),
                                ::testing::HasSubstr("multiline string"));
+}
+
+// Test that the deprecated `num-triples-per-batch` in the settings file only
+// logs a warning and is otherwise ignored.
+TEST(IndexTest, numTriplesPerBatchInSettingsFileIsIgnored) {
+  std::string basename = gtestCurrentTestName();
+  std::string settingsFilename = basename + ".settings.json";
+  absl::Cleanup cleanup = [&basename, &settingsFilename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+    ad_utility::deleteFile(settingsFilename);
+  };
+  ad_utility::makeOfstream(basename + ".ttl") << "<s> <p> <o1>, <o2> .\n";
+  ad_utility::makeOfstream(settingsFilename)
+      << nlohmann::json{{"num-triples-per-batch", 1}};
+  {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.setSettingsFile(settingsFilename);
+    index.createFromFiles(
+        {qlever::InputFileSpecification{
+            basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
+        1);
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(
+                    "\"num-triples-per-batch\" is deprecated and ignored"));
+  }
+  Index index = makeIndexWithTestSettings();
+  index.createFromOnDiskIndex(basename, false);
+  EXPECT_EQ(index.numTriples().normal, 2u);
 }
 
 // Test that an index can be built from a type-erased range of input files.

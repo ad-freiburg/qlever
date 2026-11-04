@@ -62,11 +62,11 @@ namespace ad_utility::vocabulary_merger::detail {
 // vocabulary, and the segment-local ID of the merged word.
 //
 // NOTE: The index in the partial vocabulary is stored in 32 bits, so that the
-// entry is 16 bytes. This is safe, because a partial vocabulary holds the
-// words of a single batch of the parser (`NUM_TRIPLES_PER_PARTIAL_VOCAB`
-// triples by default, see `index/ConstantsIndexBuilding.h`; at most three
-// words per triple), which has to fit into memory and is thus far below four
-// billion words. The limit is also checked when an entry is created, see
+// entry is 16 bytes. This is safe, because a partial vocabulary has to fit
+// into memory and is thus far below four billion words; additionally, the
+// first pass writes a partial vocabulary at the latest once it has
+// `MAX_WORDS_PER_PARTIAL_VOCABULARY` words (see `PartialVocabularyBuilder.h`).
+// The limit is also checked when an entry is created, see
 // `SegmentBuilder::commitPendingWord`.
 struct SegmentIdMapEntry {
   uint32_t partialVocabularyIndex_;

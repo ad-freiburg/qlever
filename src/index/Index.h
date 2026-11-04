@@ -214,7 +214,9 @@ class Index {
 
   void setSettingsFile(const std::string& filename);
 
-  void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
+  // See `IndexImpl::maxTriplesPerPartialVocabularyOnlyForTesting_`.
+  void setMaxTriplesPerPartialVocabularyOnlyForTesting(
+      std::optional<size_t> maxTriples);
 
   const std::string& getTextName() const;
   const std::string& getKbName() const;
