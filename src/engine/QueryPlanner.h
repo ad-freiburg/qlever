@@ -723,6 +723,7 @@ class QueryPlanner {
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
+    void visitRasterLookup(parsedQuery::RasterQuery& rasterQuery);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitExternalValues(const parsedQuery::ExternalValuesQuery& config);

@@ -52,6 +52,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
+#include "engine/RasterLookup.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -3338,6 +3339,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitTextSearch(arg);
   } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
     visitExternalValues(arg);
+  } else if constexpr (std::is_same_v<T, p::RasterQuery>) {
+    visitRasterLookup(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3475,6 +3478,34 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     candidatesOut.push_back(std::move(plan));
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitRasterLookup(
+    parsedQuery::RasterQuery& rasterQuery) {
+#ifdef QLEVER_USE_GDAL
+  auto config = rasterQuery.toRasterLookupConfiguration();
+
+  // Guaranteed by `RasterQuery::validate`.
+  AD_CORRECTNESS_CHECK(rasterQuery.childGraphPattern_.has_value());
+  std::vector<SubtreePlan> candidatesIn =
+      planner_.optimize(&rasterQuery.childGraphPattern_.value());
+  std::vector<SubtreePlan> candidatesOut;
+
+  // One `RasterLookup` on top of each plan for the group graph pattern.
+  for (auto& sub : candidatesIn) {
+    auto rasterLookup =
+        qec_->makeShared<RasterLookup>(qec_, std::move(sub._qet), config);
+    candidatesOut.push_back(
+        makeSubtreePlan<RasterLookup>(std::move(rasterLookup)));
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+#else
+  (void)rasterQuery;
+  throw std::runtime_error(
+      "Raster lookups are not supported, because this QLever was built "
+      "without GDAL (CMake option `USE_GDAL`)");
+#endif
 }
 
 // _______________________________________________________________

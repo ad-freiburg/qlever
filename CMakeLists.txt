@@ -403,6 +403,7 @@ option(USE_GDAL "Enable raster lookups on GeoTIFF files (requires GDAL >= 3.8)" 
 if (USE_GDAL)
     find_package(GDAL 3.8 CONFIG REQUIRED)
     MESSAGE(STATUS "Found GDAL ${GDAL_VERSION}, enabling raster support")
+    add_compile_definitions(QLEVER_USE_GDAL)
 endif ()
 
 ### ZSTD
