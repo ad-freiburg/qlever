@@ -109,7 +109,8 @@ class AsyncBlockWriterPerSubVocabulary {
 
   BlockWriterBase& blockWriter_;
   AsyncBlockWriterSharedState& sharedState_;
-  boost::asio::strand<qlever::Executor> strand_;
+  boost::asio::strand<qlever::Executor> strand_{
+      boost::asio::make_strand(ad_utility::globalExecutor())};
   // The number of blocks registered so far, which is the index of the next
   // one. Only touched on the `strand_`.
   size_t numBlocks_ = 0;
@@ -131,7 +132,6 @@ class AsyncBlockWriterPerSubVocabulary {
                                    size_t maxNumPendingBlocks)
       : blockWriter_{blockWriter},
         sharedState_{sharedState},
-        strand_{boost::asio::make_strand(ad_utility::globalExecutor())},
         queue_{strand_, maxNumPendingBlocks, "Writing the merged vocabulary"} {}
 
   // Write the next `block`. Block while the maximal number of blocks is
@@ -173,13 +173,9 @@ class AsyncBlockWriterPerSubVocabulary {
     return [this, block = std::move(block)]() mutable {
       auto measurement = sharedState_.prepareBusyTime_.startMeasurement();
       // The pieces keep (parts of) their segments alive, which are no longer
-      // needed once the words are gathered. They are moved into a local, so
-      // that they are also released if `gatherWords` throws, before the
-      // completion handler is posted (which may let the writer and the memory
-      // budget be destroyed).
-      BlockPieces pieces = std::move(block);
-      WordBlock words = gatherWords(pieces);
-      pieces = BlockPieces{};
+      // needed once the words are gathered (they are released by
+      // `gatherWords`, before the completion handler is posted).
+      WordBlock words = gatherWords(std::move(block));
       // With the pieces, the reservations of their segments may be gone, so
       // the gathered `words` are accounted for here, until `prepare` has
       // consumed them (this keeps `prepare` independent of the budget). The
@@ -298,7 +294,7 @@ class AsyncBlockWriter {
   // that one of the tasks threw, if any. After this, no more blocks may be
   // pushed. The `writer` is not finished.
   void finish() {
-    for (auto& subVocabularyWriter : subVocabularyWriters_) {
+    for (const auto& subVocabularyWriter : subVocabularyWriters_) {
       subVocabularyWriter->finish();
     }
     sharedState_.exceptionCollector_.rethrowIfException();
