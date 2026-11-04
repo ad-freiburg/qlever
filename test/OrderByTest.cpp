@@ -800,14 +800,17 @@ TEST(OrderBy, limitPushedIntoIndexScanAfterDeletions) {
   auto g = getId(std::string(DEFAULT_GRAPH_IRI));
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
+  // `deleteTriples` requires the triples to be sorted.
+  DeltaTriples::Triples triplesToDelete{
+      IdTriple<0>{
+          {getId("<s1>"), getId("<p>"), ad_utility::testing::IntId(1), g}},
+      IdTriple<0>{
+          {getId("<s2>"), getId("<p>"), ad_utility::testing::IntId(-7), g}},
+      IdTriple<0>{
+          {getId("<s0>"), getId("<r>"), ad_utility::testing::IntId(0), g}}};
+  ql::ranges::sort(triplesToDelete);
   index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
-    deltaTriples.deleteTriples(
-        cancellationHandle, {IdTriple<0>{{getId("<s1>"), getId("<p>"),
-                                          ad_utility::testing::IntId(1), g}},
-                             IdTriple<0>{{getId("<s2>"), getId("<p>"),
-                                          ad_utility::testing::IntId(-7), g}},
-                             IdTriple<0>{{getId("<s0>"), getId("<r>"),
-                                          ad_utility::testing::IntId(0), g}}});
+    deltaTriples.deleteTriples(cancellationHandle, std::move(triplesToDelete));
   });
   QueryResultCache cache;
   NamedResultCache namedCache;
