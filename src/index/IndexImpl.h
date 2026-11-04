@@ -150,6 +150,11 @@ class IndexImpl {
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
 
+  // If not empty, the `ql:has-word` triples are only added for literals that
+  // are the object of a triple with one of these predicates (IRIs in the format
+  // of `Iri::toStringRepresentation`, sorted and without duplicates).
+  std::vector<std::string> hasWordRestrictPredicates_;
+
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
   NumNormalAndInternal numSubjects_;
@@ -452,6 +457,10 @@ class IndexImpl {
   void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
     hasWordNormalization_ = normalization;
   }
+
+  // Set the `hasWordRestrictPredicates_`. Throw if one of them is not a valid
+  // IRI in angle brackets.
+  void setHasWordRestrictPredicates(const std::vector<std::string>& predicates);
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
@@ -932,6 +941,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
   FRIEND_TEST(IndexImpl, dateOfIndexBuild);
   FRIEND_TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex);
+  FRIEND_TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex);
 
   bool isLiteral(std::string_view object) const;
 
