@@ -212,7 +212,7 @@ struct CompressedRelationWriter::PermutationWriter
   // `writer1_`, so that the blocks of large relations run on the same executor
   // and with the same bound on the blocks in flight as all the other blocks (in
   // particular, the runtime index rebuild limits the concurrency of that
-  // executor, see `rebuild-permutation-writer-num-threads`). Each block in
+  // executor, see `rebuild-index-max-num-threads`). Each block in
   // flight is held in memory until it has been written, so the bound of the
   // queue also bounds the memory that the background writing consumes.
   //

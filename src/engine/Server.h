@@ -568,6 +568,13 @@ class Server {
   // Completion handler of that coroutine: log the exception, if there is one.
   static void logAutomaticRebuildFailure(std::exception_ptr exception);
 
+  // Throw an `HttpError` (bad request) if the index was loaded from a blob
+  // (see `Qlever::isLoadedFromBlob`), with a message that says that the given
+  // `operation` is not supported for such an index. This reports the error
+  // before any work is done, also for the operations that `Qlever` rejects
+  // itself.
+  void throwIfLoadedFromBlob(std::string_view operation) const;
+
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }
   const qlever::Qlever& qlever() const { return qlever_; }
