@@ -220,9 +220,12 @@ void ChunkWriter::addBlockForLargeRelation() {
     // the twin sorter.
     head_ = std::move(relation_);
     relation_ = context_.writer1_.takeBlockBuffer();
-    // See `writeBlockOfLargeRelation`. Note that this cannot actually have an
-    // effect, because the first relation of the chunk precedes all its small
-    // relations, but it keeps the invariant obvious.
+    // Buffered small relations have to be written before a block of a large
+    // relation, see `writeBlockOfLargeRelation`.
+    //
+    // NOTE: This cannot actually have an effect, because the first relation of
+    // the chunk precedes all its small relations, but it keeps the invariant
+    // obvious.
     writeBufferedSmallRelationsToSingleBlock();
     ++numBlocksCurrentRel_;
     auto headView = head_->asStaticView<0>();
@@ -299,14 +302,15 @@ void ChunkWriter::finishRelation() {
 CompressedRelationMetadata ChunkWriter::writeTwinOfCompleteLargeRelation(
     Id col0Id) {
   auto& sorter = twinSorter();
-  // NOTE: The sorter sorts and merges in this thread (see `makeTwinSorter`),
-  // so this never waits for other tasks of the thread pool. No output block
-  // size is requested: a relation whose twin rows fit into a single block of
-  // the sorter (the common case) is then moved out as a whole instead of
-  // being copied into blocks, and `writeRowsOfLargeRelation` slices it into
-  // the blocks of the permutation without copying. For a relation with
-  // several runs, the merge derives the size of its output blocks from the
-  // memory of the sorter.
+  // The sorter sorts and merges in this thread (see `makeTwinSorter`), so this
+  // never waits for other tasks of the thread pool.
+  //
+  // NOTE: No output block size is requested. A relation whose twin rows fit
+  // into a single block of the sorter (the common case) is then moved out as a
+  // whole instead of being copied into blocks, and `writeRowsOfLargeRelation`
+  // slices it into the blocks of the permutation without copying. For a
+  // relation with several runs, the merge derives the size of its output
+  // blocks from the memory of the sorter.
   auto md2 = writeSortedBlocksOfLargeRelation(
       context_.writer2_, col0Id, sorter.getSortedBlocks(std::nullopt));
   sorter.clear();

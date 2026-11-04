@@ -75,6 +75,7 @@ using TwinSorter = ad_utility::CompressedExternalIdTableSorter<
 // The part of a relation that lies at the beginning or at the end of a chunk
 // (or that covers a whole chunk), see the explanation at the top of this
 // file.
+//
 // All the rows of a part are rows of the same relation (the one with the
 // `col0Id_`), and the parts of a relation are consolidated in the order of
 // their chunks. A chunk with several relations has two separate parts (its

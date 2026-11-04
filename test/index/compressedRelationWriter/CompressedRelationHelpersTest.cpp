@@ -167,7 +167,8 @@ TEST(CompressedRelationWriter, makeLargeRelationMetadata) {
       ::testing::HasSubstr("numRows != 0"));
 }
 
-// _____________________________________________________________________________
+// Test that `permutedColIndices` permutes the first three columns and keeps
+// the graph column and the payload columns in place.
 TEST(CompressedRelationHelpers, permutedColIndices) {
   using compressedRelationHelpers::permutedColIndices;
   using ::testing::ElementsAre;

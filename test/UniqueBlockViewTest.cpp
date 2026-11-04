@@ -159,7 +159,8 @@ std::vector<int> removeDuplicates(std::vector<int> block,
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test `removeDuplicatesFromBlock` for the first block, which has no previous
+// block.
 TEST(RemoveDuplicatesFromBlock, withoutPreviousBlock) {
   using ::testing::ElementsAre;
   using ::testing::IsEmpty;
@@ -170,7 +171,8 @@ TEST(RemoveDuplicatesFromBlock, withoutPreviousBlock) {
   EXPECT_THAT(removeDuplicates({5, 5, 5}, std::nullopt), ElementsAre(5));
 }
 
-// _____________________________________________________________________________
+// Test `removeDuplicatesFromBlock` for a block that follows another block,
+// whose last element also counts as a duplicate.
 TEST(RemoveDuplicatesFromBlock, withPreviousBlock) {
   using ::testing::ElementsAre;
   using ::testing::IsEmpty;

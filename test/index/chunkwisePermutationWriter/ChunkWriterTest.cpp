@@ -296,7 +296,9 @@ void expectMetadataOfLargeRelation(
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that a merge with a single chunk writes all its relations
+// completely, like the sequential writer, for several sizes of the input
+// blocks.
 TEST(ChunkWriter, singleChunkWritesAllRelations) {
   // Small relations (some of them batched), a medium relation that spans
   // several input blocks, and large relations, the last of which ends the
@@ -351,7 +353,8 @@ TEST(ChunkWriter, singleChunkWritesAllRelations) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a middle chunk writes its middle relations and returns its first
+// and its last relation as boundary parts.
 TEST(ChunkWriter, middleChunkReturnsItsBoundaryParts) {
   // The first relation of a middle chunk is small and the last one is large,
   // with middle relations in between.
@@ -386,7 +389,8 @@ TEST(ChunkWriter, middleChunkReturnsItsBoundaryParts) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a large first relation keeps its first block of rows in memory
+// and writes the rest directly.
 TEST(ChunkWriter, largeFirstRelationKeepsItsHead) {
   // The first relation of a chunk is large and ends inside the chunk, and the
   // last relation is small.
@@ -417,7 +421,8 @@ TEST(ChunkWriter, largeFirstRelationKeepsItsHead) {
   }
 }
 
-// _____________________________________________________________________________
+// Test a chunk that consists of a single relation, which is returned as a
+// first part that spans the whole chunk.
 TEST(ChunkWriter, chunkWithASingleRelation) {
   // A chunk that consists of a single relation, which may continue in both
   // neighboring chunks, first with a small and then with a large relation.
@@ -445,7 +450,8 @@ TEST(ChunkWriter, chunkWithASingleRelation) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the last chunk writes its last relation completely instead of
+// returning it as a boundary part.
 TEST(ChunkWriter, lastChunkCompletesItsLastRelation) {
   // In the last chunk the last relation is complete, so it is written like a
   // middle relation, both if it is small and if it is large.
@@ -470,7 +476,8 @@ TEST(ChunkWriter, lastChunkCompletesItsLastRelation) {
   }
 }
 
-// _____________________________________________________________________________
+// Test the removal of duplicate rows, also across the input blocks of the
+// chunk, and the row statistics of the context.
 TEST(ChunkWriter, removeDuplicates) {
   auto r1 = relation(1, 6);
   auto r2 = relation(2, 40);
@@ -513,7 +520,7 @@ TEST(ChunkWriter, removeDuplicates) {
   writers.expectCompleteRelation(2, r2);
 }
 
-// _____________________________________________________________________________
+// Test a permutation whose `col0` is not the first column of the input.
 TEST(ChunkWriter, nonIdentityPermutation) {
   // The input is sorted by column 1, which becomes `col0` of the permutation.
   auto r1 = relation(1, 9);
@@ -537,7 +544,8 @@ TEST(ChunkWriter, nonIdentityPermutation) {
   writers.expectCompleteRelation(2, r2);
 }
 
-// _____________________________________________________________________________
+// Test `writeRowsOfLargeRelation` via the queue of the writer and in the
+// calling thread.
 TEST(ChunkWriter, writeRowsOfLargeRelation) {
   // The rows of a large relation are cut into blocks of about the blocksize,
   // both via the queue of the writer and in the calling thread, without
@@ -567,7 +575,8 @@ TEST(ChunkWriter, writeRowsOfLargeRelation) {
   }
 }
 
-// _____________________________________________________________________________
+// Test `writeSortedBlocksOfLargeRelation` with blocks whose boundaries split
+// a triple.
 TEST(ChunkWriter, writeSortedBlocksOfLargeRelation) {
   // Blocks of a sorted twin, whose boundaries split the two rows of a triple,
   // are realigned, written, and the metadata is computed from all of them.
@@ -593,7 +602,7 @@ TEST(ChunkWriter, writeSortedBlocksOfLargeRelation) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the `ChunkWriterContext` rejects writers that don't fit together.
 TEST(ChunkWriter, contextChecksTheWriters) {
   auto makeWriter = [](const std::string& filename, size_t blocksize,
                        size_t numColumns = NUM_COLUMNS) {
@@ -631,7 +640,8 @@ TEST(ChunkWriter, contextChecksTheWriters) {
       ::testing::HasSubstr("writer1.numColumns() == writer2.numColumns()"));
 }
 
-// _____________________________________________________________________________
+// Test that the small relations of a chunk are written as several blocks
+// when they exceed the capacity of a single block.
 TEST(ChunkWriter, smallRelationsFillSeveralBlocks) {
   // The small relations of a chunk together have more rows than a single block
   // of small relations can hold, so they are written as several blocks, both
@@ -661,7 +671,7 @@ TEST(ChunkWriter, smallRelationsFillSeveralBlocks) {
   }
 }
 
-// _____________________________________________________________________________
+// Test a chunk without any input.
 TEST(ChunkWriter, emptyChunk) {
   // A chunk without any input (for example because all its rows were removed
   // as duplicates) has no parts and writes nothing.
@@ -683,7 +693,8 @@ TEST(ChunkWriter, emptyChunk) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a chunk that is destroyed before `finishChunk` neither throws nor
+// writes anything.
 TEST(ChunkWriter, destroyUnfinishedChunk) {
   // A chunk that is destroyed before `finishChunk` (e.g. because of an
   // exception) while it still buffers small relations must neither throw nor
