@@ -475,7 +475,7 @@ TEST(ThreeWayComparisonTest, ReflectionCheckOfComparedMembers) {
   EXPECT_THAT(checkComparedMembers<TwoMembers>("a_, b_, c_"),
               HasSubstr("not exactly the data members"));
   EXPECT_THAT(checkComparedMembers<Template<int>>("t_"),
-              HasSubstr("`Template<int>`"));
+              HasSubstr("`reflectionCheck::Template<int>`"));
 
   // C arrays.
   EXPECT_THAT(checkComparedMembers<WithCArray>("a_"),
