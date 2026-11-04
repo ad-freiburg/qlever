@@ -11,7 +11,10 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/OrderBy.h"
+#include "engine/OrderByOnSortedNumericInput.h"
 #include "engine/QueryPlanner.h"
 #include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
@@ -582,7 +585,7 @@ void expectLimitedResultsAreSlices(
   };
   auto complete = rows(std::nullopt, 0);
   for (size_t offset : {0, 1, 2, 4}) {
-    for (size_t limit : {1, 2, 3, 5, 20}) {
+    for (size_t limit : {0, 1, 2, 3, 5, 20}) {
       std::vector<std::string> expected;
       for (size_t i = offset; i < std::min(complete.size(), offset + limit);
            ++i) {
@@ -632,7 +635,7 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
   for (auto [predicate, prefix] : {std::pair{"p", "s"}, std::pair{"q", "t"}}) {
     for (bool isDescending : {false, true}) {
       for (size_t offset : {0, 1, 2, 4, 7}) {
-        for (size_t limit : {1, 2, 3, 5, 8, 20}) {
+        for (size_t limit : {0, 1, 2, 3, 5, 8, 20}) {
           auto queryString =
               absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
                            "> ?x } ORDER BY ", isDescending ? "DESC" : "ASC",
@@ -741,6 +744,97 @@ TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
   ASSERT_TRUE(details.contains("num-blocks-read-for-limit"));
   EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
             details["num-blocks-total"].get<size_t>());
+}
+
+// Test `selectBlocksForLimit` directly on block metadata. The scan has the
+// values 0.5 .. -3.0 (doubles); block 0 lies inside the scan, but its first
+// `Id` is an `Int`, as happens when a nonexistent triple is deleted (the
+// metadata of a block also covers the deleted triples located in it).
+TEST(OrderBy, selectBlocksForLimit) {
+  using orderByOnSortedNumericInput::selectBlocksForLimit;
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  using B = IndexScan::BlockOfSortedVariable;
+  IndexScan::BlocksOfSortedVariable blocks{
+      D(0.5),
+      D(-3.0),
+      {B{I(1), D(1.0), 3, true}, B{D(1.5), D(2.5), 3, true},
+       B{D(3.0), D(4.0), 3, true}, B{D(-1.0), D(-2.0), 3, true},
+       B{D(-2.5), D(-3.0), 3, false}}};
+  using V = std::vector<size_t>;
+  // Block 0 (wrong datatype) and block 4 (at the border of the scan) are
+  // always read.
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, false), (V{0, 3, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 4, false), (V{0, 1, 3, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, true), (V{0, 2, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 4, true), (V{0, 1, 2, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 7, true), std::nullopt);
+  // For `LIMIT 0`, only the blocks that are always read are read.
+  EXPECT_EQ(selectBlocksForLimit(blocks, 0, false), (V{0, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 0, true), (V{0, 4}));
+
+  // A block whose metadata is not numeric at all is also always read. Its rows
+  // do not count towards the `LIMIT`, so block 1 is read as well.
+  blocks.blocks_[2].last_ = Id::makeFromVocabIndex(VocabIndex::make(7));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, true), (V{0, 1, 2, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, false), (V{0, 2, 3, 4}));
+}
+
+// Test the `LIMIT` pushdown after deletions that leave the block metadata of a
+// relation of doubles with an `Int`, while the scan only yields doubles:
+// for `<p>`, a nonexistent triple with an `Int` object is deleted (the metadata
+// of a block also covers the deleted triples located in it); for `<r>`, the
+// only triple with an `Int` object is deleted (the metadata is not narrowed).
+TEST(OrderBy, limitPushedIntoIndexScanAfterDeletions) {
+  std::string turtle;
+  for (int i = 1; i <= 12; ++i) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, ".5 . <s", i, "> <r> ", i,
+                    ".5 . ");
+  }
+  absl::StrAppend(&turtle, "<s0> <r> 0 . ");
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto index = std::make_shared<Index>(
+      ad_utility::testing::makeTestIndex(std::move(config)));
+  auto getId = ad_utility::testing::makeGetId(*index);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.deleteTriples(
+        cancellationHandle, {IdTriple<0>{{getId("<s1>"), getId("<p>"),
+                                          ad_utility::testing::IntId(1), g}},
+                             IdTriple<0>{{getId("<s2>"), getId("<p>"),
+                                          ad_utility::testing::IntId(-7), g}},
+                             IdTriple<0>{{getId("<s0>"), getId("<r>"),
+                                          ad_utility::testing::IntId(0), g}}});
+  });
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  QueryExecutionContext qec{index,
+                            &cache,
+                            ad_utility::testing::makeAllocator(
+                                ad_utility::MemorySize::megabytes(100)),
+                            &namedCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            ad_utility::testing::singleThreadExecutor()};
+
+  for (std::string_view predicate : {"p", "r"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      expectLimitedResultsAreSlices(
+          &qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                             "> ?x } ORDER BY ", direction, "(?x)"));
+    }
+    // The blocks after the first one can still be skipped.
+    auto [result, details] = queryWithOrderByAtRoot(
+        &qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                           "> ?x } ORDER BY DESC(?x) LIMIT 1"));
+    EXPECT_EQ(result, "?s\n<s12>\n") << predicate;
+    ASSERT_TRUE(details.contains("num-blocks-read-for-limit")) << predicate;
+    EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
+              details["num-blocks-total"].get<size_t>())
+        << predicate;
+  }
 }
 
 // Test that the cost estimate of `ORDER BY` is linear for an input that is

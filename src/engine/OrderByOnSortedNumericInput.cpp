@@ -147,8 +147,14 @@ struct BlocksSplitByRun {
   // same run. These are the only blocks that may be skipped.
   std::array<std::vector<size_t>, numNumericRuns> blocksWithinOneRun_;
   // All other blocks, which are always read: the ones at the border of the
-  // scan, whose first or last triple may belong to another relation, and the
-  // ones that span more than one run.
+  // scan, whose first or last triple may belong to another relation, the ones
+  // that span more than one run, and the ones whose first or last `Id` is not
+  // of the datatype of the scan. The latter happens with updates, where the
+  // first and last triple of a block are only bounds: they also cover the
+  // deleted triples located in the block, which need not exist (see
+  // `LocatedTriplesPerBlock::updateAugmentedMetadata`), and they are not
+  // narrowed when a triple is deleted, so they may be of a datatype that the
+  // scan no longer yields.
   std::vector<size_t> blocksToAlwaysRead_;
 };
 
@@ -164,12 +170,10 @@ BlocksSplitByRun splitBlocksByRun(
     }
     auto runOfFirst = numericRun::getRunOfId(block.first_);
     auto runOfLast = numericRun::getRunOfId(block.last_);
-    // Only guards against inconsistent metadata.
-    AD_CORRECTNESS_CHECK(runOfFirst.has_value() && runOfLast.has_value() &&
-                         numericRun::getDatatype(runOfFirst.value()) == type &&
-                         numericRun::getDatatype(runOfLast.value()) == type &&
-                         runOfFirst.value() <= runOfLast.value());
-    if (runOfFirst == runOfLast) {
+    bool isWithinOneRunOfType =
+        runOfFirst.has_value() && runOfFirst == runOfLast &&
+        numericRun::getDatatype(runOfFirst.value()) == type;
+    if (isWithinOneRunOfType) {
       result.blocksWithinOneRun_[toIndex(runOfFirst.value())].push_back(i);
     } else {
       result.blocksToAlwaysRead_.push_back(i);
@@ -198,11 +202,11 @@ std::vector<size_t> getBlocksWithinOneRunHoldingTheFirstRows(
       ql::ranges::reverse(blocksOfRun);
     }
     for (size_t i : blocksOfRun) {
-      result.push_back(i);
-      numRowsGuaranteed += blocks.blocks_[i].numRowsLowerBound_;
       if (numRowsGuaranteed >= numRows) {
         return result;
       }
+      result.push_back(i);
+      numRowsGuaranteed += blocks.blocks_[i].numRowsLowerBound_;
     }
   }
   return result;
@@ -249,8 +253,8 @@ std::optional<std::vector<size_t>> selectBlocksForLimit(
   // block that spans a boundary is always read. The scan is sorted, so there
   // is at most one such block per boundary (one boundary for `Int`s, three for
   // `Double`s), and only the first and the last block of the scan can stick
-  // out of it. So at most five blocks are read that might be skipped
-  // otherwise.
+  // out of it. So without updates, at most five blocks are read that might be
+  // skipped otherwise (with updates, see `BlocksSplitByRun`).
   auto blocksSplitByRun = splitBlocksByRun(blocks, type.value());
   auto selected = getBlocksWithinOneRunHoldingTheFirstRows(
       blocks, blocksSplitByRun, type.value(), numRows, isDescending);
