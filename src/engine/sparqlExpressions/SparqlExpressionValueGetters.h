@@ -25,19 +25,6 @@
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
 
-/// Several classes that can be used as the `ValueGetter` template
-/// argument in the SparqlExpression templates in `SparqlExpression.h`
-
-// Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
-// included in this header).
-//
-// NOTE: The underlying type must match the definition in the util's
-// `geo/Geo.h`. A mismatch does not compile, because
-// `SparqlExpressionValueGetters.cpp` includes both declarations.
-namespace util::geo {
-enum class CRSType : uint8_t;
-}
-
 namespace sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -428,7 +415,7 @@ struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
 
   // The actual implementation for a given `LiteralOrIri` which is guaranteed
   // not to use the `EvaluationContext`. This method can be used to convert
-  // `LiteralOrIri` objects holding an Enum `T`, even when no
+  // `LiteralOrIri` objects holding an Enum `Value`, even when no
   // `EvaluationContext` is available. Currently used for `geof:distance` filter
   // substitution during query planning.
   static Value litOrIriToValue(const LiteralOrIri& s);

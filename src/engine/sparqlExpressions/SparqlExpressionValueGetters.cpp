@@ -440,7 +440,7 @@ decltype(undefined)
         auto str = idToLiteralOrIri(value, context, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
-          return EnumValueGetter<iriToValue, undefined>{}(str.value(), context);
+          return litOrIriToValue(str.value());
         }
         return undefined;
       });

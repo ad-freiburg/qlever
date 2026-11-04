@@ -263,7 +263,9 @@ inline void checkLiteralContentAndDatatypeFromSecondaryVocabId(
 
 namespace enumVGTestHelpers {
 
+using namespace ad_utility;
 using namespace valueGetterTestHelpers;
+using Loc = source_location;
 
 // Test turtle for
 const std::string unitTtl = R"(
@@ -311,15 +313,19 @@ template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterForId(
     TestContextWithGivenTTl& testContext, Id id,
     decltype(undefined) expectedResult,
-    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
-  ASSERT_EQ(getter(id, &testContext.context), expectedResult);
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  EXPECT_EQ(getter(id, &testContext.context), expectedResult);
 }
 
 // Helper to test EnumValueGetter using ValueId input
 template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromId(
     const std::string& fullLiteralOrIri, decltype(undefined) expectedResult,
-    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
   TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
   checkEnumValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
                             expectedResult, getter);
@@ -330,7 +336,9 @@ inline void checkEnumValueGetterFromId(
 template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromIdEncodedValue(
     ValueId id,
-    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
   TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
   checkEnumValueGetterForId(testContext, id, undefined, getter);
 }
@@ -341,7 +349,9 @@ inline void checkEnumValueGetterFromIdEncodedValue(
 template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromSecondaryVocabId(
     const std::string& word, decltype(undefined) expectedResult,
-    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
   AllDatatypesTestContext testContext;
   checkEnumValueGetterForId(testContext, testContext.secondaryVocabId(word),
                             expectedResult, getter);
@@ -352,7 +362,9 @@ template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromLiteralOrIri(
     const std::string& unitIriWithoutBrackets,
     decltype(undefined) expectedResult,
-    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter) {
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
   TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
 
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -361,7 +373,7 @@ inline void checkEnumValueGetterFromLiteralOrIri(
   auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
                     bool expectSuccess) {
     auto actualResult = getter(litOrIri, &testContext.context);
-    ASSERT_EQ(actualResult, expectSuccess ? expectedResult : undefined);
+    EXPECT_EQ(actualResult, expectSuccess ? expectedResult : undefined);
   };
 
   // Test xsd:anyURI literal method

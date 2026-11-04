@@ -117,17 +117,11 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
 
 // _____________________________________________________________________________
 ::util::geo::CRSType iriToCrsType(const std::string_view& uri) {
-  // `::util::geo::getCRSType` expects the input string to be wrapped in
-  // angle brackets (e.g., <http://...>) and returns a default value
-  // (CRS84) if the opening bracket is missing. We wrap the content here
-  // to ensure that `::util::geo::getCRSType` handles the IRIs correctly.
-  std::string content{uri};
-  if (content.empty()) {
-    content = "<>";
-  } else if (content.front() != '<') {
-    content = "<" + content + ">";
+  auto it = ql::ranges::find(CRS_TYPE_IRI, uri);
+  if (it == CRS_TYPE_IRI.end()) {
+    return ::util::geo::CRSType::UNSUPPORTED;
   }
-  return ::util::geo::getCRSType(std::string{content});
+  return static_cast<::util::geo::CRSType>(it - CRS_TYPE_IRI.begin());
 }
 
 }  // namespace detail
