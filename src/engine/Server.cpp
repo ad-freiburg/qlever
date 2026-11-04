@@ -90,6 +90,18 @@ Server::Server(
 }
 
 // _____________________________________________________________________________
+void Server::throwIfLoadedFromBlob(std::string_view operation) const {
+  if (qlever().isLoadedFromBlob()) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        absl::StrCat(operation,
+                     " is not supported, because the index of this server was "
+                     "loaded from a blob (`--read-from-blob-file`) and has no "
+                     "permutations and no files on disk"));
+  }
+}
+
+// _____________________________________________________________________________
 void Server::initializeServerMetrics(
     std::optional<ad_utility::MemorySize> memoryLimit) {
   metrics_ = std::make_unique<ServerMetrics>(
@@ -427,6 +439,7 @@ Awaitable<DeltaTriplesCount> Server::processClearDeltaTriples() {
 // _____________________________________________________________________________
 Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
     std::optional<std::string_view> userTimeout, bool accessTokenOk) {
+  throwIfLoadedFromBlob("Vacuuming the delta triples");
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   TimeLimit timeLimit =
       verifyUserSubmittedQueryTimeout(userTimeout, accessTokenOk);
@@ -442,6 +455,7 @@ Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
 Awaitable<nlohmann::json> Server::processWriteMaterializedView(
     const ParamValueMap& parameters, const SparqlOperation& operation,
     const ad_utility::Timer& requestTimer) {
+  throwIfLoadedFromBlob("Writing a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
@@ -478,6 +492,7 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
 // _____________________________________________________________________________
 nlohmann::json Server::processLoadMaterializedView(
     const ParamValueMap& parameters, const SharedIndexAndView& indexAndViews) {
+  throwIfLoadedFromBlob("Loading a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
@@ -491,6 +506,7 @@ nlohmann::json Server::processLoadMaterializedView(
 // _____________________________________________________________________________
 nlohmann::json Server::processDeleteMaterializedView(
     const ParamValueMap& parameters) const {
+  throwIfLoadedFromBlob("Deleting a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
@@ -1377,6 +1393,7 @@ Awaitable<void> Server::processUpdate(
     ad_utility::SharedCancellationHandle cancellationHandle,
     const RequestT& request, SendT&& send,
     std::optional<PlannedQuery>& plannedUpdate) {
+  throwIfLoadedFromBlob("An update");
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
       *metrics_->runningSparqlOperations_, "update"};
@@ -1747,6 +1764,7 @@ CPP_template_def(typename RequestT)(
 Awaitable<Server::ResponseT> Server::processRebuildIndex(
     const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
+  throwIfLoadedFromBlob("An index rebuild");
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
                                              std::nullopt),

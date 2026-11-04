@@ -186,7 +186,7 @@ class Literal : public BasicLiteral<true> {
   // Concatenates the content of the current literal with another literal.
   // If the language tag or datatype of the literals differ, the existing
   // language tag or datatype is removed from the current literal. Used in the
-  // `CONCAT` function in `StringExpressions.cpp`.
+  // `CONCAT` function in `ConcatExpression.cpp`.
   void concat(const Literal& other);
 };
 
