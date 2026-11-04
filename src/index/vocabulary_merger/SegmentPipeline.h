@@ -318,6 +318,13 @@ class SegmentPipeline : public ad_utility::NoCopyNoMove {
     idMapWriters_.finish();
     AD_LOG_INFO << committer_.progressBar().getFinalProgressString()
                 << std::flush;
+    // NOTE: `peak()` locks the mutex of the budget, so it is called before the
+    // log statement, which holds the global lock of the log while it evaluates
+    // its operands. Otherwise ThreadSanitizer reports a (spurious)
+    // lock-order-inversion with code that logs while holding another mutex
+    // that lives at the same stack address in a later call (`std::mutex` has a
+    // trivial destructor, so ThreadSanitizer cannot tell the two apart).
+    const auto peakMemory = memoryBudget_.peak();
     AD_LOG_INFO
         << "Time spent by the stages behind the vocabulary merge: "
            "preparing "
@@ -327,7 +334,7 @@ class SegmentPipeline : public ad_utility::NoCopyNoMove {
         << Milliseconds{std::chrono::duration_cast<std::chrono::milliseconds>(
                idMapWriters_.busyTime())}
         << "; peak memory of the data behind the merge "
-        << memoryBudget_.peak().asString() << " (limit "
+        << peakMemory.asString() << " (limit "
         << memoryBudget_.limit().asString() << ")" << std::endl;
     return metaData;
   }
