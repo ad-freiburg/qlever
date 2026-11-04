@@ -11,6 +11,7 @@
 #define QLEVER_SRC_PARSER_RASTERQUERY_H
 
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 

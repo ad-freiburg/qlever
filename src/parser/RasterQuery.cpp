@@ -31,24 +31,28 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
   if (predString == "dataset") {
     if (dataset_.has_value()) {
       throw RasterException(
-          "The parameter <dataset> must not be set more than once");
+          "The parameter `<dataset>` must not be set more than once");
     }
     if (!object.isLiteral()) {
-      throw RasterException("The parameter <dataset> expects a string literal");
+      throw RasterException(
+          "The parameter `<dataset>` expects a string literal");
     }
     dataset_ = std::string{object.getLiteral().getContent()};
   } else if (predString == "band") {
     if (band_.has_value()) {
       throw RasterException(
-          "The parameter <band> must not be set more than once");
+          "The parameter `<band>` must not be set more than once");
     }
     if (!object.isInt()) {
-      throw RasterException("The parameter <band> expects an integer");
+      throw RasterException("The parameter `<band>` expects an integer");
     }
-    // The upper bound depends on the file and is checked by `RasterLookup`.
-    if (object.getInt() < 1 ||
-        object.getInt() > std::numeric_limits<int>::max()) {
-      throw RasterException("The parameter <band> must be at least 1");
+    // The real upper bound depends on the file and is checked by
+    // `RasterLookup`. This one only keeps the value inside an `int`.
+    if (object.getInt() < 1) {
+      throw RasterException("The parameter `<band>` must be at least 1");
+    }
+    if (object.getInt() > std::numeric_limits<int>::max()) {
+      throw RasterException("The parameter `<band>` is too large");
     }
     band_ = static_cast<int>(object.getInt());
   } else if (predString == "geometry") {
@@ -59,9 +63,9 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
     setVariable("center", object, center_);
   } else {
     throw RasterException(absl::StrCat(
-        "Unknown parameter for raster lookup: <", predString,
-        ">. Supported parameters: <dataset>, <band>, <geometry>, <value>, "
-        "<center>"));
+        "Unknown parameter for raster lookup: `<", predString,
+        ">`. Supported parameters: `<dataset>`, `<band>`, `<geometry>`, "
+        "`<value>`, `<center>`"));
   }
 }
 
@@ -69,8 +73,8 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
 void RasterQuery::validate() const {
   auto throwIfMissing = [](bool isMissing, std::string_view parameter) {
     if (isMissing) {
-      throw RasterException(absl::StrCat("A raster lookup requires a <",
-                                         parameter, "> parameter"));
+      throw RasterException(absl::StrCat("A raster lookup requires a `<",
+                                         parameter, ">` parameter"));
     }
   };
   throwIfMissing(!dataset_.has_value(), "dataset");
