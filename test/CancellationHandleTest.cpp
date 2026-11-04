@@ -301,6 +301,22 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
   EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
+// Test that the function returned by `cancellationChecker` calls
+// `throwIfCancelled`: it pleases the watchdog and throws once the handle is
+// cancelled.
+TEST(CancellationHandle, cancellationCheckerCallsThrowIfCancelled) {
+  CancellationHandle<ENABLED> handle;
+  auto checker = handle.cancellationChecker();
+
+  handle.cancellationState_ = WAITING_FOR_CHECK;
+  EXPECT_NO_THROW(checker());
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+
+  handle.cancellationState_ = MANUAL;
+  EXPECT_THROW(checker(), CancellationException);
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
+}
+
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {

@@ -89,8 +89,8 @@ using unsignedTypeForNumberOfBits =
 // O(popcount(bits)) time: `bits & (bits - 1)` clears the lowest set bit each
 // iteration, so unset bits are never visited.
 CPP_template(typename F)(
-    requires InvocableWithConvertibleReturnType<
-        F, bool, uint8_t>) inline void forEachSetBit(uint64_t bits, F&& fn) {
+    requires InvocableWithConvertibleReturnType<F, bool, uint8_t>)
+inline void forEachSetBit(uint64_t bits, F&& fn) {
   while (bits != 0) {
     if (!std::invoke(fn, static_cast<uint8_t>(absl::countr_zero(bits)))) {
       return;

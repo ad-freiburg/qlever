@@ -167,7 +167,8 @@ class IteratorForAccessOperator {
 
   decltype(auto) operator*() const { return accessor_(*vector_, index_); }
 
-  CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
+  CPP_template(typename = void)(requires(!isConst))
+  decltype(auto) operator*() {
     return accessor_(*vector_, index_);
   }
 
@@ -480,28 +481,27 @@ class InputRangeTypeErased
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
   CPP_template(typename Range)(
-      requires std::is_base_of_v<
-          InputRangeFromGet<ValueType, DetailsType>,
-          Range>) explicit InputRangeTypeErased(Range range)
+      requires std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>,
+                                 Range>)
+  explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
   // Constructor for ranges that are not movable
   CPP_template(typename Range)(
-      requires std::is_base_of_v<
-          InputRangeFromGet<ValueType, DetailsType>,
-          Range>) explicit InputRangeTypeErased(std::unique_ptr<Range> range)
+      requires std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>,
+                                 Range>)
+  explicit InputRangeTypeErased(std::unique_ptr<Range> range)
       : impl_{std::move(range)} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
   CPP_template(typename Range)(
-      requires CPP_NOT(
-          std::is_base_of_v<InputRangeFromGet<ValueType, DetailsType>, Range>)
-          CPP_and ql::ranges::range<Range>
-              CPP_and ql::concepts::same_as<
-                  ql::ranges::range_value_t<Range>,
-                  ValueType>) explicit InputRangeTypeErased(Range range)
+      requires CPP_NOT(std::is_base_of_v<
+                       InputRangeFromGet<ValueType, DetailsType>, Range>) &&
+      ql::ranges::range<Range> &&
+      ql::concepts::same_as<ql::ranges::range_value_t<Range>, ValueType>)
+  explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 
@@ -604,8 +604,8 @@ class IteratorForAssigmentOperator {
    public:
     Proxy(Func& func) : func_{func} {}
 
-    CPP_template(typename T)(requires ql::concepts::invocable<Func, T&&>) void
-    operator=(T&& value) const {
+    CPP_template(typename T)(requires ql::concepts::invocable<Func, T &&>)
+    void operator=(T&& value) const {
       std::invoke(func_, AD_FWD(value));
     }
   };

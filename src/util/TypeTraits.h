@@ -251,8 +251,8 @@ static_assert(
                                 std::optional<char>>>);
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
-CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
-    typename detail::TupleToVariantImpl<Tuple>::type;
+CPP_template(typename Tuple)(requires isTuple<Tuple>)
+using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
 // Examples:
 static_assert(std::is_same_v<TupleToVariant<std::tuple<int, bool, char>>,
                              std::variant<int, bool, char>>);

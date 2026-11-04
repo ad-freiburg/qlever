@@ -48,9 +48,9 @@ LimitOffsetHandling Bind::handlesLimitOffset() const {
 }
 
 // _____________________________________________________________________________
-void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
-  _subtree = _subtree->clone();
-  _subtree->applyLimitOffset(limitOffset);
+void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                                bool childrenAreExclusivelyOwned) {
+  applyLimitOffsetToChild(_subtree, limitOffset, childrenAreExclusivelyOwned);
 }
 
 float Bind::getMultiplicity(size_t col) {

@@ -390,8 +390,8 @@ struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
 // `IriValueGetter` returns an
 // `std::optional<ad_utility::triple_component::Iri>` object. If the
 // `LiteralOrIri` object contains an `Iri`, the Iri is returned. This
-// ValueGetter is currently used in `StringExpressions.cpp` within the
-// implementation of `STRDT()`.
+// ValueGetter is currently used in `StrLangAndStrDtExpressions.cpp` within
+// the implementation of `STRDT()`.
 struct IriValueGetter : Mixin<IriValueGetter> {
   using Value = OptIri;
   using Mixin<IriValueGetter>::operator();
@@ -488,9 +488,8 @@ struct ParsedUriGetter : Mixin<ParsedUriGetter> {
 // calculated, when requesting the centroid).
 
 CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
-        RequestedInfo>) struct GeometryInfoValueGetter
-    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Value = std::optional<RequestedInfo>;
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(

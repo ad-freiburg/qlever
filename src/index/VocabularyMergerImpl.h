@@ -161,7 +161,8 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
       blankNodeIriRegexes,
       comparator,
       maxSegmentsInFlight,
-      memoryForSegments};
+      memoryForSegments,
+      VOCAB_MERGER_SEGMENT_NUM_WORDS};
   for (MergedBlock& block : mergedWords) {
     // Stop merging as soon as one of the stages has failed, the exception is
     // rethrown by `finish()` below.

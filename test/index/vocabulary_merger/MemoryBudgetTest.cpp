@@ -19,46 +19,50 @@
 using ad_utility::MemorySize;
 using ad_utility::vocabulary_merger::detail::MemoryBudget;
 
-namespace {
-auto bytes(size_t n) { return MemorySize::bytes(n); }
-}  // namespace
+static MemorySize bytes(size_t n) { return MemorySize::bytes(n); }
 
-// _____________________________________________________________________________
 // Test that reservations account for their memory until they are destroyed or
 // released, that they can grow and be moved, and that the peak is tracked.
 TEST(MemoryBudget, reserveGrowAndRelease) {
   MemoryBudget budget{bytes(100)};
   EXPECT_EQ(budget.limit(), bytes(100));
   {
+    // A reservation accounts for its bytes, and may exceed the limit.
     auto a = budget.reserve(bytes(30));
     EXPECT_EQ(a.numBytes(), 30u);
     EXPECT_EQ(budget.used(), bytes(30));
-    // A reservation may exceed the limit.
     auto b = budget.reserve(bytes(80));
     EXPECT_EQ(budget.used(), bytes(110));
+
+    // Growing adds to the reservation and to the budget.
     b.grow(5);
     EXPECT_EQ(b.numBytes(), 85u);
     EXPECT_EQ(budget.used(), bytes(115));
-    // Moving transfers the bytes, the moved-from reservation is empty.
+
+    // Moving transfers the bytes. The moved-from reservation holds nothing and
+    // cannot grow.
     MemoryBudget::Reservation c = std::move(b);
     EXPECT_EQ(c.numBytes(), 85u);
     EXPECT_EQ(budget.used(), bytes(115));
+    // NOLINTNEXTLINE(bugprone-use-after-move)
+    EXPECT_EQ(b.numBytes(), 0u);
+    EXPECT_ANY_THROW(b.grow(1));
+
+    // Releasing returns the bytes, the reservation is then empty.
     c.release();
     EXPECT_EQ(c.numBytes(), 0u);
     EXPECT_EQ(budget.used(), bytes(30));
+
     // A move assignment releases the previous bytes of the target.
     a = budget.reserve(bytes(10));
     EXPECT_EQ(budget.used(), bytes(10));
   }
+
+  // The destructors return the remaining bytes, the peak stays.
   EXPECT_EQ(budget.used(), bytes(0));
   EXPECT_EQ(budget.peak(), bytes(115));
-  // A default-constructed reservation holds nothing and cannot grow.
-  MemoryBudget::Reservation empty;
-  EXPECT_EQ(empty.numBytes(), 0u);
-  EXPECT_ANY_THROW(empty.grow(1));
 }
 
-// _____________________________________________________________________________
 // Test that `waitUntilFits` returns immediately if the memory fits (always if
 // nothing is reserved), and returns `false` as soon as waiting is pointless.
 TEST(MemoryBudget, waitUntilFitsWithoutWaiting) {
@@ -76,7 +80,6 @@ TEST(MemoryBudget, waitUntilFitsWithoutWaiting) {
   EXPECT_EQ(numCalls, 1u);
 }
 
-// _____________________________________________________________________________
 // Test that `waitUntilFits` waits until another thread releases memory.
 TEST(MemoryBudget, waitUntilFitsWaitsForRelease) {
   MemoryBudget budget{bytes(100)};
@@ -92,7 +95,6 @@ TEST(MemoryBudget, waitUntilFitsWaitsForRelease) {
   releaser.join();
 }
 
-// _____________________________________________________________________________
 // Test that the `stopWaiting` predicate is polled while waiting, also without
 // any release.
 TEST(MemoryBudget, waitUntilFitsPollsThePredicate) {

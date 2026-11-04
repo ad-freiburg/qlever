@@ -25,6 +25,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "index/vocabulary_merger/Segment.h"
+#include "util/CompilerWarnings.h"
 #include "util/ExceptionHandling.h"
 #include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
@@ -101,6 +102,15 @@ class IdMapWriters {
   // of that segment. The `entries` are kept alive until they are written (and
   // nothing else of the segment, so that the words of the segment can be
   // released independently). Do nothing if a task has failed.
+  //
+  // NOTE: GCC 13 reports false `-Warray-bounds` and `-Wstringop-overflow`
+  // positives in the construction of the error message of the
+  // `AD_CONTRACT_CHECK` in `File::write`, when it is inlined into the task
+  // below (via `IdMapWriter::push`). These are middle-end warnings, so they are
+  // only suppressed by a region around the function into which they are
+  // inlined.
+  DISABLE_ARRAY_BOUNDS_WARNINGS
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   void write(std::shared_ptr<const SegmentIdMapEntries> entries,
              IdConverterForSegment converter) {
     AD_CONTRACT_CHECK(entries->size() == numPartialVocabularies());
@@ -126,8 +136,8 @@ class IdMapWriters {
               return;
             }
             auto measurement = busyTime_.startMeasurement();
-            for (auto&& [writer, entries] : group) {
-              for (const SegmentIdMapEntry& entry : entries) {
+            for (auto&& [writer, entriesOfMap] : group) {
+              for (const SegmentIdMapEntry& entry : entriesOfMap) {
                 writer.push(IdMapEntry{VocabIndex::make(entry.localIndex_),
                                        converter.globalIdOf(entry.id_)});
               }
@@ -135,14 +145,17 @@ class IdMapWriters {
           }));
     }
   }
+  GCC_REENABLE_WARNINGS
+  GCC_REENABLE_WARNINGS
 
   // Whether one of the tasks has thrown an exception that `finish()` has not
   // rethrown yet. The caller should then stop writing segments.
   bool hasFailed() const { return exceptionCollector_.hasException(); }
 
   // The number of tasks that have been pushed by `write`, but not completed
-  // yet. If it is zero, no task holds any `entries` (or is about to drop
-  // them).
+  // yet. If it is zero, no task is still writing. A task that has just
+  // completed may hold its `entries` for a moment longer, until the queue
+  // drops it.
   size_t numPendingTasks() const { return numPendingTasks_; }
 
   // Wait until all the entries are written, flush and close the maps, and

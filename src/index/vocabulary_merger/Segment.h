@@ -129,18 +129,10 @@ using SegmentIdMapEntries = CompactVectorOfStrings<SegmentIdMapEntry>;
 
 // The memory that the `words` occupy: their bytes and offsets, their external
 // flags, and their payload.
-inline ad_utility::MemorySize memorySizeOf(const WordBlock& words) {
-  return ad_utility::MemorySize::bytes(
-      words.words_.dataSpan().size() +
-      words.words_.offsetsSpan().size() * sizeof(uint64_t) +
-      words.isExternal_.capacity() / 8 + words.payload_.capacity());
-}
-
-// The memory that the `entries` occupy.
-inline ad_utility::MemorySize memorySizeOf(const SegmentIdMapEntries& entries) {
-  return ad_utility::MemorySize::bytes(
-      entries.dataSpan().size() * sizeof(SegmentIdMapEntry) +
-      entries.offsetsSpan().size() * sizeof(uint64_t));
+inline MemorySize memorySizeOf(const WordBlock& words) {
+  return words.words_.memorySize() +
+         MemorySize::bytes(words.isExternal_.capacity() / 8 +
+                           words.payload_.capacity());
 }
 
 // The output of a segment task.
@@ -159,9 +151,9 @@ struct Segment {
   SegmentIdMapEntries idMapEntries_;
 
   // The memory that the `wordBlocks_` occupy (the metadata is negligible).
-  ad_utility::MemorySize memorySizeOfWords() const {
+  MemorySize memorySizeOfWords() const {
     return ::ranges::accumulate(
-        wordBlocks_, ad_utility::MemorySize::bytes(0), std::plus<>{},
+        wordBlocks_, MemorySize::bytes(0), std::plus<>{},
         [](const WordBlock& words) { return memorySizeOf(words); });
   }
 
