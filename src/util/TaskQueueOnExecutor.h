@@ -141,7 +141,7 @@ class TaskQueueOnExecutor {
   void push(Task task) {
     pushAsync([task = std::move(task)](Done done) mutable {
       task();
-      task = nullptr;
+      task = Task{};
       std::invoke(std::move(done));
     });
   }
