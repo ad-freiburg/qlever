@@ -130,9 +130,7 @@ TEST(IndexVocabularyMergerImpl, splitMemoryOfVocabularyMerge) {
   }
   auto [forChunks, forSegments] =
       splitMemoryOfVocabularyMerge(MemorySize::gigabytes(4));
-  EXPECT_EQ(forChunks.getBytes(),
-            static_cast<size_t>(
-                static_cast<double>(MemorySize::gigabytes(4).getBytes()) *
-                VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS));
+  EXPECT_EQ(forChunks,
+            MemorySize::gigabytes(4) * VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS);
   EXPECT_GT(forSegments, MemorySize::bytes(0));
 }

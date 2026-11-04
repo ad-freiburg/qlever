@@ -97,9 +97,7 @@ inline size_t maxNumSegmentsInFlight() {
 // (second), see `VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS`.
 inline std::pair<ad_utility::MemorySize, ad_utility::MemorySize>
 splitMemoryOfVocabularyMerge(ad_utility::MemorySize memoryToUse) {
-  auto forChunks = ad_utility::MemorySize::bytes(
-      static_cast<size_t>(static_cast<double>(memoryToUse.getBytes()) *
-                          VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS));
+  auto forChunks = memoryToUse * VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS;
   return {forChunks, memoryToUse - forChunks};
 }
 
@@ -271,6 +269,7 @@ inline void writePartialVocabularyToFile(const ItemVec& entries,
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
 }
 
+// __________________________________________________________________________________________________
 inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
   ItemVec entries;
   entries.resize(map.map_.size());
