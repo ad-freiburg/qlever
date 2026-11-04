@@ -16,6 +16,7 @@
 
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
+#include "util/Exception.h"
 
 namespace parsedQuery {
 
@@ -62,6 +63,34 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
         ">. Supported parameters: <dataset>, <band>, <geometry>, <value>, "
         "<center>"));
   }
+}
+
+// ____________________________________________________________________________
+void RasterQuery::validate() const {
+  auto throwIfMissing = [](bool isMissing, std::string_view parameter) {
+    if (isMissing) {
+      throw RasterException(absl::StrCat("A raster lookup requires a <",
+                                         parameter, "> parameter"));
+    }
+  };
+  throwIfMissing(!dataset_.has_value(), "dataset");
+  throwIfMissing(!geometry_.has_value(), "geometry");
+  throwIfMissing(!value_.has_value(), "value");
+  if (!childGraphPattern_.has_value()) {
+    throw RasterException(
+        "A raster lookup requires a group graph pattern that binds the "
+        "geometry variable: SERVICE raster: { [Config Triples] { ?x "
+        "geo:asWKT ?geometry } }");
+  }
+}
+
+// ____________________________________________________________________________
+RasterLookupConfiguration RasterQuery::toRasterLookupConfiguration() const {
+  AD_CORRECTNESS_CHECK(dataset_.has_value() && geometry_.has_value() &&
+                       value_.has_value());
+  return RasterLookupConfiguration{dataset_.value(), band_.value_or(1),
+                                   geometry_.value(), value_.value(),
+                                   center_};
 }
 
 }  // namespace parsedQuery
