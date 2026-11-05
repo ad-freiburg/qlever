@@ -212,7 +212,7 @@ struct CompressedRelationWriter::PermutationWriter
   // `writer1_`, so that the blocks of large relations run on the same executor
   // and with the same bound on the blocks in flight as all the other blocks (in
   // particular, the runtime index rebuild limits the concurrency of that
-  // executor, see `rebuild-permutation-writer-num-threads`). Each block in
+  // executor, see `rebuild-index-max-num-threads`). Each block in
   // flight is held in memory until it has been written, so the bound of the
   // queue also bounds the memory that the background writing consumes.
   //
@@ -583,12 +583,8 @@ struct CompressedRelationWriter::PermutationWriter
   // Get the indices of all columns in the order in which they have to be added
   // to the relation.
   std::vector<ColumnIndex> getPermutedColIndices() const {
-    auto [c0, c1, c2, c3] = permutation_.keys();
-    std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
-    for (size_t colIdx = 3; colIdx < numColumns_; ++colIdx) {
-      permutedColIndices.push_back(colIdx);
-    }
-    return permutedColIndices;
+    return compressedRelationHelpers::permutedColIndices(permutation_,
+                                                         numColumns_);
   }
 
   // This function actually writes the permutation using the blocks of rows from
