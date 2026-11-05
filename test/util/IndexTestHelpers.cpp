@@ -287,6 +287,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
     index.addHasWordTriples() = c.addHasWordTriples;
+    index.getImpl().setHasWordNormalization(c.hasWordNormalization);
+    index.getImpl().setHasWordRestrictPredicates(c.hasWordRestrictPredicates);
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     if (c.parseInParallel.has_value()) {
@@ -431,8 +433,8 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{}, namedCache_.get(),
-            materializedViewsManager_, singleThreadExecutor());
+            namedCache_.get(), materializedViewsManager_,
+            singleThreadExecutor());
   };
 
   static ad_utility::HashMap<std::pair<TestIndexConfig, std::string>, Context>

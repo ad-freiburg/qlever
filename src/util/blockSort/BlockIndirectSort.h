@@ -118,6 +118,31 @@ template <typename Value>
   return {blockSizeFor<Value>(), defaultMaxElementsPerTask<Value>()};
 }
 
+// Sort `[begin, end)` with the given tuning parameters in a single task in the
+// calling thread, without any executor. A cancellable sort is split into parts
+// between which the cancellation is checked, a sort that can't be cancelled is
+// one `pdqsort` (the split costs 5-10% on a big input of `IdTable` rows).
+template <typename Iterator, typename Compare, typename CheckCancellation>
+void sortInCallingThread(Iterator begin, Iterator end, const Compare& comp,
+                         SortParams params,
+                         const CheckCancellation& checkCancellation) {
+  // Cheap special cases: already sorted (including empty), or sorted in
+  // reverse.
+  if (isSorted(begin, end, comp, checkCancellation)) {
+    return;
+  }
+  if (isDescending(begin, end, comp, checkCancellation)) {
+    reverseRange(begin, end, checkCancellation);
+    return;
+  }
+  if constexpr (std::is_same_v<CheckCancellation, ad_utility::Noop>) {
+    boost::sort::pdqsort(begin, end, comp);
+  } else {
+    serialQuicksort(begin, end, comp, params.maxElementsPerTask,
+                    checkCancellation);
+  }
+}
+
 // Sort `[begin, end)` with the given tuning parameters, see
 // `blockIndirectSort` below. Should run on `exec`: the tasks of the sort resume
 // their parents on the executor of the parent, so running elsewhere is correct,
@@ -129,33 +154,24 @@ net::awaitable<void> sortOnExecutor(Iterator begin, Iterator end, Compare comp,
                                     CheckCancellation checkCancellation) {
   AD_CORRECTNESS_CHECK(params.blockSize > 0);
   AD_CORRECTNESS_CHECK(params.maxElementsPerTask >= 16);
-  // Cheap special cases: already sorted (including empty), or sorted in
-  // reverse.
-  if (isSorted(begin, end, comp, checkCancellation)) {
-    co_return;
-  }
-  if (isDescending(begin, end, comp, checkCancellation)) {
-    reverseRange(begin, end, checkCancellation);
-    co_return;
-  }
-
   // At most one thread per group of blocks.
   size_t numElements = static_cast<size_t>(end - begin);
   numThreads = std::min(
       numThreads, static_cast<uint32_t>(
                       numElements / (params.blockSize * BLOCKS_PER_TASK) + 1));
 
-  // Sort small inputs (or without threads) in a single task. A cancellable
-  // sort is split into parts between which the cancellation is checked, a
-  // sort that can't be cancelled is one `pdqsort` (the split costs 5-10% on a
-  // big input of `IdTable` rows).
+  // Sort small inputs (or without threads) in a single task.
   if (numElements < params.maxElementsPerTask || numThreads < 2) {
-    if constexpr (std::is_same_v<CheckCancellation, ad_utility::Noop>) {
-      boost::sort::pdqsort(begin, end, comp);
-    } else {
-      serialQuicksort(begin, end, comp, params.maxElementsPerTask,
-                      checkCancellation);
-    }
+    sortInCallingThread(begin, end, comp, params, checkCancellation);
+    co_return;
+  }
+
+  // Cheap special cases: already sorted, or sorted in reverse.
+  if (isSorted(begin, end, comp, checkCancellation)) {
+    co_return;
+  }
+  if (isDescending(begin, end, comp, checkCancellation)) {
+    reverseRange(begin, end, checkCancellation);
     co_return;
   }
 
@@ -203,6 +219,13 @@ void blockIndirectSortImpl(
   boost::sort::pdqsort(begin, end, comp);
 #else
   using Value = ql::ranges::range_value_t<Range>;
+  // Without parallelism, the sort runs in the calling thread, so that it can
+  // also be called from a thread of the `exec` itself.
+  if (numThreads < 2) {
+    sortInCallingThread(begin, end, comp, defaultSortParams<Value>(),
+                        checkCancellation);
+    return;
+  }
   runSort(begin, end, std::move(comp), numThreads, std::move(exec),
           defaultSortParams<Value>(), std::move(checkCancellation));
 #endif
@@ -210,18 +233,20 @@ void blockIndirectSortImpl(
 }  // namespace detail
 
 // Sort `range` by `comp` (a strict weak ordering) on `exec`, which must not be
-// empty. The sort is not stable. Small inputs and `numThreads < 2` are sorted
-// by a single task, and below `minNumThreadsForBlocks` threads only the
-// parallel quicksort is used.
+// empty. The sort is not stable. Small inputs are sorted by a single task, and
+// below `minNumThreadsForBlocks` threads only the parallel quicksort is used.
+// With `numThreads < 2`, the sort runs completely in the calling thread and
+// doesn't use the `exec` at all.
 //
 // `numThreads` is a hint for how many tasks of the sort run at the same time.
 // For the best performance, `exec` should be run by at least that many threads.
 // It determines the number of parts of the sort.
 //
-// IMPORTANT: The calling thread blocks until the sort is done, so `exec` has to
-// be run by other threads (e.g. a `boost::asio::thread_pool` that this thread
-// is not part of), and must not be a strand. From a coroutine, prefer
-// `blockIndirectSortAsync` below, which doesn't block.
+// IMPORTANT: Unless `numThreads < 2`, the calling thread blocks until the sort
+// is done, so `exec` has to be run by other threads (e.g. a
+// `boost::asio::thread_pool` that this thread is not part of), and must not be
+// a strand. From a coroutine, prefer `blockIndirectSortAsync` below, which
+// doesn't block.
 //
 // The iterators may hand out proxy references, like those of `IdTable`. The
 // elements are sorted in place, so sorting a temporary container (e.g. a
@@ -233,10 +258,9 @@ void blockIndirectSortImpl(
 // In C++17 mode (no coroutines), this always sorts single-threaded in the
 // calling thread; `numThreads` and `exec` are then not used.
 CPP_template(typename Range, typename Compare)(
-    requires ql::ranges::random_access_range<
-        Range>) void blockIndirectSort(Range&& range, Compare comp,
-                                       uint32_t numThreads,
-                                       ql::any_io_executor exec) {
+    requires ql::ranges::random_access_range<Range>)
+void blockIndirectSort(Range&& range, Compare comp, uint32_t numThreads,
+                       ql::any_io_executor exec) {
   detail::blockIndirectSortImpl(AD_FWD(range), std::move(comp), numThreads,
                                 std::move(exec), ad_utility::noop);
 }
@@ -255,12 +279,10 @@ CPP_template(typename Range, typename Compare)(
 //
 // NOTE: In C++17 mode, the sort can't be cancelled.
 CPP_template(typename Range, typename Compare)(
-    requires ql::ranges::random_access_range<
-        Range>) void blockIndirectSort(Range&& range, Compare comp,
-                                       uint32_t numThreads,
-                                       ql::any_io_executor exec,
-                                       ad_utility::SharedCancellationHandle
-                                           cancellationHandle) {
+    requires ql::ranges::random_access_range<Range>)
+void blockIndirectSort(
+    Range&& range, Compare comp, uint32_t numThreads, ql::any_io_executor exec,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   AD_CONTRACT_CHECK(cancellationHandle != nullptr);
   detail::blockIndirectSortImpl(
       AD_FWD(range), std::move(comp), numThreads, std::move(exec),
@@ -296,23 +318,22 @@ net::awaitable<void> blockIndirectSortAsyncImpl(
 //
 // NOTE: `range` is only accessed once the result is awaited, so it has to stay
 // alive until then. Temporaries in `co_await blockIndirectSortAsync(...)` do.
-CPP_template(typename Range,
-             typename Compare)(requires ql::ranges::random_access_range<Range>)
-    boost::asio::awaitable<void> blockIndirectSortAsync(
-        Range&& range, Compare comp, uint32_t numThreads,
-        ql::any_io_executor exec) {
+CPP_template(typename Range, typename Compare)(
+    requires ql::ranges::random_access_range<Range>)
+boost::asio::awaitable<void> blockIndirectSortAsync(Range&& range, Compare comp,
+                                                    uint32_t numThreads,
+                                                    ql::any_io_executor exec) {
   return detail::blockIndirectSortAsyncImpl(AD_FWD(range), std::move(comp),
                                             numThreads, std::move(exec),
                                             ad_utility::noop);
 }
 
 // Like above, but cancellable, see the second overload of `blockIndirectSort`.
-CPP_template(typename Range,
-             typename Compare)(requires ql::ranges::random_access_range<Range>)
-    boost::asio::awaitable<void> blockIndirectSortAsync(
-        Range&& range, Compare comp, uint32_t numThreads,
-        ql::any_io_executor exec,
-        ad_utility::SharedCancellationHandle cancellationHandle) {
+CPP_template(typename Range, typename Compare)(
+    requires ql::ranges::random_access_range<Range>)
+boost::asio::awaitable<void> blockIndirectSortAsync(
+    Range&& range, Compare comp, uint32_t numThreads, ql::any_io_executor exec,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   AD_CONTRACT_CHECK(cancellationHandle != nullptr);
   return detail::blockIndirectSortAsyncImpl(
       AD_FWD(range), std::move(comp), numThreads, std::move(exec),

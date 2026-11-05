@@ -394,9 +394,14 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
   EXPECT_THAT(s, AnyOf(HasSubstr(expectedHostNotFound), Eq("")));
 
   // The `timeout` and `eof` exceptions are only logged at `TRACE` level;
-  // normally they are silently caught and ignored.
-  s = throwAndCaptureLog(beast::system_error{beast::error::timeout});
-  s += throwAndCaptureLog(beast::system_error{boost::asio::error::eof});
+  // normally they are silently caught and ignored. The runtime log level
+  // defaults to `INFO`, so raise it for these two calls (if `TRACE` is not
+  // compiled in, it is clamped to the compile-time log level).
+  {
+    ad_utility::ScopedLogLevel traceLevel{ad_utility::LogLevel::Enum::TRACE};
+    s = throwAndCaptureLog(beast::system_error{beast::error::timeout});
+    s += throwAndCaptureLog(beast::system_error{boost::asio::error::eof});
+  }
   if constexpr (ad_utility::compileTimeLogLevel >=
                 ad_utility::LogLevel::Enum::TRACE) {
     EXPECT_THAT(s,
@@ -406,19 +411,14 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
   }
 
   // Handling of `std::exception`.
-  if constexpr (ad_utility::compileTimeLogLevel >=
-                ad_utility::LogLevel::Enum::ERROR) {
-    s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
-    EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
-  }
+  s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
+  EXPECT_THAT(s, ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                     HasSubstr("The runtime error for testing")));
 
   // Thrown object that is not a `std::exception`.
-  if constexpr (ad_utility::compileTimeLogLevel >=
-                ad_utility::LogLevel::Enum::ERROR) {
-    s = throwAndCaptureLog(47);
-    EXPECT_THAT(
-        s, HasSubstr("Weird exception not inheriting from std::exception"));
-  }
+  s = throwAndCaptureLog(47);
+  EXPECT_THAT(s, ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(HasSubstr(
+                     "Weird exception not inheriting from std::exception")));
 }
 
 // Test the request body size limit (eager mode) and basic body handling (lazy).
@@ -681,10 +681,8 @@ TYPED_TEST(HttpServerBodyTest, ExceptionInResponseBody) {
   // Shut down the server first to not have a race condition on the logging
   // stream.
   httpServer.shutDown();
-  if constexpr (ad_utility::compileTimeLogLevel >=
-                ad_utility::LogLevel::Enum::ERROR) {
-    EXPECT_THAT(logStream.str(), HasSubstr("body generation failed"));
-  }
+  EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                                   HasSubstr("body generation failed")));
 }
 
 // Test that sending a response with a `streamable_body` requires a (non-empty)
@@ -708,10 +706,8 @@ TYPED_TEST(HttpServerBodyTest, StreamableResponseRequiresExecutor) {
   // Shut down the server first to not have a race condition on the logging
   // stream.
   httpServer.shutDown();
-  if constexpr (ad_utility::compileTimeLogLevel >=
-                ad_utility::LogLevel::Enum::ERROR) {
-    EXPECT_THAT(logStream.str(), HasSubstr("bodyExecutor"));
-  }
+  EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+                                   HasSubstr("bodyExecutor")));
 }
 
 // Test that the session is closed after a response that announces this via

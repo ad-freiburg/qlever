@@ -64,6 +64,23 @@ constexpr bool isDatatypeTrivial(Datatype datatype) {
   return ad_utility::contains(trivialDatatypes, datatype);
 }
 
+// Return true iff `datatypes` contains all datatypes, each exactly once, in the
+// order of their numeric values. This can be used to detect changes of the
+// numeric values, for example in `static_assert`s for serialization formats.
+template <size_t N>
+constexpr bool isListOfAllDatatypesInOrder(
+    const std::array<Datatype, N>& datatypes) {
+  if (N != static_cast<size_t>(Datatype::MaxValue) + 1) {
+    return false;
+  }
+  for (size_t i = 0; i < N; ++i) {
+    if (static_cast<size_t>(datatypes[i]) != i) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Convert the `Datatype` enum to the corresponding string.
 inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   switch (type) {

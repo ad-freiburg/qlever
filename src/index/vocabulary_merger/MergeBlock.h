@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -86,8 +87,8 @@ struct InputWord {
   // string, its external flag and its local index. The word is not copied, but
   // points into the buffer of the `serializer`, which therefore has to outlive
   // the returned `InputWord` (and must not move its buffer).
-  CPP_template(typename S)(
-      requires serialization::SpanReadSerializer<S>) static InputWord
+  CPP_template(typename S)(requires serialization::SpanReadSerializer<S>)
+  static InputWord
       fromZeroCopyDeserializer(S& serializer, uint32_t partialFileId) {
     InputWord word;
     word.word_ = serialization::zeroCopyDeserializeToStringView(serializer);
@@ -406,6 +407,16 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
 
   // The number of occurrences of all the words of this block.
   size_t numOccurrences() const { return occurrences_.size(); }
+
+  // The memory that this block occupies: its buffers, its words, and their
+  // occurrences (by capacity, which is what is actually allocated).
+  MemorySize memorySize() const {
+    return MemorySize::bytes(
+        ::ranges::accumulate(*buffers_,
+                             words().capacity() * sizeof(MergedWord) +
+                                 occurrences_.capacity() * sizeof(Occurrence),
+                             std::plus<>{}, &Buffer::capacity));
+  }
 
   // Release the words, their occurrences and the buffers (which go back to
   // the pool). The block stays usable.
