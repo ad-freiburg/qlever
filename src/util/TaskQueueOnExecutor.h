@@ -16,6 +16,7 @@
 #include <boost/asio/post.hpp>
 #include <condition_variable>
 #include <cstddef>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <string>
@@ -74,6 +75,12 @@ namespace ad_utility {
 class TaskQueueOnExecutor {
  public:
   using Task = absl::AnyInvocable<void()>;
+  // The callback that an asynchronous task (see `pushAsync`) has to call
+  // exactly once when it has completed.
+  using Done = absl::AnyInvocable<void() &&>;
+  // An asynchronous task (see `pushAsync`), which is invoked with the `Done`
+  // callback and keeps its slot in the queue until it has called it.
+  using AsyncTask = absl::AnyInvocable<void(Done)>;
 
  private:
   ql::any_io_executor executor_;
@@ -120,12 +127,50 @@ class TaskQueueOnExecutor {
   // `maxNumTasksInFlight()` tasks are in flight. May be called concurrently
   // from several threads, but not after a call to `finish()`.
   //
-  // NOTE: If the execution of the task throws, then `std::terminate` will be
+  // NOTE 1: If the execution of the task throws, then `std::terminate` will be
   // called (this matches the behavior of `TaskQueue`, where an exception
   // escapes the worker thread). Use `submit` below if the exception should
   // instead be propagated to the pushing thread. The *scheduling* of the task
   // also terminates if it throws, see below.
+  //
+  // NOTE 2: The task (and thus everything it has captured) is destroyed before
+  // its slot is released. Once `finish()` (or the destructor) has returned, no
+  // thread of the executor therefore still touches anything that a task pushed
+  // via `push` or `submit` has captured, so the captures may refer to objects
+  // that are destroyed right after the queue. For `pushAsync` see there.
   void push(Task task) {
+    pushAsync([task = std::move(task)](Done done) mutable {
+      task();
+      task = Task{};
+      std::invoke(std::move(done));
+    });
+  }
+
+  // Add an asynchronous task to the queue. This is like `push`, but the task
+  // is invoked with a `done` callback, and it stays in flight until it calls
+  // that callback (exactly once, from any thread), not only until it returns.
+  //
+  // This lets a task start an asynchronous operation (for example a
+  // `boost::asio::post` or an operation on another queue) and return
+  // immediately, so that it does not occupy a thread of the executor while
+  // waiting for the completion of that operation. The properties of the queue
+  // are nevertheless kept: the slot of the task counts against
+  // `maxNumTasksInFlight()` until `done` is called, so `pushAsync` blocks the
+  // pusher just like `push` does, and at most `maxNumTasksInFlight()` tasks
+  // (including those that have returned but not called `done` yet) are in
+  // flight at any time. Everything else (the termination if the task throws or
+  // cannot be scheduled) is as for `push`.
+  //
+  // NOTE: In contrast to `push`, the captures of the task are not destroyed
+  // before its slot is released, but only after the task has returned. A task
+  // that calls `done` itself therefore releases its slot while its captures
+  // still exist. Callers that need the guarantee of `push` have to release the
+  // captures themselves before `done` is called, see for example the `block`
+  // in the task of `AsyncBlockWriterPerSubVocabulary::push`.
+  //
+  // IMPORTANT: A task that never calls `done` keeps its slot forever, so
+  // `finish()` and the destructor then never return.
+  void pushAsync(AsyncTask task) {
     {
       std::unique_lock lock{mutex_};
       cv_.wait(lock, [this]() {
@@ -147,11 +192,12 @@ class TaskQueueOnExecutor {
     // occupied by a task that will never be run.
     ad_utility::terminateIfThrows(
         [this, &task]() {
-          boost::asio::post(executor_, [this,
-                                        task = std::move(task)]() mutable {
-            ad_utility::terminateIfThrows([&task]() { task(); }, errorMessage_);
-            taskIsDone();
-          });
+          boost::asio::post(
+              executor_, [this, task = std::move(task)]() mutable {
+                ad_utility::terminateIfThrows(
+                    [this, &task]() { task(Done{[this]() { taskIsDone(); }}); },
+                    errorMessage_);
+              });
         },
         errorMessage_);
   }

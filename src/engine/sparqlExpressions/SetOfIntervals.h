@@ -22,6 +22,13 @@ namespace ad_utility {
 // also have to be sorted in ascending order. The set additionally stores the
 // `size` of the range [0, size) it refers to (typically the size of an
 // `EvaluationContext`), all the intervals lie within this range.
+//
+// NOTE: A `SetOfIntervals` can only represent the boolean values `true` and
+// `false`, but not UNDEF (expression errors). Code that creates a
+// `SetOfIntervals` must therefore fall back to a different representation
+// (e.g. a vector of `Id`s) if the result is UNDEF for at least one row.
+// Otherwise operations like the `Complement` (used for the logical `!`) would
+// silently turn an error into `true`.
 struct SetOfIntervals {
   using Vec = std::vector<std::pair<size_t, size_t>>;
   Vec _intervals;

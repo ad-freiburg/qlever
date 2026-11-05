@@ -288,15 +288,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  // A positive value throttles the rebuild's read/decompress parallelism only,
-  // reducing its peak CPU without touching queries; 0 means "no limit".
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState,
-      ad_utility::makeConcurrencyLimitedExecutor(
-          std::move(executor),
-          getRuntimeParameterAsOptional<
-              &RuntimeParameters::rebuildIndexScanNumThreads_>()));
+      *locatedTriplesSharedState, std::move(executor));
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -464,6 +458,14 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
+  // All the work of the rebuild on the `executor` (the scans of the old
+  // permutations and the writers of the new ones) shares a single limit, see
+  // the runtime parameter `rebuild-index-max-num-threads`.
+  executor = ad_utility::makeConcurrencyLimitedExecutor(
+      std::move(executor),
+      getRuntimeParameterAsOptional<
+          &RuntimeParameters::rebuildIndexMaxNumThreads_>());
+
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration
   // of the old index and hence contain the old date).
@@ -575,15 +577,19 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     maxConcurrentPairs = numberOfPairs;
   }
   namespace net = boost::asio;
-  net::thread_pool threadPool{patternThreads + 2 * maxConcurrentPairs};
 
   // Collect the first exception thrown by any worker so it can be rethrown to
   // the caller after `threadPool.join()`. Without this, exceptions escaping a
   // `net::post` handler call `std::terminate` and exceptions from a detached
-  // `co_spawn` are silently swallowed. NOTE: `exceptionCollector` must outlive
-  // `threadPool`, since the worker callables capture a pointer to it via
-  // `wrap()` / `std::ref`; the declaration order here guarantees that.
+  // `co_spawn` are silently swallowed.
+  //
+  // NOTE: `exceptionCollector` must be declared before `threadPool`, since the
+  // worker callables capture a pointer to it via `wrap()` / `std::ref`. If an
+  // exception unwinds this scope while workers are still running, the
+  // destructor of `threadPool` joins them, and they must still find a live
+  // collector.
   ad_utility::ExceptionCollector exceptionCollector;
+  net::thread_pool threadPool{patternThreads + 2 * maxConcurrentPairs};
 
   if (index.usePatterns()) {
     net::post(threadPool, exceptionCollector.wrap([&newIndex, &index,
