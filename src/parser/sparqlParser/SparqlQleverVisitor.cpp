@@ -252,9 +252,17 @@ void Visitor::checkWktInValues(const std::vector<GraphPatternOperation>& ops,
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
     const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
-    const antlr4::ParserRuleContext* ctx) {
+    bool distinct, const antlr4::ParserRuleContext* ctx) {
   std::string_view functionName = iri.getContent();
   std::string_view prefixName;
+
+  // Only a custom aggregate may have `DISTINCT` before its argument list
+  // (SPARQL 1.1 grammar note 15), and `ql:stdev` is currently the only one.
+  if (distinct && functionName != absl::StrCat(QL_PREFIX.second, "stdev")) {
+    reportNotSupported(ctx,
+                       "DISTINCT for the argument list of an IRI function "
+                       "that is not an aggregate is");
+  }
   // Helper lambda that checks if `functionName` starts with the given prefix.
   // If yes, remove the prefix from `functionName` and set
   // `prefixName` to the short name of the prefix; see `global/Constants.h`.
@@ -417,8 +425,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(&makeSimplifyGeometryExpression);
     } else if (functionName == "stdev") {
       // Alias for the non-standard `STDEV` aggregate.
-      return createUnary([](Ptr child) -> Ptr {
-        return std::make_unique<StdevExpression>(false, std::move(child));
+      return createUnary([distinct](Ptr child) -> Ptr {
+        return std::make_unique<StdevExpression>(distinct, std::move(child));
       });
     }
   }
@@ -2089,7 +2097,8 @@ ExpressionPtr Visitor::visit(Parser::ConstraintContext* ctx) {
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::FunctionCallContext* ctx) {
-  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);
+  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()),
+                                ctx->argList()->DISTINCT() != nullptr, ctx);
 }
 
 // ____________________________________________________________________________________
@@ -2099,14 +2108,8 @@ std::vector<Visitor::ExpressionPtr> Visitor::visit(
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
   }
-  // The grammar allows an optional DISTINCT before the argument list (the
-  // whole list, not the individual arguments), but we currently don't support
-  // it.
-  if (ctx->DISTINCT()) {
-    reportNotSupported(
-        ctx, "DISTINCT for the argument lists of an IRI functions is ");
-  }
-  // Visit the expression of each argument.
+  // Visit the expression of each argument. An optional `DISTINCT` before the
+  // argument list is handled by `processIriFunctionCall`.
   return visitVector(ctx->expression());
 }
 
@@ -3294,7 +3297,8 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
     return std::make_unique<sparqlExpression::IriExpression>(visit(ctx->iri()));
   }
   // Case 2: Function call, where the function name is an IRI.
-  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);
+  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()),
+                                ctx->argList()->DISTINCT() != nullptr, ctx);
 }
 
 // ____________________________________________________________________________________

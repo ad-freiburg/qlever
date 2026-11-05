@@ -517,6 +517,12 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(
       absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\", ?c)"));
 
+  // `DISTINCT` before the argument list is only allowed for custom aggregates.
+  expectFunctionCallFails(absl::StrCat(ql, "toEpoch>(DISTINCT ?x)"),
+                          ::testing::HasSubstr("DISTINCT"));
+  expectFunctionCallFails(absl::StrCat(math, "sqrt>(DISTINCT ?x)"),
+                          ::testing::HasSubstr("DISTINCT"));
+
   const std::vector<std::string> unaryGeofFunctionNames = {
       "centroid",      "envelope",     "geometryType", "getSRID",
       "minX",          "minY",         "maxX",         "maxY",
@@ -734,9 +740,12 @@ TEST(SparqlParser, aggregateExpressions) {
   expectAggregate("STDEV(DISTINCT ?x)",
                   matchAggregateWithoutChild<StdevExpression>(true));
 
-  // `ql:stdev` is a standard-conforming alias for `STDEV`.
+  // `ql:stdev` is a standard-conforming alias for `STDEV`, also with
+  // `DISTINCT`.
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   expectFunctionCall(absl::StrCat("<", QL_PREFIX.second, "stdev>(?x)"),
                      matchAggregateWithoutChild<StdevExpression>(false));
+  expectFunctionCall(absl::StrCat("<", QL_PREFIX.second, "stdev>(DISTINCT ?x)"),
+                     matchAggregateWithoutChild<StdevExpression>(true));
 }
 }  // namespace
