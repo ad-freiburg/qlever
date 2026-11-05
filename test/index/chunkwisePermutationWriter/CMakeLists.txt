@@ -1,1 +1,2 @@
 addLinkAndDiscoverTest(ChunkWriterTest index)
+addLinkAndDiscoverTest(ChunkwisePermutationWriterTest index)
