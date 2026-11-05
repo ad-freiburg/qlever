@@ -205,11 +205,12 @@ struct MinMaxForAllTypes {
   // because the same function serves both directions.
   template <typename T>
   static bool comesFirst(const T& a, const T& b, const EvaluationContext* ctx) {
-    int result = withValueId(a, ctx, [&b, ctx](Id idA) {
-      return withValueId(b, ctx, [&ctx, idA](Id idB) {
-        return ctx->orderByComparator_.compare(idA, idB);
-      });
-    });
+    int result = withValueIds(
+        ctx,
+        [ctx](Id idA, Id idB) {
+          return ctx->orderByComparator_.compare(idA, idB);
+        },
+        a, b);
     return comparison == valueIdComparators::Comparison::LT ? result < 0
                                                             : result > 0;
   }

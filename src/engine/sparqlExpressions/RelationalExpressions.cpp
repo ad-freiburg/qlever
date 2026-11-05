@@ -27,10 +27,14 @@ using valueIdComparators::Comparison;
 // input types.
 
 // For the various `SingleExpressionResult`s the `idGenerator` function returns
-// a generator that yields `targetSize` many `ValueId`s. A `LocalVocabEntry` of
-// the `input` is yielded as a `LocalVocabEntryView` of it (in a
-// `std::variant<ValueId, LocalVocabEntryView>`), as a `ValueId` can only point
-// to such a view, which then has to be alive (see `compareIdsOrStrings`).
+// a generator that yields `targetSize` many `ValueId`s. The only exception are
+// the `LocalVocabEntry`s of the `input`: A `ValueId` can only point to a
+// `LocalVocabEntryView`, but never to a `LocalVocabEntry`. Such an entry is
+// therefore yielded as a `LocalVocabEntryView` of it (if the `input` is an
+// `IdOrLocalVocabEntry`, as a `std::variant<ValueId, LocalVocabEntryView>`),
+// which `compareIdsOrStrings` then converts to a `ValueId` (see
+// `withValueIds`). The `ValueId` must only be used as long as that
+// `LocalVocabEntryView` (and the `LocalVocabEntry` in the `input`) are alive.
 CPP_template(typename S)(requires SingleExpressionResult<S>)
 auto idGenerator(S&& input, size_t targetSize,
                  const EvaluationContext* context) {

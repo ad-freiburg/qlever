@@ -182,13 +182,6 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   BasicLocalVocabEntry& operator=(const BasicLocalVocabEntry&) = default;
   BasicLocalVocabEntry& operator=(BasicLocalVocabEntry&&) noexcept = default;
 
-  // Return a copy of this entry that is anchored to `newContext`, with an empty
-  // cache for the position in the vocabulary. This is used when an index is
-  // replaced by a rebuilt one, which encodes exactly the same IRIs directly in
-  // an `Id` (see `toIdOrLocalVocabEntry`), so an entry that was not encodable
-  // before stays not encodable.
-  LocalVocabEntry reanchoredTo(const LocalVocabContext& newContext) const;
-
   // Slice to base class `LiteralOrIriT`.
   const Base& asLiteralOrIri() const { return *this; }
 
@@ -297,6 +290,11 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   // Expose `context_` for testing.
   const LocalVocabContext& getContextForTesting() const { return *context_; }
 
+ protected:
+  // Check that this entry can be anchored to `newContext`, see the
+  // `reanchoredTo` functions of the derived classes.
+  void checkCanBeReanchoredTo(const LocalVocabContext& newContext) const;
+
  private:
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
@@ -371,6 +369,13 @@ class alignas(16) LocalVocabEntry
   static LocalVocabEntry literalWithNormalizedContent(
       std::string_view view, const LocalVocabContext& ctx);
 
+  // Return a copy of this entry that is anchored to `newContext`, with an empty
+  // cache for the position in the vocabulary. This is used when an index is
+  // replaced by a rebuilt one, which encodes exactly the same IRIs directly in
+  // an `Id` (see `toIdOrLocalVocabEntry`), so an entry that was not encodable
+  // before stays not encodable.
+  LocalVocabEntry reanchoredTo(const LocalVocabContext& newContext) const;
+
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 };
 
@@ -395,6 +400,11 @@ class alignas(16) LocalVocabEntryView
   // The test inspects the cached position of the words of a `LocalVocab`.
   FRIEND_TEST(TripleComponent, toValueId);
 
+ private:
+  // `LocalVocab` stores the characters of its words separately, and creates
+  // the views of them via the private constructor below.
+  friend class LocalVocab;
+
   // Create a view of `entry` (a `LocalVocabEntry` or another view), the
   // characters of which are stored in `storage`, which must have exactly the
   // contents of `entry.toStringRepresentation()`.
@@ -404,8 +414,13 @@ class alignas(16) LocalVocabEntryView
   LocalVocabEntryView(
       const localVocabEntryDetail::BasicLocalVocabEntry<Other>& entry,
       std::string_view storage)
-      : EntryBase{entry.viewWithStorage(storage), entry} {}
+      : EntryBase{Base{entry.asLiteralOrIri(), storage}, entry} {}
 
+  // Create a view of `base` that is anchored to `context`, see `reanchoredTo`.
+  LocalVocabEntryView(Base base, const LocalVocabContext& context) noexcept
+      : EntryBase{base, context} {}
+
+ public:
   // Create a view of `entry` itself, which is only valid as long as `entry` is
   // neither destroyed, nor moved or modified. This is useful for temporarily
   // representing a `LocalVocabEntry` as an `Id`, see
@@ -421,6 +436,12 @@ class alignas(16) LocalVocabEntryView
   // Return an owning copy of this entry (including the cached position in the
   // vocabulary).
   LocalVocabEntry toOwned() const;
+
+  // Return a view of the same characters that is anchored to `newContext`,
+  // with an empty cache for the position in the vocabulary, see
+  // `LocalVocabEntry::reanchoredTo`. Unlike there, the characters are not
+  // copied, so the result is only valid as long as this view is.
+  LocalVocabEntryView reanchoredTo(const LocalVocabContext& newContext) const;
 
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntryView)
 };

@@ -820,9 +820,10 @@ void DeltaTriples::remapId(
       // first seen by updates after the rebuild snapshot was taken). It still
       // points to an entry that is anchored to the OLD index; in particular,
       // its lazily cached position refers to the old vocabulary. Insert a
-      // *re-anchored* copy (anchored to the new index, with an empty position
-      // cache) into the local vocab and rewrite the id, so that no entry of the
-      // new index references the old index, which is destroyed after the swap.
+      // *re-anchored* view of it (anchored to the new index, with an empty
+      // position cache) into the local vocab, which copies its characters, and
+      // rewrite the id, so that no entry of the new index references the old
+      // index, which is destroyed after the swap.
       id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
           id.getLocalVocabIndex()->reanchoredTo(index.getLocalVocabContext())));
     }

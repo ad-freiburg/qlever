@@ -47,7 +47,7 @@ class BasicIri {
   static constexpr std::string_view schemePattern = "://";
 
  private:
-  // Required for `viewWithStorage` and `toOwned` below.
+  // Required for `toOwned` below.
   template <bool>
   friend class BasicIri;
 
@@ -70,11 +70,6 @@ class BasicIri {
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
-
-  // Return an `IriView` that is equal to this IRI, but refers to `storage`,
-  // which must have exactly the contents of `toStringRepresentation()`
-  // (typically it is a copy of it at a stable address).
-  IriView viewWithStorage(std::string_view storage) const;
 
   // Return an owning copy of this IRI.
   Iri toOwned() const;
@@ -227,6 +222,16 @@ class IriView : public BasicIri<false> {
   friend class BasicIri;
   explicit IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
 
+  // Only for the corresponding constructor of `LiteralOrIriView` (see there).
+  friend class LiteralOrIriView;
+  template <bool isOwning>
+  IriView([[maybe_unused]] const BasicIri<isOwning>& equal,
+          std::string_view storage)
+      : BasicIri<false>{storage} {
+    AD_EXPENSIVE_CHECK(storage ==
+                       std::string_view{equal.toStringRepresentation()});
+  }
+
  public:
   template <typename H>
   friend H AbslHashValue(H h, const IriView& iri) {
@@ -237,13 +242,6 @@ class IriView : public BasicIri<false> {
     return IriView{BasicIri<false>::fromStringRepresentation(sv)};
   }
 };
-
-// _____________________________________________________________________________
-template <bool isOwning>
-IriView BasicIri<isOwning>::viewWithStorage(std::string_view storage) const {
-  AD_EXPENSIVE_CHECK(storage == std::string_view{iri_});
-  return IriView{BasicIri<false>{storage}};
-}
 
 // _____________________________________________________________________________
 template <bool isOwning>

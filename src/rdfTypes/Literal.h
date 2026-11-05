@@ -40,9 +40,11 @@ class BasicLiteral {
       std::conditional_t<isOwning, std::string, std::string_view>;
 
  private:
-  // Required for `viewWithStorage` and `toOwned` below.
+  // Required for `toOwned` below, and for the constructor of `LiteralView`
+  // from an equal literal.
   template <bool>
   friend class BasicLiteral;
+  friend class LiteralView;
 
   // Store the normalized version of the literal, including possible datatypes
   // and descriptors.
@@ -56,9 +58,9 @@ class BasicLiteral {
   std::size_t beginOfSuffix_;
 
   // Like the constructor below, but without its checks. Only for a `content`
-  // and a `beginOfSuffix` that are taken from a valid literal (see
-  // `viewWithStorage` and `toOwned`), because `viewWithStorage` is called for
-  // each word that is added to a `LocalVocab`.
+  // and a `beginOfSuffix` that are taken from a valid literal (see `toOwned`
+  // and the constructor of `LiteralView` from an equal literal, which is called
+  // for each word that is added to a `LocalVocab`).
   struct UncheckedTag {};
   BasicLiteral(UncheckedTag, StorageType content, size_t beginOfSuffix)
       : storage_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {}
@@ -91,13 +93,6 @@ class BasicLiteral {
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,
                                               beginOfSuffix_)
-
-  // Return a `LiteralView` that is equal to this literal, but refers to
-  // `storage`, which must have exactly the contents of
-  // `toStringRepresentation()` (typically it is a copy of it at a stable
-  // address). Unlike `LiteralView::fromStringRepresentation`, this doesn't have
-  // to determine the position of the datatype or language tag again.
-  LiteralView viewWithStorage(std::string_view storage) const;
 
   // Return an owning copy of this literal.
   Literal toOwned() const;
@@ -230,6 +225,16 @@ class LiteralView : public BasicLiteral<false> {
   explicit LiteralView(BasicLiteral<false>&& base)
       : BasicLiteral<false>(std::move(base)) {}
 
+  // Only for the corresponding constructor of `LiteralOrIriView` (see there).
+  friend class LiteralOrIriView;
+  template <bool isOwning>
+  LiteralView(const BasicLiteral<isOwning>& equal, std::string_view storage)
+      : BasicLiteral<false>{BasicLiteral<false>::UncheckedTag{}, storage,
+                            equal.beginOfSuffix_} {
+    AD_EXPENSIVE_CHECK(storage ==
+                       std::string_view{equal.toStringRepresentation()});
+  }
+
  public:
   template <typename H>
   friend H AbslHashValue(H h, const LiteralView& lit) {
@@ -241,15 +246,6 @@ class LiteralView : public BasicLiteral<false> {
     return LiteralView{BasicLiteral<false>::fromStringRepresentation(internal)};
   }
 };
-
-// _____________________________________________________________________________
-template <bool isOwning>
-LiteralView BasicLiteral<isOwning>::viewWithStorage(
-    std::string_view storage) const {
-  AD_EXPENSIVE_CHECK(storage == std::string_view{storage_});
-  return LiteralView{BasicLiteral<false>{
-      typename BasicLiteral<false>::UncheckedTag{}, storage, beginOfSuffix_}};
-}
 
 // _____________________________________________________________________________
 template <bool isOwning>

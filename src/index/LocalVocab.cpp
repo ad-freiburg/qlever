@@ -45,6 +45,12 @@ std::pair<LocalVocabIndex, bool> LocalVocab::WordSet::insert(
   // not turned into a `std::memmove` by libstdc++ before version 13.4 (GCC bug
   // 116754) and by `range-v3`.
   std::copy(representation.begin(), representation.end(), characters);
+  // TODO<RobinTF> The `find` above and the `insert` below both hash the word,
+  // and the view is created before it is moved into the set. An
+  // `emplace_from`-like operation (a heterogeneous `insert`/`try_emplace` that
+  // only constructs the element from the key if it is not yet contained, like
+  // `absl`'s `lazy_emplace`) would avoid both, and would also allow to
+  // allocate and copy the characters only when actually needed.
   auto [it, isNew] = words_.insert(LocalVocabEntryView{
       word, std::string_view{characters, representation.size()}});
   AD_CORRECTNESS_CHECK(isNew);

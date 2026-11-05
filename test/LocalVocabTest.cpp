@@ -817,3 +817,31 @@ TEST(LocalVocab, viewsAndOwningEntries) {
   EXPECT_EQ(&copyOfA.getContextForTesting(), &context);
   EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::ElementsAre(a));
 }
+
+// _____________________________________________________________________________
+TEST(LocalVocab, wordsAreStoredWithTheirStructure) {
+  using ad_utility::triple_component::Iri;
+  using ad_utility::triple_component::Literal;
+  using ad_utility::triple_component::LiteralView;
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  // A literal with a datatype that contains a quote, for which the position of
+  // the datatype can't be determined from the string representation alone.
+  LocalVocabEntry word{Literal::literalWithoutQuotes(
+                           "x", Iri::fromStringRepresentation("<a\"b>")),
+                       context};
+  EXPECT_ANY_THROW(
+      LiteralView::fromStringRepresentation(word.toStringRepresentation()));
+
+  LocalVocab localVocab;
+  const LocalVocabEntryView& stored =
+      *localVocab.getIndexAndAddIfNotContained(word);
+  EXPECT_NE(stored.toStringRepresentation().data(),
+            word.toStringRepresentation().data());
+  EXPECT_EQ(stored, word);
+  EXPECT_EQ(stored.getLiteral().getContent(), "x");
+  EXPECT_EQ(stored.getLiteral().getDatatype(), "a\"b");
+
+  // The same holds for a view of the entry itself.
+  LocalVocabEntryView view{word};
+  EXPECT_EQ(view.getLiteral().getDatatype(), "a\"b");
+}

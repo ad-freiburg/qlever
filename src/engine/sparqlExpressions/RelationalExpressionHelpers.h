@@ -152,6 +152,27 @@ decltype(auto) withValueId(const S& value, const EvaluationContext* context,
   }
 }
 
+// Call `function` with the `ValueId`s that correspond to the `values` (in the
+// same order), see `withValueId` above for the details and the lifetime of
+// these `ValueId`s.
+template <typename F>
+decltype(auto) withValueIds(const EvaluationContext*, const F& function) {
+  return function();
+}
+template <typename F, typename S, typename... Ss>
+decltype(auto) withValueIds(const EvaluationContext* context, const F& function,
+                            const S& value, const Ss&... values) {
+  return withValueId(value, context,
+                     [context, &function, &values...](Id id) -> decltype(auto) {
+                       return withValueIds(
+                           context,
+                           [&function, id](auto... ids) -> decltype(auto) {
+                             return function(id, ids...);
+                           },
+                           values...);
+                     });
+}
+
 // Compare two elements that are either strings or IDs in some way (see the
 // `StoresStringOrId` concept) according to the specified comparison (see
 // `ValueIdComparators.h` for details). The `EvaluationContext` is required to
@@ -168,11 +189,12 @@ inline const auto compareIdsOrStrings =
                 ad_utility::isSimilar<LocalVocabEntry, U>) {
     return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
   } else {
-    return withValueId(a, ctx, [&b, ctx](Id idA) {
-      return withValueId(b, ctx, [idA](Id idB) {
-        return valueIdComparators::compareIds(idA, idB, Comp);
-      });
-    });
+    return withValueIds(
+        ctx,
+        [](Id idA, Id idB) {
+          return valueIdComparators::compareIds(idA, idB, Comp);
+        },
+        a, b);
   }
 };
 }  // namespace sparqlExpression

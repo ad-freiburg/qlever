@@ -165,6 +165,15 @@ TEST(LocalVocabEntry, reanchoredTo) {
   EXPECT_TRUE(newPosition ==
               iriLocalVocabEntry("<x>", newContext).positionInVocab());
 
+  // Reanchoring a view yields a view of the same characters.
+  LocalVocabEntryView view{entry};
+  LocalVocabEntryView reanchoredView = view.reanchoredTo(newContext);
+  EXPECT_EQ(reanchoredView, entry);
+  EXPECT_EQ(reanchoredView.toStringRepresentation().data(),
+            entry.toStringRepresentation().data());
+  EXPECT_EQ(&reanchoredView.getContextForTesting(), &newContext);
+  EXPECT_TRUE(reanchoredView.positionInVocab() == newPosition);
+
   // Literals are never encoded and can always be reanchored.
   LocalVocabEntry literal = LocalVocabEntry::literalWithoutQuotes(
       "http://example.org/42", oldContext);
