@@ -239,8 +239,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setSettingsFile(config.settingsFile_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
-  index.getImpl().setHasWordNormalizationForIndexBuilding(
-      config.hasWordNormalization_);
+  index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
   index.getImpl().setHasWordRestrictPredicates(
       config.hasWordRestrictPredicates_);
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);

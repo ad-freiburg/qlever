@@ -806,13 +806,12 @@ TEST(IndexTest, processTriple) {
 // Test the words of the `ql:has-word` triples with the different
 // normalizations.
 TEST(IndexTest, processTripleHasWordNormalization) {
-  // A literal with "café" composed, without accent, uppercase and decomposed,
-  // and decomposed in plural, and a function that returns its words with the
-  // given normalization.
+  // A literal with "café" composed, decomposed, uppercased and in plural, and
+  // a function that returns its words with the given normalization.
   auto getWords = [](ad_utility::HasWordNormalization normalization) {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.addHasWordTriples() = true;
-    index.setHasWordNormalizationForIndexBuilding(normalization);
+    index.setHasWordNormalization(normalization);
     TurtleTriple turtleTriple{
         iri("<subject>"), iri("<predicate>"),
         lit("\"Café cafe, CAFE\xcc\x81! cafe\xcc\x81s\"")};

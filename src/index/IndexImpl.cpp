@@ -455,8 +455,9 @@ void IndexImpl::prepareIndexBuild() {
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
-  // The normalization of the `ql:has-word` triples is stored so that
-  // `ql:normalize` can apply the same normalization at query time.
+  // The normalization of the words of the `ql:has-word` triples is stored so
+  // that the server can later normalize the words of queries and updates in
+  // the same way.
   configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
       hasWordNormalization_;
   // The predicates to which the `ql:has-word` triples are restricted are
