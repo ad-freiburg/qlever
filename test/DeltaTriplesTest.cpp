@@ -22,6 +22,8 @@
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -644,28 +646,51 @@ TEST_F(DeltaTriplesTest, insertTriplesAddsHasWordTriples) {
       {"<a> <b> \"abc\"", "<a> <label> \"abc\"", "<a> <b> \"def\""});
   ql::ranges::sort(triplesRestricted);
   deltaTriplesRestricted.insertTriples(cancellationHandle, triplesRestricted);
-  EXPECT_THAT(
-      deltaTriplesRestricted,
-      internalTriplesAre(
-          indexRestricted, localVocabRestricted,
-          {{lit("\"abc\""), hasWord, lit("\"abc\""), TripleComponent{1}}}, {}));
+  Quads restrictedHasWordTriples{
+      {lit("\"abc\""), hasWord, lit("\"abc\""), TripleComponent{1}}};
+  EXPECT_THAT(deltaTriplesRestricted,
+              internalTriplesAre(indexRestricted, localVocabRestricted,
+                                 restrictedHasWordTriples, {}));
+
+  // A triple whose predicate is not an IRI (an update can bind a variable in
+  // the predicate position to any value) adds no internal triples.
+  auto tripleWithIntPredicate = makeIdTriples(
+      indexRestricted, localVocabRestricted, {"<a> <b> \"ghi\"@en"});
+  tripleWithIntPredicate.at(0).ids().at(1) = Id::makeFromInt(42);
+  deltaTriplesRestricted.insertTriples(cancellationHandle,
+                                       tripleWithIntPredicate);
+  EXPECT_THAT(deltaTriplesRestricted,
+              internalTriplesAre(indexRestricted, localVocabRestricted,
+                                 restrictedHasWordTriples, {}));
 }
 
 // Test that a literal inserted by an update can be found via `ql:has-word`.
 TEST(DeltaTriples, hasWordTriplesForUpdatedLiterals) {
-  // An index with `ql:has-word` triples.
+  // An index with `ql:has-word` triples (an own one, because the updates
+  // modify its delta triples).
   ad_utility::testing::TestIndexConfig config{"<x> <label> \"alpha beta\""};
   config.addHasWordTriples = true;
-  QueryExecutionContext* qec = ad_utility::testing::getQec(config);
+  auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+      "hasWordTriplesForUpdatedLiterals", std::move(config)));
+  QueryResultCache cache;
+  NamedResultCache namedResultCache;
+  QueryExecutionContext qec{index,
+                            &cache,
+                            ad_utility::testing::makeAllocator(),
+                            &namedResultCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            ad_utility::testing::singleThreadExecutor()};
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
-  // Run `query` on `qec` and return the rows of its result as TSV lines
-  // (without the header).
+  // Run `query` on the current delta triples and return the rows of its result
+  // as TSV lines (without the header).
   auto runQuery = [&](const std::string& query) {
-    qec->clearCacheUnpinnedOnly();
+    cache.clearAll();
+    qec.setLocatedTriplesForEvaluation(
+        index->deltaTriplesManager().getCurrentLocatedTriplesSharedState());
     auto parsedQuery = ad_utility::testing::parseQuery(query);
-    QueryPlanner planner{qec, cancellationHandle};
+    QueryPlanner planner{&qec, cancellationHandle};
     auto tree = planner.createExecutionTree(parsedQuery);
     ad_utility::Timer timer{ad_utility::Timer::Started};
     std::string result;
@@ -681,37 +706,22 @@ TEST(DeltaTriples, hasWordTriplesForUpdatedLiterals) {
     return rows;
   };
 
-  // Run the `update` on `qec`. The delta triples live in `deltaTriples`, which
-  // the queries above evaluate against. Like the index does for its own
-  // `DeltaTriplesManager`, register the metadata of the permutations.
-  const Index& index = qec->getIndex();
-  DeltaTriples deltaTriples{index};
-  for (auto permutation : Permutation::ALL) {
-    index.getImpl()
-        .getPermutation(permutation)
-        .setOriginalMetadataForDeltaTriples(deltaTriples);
-  }
-  auto originalLocatedTriples = qec->locatedTriplesSharedState();
-  qec->setLocatedTriplesForEvaluation(
-      deltaTriples.getLocatedTriplesSharedStateReference());
-
-  // At the end, restore the located triples of the shared (cached) `qec` and
-  // clear its cache, so that neither refers to `deltaTriples` anymore.
-  absl::Cleanup restoreQec{[qec, &originalLocatedTriples] {
-    qec->setLocatedTriplesForEvaluation(originalLocatedTriples);
-    qec->clearCacheUnpinnedOnly();
-  }};
+  // Run the `update` via the `DeltaTriplesManager` of the index.
   auto runUpdate = [&](const std::string& update) {
     ad_utility::BlankNodeManager blankNodeManager;
     auto parsedUpdates = SparqlParser::parseUpdate(&blankNodeManager,
                                                    encodedIriManager(), update);
-    for (auto& parsedUpdate : parsedUpdates) {
-      QueryPlanner planner{qec, cancellationHandle};
-      auto tree = planner.createExecutionTree(parsedUpdate);
-      ExecuteUpdate::executeUpdate(index, parsedUpdate, *tree, deltaTriples,
-                                   cancellationHandle);
-      deltaTriples.updateAugmentedMetadata();
-    }
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      qec.setLocatedTriplesForEvaluation(
+          deltaTriples.getLocatedTriplesSharedStateReference());
+      for (auto& parsedUpdate : parsedUpdates) {
+        deltaTriples.updateAugmentedMetadata();
+        QueryPlanner planner{&qec, cancellationHandle};
+        auto tree = planner.createExecutionTree(parsedUpdate);
+        ExecuteUpdate::executeUpdate(*index, parsedUpdate, *tree, deltaTriples,
+                                     cancellationHandle);
+      }
+    });
   };
   std::string entitiesWithGamma =
       "SELECT ?s ?l WHERE { ?s <label> ?l . ?l ql:has-word \"gamma\" }";

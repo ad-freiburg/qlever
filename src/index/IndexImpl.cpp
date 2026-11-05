@@ -1690,12 +1690,6 @@ ad_utility::HashMap<std::string, size_t> IndexImpl::computeHasWordFrequencies(
   return wordFrequencies;
 }
 
-// _____________________________________________________________________________
-bool IndexImpl::hasWordTriplesForPredicate(const std::string& predicate) const {
-  return hasWordRestrictPredicates_.empty() ||
-         ql::ranges::binary_search(hasWordRestrictPredicates_, predicate);
-}
-
 // ___________________________________________________________________________
 ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   ProcessedTriple result;
@@ -1705,26 +1699,23 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
-    // Check if the predicate is one of the `hasWordRestrictPredicates_` (or
-    // none are set). The predicate is an `Id` if the parser has encoded it, see
-    // `EncodedIriManager`. In this case, `decodedPredicate` owns its string, so
-    // that `needle` is a reference in both cases (no copy of the IRI).
-    auto predicateAllowsHasWord = [this, &predicate = triple.predicate_]() {
-      if (hasWordRestrictPredicates_.empty()) {
-        return true;
-      }
-      std::string decodedPredicate;
-      const std::string& needle =
-          predicate.isIri()
-              ? predicate.getIri().toStringRepresentation()
-              : (decodedPredicate =
-                     encodedIriManager().toString(predicate.getId()));
-      return hasWordTriplesForPredicate(needle);
+    // Return the predicate as a string. The predicate is an `Id` if the parser
+    // has encoded it, see `EncodedIriManager`. In this case,
+    // `decodedPredicate` owns its string, so that the result is a reference in
+    // both cases (no copy of the IRI).
+    std::string decodedPredicate;
+    auto getPredicate = [this, &predicate = triple.predicate_,
+                         &decodedPredicate]() -> const std::string& {
+      return predicate.isIri()
+                 ? predicate.getIri().toStringRepresentation()
+                 : (decodedPredicate =
+                        encodedIriManager().toString(predicate.getId()));
     };
 
     // Extract the words of the literal for the `ql:has-word` triples and count
-    // their term frequencies.
-    if (addHasWordTriples_ && predicateAllowsHasWord()) {
+    // their term frequencies (only if the predicate is one of the
+    // `hasWordRestrictPredicates_`, or none are set).
+    if (addHasWordTriples_ && hasWordTriplesForPredicate(getPredicate)) {
       result.wordFrequencies_ = computeHasWordFrequencies(lit.getContent());
     }
   }

@@ -139,9 +139,11 @@ class DeltaTriples {
 
   // Cache commonly used predicates and their IRI representation between calls
   // of `makeInternalTriples`. For example in wikidata `wdt:P31`, or `wdt:P279`
-  // are frequently used, so we try to avoid an expensive lookup from disk.
+  // are frequently used, so we try to avoid an expensive lookup from disk. A
+  // predicate that is not an IRI is cached as `std::nullopt`.
   static constexpr size_t predicateCacheSize_ = 1000;
-  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
+  ad_utility::util::LRUCache<Id::T,
+                             std::optional<ad_utility::triple_component::Iri>>
       predicateCache_{predicateCacheSize_};
 
   // Store the id of the `ql:has-word` predicate to avoid repeated disk lookups.

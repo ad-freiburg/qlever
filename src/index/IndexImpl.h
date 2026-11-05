@@ -962,9 +962,19 @@ class IndexImpl {
       std::string_view content) const;
 
   // Return true if the `ql:has-word` triples are added for the literals that
-  // are the object of a triple with the given `predicate` (in the format of
-  // `Iri::toStringRepresentation`), see `hasWordRestrictPredicates_`.
-  bool hasWordTriplesForPredicate(const std::string& predicate) const;
+  // are the object of a triple with the predicate returned by `getPredicate`
+  // (in the format of `Iri::toStringRepresentation`), see
+  // `hasWordRestrictPredicates_`.
+  //
+  // NOTE: `getPredicate` is only called if the `ql:has-word` triples are
+  // restricted to certain predicates, so that the predicate is decoded only
+  // when needed.
+  template <typename GetPredicate>
+  bool hasWordTriplesForPredicate(const GetPredicate& getPredicate) const {
+    return hasWordRestrictPredicates_.empty() ||
+           ql::ranges::binary_search(hasWordRestrictPredicates_,
+                                     getPredicate());
+  }
 
  protected:
   /**

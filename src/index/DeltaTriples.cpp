@@ -268,15 +268,22 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
     const auto& literal = optionalLiteralOrIri.value().getLiteral();
 
-    // Return the predicate of the triple as an IRI (cached, because there are
-    // typically few distinct predicates).
-    auto getPredicate = [this, &ids]() -> const auto& {
+    // Return the predicate of the triple as an IRI, or `std::nullopt` if it is
+    // not an IRI (an update can bind a variable in the predicate position to
+    // any value). Cached, because there are typically few distinct predicates.
+    auto getPredicate =
+        [this,
+         &ids]() -> const std::optional<ad_utility::triple_component::Iri>& {
       return predicateCache_.getOrCompute(
-          ids.at(1).getBits(), [this](Id::T bits) {
+          ids.at(1).getBits(),
+          [this](
+              Id::T bits) -> std::optional<ad_utility::triple_component::Iri> {
             auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
                 index_, Id::fromBits(bits), localVocab_, true);
-            AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
-            AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
+            if (!optionalPredicate.has_value() ||
+                !optionalPredicate.value().isIri()) {
+              return std::nullopt;
+            }
             return std::move(optionalPredicate.value().getIri());
           });
     };
@@ -285,28 +292,39 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     // depend on the subject of the triple in which the literal occurs. Because
     // we don't track the exact counts of existing objects, we just
     // conservatively add these internal triples once per object on insertion,
-    // and never remove them. This is inefficient, but never wrong because
-    // queries that use these internal triples will always join these internal
-    // triples with a regular index scan.
+    // and never remove them.
     //
-    // NOTE: As in the index builder, the `ql:has-word` triples are only added
+    // NOTE 1: This is inefficient, but harmless for queries that join these
+    // internal triples with a regular index scan. A query that uses only the
+    // `ql:has-word` triples (like `?l ql:has-word "word"`) also returns a
+    // literal that no longer occurs in any triple.
+    //
+    // NOTE 2: As in the index builder, the `ql:has-word` triples are only added
     // if the predicate is one of the `--has-word-restrict-predicates` (or none
-    // are set).
-    bool isNewObject = insertion && addedObjects.insert(objectId).second;
+    // are set). A predicate that is not an IRI is never one of them.
     if (insertion && index_.addHasWordTriples() &&
-        index_.hasWordTriplesForPredicate(
-            getPredicate().toStringRepresentation()) &&
+        index_.hasWordTriplesForPredicate([&getPredicate]() {
+          const auto& predicate = getPredicate();
+          return predicate.has_value() ? predicate->toStringRepresentation()
+                                       : std::string{};
+        }) &&
         addedHasWordObjects.insert(objectId).second) {
       addHasWordTriples(objectId, literal, internalTriples);
     }
+
+    // The language filter triples are only added for a literal with a language
+    // tag and a predicate that is an IRI.
     if (!literal.hasLanguageTag()) {
+      continue;
+    }
+    const auto& predicate = getPredicate();
+    if (!predicate.has_value()) {
       continue;
     }
 
     // Extra triple `<subject> @language@<predicate> "object"@language`.
-    const auto& predicate = getPredicate();
     auto langtag = literal.getLanguageTag();
-    auto specialPredicate = predicate.withLanguageTag(langtag);
+    auto specialPredicate = predicate->withLanguageTag(langtag);
     Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
                              index_, localVocab_);
     internalTriples.push_back(
@@ -314,7 +332,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
 
     // Extra triple `"object"@language ql:langtag <@language>` (once per object
     // and only on insertion, see above).
-    if (!isNewObject) {
+    if (!insertion || !addedObjects.insert(objectId).second) {
       continue;
     }
     Id langtagId =
