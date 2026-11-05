@@ -80,7 +80,7 @@ void testCartesianProductImpl(VectorTable expected,
     for (size_t offset = 0; offset < expected.size(); ++offset) {
       LimitOffsetClause limitClause{limit, 0, offset};
       auto join = makeJoin(inputs, useLimitInSuboperations);
-      join.applyLimitOffset(limitClause);
+      join.applyLimitOffset(limitClause, false);
       VectorTable partialResult;
       std::copy(expected.begin() + limitClause.actualOffset(expected.size()),
                 expected.begin() + limitClause.upperBound(expected.size()),
@@ -306,7 +306,7 @@ class CartesianProductJoinLazyTest
         ->sizeEstimate() = counter;
     CartesianProductJoin join{qec, std::move(children), CHUNK_SIZE};
     join.applyLimitOffset(
-        LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
+        LimitOffsetClause{std::get<2>(GetParam()), getOffset()}, false);
     return join;
   }
 
@@ -775,7 +775,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
 
-    join.applyLimitOffset({1});
+    join.applyLimitOffset({1}, false);
 
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
@@ -800,7 +800,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
 
     // Should not work with limit
-    join.applyLimitOffset({1});
+    join.applyLimitOffset({1}, false);
 
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());

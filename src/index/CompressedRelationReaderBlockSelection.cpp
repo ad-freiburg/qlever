@@ -125,10 +125,12 @@ auto CompressedRelationReader::getBlocksForJoin(
   auto& blockIdx = res.numHandledBlocks;
   while (true) {
     // Skip all IDs in the `joinColumn` that are strictly smaller than any
-    // block that hasn't been handled so far.
-    while (colIt != colEnd && idLessThanBlock(*colIt, *blockIt)) {
-      ++colIt;
-    }
+    // block that hasn't been handled so far. Use a binary search, because
+    // after the first matching blocks have been found, this typically skips
+    // (almost) all the remaining entries of the `joinColumn`.
+    colIt = ql::ranges::lower_bound(
+        colIt, colEnd,
+        getRelevantIdFromTriple(blockIt->firstTriple_, metadataAndBlocks));
     if (colIt == colEnd) {
       return res;
     }
@@ -320,20 +322,17 @@ static auto createErrorMessage = [](const auto& b1, const auto& b2,
 // _____________________________________________________________________________
 // Check if the provided `Range` holds less than two `CompressedBlockMetadata`
 // values.
-CPP_template(typename Range)(
-    requires ql::ranges::input_range<
-        Range>) static bool checkBlockRangeSizeLessThanTwo(const Range&
-                                                               blockMetadataRange) {
+CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
+static bool checkBlockRangeSizeLessThanTwo(const Range& blockMetadataRange) {
   auto begin = ql::ranges::begin(blockMetadataRange);
   auto end = ql::ranges::end(blockMetadataRange);
   return begin == end || ql::ranges::next(begin) == end;
 }
 
 // _____________________________________________________________________________
-CPP_template(typename Range)(
-    requires ql::ranges::input_range<
-        Range>) static void checkBlockMetadataInvariantOrderAndUniquenessImpl(const Range&
-                                                                                  blockMetadataRange) {
+CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
+static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
+    const Range& blockMetadataRange) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;
   }
@@ -359,7 +358,8 @@ CPP_template(typename Range)(
 }
 
 // ____________________________________________________________________________
-CPP_template(typename Range)(requires ql::ranges::input_range<Range>) static void checkBlockMetadataInvariantBlockConsistencyImpl(
+CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
+static void checkBlockMetadataInvariantBlockConsistencyImpl(
     const Range& blockMetadataRange, size_t firstFreeColIndex) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;

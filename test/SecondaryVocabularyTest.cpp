@@ -36,7 +36,10 @@
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/CompactStringVector.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -110,7 +113,7 @@ class SecondaryVocabIndexTest : public ::testing::Test {
 
   // A `LocalVocabEntry` for the given IRI, in the context of this index.
   LocalVocabEntry entry(std::string_view iriref) const {
-    return LocalVocabEntry::fromIriref(iriref, context_);
+    return iriLocalVocabEntry(iriref, context_);
   }
 
   // The `Id` that refers to the given entry. NOTE: The entry has to outlive the
@@ -446,9 +449,14 @@ TEST(SecondaryVocabIndex, valueIdBasics) {
   // Unlike a `LocalVocabIndex`, a `SecondaryVocabIndex` carries its value in
   // its bits.
   EXPECT_TRUE(id.canBeComparedBitwise());
-  EXPECT_THROW(Id::makeFromSecondaryVocabIndex(
-                   SecondaryVocabIndex::make(Id::maxIndex + 1)),
-               Id::IndexTooLargeException);
+  // An index larger than `Id::maxIndex` throws. With a 64 bit payload every
+  // index fits.
+  if constexpr (Id::maxIndex < std::numeric_limits<uint64_t>::max()) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Id::makeFromSecondaryVocabIndex(
+            SecondaryVocabIndex::make(Id::maxIndex + 1)),
+        ::testing::HasSubstr("is bigger than"));
+  }
 
   auto visitor = [](const auto& value) -> std::optional<uint64_t> {
     if constexpr (std::is_same_v<std::decay_t<decltype(value)>,
@@ -617,7 +625,7 @@ TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
   EXPECT_EQ(index.getImpl().secondaryVocab(), nullptr);
   EXPECT_FALSE(context.hasSecondaryVocabulary());
   auto entry = [&context](std::string_view iriref) {
-    return LocalVocabEntry::fromIriref(iriref, context);
+    return iriLocalVocabEntry(iriref, context);
   };
 
   auto entryB = entry("<b>");

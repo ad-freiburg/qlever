@@ -29,9 +29,9 @@ numbers for the same seed.
 @param randomNumberGeneratorFactory An invocable object, that should return a
 random number generator, using the given seed.
 */
-CPP_template(typename T)(requires std::invocable<T, RandomSeed>) void testSeed(
-    T randomNumberGeneratorFactory,
-    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+CPP_template(typename T)(requires std::invocable<T, RandomSeed>)
+void testSeed(T randomNumberGeneratorFactory,
+              ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeed")};
 

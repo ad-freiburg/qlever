@@ -1271,7 +1271,7 @@ TEST(JoinTest, costEstimateOfJoinWithIndexScan) {
   // A scan with a LIMIT and OFFSET reads all blocks. Its size is the limit,
   // its own cost includes the offset.
   auto scanWithLimit = makeScan();
-  scanWithLimit->applyLimitOffset({3, 2});
+  scanWithLimit->applyLimitOffset({3, 2}, false);
   ASSERT_EQ(scanWithLimit->getSizeEstimate(), 3u);
   ASSERT_EQ(scanWithLimit->getCostEstimate(), 5u);
   expectCost(one, scanWithLimit, 3, 5);
