@@ -103,8 +103,7 @@ TEST(Sort, sortNumTasksInFlight) {
     IdTable input = shuffled.clone();
     IdTableUtils::sort(
         input, {0},
-        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks},
-        std::make_shared<ad_utility::CancellationHandle<>>());
+        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks});
     EXPECT_EQ(input, expected) << "numTasks = " << numTasks;
   }
 }
@@ -112,7 +111,7 @@ TEST(Sort, sortNumTasksInFlight) {
 // Test that the number of tasks of the `SortConfig` of a query is the runtime
 // parameter `sort-num-tasks-in-flight`, not capped by
 // `max-num-threads-per-query` (which limits the threads of the query's executor
-// instead).
+// instead), and that it checks the given cancellation handle.
 TEST(Sort, makeSortConfig) {
   auto numTasks = [](size_t sortNumTasks, size_t maxNumThreadsPerQuery) {
     auto cleanup1 =
@@ -121,9 +120,11 @@ TEST(Sort, makeSortConfig) {
     auto cleanup2 =
         setRuntimeParameterForTest<&RuntimeParameters::maxNumThreadsPerQuery_>(
             maxNumThreadsPerQuery);
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     auto config = QueryExecutionContext::makeSortConfig(
-        ad_utility::testing::singleThreadExecutor());
+        ad_utility::testing::singleThreadExecutor(), handle);
     EXPECT_TRUE(static_cast<bool>(config.executor_));
+    EXPECT_EQ(config.cancellationHandle_, handle);
     return config.numTasksInFlight_;
   };
   EXPECT_EQ(numTasks(3, 6), 3);
@@ -290,12 +291,11 @@ TEST(Sort, inMemorySortIsCancellable) {
   handle->cancel(ad_utility::CancellationState::MANUAL);
   for (uint32_t numTasks : {1, 8}) {
     IdTable input = table.clone();
-    EXPECT_THROW(
-        IdTableUtils::sort(
-            input, {0},
-            SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks},
-            handle),
-        ad_utility::CancellationException)
+    EXPECT_THROW(IdTableUtils::sort(
+                     input, {0},
+                     SortConfig{ad_utility::testing::multiThreadExecutor(),
+                                numTasks, handle}),
+                 ad_utility::CancellationException)
         << "numTasks = " << numTasks;
   }
 }

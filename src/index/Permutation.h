@@ -225,10 +225,12 @@ class Permutation {
 
   // Get the exact size of the result of a scan, taking into account the
   // given located triples. This requires an exact location of the delta
-  // triples within the respective blocks.
+  // triples within the respective blocks (see
+  // `CompressedRelationReader::getResultSizeOfScan`).
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const LocatedTriplesState& locatedTriplesState,
+      const CancellationHandle& cancellationHandle) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
@@ -302,6 +304,13 @@ class Permutation {
       ColumnIndex col) const;
 
  private:
+  // Throw a `std::runtime_error` that names this permutation if it was not
+  // loaded (see `loadFromDisk`), for example for a `Qlever` instance that was
+  // loaded from a blob of the named result cache. Called by the entry points
+  // of the scans, so that such queries fail with a readable message instead of
+  // an assertion deep inside the scan.
+  void throwIfNotLoaded() const;
+
   // Common implementation of the two `lazyScan` overloads above. Performs the
   // scan through the given `reader`, which may either be this permutation's
   // shared reader or an independently created one.
