@@ -52,7 +52,8 @@ class Sort : public Operation {
     return subtree_->getSizeEstimate();
   }
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   virtual float getMultiplicity(size_t col) override {
@@ -101,7 +102,7 @@ class Sort : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const std::set<Variable>& variables) const override;
+      const std::set<Variable>& requestedVariables) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

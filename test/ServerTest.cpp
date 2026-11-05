@@ -10,6 +10,7 @@
 #include <optional>
 #include <thread>
 
+#include "./libqlever/QleverTestHelpers.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
@@ -21,6 +22,7 @@
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
 #include "parser/SparqlParser.h"
+#include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -73,6 +75,12 @@ TEST(ServerTest, chooseBestFittingMediaType) {
   EXPECT_EQ(choose({tsv, csv}, askQuery), sparqlJson);
   EXPECT_EQ(choose({turtle, json}, selectQuery), sparqlJson);
   EXPECT_EQ(choose({octetStream, sparqlJson}, constructQuery), turtle);
+
+  // QLever's binary format is only supported for SELECT queries.
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, selectQuery),
+            binaryQleverExport);
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({binaryQleverExport}, constructQuery), turtle);
 }
 
 // _____________________________________________________________________________
@@ -572,7 +580,8 @@ TEST(ServerTest, pingEndpoint) {
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
   EXPECT_THAT(logStream.str(),
-              testing::HasSubstr("Alive check without message"));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+                  testing::HasSubstr("Alive check without message")));
 
   // With a `msg` parameter; the response is the same regardless of the
   // message, which is only used for logging.
@@ -582,7 +591,8 @@ TEST(ServerTest, pingEndpoint) {
   EXPECT_THAT(responseBodyToString(std::move(response.body())),
               testing::StrEq("This QLever server is up and running\n"));
   EXPECT_THAT(logStream.str(),
-              testing::HasSubstr("Alive check with message \"hello\""));
+              ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+                  testing::HasSubstr("Alive check with message \"hello\"")));
 }
 
 // _____________________________________________________________________________
@@ -732,6 +742,24 @@ TEST(ServerTest, processCommands) {
       boost::beast::http::status::bad_request,
       testing::HasSubstr(
           "Unknown value \"not-a-real-command\" for parameter \"cmd\""));
+}
+
+// Test that a request with neither a known URL parameter nor a known path is
+// answered with an error response.
+TEST(ServerTest, unknownParametersAndPath) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown URL parameter results in a 400 Bad Request response.
+  auto response = server.process(makeGetRequest("/?nexistepas=1"));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown query parameters"));
+
+  // An unknown path without URL parameters results in a 404 Not Found response.
+  response = server.process(makeGetRequest("/nexistepas"));
+  EXPECT_THAT(response, StatusIs(http::status::not_found));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("Unknown path"));
 }
 
 // _____________________________________________________________________________
@@ -1223,4 +1251,76 @@ TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
   });
 
   EXPECT_THAT(lines, testing::IsEmpty());
+}
+
+// Test that a `Server` can be loaded from a blob file, but rejects the
+// operations that it does not support in that mode.
+TEST(ServerTest, readFromBlobFile) {
+  std::string filename = gtestCurrentTestName() + ".blob";
+  writeTestBlobFile(filename);
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  // The index basename deliberately does not exist, to verify that nothing is
+  // loaded from disk.
+  auto config =
+      serverTestHelpers::getDefaultConfigWithName("nonExistingIndexBasename");
+  config.compressedBlobFilename_ = filename;
+
+  // The named cached query from the blob can be answered.
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+  auto response = server.process(
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-query"},
+                   {http::field::accept, "text/tab-separated-values"}},
+                  std::string{testBlobFileQuery}));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_EQ(serverTestHelpers::responseBodyToString(std::move(response.body())),
+            testBlobFileQueryResult);
+
+  // Updates, materialized views, and index rebuilds are rejected.
+  auto rejectionMessage = [](std::string_view operation) {
+    return absl::StrCat(operation,
+                        " is not supported, because the index of this server "
+                        "was loaded from a blob");
+  };
+  // For an update (like for every SPARQL operation), the error is reported
+  // as a JSON response with the status of the error.
+  auto updateResponse = server.process(
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <a> <b> <c> }"));
+  EXPECT_THAT(updateResponse, StatusIs(http::status::bad_request));
+  EXPECT_THAT(
+      serverTestHelpers::responseBodyToString(std::move(updateResponse.body())),
+      testing::HasSubstr(rejectionMessage("An update")));
+  // The commands throw an `HttpError` with the error message.
+  auto expectRejected = [&server, &rejectionMessage](
+                            const ReqT& request, std::string_view operation,
+                            ad_utility::source_location l =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    expectHttpError([&] { server.process(request); },
+                    boost::beast::http::status::bad_request,
+                    testing::HasSubstr(rejectionMessage(operation)));
+  };
+  expectRejected(makeGetRequest("/?cmd=rebuild-index", "accessToken"),
+                 "An index rebuild");
+  expectRejected(
+      makeRequest(http::verb::post,
+                  "/?cmd=write-materialized-view&view-name=someView",
+                  {{http::field::content_type, "application/sparql-query"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "SELECT * { ?s ?p ?o }"),
+      "Writing a materialized view");
+  expectRejected(
+      makeGetRequest("/?cmd=load-materialized-view&view-name=someView",
+                     "accessToken"),
+      "Loading a materialized view");
+  expectRejected(
+      makeGetRequest("/?cmd=delete-materialized-view&view-name=someView",
+                     "accessToken"),
+      "Deleting a materialized view");
+  expectRejected(makeGetRequest("/?cmd=vacuum-delta-triples", "accessToken"),
+                 "Vacuuming the delta triples");
 }

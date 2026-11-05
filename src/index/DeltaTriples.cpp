@@ -91,6 +91,8 @@ void DeltaTriples::clear() {
   };
   clearImpl(triplesSetsNormal_, locatedTriples_->getLocatedTriples<false>());
   clearImpl(triplesSetsInternal_, locatedTriples_->getLocatedTriples<true>());
+  // Update the index of the located triples to mark that they have changed.
+  locatedTriples_->index_++;
 }
 
 // ____________________________________________________________________________
@@ -456,9 +458,9 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   tracer.endTrace("rewriteLocalVocabEntries");
-  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
-  AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
-                     triples.end());
+  // Check that `triples` is sorted and without duplicates.
+  AD_EXPENSIVE_CHECK(ql::ranges::adjacent_find(
+                         triples, std::greater_equal<>{}) == triples.end());
   tracer.beginTrace("removeExistingTriples");
   ql::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
@@ -790,8 +792,12 @@ void DeltaTriples::addFromSnapshotDiff(
   tracer.beginTrace("consolidate");
   consolidateAll();
   tracer.endTrace("consolidate");
-  // Update the index of the located triples to mark that they have changed.
-  locatedTriples_->index_++;
+  // Continue the index of `newState` (the snapshot of the old index), so that
+  // the query cache never confuses results that were computed for the old
+  // index with results for this one. This instance belongs to a freshly
+  // rebuilt index, so its own index has never been increased beyond that.
+  AD_CORRECTNESS_CHECK(newState.index_ >= locatedTriples_->index_);
+  locatedTriples_->index_ = newState.index_ + 1;
 }
 
 // _____________________________________________________________________________
@@ -818,8 +824,7 @@ void DeltaTriples::remapId(
       // cache) into the local vocab and rewrite the id, so that no entry of the
       // new index references the old index, which is destroyed after the swap.
       id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(),
-                          index.getLocalVocabContext()}));
+          id.getLocalVocabIndex()->reanchoredTo(index.getLocalVocabContext())));
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
