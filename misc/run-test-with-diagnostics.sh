@@ -14,18 +14,18 @@
 #
 # Environment variables:
 #   QLEVER_TEST_STALL_SECONDS: The time after which a test counts as stalled
-#     (default: 30). Healthy tests of the Docker build take at most 5 s.
+#     (default: 10). Healthy tests of the Docker build take at most 5 s.
 #   QLEVER_TEST_DIAGNOSTICS_DIR: If set, the diagnostics are also appended to a
 #     file in this directory, because `ctest --output-on-failure` only shows
 #     the output of failed tests, but a stalled test may still pass.
 #
 # What is collected:
 #
-# 1. If the command is still running after `QLEVER_TEST_STALL_SECONDS`, two
-#    samples (2 s apart) of the state, the consumed CPU time, the time spent
-#    waiting for a CPU, and the kernel wait channel of each of its threads, the
-#    CPU steal time and pressure of the machine, and the stacks of all threads
-#    (via `gdb`). Then `gdb` stays attached until the command terminates, so
+# 1. If the command is still running after `QLEVER_TEST_STALL_SECONDS`, three
+#    samples (1 s apart) of the state, the consumed CPU time (user and kernel),
+#    the page faults, the time spent waiting for a CPU, and the kernel wait
+#    channel of each of its threads, various counters of the machine (see
+#    `print_sample`), and the stacks of all threads (via `gdb`). Then `gdb` stays attached until the command terminates, so
 #    that a later crash is reported with the signal info, the registers, and
 #    the stacks of all threads.
 #
@@ -46,7 +46,7 @@ if [ $# -eq 0 ]; then
   exit 2
 fi
 
-STALL_SECONDS="${QLEVER_TEST_STALL_SECONDS:-30}"
+STALL_SECONDS="${QLEVER_TEST_STALL_SECONDS:-10}"
 DIAGNOSTICS_DIR="${QLEVER_TEST_DIAGNOSTICS_DIR:-}"
 
 # Let a crashing command leave a core dump (if the hard limit allows it).
@@ -121,13 +121,18 @@ echo "=== All processes:"
 ps -eo pid,ppid,stat,pcpu,rss,etime,args --sort=-pcpu | head -n 30
 
 # Print one line per thread of the command with its state, the CPU time that it
-# has consumed so far (user + system, in clock ticks), the time that it has
-# spent on and waiting for a CPU (in ns, from `schedstat`), and the kernel
-# function in which it is waiting. Also print the load, the pressure, and the
-# CPU line of `/proc/stat` (whose eighth number is the steal time, which is
-# the time that the hypervisor didn't give to this machine). This needs no
-# `ptrace`, and two samples tell threads that spin apart from threads that are
-# blocked, and from threads that don't get a CPU.
+# has consumed so far in user and in kernel mode (in clock ticks), its minor and
+# major page faults, the time that it has spent on and waiting for a CPU (in ns,
+# from `schedstat`), the kernel function in which it is waiting, its current
+# system call (`running` if it is running in user mode), and its kernel stack
+# (if readable). Also print the load, the CPU line of `/proc/stat` (whose eighth
+# number is the steal time, which is the time that the hypervisor didn't give to
+# this machine), the pressure, the page fault, migration, and huge page counters
+# of the kernel, the inter-processor interrupts, and the CPU and memory
+# statistics of the cgroup. This needs no `ptrace`, and several samples tell
+# threads that spin apart from threads that are blocked, from threads that don't
+# get a CPU, and from threads that are stuck in the kernel (e.g. in a storm of
+# page faults or traps).
 print_sample() {
   echo "=== Sample at $(date -u +%H:%M:%S.%N)"
   echo "loadavg: $(cat /proc/loadavg)"
@@ -137,8 +142,16 @@ print_sample() {
       echo "pressure $RESOURCE: $(tr '\n' ' ' < "/proc/pressure/$RESOURCE")"
     fi
   done
-  echo "Threads of pid $PID (tid, name, state, CPU ticks, schedstat [ns on" \
-    "CPU, ns waiting for a CPU, timeslices], wchan):"
+  echo "vmstat: $(grep -E '^(pgfault|pgmajfault|pgmigrate_success|pgmigrate_fail|numa_hint_faults|numa_pages_migrated|thp_fault_alloc|thp_fault_fallback|thp_split_page|compact_stall|allocstall_normal|allocstall_movable|pswpin|pswpout) ' /proc/vmstat | tr '\n' ' ')"
+  echo "IPIs (per CPU): $(grep -E '^ *IPI[0-9]+:' /proc/interrupts | tr -s ' ' | tr '\n' ';')"
+  for FILE in cpu.stat memory.events memory.pressure; do
+    if [ -r "/sys/fs/cgroup/$FILE" ]; then
+      echo "cgroup $FILE: $(tr '\n' ' ' < "/sys/fs/cgroup/$FILE")"
+    fi
+  done
+  echo "Threads of pid $PID (tid, name, state, user ticks, system ticks," \
+    "minor faults, major faults, schedstat [ns on CPU, ns waiting for a CPU," \
+    "timeslices], wchan, syscall):"
   for TASK in /proc/"$PID"/task/*; do
     # The name (field 2) is in parentheses and may contain spaces, so the
     # fields are counted from the closing parenthesis.
@@ -146,14 +159,24 @@ print_sample() {
     NAME="${STAT#*(}"
     NAME="${NAME%)*}"
     read -r -a FIELDS <<< "${STAT##*) }"
-    echo "$(basename "$TASK") ($NAME) ${FIELDS[0]}" \
-      "$((FIELDS[11] + FIELDS[12]))" \
+    echo "$(basename "$TASK") ($NAME) ${FIELDS[0]} ${FIELDS[11]} ${FIELDS[12]}" \
+      "${FIELDS[7]} ${FIELDS[9]}" \
       "[$(cat "$TASK/schedstat" 2> /dev/null)]" \
-      "$(cat "$TASK/wchan" 2> /dev/null)"
+      "$(cat "$TASK/wchan" 2> /dev/null)" \
+      "$(cut -d ' ' -f 1 "$TASK/syscall" 2> /dev/null)"
+    # Only the kernel stacks of the threads that are not sleeping are of
+    # interest, and reading them requires `CAP_SYS_ADMIN`.
+    if [ "${FIELDS[0]}" != "S" ]; then
+      sed 's/^/    /' "$TASK/stack" 2> /dev/null
+    fi
   done
 }
+echo "=== Kernel: $(uname -a)"
+echo "=== CPU features: $(grep -m 1 -i '^features' /proc/cpuinfo)"
 print_sample
-sleep 2
+sleep 1
+print_sample
+sleep 1
 print_sample
 
 # The `gdb` script that dumps the stacks of all threads, and then resumes the
