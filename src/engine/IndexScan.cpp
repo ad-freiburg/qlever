@@ -523,8 +523,8 @@ IndexScan::sizeEstimateFromDroppedBlocks() const {
 // _____________________________________________________________________________
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  return permutation().getResultSizeOfScan(scanSpecAndBlocks_,
-                                           locatedTriplesState());
+  return permutation().getResultSizeOfScan(
+      scanSpecAndBlocks_, locatedTriplesState(), cancellationHandle());
 }
 
 // _____________________________________________________________________________

@@ -15,11 +15,13 @@
 #include "index/IdTableUtils.h"
 #include "index/LocalVocabEntry.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
 using ad_utility::source_location;
 using V = Variable;
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace {
 // Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
@@ -192,7 +194,7 @@ TEST(OrderBy, mixedDatatypes) {
   auto U = Id::makeUndefined();
   auto* qec = ad_utility::testing::getQec();
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  auto localIri = LocalVocabEntry::fromStringRepresentation(
+  auto localIri = localVocabEntryFromStringRepresentation(
       "<a>", qec->getLocalVocabContext());
   Id a = Id::makeFromLocalVocabIndex(&localIri);
 
@@ -241,8 +243,8 @@ TEST(OrderBy, mixedDatatypes) {
 TEST(OrderBy, irisBeforeNumbers) {
   auto I = ad_utility::testing::IntId;
   const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
-  auto x1 = LocalVocabEntry::fromStringRepresentation("<x:1>", context);
-  auto x2 = LocalVocabEntry::fromStringRepresentation("<x:2>", context);
+  auto x1 = localVocabEntryFromStringRepresentation("<x:1>", context);
+  auto x2 = localVocabEntryFromStringRepresentation("<x:2>", context);
   Id iri1 = Id::makeFromLocalVocabIndex(&x1);
   Id iri2 = Id::makeFromLocalVocabIndex(&x2);
   VectorTable input{{I(3)}, {iri1}, {I(4)}, {iri2}};
@@ -269,8 +271,7 @@ ResultAndFastPath orderByOnSortedInput(
   // subtree that reports being sorted by these columns.
   auto qec = ad_utility::testing::getQec();
   IdTable table = makeIdTableFromVector(input);
-  IdTableUtils::sort(table, sortedColumns, qec->sortConfig(),
-                     std::make_shared<ad_utility::CancellationHandle<>>());
+  IdTableUtils::sort(table, sortedColumns, qec->sortConfig());
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < table.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
