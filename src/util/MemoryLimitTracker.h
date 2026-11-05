@@ -126,14 +126,9 @@ makeSharedAllocationMemoryLeft(MemorySize n) {
   return std::make_shared<detail::AllocationMemoryLeft>(n);
 }
 
-/*
-A lambda for use with `AllocatorWithLimit`.
-
-Called, when there is not enough memory left for an allocation and is supposed
-to try to free the given amount of memory.
-
-The lambda is given at construction.
-*/
+// The hook of an allocator that is called with the requested size when there
+// is not enough memory left for an allocation. It is supposed to try to free
+// that amount of memory, e.g. by clearing a cache. It is given at construction.
 using ClearOnAllocation = std::function<void(MemorySize)>;
 
 namespace detail {
@@ -205,41 +200,39 @@ class SharedMemoryLimit {
   // Reserve `n` bytes, either from the calling thread's cache or from the
   // shared counter. If not enough memory is left, call the `ClearOnAllocation`
   // hook and retry once, then throw an `AllocationExceedsLimitException`.
-  void reserveOrThrow(MemorySize memorySize) {
+  void reserveOrThrow(MemorySize n) {
     // There is no cache for large allocations, and also not if the calling
     // thread is already exiting (see `ThreadLocalMember::getOrCreate`).
-    MemorySize* cached = memorySize <= maxCachedAllocationSize
-                             ? threadCache_.getOrCreate()
-                             : nullptr;
+    MemorySize* cached =
+        n <= maxCachedAllocationSize ? threadCache_.getOrCreate() : nullptr;
     if (cached == nullptr) {
-      reserveExactlyOrThrow(memorySize);
+      reserveExactlyOrThrow(n);
       return;
     }
-    if (*cached >= memorySize) {
-      *cached -= memorySize;
+    if (*cached >= n) {
+      *cached -= n;
       return;
     }
     // Refill the cache s.t. it holds `cacheRefillSize` after serving this
-    // request. Note that `*cached < memorySize` at this point.
-    if (memoryLeft_->decreaseIfEnoughLeftOrReturnFalse(cacheRefillSize +
-                                                       memorySize - *cached)) {
+    // request. Note that `*cached < n` at this point.
+    if (memoryLeft_->decreaseIfEnoughLeftOrReturnFalse(cacheRefillSize + n -
+                                                       *cached)) {
       *cached = cacheRefillSize;
       return;
     }
-    reserveExactlyOrThrow(memorySize);
+    reserveExactlyOrThrow(n);
   }
 
   // Give `n` bytes back, either to the calling thread's cache or to the shared
   // counter.
-  void release(MemorySize memorySize) {
-    MemorySize* cached = memorySize <= maxCachedAllocationSize
-                             ? threadCache_.getIfExists()
-                             : nullptr;
+  void release(MemorySize n) {
+    MemorySize* cached =
+        n <= maxCachedAllocationSize ? threadCache_.getIfExists() : nullptr;
     if (cached == nullptr) {
-      memoryLeft_->increase(memorySize);
+      memoryLeft_->increase(n);
       return;
     }
-    *cached += memorySize;
+    *cached += n;
     if (*cached > maxCachedBytes) {
       memoryLeft_->increase(*cached - cacheRefillSize);
       *cached = cacheRefillSize;
