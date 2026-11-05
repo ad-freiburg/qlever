@@ -12,9 +12,11 @@
 #include <gmock/gmock.h>
 #include <re2/re2.h>
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <thread>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
@@ -127,6 +129,42 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) {          \
     ad_utility::LogLevel::Enum::level                                         \
   }
+
+// Match the captured log with `matcher`, but fail with a readable message if
+// the runtime log level suppresses messages with the given `level`, for example
+// because an earlier test did not restore it. See `ifLogLevelIsCompiledIn`.
+MATCHER_P2(LogLevelIsEnabledAndLogMatches, level, matcher,
+           absl::StrCat("(with ", ad_utility::LogLevel{level}.toString(),
+                        " messages enabled at runtime) ",
+                        ::testing::DescribeMatcher<std::string>(matcher,
+                                                                negation))) {
+  if (!ad_utility::detail::logLevelIsEnabled(level)) {
+    *result_listener << "which was not checked, because the runtime log level "
+                     << ad_utility::getRuntimeLogLevel().toString()
+                     << " suppresses " << ad_utility::LogLevel{level}.toString()
+                     << " messages (did an earlier test not restore it?)";
+    return false;
+  }
+  return ::testing::ExplainMatchResult(matcher, arg, result_listener);
+}
+
+// Return `matcher` if messages with the given `level` are compiled in (see
+// `ad_utility::compileTimeLogLevel`), and a matcher that matches anything
+// otherwise. The returned matcher also checks that the runtime log level does
+// not suppress messages with `level`. Use this for the log checks of a test
+// that also checks other things, which `ENFORCE_LOG_LEVEL_OR_SKIP` would skip
+// as well.
+//
+// NOTE: Don't negate the result, `Not(_)` matches nothing. Write
+// `Not(HasSubstr(...))` directly instead, it is valid at every log level.
+template <ad_utility::LogLevel::Enum level, typename Matcher>
+auto ifLogLevelIsCompiledIn(Matcher matcher) {
+  if constexpr (ad_utility::compileTimeLogLevel >= level) {
+    return LogLevelIsEnabledAndLogMatches(level, std::move(matcher));
+  } else {
+    return ::testing::_;
+  }
+}
 
 // _____________________________________________________________________________
 // Skip the enclosing test if the `_NO_TIMING_TESTS` CMake option is set. Use
@@ -243,13 +281,13 @@ class CopyShield {
 
  public:
   CPP_variadic_template(typename... Ts)(
-      requires ql::concepts::constructible_from<
-          T, Ts&&...>) explicit CopyShield(Ts&&... args)
+      requires ql::concepts::constructible_from<T, Ts...>)
+  explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)
-      CopyShield&
-      operator=(Ts&& ts) {
+  CPP_template(typename Ts)(
+      requires ql::concepts::constructible_from<T, Ts &&>)
+  CopyShield& operator=(Ts&& ts) {
     pointer_ = std::make_shared<T>(AD_FWD(ts));
     return *this;
   }
@@ -293,10 +331,8 @@ auto liftOptionalMatcher(MakeMatcher makeMatcher) {
 // `MakeMatcher` to each of the expected values in the argument of `ArrayType`
 // and returns an `ElementsAreArray` matcher of these submatchers.
 CPP_template(typename T, typename ArrayType, typename MakeMatcher)(
-    requires std::is_convertible_v<
-        ArrayType,
-        std::vector<T>>) auto liftMatcherToElementsAreArray(MakeMatcher
-                                                                makeMatcher) {
+    requires std::is_convertible_v<ArrayType, std::vector<T>>)
+auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
         std::vector<::testing::Matcher<T>> childMatchers;
@@ -343,6 +379,24 @@ inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
   return absl::StrReplaceAll(
       absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name()),
       {{"/", "_"}});
+}
+
+// _____________________________________________________________________________
+// Block until the `predicate` is true, polling it every millisecond, but at
+// most for the `timeout`. Return the final value of the `predicate`. Use this
+// to wait for the effect of work that runs on another thread, typically as
+// `ASSERT_TRUE(waitUntil(...))`.
+//
+// NOTE: The `timeout` is deliberately generous, because it is only waited for
+// in full when the awaited event never happens, which is a failing test anyway.
+template <typename Predicate>
+bool waitUntil(const Predicate& predicate,
+               std::chrono::milliseconds timeout = std::chrono::seconds{10}) {
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (!predicate() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  return predicate();
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

@@ -121,14 +121,20 @@ class ExistsJoin : public Operation {
                         std::shared_ptr<const Result> right,
                         bool requestLaziness);
 
+  // Only the left child's columns appear in the result, so we need special
+  // treatment of the `EXISTS` operation for `BIND` push down.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
   // Helper function to modify the `IdTable` such that it gains a column
   // signaling if the values exist on the right or not.
   CPP_template(typename Range)(
-      requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
-          ql::concepts::convertible_to<
-              ql::ranges::range_value_t<Range>,
-              bool>) void addExistsColumn(IdTable& idTable,
-                                          Range&& range) const;
+      requires ql::ranges::input_range<Range> &&
+      ql::ranges::sized_range<Range> &&
+      ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
+  void addExistsColumn(IdTable& idTable, Range&& range) const;
 
   FRIEND_TEST(ExistsJoin,
               addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);

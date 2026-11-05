@@ -360,6 +360,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeEnvelopeExpression));
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
                      matchUnary(&makeGeometryTypeExpression));
+  expectFunctionCall(absl::StrCat(geof, "getSRID>(?x)"),
+                     matchUnary(&makeCrsTypeExpression));
   expectFunctionCall(absl::StrCat(geof, "numGeometries>(?x)"),
                      matchUnary(&makeNumGeometriesExpression));
 
@@ -421,6 +423,10 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(
       absl::StrCat(geof, "length>(?a, ?b)"),
       matchNary(&makeLengthExpression, Variable{"?a"}, Variable{"?b"}));
+
+  // GeoJSON serialization
+  expectFunctionCall(absl::StrCat(geof, "asGeoJSON>(?x)"),
+                     matchUnary(&makeAsGeoJsonExpression));
 
   // Geometry N
   expectFunctionCall(
@@ -512,8 +518,9 @@ TEST(SparqlParser, FunctionCall) {
       absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\", ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
-      "centroid", "envelope", "geometryType",  "minX",         "minY",
-      "maxX",     "maxY",     "numGeometries", "metricLength", "metricArea",
+      "centroid",      "envelope",     "geometryType", "getSRID",
+      "minX",          "minY",         "maxX",         "maxY",
+      "numGeometries", "metricLength", "metricArea",   "asGeoJSON",
   };
   for (const auto& func : unaryGeofFunctionNames) {
     expectFunctionCallFails(absl::StrCat(geof, func, ">()"));

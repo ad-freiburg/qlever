@@ -10,7 +10,7 @@
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/Index.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
@@ -59,6 +59,8 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // is, not skipped) geometries respectively.
   size_t getPrefilterCounter();
   size_t getParseCounter();
+  // The number of parsed geometries that were skipped as invalid WKT is given
+  // by `getNumInvalid` of the base class.
 
  protected:
   void processQueue(size_t t) override;

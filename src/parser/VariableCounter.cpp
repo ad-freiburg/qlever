@@ -37,6 +37,9 @@ void VariableCounter::operator()(const SparqlFilter& filter) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const Subquery& op) {
   (*this)(op.get()._rootGraphPattern);
+  if (const auto& values = op.get().postQueryValuesClause_) {
+    (*this)(values.value());
+  }
 }
 
 // _____________________________________________________________________________
@@ -173,6 +176,12 @@ void VariableCounter::operator()(const MaterializedViewQuery& op) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const ExternalValuesQuery& op) {
   (*this)(op.variables_);
+}
+
+// ____________________________________________________________________________
+void VariableCounter::operator()(const RowNumberQuery& op) {
+  (*this)(op.rowNumberVariable_);
+  (*this)(op.childGraphPattern_);
 }
 
 }  // namespace parsedQuery

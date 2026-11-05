@@ -84,9 +84,17 @@ class CopyOnWritePtr {
   // value. See the IMPORTANT note in the class comment for the synchronization
   // requirements.
   T& write() {
+    return write([](const T& value) { return value; });
+  }
+
+  // Like `write()`, but a clone (if one is needed) is made by `cloneFn`, which
+  // takes a `const T&` and returns a `T`. Useful when the clone should differ
+  // from a plain copy, for example by having spare capacity.
+  template <typename CloneFn>
+  T& write(CloneFn cloneFn) {
     AD_CONTRACT_CHECK(ptr_ != nullptr);
     if (isShared()) {
-      ptr_ = std::make_shared<T>(*ptr_);
+      ptr_ = std::make_shared<T>(cloneFn(std::as_const(*ptr_)));
     }
     return *ptr_;
   }

@@ -5,9 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 
+#include <memory>
 #include <string>
 #include <string_view>
 
+#include "backports/algorithm.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -27,15 +29,21 @@ class VocabularyInMemory
   using Words = CompactVectorOfStrings<CharType>;
 
  private:
-  // The actual storage.
-  Words _words;
+  // The actual storage. It is shared with the batch-lookup results (see
+  // `lookupBatch`), which is why it is immutable: `open()` and
+  // deserialization replace it by a new one, `close()` by an empty one.
+  std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
+
+  // Const access to the words.
+  const Words& words() const { return *words_; }
 
  public:
   // Construct an empty vocabulary
   VocabularyInMemory() = default;
 
   // Construct the vocabulary from `Words`
-  explicit VocabularyInMemory(Words words) : _words{std::move(words)} {}
+  explicit VocabularyInMemory(Words words)
+      : words_{std::make_shared<const Words>(std::move(words))} {}
 
   // Build a vocabulary as a non-owning, zero-copy view directly into the
   // buffer of `serializer`, which must support zero-copy deserialization
@@ -43,9 +51,8 @@ class VocabularyInMemory
   // returned vocabulary is only valid as long as the memory backing
   // `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          S>) static VocabularyInMemory
-      fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+  static VocabularyInMemory fromZeroCopyDeserializer(S& serializer) {
     return VocabularyInMemory{Words::fromZeroCopyDeserializer(serializer)};
   }
 
@@ -61,10 +68,10 @@ class VocabularyInMemory
   void writeToFile(const std::string& fileName) const;
 
   // Return the total number of words
-  [[nodiscard]] size_t size() const { return _words.size(); }
+  [[nodiscard]] size_t size() const { return words().size(); }
 
   // Return the `i-th` word. The behavior is undefined if `i >= size()`
-  auto operator[](uint64_t i) const { return _words[i]; }
+  auto operator[](uint64_t i) const { return words()[i]; }
 
   // Default fallback iteration over all words.
   auto scanAll() const {
@@ -74,10 +81,14 @@ class VocabularyInMemory
            });
   }
 
-  //____________________________________________________________________________
-  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
-  }
+  // Return the words for `indices` in that order, as views into the word
+  // storage of this vocabulary. The batch must not be empty and every index
+  // must be less than `size()` (both checked).
+  //
+  // NOTE: The result shares the ownership of the word storage, so no word is
+  // copied and the result stays valid when this vocabulary is closed or
+  // reopened.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
@@ -88,11 +99,11 @@ class VocabularyInMemory
   // Conversion function that is used by the Mixin base class.
   template <typename It>
   WordAndIndex iteratorToWordAndIndex(It it) const {
-    if (it == _words.end()) {
+    if (it == words().end()) {
       return WordAndIndex::end();
     }
-    size_t idx = it - _words.begin();
-    return {_words[idx], idx};
+    size_t idx = it - words().begin();
+    return {words()[idx], idx};
   }
 
   // A helper type that can be used to directly write a vocabulary to disk
@@ -131,15 +142,39 @@ class VocabularyInMemory
     return std::make_unique<WordWriter>(filename);
   }
 
-  // Clear the vocabulary.
-  void close() { _words.clear(); }
+  // The block writer of this vocabulary simply feeds its `WordWriter` word by
+  // word (see `BlockWriterBase`).
+  static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    return makeBlockWriterFromWordWriter(makeDiskWriterPtr(filename));
+  }
+
+  // The `ParallelWordWriterBase` of this (single) vocabulary, for a
+  // `Vocabulary` that is built directly on it (see `Vocabulary.h`).
+  static std::unique_ptr<ParallelWordWriterBase> makeParallelWriterPtr(
+      const std::string& filename) {
+    return std::make_unique<SingleVocabularyParallelWriter>(
+        makeBlockWriterPtr(filename));
+  }
+
+  // Clear the vocabulary. Batch-lookup results that are still alive keep the
+  // previous words.
+  void close() { words_ = std::make_shared<const Words>(); }
 
   // Const access to the underlying words.
-  auto begin() const { return _words.begin(); }
-  auto end() const { return _words.end(); }
+  auto begin() const { return words().begin(); }
+  auto end() const { return words().end(); }
 
   // Generic serialization support.
-  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) { serializer | arg._words; }
+  AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) {
+    if constexpr (ad_utility::serialization::ReadSerializer<S>) {
+      Words words;
+      serializer | words;
+      arg.words_ = std::make_shared<const Words>(std::move(words));
+    } else {
+      serializer | *arg.words_;
+    }
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H

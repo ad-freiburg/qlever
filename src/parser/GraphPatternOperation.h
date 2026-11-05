@@ -20,6 +20,7 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/NamedCachedResult.h"
 #include "parser/PathQuery.h"
+#include "parser/RowNumberQuery.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
@@ -133,6 +134,15 @@ struct Optional {
 /// A SPARQL `MINUS` construct.
 struct Minus {
   GraphPattern _child;
+  // The variables that are in scope (see section 18.2.1 of the SPARQL 1.1
+  // standard) in the `_child` and in the patterns that precede the MINUS clause
+  // in the same group, respectively. They are filled by the parser.
+  //
+  // NOTE: Inside a `GRAPH ?g {...}` clause, the query planner adds `?g` as an
+  // implicit column to all index scans, so it needs these to decide whether
+  // `?g` is actually shared between both sides.
+  std::vector<Variable> visibleVariables_;
+  std::vector<Variable> visibleVariablesOfPrecedingPatterns_;
 };
 
 /// A SPARQL `UNION` construct.
@@ -218,11 +228,14 @@ using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
                  Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
-                 MaterializedViewQuery, ExternalValuesQuery>;
+                 MaterializedViewQuery, ExternalValuesQuery, RowNumberQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
   using GraphPatternOperationVariant::GraphPatternOperationVariant;
+  // Since C++26, `std::variant` also has a `visit` member function, so
+  // explicitly choose the one from the mixin to avoid an ambiguity.
+  using VisitMixin<GraphPatternOperation, GraphPatternOperationVariant>::visit;
 
   // TODO<joka921> First refactor `SparqlParserTest.cpp`,
   // then get rid of this function.

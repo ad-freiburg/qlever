@@ -9,9 +9,12 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <random>
 #include <string>
 
 #include "../test/util/IndexTestHelpers.h"
@@ -27,6 +30,25 @@
 #include "util/ChunkedForLoop.h"
 
 namespace sparqlExpression::detail {
+
+// Distinct operation types keep all evaluator instantiations in this benchmark
+// translation unit, including when compiling against master evaluator headers.
+struct FallbackBenchmarkAbs {
+  auto operator()(auto value) const { return std::abs(value); }
+};
+struct FallbackBenchmarkMultiply {
+  auto operator()(auto left, auto right) const { return left * right; }
+};
+struct FallbackBenchmarkAddThree {
+  auto operator()(auto a, auto b, auto c) const { return a + b + c; }
+};
+
+using FallbackAbs = MakeNumericExpression<FallbackBenchmarkAbs>;
+using FallbackMultiply = MakeNumericExpression<FallbackBenchmarkMultiply>;
+using FallbackAddThree = MakeNumericExpression<FallbackBenchmarkAddThree>;
+using FallbackAbsExpression = NARY<1, FV<FallbackAbs, NumericValueGetter>>;
+using FallbackAddThreeExpression =
+    NARY<3, FV<FallbackAddThree, NumericValueGetter>>;
 
 // The previous generator-based multiplication implementation. This exists only
 // for comparison with the new production implementation in this benchmark.
@@ -63,6 +85,27 @@ struct BenchmarkAdd {
   }
 };
 
+// Ternary addition used to benchmark the N-ary expression infrastructure
+// without unrelated expression overhead.
+struct BenchmarkTernaryAddImpl {
+  template <typename A, typename B, typename C>
+  auto operator()(A a, B b, C c) const {
+    if constexpr (ql::concepts::same_as<std::decay_t<A>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<B>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<C>, int64_t>) {
+      return a + b + c;
+    } else {
+      return static_cast<double>(a) + static_cast<double>(b) +
+             static_cast<double>(c);
+    }
+  }
+};
+
+using BenchmarkTernaryAdd = MakeNumericExpression<BenchmarkTernaryAddImpl>;
+
+NARY_EXPRESSION(BenchmarkTernaryAddExpression, 3,
+                FV<BenchmarkTernaryAdd, NumericValueGetter>);
+
 }  // namespace sparqlExpression::detail
 
 namespace ad_benchmark {
@@ -74,6 +117,7 @@ using sparqlExpression::IdExpression;
 using sparqlExpression::SparqlExpression;
 using sparqlExpression::VariableExpression;
 using sparqlExpression::VectorWithMemoryLimit;
+using sparqlExpression::detail::NumericValueGetter;
 
 // Owns all data referenced by the evaluation context.
 struct NumericExpressionBenchmarkContext {
@@ -88,8 +132,7 @@ struct NumericExpressionBenchmarkContext {
       table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
 
   explicit NumericExpressionBenchmarkContext(size_t numRows) {
     table.setNumColumns(2);
@@ -135,6 +178,24 @@ SparqlExpression::Ptr makeNewVectorConstantExpression() {
   return sparqlExpression::makeMultiplyExpression(
       std::make_unique<VariableExpression>(Variable{"?left"}),
       std::make_unique<IdExpression>(Id::makeFromInt(2)));
+}
+
+// ternary addition expression for benchmarking the N-ary expression
+// infrastructure
+SparqlExpression::Ptr makeBenchmarkTernaryAddExpression() {
+  return std::make_unique<
+      sparqlExpression::detail::BenchmarkTernaryAddExpression>(
+      std::make_unique<VariableExpression>(Variable{"?left"}),
+      std::make_unique<VariableExpression>(Variable{"?right"}),
+      std::make_unique<VariableExpression>(Variable{"?left"}));
+}
+
+SparqlExpression::Ptr makeBenchmarkMixedTernaryAddExpression() {
+  return std::make_unique<
+      sparqlExpression::detail::BenchmarkTernaryAddExpression>(
+      std::make_unique<VariableExpression>(Variable{"?left"}),
+      std::make_unique<VariableExpression>(Variable{"?right"}),
+      std::make_unique<IdExpression>(Id::makeFromDouble(2.0)));
 }
 
 // Evaluate once and verify that the expected result type and size are produced.
@@ -295,6 +356,172 @@ VectorWithMemoryLimit<Id> makeDoubleVector(ql::span<const ValueId> input,
   return result;
 }
 
+void evaluateMixedTernaryAddRepeatedly(ql::span<const ValueId> left,
+                                       ql::span<const ValueId> middle,
+                                       ql::span<const ValueId> right,
+                                       EvaluationContext& context,
+                                       size_t repetitions) {
+  sparqlExpression::detail::BenchmarkTernaryAdd function;
+  NumericValueGetter getter;
+
+  for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+    VectorWithMemoryLimit<Id> result{context._allocator};
+    result.reserve(context.size());
+
+    ad_utility::chunkedForLoop<1000>(
+        0, context.size(),
+        [&](size_t i) {
+          result.push_back(function(getter(left[i], &context),
+                                    getter(middle[i], &context),
+                                    getter(right[i], &context)));
+        },
+        [&context]() { context.cancellationHandle_->throwIfCancelled(); });
+  }
+}
+
+constexpr size_t fallbackNumRows = 100'000;
+constexpr size_t fallbackRepetitions = 100;
+
+struct InputCase {
+  std::string name_;
+  size_t ints_;
+  size_t doubles_;
+  size_t undefs_;
+  size_t bools_ = 0;
+  size_t vocab_ = 0;
+};
+
+// Exact datatype counts. Shuffling is deterministic and outside measured work.
+void setInput(NumericExpressionBenchmarkContext& context,
+              const InputCase& input, bool shuffled) {
+  std::vector<Datatype> types;
+  for (auto [type, percent] : {std::pair{Datatype::Int, input.ints_},
+                               {Datatype::Double, input.doubles_},
+                               {Datatype::Undefined, input.undefs_},
+                               {Datatype::Bool, input.bools_},
+                               {Datatype::VocabIndex, input.vocab_}}) {
+    types.insert(types.end(), fallbackNumRows * percent / 100, type);
+  }
+  AD_CORRECTNESS_CHECK(types.size() == fallbackNumRows);
+  if (shuffled) {
+    std::mt19937 random{42};
+    std::shuffle(types.begin(), types.end(), random);
+  }
+  for (size_t i = 0; i < fallbackNumRows; ++i) {
+    const auto value = static_cast<int64_t>(i % 1000) - 500;
+    Id id;
+    switch (types[i]) {
+      case Datatype::Int:
+        id = Id::makeFromInt(value);
+        break;
+      case Datatype::Double:
+        id = Id::makeFromDouble(static_cast<double>(value) + 0.25);
+        break;
+      case Datatype::Undefined:
+        id = Id::makeUndefined();
+        break;
+      case Datatype::Bool:
+        id = Id::makeFromBool(i % 2 == 0);
+        break;
+      case Datatype::VocabIndex:
+        id = Id::makeFromVocabIndex(VocabIndex::make(i));
+        break;
+      default:
+        AD_FAIL();
+    }
+    context.table(i, 0) = id;
+    context.table(i, 1) = Id::makeFromInt(2);
+  }
+}
+
+auto variable(const char* name) {
+  return std::make_unique<VariableExpression>(Variable{name});
+}
+
+// Compare every result with the regular value getters before timing. Consume
+// a result after each batch to keep its computation observable to the compiler.
+template <typename Evaluate, typename Expected>
+void measure(BenchmarkResults& results, const std::string& name,
+             Evaluate evaluate, Expected expected) {
+  auto check = [&](const ExpressionResult& result) {
+    const auto& values = std::get<VectorWithMemoryLimit<Id>>(result);
+    AD_CORRECTNESS_CHECK(values.size() == fallbackNumRows);
+    for (size_t i = 0; i < fallbackNumRows; ++i) {
+      AD_CORRECTNESS_CHECK(values[i] == expected(i));
+    }
+  };
+  check(evaluate());
+  results.addMeasurement(name, [&] {
+    ExpressionResult result;
+    for (size_t i = 0; i < fallbackRepetitions; ++i) {
+      result = evaluate();
+    }
+    AD_CORRECTNESS_CHECK(std::get<VectorWithMemoryLimit<Id>>(result).back() ==
+                         expected(fallbackNumRows - 1));
+  });
+}
+
+void addNumericFallbackBenchmarks(BenchmarkResults& results) {
+  using namespace sparqlExpression::detail;
+  NumericExpressionBenchmarkContext storage{fallbackNumRows};
+  storage.variableToColumnMap[Variable{"?left"}] =
+      makePossiblyUndefinedColumn(0);
+  auto& context = storage.context;
+  FallbackAbsExpression abs{variable("?left")};
+  FallbackAddThreeExpression add{
+      variable("?left"), variable("?right"),
+      std::make_unique<IdExpression>(Id::makeFromInt(2))};
+  const std::array cases{
+      InputCase{"100% double", 0, 100, 0},
+      InputCase{"100% int", 100, 0, 0},
+      InputCase{"70% double, 30% undef", 0, 70, 30},
+      InputCase{"70% int, 30% undef", 70, 0, 30},
+      InputCase{"35% int, 35% double, 30% undef", 35, 35, 30},
+      InputCase{"70% double, 30% bool", 0, 70, 0, 30},
+      InputCase{"70% double, 30% vocab", 0, 70, 0, 0, 30}};
+  for (bool shuffled : {false, true}) {
+    for (const auto& input : cases) {
+      setInput(storage, input, shuffled);
+      const auto left = getIdsFromVariable(Variable{"?left"}, &context);
+      const auto right = getIdsFromVariable(Variable{"?right"}, &context);
+      const auto two = Id::makeFromInt(2);
+      const auto suffix =
+          input.name_ + (shuffled ? ", shuffled" : ", clustered");
+      auto numeric = [&](Id id) { return NumericValueGetter{}(id, &context); };
+      measure(
+          results, "Numeric fallback ABS: " + suffix,
+          [&] { return abs.evaluate(&context); },
+          [&](size_t i) { return FallbackAbs{}(numeric(left[i])); });
+      auto expectedMultiply = [&](size_t i) {
+        return FallbackMultiply{}(numeric(left[i]), numeric(two));
+      };
+      measure(
+          results, "Numeric fallback Multiply vector-constant: " + suffix,
+          [&] {
+            return evaluateBinaryOperation<FallbackMultiply, NumericValueGetter,
+                                           NumericValueGetter>(left, two,
+                                                               &context);
+          },
+          expectedMultiply);
+      measure(
+          results, "Numeric fallback Multiply vector-vector: " + suffix,
+          [&] {
+            return evaluateBinaryOperation<FallbackMultiply, NumericValueGetter,
+                                           NumericValueGetter>(left, right,
+                                                               &context);
+          },
+          expectedMultiply);
+      measure(
+          results, "Numeric fallback Ternary add: " + suffix,
+          [&] { return add.evaluate(&context); },
+          [&](size_t i) {
+            return FallbackAddThree{}(numeric(left[i]), numeric(right[i]),
+                                      numeric(two));
+          });
+    }
+  }
+}
+
 }  // namespace
 
 class SparqlExpressionBenchmark : public BenchmarkInterface {
@@ -308,11 +535,33 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     constexpr size_t repetitions = 50;
 
     NumericExpressionBenchmarkContext benchmarkContext{numRows};
+    NumericExpressionBenchmarkContext mixedTernaryContext{numRows};
+
+    NumericExpressionBenchmarkContext genericFallbackContext{numRows};
+
+    for (size_t i = 1; i < numRows; i += 2) {
+      genericFallbackContext.table(i, 0) = Id::makeFromDouble(
+          static_cast<double>(genericFallbackContext.table(i, 0).getInt()));
+    }
+
+    genericFallbackContext.context._inputTable =
+        genericFallbackContext.table.asStaticView<0>();
 
     auto leftIds = sparqlExpression::detail::getIdsFromVariable(
         Variable{"?left"}, &benchmarkContext.context);
     auto rightIds = sparqlExpression::detail::getIdsFromVariable(
         Variable{"?right"}, &benchmarkContext.context);
+
+    mixedTernaryContext.table(numRows / 2, 0) =
+        Id::makeFromDouble(static_cast<double>(
+            mixedTernaryContext.table(numRows / 2, 0).getInt()));
+
+    mixedTernaryContext.context._inputTable =
+        mixedTernaryContext.table.asStaticView<0>();
+
+    auto mixedTernaryStorage =
+        makeVectorWithDoubleAt(leftIds, numRows / 2, &benchmarkContext.context);
+
     auto doubleLeftStorage =
         makeDoubleVector(leftIds, &benchmarkContext.context);
     auto doubleRightStorage =
@@ -322,6 +571,10 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
                                        doubleLeftStorage.size()};
     ql::span<const ValueId> doubleRight{doubleRightStorage.data(),
                                         doubleRightStorage.size()};
+
+    ql::span<const ValueId> mixedTernary{mixedTernaryStorage.data(),
+                                         mixedTernaryStorage.size()};
+
     const ValueId constantTwo = Id::makeFromInt(2);
     const ValueId constantTwoDouble = Id::makeFromDouble(2.0);
     // The mixed cases: the left operand follows the datatype pattern, the right
@@ -375,11 +628,23 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     auto legacyVectorConstant = makeLegacyVectorConstantExpression();
     auto newVectorConstant = makeNewVectorConstantExpression();
 
+    auto ternaryAdd = makeBenchmarkTernaryAddExpression();
+    auto mixedTernaryAdd = makeBenchmarkMixedTernaryAddExpression();
+    auto mixedFallbackTernaryAdd = makeBenchmarkTernaryAddExpression();
+    auto genericFallbackTernaryAdd = makeBenchmarkTernaryAddExpression();
+
     // Warm up the multiplication implementations and validate their results.
     validateResult(*legacyVectorVector, benchmarkContext.context, numRows);
     validateResult(*newVectorVector, benchmarkContext.context, numRows);
     validateResult(*legacyVectorConstant, benchmarkContext.context, numRows);
     validateResult(*newVectorConstant, benchmarkContext.context, numRows);
+
+    // Warm up the ternary addition implementations and validate their results.
+    validateResult(*ternaryAdd, benchmarkContext.context, numRows);
+    validateResult(*mixedTernaryAdd, benchmarkContext.context, numRows);
+    validateResult(*mixedFallbackTernaryAdd, benchmarkContext.context, numRows);
+    validateResult(*genericFallbackTernaryAdd, genericFallbackContext.context,
+                   numRows);
 
     // Warm up the homogeneous numeric benchmark paths.
     auto warmUpHomogeneousCase = [&](const auto& left, const auto& right,
@@ -548,6 +813,43 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
                                NumericType::Int);
           });
     }
+
+    results.addMeasurement(
+        "NaryExpression ternary add: integer vector-vector-vector, 100k rows "
+        "x 50",
+        [&]() {
+          evaluateRepeatedly(*ternaryAdd, benchmarkContext.context,
+                             repetitions);
+        });
+
+    results.addMeasurement(
+        "NaryExpression ternary add: int-int-double, 100k rows x 50", [&]() {
+          evaluateRepeatedly(*mixedTernaryAdd, benchmarkContext.context,
+                             repetitions);
+        });
+
+    results.addMeasurement(
+        "Generic fallback ternary add: one mixed vector, 100k rows x 50",
+        [&]() {
+          evaluateMixedTernaryAddRepeatedly(mixedTernary, rightIds, leftIds,
+                                            benchmarkContext.context,
+                                            repetitions);
+        });
+
+    results.addMeasurement(
+        "NaryExpression ternary add: majority-mixed vector, 100k rows x 50",
+        [&]() {
+          evaluateRepeatedly(*mixedFallbackTernaryAdd,
+                             mixedTernaryContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "NaryExpression ternary add: 50-50 mixed input, 100k rows x 50", [&]() {
+          evaluateRepeatedly(*genericFallbackTernaryAdd,
+                             genericFallbackContext.context, repetitions);
+        });
+
+    addNumericFallbackBenchmarks(results);
 
     return results;
   }

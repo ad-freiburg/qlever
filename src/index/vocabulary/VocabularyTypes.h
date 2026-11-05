@@ -5,11 +5,13 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +22,7 @@
 
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
@@ -41,10 +44,12 @@ using VocabLookupOutput =
     ad_utility::InputRangeTypeErased<VocabBatchLookupResult>;
 
 // Base class for a vocabulary batch-lookup result, shared by the different
-// vocabulary implementations. Owns the materialized string data (`buffer()`,
-// whose concrete type `BufferType` depends on the implementation) and one
-// `string_view` per looked-up term (`views()`, each pointing into `buffer()`).
-// The vocabulary implementation that performs the lookup fills `buffer()` and
+// vocabulary implementations. Owns the storage of the words (`buffer()`,
+// whose concrete type `BufferType` depends on the implementation: a byte
+// buffer, a vector of strings, or a shared handle on the word storage of a
+// vocabulary that keeps its words in RAM) and one `string_view` per looked-up
+// term (`views()`, each pointing into storage that `buffer()` owns). The
+// vocabulary implementation that performs the lookup fills `buffer()` and
 // `views()`, then calls `asResult()` to hand out a `VocabBatchLookupResult`
 // that keeps this object (and thus the storage the views point into) alive for
 // as long as the `VocabBatchLookupResult` is used.
@@ -59,8 +64,8 @@ class VocabLookupDataCommonBase {
   BufferType& buffer() { return buffer_; }
 
   // Mutable access to the views (one `string_view` per looked-up index, each
-  // pointing into `buffer()`), for the producer to fill before calling
-  // `asResult`.
+  // pointing into storage that `buffer()` owns), for the producer to fill
+  // before calling `asResult`.
   std::vector<std::string_view>& views() { return views_; }
 
   // Convert a filled lookup-data object into the public result type
@@ -81,7 +86,8 @@ class VocabLookupDataCommonBase {
   // Buffer for the materialized string data (used by disk-based vocabularies).
   BufferType buffer_;
 
-  // One `string_view` per looked-up index, each pointing into `buffer_`.
+  // One `string_view` per looked-up index, each pointing into storage that
+  // `buffer_` owns.
   std::vector<std::string_view> views_;
 
   // The span over `views_`, populated by `finalize()` and exposed by
@@ -91,6 +97,26 @@ class VocabLookupDataCommonBase {
   // Set up `span_` over `views_`. Call after `views_` is fully filled; do not
   // modify `views_` afterward, as `span_` would be invalidated.
   void finalize() { span_ = ql::span<std::string_view>{views_}; }
+};
+
+// Lookup data of a vocabulary that keeps its words in RAM
+// (`VocabularyInMemory`): the result shares the ownership of the word storage
+// with the vocabulary, so the views point into storage that `buffer()` owns
+// and no word is copied. Closing or reopening the vocabulary does not
+// invalidate a result.
+struct SharedWordsVocabBatchLookupData
+    : VocabLookupDataCommonBase<
+          std::shared_ptr<const CompactVectorOfStrings<char>>> {
+  // Return the batch-lookup result for `views` (one per looked-up index, in
+  // order), which point into `words`.
+  static VocabBatchLookupResult fromViews(
+      std::shared_ptr<const CompactVectorOfStrings<char>> words,
+      std::vector<std::string_view> views) {
+    auto data = std::make_shared<SharedWordsVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views() = std::move(views);
+    return asResult(std::move(data));
+  }
 };
 
 // A vocabulary batch-lookup result whose total size is known up front, so all
@@ -133,7 +159,20 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 // owning `std::string`s. The words are moved into the
 // `std::vector<std::string>` buffer and the `views()` point at those strings.
 struct StringVectorVocabBatchLookupData
-    : VocabLookupDataCommonBase<std::vector<std::string>> {};
+    : VocabLookupDataCommonBase<std::vector<std::string>> {
+  // Return the batch-lookup result that takes ownership of `words` (one word
+  // per looked-up index, in order): move the vector into the buffer (this
+  // transfers the storage, the strings are not relocated) and then point one
+  // view at each string.
+  static VocabBatchLookupResult fromWords(std::vector<std::string> words) {
+    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views() = ::ranges::to_vector(
+        data->buffer() |
+        ql::views::transform(ad_utility::staticCast<std::string_view>));
+    return asResult(std::move(data));
+  }
+};
 
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
@@ -230,24 +269,14 @@ template <typename Vocab>
 VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
                                              ql::span<const size_t> indices) {
   AD_CONTRACT_CHECK(!indices.empty());
-  // Materialize the words as owning `std::string`s and move them into the
-  // result's `std::vector<std::string>` buffer. The views then point at those
-  // strings; no byte copying into a contiguous buffer is needed. Building the
-  // views after the move is safe: moving the vector does not relocate the
-  // contained strings.
 
-  std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
-      indices | ql::views::transform([&vocab](size_t idx) {
-        return wordAsStringOrPlaceholder(vocab, idx);
-      }));
-
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+  // Materialize the words as owning `std::string`s; `fromWords` moves them
+  // into the result and points one view at each of them.
+  return StringVectorVocabBatchLookupData::fromWords(
+      ::ranges::to<std::vector<std::string>>(
+          indices | ql::views::transform([&vocab](size_t idx) {
+            return wordAsStringOrPlaceholder(vocab, idx);
+          })));
 }
 
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the
@@ -407,5 +436,306 @@ class WordWriterBase {
   // The base classes have to implement the actual logic for `finish` here.
   virtual void finishImpl() = 0;
 };
+
+// The parallel writers of a vocabulary. A `WordWriterBase` (see above) is fed
+// one word at a time by a single thread. A `BlockWriterBase` is fed blocks of
+// consecutive words and splits the writing of a block into two steps:
+//
+// 1. The `prepare` step runs on any thread and concurrently for different
+// blocks (the compression of the words, the geometry info of WKT literals).
+//
+// 2. The append step (the `AppendBlock` that `prepare` returns) appends the
+// prepared block to the files. It runs on a single thread, in the order of the
+// blocks.
+//
+// NOTE: This lets the vocabulary merger (see `index/VocabularyMerger.h`, in a
+// follow-up PR) do the expensive per-word work of the writing on all its
+// threads.
+
+// A block of consecutive words of a vocabulary, the unit in which a
+// `BlockWriterBase` works: the words, whether each word is to be externalized
+// (see `WordWriterBase::operator()`), and the position of the first word in the
+// vocabulary. The concatenated bytes of the words and their offsets (see
+// `data()` and `offsets()`) are directly what `VocabularyOnDisk` writes to
+// disk.
+struct WordBlock {
+  CompactVectorOfStrings<char> words_;
+  std::vector<bool> isExternal_;
+  uint64_t firstPosition_ = 0;
+  // The precomputed payload of the words, `payloadSize_` bytes per word (see
+  // `BlockWriterBase::precomputePayload`), empty if the vocabulary has none.
+  std::string payload_;
+  size_t payloadSize_ = 0;
+
+  // Append a word, with its precomputed `payload` (of `payloadSize_` bytes,
+  // empty if the vocabulary has none).
+  void push(std::string_view word, bool isExternal,
+            std::string_view payload = {}) {
+    AD_CORRECTNESS_CHECK(payload.size() == payloadSize_);
+    words_.push_back(word);
+    isExternal_.push_back(isExternal);
+    payload_.append(payload);
+  }
+
+  // Append a word whose payload (`payloadSize_` bytes) is not computed yet,
+  // and return the bytes of its payload inside this block, for the caller to
+  // compute it into (see `BlockWriterBase::precomputePayload`). The returned
+  // span is only valid until the next `push` or `pushWithPayloadSlot`.
+  ql::span<char> pushWithPayloadSlot(std::string_view word, bool isExternal) {
+    words_.push_back(word);
+    isExternal_.push_back(isExternal);
+    size_t offset = payload_.size();
+    payload_.resize(offset + payloadSize_);
+    return {payload_.data() + offset, payloadSize_};
+  }
+
+  // The payload of the `i`-th word.
+  std::string_view payload(size_t i) const {
+    return std::string_view{payload_}.substr(i * payloadSize_, payloadSize_);
+  }
+
+  size_t numWords() const { return isExternal_.size(); }
+  bool empty() const { return numWords() == 0; }
+
+  // The `i`-th word of the block.
+  std::string_view word(size_t i) const { return words_[i]; }
+
+  // The words of the block as views into `words_`.
+  std::vector<std::string_view> words() const {
+    return {words_.begin(), words_.end()};
+  }
+
+  // The concatenated bytes of all the words.
+  ql::span<const char> data() const { return words_.dataSpan(); }
+
+  // The offset of each word in `data()`, plus the end of the last word. Empty
+  // if the block is empty.
+  ql::span<const uint64_t> offsets() const { return words_.offsetsSpan(); }
+};
+
+// The append step of a block that `BlockWriterBase::prepare` returns, see the
+// comment above. It has to be called exactly once.
+using AppendBlock = absl::AnyInvocable<void() &&>;
+
+// The default number of words per block for a vocabulary that has no
+// requirement of its own (see `BlockWriterBase::blockSize`).
+inline constexpr size_t DEFAULT_WORDS_PER_VOCABULARY_BLOCK = 100'000;
+
+// The block-wise counterpart of a `WordWriterBase`, see the comment above. The
+// blocks have to be appended in the order of their positions, and every block
+// but the last has to consist of exactly `blockSize()` words, with the first
+// block starting at position `0`.
+class BlockWriterBase {
+ private:
+  std::string readableName_;
+  std::atomic_bool finishWasCalled_ = false;
+
+ public:
+  // NOTE: The destructor is `noexcept(false)` like the one of
+  // `WordWriterBase`, because the block writers hold word writers. It is
+  // deliberately not `= default`, which GCC 8 rejects (it deletes a defaulted
+  // destructor whose exception specification differs from the implicit one).
+  virtual ~BlockWriterBase() noexcept(false) {}
+
+  // The number of words per block that this vocabulary requires, for example
+  // because it creates one codebook per block. A vocabulary without such a
+  // requirement returns `DEFAULT_WORDS_PER_VOCABULARY_BLOCK`.
+  virtual size_t blockSize() const = 0;
+
+  // The index of the `word` at the given `position` (the number of words
+  // before it), which for most vocabularies is the position itself. This is
+  // what the corresponding `WordWriterBase::operator()` would return. This
+  // function must be thread-safe (for all overrides), because it may be called
+  // from any thread.
+  virtual uint64_t indexOf(uint64_t position,
+                           [[maybe_unused]] std::string_view word) const {
+    return position;
+  }
+
+  // The number of bytes that `precomputePayload` produces per word, `0` if the
+  // vocabulary precomputes nothing.
+  virtual size_t precomputedPayloadSize() const { return 0; }
+
+  // Compute the payload of a `word` (see `precomputedPayloadSize`) into
+  // `payload`, which has that many bytes. This is the expensive per-word work
+  // of a vocabulary (the geometry info of a WKT literal), which the caller can
+  // do wherever it has the words and idle threads; the block then carries the
+  // payload (see `WordBlock::payload_`), and `prepare` uses it instead of
+  // computing it. Never called if the size is `0`. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
+  virtual void precomputePayload(
+      [[maybe_unused]] std::string_view word,
+      [[maybe_unused]] ql::span<char> payload) const {}
+
+  // Do the part of the writing of the `block` that does not depend on any
+  // other block. The block carries the precomputed payload of its words if
+  // `precomputedPayloadSize()` is not `0`. This function must be thread-safe
+  // (for all overrides), because it may be called from any thread and
+  // concurrently for different blocks. Return the step that appends the
+  // prepared block to the vocabulary, which has to be called from a single
+  // thread, in the order of the blocks, and before `finish()`.
+  virtual AppendBlock prepare(WordBlock block) = 0;
+
+  // Signal that the last block has been appended (flush and close the files).
+  // No further block may be prepared or appended afterwards.
+  void finish() {
+    if (finishWasCalled_.exchange(true)) {
+      return;
+    }
+    finishImpl();
+  }
+  bool finishWasCalled() const { return finishWasCalled_; }
+
+  // A readable name of the vocabulary that is written, for log messages.
+  std::string& readableName() { return readableName_; }
+
+ private:
+  virtual void finishImpl() = 0;
+};
+
+// The writer of a vocabulary that may consist of several sub-vocabularies (see
+// `SplitVocabulary`), each of which is written by a `BlockWriterBase` of its
+// own. The user first asks for the sub-vocabulary of a word, then for the index
+// that the word gets at a given position in that sub-vocabulary, and writes
+// the words of each sub-vocabulary in blocks via its block writer.
+class ParallelWordWriterBase {
+ private:
+  std::atomic_bool finishWasCalled_ = false;
+
+ public:
+  // NOTE: Not `= default`, see `~BlockWriterBase`.
+  virtual ~ParallelWordWriterBase() noexcept(false) {}
+
+  // The number of sub-vocabularies, at least one.
+  virtual uint8_t numSubVocabularies() const = 0;
+
+  // The sub-vocabulary to which the `word` belongs. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
+  virtual uint8_t subVocabularyOf(std::string_view word) const = 0;
+
+  // The index in the whole vocabulary of the `word` at the given `position` in
+  // the sub-vocabulary `sub`. This function must be thread-safe (for all
+  // overrides), because it may be called from any thread.
+  virtual uint64_t indexOf(uint8_t sub, uint64_t position,
+                           std::string_view word) const = 0;
+
+  // The block writer of the sub-vocabulary `sub`.
+  virtual BlockWriterBase& blockWriter(uint8_t sub) = 0;
+  const BlockWriterBase& blockWriter(uint8_t sub) const {
+    return const_cast<ParallelWordWriterBase*>(this)->blockWriter(sub);
+  }
+
+  // Finish all the block writers.
+  void finish() {
+    if (finishWasCalled_.exchange(true)) {
+      return;
+    }
+    for (uint8_t sub = 0; sub < numSubVocabularies(); ++sub) {
+      blockWriter(sub).finish();
+    }
+  }
+
+  // The readable name of the (first) sub-vocabulary, see
+  // `BlockWriterBase::readableName`.
+  std::string& readableName() { return blockWriter(0).readableName(); }
+};
+
+// The `ParallelWordWriterBase` of a vocabulary with a single sub-vocabulary.
+class SingleVocabularyParallelWriter : public ParallelWordWriterBase {
+ private:
+  std::unique_ptr<BlockWriterBase> blockWriter_;
+
+ public:
+  explicit SingleVocabularyParallelWriter(
+      std::unique_ptr<BlockWriterBase> blockWriter)
+      : blockWriter_{std::move(blockWriter)} {
+    AD_CONTRACT_CHECK(blockWriter_ != nullptr);
+  }
+  uint8_t numSubVocabularies() const override { return 1; }
+  uint8_t subVocabularyOf(std::string_view) const override { return 0; }
+  uint64_t indexOf(uint8_t sub, uint64_t position,
+                   std::string_view word) const override {
+    AD_CORRECTNESS_CHECK(sub == 0);
+    return blockWriter_->indexOf(position, word);
+  }
+  BlockWriterBase& blockWriter(uint8_t sub) override {
+    AD_CORRECTNESS_CHECK(sub == 0);
+    return *blockWriter_;
+  }
+};
+
+namespace detail {
+// Whether `T` has a member function `finish()`, see `BlockWriterFromCallback`.
+template <typename T, typename = void>
+struct HasFinish : std::false_type {};
+template <typename T>
+struct HasFinish<T, std::void_t<decltype(std::declval<T&>().finish())>>
+    : std::true_type {};
+}  // namespace detail
+
+// A `BlockWriterBase` for a vocabulary that has no block writer of its own:
+// the words of a block are handed one by one to the `callback`, which has the
+// signature of `WordWriterBase::operator()` and which has to return the
+// position of the word (the block writer checks that). If the callback has a
+// `finish()`, it is called by `finishImpl`. The `prepare` step does nothing,
+// so all the work of such a writer happens in the append step.
+template <typename Callback>
+class BlockWriterFromCallback : public BlockWriterBase {
+ private:
+  Callback callback_;
+
+ public:
+  explicit BlockWriterFromCallback(Callback callback)
+      : callback_{std::move(callback)} {}
+
+  // Direct access to the callback.
+  Callback& callback() { return callback_; }
+
+  size_t blockSize() const override {
+    return DEFAULT_WORDS_PER_VOCABULARY_BLOCK;
+  }
+
+  AppendBlock prepare(WordBlock block) override {
+    return [this, block = std::move(block)]() {
+      for (size_t i = 0; i < block.numWords(); ++i) {
+        uint64_t position = std::invoke(
+            callback_, block.word(i), static_cast<bool>(block.isExternal_[i]));
+        AD_CORRECTNESS_CHECK(position == block.firstPosition_ + i);
+      }
+    };
+  }
+
+ private:
+  void finishImpl() override {
+    if constexpr (detail::HasFinish<Callback>::value) {
+      callback_.finish();
+    }
+  }
+};
+
+// The callback for `BlockWriterFromCallback` that writes into a
+// `WordWriterBase` (which it owns).
+class WordWriterCallback {
+ private:
+  std::unique_ptr<WordWriterBase> writer_;
+
+ public:
+  explicit WordWriterCallback(std::unique_ptr<WordWriterBase> writer)
+      : writer_{std::move(writer)} {
+    AD_CONTRACT_CHECK(writer_ != nullptr);
+  }
+  uint64_t operator()(std::string_view word, bool isExternal) {
+    return (*writer_)(word, isExternal);
+  }
+  void finish() { writer_->finish(); }
+};
+
+// Make the `BlockWriterBase` that writes word by word into the given
+// `WordWriterBase`, for the vocabularies without a block writer of their own.
+inline std::unique_ptr<BlockWriterBase> makeBlockWriterFromWordWriter(
+    std::unique_ptr<WordWriterBase> writer) {
+  return std::make_unique<BlockWriterFromCallback<WordWriterCallback>>(
+      WordWriterCallback{std::move(writer)});
+}
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H

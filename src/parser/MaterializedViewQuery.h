@@ -68,7 +68,7 @@ struct MaterializedViewQuery : MagicServiceQuery {
   // materialized view. Used for column stripping.
   ad_utility::HashSet<Variable> getVarsToKeep() const;
 
-  constexpr std::string_view name() const override {
+  QL_CONSTEXPR std::string_view name() const override {
     return "materialized view query";
   }
 

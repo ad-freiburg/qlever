@@ -16,6 +16,9 @@
 #include "index/Permutation.h"
 #include "util/IndexTestHelpers.h"
 
+// Multi-threaded, to exercise the concurrency of the tested code.
+static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
+
 // _____________________________________________________________________________
 TEST(Permutation, fileNames) {
   using enum Permutation::Enum;
@@ -81,9 +84,9 @@ TEST(Permutation, getDistinctCol0Ids) {
   // Concatenate all the tables that the generator yields.
   auto getDistinctCol0Ids = [&](std::optional<std::vector<Id>> idFilter) {
     IdTable result{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    for (const IdTable& table :
-         pso.getDistinctCol0Ids(fullScan, false, std::move(idFilter),
-                                cancellationHandle, locatedTriplesState)) {
+    for (const IdTable& table : pso.getDistinctCol0Ids(
+             fullScan, false, std::move(idFilter), cancellationHandle,
+             locatedTriplesState, executor())) {
       result.insertAtEnd(table);
     }
     return result;

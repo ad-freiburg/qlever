@@ -156,8 +156,7 @@ void Service::throwIfIriNotWhitelisted() {
       getRuntimeParameter<&RuntimeParameters::serviceAllowedIriPrefixes_>();
 
   if (!allowedPrefixes.empty()) {
-    auto iri =
-        asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent());
+    auto iri = parsedServiceClause_.serviceIri_.getContent();
 
     bool allowed = ql::ranges::any_of(allowedPrefixes, [&](const auto& prefix) {
       return ql::starts_with(iri, prefix);
@@ -182,7 +181,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
   throwIfIriNotWhitelisted();
 
   ad_utility::httpUtils::Url serviceUrl{
-      asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
+      parsedServiceClause_.serviceIri_.getContent()};
 
   // Construct the query to be sent to the SPARQL endpoint.
   const auto& variables = parsedServiceClause_.visibleVariables_;
@@ -206,7 +205,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
   const size_t maxRedirects =
       getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
   HttpOrHttpsResponse response = getResultFunction_(
-      serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
+      serviceUrl, cancellationHandle(), boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json", maxRedirects);
 
@@ -292,9 +291,8 @@ namespace {
 // `CachingTransformInputRange` with a trivial transformation. This enables the
 // usage of the `Range` with the additional interface and caching properties of
 // the `CachingInputRange`.
-CPP_template(typename Range)(
-    requires ad_utility::Rvalue<
-        Range&&>) auto moveToCachingInputRange(Range&& range) {
+CPP_template(typename Range)(requires ad_utility::Rvalue<Range &&>)
+auto moveToCachingInputRange(Range&& range) {
   return ad_utility::CachingTransformInputRange(
       AD_FWD(range), [](auto& input) { return std::move(input); });
 }
@@ -473,11 +471,9 @@ TripleComponent Service::bindingToTripleComponent(
           getIndex().encodedIriManager());
     } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(value),
-          binding["xml:lang"].get<std::string>());
+          value, binding["xml:lang"].get<std::string>());
     } else {
-      tc = TripleComponent::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(value));
+      tc = TripleComponent::Literal::literalWithNormalizedContent(value);
     }
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
@@ -544,7 +540,7 @@ void Service::throwErrorWithContext(std::string_view msg,
                                     std::string_view first100,
                                     std::string_view last100) const {
   const ad_utility::httpUtils::Url serviceUrl{
-      asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
+      parsedServiceClause_.serviceIri_.getContent()};
 
   throw std::runtime_error(absl::StrCat(
       "Error while executing a SERVICE request to <", serviceUrl.asString(),

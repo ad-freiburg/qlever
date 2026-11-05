@@ -13,8 +13,10 @@
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+#include "util/Serializer/AllocationLimitedReadSerializer.h"
 #include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/ChunkedReadSerializer.h"
 #include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
@@ -706,6 +708,25 @@ TEST(Serializer, serializeOptional) {
 }
 
 // _____________________________________________________________________________
+TEST(Serializer, serializeTriviallyCopyableOptional) {
+  std::optional<double> d = 3.5;
+  std::optional<double> nil = std::nullopt;
+  ByteBufferWriteSerializer writer;
+  writer << d;
+  writer << nil;
+  // The optionals are written as a `bool` followed by the value (if any), and
+  // not as their raw bytes.
+  EXPECT_EQ(writer.data().size(), 2 * sizeof(bool) + sizeof(double));
+  std::optional<double> dExpected;
+  std::optional<double> nilExpected = 1.0;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  reader >> dExpected;
+  reader >> nilExpected;
+  EXPECT_THAT(dExpected, ::testing::Optional(3.5));
+  EXPECT_EQ(nilExpected, std::nullopt);
+}
+
+// _____________________________________________________________________________
 TEST(Serializer, serializeVariant) {
   using Variant = std::variant<int, std::string, std::vector<int>>;
   Variant number = 42;
@@ -1123,6 +1144,135 @@ TEST(AlignedSerializer, Concepts) {
   static_assert(!ReadSerializer<AlignedByteBufferWriteSerializer>);
   static_assert(ReadSerializer<AlignedByteBufferReadSerializer>);
   static_assert(!WriteSerializer<AlignedByteBufferReadSerializer>);
+}
+
+// Test the concepts `SpanReadSerializer` and `ZeroCopyReadSerializer` and the
+// deduction guide of `ByteBufferReadSerializerT`.
+TEST(Serializer, SpanReadSerializerConcepts) {
+  using ad_utility::serialization::SpanReadSerializer;
+  using ad_utility::serialization::ZeroCopyReadSerializer;
+  using SpanReader = ad_utility::serialization::ByteBufferReadSerializerT<
+      false, ql::span<const char>>;
+  using UninitializedBufferReader =
+      ad_utility::serialization::ByteBufferReadSerializerT<
+          false, ad_utility::serialization::UninitializedBuffer>;
+  using AlignedSpanReader =
+      ad_utility::serialization::ByteBufferReadSerializerT<
+          true, ql::span<const char>>;
+
+  // Every byte buffer read serializer gives access to its buffer, regardless
+  // of its storage and of whether it uses aligned serialization.
+  static_assert(SpanReadSerializer<ByteBufferReadSerializer>);
+  static_assert(SpanReadSerializer<SpanReader>);
+  static_assert(SpanReadSerializer<UninitializedBufferReader>);
+  static_assert(SpanReadSerializer<AlignedByteBufferReadSerializer>);
+  static_assert(SpanReadSerializer<AlignedSpanReader>);
+
+  // Serializers that read from a file have no buffer to point into, and write
+  // serializers are no read serializers.
+  static_assert(!SpanReadSerializer<FileReadSerializer>);
+  static_assert(!SpanReadSerializer<CopyableFileReadSerializer>);
+  static_assert(!SpanReadSerializer<ByteBufferWriteSerializer>);
+  static_assert(!SpanReadSerializer<AlignedByteBufferWriteSerializer>);
+  static_assert(!SpanReadSerializer<FileWriteSerializer>);
+
+  // `ZeroCopyReadSerializer` is strictly stronger: it additionally requires
+  // aligned serialization.
+  static_assert(ZeroCopyReadSerializer<AlignedByteBufferReadSerializer>);
+  static_assert(ZeroCopyReadSerializer<AlignedSpanReader>);
+  static_assert(!ZeroCopyReadSerializer<ByteBufferReadSerializer>);
+  static_assert(!ZeroCopyReadSerializer<SpanReader>);
+  static_assert(!ZeroCopyReadSerializer<UninitializedBufferReader>);
+  static_assert(!ZeroCopyReadSerializer<FileReadSerializer>);
+  static_assert(!ZeroCopyReadSerializer<ByteBufferWriteSerializer>);
+
+  // The deduction guide of `ByteBufferReadSerializerT` yields the plain (not
+  // aligned) reader for any kind of buffer.
+  std::vector<char> vec;
+  ad_utility::serialization::UninitializedBuffer uninitializedBuffer;
+  static_assert(
+      std::is_same_v<
+          decltype(ad_utility::serialization::ByteBufferReadSerializerT{vec}),
+          ByteBufferReadSerializer>);
+  static_assert(std::is_same_v<
+                decltype(ad_utility::serialization::ByteBufferReadSerializerT{
+                    std::move(uninitializedBuffer)}),
+                UninitializedBufferReader>);
+  static_assert(std::is_same_v<
+                decltype(ad_utility::serialization::ByteBufferReadSerializerT{
+                    ql::span<const char>{vec}}),
+                SpanReader>);
+}
+
+// Test that `zeroCopyDeserializeToStringView` returns views into the buffer of
+// the reader, for the unaligned and the aligned serializers, and throws on a
+// truncated buffer.
+TEST(Serializer, ZeroCopyDeserializeToStringView) {
+  using ad_utility::serialization::zeroCopyDeserializeToStringView;
+  using namespace ad_utility::use_type_identity;
+
+  // Write a mix of strings and other values with the `Writer`, read them back
+  // with the `Reader` via `zeroCopyDeserializeToStringView`, and check that the
+  // returned views point into the buffer of the reader.
+  auto test = [](auto writerTi, auto makeReader) {
+    using Writer = typename decltype(writerTi)::type;
+    Writer writer;
+    std::string s1 = "a string that is longer than the short string buffer";
+    std::string_view s2 = "view";
+    std::string empty;
+    int64_t i = 42;
+    writer << s1;
+    writer << i;
+    writer << s2;
+    writer << empty;
+    auto data = std::move(writer).data();
+
+    auto reader = makeReader(data);
+    const char* begin = reader.data().data();
+    const char* end = begin + reader.data().size();
+    auto pointsIntoBuffer = [begin, end](std::string_view view) {
+      return view.data() >= begin && view.data() + view.size() <= end;
+    };
+
+    auto s1Read = zeroCopyDeserializeToStringView(reader);
+    int64_t iRead = 0;
+    reader >> iRead;
+    auto s2Read = zeroCopyDeserializeToStringView(reader);
+    auto emptyRead = zeroCopyDeserializeToStringView(reader);
+    EXPECT_EQ(s1Read, s1);
+    EXPECT_EQ(iRead, i);
+    EXPECT_EQ(s2Read, s2);
+    EXPECT_TRUE(emptyRead.empty());
+    EXPECT_TRUE(pointsIntoBuffer(s1Read));
+    EXPECT_TRUE(pointsIntoBuffer(s2Read));
+    EXPECT_EQ(reader.getCurrentPosition(), reader.data().size());
+  };
+
+  // The unaligned writer with a reader that owns its buffer, and one that
+  // only views it.
+  test(ti<ByteBufferWriteSerializer>,
+       [](const auto& data) { return ByteBufferReadSerializer{data}; });
+  test(ti<ByteBufferWriteSerializer>, [](const auto& data) {
+    return ad_utility::serialization::ByteBufferReadSerializerT{
+        ql::span<const char>{data}};
+  });
+  // Strings have no alignment requirement, so the function also works for the
+  // aligned serializers.
+  test(ti<AlignedByteBufferWriteSerializer>,
+       [](const auto& data) { return AlignedByteBufferReadSerializer{data}; });
+
+  // A buffer that ends inside the bytes of the string throws.
+  {
+    ByteBufferWriteSerializer writer;
+    std::string s = "truncated";
+    writer << s;
+    auto data = std::move(writer).data();
+    data.resize(data.size() - 3);
+    ByteBufferReadSerializer reader{std::move(data)};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        zeroCopyDeserializeToStringView(reader),
+        ::testing::HasSubstr("not enough bytes available"));
+  }
 }
 
 // Test that alignment padding is correctly inserted. We write a single char
@@ -1564,4 +1714,143 @@ TEST(VectorIncrementalSerializer, MoveAssignmentFinishesOverwrittenSerializer) {
     }
   }
   EXPECT_EQ(readIntVector(filenameB), originalB);
+}
+
+namespace {
+// Return the bytes that `values` are serialized to.
+template <typename... Ts>
+std::vector<char> serializeToBytes(const Ts&... values) {
+  ByteBufferWriteSerializer writer;
+  ((writer << values), ...);
+  return std::move(writer).data();
+}
+
+// Split the `bytes` into consecutive chunks of the given `sizes`, followed by a
+// chunk with the remaining bytes.
+std::vector<ql::span<const std::byte>> splitIntoChunks(
+    std::string_view bytes, const std::vector<size_t>& sizes) {
+  auto remaining = ql::as_bytes(ql::span{bytes});
+  std::vector<ql::span<const std::byte>> chunks;
+  for (size_t size : sizes) {
+    chunks.push_back(remaining.first(size));
+    remaining = remaining.subspan(size);
+  }
+  chunks.push_back(remaining);
+  return chunks;
+}
+}  // namespace
+
+// Test that `read<T>` reads consecutive values of different types.
+TEST(Serializer, read) {
+  ByteBufferReadSerializer reader{
+      serializeToBytes(42, std::string{"abc"}, 3.5)};
+  EXPECT_EQ(serialization::read<int>(reader), 42);
+  EXPECT_EQ(serialization::read<std::string>(reader), "abc");
+  EXPECT_EQ(serialization::read<double>(reader), 3.5);
+}
+
+// Test that a `ChunkedReadSerializer` reads values that are split across
+// chunks, skips empty chunks, and throws when the range ends within a value.
+TEST(ChunkedReadSerializer, readAcrossChunks) {
+  using Chunks = std::vector<ql::span<const std::byte>>;
+  using serialization::ChunkedReadSerializer;
+  static_assert(serialization::ReadSerializer<ChunkedReadSerializer<Chunks>>);
+  // Chunks of non-const bytes (like the body of an HTTP response) are also
+  // supported, but no ranges of other things.
+  static_assert(
+      serialization::RangeOfByteChunks<std::vector<ql::span<std::byte>>>);
+  static_assert(!serialization::RangeOfByteChunks<std::vector<int>>);
+
+  // The 8-byte value is split across three chunks (3 + 2 + 3 bytes) with empty
+  // chunks in between, the `'x'` ends the chunk of 4 bytes, and the `'y'` is a
+  // chunk of its own.
+  uint64_t value = 0x0123456789ABCDEF;
+  auto bytes = serializeToBytes(value, 'x', 'y');
+  auto chunks =
+      splitIntoChunks({bytes.data(), bytes.size()}, {0, 3, 0, 2, 0, 4});
+  ChunkedReadSerializer reader{chunks};
+  EXPECT_FALSE(reader.isExhausted());
+  EXPECT_EQ(serialization::read<uint64_t>(reader), value);
+  EXPECT_EQ(serialization::read<char>(reader), 'x');
+  EXPECT_FALSE(reader.isExhausted());
+  EXPECT_EQ(serialization::read<char>(reader), 'y');
+  EXPECT_TRUE(reader.isExhausted());
+  auto endedUnexpectedly = ::testing::HasSubstr("ended unexpectedly");
+  AD_EXPECT_THROW_WITH_MESSAGE(serialization::read<char>(reader),
+                               endedUnexpectedly);
+
+  // The range ends in the middle of a value.
+  auto shortChunks = splitIntoChunks("abc", {});
+  ChunkedReadSerializer shortReader{shortChunks};
+  AD_EXPECT_THROW_WITH_MESSAGE(serialization::read<uint64_t>(shortReader),
+                               endedUnexpectedly);
+
+  Chunks noChunks;
+  EXPECT_TRUE(ChunkedReadSerializer{noChunks}.isExhausted());
+}
+
+// Test that `readWithAllocationLimit` throws before a vector, string, or hash
+// map would allocate more than the given number of bytes in total.
+TEST(AllocationLimitedReadSerializer, readWithAllocationLimit) {
+  using serialization::readWithAllocationLimit;
+  static_assert(serialization::AllocationCheckingReadSerializer<
+                serialization::AllocationLimitedReadSerializer<
+                    ByteBufferReadSerializer>>);
+  static_assert(!serialization::AllocationCheckingReadSerializer<
+                ByteBufferReadSerializer>);
+
+  std::vector<std::string> strings{"foo", "", "barbaz"};
+  auto bytes = serializeToBytes(strings);
+  auto read = [&bytes](size_t maxNumBytes) {
+    ByteBufferReadSerializer reader{bytes};
+    return readWithAllocationLimit<std::vector<std::string>>(reader,
+                                                             maxNumBytes);
+  };
+
+  // The strings take up 9 bytes, plus the `std::string` objects.
+  size_t numBytes = 3 * sizeof(std::string) + 9;
+  EXPECT_EQ(read(numBytes), strings);
+  auto tooLarge = ::testing::HasSubstr("would allocate more than the maximum");
+  AD_EXPECT_THROW_WITH_MESSAGE(read(numBytes - 1), tooLarge);
+  // There are too many strings, which is detected before reading them.
+  AD_EXPECT_THROW_WITH_MESSAGE(read(2 * sizeof(std::string)), tooLarge);
+
+  // Values that don't allocate are not limited.
+  {
+    ByteBufferReadSerializer reader{serializeToBytes(uint64_t{42})};
+    EXPECT_EQ(readWithAllocationLimit<uint64_t>(reader, 0), 42);
+  }
+
+  // The limit also applies to vectors of trivially serializable values.
+  {
+    ByteBufferReadSerializer reader{
+        serializeToBytes(std::vector<uint32_t>{1, 2, 3})};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        readWithAllocationLimit<std::vector<uint32_t>>(reader, 11), tooLarge);
+  }
+
+  // The limit also applies to hash maps.
+  {
+    using Map = ad_utility::HashMap<uint64_t, std::string>;
+    Map map{{1, "a"}, {2, "bc"}};
+    auto mapBytes = serializeToBytes(map);
+    auto readMap = [&mapBytes](size_t maxNumBytes) {
+      ByteBufferReadSerializer reader{mapBytes};
+      return readWithAllocationLimit<Map>(reader, maxNumBytes);
+    };
+    size_t numMapBytes = 2 * sizeof(std::pair<uint64_t, std::string>) + 3;
+    EXPECT_EQ(readMap(numMapBytes), map);
+    AD_EXPECT_THROW_WITH_MESSAGE(readMap(numMapBytes - 1), tooLarge);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        readMap(sizeof(std::pair<uint64_t, std::string>)), tooLarge);
+  }
+
+  // No memory is allocated for the size of an invalid string, and the size
+  // doesn't overflow when it is multiplied with the size of the elements.
+  for (size_t hugeSize :
+       {size_t{1} << 60, std::numeric_limits<size_t>::max()}) {
+    ByteBufferReadSerializer reader{serializeToBytes(hugeSize)};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        readWithAllocationLimit<std::vector<uint64_t>>(reader, 1000), tooLarge);
+  }
 }

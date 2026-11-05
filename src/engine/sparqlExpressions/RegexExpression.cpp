@@ -36,7 +36,7 @@ void ensureIsValidRegexIfConstant(const SparqlExpression& expression) {
       dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
+    const auto& string = literal.getContent();
     RE2 regex{string, RE2::Quiet};
     if (!regex.ok()) {
       throw std::runtime_error{absl::StrCat(
@@ -54,7 +54,7 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
       dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
+    const auto& string = literal.getContent();
     auto firstInvalidFlag = string.find_first_not_of("imsU");
     if (firstInvalidFlag != std::string::npos) {
       throw std::runtime_error{absl::StrCat(
@@ -250,36 +250,24 @@ ExpressionResult PrefixRegexExpression::evaluate(
         child_->evaluate(context));
   }
 
-  // Begin and end of the input (for each row of which we want to
-  // evaluate the regex).
-  auto beg = context->_inputTable.begin() + context->_beginIndex;
-  auto end = context->_inputTable.begin() + context->_endIndex;
-  AD_CONTRACT_CHECK(end <= context->_inputTable.end());
-
   // In this function, the expression is a simple variable. If the input is
   // sorted by that variable, the result can be computed by a constant number
   // of binary searches and the result is a set of intervals.
-  const auto& column = optColumn.value();
-  if (context->isResultSortedBy(variable_) &&
-      (beg == end || !(*beg)[column].isUndefined())) {
+  if (auto sortedColumn =
+          context->getSortedAlwaysDefinedColumnOrNullopt(variable_);
+      sortedColumn.has_value()) {
+    auto column = sortedColumn.value();
     std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.
-      auto lower = std::lower_bound(
-          beg, end, nullptr,
-          [column, lowerId = lowerId](const auto& l, const auto&) {
-            return l[column] < lowerId;
-          });
-      auto upper = std::lower_bound(
-          beg, end, nullptr,
-          [column, upperId = upperId](const auto& l, const auto&) {
-            return l[column] < upperId;
-          });
+      auto lower = ql::ranges::lower_bound(column, lowerId);
+      auto upper = ql::ranges::lower_bound(column, upperId);
       // Return the empty result as an empty `SetOfIntervals` instead of as an
       // empty range.
       if (lower != upper) {
         resultSetOfIntervals.push_back(ad_utility::SetOfIntervals{
-            {{lower - beg, upper - beg}}, context->size()});
+            {{lower - column.begin(), upper - column.begin()}},
+            context->size()});
       }
       checkCancellation(context);
     }
@@ -338,8 +326,7 @@ PrefixRegexExpression::getPrefilterExpressionForMetadata(
   std::vector<PrefilterExprVariablePair> prefilterVec;
   prefilterVec.emplace_back(
       std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-          TripleComponent::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(prefixRegex_))),
+          TripleComponent::Literal::literalWithNormalizedContent(prefixRegex_)),
       variable_);
   return prefilterVec;
 }
@@ -361,8 +348,8 @@ PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
   }
   const auto& stringLiteral = stringLiteralExpression->value();
   detail::ensureIsSimpleLiteral(stringLiteral);
-  if (std::optional<std::string> prefixRegex = getPrefixRegex(
-          std::string{asStringViewUnsafe(stringLiteral.getContent())})) {
+  if (std::optional<std::string> prefixRegex =
+          getPrefixRegex(std::string{stringLiteral.getContent()})) {
     return PrefixRegexExpression{std::move(string),
                                  std::move(prefixRegex.value()),
                                  variableExpression->value()};
@@ -415,8 +402,7 @@ SparqlExpression::Ptr makePrefixMatchExpression(
   const auto& stringLiteral = stringLiteralExpression->value();
   detail::ensureIsSimpleLiteral(stringLiteral);
   return std::make_unique<PrefixRegexExpression>(
-      std::move(string),
-      std::string{asStringViewUnsafe(stringLiteral.getContent())},
+      std::move(string), std::string{stringLiteral.getContent()},
       variableExpression->value());
 }
 

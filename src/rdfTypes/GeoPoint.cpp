@@ -4,12 +4,13 @@
 
 #include "rdfTypes/GeoPoint.h"
 
+#include <absl/strings/str_format.h>
+
 #include <cmath>
 #include <optional>
 #include <type_traits>
 
 #include "global/Constants.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
@@ -65,10 +66,8 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
 std::optional<GeoPoint> GeoPoint::parseFromLiteral(
     const ad_utility::triple_component::Literal& value, bool checkDatatype) {
   if (!checkDatatype ||
-      (value.hasDatatype() &&
-       value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL))) {
-    auto [lng, lat] = ad_utility::detail::parseWktPoint(
-        asStringViewUnsafe(value.getContent()));
+      (value.hasDatatype() && value.getDatatype() == GEO_WKT_LITERAL)) {
+    auto [lng, lat] = ad_utility::detail::parseWktPoint(value.getContent());
     if (!std::isnan(lng) && !std::isnan(lat)) {
       return GeoPoint{lat, lng};
     }
@@ -85,9 +84,12 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
 
 // _____________________________________________________________________________
 std::string GeoPoint::toStringRepresentation() const {
-  // Extra conversion using std::to_string to get more decimals
-  return absl::StrCat("POINT(", std::to_string(getLng()), " ",
-                      std::to_string(getLat()), ")");
+  // Format both coordinates with `%f` (six decimals).
+  //
+  // NOTE: This is what `std::to_string` did for floating-point values before
+  // C++26. Since C++26, it produces the shortest round-trip representation
+  // instead (`42` instead of `42.000000`), which would change this output.
+  return absl::StrFormat("POINT(%f %f)", getLng(), getLat());
 }
 
 // _____________________________________________________________________________

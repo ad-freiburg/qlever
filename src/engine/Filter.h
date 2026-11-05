@@ -59,14 +59,17 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override {
-    return _subtree->getVariableColumns();
-  }
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   // The method is directly invoked with the construction of this `Filter`
   // object. Its implementation retrieves <PrefilterExpression, Variable> pairs
@@ -79,16 +82,14 @@ class Filter : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   // Perform the actual filter operation of the data provided.
-  CPP_template(int WIDTH, typename Table)(
-      requires IdTableLike<
-          Table>) void computeFilterImpl(IdTable& dynamicResultTable,
-                                         Table&& input,
-                                         std::vector<ColumnIndex> sortedBy)
-      const;
+  CPP_template(int WIDTH, typename Table)(requires IdTableLike<Table>)
+  void computeFilterImpl(IdTable& dynamicResultTable, Table&& input,
+                         qlm::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable.
-  CPP_template(typename Table)(requires IdTableLike<Table>) IdTable
-      filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
+  CPP_template(typename Table)(requires IdTableLike<Table>)
+  IdTable
+      filterIdTable(qlm::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_FILTER_H

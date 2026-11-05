@@ -16,6 +16,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
@@ -24,6 +25,8 @@
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
+
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 using namespace ad_utility::testing;
 using namespace std::chrono_literals;
@@ -118,7 +121,7 @@ void testLazyScanForJoinOfTwoScans(
     config.rowsPerBlock = rowsPerBlock;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
-    s1.applyLimitOffset(limit);
+    s1.applyLimitOffset(limit, false);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
     auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
                             const auto& expectedR,
@@ -595,7 +598,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   auto sizeEstimate = [&](const std::string& predicate) {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
+        &namedCache, materializedViewsManager, executor());
     SparqlTripleSimple scanTriple{Variable{"?x"},
                                   TripleComponent::Iri::fromIriref(predicate),
                                   Variable{"?y"}};
@@ -654,7 +657,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   auto makeScan = [&]() {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
+        &namedCache, materializedViewsManager, executor());
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
@@ -767,7 +770,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
     auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    size_t byteCount = numRows * numCols * sizeof(Id);
+    size_t byteCount = numRows * numCols * BYTES_PER_ID_COLUMN_ENTRY;
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount - 1)));
     EXPECT_FALSE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount)));
   };
@@ -889,6 +892,29 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   // be still cacheable.
   EXPECT_TRUE(!updatedQet.has_value());
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
+}
+
+// Test that the prefiltered `IndexScan` keeps the variables hidden by a
+// subquery hidden.
+TEST(IndexScan, prefilteringKeepsHiddenVariablesHidden) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  using V = Variable;
+  auto qec = getQec("<x> <y> <z>.");
+  SparqlTripleSimple triple{V{"?x"}, iri("<y>"), V{"?z"}};
+  auto qet =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+  // `?z` is hidden by a subquery (with `strip-columns` disabled).
+  qet->getRootOperation()->setSelectedVariablesForSubquery({V{"?x"}});
+
+  // The prefiltered `IndexScan` is a new operation, but `?z` must still be
+  // hidden.
+  auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      makePrefilterVec(pr(lt(IntId(5)), V{"?x"})));
+  ASSERT_TRUE(updatedQet.has_value());
+  EXPECT_FALSE(updatedQet.value()->getRootOperation()->canResultBeCached());
+  EXPECT_THAT(updatedQet.value()->getVariableColumns(),
+              ::testing::UnorderedElementsAre(::testing::Key(V{"?x"})));
 }
 
 // _____________________________________________________________________________
@@ -1205,6 +1231,44 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   EXPECT_EQ(rti.details_["num-elements-read"], 4);
 }
 
+// Test that for a scan with a LIMIT or OFFSET, the scan side of
+// `prefilterTables` is the complete limited scan, read once, and the join side
+// is passed through unfiltered (`getLazyScan` ignores the prefiltered blocks
+// for such a scan, so reading it per batch would repeat it).
+TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
+  // Rows 3-5 of the six `<p>` rows, join side with two matching values from
+  // different blocks and a value (`<xb>`) that matches no block.
+  IndexScan scan = makeScan();
+  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2}, false);
+
+  auto makeJoinSide = [this]() {
+    using P = Result::IdTableVocabPair;
+    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<xb>")}), LocalVocab{}}};
+  };
+
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+
+  // The join side is passed through unchanged, including the non-matching
+  // table.
+  ASSERT_EQ(joinSideResults.size(), 3);
+  EXPECT_EQ(joinSideResults.at(0).idTable_, makeIdTable({iri("<a>")}));
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<c>")}));
+  EXPECT_EQ(joinSideResults.at(2).idTable_, makeIdTable({iri("<xb>")}));
+
+  // The scan side is exactly the limited scan, each row once.
+  IdTable scanTable{2, qec_->getAllocator()};
+  for (const auto& [table, vocab] : scanResults) {
+    scanTable.insertAtEnd(table);
+  }
+  EXPECT_EQ(scanTable, tableFromTriples({{iri("<b>"), iri("<B>")},
+                                         {iri("<b>"), iri("<B2>")},
+                                         {iri("<c>"), iri("<C>")}}));
+  EXPECT_EQ(scan.runtimeInfo().details_["num-blocks-all"], 3);
+}
+
 // _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin,
        prefilterTablesDoesFilterCorrectlyWithOverlappingValues) {
@@ -1332,9 +1396,9 @@ TEST_P(IndexScanWithLazyJoin,
   LocalVocab extraVocab;
   const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<e>"), localVocabContext});
+      localVocabEntry(iri("<e>"), localVocabContext));
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<g>"), localVocabContext});
+      localVocabEntry(iri("<g>"), localVocabContext));
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -1964,7 +2028,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
     return makePrefilterVec(
-        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+        pr(lt(iriLocalVocabEntry("<s2>", qec->getLocalVocabContext())),
            Var{"?x"}));
   };
 

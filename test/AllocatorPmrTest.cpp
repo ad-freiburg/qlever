@@ -14,9 +14,11 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <optional>
 
 #include "backports/memory_resource.h"
 #include "util/AllocatorPmr.h"
+#include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
 using ad_utility::makePmrAllocatorFromResource;
@@ -142,14 +144,71 @@ TEST(AllocatorPmr, ResourceIsEqual) {
               PolymorphicAllocator{otherAlloc.resource()});
 }
 
-// ____________________________________________________________________________
-// A plain platform resource (non-owning) enforces no limit.
+// Test that a plain platform resource (non-owning) enforces no limit, so it
+// rejects changing the limit.
 TEST(AllocatorPmr, FromResourceNoLimit) {
   ql::pmr::monotonic_buffer_resource platformPool;
   auto alloc = makePmrAllocatorFromResource<int>(&platformPool);
   EXPECT_EQ(alloc.resource(), &platformPool);
   EXPECT_EQ(alloc.amountMemoryLeft(), MemorySize::max());
+  AD_EXPECT_THROW_WITH_MESSAGE(alloc.increaseMemoryLimit(MemorySize::bytes(4)),
+                               ::testing::HasSubstr("does not enforce one"));
+  AD_EXPECT_THROW_WITH_MESSAGE(alloc.decreaseMemoryLimit(MemorySize::bytes(4)),
+                               ::testing::HasSubstr("does not enforce one"));
   int* p = alloc.allocate(10);
   ASSERT_NE(p, nullptr);
   alloc.deallocate(p, 10);
+}
+
+// Test that a non-owning copy shares the resource of its owner and that copies
+// of a non-owning allocator (also rebound ones) are non-owning, too.
+TEST(AllocatorPmr, NonOwningCopy) {
+  static_assert(sizeof(int) == 4);
+  auto owner = makePmrAllocatorWithLimit<int>(8_B);
+  EXPECT_TRUE(owner.isOwning());
+  auto nonOwning = owner.nonOwningCopy();
+  EXPECT_FALSE(nonOwning.isOwning());
+  EXPECT_EQ(nonOwning, owner);
+  EXPECT_EQ(nonOwning.resource(), owner.resource());
+
+  int* p = nonOwning.allocate(1);
+  EXPECT_EQ(owner.amountMemoryLeft(), 4_B);
+
+  PmrAllocator<int> copy{nonOwning};
+  EXPECT_FALSE(copy.isOwning());
+  auto moved = std::move(copy);
+  EXPECT_FALSE(moved.isOwning());
+  auto rebound = nonOwning.as<char>();
+  EXPECT_FALSE(rebound.isOwning());
+  EXPECT_EQ(rebound.amountMemoryLeft(), 4_B);
+
+  // A non-owning copy of a non-owning copy is fine as well.
+  auto nonOwning2 = moved.nonOwningCopy();
+  EXPECT_FALSE(nonOwning2.isOwning());
+  nonOwning2.deallocate(p, 1);
+  EXPECT_EQ(owner.amountMemoryLeft(), 8_B);
+
+  // An allocator for a platform resource is non-owning from the start.
+  ql::pmr::monotonic_buffer_resource platformPool;
+  auto platformAlloc = makePmrAllocatorFromResource<int>(&platformPool);
+  EXPECT_FALSE(platformAlloc.isOwning());
+  EXPECT_EQ(platformAlloc.nonOwningCopy().resource(), &platformPool);
+}
+
+// Test that a non-owning copy that outlives its owner terminates the program
+// when the lifetime checks are enabled.
+TEST(AllocatorPmr, NonOwningCopyOutlivesOwner) {
+#ifdef QL_ENABLE_LIFETIME_CHECKS
+  auto outliveOwner = []() {
+    std::optional<PmrAllocator<int>> nonOwning;
+    {
+      auto owner = makePmrAllocatorWithLimit<int>(8_B);
+      nonOwning.emplace(owner.nonOwningCopy());
+    }
+    nonOwning.reset();
+  };
+  EXPECT_DEATH_IF_SUPPORTED(outliveOwner(), "outlived the owner");
+#else
+  GTEST_SKIP() << "The lifetime checks are disabled in this build";
+#endif
 }

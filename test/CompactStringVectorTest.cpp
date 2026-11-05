@@ -92,6 +92,78 @@ TYPED_TEST(CompactVectorOfStringsFixture, Build) {
   vectorsEqual(v, input);
 }
 
+// Test that `fromDataAndOffsets` yields the same elements as `build`, and that
+// it rejects offsets that are not a valid layout for the data.
+TYPED_TEST(CompactVectorOfStringsFixture, FromDataAndOffsets) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+  using Data = std::vector<typename TestFixture::Type>;
+  using Offsets = std::vector<typename CompactVector::offset_type>;
+
+  // Lay the input out as data and offsets by hand.
+  Data data;
+  Offsets offsets{0};
+  for (const auto& element : input) {
+    data.insert(data.end(), element.begin(), element.end());
+    offsets.push_back(data.size());
+  }
+  auto v = CompactVector::fromDataAndOffsets(data, offsets);
+  EXPECT_TRUE(v.ready());
+  vectorsEqual(v, input);
+  // The result owns its storage, so it can be appended to.
+  v.push_back(input[0]);
+  EXPECT_EQ(v.size(), input.size() + 1);
+  iterablesEqual(v[v.size() - 1], input[0]);
+
+  // Zero elements are the single offset `0` and no data.
+  auto empty = CompactVector::fromDataAndOffsets({}, {0});
+  EXPECT_TRUE(empty.ready());
+  EXPECT_EQ(empty.size(), 0u);
+
+  // Invalid layouts: no offsets, a first offset other than `0`, a last offset
+  // other than the size of the data, and decreasing offsets.
+  EXPECT_ANY_THROW(CompactVector::fromDataAndOffsets(data, {}));
+  auto expectRejected = [&data, &offsets](auto invalidate) {
+    auto invalid = offsets;
+    invalidate(invalid);
+    EXPECT_ANY_THROW(CompactVector::fromDataAndOffsets(data, invalid));
+  };
+  expectRejected([](Offsets& o) { o.front() = 1; });
+  expectRejected([&data](Offsets& o) { o.back() = data.size() - 1; });
+  expectRejected([](Offsets& o) { std::swap(o[1], o[2]); });
+}
+
+// Test that `push_back` appends single elements, to an empty object and to a
+// built one.
+TYPED_TEST(CompactVectorOfStringsFixture, PushBack) {
+  const auto& input = TestFixture::input_;
+  const auto& input1 = TestFixture::input1_;
+
+  // `push_back` into an empty object yields the pushed elements.
+  typename TestFixture::CompactVector v;
+  EXPECT_FALSE(v.ready());
+  for (const auto& element : input) {
+    v.push_back(element);
+  }
+  vectorsEqual(v, input);
+
+  // `push_back` after `build` appends to the built elements.
+  typename TestFixture::CompactVector v1;
+  v1.build(input);
+  for (const auto& element : input1) {
+    v1.push_back(element);
+  }
+  auto expected = input;
+  expected.insert(expected.end(), input1.begin(), input1.end());
+  vectorsEqual(v1, expected);
+
+  // The offsets start at zero and end at the size of the data.
+  auto offsets = v1.offsetsSpan();
+  ASSERT_EQ(offsets.size(), expected.size() + 1);
+  EXPECT_EQ(offsets.front(), 0u);
+  EXPECT_EQ(offsets.back(), v1.dataSpan().size());
+}
+
 // _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, Iterator) {
   const auto& input = TestFixture::input_;
@@ -329,9 +401,10 @@ TYPED_TEST(CompactVectorOfStringsFixture, ZeroCopyViewCannotBeMutated) {
       std::move(writeSerializer).data()};
   auto view = CompactVector::fromZeroCopyDeserializer(readSerializer);
 
-  // A non-owning, zero-copy view must not be mutated via `build()`, which
-  // requires owned storage.
+  // A non-owning, zero-copy view must not be mutated via `build()` or
+  // `push_back()`, which require owned storage.
   EXPECT_ANY_THROW(view.build(input));
+  EXPECT_ANY_THROW(view.push_back(input.front()));
 }
 
 // _____________________________________________________________________________

@@ -94,6 +94,22 @@ std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
 }
 
 // _____________________________________________________________________________
+std::optional<std::string> wktToGeoJson(const GeoPointOrWkt& wkt) {
+  // A `GeoPoint` is stored with limited precision. Round its coordinates to
+  // the six decimals of its WKT export, so that the decoding artifacts (a
+  // stored `POINT(1 2)` decodes to `1.0000001089647412 1.9999999664723873`)
+  // do not end up in the GeoJSON.
+  if (const auto* point = std::get_if<GeoPoint>(&wkt)) {
+    auto round = [](double coordinate) {
+      return std::round(coordinate * 1e6) / 1e6;
+    };
+    return utilGeomToGeoJson(std::optional<ParsedWkt>{
+        Point<CoordType>{round(point->getLng()), round(point->getLat())}});
+  }
+  return utilGeomToGeoJson(parseGeoPointOrWkt(wkt).parsedWkt_);
+}
+
+// _____________________________________________________________________________
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b) {
   return computeMetricDistance(a, b);

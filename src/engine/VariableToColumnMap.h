@@ -93,9 +93,8 @@ using VariableToColumnMap =
 // serialized named result caches). The reading side does not depend on that
 // order.
 CPP_template(typename S, typename T)(
-    requires ad_utility::SimilarTo<
-        T, VariableToColumnMap>) void serializeDeterministically(S& serializer,
-                                                                 T&& map) {
+    requires ad_utility::SimilarTo<T, VariableToColumnMap>)
+void serializeDeterministically(S& serializer, T&& map) {
   if constexpr (ad_utility::serialization::WriteSerializer<S>) {
     serializer << map.size();
     std::vector<const VariableToColumnMap::value_type*> sortedEntries;

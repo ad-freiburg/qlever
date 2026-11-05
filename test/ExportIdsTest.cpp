@@ -16,7 +16,6 @@
 #include "index/ExportIds.h"
 #include "index/LocalVocabEntry.h"
 #include "parser/LiteralOrIri.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/Literal.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"

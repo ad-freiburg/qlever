@@ -97,12 +97,12 @@ SelectClause::getSelectedVariablesAsStrings() const {
   }
 }
 
-void SelectClause::deleteAliasesButKeepVariables() {
+std::vector<Alias> SelectClause::deleteAliasesButKeepVariables() {
   if (isAsterisk()) {
-    return;
+    return {};
   }
   auto& varsAndAliases = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
   // The variables that the aliases are bound to have previously been stored
   // separately in `varsAndAliases.vars_`, so we can simply delete the aliases.
-  varsAndAliases.aliases_.clear();
+  return std::exchange(varsAndAliases.aliases_, {});
 }

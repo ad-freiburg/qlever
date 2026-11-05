@@ -52,6 +52,22 @@ constexpr inline size_t VOCABULARY_SCAN_MAX_WORDS_PER_BATCH = 10'000;
 constexpr inline ad_utility::MemorySize
     VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH = 10_MB;
 
+// Read-ahead of `VocabularyOnDisk::operator[]`: when a thread looks up words
+// (nearly) sequentially, the following words are read together with the
+// requested one and cached (one window per thread).
+//
+// A lookup is considered to be sequential if it is at most this many words
+// after the previous lookup of the same thread in the same vocabulary.
+constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_GAP = 64;
+// The window of the read-ahead starts with one word and doubles with every
+// sequential lookup that is not in it, up to this many words (8 bytes of offset
+// each).
+constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_WORDS = 4096;
+// The maximum size of the word data in a window, which bounds the memory per
+// thread.
+constexpr inline ad_utility::MemorySize VOCABULARY_READ_AHEAD_MAX_WORD_DATA =
+    1_MB;
+
 constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_URL =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/";
@@ -241,6 +257,8 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline std::string_view GEO_WKT_LITERAL =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+constexpr inline std::string_view GEO_JSON_LITERAL =
+    "http://www.opengis.net/ont/geosparql#geoJSONLiteral";
 namespace string_constants::detail {
 constexpr inline std::string_view geo_literal_prefix = "\"^^<";
 }  // namespace string_constants::detail
@@ -296,10 +314,6 @@ constexpr inline uint8_t NUM_COMPRESSION_PREFIXES = 126;
 constexpr inline uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
 
-// When initializing a sort performance estimator, at most this percentage of
-// the number of triples in the index is being sorted at once.
-constexpr inline size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
-
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.
 constexpr inline size_t MAKE_ROOM_SLACK_FACTOR = 2;
@@ -336,30 +350,6 @@ constexpr inline size_t ADDITIONAL_COLUMN_GRAPH_ID = 3;
 constexpr inline size_t ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN = 4;
 constexpr inline size_t ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN = 5;
 
-#ifdef _PARALLEL_SORT
-constexpr inline bool USE_PARALLEL_SORT = true;
-#include <parallel/algorithm>
-namespace ad_utility {
-template <typename... Args>
-auto parallel_sort(Args&&... args) {
-  return __gnu_parallel::sort(std::forward<Args>(args)...);
-}
-using parallel_tag = __gnu_parallel::parallel_tag;
-
-}  // namespace ad_utility
-
-#else
-constexpr inline bool USE_PARALLEL_SORT = false;
-namespace ad_utility {
-template <typename... Args>
-auto parallel_sort([[maybe_unused]] Args&&... args) {
-  throw std::runtime_error(
-      "Triggered the parallel sort although it was disabled. Please report to "
-      "the developers!");
-}
-using parallel_tag = int;
-}  // namespace ad_utility
-#endif
 /// ANSI escape sequence for bold text in the console
 constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.

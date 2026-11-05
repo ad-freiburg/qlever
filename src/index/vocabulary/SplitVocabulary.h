@@ -22,7 +22,7 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/type_traits.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
@@ -135,12 +135,12 @@ class SplitVocabulary {
   // Bit masks for extracting and adding marker and vocabIndex bits
   static constexpr uint64_t markerBitMaskSize = ad_utility::bitMaskSizeForValue(
       numberOfVocabs - 1);  // Range of marker: [0..numberOfVocabs-1]
-  static constexpr uint64_t markerBitMask =
-      ad_utility::bitMaskForHigherBits(ValueId::numDatatypeBits +
-                                       markerBitMaskSize) &
-      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+  // The marker takes the topmost bits of a vocabulary index (see
+  // `ValueId::numVocabIndexBits`).
   static constexpr uint64_t markerShift =
-      ValueId::numDataBits - markerBitMaskSize;
+      ValueId::numVocabIndexBits - markerBitMaskSize;
+  static constexpr uint64_t markerBitMask =
+      ad_utility::bitMaskForLowerBits(markerBitMaskSize) << markerShift;
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 
@@ -421,6 +421,40 @@ class SplitVocabulary {
 
     ~WordWriter() override;
   };
+
+  // The parallel writer (see `ParallelWordWriterBase`): one block writer per
+  // underlying vocabulary, the split function decides the sub-vocabulary of a
+  // word, and the index of a word is the index in its underlying vocabulary
+  // plus the marker (exactly as `WordWriter::operator()`).
+  class ParallelWordWriter : public ParallelWordWriterBase {
+   private:
+    std::array<std::unique_ptr<BlockWriterBase>, numberOfVocabs> blockWriters_;
+
+   public:
+    // Construct the block writers of all underlying vocabularies, see
+    // `WordWriter`.
+    ParallelWordWriter(const UnderlyingVocabsArray& underlyingVocabularies,
+                       const std::string& filename);
+
+    uint8_t numSubVocabularies() const override { return numberOfVocabs; }
+    uint8_t subVocabularyOf(std::string_view word) const override {
+      return SplitVocabulary::splitFunction_(word);
+    }
+    uint64_t indexOf(uint8_t sub, uint64_t position,
+                     std::string_view word) const override {
+      return SplitVocabulary::addMarker(
+          blockWriters_.at(sub)->indexOf(position, word), sub);
+    }
+    BlockWriterBase& blockWriter(uint8_t sub) override {
+      return *blockWriters_.at(sub);
+    }
+  };
+
+  // Construct the `ParallelWordWriter` for the given base `filename`.
+  std::unique_ptr<ParallelWordWriter> makeParallelWriterPtr(
+      const std::string& filename) const {
+    return std::make_unique<ParallelWordWriter>(underlying_, filename);
+  }
 
   // The files of all the underlying vocabularies, each prefixed with the
   // respective one of the `FilenameSuffixes`.

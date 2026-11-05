@@ -7,15 +7,10 @@
 #define QLEVER_SRC_GLOBAL_PATTERN_H
 
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
 #include <limits>
-#include <stdexcept>
-#include <string>
 #include <vector>
 
 #include "global/Id.h"
-#include "util/Generator.h"
 
 /**
  * @brief This represents a set of relations of a single entity.
@@ -27,16 +22,6 @@
 struct Pattern : std::vector<Id> {
   using PatternId = int32_t;
   static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();
-};
-
-// Hashing support for the `Pattern` class.
-template <>
-struct std::hash<Pattern> {
-  std::size_t operator()(const Pattern& p) const noexcept {
-    std::string_view s = std::string_view(
-        reinterpret_cast<const char*>(p.data()), sizeof(Id) * p.size());
-    return hash<std::string_view>()(s);
-  }
 };
 
 #endif  // QLEVER_SRC_GLOBAL_PATTERN_H

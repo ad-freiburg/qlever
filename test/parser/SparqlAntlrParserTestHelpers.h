@@ -730,6 +730,20 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
+// Match a `MINUS` clause by the variables that are in scope in it and in the
+// patterns before it (in any order), ignoring its child.
+inline auto MinusWithVisibleVariables =
+    [](const std::vector<::Variable>& visibleVariables,
+       const std::vector<::Variable>& visibleVariablesOfPrecedingPatterns)
+    -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Minus>(testing::AllOf(
+      AD_FIELD(p::Minus, visibleVariables_,
+               testing::UnorderedElementsAreArray(visibleVariables)),
+      AD_FIELD(p::Minus, visibleVariablesOfPrecedingPatterns_,
+               testing::UnorderedElementsAreArray(
+                   visibleVariablesOfPrecedingPatterns))));
+};
+
 inline auto Load = [](const TripleComponent::Iri& iri,
                       bool silent) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Load>(
@@ -1053,10 +1067,9 @@ auto matchPtrWithChildren(ChildrenMatchers&&... childrenMatchers)
 }
 
 // Same as `matchPtrWithChildren` above, but the children are all variables.
-CPP_template(typename Expression, typename... Children)(requires(
-    ql::concepts::same_as<
-        ::Variable,
-        Children>&&...)) auto matchPtrWithVariables(const Children&... children)
+CPP_template(typename Expression, typename... Children)(
+            requires(ql::concepts::same_as<::Variable, Children>&&...))
+auto matchPtrWithVariables(const Children&... children)
     -> Matcher<const SparqlExpression::Ptr&> {
   return matchPtrWithChildren<Expression>(
       variableExpressionMatcher(children)...);

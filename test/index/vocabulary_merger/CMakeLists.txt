@@ -7,3 +7,15 @@ addLinkAndDiscoverTest(WordBatchBuilderTest index)
 addLinkAndDiscoverTest(VocabularyWriterTest index)
 
 addLinkAndDiscoverTest(VocabularyMergePipelineTest index)
+
+addLinkAndDiscoverTest(SegmentTest index)
+
+addLinkAndDiscoverTest(SegmentCommitterTest index)
+
+addLinkAndDiscoverTest(IdMapWritersTest index)
+
+addLinkAndDiscoverTest(AsyncBlockWriterTest index)
+
+addLinkAndDiscoverTest(SegmentPipelineTest index)
+
+addLinkAndDiscoverTest(MemoryBudgetTest)

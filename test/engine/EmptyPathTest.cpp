@@ -13,6 +13,7 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/EmptyPath.h"
@@ -20,6 +21,9 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/DeltaTriples.h"
+#include "util/Tie.h"
+
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 using ad_utility::testing::getQec;
 using ::testing::ElementsAreArray;
@@ -137,7 +141,8 @@ TEST(EmptyPath, allEntitiesWithTheirGraphs) {
   // The result is sorted by the entity and then by the graph.
   EXPECT_TRUE(
       ql::ranges::is_sorted(result, [](const auto& row1, const auto& row2) {
-        return std::tie(row1[0], row1[1]) < std::tie(row2[0], row2[1]);
+        return ad_utility::tie(row1[0], row1[1]) <
+               ad_utility::tie(row2[0], row2[1]);
       }));
 }
 
@@ -434,8 +439,9 @@ TEST(EmptyPath, theResultOfTheExistenceCheckCanBeFullyMaterialized) {
   // result is the concatenation of several chunks and the local vocabs of
   // those chunks have to be merged.
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-      "<notInTheIndex>", qec->getLocalVocabContext()));
+  localVocab.getIndexAndAddIfNotContained(
+      ad_utility::testing::iriLocalVocabEntry("<notInTheIndex>",
+                                              qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}));
   tables.push_back(makeIdTableFromVector({{getId("<z>")}}));
@@ -561,9 +567,9 @@ TEST(EmptyPath, deletedTriplesAreRespected) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
-                            materializedViews};
+                            materializedViews,
+                            executor()};
 
   EmptyPath emptyPath{&qec, Variable{"?x"}, Graphs::All(), std::nullopt};
   std::vector<Id> expected{getId("<a>"), getId("<b>"), getId("<z>")};
@@ -789,9 +795,9 @@ TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
-                            materializedViews};
+                            materializedViews,
+                            executor()};
 
   EmptyPath emptyPath{&qec, Variable{"?x"}, Graphs::All(), std::nullopt};
   auto result = emptyPath.computeResultOnlyForTesting(true);

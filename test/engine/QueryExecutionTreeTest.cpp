@@ -8,6 +8,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
+#include "engine/CartesianProductJoin.h"
 #include "engine/Distinct.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
@@ -105,7 +106,7 @@ TEST(QueryExecutionTree, createDistinctTreeReturnsInputWhenAlreadyDistinct) {
   // A `LIMIT 1` makes any operation distinct wrt any columns.
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}}), Vars{Variable{"?x"}});
-  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1}, false);
 
   EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{0}), values);
   EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{}), values);
@@ -151,6 +152,40 @@ TEST(QueryExecutionTree, createDistinctTreeEmptyIndicesUsesLimitOne) {
             makeIdTableFromVector({{0}}));
 }
 
+// Test that pushing a `DISTINCT` into a `CartesianProductJoin` keeps the
+// variables hidden by a subquery hidden (regression test for #3563).
+TEST(QueryExecutionTree, createDistinctTreeKeepsHiddenVariablesHidden) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+  Var a{"?a"};
+
+  // A Cartesian product whose root hides `?hidden` and `?b`.
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}, {0, 2}, {1, 3}}),
+      Vars{a, Var{"?hidden"}});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{5}, {6}}), Vars{Var{"?b"}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{left, right});
+  cartesian->getRootOperation()->setSelectedVariablesForSubquery({a});
+
+  auto tree = QueryExecutionTree::createDistinctTree(
+      cartesian, SC{cartesian->getVariableColumn(a)});
+  ASSERT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+      tree->getRootOperation()));
+  EXPECT_THAT(tree->getVariableColumns(),
+              ::testing::UnorderedElementsAre(::testing::Key(a)));
+
+  // `?a` is deduplicated to `{0, 1}`, the hidden columns don't matter.
+  auto result = tree->getResult(false);
+  auto column = result->idTableView().getColumn(tree->getVariableColumn(a));
+  auto expected = makeIdTableFromVector({{0}, {1}});
+  EXPECT_THAT(std::vector<Id>(column.begin(), column.end()),
+              ::testing::UnorderedElementsAre(expected(0, 0), expected(1, 0)));
+}
+
 // _____________________________________________________________________________
 TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
   using Vars = std::vector<std::optional<Variable>>;
@@ -165,13 +200,13 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
-  indexScan->applyLimitOffset(limitOffset);
+  indexScan->applyLimitOffset(limitOffset, false);
 
   // `ValuesForTesting` doesn't support stripping columns natively.
   auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1, 2}}),
       Vars{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}});
-  valuesForTesting->applyLimitOffset(limitOffset);
+  valuesForTesting->applyLimitOffset(limitOffset, false);
 
   auto strippedIndex = QueryExecutionTree::makeTreeWithStrippedColumns(
       indexScan, {Variable{"?s"}});
@@ -209,7 +244,7 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
   // `Union` natively supports creating a sorted variant of itself, which
   // replaces the root operation and therefore has to restore the limit.
   auto unionTree = ad_utility::makeExecutionTree<Union>(qec, leftT, rightT);
-  unionTree->applyLimitOffset(limitOffset);
+  unionTree->applyLimitOffset(limitOffset, false);
 
   auto sortedTree = QueryExecutionTree::createSortedTree(unionTree, {0});
   ASSERT_TRUE(std::dynamic_pointer_cast<Union>(sortedTree->getRootOperation()));
@@ -219,7 +254,7 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
   // is added on top and the limit stays where it is.
   auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {0}}), Vars{Var{"?a"}});
-  valuesForTesting->applyLimitOffset(limitOffset);
+  valuesForTesting->applyLimitOffset(limitOffset, false);
 
   auto sortedValues =
       QueryExecutionTree::createSortedTree(valuesForTesting, {0});
@@ -229,6 +264,44 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
       sortedValues->getRootOperation()->getLimitOffset().isUnconstrained());
   EXPECT_EQ(valuesForTesting->getRootOperation()->getLimitOffset(),
             limitOffset);
+}
+
+// Test that re-sorting a `Union` or a `Sort` keeps the variables hidden by a
+// subquery hidden (regression test for #3569).
+TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+  VariableToColumnMap expectedVariables{
+      {Var{"?a"}, makeAlwaysDefinedColumn(0)}};
+
+  // A `Union` whose root hides `?b`, re-sorted by `?a`.
+  auto makeValues = [qec](IdTable table) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(table), Vars{Var{"?a"}, Var{"?b"}});
+  };
+  auto unionTree = ad_utility::makeExecutionTree<Union>(
+      qec, makeValues(makeIdTableFromVector({{1, 2}})),
+      makeValues(makeIdTableFromVector({{0, 3}})), SC{1});
+  unionTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
+
+  auto sortedUnion = QueryExecutionTree::createSortedTree(unionTree, {0});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<Union>(sortedUnion->getRootOperation()));
+  EXPECT_EQ(sortedUnion->getVariableColumns(), expectedVariables);
+  qec->getQueryTreeCache().clearAll();
+  EXPECT_EQ(sortedUnion->getResult(false)->idTableView(),
+            makeIdTableFromVector({{0, 3}, {1, 2}}));
+
+  // The same holds for `Sort`.
+  auto sortTree = ad_utility::makeExecutionTree<Sort>(
+      qec, makeValues(makeIdTableFromVector({{1, 0}, {0, 1}})), SC{1});
+  sortTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
+
+  auto sortedSort = QueryExecutionTree::createSortedTree(sortTree, {0});
+  ASSERT_TRUE(std::dynamic_pointer_cast<Sort>(sortedSort->getRootOperation()));
+  EXPECT_EQ(sortedSort->getVariableColumns(), expectedVariables);
 }
 
 // _____________________________________________________________________________
@@ -278,7 +351,7 @@ TEST(QueryExecutionTree,
   auto sort = ad_utility::makeExecutionTree<Sort>(qec, indexScan,
                                                   std::vector<ColumnIndex>{0});
 
-  sort->applyLimitOffset(limitOffset);
+  sort->applyLimitOffset(limitOffset, false);
   EXPECT_TRUE(
       indexScan->getRootOperation()->getLimitOffset().isUnconstrained());
   EXPECT_EQ(sort->getRootOperation()
@@ -293,17 +366,18 @@ TEST(QueryExecutionTree,
   EXPECT_TRUE(
       indexScan->getRootOperation()->getLimitOffset().isUnconstrained());
 
-  // The test only makes sense if `Sort´ can handle stripping columns itself.
-  EXPECT_TRUE(
-      std::dynamic_pointer_cast<Sort>(strippedValues->getRootOperation()));
+  auto stripColumns = std::dynamic_pointer_cast<StripColumns>(
+      strippedValues->getRootOperation());
+  EXPECT_TRUE(stripColumns);
   EXPECT_EQ(strippedValues->getRootOperation()->getLimitOffset(), limitOffset);
 
-  auto childOperation = strippedValues->getRootOperation()
-                            ->getChildren()
-                            .at(0)
-                            ->getRootOperation();
-  EXPECT_TRUE(std::dynamic_pointer_cast<IndexScan>(childOperation));
-  EXPECT_EQ(childOperation->getLimitOffset(), limitOffset);
+  auto childSort = std::dynamic_pointer_cast<Sort>(
+      stripColumns->getChildren().at(0)->getRootOperation());
+  EXPECT_TRUE(childSort);
+
+  auto childIndexScan = std::dynamic_pointer_cast<IndexScan>(
+      childSort->getChildren().at(0)->getRootOperation());
+  EXPECT_TRUE(childIndexScan);
 }
 
 // _____________________________________________________________________________

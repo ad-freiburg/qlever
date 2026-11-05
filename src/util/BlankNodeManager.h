@@ -19,7 +19,8 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <vector>
 
-#include "global/ValueId.h"
+#include "backports/keywords.h"
+#include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -49,9 +50,12 @@ class BlankNodeManager {
   // Number of indices that make up a single block.
   static constexpr uint32_t blockSize_ = 1000;
 
-  // Number of blocks available.
+  // Number of blocks available. This is `(maxIndex - minIndex_ + 1) /
+  // blockSize_`, but computed without the `+ 1` on the left, which overflows
+  // for `minIndex_ == 0` if `maxIndex` is the maximum of `uint64_t`.
   const uint64_t totalAvailableBlocks_ =
-      (ValueId::maxIndex - minIndex_ + 1) / blockSize_;
+      (ValueId::maxIndex - minIndex_) / blockSize_ +
+      ((ValueId::maxIndex - minIndex_) % blockSize_ == blockSize_ - 1);
 
  private:
   // Forward declaration because of cyclic dependency.
@@ -128,7 +132,11 @@ class BlankNodeManager {
         : manager_(manager), uuid_(std::move(uuid)) {
       AD_CORRECTNESS_CHECK(manager_ != nullptr);
     }
-    ~Blocks() noexcept(false) {
+    // The destructor may throw (via `throwIfSafe_`), except in the reduced
+    // feature set for C++17, where it is `noexcept` because the libc++ of QNX
+    // rejects a type with a `noexcept(false)` destructor in a `shared_ptr`.
+    // There, an exception from `freeBlockSet` terminates the program.
+    ~Blocks() noexcept(qlever::usesReducedFeatureSet) {
       throwIfSafe_(
           [this]() { manager_->freeBlockSet(*this); },
           std::string_view{"In `freeBlockSet` called from the destructor of a "
@@ -177,8 +185,8 @@ class BlankNodeManager {
 
     // Merge passed `LocalBlankNodeManager`s to keep alive their reserved
     // BlankNodeIndex blocks.
-    CPP_template(typename R)(requires ql::ranges::range<R>) void mergeWith(
-        const R& localBlankNodeManagers) {
+    CPP_template(typename R)(requires ql::ranges::range<R>)
+    void mergeWith(const R& localBlankNodeManagers) {
       auto inserter = std::back_inserter(otherBlocks_);
       for (const auto& l : localBlankNodeManagers) {
         if (l == nullptr) {

@@ -35,6 +35,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
@@ -55,6 +56,12 @@
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
+using ad_utility::testing::localVocabEntry;
+
+// Multi-threaded, to exercise the concurrency of the tested code.
+static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -150,8 +157,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   }};
 
   auto makeVocabEntry = [&oldIndex](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str),
-                           oldIndex.getLocalVocabContext()};
+    return localVocabEntry(ad_utility::testing::iri(str),
+                           oldIndex.getLocalVocabContext());
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -245,9 +252,9 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
   std::deque<LocalVocabEntry> entryStorage;
   std::vector<LocalVocabIndex> entries;
   for (size_t i = 0; i < numEntries; ++i) {
-    entryStorage.emplace_back(
-        ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
-        oldIndex.getLocalVocabContext());
+    entryStorage.push_back(
+        localVocabEntry(ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
+                        oldIndex.getLocalVocabContext()));
     entries.push_back(&entryStorage.back());
   }
 
@@ -420,9 +427,9 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
         LocalVocabEntry entry1 =
-            LocalVocabEntry::fromIriref("<a2>", index.getLocalVocabContext());
+            iriLocalVocabEntry("<a2>", index.getLocalVocabContext());
         LocalVocabEntry entry2 =
-            LocalVocabEntry::fromIriref("<d2>", index.getLocalVocabContext());
+            iriLocalVocabEntry("<d2>", index.getLocalVocabContext());
         auto a2 = Id::makeFromLocalVocabIndex(&entry1);
         auto d2 = Id::makeFromLocalVocabIndex(&entry2);
         deltaTriples.insertTriples(
@@ -455,10 +462,10 @@ TEST(IndexRebuilder, readIndexAndRemap) {
       ADDITIONAL_COLUMN_GRAPH_ID, ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
       ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
 
-  auto range = readIndexAndRemap(permutation, blockMetadataRanges, state,
-                                 localVocabMapping, insertionPositions,
-                                 blankNodeBlocks, minBlankNodeIndex,
-                                 cancellationHandle, additionalColumns);
+  auto range = readIndexAndRemap(
+      permutation, blockMetadataRanges, state, localVocabMapping,
+      insertionPositions, blankNodeBlocks, minBlankNodeIndex,
+      cancellationHandle, additionalColumns, executor());
 
   std::vector<IdTableStatic<0>> idTables = ::ranges::to<std::vector>(
       ql::views::transform(range, ad_utility::staticCast<IdTableStatic<0>&&>));
@@ -561,7 +568,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),
       index.getImpl().getPermutation(Permutation::Enum::POS), false, state,
       localVocabMapping, insertionPositions, blankNodeBlocks, 1,
-      cancellationHandle);
+      cancellationHandle, executor());
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
@@ -600,12 +607,20 @@ TEST(IndexRebuilder, materializeToIndex) {
        {std::pair{false, false}, std::pair{false, true},
         std::pair{true, true}}) {
     // Also exercise the fully sequential processing of the permutation pairs
-    // (`rebuild-max-concurrent-permutation-pairs = 1`); the result must be
-    // the same as with the default (0 = no limit).
-    for (size_t maxConcurrentPairs : {size_t{0}, size_t{1}}) {
+    // (`rebuild-max-concurrent-permutation-pairs = 1`) and the limits of the
+    // threads of the whole rebuild (`rebuild-index-max-num-threads`); the
+    // result must be the same as with the defaults (0 = no limit). In
+    // particular, a limit of 1 with all pairs in parallel lets all the scans
+    // and writers of the rebuild share a single thread, which must not
+    // deadlock.
+    for (auto [maxConcurrentPairs, maxNumThreads] :
+         {std::pair<size_t, size_t>{0, 0}, std::pair<size_t, size_t>{1, 0},
+          std::pair<size_t, size_t>{0, 1}, std::pair<size_t, size_t>{0, 2}}) {
       auto cleanupMaxPairs = setRuntimeParameterForTest<
           &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>(
           maxConcurrentPairs);
+      auto cleanupMaxNumThreads = setRuntimeParameterForTest<
+          &RuntimeParameters::rebuildIndexMaxNumThreads_>(maxNumThreads);
       ad_utility::testing::TestIndexConfig config;
       config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
       config.loadAllPermutations = loadAllPermutations;
@@ -633,8 +648,7 @@ TEST(IndexRebuilder, materializeToIndex) {
         LocalVocab outsideVocab;
         Id localA = Id::makeFromLocalVocabIndex(
             outsideVocab.getIndexAndAddIfNotContained(
-                LocalVocabEntry::fromIriref("<a>",
-                                            index.getLocalVocabContext())));
+                iriLocalVocabEntry("<a>", index.getLocalVocabContext())));
         deltaTriples.insertTriples(
             cancellationHandle,
             {IdTriple<0>{std::array{localA, V(1), V(2), g}}});
@@ -651,7 +665,8 @@ TEST(IndexRebuilder, materializeToIndex) {
       auto sourceDate = index.getImpl().dateOfIndexBuild();
 
       qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                                 blankNodes, cancellationHandle, logFile);
+                                 blankNodes, cancellationHandle, executor(),
+                                 logFile);
       EXPECT_TRUE(ql::filesystem::exists(logFile));
 
       // Each phase writes its header (which says what is being processed,
@@ -761,9 +776,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
-  EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
-                                             state, vocab, blankNodes,
-                                             cancellationHandle, logFile));
+  EXPECT_NO_THROW(qlever::materializeToIndex(
+      index.getImpl(), newIndexName, state, vocab, blankNodes,
+      cancellationHandle, executor(), logFile));
 
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -823,7 +838,7 @@ TEST(IndexRebuilder, materializeToIndexKeepsGeoPointEncoding) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
   qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                             blankNodes, cancellationHandle,
+                             blankNodes, cancellationHandle, executor(),
                              newIndexName + ".log");
 
   // The rebuilt index is in the current format with the entry `lat-major`, and
@@ -859,10 +874,10 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  EXPECT_THROW(
-      qlever::materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
-                                 blankNodes, cancellationHandle, ""),
-      ad_utility::Exception);
+  EXPECT_THROW(qlever::materializeToIndex(index.getImpl(), "nexIndex", state,
+                                          vocab, blankNodes, cancellationHandle,
+                                          executor(), ""),
+               ad_utility::Exception);
 }
 
 namespace {
@@ -884,44 +899,6 @@ void cleanDirsWithPrefix(std::string_view prefix) {
   }
 }
 }  // namespace
-
-// _____________________________________________________________________________
-// The thread-count override for the rebuild's scans must be set on the
-// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
-// the permutation's shared reader, which is used by the query scans, must
-// never carry an override.
-TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
-  auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
-                                                  "<a> <b> <c> .");
-  const auto& permutation =
-      index.getImpl().getPermutation(Permutation::Enum::PSO);
-  auto cancellationHandle =
-      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  auto state =
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-
-  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
-    return permutation.lazyScanWithUnlimitedReader(
-        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
-        cancellationHandle, *state, numThreadsOverride);
-  };
-  auto [reader, scan] = scanWithOverride(3);
-  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
-  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
-  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
-  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
-
-  // Recomputing the statistics with the throttle set must give exactly the
-  // same result as with the default (0, which means "fall back to
-  // `lazy-index-scan-num-threads`"). This exercises the translation of the
-  // runtime parameter to the override at both of its use sites.
-  auto statsDefault = index.getImpl().recomputeStatistics(state);
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
-  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
-}
 
 // _____________________________________________________________________________
 // All of the server-integration tests below are compiled out under
@@ -1221,14 +1198,17 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
         .get();
     EXPECT_THAT(
         logStream.str(),
-        ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
-                             "started concurrently"));
+        ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::HasSubstr(
+            "Automatic index rebuild skipped, another rebuild "
+            "started concurrently")));
     server.server().rebuildInProgress_.store(false);
 
     Server::logAutomaticRebuildFailure(
         std::make_exception_ptr(std::runtime_error{"boom"}));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("Automatic index rebuild failed: boom"));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+            ::testing::HasSubstr("Automatic index rebuild failed: boom")));
     Server::logAutomaticRebuildFailure(nullptr);
   }
 }

@@ -82,11 +82,12 @@ struct SelectClause : ClauseBase {
   /// `{(?a + ?b AS ?c)}` will be returned.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 
-  /// Delete all the aliases, but keep the variables that they are bound to as
-  /// selected. This is used in the case of queries that have aliases, but no
-  /// GROUP BY clause. There these aliases become ordinary BIND clauses and are
-  /// then deleted from the SELECT clause
-  void deleteAliasesButKeepVariables();
+  /// Delete all the aliases and return them, but keep the variables that they
+  /// are bound to as selected. This is used for queries without `GROUP BY`,
+  /// where all aliases become ordinary `BIND` clauses, and for queries with
+  /// `GROUP BY` and a trailing `VALUES` clause, where some of them do (see
+  /// `ParsedQuery::moveAliasesAfterPostQueryValues`).
+  std::vector<Alias> deleteAliasesButKeepVariables();
 };
 }  // namespace parsedQuery
 
