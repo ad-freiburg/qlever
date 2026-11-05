@@ -1506,11 +1506,6 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 
   applyGeoPointEncoding();
 
-  // Indexes built before the normalization was recorded use `Lowercase`.
-  hasWordNormalization_ = configurationJson_.value(
-      std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY},
-      ad_utility::HasWordNormalization::Lowercase);
-
   // The index and the current binary must agree on whether ICU (Unicode)
   // support is available: the two use different string collations, so mixing
   // them would silently produce a wrong sort order. Indexes built before this
