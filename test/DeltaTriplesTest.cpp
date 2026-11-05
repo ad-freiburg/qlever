@@ -629,8 +629,10 @@ TEST_F(DeltaTriplesTest, insertTriplesAddsHasWordTriples) {
   // For an index with `ql:has-word` triples restricted to the predicate
   // `<label>`, only the literals that are inserted as the object of a triple
   // with that predicate get `ql:has-word` triples, also if the same literal is
-  // inserted with another predicate as well.
-  ad_utility::testing::TestIndexConfig configRestricted{"<x> <label> 44"};
+  // inserted with another predicate before (`<b>` and `<label>` are both in the
+  // vocabulary of the index, so the triple with `<b>` comes first).
+  ad_utility::testing::TestIndexConfig configRestricted{
+      "<x> <b> 44 . <x> <label> 44"};
   configRestricted.addHasWordTriples = true;
   configRestricted.hasWordRestrictPredicates = {"<label>"};
   const IndexImpl& indexRestricted =
