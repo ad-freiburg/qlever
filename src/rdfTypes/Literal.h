@@ -144,8 +144,9 @@ class Literal : public BasicLiteral<true> {
   using BasicLiteral<true>::BasicLiteral;
 
  private:
-  // Qualified, because inside a class derived from `BasicLiteral<...>`, gcc 8
-  // resolves the plain `BasicLiteral` to the specialization of the base class.
+  // The qualified name is needed, because inside a class derived from
+  // `BasicLiteral<...>` GCC 8 resolves a plain `BasicLiteral` to the
+  // specialization of the base class.
   template <bool>
   friend class ::ad_utility::triple_component::BasicLiteral;
 
@@ -221,8 +222,9 @@ class LiteralView : public BasicLiteral<false> {
   using BasicLiteral<false>::BasicLiteral;
 
  private:
-  // Qualified, because inside a class derived from `BasicLiteral<...>`, gcc 8
-  // resolves the plain `BasicLiteral` to the specialization of the base class.
+  // The qualified name is needed, because inside a class derived from
+  // `BasicLiteral<...>` GCC 8 resolves a plain `BasicLiteral` to the
+  // specialization of the base class.
   template <bool>
   friend class ::ad_utility::triple_component::BasicLiteral;
 
