@@ -20,6 +20,8 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
 
+class Index;
+
 // Factory functions for all kinds of expressions that only have other
 // expressions as arguments. The actual types and implementations of the
 // expressions are hidden in the respective `.cpp` file to reduce compile times.
@@ -124,6 +126,17 @@ SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
 SparqlExpression::Ptr makeUppercaseExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLowercaseExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeNormalizeExpression(SparqlExpression::Ptr child);
+
+// Replace each `ql:normalize` with a string literal as its argument in the
+// children of `expression` (recursively) by the string literal to which it
+// evaluates for the given `index`. If `expression` itself is such a
+// `ql:normalize`, return its string literal, else return `nullptr`.
+//
+// NOTE: A string literal is a constant for the query planner. For example,
+// `FILTER(?w = ql:normalize("OLÉ"))` then gets the same prefilter as
+// `FILTER(?w = "olé")`.
+SparqlExpression::Ptr foldNormalizeExpressions(SparqlExpression& expression,
+                                               const Index& index);
 SparqlExpression::Ptr makeStrStartsExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrEndsExpression(SparqlExpression::Ptr child1,

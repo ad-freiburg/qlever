@@ -187,10 +187,15 @@ std::optional<std::string> normalizeString(std::optional<std::string> s,
   if (!s.has_value()) {
     return std::nullopt;
   }
-  return absl::StrJoin(
-      context->_qec.getIndex().getImpl().getNormalizedWords(s.value()), " ");
+  return NormalizedStringGetter::normalize(s.value(), context->_qec.getIndex());
 }
 }  // namespace
+
+// ____________________________________________________________________________
+std::string NormalizedStringGetter::normalize(std::string_view s,
+                                              const Index& index) {
+  return absl::StrJoin(index.getImpl().getNormalizedWords(s), " ");
+}
 
 // ____________________________________________________________________________
 std::optional<std::string> NormalizedStringGetter::operator()(
