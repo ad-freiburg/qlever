@@ -13,9 +13,12 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
+#include "engine/RowNumber.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -27,12 +30,19 @@ using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
 using ad_utility::testing::parseQuery;
 using queryPlannerTestHelpers::NamedTag;
+const auto alloc = [] { return ad_utility::testing::makeAllocator(); };
 }  // namespace
 using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{ad_utility::testing::getQec(),
                       std::make_shared<ad_utility::CancellationHandle<>>()};
+}
+
+// Test that the `QueryPlanner` rejects a null `QueryExecutionContext`.
+TEST(QueryPlanner, constructorRequiresQueryExecutionContext) {
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  EXPECT_ANY_THROW(QueryPlanner(nullptr, handle));
 }
 
 TEST(QueryPlanner, createTripleGraph) {
@@ -51,8 +61,8 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(
         &pq._rootGraphPattern._graphPatterns[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      0, SparqlTriple(Var{"?x"},
@@ -70,7 +80,8 @@ TEST(QueryPlanner, createTripleGraph) {
                      2, SparqlTriple(Var{"?y"},
                                      iri("<http://rdf.myprefix.com/xxx/rel2>"),
                                      iri("<http://abc.de>"))),
-                 {0, 1})}));
+                 {0, 1})}),
+        alloc());
 
     ASSERT_TRUE(tg.isSimilar(expected));
   }
@@ -80,8 +91,8 @@ TEST(QueryPlanner, createTripleGraph) {
         parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      0, SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>"))),
@@ -93,7 +104,8 @@ TEST(QueryPlanner, createTripleGraph) {
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
-                 {0})}));
+                 {0})}),
+        alloc());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 
@@ -104,8 +116,8 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>({
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
                     0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>"))),
@@ -115,7 +127,8 @@ TEST(QueryPlanner, createTripleGraph) {
                     1, SparqlTriple(Var{"?x"}, iri("<Author>"),
                                     iri("<Anthony_Newman_(Author)>"))),
                 {0}),
-        }));
+        }),
+        alloc());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 }
@@ -135,12 +148,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -155,14 +168,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);
@@ -216,6 +229,41 @@ TEST(QueryPlanner, testBFSLeaveOut) {
     out = tg.bfsLeaveOut(1, lo);
     ASSERT_EQ(2u, out.size());
   }
+}
+
+// Test the splitting of a `TripleGraph` at the text nodes of context
+// variables, with the filters distributed to the parts.
+TEST(QueryPlanner, splitAtContextVars) {
+  ParsedQuery pq = parseQuery(
+      "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y> FILTER(?p2 = <Y>)}");
+  QueryPlanner qp = makeQueryPlanner();
+  auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+  const auto& origFilters = pq._rootGraphPattern._filters;
+  qlm::vector<SparqlFilter> filters{origFilters.begin(), origFilters.end(),
+                                    alloc()};
+  ASSERT_EQ(filters.size(), 1u);
+  using TextNodes = ad_utility::HashMap<std::string, qlm::vector<size_t>>;
+
+  // Without context variables the graph is returned unchanged.
+  TextNodes none;
+  EXPECT_EQ(tg.splitAtContextVars(filters, none).size(), 1u);
+
+  // Leaving out node 2 keeps the rest connected, so there is only one split.
+  TextNodes outside;
+  outside.emplace("?c", qlm::vector<size_t>{{2}, alloc()});
+  auto result = tg.splitAtContextVars(filters, outside);
+  ASSERT_EQ(result.size(), 1u);
+  EXPECT_EQ(result.at(0).first._nodeStorage.size(), 2u);
+  EXPECT_EQ(result.at(0).second.size(), 1u);
+
+  // Leaving out node 0 disconnects nodes 1 and 2, so there are two splits.
+  TextNodes inside;
+  inside.emplace("?c", qlm::vector<size_t>{{0}, alloc()});
+  result = tg.splitAtContextVars(filters, inside);
+  ASSERT_EQ(result.size(), 2u);
+  EXPECT_EQ(result.at(0).first._nodeStorage.size(), 1u);
+  EXPECT_EQ(result.at(1).first._nodeStorage.size(), 1u);
+  EXPECT_EQ(result.at(0).second.size() + result.at(1).second.size(), 1u);
 }
 
 TEST(QueryPlanner, indexScanZeroVariables) {
@@ -921,6 +969,146 @@ TEST(QueryPlanner, TransitivePathBindRight) {
           scan("?y", "<p>", "<o>"),
           scan(internalVar(0), "<p>", internalVar(1), {Permutation::POS})),
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
+}
+
+// Test that two row number services on the same sorted subquery with different
+// offsets (the equivalent of the SQL window function `LAG`) are joined without
+// sorting, and that invalid configurations are rejected.
+TEST(QueryPlanner, RowNumber) {
+  // A relation `<p>` with two objects for `<x>`.
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <x> <p> <z>");
+  auto rowNumberService = [](std::string_view config, std::string_view y,
+                             std::string_view orderBy) {
+    return absl::StrCat(
+        "SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> { ", config,
+        " { SELECT ?x ", y, " { ?x <p> ", y, " } ", orderBy, " } }");
+  };
+
+  // The row numbers are added on top of the sorted subqueries (the second one
+  // is sorted by the index scan). The result of each service is sorted by `?n`
+  // and `?x`, so the multi-column join on `?n` and `?x` needs no `Sort`.
+  using enum ::OrderBy::AscOrDesc;
+  auto rowNumber = h::MatchTypeAndOrderedChildren<::RowNumber>;
+  h::expect(
+      absl::StrCat(
+          "SELECT * { ",
+          rowNumberService("[] <bind> ?n .", "?y", "ORDER BY ?x DESC(?y)"),
+          rowNumberService("[] <bind> ?n ; <offset> 1 .", "?y2",
+                           "INTERNAL SORT BY ?x ?y2"),
+          " }"),
+      h::MultiColumnJoin(
+          rowNumber(h::OrderBy({{Variable{"?x"}, Asc}, {Variable{"?y"}, Desc}},
+                               h::IndexScanFromStrings("?x", "<p>", "?y"))),
+          rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y2"))),
+      qec);
+
+  // The row number variable is required.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ", rowNumberService("", "?y", "ORDER BY ?y"),
+                       " }"),
+          qec),
+      HasSubstr("requires a `<bind>` parameter"));
+
+  // The child graph pattern must be present and consist of a single subquery
+  // with an `ORDER BY` or `INTERNAL SORT BY` clause and no filter.
+  std::string_view sorted = "{ SELECT ?x ?y { ?x <p> ?y } ORDER BY ?y }";
+  for (const std::string& child :
+       {std::string{}, std::string{"{ ?x <p> ?y }"},
+        std::string{"{ SELECT ?x ?y { ?x <p> ?y } }"},
+        absl::StrCat("{ ", sorted, " FILTER (?y != <y>) }"),
+        absl::StrCat("{ ", sorted, " ?x <p> ?y }")}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::parseAndPlan(
+            absl::StrCat("SELECT * { SERVICE "
+                         "<https://qlever.cs.uni-freiburg.de/rowNumber/> { "
+                         "[] <bind> ?n . ",
+                         child, " } }"),
+            qec),
+        HasSubstr("`ORDER BY` or `INTERNAL SORT BY`"));
+  }
+
+  // The row number variable must not be selected by the subquery.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          absl::StrCat("SELECT * { ",
+                       rowNumberService("[] <bind> ?y .", "?y", "ORDER BY ?y"),
+                       " }"),
+          qec),
+      HasSubstr("must not be selected by the subquery"));
+
+  // Unknown parameters are rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(absl::StrCat("SELECT * { ",
+                                   rowNumberService("[] <bind> ?n ; <typo> 1 .",
+                                                    "?y", "ORDER BY ?y"),
+                                   " }"),
+                      qec),
+      HasSubstr("Unknown parameter for row number query: `<typo>`"));
+
+  // Each variable of the `ORDER BY` must be bound by the subquery.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(absl::StrCat("SELECT * { ",
+                                   rowNumberService("[] <bind> ?n .", "?y",
+                                                    "ORDER BY ?x ?typo"),
+                                   " }"),
+                      qec),
+      HasSubstr("Variable ?typo is used in the ORDER BY clause"));
+
+  // A row number service can be nested in the sorted subquery of another one.
+  h::expect(
+      R"(
+SELECT * {
+  SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> {
+    [] <bind> ?n .
+    {
+      SELECT * {
+        SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> {
+          [] <bind> ?m .
+          { SELECT ?x ?y { ?x <p> ?y } INTERNAL SORT BY ?x ?y }
+        }
+      }
+      ORDER BY ?m
+    }
+  }
+}
+)",
+      rowNumber(
+          h::OrderBy({{Variable{"?m"}, Asc}},
+                     rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y")))),
+      qec);
+
+  // A plain subquery nested in the sorted subquery of a row number service
+  // still ignores unbound variables of its `ORDER BY`.
+  h::expect(
+      R"(
+SELECT * {
+  SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> {
+    [] <bind> ?n .
+    {
+      SELECT * {
+        { SELECT ?x ?y { ?x <p> ?y } ORDER BY ?typo }
+      }
+      INTERNAL SORT BY ?x ?y
+    }
+  }
+}
+)",
+      rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y")), qec);
+
+  // The offset must be a non-negative integer.
+  for (std::string_view offset : {"-1", "\"1\""}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::parseAndPlan(
+            absl::StrCat(
+                "SELECT * { ",
+                rowNumberService(
+                    absl::StrCat("[] <bind> ?n ; <offset> ", offset, " ."),
+                    "?y", "ORDER BY ?y"),
+                " }"),
+            qec),
+        HasSubstr("non-negative integer"));
+  }
 }
 
 TEST(QueryPlanner, PathSearchSingleTarget) {
@@ -2855,6 +3043,27 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY (?x)", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
+}
+
+// Test that a group with many `FILTER (NOT) EXISTS` clauses is planned
+// quickly. These filters used to be applied speculatively in every round of
+// the dynamic programming, which made planning time and memory exponential in
+// their number (about four times per clause).
+TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
+  std::string query = R"(
+  SELECT ?v WHERE {
+    ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .
+    FILTER NOT EXISTS { ?v <q0> ?x0 . FILTER (?x0 != ?w1) }
+    FILTER NOT EXISTS { ?v <q1> ?x1 . FILTER (?x1 != ?w1) }
+    FILTER NOT EXISTS { ?v <q2> ?x2 . FILTER (?x2 != ?w1) }
+    FILTER NOT EXISTS { ?v <q3> ?x3 . FILTER (?x3 != ?w1) }
+    FILTER NOT EXISTS { ?v <q4> ?x4 . FILTER (?x4 != ?w1) }
+    FILTER NOT EXISTS { ?v <q5> ?x5 . FILTER (?x5 != ?w1) }
+    FILTER NOT EXISTS { ?v <q6> ?x6 . FILTER (?x6 != ?w1) }
+    FILTER NOT EXISTS { ?v <q7> ?x7 . FILTER (?x7 != ?w1) }
+  })";
+  EXPECT_NO_THROW(
+      h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
 }
 
 // ____________________________________________________________________________

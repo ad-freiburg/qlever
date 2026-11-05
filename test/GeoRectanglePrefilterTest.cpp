@@ -889,11 +889,11 @@ TEST(GeoRectanglePrefilterGrid, evaluateKeepsInsertedLiterals) {
       std::minmax({getId(wkt("LINESTRING(10 10, 11 10)")),
                    getId(wkt("LINESTRING(12 10, 13 10)"))});
   LocalVocab localVocab;
-  Id inserted =
-      Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry::fromStringRepresentation(
-              wkt("LINESTRING(170.5 -80, 171 -80)"),
-              index.getImpl().getLocalVocabContext())));
+  Id inserted = Id::makeFromLocalVocabIndex(
+      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+          ad_utility::triple_component::Literal::fromStringRepresentation(
+              wkt("LINESTRING(170.5 -80, 171 -80)")),
+          index.getImpl().getLocalVocabContext()}));
   ASSERT_LT(cell0Last, inserted);
   ASSERT_LT(inserted, cell10First);
 

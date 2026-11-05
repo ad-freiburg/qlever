@@ -16,6 +16,7 @@
 #include <s2/util/units/length-units.h>
 
 #include "engine/NamedResultCache.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GeoConverters.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"
@@ -107,6 +108,7 @@ Result S2PointPolylineAlgorithm::run() {
 
   // Use the index to lookup the points of the other table
   for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
+    throwIfCancelled();
     auto p = getPoint(idTableLeft, rowLeft, leftJoinCol);
     if (!p.has_value()) {
       continue;
@@ -121,7 +123,7 @@ Result S2PointPolylineAlgorithm::run() {
     for (auto [indexRow, dist] : deduplicatedSet) {
       auto rowRight = indexRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
-                          Id::makeFromDouble(dist));
+                          kilometersToDistanceId(dist));
     }
     timerWrite.stop();
   }
@@ -132,6 +134,7 @@ Result S2PointPolylineAlgorithm::run() {
   spatialJoin_.value()->runtimeInfo().addDetail("time total",
                                                 timerAll.msecs().count());
 
-  return Result{std::move(result), std::vector<ColumnIndex>{},
+  return Result{std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight)};
 }

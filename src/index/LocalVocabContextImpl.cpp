@@ -50,3 +50,9 @@ ad_utility::BlankNodeManager* LocalVocabContextImpl::getBlankNodeManager()
   AD_CONTRACT_CHECK(*blankNodeManager_);
   return blankNodeManager_->get();
 }
+
+// _____________________________________________________________________________
+std::pair<VocabIndex, VocabIndex>
+LocalVocabContextImpl::getRangeOfIrisInVocabulary() const {
+  return vocabulary_->getRangeOfIris();
+}

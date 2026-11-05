@@ -35,6 +35,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
@@ -55,6 +56,9 @@
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
+using ad_utility::testing::localVocabEntry;
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
@@ -153,8 +157,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   }};
 
   auto makeVocabEntry = [&oldIndex](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str),
-                           oldIndex.getLocalVocabContext()};
+    return localVocabEntry(ad_utility::testing::iri(str),
+                           oldIndex.getLocalVocabContext());
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -248,9 +252,9 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
   std::deque<LocalVocabEntry> entryStorage;
   std::vector<LocalVocabIndex> entries;
   for (size_t i = 0; i < numEntries; ++i) {
-    entryStorage.emplace_back(
-        ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
-        oldIndex.getLocalVocabContext());
+    entryStorage.push_back(
+        localVocabEntry(ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
+                        oldIndex.getLocalVocabContext()));
     entries.push_back(&entryStorage.back());
   }
 
@@ -423,9 +427,9 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
         LocalVocabEntry entry1 =
-            LocalVocabEntry::fromIriref("<a2>", index.getLocalVocabContext());
+            iriLocalVocabEntry("<a2>", index.getLocalVocabContext());
         LocalVocabEntry entry2 =
-            LocalVocabEntry::fromIriref("<d2>", index.getLocalVocabContext());
+            iriLocalVocabEntry("<d2>", index.getLocalVocabContext());
         auto a2 = Id::makeFromLocalVocabIndex(&entry1);
         auto d2 = Id::makeFromLocalVocabIndex(&entry2);
         deltaTriples.insertTriples(
@@ -603,12 +607,20 @@ TEST(IndexRebuilder, materializeToIndex) {
        {std::pair{false, false}, std::pair{false, true},
         std::pair{true, true}}) {
     // Also exercise the fully sequential processing of the permutation pairs
-    // (`rebuild-max-concurrent-permutation-pairs = 1`); the result must be
-    // the same as with the default (0 = no limit).
-    for (size_t maxConcurrentPairs : {size_t{0}, size_t{1}}) {
+    // (`rebuild-max-concurrent-permutation-pairs = 1`) and the limits of the
+    // threads of the whole rebuild (`rebuild-index-max-num-threads`); the
+    // result must be the same as with the defaults (0 = no limit). In
+    // particular, a limit of 1 with all pairs in parallel lets all the scans
+    // and writers of the rebuild share a single thread, which must not
+    // deadlock.
+    for (auto [maxConcurrentPairs, maxNumThreads] :
+         {std::pair<size_t, size_t>{0, 0}, std::pair<size_t, size_t>{1, 0},
+          std::pair<size_t, size_t>{0, 1}, std::pair<size_t, size_t>{0, 2}}) {
       auto cleanupMaxPairs = setRuntimeParameterForTest<
           &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>(
           maxConcurrentPairs);
+      auto cleanupMaxNumThreads = setRuntimeParameterForTest<
+          &RuntimeParameters::rebuildIndexMaxNumThreads_>(maxNumThreads);
       ad_utility::testing::TestIndexConfig config;
       config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
       config.loadAllPermutations = loadAllPermutations;
@@ -636,8 +648,7 @@ TEST(IndexRebuilder, materializeToIndex) {
         LocalVocab outsideVocab;
         Id localA = Id::makeFromLocalVocabIndex(
             outsideVocab.getIndexAndAddIfNotContained(
-                LocalVocabEntry::fromIriref("<a>",
-                                            index.getLocalVocabContext())));
+                iriLocalVocabEntry("<a>", index.getLocalVocabContext())));
         deltaTriples.insertTriples(
             cancellationHandle,
             {IdTriple<0>{std::array{localA, V(1), V(2), g}}});
@@ -914,26 +925,6 @@ void cleanDirsWithPrefix(std::string_view prefix) {
   }
 }
 }  // namespace
-
-// _____________________________________________________________________________
-// Recomputing the statistics must give exactly the same result, no matter by
-// how many threads each of its scans is limited (0 means "no limit"). This
-// exercises both branches of the translation of the runtime parameter
-// `rebuild-index-scan-num-threads` to a concurrency-limited executor.
-TEST(IndexRebuilder, rebuildIndexScanNumThreads) {
-  auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
-                                                  "<a> <b> <c> .");
-  auto state =
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  auto recomputeStatistics = [&](size_t maxNumThreads) {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::rebuildIndexScanNumThreads_>(maxNumThreads);
-    return index.getImpl().recomputeStatistics(state, executor());
-  };
-  auto statsUnlimited = recomputeStatistics(0);
-  EXPECT_EQ(recomputeStatistics(1), statsUnlimited);
-  EXPECT_EQ(recomputeStatistics(2), statsUnlimited);
-}
 
 // _____________________________________________________________________________
 // All of the server-integration tests below are compiled out under
@@ -1233,14 +1224,17 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
         .get();
     EXPECT_THAT(
         logStream.str(),
-        ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
-                             "started concurrently"));
+        ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::HasSubstr(
+            "Automatic index rebuild skipped, another rebuild "
+            "started concurrently")));
     server.server().rebuildInProgress_.store(false);
 
     Server::logAutomaticRebuildFailure(
         std::make_exception_ptr(std::runtime_error{"boom"}));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("Automatic index rebuild failed: boom"));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+            ::testing::HasSubstr("Automatic index rebuild failed: boom")));
     Server::logAutomaticRebuildFailure(nullptr);
   }
 }

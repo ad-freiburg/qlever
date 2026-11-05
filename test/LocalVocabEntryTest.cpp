@@ -18,6 +18,9 @@
 #include "index/IndexImpl.h"
 #include "index/LocalVocabContext.h"
 #include "index/LocalVocabEntry.h"
+#include "util/LocalVocabEntryTestHelpers.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
 
 // _____________________________________________________________________________
 TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
@@ -28,10 +31,10 @@ TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
   Index index1 = makeTestIndex(gtestCurrentTestName() + "-1", "<a> <b> <c> .");
   Index index2 = makeTestIndex(gtestCurrentTestName() + "-2", "<a> <b> <c> .");
 
-  LocalVocabEntry entry1 = LocalVocabEntry::fromIriref(
-      "<x>", index1.getImpl().getLocalVocabContext());
-  LocalVocabEntry entry2 = LocalVocabEntry::fromIriref(
-      "<x>", index2.getImpl().getLocalVocabContext());
+  LocalVocabEntry entry1 =
+      iriLocalVocabEntry("<x>", index1.getImpl().getLocalVocabContext());
+  LocalVocabEntry entry2 =
+      iriLocalVocabEntry("<x>", index2.getImpl().getLocalVocabContext());
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       (void)(entry1 < entry2),
@@ -80,9 +83,9 @@ TEST(LocalVocabEntry, comparisonWithPlainLiteralOrIri) {
                                                    "<a> <b> <c> .");
   const auto& ctx = index.getLocalVocabContext();
 
-  LocalVocabEntry entry = LocalVocabEntry::fromIriref("<x>", ctx);
-  LocalVocabEntry sameEntry = LocalVocabEntry::fromIriref("<x>", ctx);
-  LocalVocabEntry otherEntry = LocalVocabEntry::fromIriref("<y>", ctx);
+  LocalVocabEntry entry = iriLocalVocabEntry("<x>", ctx);
+  LocalVocabEntry sameEntry = iriLocalVocabEntry("<x>", ctx);
+  LocalVocabEntry otherEntry = iriLocalVocabEntry("<y>", ctx);
   LiteralOrIri same = LiteralOrIri::iriref("<x>");
   LiteralOrIri other = LiteralOrIri::iriref("<y>");
 
@@ -116,8 +119,8 @@ TEST(LocalVocabEntry, compareThreeWayOnlyOneEntryIsContainedInVocabulary) {
   // sorted into the vocabulary of the main index, which is exactly the position
   // of `<b>`. The two entries hence have the same lower bound, and differ only
   // in whether they are contained.
-  LocalVocabEntry contained = LocalVocabEntry::fromIriref("<b>", ctx);
-  LocalVocabEntry notContained = LocalVocabEntry::fromIriref("<aa>", ctx);
+  LocalVocabEntry contained = iriLocalVocabEntry("<b>", ctx);
+  LocalVocabEntry notContained = iriLocalVocabEntry("<aa>", ctx);
   auto containedPosition = contained.positionInVocab();
   auto notContainedPosition = notContained.positionInVocab();
   ASSERT_EQ(containedPosition.lowerBound_, notContainedPosition.lowerBound_);
@@ -134,4 +137,46 @@ TEST(LocalVocabEntry, compareThreeWayOnlyOneEntryIsContainedInVocabulary) {
   // `isContained == false, rhsIsContained == true`.
   EXPECT_EQ(notContained.compareThreeWay(contained), ql::strong_ordering::less);
   EXPECT_LT(notContained, contained);
+}
+
+// Test that `reanchoredTo` returns an equal entry with the position in the
+// vocabulary of the new index, and that it rejects an IRI that the new index
+// encodes directly in an `Id`.
+TEST(LocalVocabEntry, reanchoredTo) {
+  using namespace ad_utility::testing;
+  Index oldIndex =
+      makeTestIndex(gtestCurrentTestName() + "-old", "<a> <b> <c> .");
+  TestIndexConfig config{"<a> <b> <c> . <w> <w> <w> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  Index newIndex =
+      makeTestIndex(gtestCurrentTestName() + "-new", std::move(config));
+  const auto& oldContext = oldIndex.getImpl().getLocalVocabContext();
+  const auto& newContext = newIndex.getImpl().getLocalVocabContext();
+
+  // `<x>` is sorted after `<w>` in the new index, so its position changes.
+  LocalVocabEntry entry = iriLocalVocabEntry("<x>", oldContext);
+  auto oldPosition = entry.positionInVocab();
+  LocalVocabEntry reanchored = entry.reanchoredTo(newContext);
+  EXPECT_EQ(reanchored, entry);
+  EXPECT_EQ(&reanchored.getContextForTesting(), &newContext);
+  auto newPosition = reanchored.positionInVocab();
+  EXPECT_FALSE(newPosition == oldPosition);
+  EXPECT_TRUE(newPosition ==
+              iriLocalVocabEntry("<x>", newContext).positionInVocab());
+
+  // Literals are never encoded and can always be reanchored.
+  LocalVocabEntry literal = LocalVocabEntry::literalWithoutQuotes(
+      "http://example.org/42", oldContext);
+  EXPECT_EQ(literal.reanchoredTo(newContext), literal);
+
+  // An IRI that the new index encodes directly in an `Id` cannot be
+  // reanchored.
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    LocalVocabEntry encodable =
+        iriLocalVocabEntry("<http://example.org/42>", oldContext);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        encodable.reanchoredTo(newContext),
+        ::testing::HasSubstr("must not be stored in a `LocalVocabEntry`"));
+  }
 }

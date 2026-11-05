@@ -123,6 +123,31 @@ TEST(TaskQueueOnExecutor, destructorWaitsForAllTasks) {
   EXPECT_EQ(counter.load(), numTasks);
 }
 
+// Test that the captures of a task are destroyed before `finish()` returns, so
+// that they may refer to objects that are destroyed right after the queue (for
+// example a reservation of a `MemoryBudget` in the vocabulary merger).
+TEST(TaskQueueOnExecutor, capturesAreDestroyedBeforeFinishReturns) {
+  // The counter is declared before the pool (whose destructor joins the
+  // threads), so that it outlives the deleters below even if `finish()`
+  // returns too early.
+  std::atomic<size_t> numDestroyedCaptures = 0;
+  net::thread_pool pool{4};
+  constexpr size_t numTasks = 10;
+  TaskQueueOnExecutor queue{pool.get_executor(), 3, "capturesAreDestroyed"};
+  for (size_t i = 0; i < numTasks; ++i) {
+    // The deleter of the `shared_ptr` runs once, when the last copy of the
+    // capture is destroyed. It sleeps first, so that a `finish()` that does
+    // not wait for the destruction of the captures returns too early.
+    std::shared_ptr<void> capture{nullptr, [&numDestroyedCaptures](void*) {
+                                    std::this_thread::sleep_for(shortTimeout);
+                                    ++numDestroyedCaptures;
+                                  }};
+    queue.push([capture = std::move(capture)]() {});
+  }
+  queue.finish();
+  EXPECT_EQ(numDestroyedCaptures.load(), numTasks);
+}
+
 // _____________________________________________________________________________
 TEST(TaskQueueOnExecutor, inFlightBoundIsRespected) {
   // A single thread, so that at most one task runs at a time, and a bound of
@@ -177,6 +202,38 @@ TEST(TaskQueueOnExecutor, submitPropagatesValuesAndExceptions) {
   EXPECT_NO_THROW(voidFuture.get());
   ASSERT_TRUE(becomesReady(throwingFuture));
   EXPECT_THROW(throwingFuture.get(), std::runtime_error);
+  queue.finish();
+}
+
+// Test that a task pushed with `pushAsync` keeps its slot in the queue until
+// it calls its `done` callback, also after it has returned.
+TEST(TaskQueueOnExecutor, pushAsyncKeepsTheTaskInFlightUntilDone) {
+  net::thread_pool pool{2};
+  TaskQueueOnExecutor queue{pool.get_executor(), 1, "pushAsync"};
+
+  // The task returns right away, but hands its `done` callback out instead of
+  // calling it.
+  std::promise<TaskQueueOnExecutor::Done> donePromise;
+  auto doneFuture = donePromise.get_future();
+  queue.pushAsync([&donePromise](TaskQueueOnExecutor::Done done) {
+    donePromise.set_value(std::move(done));
+  });
+  ASSERT_TRUE(becomesReady(doneFuture));
+  auto done = doneFuture.get();
+
+  // The task is still in flight, so the next push (the bound is one) blocks.
+  std::atomic<bool> secondPushHasReturned = false;
+  ad_utility::JThread pusher{[&queue, &secondPushHasReturned]() {
+    queue.push([]() {});
+    secondPushHasReturned = true;
+  }};
+  std::this_thread::sleep_for(shortTimeout);
+  EXPECT_FALSE(secondPushHasReturned.load());
+
+  // Calling `done` (from another thread) releases the slot.
+  std::move(done)();
+  pusher.join();
+  EXPECT_TRUE(secondPushHasReturned.load());
   queue.finish();
 }
 

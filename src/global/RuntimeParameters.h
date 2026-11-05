@@ -8,15 +8,16 @@
 #include <algorithm>
 #include <optional>
 
+#include "global/Constants.h"
 #include "util/Log.h"
 #include "util/Parameters.h"
+#include "util/Synchronized.h"
 
 // A set of parameters that can be accessed with a runtime and a compile time
 // interface. They are currently managed using a synchronized singleton for the
 // complete QLever instance.
 struct RuntimeParameters {
   using Bool = ad_utility::detail::parameterShortNames::Bool;
-  using Double = ad_utility::detail::parameterShortNames::Double;
   template <typename DurationTp>
   using Duration =
       ad_utility::detail::parameterShortNames::DurationParameter<DurationTp>;
@@ -45,12 +46,15 @@ struct RuntimeParameters {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
-  // If the time estimate for a sort operation is larger by more than this
-  // factor than the remaining time, then the sort is canceled with a
-  // timeout exception.
-  Double sortEstimateCancellationFactor_{3.0,
-                                         "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
+
+  // The total amount of memory that may be used for query processing and
+  // caching (the `--memory-for-queries` option of `qlever-server`, called
+  // `MEMORY_FOR_QUERIES` in a Qleverfile). Increasing it at runtime always
+  // succeeds. Decreasing it requires the freed part to be currently unused,
+  // otherwise the change is rejected.
+  MemorySizeParameter memoryForQueries_{DEFAULT_MEM_FOR_QUERIES,
+                                        "memory-for-queries"};
 
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),
                                     "cache-max-size"};
@@ -71,34 +75,23 @@ struct RuntimeParameters {
   // occupying all the threads of the pool. The value must be at least `1`
   // (enforced by a parameter constraint).
   SizeT maxNumThreadsPerQuery_{6, "max-num-threads-per-query"};
-  // The maximum number of threads with which each scan of a permutation
-  // during a runtime index rebuild (see `IndexRebuilder`) reads and
-  // decompresses its blocks, both for the main scan of the old permutations
-  // and for the statistics recomputation. A value of 0 means "no limit".
-  // Lowering it reduces the rebuild's CPU usage without affecting query scans
-  // (how many blocks are read ahead of the consumer is determined by
-  // `lazy-index-scan-num-blocks-in-flight` above, as for query scans).
+  // The maximum number of tasks that a runtime index rebuild (see
+  // `IndexRebuilder`) runs at the same time on the global thread pool. A value
+  // of 0 means "no limit".
   //
-  // NOTE: The default of 1 keeps a rebuild on a live server from starving
-  // concurrent queries of CPU, at nearly no cost in wall time: the bottleneck
-  // of each permutation pipeline is its single sequential remap thread, so
-  // more concurrent block reads mostly add contention (measured on Wikidata on
-  // an otherwise idle 16-core server, where the wall time was the same for 1,
-  // 2, and 4).
-  SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
-  // The maximum number of threads with which each permutation is compressed
-  // and written during a runtime index rebuild. A value of 0 means "no limit".
-  // The number of blocks that are in flight is still determined by
-  // `permutation-writer-num-blocks-in-flight`, which is also used when
-  // building an index from scratch and when writing materialized views.
+  // NOTE 1: The limit applies to the rebuild as a whole and not to its
+  // individual scans and writers: the reading and decompressing of the blocks
+  // of the old permutations (also for the recomputation of the statistics) and
+  // the compressing and writing of the blocks of the new ones share it, so
+  // each of them may use as many threads as are currently free within it. Not
+  // covered are the threads that remap the triples of each permutation (they
+  // are not on the pool) and the sorting of the twin relations of large
+  // relations (see `PermutationWriter`), which uses the pool directly.
   //
-  // NOTE: Like the scan parameter above, this exists so that a rebuild on a
-  // live server leaves as much CPU as possible to concurrent queries: the
-  // default of 1 compresses and writes the blocks of each permutation one
-  // after the other, which reduces the CPU work of the permutation phase by
-  // ~20% at nearly no cost in wall time (same measurement setup as above).
-  SizeT rebuildPermutationWriterNumThreads_{
-      1, "rebuild-permutation-writer-num-threads"};
+  // NOTE 2: This is the analogue of `max-num-threads-per-query` for the
+  // rebuild. When the pool is idle, the rebuild uses this many of its threads,
+  // and when the pool is busy, it shares them with the queries.
+  SizeT rebuildIndexMaxNumThreads_{0, "rebuild-index-max-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
   // the internal PSO+POS) that a runtime index rebuild processes in
   // parallel. Each pair costs several CPU cores, several GB/s of memory
@@ -208,9 +201,9 @@ struct RuntimeParameters {
   Bool treatDefaultGraphAsNamedGraph_{false,
                                       "treat-default-graph-as-named-graph"};
 
-  // If set, each `sparql-results+json` results will include a top-level "meta"
-  // field with information about query execution time and result size.
-  Bool sparqlResultsJsonWithTime_{true, "sparql-results-json-with-time"};
+  // If set, each `sparql-results+json` result includes a top-level "meta" field
+  // with the query execution time, the result size, and the warnings.
+  Bool sparqlResultsJsonWithMeta_{true, "sparql-results-json-with-meta"};
 
   // Memory limit for sorting rows during the writing of materialized views.
   MemorySizeParameter materializedViewWriterMemory_{
@@ -257,7 +250,7 @@ struct RuntimeParameters {
   // memory until it has been written. How many of them are compressed at the
   // same time is not determined by this parameter, but by the executor on
   // which they are written (for the runtime index rebuild, see
-  // `rebuild-permutation-writer-num-threads`). The value must be at least `1`
+  // `rebuild-index-max-num-threads`). The value must be at least `1`
   // (enforced by a parameter constraint). Even though this influences the
   // logic of regular index building, `qlever-index` doesn't expose a CLI flag
   // to set this parameter, but derives it from its `--num-threads` option.

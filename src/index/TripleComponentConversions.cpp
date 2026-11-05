@@ -16,6 +16,29 @@
 #include "index/LocalVocabContext.h"
 #include "rdfTypes/GeoPoint.h"
 
+namespace localVocabEntryDetail::onlyForTripleComponentConversions {
+// Calls the private constructors of `LocalVocabEntry`. It is only used by
+// `toIdOrLocalVocabEntry` and `toValueId` below, which make sure that an IRI
+// that can be encoded directly in an `Id` is never stored in a
+// `LocalVocabEntry`. Do NOT use it anywhere else.
+class LocalVocabEntryFactory {
+ public:
+  static LocalVocabEntry make(LocalVocabEntry::Base&& word,
+                              const LocalVocabContext& context) {
+    return LocalVocabEntry{std::move(word), context};
+  }
+
+  static LocalVocabEntry makeWithKnownBounds(LocalVocabEntry::Base&& word,
+                                             Id lower, Id upper,
+                                             const LocalVocabContext& context) {
+    return LocalVocabEntry{std::move(word), lower, upper, context};
+  }
+};
+}  // namespace localVocabEntryDetail::onlyForTripleComponentConversions
+
+using localVocabEntryDetail::onlyForTripleComponentConversions::
+    LocalVocabEntryFactory;
+
 // ____________________________________________________________________________
 std::optional<Id> toValueIdIfNotString(
     const TripleComponent& tripleComponent,
@@ -51,6 +74,18 @@ std::optional<Id> toValueIdIfNotString(
     }
   };
   return tripleComponent.visit(visitor);
+}
+
+// _____________________________________________________________________________
+IdOrLocalVocabEntry toIdOrLocalVocabEntry(
+    ad_utility::triple_component::LiteralOrIri word,
+    const LocalVocabContext& context) {
+  if (word.isIri()) {
+    if (auto id = context.encodeAsId(word.toStringRepresentation())) {
+      return id.value();
+    }
+  }
+  return LocalVocabEntryFactory::make(std::move(word), context);
 }
 
 // ____________________________________________________________________________
@@ -123,8 +158,8 @@ Id toValueId(TripleComponent&& tripleComponent, const IndexImpl& index,
       return LiteralOrIri{std::move(tripleComponent.getIri())};
     }
   };
-  return Id::makeFromLocalVocabIndex(
-      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
+  return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntryFactory::makeWithKnownBounds(
           moveWord(), Id::makeFromVocabIndex(lower),
           Id::makeFromVocabIndex(upper), index.getLocalVocabContext())));
 }

@@ -38,8 +38,38 @@
 #include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
+#include "util/UninitializedAllocator.h"
 
 namespace qlever {
+
+namespace {
+// Read the complete contents of the blob file with the given `filename`. The
+// buffer is not zero-initialized, because it is completely overwritten by the
+// read.
+std::vector<char, ad_utility::default_init_allocator<char>>
+readCompressedBlobFile(const std::string& filename) {
+  // A directory can be opened like a file, but its size is reported as the
+  // maximal file size, which we must not try to allocate.
+  if (!ql::filesystem::is_regular_file(filename)) {
+    throw std::runtime_error{
+        absl::StrCat("The blob file \"", filename,
+                     "\" does not exist or is not a regular file")};
+  }
+  ad_utility::File file{filename, "r"};
+  std::vector<char, ad_utility::default_init_allocator<char>> compressedBlob(
+      file.sizeOfFile());
+  auto numBytesRead =
+      file.read(compressedBlob.data(), compressedBlob.size(), 0);
+  AD_CORRECTNESS_CHECK(
+      static_cast<size_t>(numBytesRead) == compressedBlob.size(), [&]() {
+        return absl::StrCat("Could not read the complete blob file \"",
+                            filename, "\" (expected ", compressedBlob.size(),
+                            " bytes, but read ", numBytesRead,
+                            "), was it modified while it was being read?");
+      });
+  return compressedBlob;
+}
+}  // namespace
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
@@ -51,17 +81,41 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numMemoryToAllocate);
                  }),
-             std::move(executor)) {}
+             std::move(executor)) {
+  // Mirror the configured memory limit in the runtime parameter
+  // `memory-for-queries`, and apply later changes of the parameter to the
+  // allocator as the difference to the current limit. Registering triggers
+  // the action once, which is a no-op because the difference is zero.
+  //
+  // NOTE: The action holds a copy of the allocator, which shares the limit
+  // with `allocator_` and keeps it alive, so the action never dangles, also
+  // not after this instance is destroyed.
+  auto memoryLimit = config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES);
+  auto runtimeParameters = globalRuntimeParameters.wlock();
+  runtimeParameters->memoryForQueries_.set(memoryLimit);
+  runtimeParameters->memoryForQueries_.setOnUpdateAction(
+      [allocator = allocator_,
+       currentLimit = memoryLimit](ad_utility::MemorySize newLimit) mutable {
+        if (newLimit >= currentLimit) {
+          allocator.increaseMemoryLimit(newLimit - currentLimit);
+        } else {
+          allocator.decreaseMemoryLimit(currentLimit - newLimit);
+        }
+        currentLimit = newLimit;
+      });
+}
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                Allocator<Id> allocator, qlever::Executor executor)
     : allocator_{std::move(allocator)},
       executor_{std::move(executor)},
-      indexAndViews_{std::make_shared<IndexAndViews>(
-          Index{allocator_}, MaterializedViewsManager{})},
+      indexAndViews_{std::allocate_shared<IndexAndViews>(
+          allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
+  // Reject invalid configurations before loading anything.
+  config.validate();
   // Set runtime parameters relevant for caching and propagate them to the
   // cache.
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
@@ -73,10 +127,17 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
+  // The memory limit of a caller-provided allocator is unknown, so only the
+  // other constructor binds the runtime parameter `memory-for-queries` to the
+  // allocator. Clear the action of a previous instance, so that the parameter
+  // is bound to nothing.
+  globalRuntimeParameters.wlock()->memoryForQueries_.clearOnUpdateAction();
+
   // If `skipLoading` is set, we do not touch the on-disk index at all; the
   // instance is expected to be populated later from a blob (see
-  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
-  if (skipLoading) {
+  // `deserializeVocabAndNamedCacheFromCompressedBlob`). A blob file from the
+  // `config` is loaded in any case (see below).
+  if (skipLoading && !config.compressedBlobFilename_.has_value()) {
     return;
   }
 
@@ -86,13 +147,24 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   auto snapshot = indexAndViewsSnapshot();
   auto& [index, materializedViewsManager] = *snapshot;
 
-  // Load the index from disk.
-  index.usePatterns() = enablePatternTrick_;
-  index.loadAllPermutations() = !config.onlyPsoAndPos_;
-  index.doNotLoadPermutations() = config.doNotLoadPermutations_;
-  index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
-  if (config.loadTextIndex_) {
-    index.addTextFromOnDiskIndex();
+  // Load the index from the blob file if one is given, and from disk
+  // otherwise. A blob has no text index (`validate` has checked that
+  // `loadTextIndex_` is not set in this case).
+  if (config.compressedBlobFilename_.has_value()) {
+    const auto& filename = config.compressedBlobFilename_.value();
+    AD_LOG_INFO << "Loading the index from the blob file \"" << filename
+                << "\" ..." << std::endl;
+    deserializeVocabAndNamedCacheFromCompressedBlob(
+        readCompressedBlobFile(filename));
+    loadedFromBlob_ = true;
+  } else {
+    index.usePatterns() = enablePatternTrick_;
+    index.loadAllPermutations() = !config.onlyPsoAndPos_;
+    index.doNotLoadPermutations() = config.doNotLoadPermutations_;
+    index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
+    if (config.loadTextIndex_) {
+      index.addTextFromOnDiskIndex();
+    }
   }
   if (config.indexDescription_.has_value()) {
     index.setKbName(config.indexDescription_.value());
@@ -101,19 +173,13 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
     index.setTextName(config.textDescription_.value());
   }
 
-  materializedViewsManager.setOnDiskBase(config.baseName_);
-
-  // Estimate the cost of sorting operations (needed for query planning), unless
-  // the user disabled this (potentially expensive) step. The samples are sorted
-  // like the sorts of the queries themselves (see `IdTableUtils::sort` and
-  // `QueryExecutionContext::makeSortConfig`).
-  if (config.computeSortPerformanceEstimators_) {
-    sortPerformanceEstimator_.computeEstimatesExpensively(
-        allocator_,
-        index.numTriples().normalAndInternal_() *
-            PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100,
-        QueryExecutionContext::makeSortConfig(executor_));
+  // An index that is loaded from a blob has no files on disk, and hence no
+  // materialized views (`validate` has checked that none are to be preloaded).
+  if (loadedFromBlob_) {
+    return;
   }
+
+  materializedViewsManager.setOnDiskBase(config.baseName_);
 
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
@@ -174,6 +240,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setSettingsFile(config.settingsFile_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
+  index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
+  index.getImpl().setHasWordRestrictPredicates(
+      config.hasWordRestrictPredicates_);
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   if (config.geoCellGridLevel_ > 0) {
     index.getImpl().setGeoCellGridForIndexBuilding(
@@ -237,9 +306,8 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
                           ad_utility::MediaType mediaType) const {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
-  const auto& sharedCancellationHandle = plannedQuery.queryExecutionTree()
-                                             .getRootOperation()
-                                             ->getCancellationHandle();
+  const auto& sharedCancellationHandle =
+      plannedQuery.queryExecutionContext().cancellationHandle();
   std::string result;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
@@ -264,6 +332,7 @@ UpdateMetadata Qlever::applyUpdate(
     const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+  throwIfLoadedFromBlob("An update");
   const auto& qet = plannedUpdate.queryExecutionTree();
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
   AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
@@ -327,6 +396,7 @@ DeltaTriplesCount Qlever::clearDeltaTriples() const {
 // _____________________________________________________________________________
 nlohmann::json Qlever::vacuumDeltaTriples(
     SharedCancellationHandle handle) const {
+  throwIfLoadedFromBlob("Vacuuming the delta triples");
   auto snapshot = indexAndViewsSnapshot();
   return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
       [handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });
@@ -340,8 +410,8 @@ void Qlever::eraseResultWithName(std::string name) {
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
     ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
+  const auto& handle = qec.cancellationHandle();
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
 
@@ -351,12 +421,6 @@ PlannedQuery Qlever::planQuery(
   PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
-  // Propagate the `cancellationHandle` and the `timeLimit` through the
-  // `queryExecutionTree`.
-  rootOperation.recursivelySetCancellationHandle(std::move(handle));
-  if (timeLimit.has_value()) {
-    rootOperation.recursivelySetTimeConstraint(timeLimit.value());
-  }
 
   auto& queryPlanningInfo = rootOperation.getQueryPlanningInfo();
   if (requestTimer.has_value()) {
@@ -371,25 +435,23 @@ PlannedQuery Qlever::planQuery(
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
-    std::optional<TimeLimit> timeLimit,
+    ParsedQueryAndContext parsedQuery,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
   // NOTE: `qec` is a reference into `parsedQuery`, which is alive for the
   // duration of this call, and the resulting `PlannedQuery` takes its own
   // `shared_ptr` to the context.
   auto& qec = parsedQuery.queryExecutionContext();
-  return planQuery(std::move(parsedQuery.parsedQuery()), qec, std::move(handle),
-                   timeLimit, requestTimer);
+  return planQuery(std::move(parsedQuery.parsedQuery()), qec, requestTimer);
 }
 
 // ___________________________________________________________________________
 ParsedQueryAndContext Qlever::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult) const {
+    bool pinResult, SharedCancellationHandle handle) const {
   auto qecPtr = createQueryExecutionContext(
       indexAndViewsSnapshot(), executor_, std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching_);
+      pinSubtrees, pinResult, disableCaching_, std::move(handle));
 
   auto parsedQuery = SparqlParser::parseQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
@@ -401,24 +463,24 @@ ParsedQueryAndContext Qlever::parseQuery(
 // ___________________________________________________________________________
 ParsedQueryAndContext Qlever::bindParsedQuery(
     ParsedQuery parsedQuery, std::function<void(std::string)> updateCallback,
-    bool pinSubtrees, bool pinResult) const {
+    bool pinSubtrees, bool pinResult, SharedCancellationHandle handle) const {
   auto qecPtr = createQueryExecutionContext(
       indexAndViewsSnapshot(), executor_, std::move(updateCallback),
-      pinSubtrees, pinResult, disableCaching_);
+      pinSubtrees, pinResult, disableCaching_, std::move(handle));
   return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
 }
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::parseAndPlanQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
-    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
+    SharedCancellationHandle handle,
     boost::optional<const ad_utility::Timer&> requestTimer,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
   return planQuery(
       parseQuery(std::move(query), datasetClauses, std::move(updateCallback),
-                 pinSubtrees, pinResult),
-      std::move(handle), timeLimit, requestTimer);
+                 pinSubtrees, pinResult, std::move(handle)),
+      requestTimer);
 }
 
 // ___________________________________________________________________________
@@ -456,6 +518,12 @@ void IndexBuilderConfig::validate() const {
         "must be between 1 and ",
         MAX_INDEX_ROWS_PER_BLOCK));
   }
+  if (!hasWordRestrictPredicates_.empty() && !addHasWordTriples_) {
+    throw std::invalid_argument(
+        "The predicates to which the `ql:has-word` triples are restricted "
+        "(`has-word-restrict-predicates`) require the option "
+        "`add-has-word-triples`");
+  }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
   }
@@ -475,15 +543,57 @@ void IndexBuilderConfig::validate() const {
 }
 
 // ___________________________________________________________________________
+void EngineConfig::validate() const {
+  if (!compressedBlobFilename_.has_value()) {
+    return;
+  }
+  auto throwUnsupported = [](std::string_view option) {
+    throw std::invalid_argument(absl::StrCat(
+        "An index that is loaded from a blob (`compressedBlobFilename_`, "
+        "`--read-from-blob-file` of `qlever-server`) has no permutations and "
+        "no files on disk, so it cannot be combined with ",
+        option));
+  };
+  if (persistUpdates_) {
+    throwUnsupported(
+        "persisting updates (`persistUpdates_`, which is true by default, or "
+        "`--persist-updates`)");
+  }
+  if (loadTextIndex_) {
+    throwUnsupported("loading a text index (`loadTextIndex_`, `--text`)");
+  }
+  if (rebuildIndexStrategy_.has_value()) {
+    throwUnsupported(
+        "automatic index rebuilds (`rebuildIndexStrategy_`, "
+        "`--rebuild-index-strategy`)");
+  }
+  if (!preloadMaterializedViews_.empty()) {
+    throwUnsupported(
+        "preloading materialized views (`preloadMaterializedViews_`, "
+        "`--preload-materialized-views`)");
+  }
+}
+
+// ___________________________________________________________________________
+void Qlever::throwIfLoadedFromBlob(std::string_view operation) const {
+  if (loadedFromBlob_) {
+    throw std::runtime_error(
+        absl::StrCat(operation,
+                     " is not supported for an index that is loaded from a "
+                     "blob, because it has no permutations and no files on "
+                     "disk"));
+  }
+}
+
+// ___________________________________________________________________________
 void Qlever::writeMaterializedView(
     std::string name, std::string query,
     const std::vector<DatasetClause>& datasetClauses,
     SharedCancellationHandle cancellationHandle,
-    std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
-  auto plan =
-      parseAndPlanQuery(std::move(query), datasetClauses,
-                        std::move(cancellationHandle), timeLimit, requestTimer);
+  throwIfLoadedFromBlob("Writing a materialized view");
+  auto plan = parseAndPlanQuery(std::move(query), datasetClauses,
+                                std::move(cancellationHandle), requestTimer);
   const auto& viewsManager =
       plan.queryExecutionContext().materializedViewsManager();
   auto memoryLimit =
@@ -505,6 +615,7 @@ bool Qlever::unloadMaterializedView(const std::string& name) const {
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
+  throwIfLoadedFromBlob("Loading a materialized view");
   auto indexAndViews = indexAndViewsSnapshot();
   auto qec = createQueryExecutionContext(indexAndViews, executor_);
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
@@ -512,6 +623,7 @@ void Qlever::loadMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 void Qlever::deleteMaterializedView(std::string name) const {
+  throwIfLoadedFromBlob("Deleting a materialized view");
   const auto indexAndViews = indexAndViewsSnapshot();
   indexAndViews->materializedViewsManager_.deleteView(name);
 }
@@ -520,13 +632,13 @@ void Qlever::deleteMaterializedView(std::string name) const {
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
     std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
-    bool pinResult,
-    QueryExecutionContext::DisableCaching disableCaching) const {
+    bool pinResult, QueryExecutionContext::DisableCaching disableCaching,
+    SharedCancellationHandle handle) const {
   auto [index, viewsManager] = getPointerPair(std::move(indexAndViews));
   return std::make_shared<QueryExecutionContext>(
-      std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
-      &namedResultCache_, std::move(viewsManager), std::move(executor),
-      std::move(updateCallback), pinSubtrees, pinResult, disableCaching);
+      std::move(index), &cache_, allocator_, &namedResultCache_,
+      std::move(viewsManager), std::move(executor), std::move(updateCallback),
+      pinSubtrees, pinResult, disableCaching, false, std::move(handle));
 }
 
 // ___________________________________________________________________________
@@ -663,6 +775,7 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
 Qlever::RebuildResult Qlever::rebuildIndexToDisk(
     Index& index, const IndexSwapConfig& config,
     const ad_utility::SharedCancellationHandle& handle) const {
+  throwIfLoadedFromBlob("An index rebuild");
   const std::string& indexBaseName = config.newIndexSource();
   ql::filesystem::path directory =
       ql::filesystem::path{indexBaseName}.parent_path();
@@ -676,13 +789,18 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
   auto mapping =
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
                          ownedBlocks, handle, executor_, logFileName);
-  auto indexAndViews = std::make_shared<IndexAndViews>(
-      Index{allocator()}, MaterializedViewsManager{});
+  auto indexAndViews = std::allocate_shared<IndexAndViews>(
+      allocator(), Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
   newIndex.usePatterns() = index.usePatterns();
   newIndex.loadAllPermutations() = index.loadAllPermutations();
   newIndex.createFromOnDiskIndex(indexBaseName,
                                  index.deltaTriplesManager().persists());
+  // The rebuilt index has to encode exactly the same IRIs directly in an `Id`,
+  // otherwise the `Id`s and `LocalVocabEntry`s of the old index cannot be
+  // carried over (see `LocalVocabEntry::reanchoredTo`).
+  AD_CORRECTNESS_CHECK(index.getImpl().encodedIriManager() ==
+                       newIndex.getImpl().encodedIriManager());
   newManager.setOnDiskBase(indexBaseName);
   return {std::move(currentSnapshot), std::move(mapping),
           std::move(indexAndViews)};
@@ -721,13 +839,11 @@ void Qlever::swapInRebuiltIndex(
   // repaired manually before the next restart.
   moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
-  // Clear the query cache, including pinned entries: cached results were
-  // computed against the old index, so their `VocabIndex` ids are in the old
-  // vocabulary's coordinates and their `LocalVocabEntry`s are anchored to the
-  // old index. The cache key alone does not protect against serving them: it
-  // only contains the query string and the delta triples version counter,
-  // and the counter of the new index starts over and can collide with a
-  // pre-swap value.
+  // Clear the query cache, including pinned entries, to free the memory of
+  // the results that were computed against the old index. They can never be
+  // hit again, because `addFromSnapshotDiff` above continued the snapshot
+  // index of the old index in the new one. This also holds for the results
+  // that queries still running on the old index insert after this point.
   cache_.clearAll();
 }
 #endif

@@ -28,11 +28,8 @@ namespace ad_utility {
 // classes within `boost::program_options`. The values are parsed via the
 // `fromString` method.
 CPP_template(typename E)(
-    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag,
-                               E>) void validate(boost::any& v,
-                                                 const std::vector<std::string>&
-                                                     values,
-                                                 E*, int) {
+    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag, E>)
+void validate(boost::any& v, const std::vector<std::string>& values, E*, int) {
   // First parse as the command line argument as a string.
   // Note: `validate` stores the result in `v`.
   std::string* dummy = nullptr;

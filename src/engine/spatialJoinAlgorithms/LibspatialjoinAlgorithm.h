@@ -67,6 +67,8 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
     // Subset of the dropped geometries that were dropped by the geo cell test
     // on their `ValueId` alone (see `GeoRectangleIdPrefilter`)
     size_t numGeomsDroppedByCell_;
+    // Number of parsed geometries skipped because they are invalid WKT
+    size_t numGeomsInvalid_;
     // Actual number of threads used (might be lower than result of
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;

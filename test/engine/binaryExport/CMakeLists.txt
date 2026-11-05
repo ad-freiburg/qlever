@@ -1,0 +1,2 @@
+addLinkAndDiscoverTest(StringMappingTest engine index)
+addLinkAndDiscoverTest(BinaryExportTest engine)

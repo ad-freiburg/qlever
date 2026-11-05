@@ -10,6 +10,7 @@
 #ifndef QLEVER_TEST_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNTESTHELPERS_H
 #define QLEVER_TEST_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNTESTHELPERS_H
 
+#include <utility>
 #include <vector>
 
 #include "../../../util/AllocatorTestHelpers.h"
@@ -37,6 +38,12 @@ inline std::vector<Id> sampleIds() {
           Id::makeFromDouble(13.37),
           Id::makeFromVocabIndex(VocabIndex::make(123)),
           Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7))};
+}
+
+// The datatype bits and the payload bits of `id` as a pair, for structured
+// bindings in the tests.
+inline auto getBitsCompat(const Id id) {
+  return std::pair{id.getDatatypeBits(), id.getPayloadBits()};
 }
 
 }  // namespace columnBasedIdTable::splitLayout::testHelpers

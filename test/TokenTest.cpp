@@ -11,6 +11,7 @@
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
 #include "rdfTypes/RdfEscaping.h"
+#include "util/Exception.h"
 
 using std::string;
 TEST(TokenTest, Numbers) {
@@ -363,6 +364,18 @@ TEST(TokenizerTest, WhitespaceAndComments) {
     ASSERT_FALSE(success2);
     tok.skipWhitespaceAndComments();
     ASSERT_EQ(tok.data().data() - s.data(), 27);
+
+    // A comment at the end of the input needs no newline.
+    std::string s3("  #comment without newline");
+    tok.reset(s3.data(), s3.size());
+    tok.skipWhitespaceAndComments();
+    ASSERT_TRUE(tok.data().empty());
+
+    // A plain `\r` also ends a comment.
+    std::string s4("#comment\r<x>");
+    tok.reset(s4.data(), s4.size());
+    tok.skipWhitespaceAndComments();
+    ASSERT_EQ(tok.data().data() - s4.data(), 9);
   }
 
   {
@@ -377,6 +390,18 @@ TEST(TokenizerTest, WhitespaceAndComments) {
     ASSERT_FALSE(success2);
     tok.skipWhitespaceAndComments();
     ASSERT_EQ(tok.data().data() - s.data(), 27);
+
+    // A comment at the end of the input needs no newline.
+    std::string s3("  #comment without newline");
+    tok.reset(s3.data(), s3.size());
+    tok.skipWhitespaceAndComments();
+    ASSERT_TRUE(tok.data().empty());
+
+    // A plain `\r` also ends a comment.
+    std::string s4("#comment\r<x>");
+    tok.reset(s4.data(), s4.size());
+    tok.skipWhitespaceAndComments();
+    ASSERT_EQ(tok.data().data() - s4.data(), 9);
   }
 }
 

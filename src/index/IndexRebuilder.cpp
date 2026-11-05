@@ -288,15 +288,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  // A positive value throttles the rebuild's read/decompress parallelism only,
-  // reducing its peak CPU without touching queries; 0 means "no limit".
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState,
-      ad_utility::makeConcurrencyLimitedExecutor(
-          std::move(executor),
-          getRuntimeParameterAsOptional<
-              &RuntimeParameters::rebuildIndexScanNumThreads_>()));
+      *locatedTriplesSharedState, std::move(executor));
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -470,6 +464,14 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   AD_CONTRACT_CHECK(!index.getVocab().getGeoCellGrid().has_value(),
                     "Rebuilding an index whose vocabulary has a geo cell grid "
                     "is not supported yet");
+
+  // All the work of the rebuild on the `executor` (the scans of the old
+  // permutations and the writers of the new ones) shares a single limit, see
+  // the runtime parameter `rebuild-index-max-num-threads`.
+  executor = ad_utility::makeConcurrencyLimitedExecutor(
+      std::move(executor),
+      getRuntimeParameterAsOptional<
+          &RuntimeParameters::rebuildIndexMaxNumThreads_>());
 
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration
