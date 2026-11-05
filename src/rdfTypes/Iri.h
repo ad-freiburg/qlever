@@ -123,8 +123,10 @@ class Iri : public BasicIri<true> {
   using BasicIri<true>::BasicIri;
 
  private:
+  // Qualified, because inside a class derived from `BasicIri<...>`, gcc 8
+  // resolves the plain `BasicIri` to the specialization of the base class.
   template <bool>
-  friend class BasicIri;
+  friend class ::ad_utility::triple_component::BasicIri;
   explicit Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
 
   // The implementation of the `fromIriref` overload for owned strings (see
@@ -218,8 +220,10 @@ class IriView : public BasicIri<false> {
   using BasicIri<false>::BasicIri;
 
  private:
+  // Qualified, because inside a class derived from `BasicIri<...>`, gcc 8
+  // resolves the plain `BasicIri` to the specialization of the base class.
   template <bool>
-  friend class BasicIri;
+  friend class ::ad_utility::triple_component::BasicIri;
   explicit IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
 
   // Only for the corresponding constructor of `LiteralOrIriView` (see there).

@@ -144,8 +144,10 @@ class Literal : public BasicLiteral<true> {
   using BasicLiteral<true>::BasicLiteral;
 
  private:
+  // Qualified, because inside a class derived from `BasicLiteral<...>`, gcc 8
+  // resolves the plain `BasicLiteral` to the specialization of the base class.
   template <bool>
-  friend class BasicLiteral;
+  friend class ::ad_utility::triple_component::BasicLiteral;
 
   explicit Literal(BasicLiteral<true>&& base)
       : BasicLiteral<true>(std::move(base)) {}
@@ -219,8 +221,10 @@ class LiteralView : public BasicLiteral<false> {
   using BasicLiteral<false>::BasicLiteral;
 
  private:
+  // Qualified, because inside a class derived from `BasicLiteral<...>`, gcc 8
+  // resolves the plain `BasicLiteral` to the specialization of the base class.
   template <bool>
-  friend class BasicLiteral;
+  friend class ::ad_utility::triple_component::BasicLiteral;
 
   explicit LiteralView(BasicLiteral<false>&& base)
       : BasicLiteral<false>(std::move(base)) {}
