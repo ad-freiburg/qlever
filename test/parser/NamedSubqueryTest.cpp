@@ -256,6 +256,15 @@ TEST(NamedSubquery, invalidQueries) {
             "SELECT * WHERE { SERVICE <http://example.org/sparql> {"
             " { SELECT ?s WHERE { INCLUDE %a } } } }"),
       ::testing::HasSubstr("not supported inside SERVICE"));
+  // This also holds for an `INCLUDE` inside a magic `SERVICE` that is itself
+  // inside a remote `SERVICE`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("PREFIX rn: <https://qlever.cs.uni-freiburg.de/rowNumber/>"
+            "WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { SERVICE <http://example.org/sparql> {"
+            " SERVICE rn: { [] rn:bind ?n ."
+            " { SELECT ?s WHERE { INCLUDE %a } ORDER BY ?s } } } }"),
+      ::testing::HasSubstr("not supported inside SERVICE"));
 }
 
 // Test that an `INCLUDE` is allowed inside a magic `SERVICE`, which QLever
