@@ -109,6 +109,10 @@ class AllocationMemoryLeft {
   }
 
   // Return `a + b`, or the maximal value if that sum overflows.
+  //
+  // NOTE: Neither Abseil nor the Boost libraries that we use provide a
+  // saturating addition of integers, and the standard library only has one
+  // since C++26 (`std::add_sat`), so we implement it ourselves.
   static size_t saturatingAdd(size_t a, size_t b) noexcept {
     return b > std::numeric_limits<size_t>::max() - a
                ? std::numeric_limits<size_t>::max()
@@ -164,7 +168,10 @@ class SharedMemoryLimit {
   // before retrying.
   ClearOnAllocation clearOnAllocation_;
   // The bytes that a thread has reserved from `memoryLeft_`, but not yet
-  // handed out.
+  // handed out. When a thread exits, `ThreadLocalMember` calls the lambda with
+  // the bytes that this thread still has cached, which gives them back to
+  // `memoryLeft_` (saturating, because it must not throw). For details see
+  // `ThreadLocalMember`.
   ThreadLocalMember<size_t> threadCache_{[this](size_t& cached) {
     memoryLeft_->increaseSaturating(MemorySize::bytes(cached));
     cached = 0;
