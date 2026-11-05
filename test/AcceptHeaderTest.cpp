@@ -50,7 +50,7 @@ TEST(AcceptHeaderParser, singleTypeNQuads) {
 // Test that the name of QLever's binary export format contains its version.
 TEST(AcceptHeaderParser, singleTypeBinaryQleverExport) {
 #ifdef QLEVER_USE_ID_SPLIT_LAYOUT
-  std::string name = "application/vnd.qlever.results.v2";
+  std::string name = "application/vnd.qlever.results.v1337";
 #else
   std::string name = "application/vnd.qlever.results.v1";
 #endif

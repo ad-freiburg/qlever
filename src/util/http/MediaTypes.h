@@ -44,10 +44,10 @@ enum class MediaType {
 // (and otherwise fall back to a different format like JSON). Increase it
 // whenever the format changes, in particular when the bit representation of an
 // `Id` changes. Version 1 transfers the `Id`s of the legacy layout and version
-// 2 the ones of the split layout, so two instances with different layouts never
-// agree on the format.
+// 1337 the ones of the split layout, so two instances with different layouts
+// never agree on the format.
 #ifdef QLEVER_USE_ID_SPLIT_LAYOUT
-inline constexpr uint16_t binaryQleverExportVersion = 2;
+inline constexpr uint16_t binaryQleverExportVersion = 1337;
 #else
 inline constexpr uint16_t binaryQleverExportVersion = 1;
 #endif
