@@ -344,7 +344,6 @@ class IdBase {
         static_cast<uint64_t>(derived().getPayloadBits()));
   }
 
-  // TODO<joka921> implement dates
 
   // Create an `Id` for a GeoPoint object (representing a POINT from WKT).
   static Derived makeFromGeoPoint(GeoPoint p) {
