@@ -16,6 +16,7 @@
 #include <algorithm>
 
 #include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
+#include "util/ExceptionHandling.h"
 #include "util/views/UniqueBlockView.h"
 
 namespace chunkwisePermutationWriter {
@@ -24,28 +25,43 @@ using namespace compressedRelationHelpers;
 using BlockToWrite = CompressedRelationWriter::BlockToWrite;
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> ChunkWriterContext::makePermutedColIndices(
-    const qlever::KeyOrder& permutation, size_t numColumns) {
-  auto [c0, c1, c2, c3] = permutation.keys();
-  std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
-  for (size_t colIdx = 3; colIdx < numColumns; ++colIdx) {
-    permutedColIndices.push_back(colIdx);
-  }
-  return permutedColIndices;
+void ChunkWriterContext::connectTwinWriters(CompressedRelationWriter& writer1,
+                                            CompressedRelationWriter& writer2) {
+  AD_CONTRACT_CHECK(writer1.blocksize() == writer2.blocksize());
+  AD_CONTRACT_CHECK(writer1.numColumns() == writer2.numColumns());
+  writer1.smallBlocksCallback_ =
+      CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched{writer2};
+  writer2.shareBlockBufferPoolWith(writer1);
+}
+
+// _____________________________________________________________________________
+ChunkWriterContext::ChunkWriterContext(
+    CompressedRelationWriter& writer1, CompressedRelationWriter& writer2,
+    ColumnIndex col0Column, std::vector<ColumnIndex> permutedColIndices,
+    bool removeDuplicates, std::string twinSorterBasename,
+    ad_utility::MemorySize twinSorterMemoryPerChunk)
+    : writer1_{writer1},
+      writer2_{writer2},
+      col0Column_{col0Column},
+      permutedColIndices_{std::move(permutedColIndices)},
+      removeDuplicates_{removeDuplicates},
+      twinSorterBasename_{std::move(twinSorterBasename)},
+      twinSorterMemoryPerChunk_{twinSorterMemoryPerChunk} {
+  AD_CONTRACT_CHECK(permutedColIndices_.size() == writer1_.numColumns());
+  connectTwinWriters(writer1_, writer2_);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<TwinSorter> ChunkWriterContext::makeTwinSorter(
     const std::string& filename) const {
   auto sorter = std::make_unique<TwinSorter>(
-      filename, permutedColIndices_.size(), twinSorterMemory_,
+      filename, numColumns(), twinSorterMemoryPerChunk_,
       ad_utility::makeUnlimitedAllocator<Id>());
-  // A parallelism of one makes the sorter merge serially in the consuming
-  // thread, which is what a chunk needs: it runs on a thread of the pool and
-  // must never wait for other tasks of that pool. (The runs of the sorters of
-  // the boundary parts are merged by a parallel merge of the consolidation
-  // instead.)
-  sorter->setMergeExecutor(executor_, 1);
+  // A chunk runs on a thread of the pool and must never wait for other tasks
+  // of that pool, so the sorter sorts, writes, and merges in the thread of the
+  // chunk. (The runs of the sorters of the boundary parts are merged by a
+  // parallel merge of the consolidation instead.)
+  sorter->setDoAllWorkInCallingThread();
   return sorter;
 }
 
@@ -56,22 +72,31 @@ ChunkWriter::ChunkWriter(ChunkWriterContext& context, size_t chunkIndex,
       context_{context},
       chunkIndex_{chunkIndex},
       isLastChunk_{chunkIndex + 1 == numChunks},
-      writer1_{context.writer1_},
-      writer2_{context.writer2_},
-      numColumns_{context.writer1_.numColumns()},
       inFirstRelation_{chunkIndex > 0},
-      smallRelations_{writer1_.takeBlockBuffer(), blocksize_} {}
+      smallRelations_{context.writer1_.takeBlockBuffer(), blocksize_} {}
 
 // _____________________________________________________________________________
 ChunkWriter::~ChunkWriter() {
-  // Note: The buffer of the `smallRelations_` can't be taken out of the
-  // builder, so it is simply freed.
-  writer1_.blockBufferPool()->giveBack(std::move(relation_));
+  ad_utility::terminateIfThrows(
+      [this] {
+        const auto& pool = context_.writer1_.blockBufferPool();
+        pool->giveBack(std::move(relation_));
+        // The `smallRelations_` are empty if the chunk was finished (see
+        // `finishChunk`), but not if it was destroyed early (e.g. because of
+        // an exception), in which case its buffer is simply freed.
+        if (smallRelations_.empty()) {
+          pool->giveBack(std::move(smallRelations_).releaseBuffer());
+        }
+      },
+      "Destroying a `ChunkWriter` failed.");
 }
 
 // _____________________________________________________________________________
-void ChunkWriter::removeDuplicates(Block& block) {
+void ChunkWriter::removeDuplicatesIfNecessary(Block& block) {
   context_.numInputRows_.fetch_add(block.numRows());
+  if (!context_.removeDuplicates_) {
+    return;
+  }
   ad_utility::removeDuplicatesFromBlock(block, lastRowOfPreviousBlock_);
   if (!block.empty()) {
     lastRowOfPreviousBlock_ = block.back();
@@ -81,22 +106,17 @@ void ChunkWriter::removeDuplicates(Block& block) {
 
 // _____________________________________________________________________________
 SharedBlock ChunkWriter::processBlock(Block block) {
-  AD_CORRECTNESS_CHECK(block.numColumns() == numColumns_);
-  if (context_.removeDuplicates_) {
-    removeDuplicates(block);
-  } else {
-    context_.numInputRows_.fetch_add(block.numRows());
-  }
+  AD_CORRECTNESS_CHECK(block.numColumns() == context_.numColumns());
+  removeDuplicatesIfNecessary(block);
   if (block.empty()) {
     return nullptr;
   }
-  if (!col0IdCurrentRelation_.has_value()) {
-    // This can only happen for the very first block of the chunk; afterwards
-    // the current relation is reset only by
-    // `RelationBlockCutter::writeCompleteSmallRelations`, which also means
-    // that the first relation of the chunk is over.
-    AD_CORRECTNESS_CHECK(!inFirstRelation_ || result_.numRows_ == 0);
-  }
+  // If there is no current relation, then this is the very first block of the
+  // chunk; afterwards the current relation is reset only by
+  // `RelationBlockCutter::writeCompleteSmallRelations`, which also means that
+  // the first relation of the chunk is over.
+  AD_CORRECTNESS_CHECK(col0IdCurrentRelation_.has_value() ||
+                       !inFirstRelation_ || result_.numRows_ == 0);
   const size_t numRows = block.numRows();
   this->addInputBlock(std::make_shared<const Block>(std::move(block)),
                       context_.col0Column_, context_.permutedColIndices_);
@@ -132,16 +152,17 @@ void ChunkWriter::writeBufferedSmallRelationsToSingleBlock() {
   if (smallRelations_.empty()) {
     return;
   }
-  auto block = smallRelations_.takeBlock(writer1_.takeBlockBuffer());
-  // The last argument invokes the `smallBlocksCallback_` of `writer1_`, which
-  // writes the block to the twin permutation (in this thread).
-  writer1_.compressAndWriteBlockInCallingThread(
+  auto block = smallRelations_.takeBlock(context_.writer1_.takeBlockBuffer());
+  // The last argument invokes the `smallBlocksCallback_` of
+  // `context_.writer1_`, which writes the block to the twin permutation (in
+  // this thread).
+  context_.writer1_.compressAndWriteBlockInCallingThread(
       block.firstCol0_, block.lastCol0_, BlockToWrite{std::move(block.rows_)},
       true);
 }
 
 // _____________________________________________________________________________
-void ChunkWriter::countRowsOfCurrentRelation(IdTableView<0> rows) {
+void ChunkWriter::countRowsOfCurrentRelation(const IdTableView<0>& rows) {
   AD_CORRECTNESS_CHECK(!rows.empty());
   numRowsCurrentRel_ += rows.numRows();
   auto col1 = rows.getColumn(c1Idx);
@@ -164,9 +185,8 @@ TwinSorter& ChunkWriter::twinSorter() {
 
 // _____________________________________________________________________________
 void ChunkWriter::pushTwinRows(IdTableView<0> rows) {
-  IdTableView<0> twinRows = rows;
-  twinRows.swapColumns(c1Idx, c2Idx);
-  twinSorter().pushBlock(twinRows);
+  rows.swapColumns(c1Idx, c2Idx);
+  twinSorter().pushBlock(rows);
 }
 
 // _____________________________________________________________________________
@@ -182,25 +202,30 @@ void ChunkWriter::writeBlockOfLargeRelation(IdTableView<0> block,
   pushTwinRows(block);
   // This is a block of a large relation, so the `smallBlocksCallback_` is not
   // invoked, hence the last argument is `false`.
-  writer1_.compressAndWriteBlockInCallingThread(
-      col0Id, col0Id, BlockToWrite{block, std::move(owner)}, false);
+  context_.writer1_.compressAndWriteBlockInCallingThread(
+      col0Id, col0Id, BlockToWrite{std::move(block), std::move(owner)}, false);
 }
 
 // _____________________________________________________________________________
 void ChunkWriter::addBlockForLargeRelation() {
-  if (relation_.empty()) {
-    return;
-  }
-  if (inFirstRelation_ && !head_.has_value()) {
+  // NOTE: Unlike the general contract of the hook (see `RelationBlockCutter`),
+  // the buffer is never empty here: the cutter only writes a block directly
+  // from the input if the relation continues after it, so the last rows of a
+  // relation always end up in the buffer.
+  AD_CORRECTNESS_CHECK(!relation_.empty());
+  if (sizeOfFirstRelationIsUndecided()) {
     // The first block of the first relation of the chunk is kept in memory,
     // because it has to be consolidated with the end of the previous chunk.
     // From now on the relation is known to be large, so its twin rows go to
     // the twin sorter.
     head_ = std::move(relation_);
-    relation_ = writer1_.takeBlockBuffer();
-    // See `writeBlockOfLargeRelation`. Note that this cannot actually have an
-    // effect, because the first relation of the chunk precedes all its small
-    // relations, but it keeps the invariant obvious.
+    relation_ = context_.writer1_.takeBlockBuffer();
+    // Buffered small relations have to be written before a block of a large
+    // relation, see `writeBlockOfLargeRelation`.
+    //
+    // NOTE: This cannot actually have an effect, because the first relation of
+    // the chunk precedes all its small relations, but it keeps the invariant
+    // obvious.
     writeBufferedSmallRelationsToSingleBlock();
     ++numBlocksCurrentRel_;
     auto headView = head_->asStaticView<0>();
@@ -209,10 +234,10 @@ void ChunkWriter::addBlockForLargeRelation() {
     return;
   }
   auto owner = CompressedRelationWriter::BlockBufferPool::makeRecyclingOwner(
-      writer1_.blockBufferPool(), std::move(relation_));
+      context_.writer1_.blockBufferPool(), std::move(relation_));
   auto block = owner->template asStaticView<0>();
-  relation_ = writer1_.takeBlockBuffer();
-  writeBlockOfLargeRelation(block, std::move(owner));
+  relation_ = context_.writer1_.takeBlockBuffer();
+  writeBlockOfLargeRelation(std::move(block), std::move(owner));
 }
 
 // _____________________________________________________________________________
@@ -220,7 +245,7 @@ void ChunkWriter::addBlockOfLargeRelationWithoutCopying(IdTableView<0> block) {
   AD_CORRECTNESS_CHECK(relation_.empty() && !block.empty());
   // The rows of the `block` are owned by the `inputBlock_`, which stays alive
   // until the block has been written (which happens synchronously).
-  writeBlockOfLargeRelation(block, inputBlock_);
+  writeBlockOfLargeRelation(std::move(block), inputBlock_);
 }
 
 // _____________________________________________________________________________
@@ -266,7 +291,7 @@ void ChunkWriter::finishRelation() {
   } else {
     // Small relations are batched into blocks, and no metadata is stored for
     // them. The twin permutation is handled by the `smallBlocksCallback_` of
-    // `writer1_`.
+    // `context_.writer1_`.
     addSmallRelations(col0Id, col0Id, relation_, 0, relation_.numRows());
   }
   ++result_.numMiddleRelations_;
@@ -277,16 +302,17 @@ void ChunkWriter::finishRelation() {
 CompressedRelationMetadata ChunkWriter::writeTwinOfCompleteLargeRelation(
     Id col0Id) {
   auto& sorter = twinSorter();
-  // NOTE: The sorter merges serially in this thread (see `makeTwinSorter`),
-  // so this never waits for other tasks of the thread pool. No output block
-  // size is requested: a relation whose twin rows fit into a single block of
-  // the sorter (the common case) is then moved out as a whole instead of
-  // being copied into blocks, and `writeRowsOfLargeRelation` slices it into
-  // the blocks of the permutation without copying. For a relation with
-  // several runs, the merge derives the size of its output blocks from the
-  // memory of the sorter.
+  // The sorter sorts and merges in this thread (see `makeTwinSorter`), so this
+  // never waits for other tasks of the thread pool.
+  //
+  // NOTE: No output block size is requested. A relation whose twin rows fit
+  // into a single block of the sorter (the common case) is then moved out as a
+  // whole instead of being copied into blocks, and `writeRowsOfLargeRelation`
+  // slices it into the blocks of the permutation without copying. For a
+  // relation with several runs, the merge derives the size of its output
+  // blocks from the memory of the sorter.
   auto md2 = writeSortedBlocksOfLargeRelation(
-      writer2_, col0Id, sorter.getSortedBlocks(std::nullopt));
+      context_.writer2_, col0Id, sorter.getSortedBlocks(std::nullopt));
   sorter.clear();
   return md2;
 }
@@ -296,24 +322,25 @@ void ChunkWriter::finishFirstRelation(bool reachesChunkEnd) {
   AD_CORRECTNESS_CHECK(inFirstRelation_ && col0IdCurrentRelation_.has_value());
   const Id col0Id = col0IdCurrentRelation_.value();
   std::optional<BoundaryPart> part;
-  if (!head_.has_value()) {
+  if (sizeOfFirstRelationIsUndecided()) {
     // The part is small, all its rows are still in the buffer.
     AD_CORRECTNESS_CHECK(numBlocksCurrentRel_ == 0 && !relation_.empty());
     countRowsOfCurrentRelation(relation_.asStaticView<0>());
     part.emplace(col0Id, std::move(relation_));
-    relation_ = writer1_.takeBlockBuffer();
+    relation_ = context_.writer1_.takeBlockBuffer();
   } else {
     // NOTE: The remaining rows are handled before the head is moved out, as
     // `addBlockForLargeRelation` would otherwise capture them as a new head.
     std::optional<IdTable> tail;
     if (reachesChunkEnd) {
-      if (!relation_.empty()) {
-        auto tailView = relation_.asStaticView<0>();
-        countRowsOfCurrentRelation(tailView);
-        pushTwinRows(tailView);
-        tail = std::move(relation_);
-        relation_ = writer1_.takeBlockBuffer();
-      }
+      // The last rows of a relation are always buffered, see
+      // `addBlockForLargeRelation`.
+      AD_CORRECTNESS_CHECK(!relation_.empty());
+      auto tailView = relation_.asStaticView<0>();
+      countRowsOfCurrentRelation(tailView);
+      pushTwinRows(tailView);
+      tail = std::move(relation_);
+      relation_ = context_.writer1_.takeBlockBuffer();
     } else {
       // The relation ends inside this chunk, so its remaining rows are its
       // last block, which can be written directly.
@@ -321,12 +348,13 @@ void ChunkWriter::finishFirstRelation(bool reachesChunkEnd) {
     }
     part.emplace(col0Id, std::move(head_).value());
     head_.reset();
-    part->tail_ = std::move(tail);
+    part->rowsAfterWrittenBlocks_ = std::move(tail);
     part->twinSorter_ = std::move(twinSorter_);
     AD_CORRECTNESS_CHECK(part->twinSorter_ != nullptr);
   }
   part->numRows_ = numRowsCurrentRel_;
   part->distinctCol1_ = distinctCol1OfCurrentRelation();
+  finishTwinSorterOfPart(part.value());
   AD_CORRECTNESS_CHECK(!result_.firstPart_.has_value());
   result_.firstPart_ = std::move(part);
   result_.spansWholeChunk_ = reachesChunkEnd;
@@ -345,23 +373,26 @@ void ChunkWriter::finishLastRelation() {
     AD_CORRECTNESS_CHECK(!relation_.empty());
     countRowsOfCurrentRelation(relation_.asStaticView<0>());
     part.emplace(col0Id, std::move(relation_));
-    relation_ = writer1_.takeBlockBuffer();
+    relation_ = context_.writer1_.takeBlockBuffer();
   } else {
     // The first rows of the relation lie inside this chunk and have already
     // been written directly, so there are no rows before the first block.
-    part.emplace(col0Id, IdTable{numColumns_, relation_.getAllocator()});
-    if (!relation_.empty()) {
-      auto tailView = relation_.asStaticView<0>();
-      countRowsOfCurrentRelation(tailView);
-      pushTwinRows(tailView);
-      part->tail_ = std::move(relation_);
-      relation_ = writer1_.takeBlockBuffer();
-    }
+    part.emplace(col0Id,
+                 IdTable{context_.numColumns(), relation_.getAllocator()});
+    // The last rows of a relation are always buffered, see
+    // `addBlockForLargeRelation`.
+    AD_CORRECTNESS_CHECK(!relation_.empty());
+    auto tailView = relation_.asStaticView<0>();
+    countRowsOfCurrentRelation(tailView);
+    pushTwinRows(tailView);
+    part->rowsAfterWrittenBlocks_ = std::move(relation_);
+    relation_ = context_.writer1_.takeBlockBuffer();
     part->twinSorter_ = std::move(twinSorter_);
     AD_CORRECTNESS_CHECK(part->twinSorter_ != nullptr);
   }
   part->numRows_ = numRowsCurrentRel_;
   part->distinctCol1_ = distinctCol1OfCurrentRelation();
+  finishTwinSorterOfPart(part.value());
   AD_CORRECTNESS_CHECK(!result_.lastPart_.has_value());
   result_.lastPart_ = std::move(part);
   resetCurrentRelation();
@@ -381,17 +412,14 @@ ChunkResult ChunkWriter::finishChunk() {
     }
   }
   writeBufferedSmallRelationsToSingleBlock();
-  // Finish the input phase of the twin sorters of the boundary parts (which
-  // sorts and writes their last block), so that the parts only hold the runs
-  // on disk while they wait for the consolidation, see
-  // `BoundaryPart::twinRuns_`.
-  for (auto* part : {&result_.firstPart_, &result_.lastPart_}) {
-    if (part->has_value() && part->value().isLarge()) {
-      part->value().twinRuns_ =
-          part->value().twinSorter_->finishAndGetRunsInput<0>();
-    }
-  }
   return std::move(result_);
+}
+
+// _____________________________________________________________________________
+void ChunkWriter::finishTwinSorterOfPart(BoundaryPart& part) {
+  if (part.isLarge()) {
+    part.twinRuns_ = part.twinSorter_->finishAndGetRunsInput<0>();
+  }
 }
 
 // _____________________________________________________________________________
@@ -432,7 +460,8 @@ CompressedRelationMetadata ChunkWriter::writeSortedBlocksOfLargeRelation(
     ad_utility::InputRangeTypeErased<Block> blocks) {
   DistinctIdCounter distinctCol1Counter;
   size_t numRows = 0;
-  auto writeBlock = [&](Block block) {
+  auto writeBlock = [&numRows, &distinctCol1Counter, &writer,
+                     col0Id](Block block) {
     numRows += block.numRows();
     distinctCol1Counter.addBlock(std::as_const(block).getColumn(c1Idx));
     writeRowsOfLargeRelation(writer, col0Id, std::move(block), false);
@@ -445,21 +474,12 @@ CompressedRelationMetadata ChunkWriter::writeSortedBlocksOfLargeRelation(
       writeBlock(std::move(complete).value());
     }
   }
-  if (auto last = alignedBlocks.finish()) {
-    writeBlock(std::move(last).value());
-  }
+  // A large relation is never empty, so there always is a last block.
+  auto last = alignedBlocks.finish();
+  AD_CORRECTNESS_CHECK(last.has_value());
+  writeBlock(std::move(last).value());
   return CompressedRelationWriter::makeLargeRelationMetadata(
       col0Id, numRows, distinctCol1Counter.getAndReset());
-}
-
-// _____________________________________________________________________________
-void ChunkWriter::connectTwinWriters(CompressedRelationWriter& writer1,
-                                     CompressedRelationWriter& writer2) {
-  AD_CONTRACT_CHECK(writer1.blocksize() == writer2.blocksize());
-  AD_CONTRACT_CHECK(writer1.numColumns() == writer2.numColumns());
-  writer1.smallBlocksCallback_ =
-      CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched{writer2};
-  writer2.shareBlockBufferPoolWith(writer1);
 }
 
 }  // namespace chunkwisePermutationWriter

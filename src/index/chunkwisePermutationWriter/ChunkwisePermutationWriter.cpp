@@ -145,22 +145,20 @@ ChunkwisePermutationWriter::ChunkwisePermutationWriter(
       executor_{ad_utility::globalExecutor()},
       callbackPermits_{executor_,
                        std::max<size_t>(1, options.numCallbackBlocksInFlight_)},
-      context_{
-          *writer1_,
-          *writer2_,
-          permutation_.keys().at(0),
-          ChunkWriterContext::makePermutedColIndices(permutation_, numColumns_),
-          options.removeDuplicates_,
-          basename_,
-          options.twinSorterMemoryPerChunk_,
-          executor_} {
+      context_{*writer1_,
+               *writer2_,
+               permutation_.keys().at(0),
+               compressedRelationHelpers::permutedColIndices(permutation_,
+                                                             numColumns_),
+               options.removeDuplicates_,
+               basename_,
+               options.twinSorterMemoryPerChunk_} {
   // This logic only works for permutations that have the graph as the fourth
   // column.
   AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
   AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
   AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
   AD_CORRECTNESS_CHECK(blocksize_ > 0);
-  ChunkWriter::connectTwinWriters(*writer1_, *writer2_);
 }
 
 // _____________________________________________________________________________
@@ -436,13 +434,16 @@ void ChunkwisePermutationWriter::writeBoundaryRelation(
     // relations together with the other small boundary relations that are
     // adjacent to it (see `consolidate`).
     if (parts.size() == 1) {
-      writer1_->addSmallRelation(col0Id, parts.front().rows_);
+      writer1_->addSmallRelation(col0Id,
+                                 parts.front().rowsBeforeWrittenBlocks_);
       return;
     }
-    IdTable rows{numColumns_, parts.front().rows_.getAllocator()};
+    IdTable rows{numColumns_,
+                 parts.front().rowsBeforeWrittenBlocks_.getAllocator()};
     rows.reserve(numRows);
     for (const auto& part : parts) {
-      rows.insertAtEnd(part.rows_, 0, part.rows_.numRows());
+      rows.insertAtEnd(part.rowsBeforeWrittenBlocks_, 0,
+                       part.rowsBeforeWrittenBlocks_.numRows());
     }
     writer1_->addSmallRelation(col0Id, rows);
     return;
@@ -459,15 +460,17 @@ void ChunkwisePermutationWriter::writeBoundaryRelation(
   DistinctIdCounter distinctCol1Counter;
   for (auto& part : parts) {
     distinctCol1Counter.addCountOfBlock(part.distinctCol1_);
-    pending.insertAtEnd(part.rows_, 0, part.rows_.numRows());
+    pending.insertAtEnd(part.rowsBeforeWrittenBlocks_, 0,
+                        part.rowsBeforeWrittenBlocks_.numRows());
     if (part.isLarge()) {
       if (!pending.empty()) {
         ChunkWriter::writeRowsOfLargeRelation(*writer1_, col0Id,
                                               std::move(pending), true);
         pending = writer1_->takeBlockBuffer();
       }
-      if (part.tail_.has_value()) {
-        pending.insertAtEnd(part.tail_.value(), 0, part.tail_->numRows());
+      if (part.rowsAfterWrittenBlocks_.has_value()) {
+        pending.insertAtEnd(part.rowsAfterWrittenBlocks_.value(), 0,
+                            part.rowsAfterWrittenBlocks_->numRows());
       }
     }
   }
@@ -496,9 +499,11 @@ ChunkwisePermutationWriter::writeTwinOfBoundaryRelation(
   if (sorters.empty()) {
     // All the parts are small (but the relation as a whole is large), so all
     // the twin rows fit into memory and can be sorted there.
-    IdTable twinRows{numColumns_, parts.front().rows_.getAllocator()};
+    IdTable twinRows{numColumns_,
+                     parts.front().rowsBeforeWrittenBlocks_.getAllocator()};
     for (const auto& part : parts) {
-      twinRows.insertAtEnd(part.rows_, 0, part.rows_.numRows());
+      twinRows.insertAtEnd(part.rowsBeforeWrittenBlocks_, 0,
+                           part.rowsBeforeWrittenBlocks_.numRows());
     }
     twinRows.swapColumns(c1Idx, c2Idx);
     ql::ranges::sort(twinRows, ComparatorForConstCol0{});
@@ -526,7 +531,7 @@ ChunkwisePermutationWriter::writeTwinOfBoundaryRelation(
         sorterForSmallParts = context_.makeTwinSorter(absl::StrCat(
             basename_, ".twin-boundary-small-parts.", col0Id.getBits()));
       }
-      auto twinRows = part.rows_.asStaticView<0>();
+      auto twinRows = part.rowsBeforeWrittenBlocks_.asStaticView<0>();
       twinRows.swapColumns(c1Idx, c2Idx);
       sorterForSmallParts->pushBlock(twinRows);
     }

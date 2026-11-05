@@ -41,12 +41,15 @@
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
-// The writer of a single chunk of a parallel merge (see
-// `index/chunkwisePermutationWriter/ChunkWriter.h`), which needs access to the
-// thread-safe internals of the `CompressedRelationWriter` below.
+// The writer of a single chunk of a parallel merge and the state that all such
+// writers share (see `index/chunkwisePermutationWriter/ChunkWriter.h`), and the
+// writer of a complete pair of permutations that drives them (see
+// `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`), which need
+// access to the thread-safe internals of the `CompressedRelationWriter` below.
 namespace chunkwisePermutationWriter {
 class ChunkwisePermutationWriter;
 class ChunkWriter;
+struct ChunkWriterContext;
 }  // namespace chunkwisePermutationWriter
 
 /// Manage the compression and serialization of relations during the index
@@ -460,6 +463,7 @@ class CompressedRelationWriter {
   static size_t getNumBlocksInFlight();
   friend class chunkwisePermutationWriter::ChunkwisePermutationWriter;
   friend class chunkwisePermutationWriter::ChunkWriter;
+  friend struct chunkwisePermutationWriter::ChunkWriterContext;
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);

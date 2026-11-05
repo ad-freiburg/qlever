@@ -56,11 +56,11 @@ struct Options {
   bool removeDuplicates_ = false;
   // The memory limit of the twin sorter of a single chunk, which sorts the
   // twin rows of a large relation. The sorter only needs a file (and hence the
-  // disk) if a single relation has more rows than fit into this memory. Up to
-  // three such sorters (the working one and the ones of the two boundary
-  // parts) exist per chunk that the merge keeps in flight, and the results of
-  // finished chunks (which hold the sorters of their boundary parts) are
-  // bounded by the same number, see `finishChunkImpl`.
+  // disk) if a single relation has more rows than fit into this memory. Only
+  // one sorter per running chunk holds rows in memory at a time, because the
+  // sorters of finished boundary parts only keep their runs on disk (see
+  // `ChunkWriterContext::twinSorterMemoryPerChunk_`), and the results of
+  // finished chunks are bounded, see `finishChunkImpl`.
   ad_utility::MemorySize twinSorterMemoryPerChunk_ =
       ad_utility::MemorySize::megabytes(256);
   // The memory limit of the parallel merge that sorts the twin rows of a

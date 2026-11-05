@@ -765,11 +765,15 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 
   STREAMABLE_YIELD("]}");
 
-  // Optionally add field `meta` with timing information.
-  if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>()) {
-    auto timeMs = requestTimer.msecs().count();
-    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":{"query-time-ms":)", timeMs,
-                                  R"(,"result-size-total":)", resultSize, "}"));
+  // Optionally add field `meta` with timing information, the total result
+  // size, and the warnings. The warnings are collected only now, so that
+  // warnings that were added during the lazy computation are included.
+  if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithMeta_>()) {
+    nlohmann::ordered_json meta;
+    meta["query-time-ms"] = requestTimer.msecs().count();
+    meta["result-size-total"] = resultSize;
+    meta["warnings"] = qet.collectWarnings();
+    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":)", meta.dump()));
   }
 
   STREAMABLE_YIELD("}");

@@ -325,6 +325,10 @@ addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
+addLinkAndDiscoverTestNoLibs(MaybeOwningPtrTest)
+
+addLinkAndDiscoverTestNoLibs(ThreadLocalMemberTest)
+
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
