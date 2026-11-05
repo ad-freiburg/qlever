@@ -144,15 +144,26 @@ std::chrono::microseconds RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
   } else {
-    // If a child was computed during the query planning, the time spent
-    // computing that child is *not* included in this operation's
-    // `totalTime_`. That's why we skip such children in the following loop.
-    auto timesOfChildren =
-        children_ | ql::views::transform(&RuntimeInformation::totalTime_);
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
-    return std::max(0us,
-                    totalTime_ - ::ranges::accumulate(timesOfChildren, 0us));
+    return std::max(0us, totalTime_ - getTotalTimeOfChildren());
+  }
+}
+
+// __________________________________________________________________________
+std::chrono::microseconds RuntimeInformation::getTotalTimeOfChildren() const {
+  return ::ranges::accumulate(
+      children_ | ql::views::transform(&RuntimeInformation::totalTime_), 0us);
+}
+
+// __________________________________________________________________________
+void RuntimeInformation::updateTotalTimeOfOptimizedOutChildren() {
+  for (auto& child : children_) {
+    if (child->status_ != optimizedOut) {
+      continue;
+    }
+    child->updateTotalTimeOfOptimizedOutChildren();
+    child->totalTime_ = child->getTotalTimeOfChildren();
   }
 }
 

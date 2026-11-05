@@ -65,8 +65,9 @@ CPP_concept ValueAsNumericId =
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
 // point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
-CPP_template(bool NanOrInfToUndef = false,
-             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+CPP_template(bool NanOrInfToUndef = false, typename T)(
+    requires ValueAsNumericId<T>)
+Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
   } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
@@ -209,11 +210,17 @@ struct LiteralValueGetterWithoutStrFunction
 };
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
+//
+// NOTE: For this and all the `is...` getters below, the result for UNDEF is
+// UNDEF, because an unbound argument is an error in SPARQL.
 template <Datatype datatype>
 struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
   using Value = Id;
   using Mixin<IsValueIdValueGetter>::operator();
   Id operator()(Id id, const EvaluationContext*) const {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
     return Id::makeFromBool(id.getDatatype() == datatype);
   }
 
@@ -228,6 +235,9 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
   using Value = Id;
   using Mixin<IsNumericValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
     Datatype datatype = id.getDatatype();
     return Id::makeFromBool(datatype == Datatype::Double ||
                             datatype == Datatype::Int);
@@ -380,8 +390,8 @@ struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
 // `IriValueGetter` returns an
 // `std::optional<ad_utility::triple_component::Iri>` object. If the
 // `LiteralOrIri` object contains an `Iri`, the Iri is returned. This
-// ValueGetter is currently used in `StringExpressions.cpp` within the
-// implementation of `STRDT()`.
+// ValueGetter is currently used in `StrLangAndStrDtExpressions.cpp` within
+// the implementation of `STRDT()`.
 struct IriValueGetter : Mixin<IriValueGetter> {
   using Value = OptIri;
   using Mixin<IriValueGetter>::operator();
@@ -449,12 +459,12 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
-  using Value = IdOrLocalVocabEntry;
+  using Value = IdOrLiteralOrIri;
   using Mixin<IriOrUriValueGetter>::operator();
-  IdOrLocalVocabEntry operator()(ValueId id,
-                                 const EvaluationContext* context) const;
-  IdOrLocalVocabEntry operator()(const LiteralOrIri& litOrIri,
-                                 const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(ValueId id,
+                              const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
+                              const EvaluationContext* context) const;
 };
 
 // Value getter similar to `IriOrUriValueGetter`. Parses the base IRI once so
@@ -478,9 +488,8 @@ struct ParsedUriGetter : Mixin<ParsedUriGetter> {
 // calculated, when requesting the centroid).
 
 CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
-        RequestedInfo>) struct GeometryInfoValueGetter
-    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Value = std::optional<RequestedInfo>;
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(

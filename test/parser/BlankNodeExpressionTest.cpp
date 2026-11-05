@@ -6,6 +6,7 @@
 
 #include "../SparqlExpressionTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -42,8 +43,8 @@ TEST(BlankNodeExpression, expectBlankNodeResultEquality) {
       LocalVocabEntry::literalWithoutQuotes("Other", localVocabContext));
   vector.emplace_back(
       LocalVocabEntry::literalWithoutQuotes("Test", localVocabContext));
-  vector.emplace_back(
-      LocalVocabEntry::fromIriref("<http://example.com>", localVocabContext));
+  vector.emplace_back(ad_utility::testing::iriLocalVocabEntry(
+      "<http://example.com>", localVocabContext));
 
   auto expression4 =
       makeBlankNodeExpression(std::make_unique<SingleUseExpression>(

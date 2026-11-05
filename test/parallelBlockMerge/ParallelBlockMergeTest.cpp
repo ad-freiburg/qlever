@@ -1449,7 +1449,10 @@ namespace {
 struct DummyMergeState {
   using Block = SizeVec;
   void stop() {}
-  std::future<void> asyncWaitForCompletion() { return {}; }
+  template <typename Token>
+  std::future<void> asyncWaitForCompletion([[maybe_unused]] Token&& token) {
+    return {};
+  }
 };
 struct DummySink {
   template <typename Token>

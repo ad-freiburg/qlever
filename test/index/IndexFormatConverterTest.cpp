@@ -54,14 +54,12 @@ fs::path oldIndexDirectory() {
 // Return the `Id` of the previous index format with the given datatype bits and
 // value bits.
 Id oldFormatId(uint64_t datatypeBits, uint64_t valueBits) {
-  return Id::fromBits((datatypeBits << ValueId::numDataBits) | valueBits);
+  return Id::fromBits(datatypeBits, valueBits);
 }
 
 // Return the value bits of the given `id`, that is, its bits without the
 // datatype bits.
-uint64_t valueBits(Id id) {
-  return id.getBits() & ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
-}
+uint64_t valueBits(Id id) { return id.getPayloadBits(); }
 
 // The 20 triples of the index in the previous format, in the order of the `SPO`
 // permutation, in the string representation of `tripleToString` below. Note
@@ -209,8 +207,8 @@ TEST(IndexFormatConverter, convertIdPreservesTheOrder) {
       convertedIds.push_back(convertId(oldFormatId(datatypeBits, value)));
     }
   }
-  EXPECT_TRUE(ql::ranges::is_sorted(convertedIds));
-  EXPECT_TRUE(ql::ranges::adjacent_find(convertedIds) == convertedIds.end());
+  EXPECT_TRUE(ql::ranges::adjacent_find(convertedIds, std::greater_equal<>{}) ==
+              convertedIds.end());
 }
 
 // _____________________________________________________________________________
@@ -722,8 +720,9 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
     std::string numTriplesTotal = ad_utility::withThousandSeparators(
         permutations.size() * numTriples.normal + 2 * numTriples.internal);
     EXPECT_THAT(conversionLog,
-                HasSubstr(absl::StrCat("Triples converted: ", numTriplesTotal,
-                                       " of ", numTriplesTotal, " (100.0%)")));
+                ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(HasSubstr(
+                    absl::StrCat("Triples converted: ", numTriplesTotal, " of ",
+                                 numTriplesTotal, " (100.0%)"))));
     EXPECT_THAT(conversionLog, ::testing::Not(HasSubstr("Registered ")));
     EXPECT_THAT(conversionLog, ::testing::Not(HasSubstr("Triples sorted")));
 

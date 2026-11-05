@@ -225,6 +225,33 @@ TEST(BlankNodeManager, maxNumOfBlocks) {
           "Critical high number of blank node blocks in use:"));
 }
 
+// Test the number of available blocks, in particular the carry when the
+// number of indices from `minIndex_` to `ValueId::maxIndex` is a multiple of
+// `blockSize_`.
+TEST(BlankNodeManager, totalAvailableBlocks) {
+  constexpr uint64_t blockSize = BlankNodeManager::blockSize_;
+  constexpr uint64_t maxIndex = ValueId::maxIndex;
+
+  // Exactly one and exactly two blocks of indices.
+  EXPECT_EQ(BlankNodeManager(maxIndex - blockSize + 1).totalAvailableBlocks_,
+            1);
+  EXPECT_EQ(
+      BlankNodeManager(maxIndex - 2 * blockSize + 1).totalAvailableBlocks_, 2);
+
+  // One index more and one index less than two blocks.
+  EXPECT_EQ(BlankNodeManager(maxIndex - 2 * blockSize).totalAvailableBlocks_,
+            2);
+  EXPECT_EQ(
+      BlankNodeManager(maxIndex - 2 * blockSize + 2).totalAvailableBlocks_, 1);
+
+  // All indices, compared with the formula that overflows for a 64-bit
+  // `maxIndex`.
+  if constexpr (maxIndex < std::numeric_limits<uint64_t>::max()) {
+    EXPECT_EQ(BlankNodeManager(0).totalAvailableBlocks_,
+              (maxIndex + 1) / blockSize);
+  }
+}
+
 // _____________________________________________________________________________
 TEST(BlankNodeManager, moveLocalBlankNodeManager) {
   // This ensures that the `blocks_` of the `LocalBlankNodeManager` are moved
