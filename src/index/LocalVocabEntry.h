@@ -302,9 +302,11 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   // cache for the position in the vocabulary. This is used when an index is
   // replaced by a rebuilt one, which encodes exactly the same IRIs directly in
   // an `Id` (see `toIdOrLocalVocabEntry`), so an entry that was not encodable
-  // before stays not encodable. For a `LocalVocabEntry`, the characters are
-  // copied. For a `LocalVocabEntryView` they are not, so the result is only
-  // valid as long as the characters this view refers to are.
+  // before stays not encodable.
+  //
+  // NOTE: For a `LocalVocabEntry`, the characters are copied. For a
+  // `LocalVocabEntryView` they are not, so the result is only valid as long as
+  // the characters this view refers to are.
   Derived reanchoredTo(const LocalVocabContext& newContext) const;
 
  private:
