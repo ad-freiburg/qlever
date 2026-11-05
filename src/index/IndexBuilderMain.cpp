@@ -276,6 +276,24 @@ int main(int argc, char** argv) {
   add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
       "Add `ql:has-word` triples for each word in each literal. This enables "
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
+  auto hasWordNormalizationDescription = absl::StrCat(
+      "The normalization of the words of the `ql:has-word` triples. Literals "
+      "are always split at non-alphanumeric characters and the words are "
+      "lowercased; with `lowercase-no-accents`, all combining marks are also "
+      "removed (e.g. \"Café\" becomes \"cafe\"). The latter is meant for "
+      "text in the Latin, Greek or Cyrillic script; in other scripts it also "
+      "removes marks that are not accents (e.g. the vowel signs of Thai). One "
+      "of ",
+      ad_utility::HasWordNormalization::getListOfSupportedValues(),
+      ", the default is `lowercase`.");
+  add("has-word-normalization", po::value(&config.hasWordNormalization_),
+      hasWordNormalizationDescription.c_str());
+  add("has-word-restrict-predicates",
+      po::value(&config.hasWordRestrictPredicates_)->composing()->multitoken(),
+      "Space-separated list of predicate IRIs in angle brackets. If "
+      "specified, the `ql:has-word` triples are only added for literals that "
+      "are the object of a triple with one of these predicates. Requires "
+      "`--add-has-word-triples`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
@@ -409,6 +427,12 @@ int main(int argc, char** argv) {
       resourceMonitor.start(config.baseName_ + ".index.resource-usage-log.tsv",
                             ad_utility::ResourceMonitor::Mode::Truncate,
                             std::chrono::seconds{resourceUsageIntervalS});
+    }
+    // When no `--kg-input-file` is given, the KG data is read from stdin (as
+    // documented in `--help`), except when only a text index is added to an
+    // existing index (`--add-text-index`), which needs no KG input.
+    if (inputFile.empty() && !config.onlyAddTextIndex_) {
+      inputFile.emplace_back("-");
     }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);

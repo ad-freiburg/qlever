@@ -18,6 +18,12 @@ the label, so applying any other label also triggers a run (which behaves like
 a run for a new push, in particular it cancels a run that is still in
 progress).
 
+The workflows don't listen to the `opened` event: a pull request that is opened
+with one of the labels also gets a `labeled` event, and one without them has
+nothing to run. Listening to both would start two runs, the second of which
+would cancel the first, so the checks of the pull request would show up as
+cancelled.
+
 ## The cheap subset (`run-ci` or `run-full-ci`)
 
 - `native-build-always.yml` (GCC 13, ASan, UBSan, C++17 backports)

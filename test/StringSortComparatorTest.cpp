@@ -176,9 +176,11 @@ TEST(StringSortComparatorTest, GeoCellGridOrder) {
   EXPECT_EQ(comp.geoSortKey(bad), 1 + grid.sentinelCell());
 
   // WKT literals come after all other words, by cell first, and within a
-  // cell lexicographically.
+  // cell lexicographically. Words that are not WKT literals keep their order.
   EXPECT_TRUE(comp(lit, w3));
   EXPECT_TRUE(comp(iri, w3));
+  EXPECT_FALSE(comp(w3, lit));
+  EXPECT_EQ(comp(lit, iri), comp.compareWithoutGeoCellGrid(lit, iri) < 0);
   EXPECT_TRUE(comp(w3, w12));
   EXPECT_FALSE(comp(w12, w3));
   EXPECT_TRUE(comp(w12, w12b));
@@ -201,6 +203,10 @@ TEST(StringSortComparatorTest, GeoCellGridOrder) {
       w12, false, 13, w12b, false, 13));
   EXPECT_TRUE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(w12, true, 13,
                                                                w12, false, 13));
+  EXPECT_FALSE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(w12, false, 13,
+                                                                w12, true, 13));
+  EXPECT_FALSE(comp.isLessInTotalWithExternalFlagAndGeoSortKeys(
+      w12, false, 13, w12, false, 13));
 
   // Removing the grid restores the lexicographic order.
   comp.setGeoCellGrid(std::nullopt);

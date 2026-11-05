@@ -42,7 +42,6 @@
 #endif
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CancellationHandle.h"
-#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/FilesystemHelpers.h"
 #include "util/GlobalExecutor.h"
 #include "util/HashMap.h"
@@ -425,15 +424,25 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files, size_t numThreads) {
+  // The settings file (read by `prepareIndexBuild`) may set
+  // `useParallelParser_`, so it must be read before the file specifications
+  // are updated.
+  prepareIndexBuild();
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
-                  numThreads);
+  createFromFilesAfterPreparation(
+      ad_utility::InputRangeTypeErased{std::move(files)}, numThreads);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
+  prepareIndexBuild();
+  createFromFilesAfterPreparation(std::move(files), numThreads);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::prepareIndexBuild() {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -446,6 +455,17 @@ void IndexImpl::createFromFiles(
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+  // The normalization of the words of the `ql:has-word` triples is stored so
+  // that the server can later normalize the words of queries and updates in
+  // the same way.
+  configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
+      hasWordNormalization_;
+  // The predicates to which the `ql:has-word` triples are restricted are
+  // stored, so that the configuration of the index records for which literals
+  // it has `ql:has-word` triples.
+  configurationJson_[std::string{
+      ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY}] =
+      hasWordRestrictPredicates_;
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -473,7 +493,12 @@ void IndexImpl::createFromFiles(
                 << static_cast<int>(grid.level()) << ", scheme "
                 << grid.scheme() << std::endl;
   }
+}
 
+// _____________________________________________________________________________
+void IndexImpl::createFromFilesAfterPreparation(
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
 
@@ -963,16 +988,8 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
   std::string fileName = getFilenameForPermutation(permutation, internal);
-  // This function is only used by the runtime index rebuild (see
-  // `IndexRebuilder`), which by default throttles the compress/write threads
-  // of its permutation writers so that a rebuild on a live server leaves most
-  // of the CPU to concurrent queries. A value of 0 means "no limit".
   auto metaData = createPermutationImpl(
-      numColumns, fileName, std::move(sortedTriples),
-      ad_utility::makeConcurrencyLimitedExecutor(
-          std::move(executor),
-          getRuntimeParameterAsOptional<
-              &RuntimeParameters::rebuildPermutationWriterNumThreads_>()));
+      numColumns, fileName, std::move(sortedTriples), std::move(executor));
 
   auto& [numDistinctCol0, meta] = metaData;
   meta.calculateStatistics(numDistinctCol0);
@@ -1610,6 +1627,23 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // The normalization of the words of the `ql:has-word` triples of this index
+  // (an index built before this key existed uses `Lowercase`).
+  loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
+                 ad_utility::HasWordNormalization::Lowercase);
+
+  // The predicates to which the `ql:has-word` triples of this index are
+  // restricted. They were stored sorted and without duplicates.
+  //
+  // NOTE: `std::greater_equal` finds the first pair that is not strictly
+  // increasing, so the check covers both the sortedness (needed for the binary
+  // search in `processTriple`) and the uniqueness.
+  loadDataMember(ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY,
+                 hasWordRestrictPredicates_, std::vector<std::string>{});
+  AD_CORRECTNESS_CHECK(ql::ranges::adjacent_find(hasWordRestrictPredicates_,
+                                                 std::greater_equal<>{}) ==
+                       hasWordRestrictPredicates_.end());
+
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
   // materialized view, for example), so that all permutations of an index have
@@ -1635,6 +1669,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                    geoCellGridScheme);
     vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
         static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+    // Setting the grid is a no-op for a vocabulary type without a
+    // `GeoVocabulary` that could hold it.
+    if (!vocab_.getGeoCellGrid().has_value()) {
+      throw std::runtime_error{
+          "A geo cell grid requires the vocabulary type "
+          "`on-disk-compressed-geo-split`"};
+    }
   }
 
   // Initialize BlankNodeManager
@@ -1658,10 +1699,37 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
-    // Extract words from the literal content for ql:has-word triples and
-    // count their term frequencies.
-    if (addHasWordTriples_) {
+    // Check if the predicate is one of the `hasWordRestrictPredicates_` (or
+    // none are set). The predicate is an `Id` if the parser has encoded it, see
+    // `EncodedIriManager`. In this case, `decodedPredicate` owns its string, so
+    // that `needle` is a reference in both cases (no copy of the IRI).
+    auto predicateAllowsHasWord = [this, &predicate = triple.predicate_]() {
+      if (hasWordRestrictPredicates_.empty()) {
+        return true;
+      }
+      std::string decodedPredicate;
+      const std::string& needle =
+          predicate.isIri()
+              ? predicate.getIri().toStringRepresentation()
+              : (decodedPredicate =
+                     encodedIriManager().toString(predicate.getId()));
+      return ql::ranges::binary_search(hasWordRestrictPredicates_, needle);
+    };
+
+    // Extract the words of the literal for the `ql:has-word` triples and count
+    // their term frequencies.
+    if (addHasWordTriples_ && predicateAllowsHasWord()) {
       std::string_view content = lit.getContent();
+      // With `LowercaseNoAccents`, remove the accents before the tokenization
+      // (combining marks are not alphanumeric and would otherwise split
+      // words). `contentWithoutAccents` owns the result, so that `content`
+      // stays valid during the tokenization.
+      std::string contentWithoutAccents;
+      if (hasWordNormalization_ ==
+          ad_utility::HasWordNormalization::LowercaseNoAccents) {
+        contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
+        content = contentWithoutAccents;
+      }
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
         ++result.wordFrequencies_[std::move(word)];
@@ -1793,7 +1861,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count("parallel-parsing")) {
     useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
   }
-  if (useParallelParser_) {
+  if (useParallelParser_.value_or(false)) {
     AD_LOG_INFO << WARNING_PARALLEL_PARSING << std::endl;
   }
 
@@ -2040,17 +2108,6 @@ std::vector<float> IndexImpl::getMultiplicities(
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getResultSizeOfScan(
-    const ScanSpecification& scanSpecification,
-    const Permutation::Enum& permutation,
-    const LocatedTriplesState& locatedTriplesState) const {
-  const auto& perm = getPermutation(permutation);
-  return perm.getResultSizeOfScan(
-      perm.getScanSpecAndBlocks(scanSpecification, locatedTriplesState),
-      locatedTriplesState);
-}
-
-// _____________________________________________________________________________
 void IndexImpl::deleteTemporaryFile(const std::string& path) {
   if (!keepTempFiles_) {
     ad_utility::deleteFile(path);
@@ -2221,6 +2278,27 @@ void IndexImpl::setPrefixesForEncodedValues(
 }
 
 // _____________________________________________________________________________
+void IndexImpl::setHasWordRestrictPredicates(
+    const std::vector<std::string>& predicates) {
+  // Validate the predicates (which throws for an invalid one, before anything
+  // is changed).
+  std::vector<std::string> validated;
+  for (const std::string& predicate : predicates) {
+    validated.push_back(
+        ad_utility::triple_component::Iri::fromIrirefValidated(predicate)
+            .toStringRepresentation());
+  }
+
+  // Sort them (for the binary search in `processTriple`) and remove duplicates
+  // (the stored predicates are checked to be strictly increasing when they are
+  // loaded, see `applyConfiguration`).
+  ql::ranges::sort(validated);
+  validated.erase(std::unique(validated.begin(), validated.end()),
+                  validated.end());
+  hasWordRestrictPredicates_ = std::move(validated);
+}
+
+// _____________________________________________________________________________
 void IndexImpl::setBlankNodeIriRegexes(
     std::vector<std::string> blankNodeIriRegexes) {
   ql::ranges::for_each(blankNodeIriRegexes, [](const std::string& regex) {
@@ -2308,18 +2386,10 @@ std::packaged_task<void()> computeStatistics(
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-    // The statistics are only recomputed as part of a runtime index rebuild
-    // (see `IndexRebuilder`), so this scan is also throttled by
-    // `rebuild-index-scan-num-threads` (several permutations are
-    // scanned in parallel, so without the throttle this short phase has a high
-    // peak CPU). A value of 0 means "no limit".
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
-        ad_utility::makeConcurrencyLimitedExecutor(
-            std::move(executor),
-            getRuntimeParameterAsOptional<
-                &RuntimeParameters::rebuildIndexScanNumThreads_>()));
+        std::move(executor));
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);

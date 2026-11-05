@@ -28,6 +28,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/GeoPointEncoding.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
@@ -136,6 +137,12 @@ struct TestIndexConfig {
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.
   bool addHasWordTriples = false;
+  // The normalization of the words of the `ql:has-word` triples.
+  ad_utility::HasWordNormalization hasWordNormalization =
+      ad_utility::HasWordNormalization::Lowercase;
+  // The predicates to which the `ql:has-word` triples are restricted (see
+  // `IndexImpl::setHasWordRestrictPredicates`).
+  std::vector<std::string> hasWordRestrictPredicates;
   // The words of the secondary vocabulary of the index (see
   // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
   // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not
@@ -183,8 +190,9 @@ struct TestIndexConfig {
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.vocabularyType, c.geoCellGridLevel, c.geoCellGridScheme,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
-        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
+        c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
+        c.numThreads, c.parseInParallel, c.additionalSettings,
+        c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -192,8 +200,9 @@ struct TestIndexConfig {
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
       bAndKParam, indexType, vocabularyType, geoCellGridLevel,
       geoCellGridScheme, encodedPrefixesWithoutAngleBrackets,
-      encodedIriPatterns, addHasWordTriples, secondaryVocabWords, numThreads,
-      parseInParallel, additionalSettings, geoPointEncoding)
+      encodedIriPatterns, addHasWordTriples, hasWordRestrictPredicates,
+      secondaryVocabWords, numThreads, parseInParallel, additionalSettings,
+      geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
