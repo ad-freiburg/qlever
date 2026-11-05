@@ -31,10 +31,9 @@ using ad_utility::detail::AllocationExceedsLimitException;
 using ad_utility::detail::SharedMemoryLimit;
 using Alloc = ad_utility::allocatorImpl::AllocatorWithLimit<char>;
 
-constexpr size_t maxSmall =
-    SharedMemoryLimit::maxCachedAllocationSize.getBytes();
-constexpr size_t refill = SharedMemoryLimit::cacheRefillSize.getBytes();
-constexpr size_t maxCached = SharedMemoryLimit::maxCachedBytes.getBytes();
+constexpr MemorySize maxSmall = SharedMemoryLimit::maxCachedAllocationSize;
+constexpr MemorySize refill = SharedMemoryLimit::cacheRefillSize;
+constexpr MemorySize maxCached = SharedMemoryLimit::maxCachedBytes;
 
 // Return `alloc.amountMemoryLeft()` as seen from a fresh thread, which has no
 // cache for the pool of `alloc`. This is the value of the shared counter.
@@ -59,23 +58,19 @@ TEST(MemoryLimitTracker, smallAllocationsUseThreadCache) {
   runOnThread([&]() {
     char* p = alloc.allocate(100);
     EXPECT_EQ(alloc.amountMemoryLeft(), limit - 100_B);
-    EXPECT_EQ(amountLeftOnFreshThread(alloc),
-              limit - MemorySize::bytes(refill + 100));
+    EXPECT_EQ(amountLeftOnFreshThread(alloc), limit - (refill + 100_B));
 
     // The next small allocation is served from the cache.
-    char* p2 = alloc.allocate(maxSmall);
-    EXPECT_EQ(alloc.amountMemoryLeft(),
-              limit - MemorySize::bytes(100 + maxSmall));
-    EXPECT_EQ(amountLeftOnFreshThread(alloc),
-              limit - MemorySize::bytes(refill + 100));
+    char* p2 = alloc.allocate(maxSmall.getBytes());
+    EXPECT_EQ(alloc.amountMemoryLeft(), limit - (100_B + maxSmall));
+    EXPECT_EQ(amountLeftOnFreshThread(alloc), limit - (refill + 100_B));
 
-    alloc.deallocate(p2, maxSmall);
+    alloc.deallocate(p2, maxSmall.getBytes());
     alloc.deallocate(p, 100);
     EXPECT_EQ(alloc.amountMemoryLeft(), limit);
     // All bytes were given back to the cache of this thread, which now holds
     // the refill and the bytes of the first allocation.
-    EXPECT_EQ(amountLeftOnFreshThread(alloc),
-              limit - MemorySize::bytes(refill + 100));
+    EXPECT_EQ(amountLeftOnFreshThread(alloc), limit - (refill + 100_B));
   });
   // The cache was returned when the thread exited.
   EXPECT_EQ(alloc.amountMemoryLeft(), limit);
@@ -86,10 +81,9 @@ TEST(MemoryLimitTracker, largeAllocationsBypassCache) {
   const MemorySize limit = 1_MB;
   auto alloc = Alloc::makeLimited(limit);
   runOnThread([&]() {
-    char* p = alloc.allocate(maxSmall + 1);
-    EXPECT_EQ(amountLeftOnFreshThread(alloc),
-              limit - MemorySize::bytes(maxSmall + 1));
-    alloc.deallocate(p, maxSmall + 1);
+    char* p = alloc.allocate(maxSmall.getBytes() + 1);
+    EXPECT_EQ(amountLeftOnFreshThread(alloc), limit - (maxSmall + 1_B));
+    alloc.deallocate(p, maxSmall.getBytes() + 1);
     EXPECT_EQ(amountLeftOnFreshThread(alloc), limit);
   });
 }
@@ -120,21 +114,21 @@ TEST(MemoryLimitTracker, cacheIsDrained) {
   auto alloc = Alloc::makeLimited(limit);
   runOnThread([&]() {
     // Allocate many small blocks, which repeatedly refill the cache.
-    constexpr size_t numBlocks = 4 * maxCached / maxSmall;
+    constexpr size_t numBlocks = 4 * maxCached.getBytes() / maxSmall.getBytes();
     std::vector<char*> blocks;
     for (size_t i = 0; i < numBlocks; ++i) {
-      blocks.push_back(alloc.allocate(maxSmall));
+      blocks.push_back(alloc.allocate(maxSmall.getBytes()));
     }
-    const size_t used = numBlocks * maxSmall;
-    EXPECT_EQ(alloc.amountMemoryLeft(), limit - MemorySize::bytes(used));
+    const MemorySize used = numBlocks * maxSmall;
+    EXPECT_EQ(alloc.amountMemoryLeft(), limit - used);
     auto shared = amountLeftOnFreshThread(alloc);
-    EXPECT_LE(shared, limit - MemorySize::bytes(used));
-    EXPECT_GE(shared, limit - MemorySize::bytes(used + refill));
+    EXPECT_LE(shared, limit - used);
+    EXPECT_GE(shared, limit - (used + refill));
 
     for (char* block : blocks) {
-      alloc.deallocate(block, maxSmall);
+      alloc.deallocate(block, maxSmall.getBytes());
       // The cache never holds more than `maxCachedBytes`.
-      EXPECT_GE(amountLeftOnFreshThread(alloc) + MemorySize::bytes(maxCached),
+      EXPECT_GE(amountLeftOnFreshThread(alloc) + maxCached,
                 alloc.amountMemoryLeft());
     }
     EXPECT_EQ(alloc.amountMemoryLeft(), limit);
@@ -268,7 +262,8 @@ TEST(MemoryLimitTracker, concurrentStressTest) {
   for (size_t t = 0; t < numThreads; ++t) {
     threads.emplace_back([&, t]() {
       std::mt19937 rng(t);
-      std::uniform_int_distribution<size_t> sizeDist(1, 3 * maxSmall);
+      std::uniform_int_distribution<size_t> sizeDist(1,
+                                                     3 * maxSmall.getBytes());
       std::vector<std::pair<char*, size_t>> blocks;
       for (size_t i = 0; i < 20'000; ++i) {
         if (blocks.empty() || rng() % 3 != 0) {

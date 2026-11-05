@@ -98,8 +98,8 @@ class AllocationMemoryLeft {
   // Same as `increase`, but saturate at the maximal value instead of throwing.
   void increaseSaturating(MemorySize n) noexcept {
     size_t current = free_.load();
-    while (!free_.compare_exchange_weak(current,
-                                        saturatingAdd(current, n.getBytes()))) {
+    while (!free_.compare_exchange_weak(
+        current, saturatingAdd(MemorySize::bytes(current), n).getBytes())) {
     }
   }
 
@@ -113,10 +113,9 @@ class AllocationMemoryLeft {
   // NOTE: Neither Abseil nor the Boost libraries that we use provide a
   // saturating addition of integers, and the standard library only has one
   // since C++26 (`std::add_sat`), so we implement it ourselves.
-  static size_t saturatingAdd(size_t a, size_t b) noexcept {
-    return b > std::numeric_limits<size_t>::max() - a
-               ? std::numeric_limits<size_t>::max()
-               : a + b;
+  static constexpr MemorySize saturatingAdd(MemorySize a,
+                                            MemorySize b) noexcept {
+    return b > MemorySize::max() - a ? MemorySize::max() : a + b;
   }
 };
 }  // namespace detail
@@ -179,9 +178,9 @@ class SharedMemoryLimit {
   // counter, but not the bytes that the threads have cached. Increasing the
   // limit of an already (almost) unlimited resource while some threads have
   // cached bytes thus has to work, and so has giving those bytes back later.
-  ThreadLocalMember<size_t> threadCache_{[this](size_t& cached) {
-    memoryLeft_->increaseSaturating(MemorySize::bytes(cached));
-    cached = 0;
+  ThreadLocalMember<MemorySize> threadCache_{[this](MemorySize& cached) {
+    memoryLeft_->increaseSaturating(cached);
+    cached = MemorySize{};
   }};
 
  public:
@@ -197,25 +196,24 @@ class SharedMemoryLimit {
   // shared counter. If not enough memory is left, call the `ClearOnAllocation`
   // hook and retry once, then throw an `AllocationExceedsLimitException`.
   void reserveOrThrow(MemorySize memorySize) {
-    size_t n = memorySize.getBytes();
     // There is no cache for large allocations, and also not if the calling
     // thread is already exiting (see `ThreadLocalMember::getOrCreate`).
-    size_t* cached = memorySize <= maxCachedAllocationSize
-                         ? threadCache_.getOrCreate()
-                         : nullptr;
+    MemorySize* cached = memorySize <= maxCachedAllocationSize
+                             ? threadCache_.getOrCreate()
+                             : nullptr;
     if (cached == nullptr) {
       reserveExactlyOrThrow(memorySize);
       return;
     }
-    if (*cached >= n) {
-      *cached -= n;
+    if (*cached >= memorySize) {
+      *cached -= memorySize;
       return;
     }
-    // Refill the cache s.t. it holds `cacheRefillSize` bytes after serving
-    // this request. Note that `*cached < n` at this point.
-    if (memoryLeft_->decreaseIfEnoughLeftOrReturnFalse(
-            cacheRefillSize + MemorySize::bytes(n - *cached))) {
-      *cached = cacheRefillSize.getBytes();
+    // Refill the cache s.t. it holds `cacheRefillSize` after serving this
+    // request. Note that `*cached < memorySize` at this point.
+    if (memoryLeft_->decreaseIfEnoughLeftOrReturnFalse(cacheRefillSize +
+                                                       memorySize - *cached)) {
+      *cached = cacheRefillSize;
       return;
     }
     reserveExactlyOrThrow(memorySize);
@@ -224,36 +222,36 @@ class SharedMemoryLimit {
   // Give `n` bytes back, either to the calling thread's cache or to the shared
   // counter.
   void release(MemorySize memorySize) {
-    size_t* cached = memorySize <= maxCachedAllocationSize
-                         ? threadCache_.getIfExists()
-                         : nullptr;
+    MemorySize* cached = memorySize <= maxCachedAllocationSize
+                             ? threadCache_.getIfExists()
+                             : nullptr;
     if (cached == nullptr) {
       memoryLeft_->increase(memorySize);
       return;
     }
-    *cached += memorySize.getBytes();
-    if (*cached > maxCachedBytes.getBytes()) {
-      memoryLeft_->increase(MemorySize::bytes(*cached) - cacheRefillSize);
-      *cached = cacheRefillSize.getBytes();
+    *cached += memorySize;
+    if (*cached > maxCachedBytes) {
+      memoryLeft_->increase(*cached - cacheRefillSize);
+      *cached = cacheRefillSize;
     }
   }
 
   // Return the bytes that the calling thread has cached to the shared counter.
   void flushThreadCache() noexcept {
-    if (size_t* cached = threadCache_.getIfExists()) {
-      memoryLeft_->increaseSaturating(MemorySize::bytes(*cached));
-      *cached = 0;
+    if (MemorySize* cached = threadCache_.getIfExists()) {
+      memoryLeft_->increaseSaturating(*cached);
+      *cached = MemorySize{};
     }
   }
 
   // Return the amount of memory still available. This includes the bytes that
   // the calling thread has cached, but not those cached by other threads.
   [[nodiscard]] MemorySize amountMemoryLeft() const {
-    size_t result = memoryLeft_->amountMemoryLeft().getBytes();
-    if (const size_t* cached = threadCache_.getIfExists()) {
+    MemorySize result = memoryLeft_->amountMemoryLeft();
+    if (const MemorySize* cached = threadCache_.getIfExists()) {
       result = AllocationMemoryLeft::saturatingAdd(result, *cached);
     }
-    return MemorySize::bytes(result);
+    return result;
   }
 
   // Return the shared counter.
