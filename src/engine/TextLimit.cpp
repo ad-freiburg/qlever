@@ -4,6 +4,9 @@
 
 #include "engine/TextLimit.h"
 
+#include "index/IdTableUtils.h"
+#include "util/ChunkedForLoop.h"
+
 // _____________________________________________________________________________
 TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
                      std::shared_ptr<QueryExecutionTree> child,
@@ -29,7 +32,7 @@ Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
 
-  IdTable idTable = childRes->cloneIdTable();
+  IdTable idTable = childRes->cloneIdTable(cancellationChecker());
 
   // TODO<joka921> Let the SORT class handle this. This requires descending
   // sorting for positive integers though.
@@ -66,14 +69,16 @@ Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
     return 0;
   };
 
-  ql::ranges::sort(idTable, [this, compareScores, compareEntities](
-                                const auto& lhs, const auto& rhs) {
-    return compareEntities(lhs, rhs) == 1 ||
-           (compareEntities(lhs, rhs) == 0 &&
-            (compareScores(lhs, rhs) == 1 ||
-             (compareScores(lhs, rhs) == 0 &&
-              (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
-  });
+  IdTableUtils::sort<0>(
+      &idTable,
+      [this, compareScores, compareEntities](const auto& lhs, const auto& rhs) {
+        return compareEntities(lhs, rhs) == 1 ||
+               (compareEntities(lhs, rhs) == 0 &&
+                (compareScores(lhs, rhs) == 1 ||
+                 (compareScores(lhs, rhs) == 0 &&
+                  (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
+      },
+      sortConfig());
 
   // Go through the table and add the first n texts for each
   // entity to a new empty table (where n is the limit).
@@ -82,40 +87,46 @@ Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
   size_t currentEntityIndex = 0;
   size_t currentEntityCount = 0;
   bool lastRecordAdded = false;
-  for (size_t i = 0; i < idTable.numRows(); ++i) {
-    if (i == 0) {
-      resIdTable.push_back(idTable[i]);
-      lastRecordAdded = true;
-      currentEntityCount = 1;
-      continue;  // handle first row separately to avoid out of bounds access
-    }
-    if (compareEntities(idTable[i], idTable[currentEntityIndex]) != 0) {
-      // Case: new entity.
-      currentEntityIndex = i;
-      currentEntityCount = 1;
-    } else if (idTable[i][textRecordColumn_] !=
-               idTable[i - 1][textRecordColumn_]) {
-      // Case: new text record.
-      if (currentEntityCount >= limit_) {
-        // Case: new text record and reached the limit.
-        // If we reached the limit we do not add the row to the result table.
-        lastRecordAdded = false;
-        continue;
-      } else {
-        // Case: new text record but limit not reached yet.
-        ++currentEntityCount;
-      }
-    } else if (!lastRecordAdded) {
-      // Case: the text record is the same as the last one but we didn't add
-      // the last one to the result table because we reached the limit.
-      // So we do not add this row to the result table either.
-      continue;
-    }
-    // If the we don't have a new text record we don't have to increase the
-    // counter but we still add the row to the result table.
-    resIdTable.push_back(idTable[i]);
-    lastRecordAdded = true;
-  }
+  ad_utility::chunkedForLoop<ad_utility::CANCELLATION_CHECK_CHUNK_SIZE>(
+      0, idTable.numRows(),
+      [this, &idTable, &resIdTable, &compareEntities, &currentEntityIndex,
+       &currentEntityCount, &lastRecordAdded](size_t i) {
+        if (i == 0) {
+          resIdTable.push_back(idTable[i]);
+          lastRecordAdded = true;
+          currentEntityCount = 1;
+          // Handle the first row separately to avoid out of bounds access.
+          return;
+        }
+        if (compareEntities(idTable[i], idTable[currentEntityIndex]) != 0) {
+          // Case: new entity.
+          currentEntityIndex = i;
+          currentEntityCount = 1;
+        } else if (idTable[i][textRecordColumn_] !=
+                   idTable[i - 1][textRecordColumn_]) {
+          // Case: new text record.
+          if (currentEntityCount >= limit_) {
+            // Case: new text record and reached the limit.
+            // If we reached the limit we do not add the row to the result
+            // table.
+            lastRecordAdded = false;
+            return;
+          } else {
+            // Case: new text record but limit not reached yet.
+            ++currentEntityCount;
+          }
+        } else if (!lastRecordAdded) {
+          // Case: the text record is the same as the last one but we didn't
+          // add the last one to the result table because we reached the limit.
+          // So we do not add this row to the result table either.
+          return;
+        }
+        // If the we don't have a new text record we don't have to increase the
+        // counter but we still add the row to the result table.
+        resIdTable.push_back(idTable[i]);
+        lastRecordAdded = true;
+      },
+      cancellationChecker());
 
   return {std::move(resIdTable), resultSortedOn(),
           childRes->getSharedLocalVocab()};

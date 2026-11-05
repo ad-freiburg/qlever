@@ -33,6 +33,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/GeoPointEncoding.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
@@ -92,6 +93,15 @@ struct CommonConfig {
   // each literal, a triple `<literal> ql:has-word "word"` is added for each
   // word in the literal. This is useful for keyword search in literals.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples, see `ad_utility::HasWordNormalization`.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
+
+  // If not empty, only add the `ql:has-word` triples for literals that are the
+  // object of a triple with one of these predicates.
+  std::vector<std::string> hasWordRestrictPredicates_;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -277,14 +287,19 @@ struct EngineConfig : CommonConfig {
   // separately).
   bool doNotLoadPermutations_ = false;
 
-  // QLever doesn't use a cancelable sorting algorithm, but before starting a
-  // sort estimates whether the sort will time out. To do so, on index load it
-  // sorts some `IdTable`s to measure the time that sorting takes on the
-  // concrete machine. This step can take some time and can be disabled by
-  // setting this flag to `false`. In that case, sort operations are always
-  // started and run to completion (unless the query times out or is canceled
-  // before the sort operation starts).
-  bool computeSortPerformanceEstimators_ = true;
+  // If set, load the vocabulary and the named result cache from the
+  // compressed blob in this file instead of loading the index from the files
+  // with the `baseName_`. The blob is written by
+  // `Qlever::serializeVocabAndNamedCacheToCompressedBlob` and read by
+  // `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`.
+  //
+  // NOTE: The blob contains no permutations, so such an instance can only
+  // answer queries that read from the named result cache (via `SERVICE
+  // ql:cached-result-with-name-...`) or that need no triples at all. It does
+  // not support updates, materialized views, or index rebuilds. Hence
+  // `persistUpdates_`, `loadTextIndex_`, `rebuildIndexStrategy_`, and
+  // `preloadMaterializedViews_` must not be set (see `validate`).
+  std::optional<std::string> compressedBlobFilename_;
 
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
@@ -307,6 +322,11 @@ struct EngineConfig : CommonConfig {
   // via the `index-description` and `text-description` API commands.
   std::optional<std::string> indexDescription_;
   std::optional<std::string> textDescription_;
+
+  // Throw if the given configuration is invalid, in particular if
+  // `compressedBlobFilename_` is combined with an option that a `Qlever`
+  // instance that is loaded from a blob does not support.
+  void validate() const;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
@@ -356,12 +376,10 @@ class Qlever {
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work, see `executor()`.
   qlever::Executor executor_;
-  SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
-  using TimeLimit = std::chrono::milliseconds;
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
   // Handles the (de)serialization of the vocabulary and the `NamedResultCache`
@@ -372,25 +390,36 @@ class Qlever {
   NamedCachedQueryBlobManager blobManager_;
   friend class NamedCachedQueryBlobManager;
 
+  // True if this instance was populated from the blob file given by
+  // `EngineConfig::compressedBlobFilename_`, see `isLoadedFromBlob`.
+  bool loadedFromBlob_ = false;
+
   FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
+
+  // Throw if `isLoadedFromBlob()`, with a message that says that the given
+  // `operation` is not supported for such an instance.
+  void throwIfLoadedFromBlob(std::string_view operation) const;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
 
   // Create a QLever instance for querying using an `EngineConfig` as
-  // explained above. If `skipLoading` is true, no index is loaded from disk
-  // (in particular, none of the on-disk index files, not even the vocabulary
-  // or the `.meta-data.json`, need to exist); the instance must then be
-  // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
-  // before it can answer queries. The memory limit from `config` is enforced
-  // and cache eviction is wired into the allocator. The queries and index
-  // rebuilds of this instance run their parallel work on the `executor`.
+  // explained above. The memory limit from `config` is enforced and cache
+  // eviction is wired into the allocator. The queries and index rebuilds of
+  // this instance run their parallel work on the `executor`.
+  //
+  // If `skipLoading` is true, no index is loaded from disk (in particular,
+  // none of the on-disk index files, not even the vocabulary or the
+  // `.meta-data.json`, need to exist); the instance must then be populated
+  // from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob` before
+  // it can answer queries. If `config.compressedBlobFilename_` is set, the
+  // instance is populated from that blob file instead of from the on-disk
+  // index, independent of `skipLoading`.
   //
   // NOTE: Neither this constructor nor the computation of a query must be
   // called from a thread of the `executor`, because they block while waiting
-  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`, which
-  // also run when the sort performance estimates are computed here).
+  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`).
   explicit Qlever(const EngineConfig& config, bool skipLoading = false,
                   qlever::Executor executor = ad_utility::globalExecutor());
 
@@ -405,6 +434,13 @@ class Qlever {
   // `createQueryExecutionContext`).
   const qlever::Executor& executor() const { return executor_; }
 
+  // Return true if this instance was populated from the blob file given by
+  // `EngineConfig::compressedBlobFilename_`. Such an instance has no
+  // permutations and no files on disk, so `applyUpdate`,
+  // `vacuumDeltaTriples`, `writeMaterializedView`, `loadMaterializedView`,
+  // `deleteMaterializedView`, and `rebuildIndexToDisk` throw.
+  bool isLoadedFromBlob() const { return loadedFromBlob_; }
+
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see
   // ParsedQuery::hasUpdateClause()); this function handles both cases
@@ -415,17 +451,9 @@ class Qlever {
   // `timeQueryPlanning`. This information can be accessed via the
   // query execution tree's root operation.
   //
-  // TODO<joka921,damekt> The `timeLimit` is currently only used for
-  // non-cancelable operations (in particular sorting). The time limit applies
-  // from the time this function is called until the execution of the query
-  // has finished. This might be very unintuitive when the `PlannedQuery` is
-  // stored for later execution. This is not an issue for now (only the
-  // `Server` actually imposes time limits and then executes the queries right
-  // away), but should be addressed in the future once the timeout management
-  // also is moved into the `QLever` class.
+  // The query planning and the execution use the cancellation handle of the
+  // `qec` (see `QueryExecutionContext::cancellationHandle`).
   PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle,
-                         std::optional<TimeLimit> timeLimit,
                          boost::optional<const ad_utility::Timer&>
                              requestTimer = boost::none) const;
 
@@ -434,15 +462,10 @@ class Qlever {
   // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
   // out of sync. Implemented in terms of the `planQuery` overload above.
   //
-  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
-  // `planQuery` above.
-  PlannedQuery planQuery(
-      ParsedQueryAndContext parsedQuery,
-      SharedCancellationHandle handle =
-          std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
-      boost::optional<const ad_utility::Timer&> requestTimer =
-          boost::none) const;
+  // For the semantics of `requestTimer`, see `planQuery` above.
+  PlannedQuery planQuery(ParsedQueryAndContext parsedQuery,
+                         boost::optional<const ad_utility::Timer&>
+                             requestTimer = boost::none) const;
 
   // Parse the given `query` (despite the name, `query` may also be a SPARQL
   // update operation) and return it together with the
@@ -466,10 +489,15 @@ class Qlever {
   // `IndexBuilderConfig::prefixesForIdEncodedIris_`. If the
   // `EncodedIriManager`s differ, the affected IRIs are silently misinterpreted,
   // so this has to be ensured by the caller.
+  //
+  // The planning and the execution of the query can be cancelled via `handle`,
+  // which is stored in the `QueryExecutionContext`.
   ParsedQueryAndContext parseQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       std::function<void(std::string)> updateCallback = ad_utility::noop,
-      bool pinSubtrees = false, bool pinResult = false) const;
+      bool pinSubtrees = false, bool pinResult = false,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>()) const;
 
   // Bundle an already-parsed query with a fresh `QueryExecutionContext` of this
   // instance, so that it can be planned here. Together with `parseQuery` this
@@ -478,10 +506,14 @@ class Qlever {
   // PRECONDITION: `parsedQuery` must have been parsed with a context whose
   // `EncodedIriManager` is equivalent to this instance's; see the note on
   // reusing a parsed query in `parseQuery` above. This is not checked.
+  //
+  // For the semantics of `handle`, see `parseQuery` above.
   ParsedQueryAndContext bindParsedQuery(
       ParsedQuery parsedQuery,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
-      bool pinSubtrees = false, bool pinResult = false) const;
+      bool pinSubtrees = false, bool pinResult = false,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>()) const;
 
   // Parse and plan the given `query` (see `planQuery` above; despite the
   // name, `query` may also be a SPARQL update operation). This is exactly
@@ -497,20 +529,10 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  //
-  // TODO<joka921,damekt> The `timeLimit` is currently only used for
-  // non-cancelable operations (in particular sorting). The time limit applies
-  // from the time this function is called until the execution of the query
-  // has finished. This might be very unintuitive when the `PlannedQuery` is
-  // stored for later execution. This is not an issue for now (only the
-  // `Server` actually imposes time limits and then executes the queries right
-  // away), but should be addressed in the future once the timeout management
-  // also is moved into the `QLever` class.
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
@@ -596,16 +618,15 @@ class Qlever {
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
   //
-  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
-  // (see there for their exact semantics). If omitted, the query is planned
-  // and executed without a timer, without a time limit, and with a fresh,
-  // never-triggered cancellation handle, i.e. it always runs to completion.
+  // `requestTimer` and `handle` are forwarded to `planQuery` (see there for
+  // their exact semantics). If omitted, the query is planned and executed
+  // without a timer and with a fresh, never-triggered cancellation handle, i.e.
+  // it always runs to completion.
   void writeMaterializedView(
       std::string name, std::string query,
       const std::vector<DatasetClause>& datasetClauses = {},
       SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer =
           boost::none) const;
 
@@ -674,13 +695,17 @@ class Qlever {
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
   // consistent state. The `executor` is the one on which the query runs its
-  // parallel work (see `QueryExecutionContext::executor`).
+  // parallel work (see `QueryExecutionContext::executor`), and the query can
+  // be cancelled via `handle` (see
+  // `QueryExecutionContext::cancellationHandle`).
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false,
       QueryExecutionContext::DisableCaching disableCaching =
-          QueryExecutionContext::DisableCaching::FromRuntimeParameter) const;
+          QueryExecutionContext::DisableCaching::FromRuntimeParameter,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>()) const;
 
   // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
   // under a single read lock, so that all code paths handling a single request
@@ -846,13 +871,6 @@ class Qlever {
 
   Allocator<Id>& allocator() { return allocator_; }
   const Allocator<Id>& allocator() const { return allocator_; }
-
-  SortPerformanceEstimator& sortPerformanceEstimator() {
-    return sortPerformanceEstimator_;
-  }
-  const SortPerformanceEstimator& sortPerformanceEstimator() const {
-    return sortPerformanceEstimator_;
-  }
 
   NamedResultCache& namedResultCache() { return namedResultCache_; }
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }

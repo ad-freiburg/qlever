@@ -84,18 +84,18 @@ int main(int argc, char** argv) {
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
-  add("memory-max-size,m",
-      po::value<ad_utility::MemorySize>()
-          ->default_value(DEFAULT_MEM_FOR_QUERIES)
-          ->notifier([&config](auto v) { config.memoryLimit_ = v; }),
+  add("memory-for-queries,m",
+      optionFactory.getProgramOption<&RuntimeParameters::memoryForQueries_>(),
       "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
-      "an error, but the engine will not crash.");
+      "an error, but the engine will not crash. Can be changed at runtime "
+      "via the runtime parameter of the same name, where a decrease is "
+      "only possible if the freed part is currently unused.");
   add("cache-max-size,c",
       optionFactory.getProgramOption<&RuntimeParameters::cacheMaxSize_>(),
       "Maximum memory size for all cache entries (pinned and "
       "not pinned). Note that the cache is part of the total memory "
-      "limited by --memory-max-size.");
+      "limited by --memory-for-queries.");
   add("cache-max-size-single-entry,e",
       optionFactory
           .getProgramOption<&RuntimeParameters::cacheMaxSizeSingleEntry_>(),
@@ -179,6 +179,22 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
+  add("read-from-blob-file",
+      po::value<std::string>()->notifier([&config](const std::string& f) {
+        config.compressedBlobFilename_ = f;
+      }),
+      "Do not load the index from the files with the given index basename, but "
+      "from the compressed blob in the given file (which contains the "
+      "vocabulary and the named result cache, see "
+      "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`). This mode is "
+      "only meant for serving a fixed set of precomputed results: the blob "
+      "contains no permutations, so only queries that read from the named "
+      "result cache (`SERVICE ql:cached-result-with-name-...`) or that need no "
+      "triples at all can be answered. Updates, materialized views, and index "
+      "rebuilds are not supported, so this option cannot be combined with "
+      "`--persist-updates`, `--text`, an automatic `--rebuild-index-strategy`, "
+      "or `--preload-materialized-views`. The `--index-basename` is still "
+      "required, it determines the names of the log files.");
   add("rebuild-index-strategy",
       po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
       "When to rebuild the index from the current data (including updates). "
@@ -282,17 +298,36 @@ int main(int argc, char** argv) {
       "can also be changed while the server is running, via the API. If a "
       "parameter can also be set by one of the dedicated options above, the "
       "value given here wins.");
+  // Deprecated alias for `--memory-for-queries` (the historical name of that
+  // option), kept so that existing scripts continue to work. Deliberately not
+  // part of `options`, so it does not show up in the help message. It is
+  // applied after `po::notify` below, which sets `memory-for-queries` to its
+  // default value.
+  po::options_description deprecatedOptions;
+  deprecatedOptions.add_options()("memory-max-size",
+                                  po::value<ad_utility::MemorySize>(),
+                                  "Deprecated alias for --memory-for-queries.");
+  po::options_description allOptions;
+  allOptions.add(options).add(deprecatedOptions);
+
   po::variables_map optionsMap;
 
   try {
-    po::store(po::parse_command_line(argc, argv, options), optionsMap);
+    po::store(po::parse_command_line(argc, argv, allOptions), optionsMap);
+    if (optionsMap.count("memory-max-size") &&
+        !optionsMap["memory-for-queries"].defaulted()) {
+      throw std::runtime_error{
+          "Specify either --memory-for-queries or its deprecated alias "
+          "--memory-max-size, but not both"};
+    }
     if (optionsMap.count("set-runtime-parameter") &&
         ad_utility::contains(
             optionsMap["set-runtime-parameter"].as<std::vector<std::string>>(),
-            "help")) {
+            std::string_view{"help"})) {
       std::cout << "Available runtime parameters and their default values:\n";
       auto parameters = globalRuntimeParameters.rlock()->toMap();
-      for (const auto& name : globalRuntimeParameters.rlock()->getKeys()) {
+      auto keys = globalRuntimeParameters.rlock()->getKeys();
+      for (const auto& name : keys) {
         std::cout << "  " << name << " = " << parameters.at(name) << '\n';
       }
       return EXIT_SUCCESS;
@@ -306,6 +341,13 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
+    if (optionsMap.count("memory-max-size")) {
+      AD_LOG_WARN << "The option --memory-max-size is deprecated, use "
+                     "--memory-for-queries instead"
+                  << std::endl;
+      setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(
+          optionsMap["memory-max-size"].as<ad_utility::MemorySize>());
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
@@ -333,6 +375,12 @@ int main(int argc, char** argv) {
     AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
                 << std::endl;
   }
+
+  // The memory limit is bound to the runtime parameter `memory-for-queries`
+  // (settable via `-m` and `--set-runtime-parameter` alike), from which the
+  // engine constructs its allocator.
+  config.memoryLimit_ =
+      getRuntimeParameter<&RuntimeParameters::memoryForQueries_>();
 
   // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
   // environment. We do this eagerly so that a malformed proxy URL fails the

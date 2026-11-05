@@ -24,14 +24,15 @@ namespace net = boost::asio;
 namespace detail {
 // Call `function()`. If this call doesn't throw, call the handler with
 // `std::exception_ptr{}` and, unless `Value` is `void`, the result of the call.
-// Else call it with `std::current_exception()` and, unless `Value` is `void`, a
-// default-constructed `Value` (see the NOTE at `runFunctionOnExecutor` below
-// for why that value has to be passed at all). The function is called directly,
-// but the invocation of the handler is posted to the associated executor of the
-// `handler`, or to the `executor` if no such associated executor exists.
-CPP_template(typename Executor, typename Function,
-             typename Handler)(requires ql::concepts::invocable<
-                               Function>) struct CallFunctionAndPassToHandler {
+// Else call it with the `std::exception_ptr` of the thrown exception and,
+// unless `Value` is `void`, a default-constructed `Value` (see the NOTE at
+// `runFunctionOnExecutor` below for why that value has to be passed at all).
+// The function is called directly, but the invocation of the handler is posted
+// to the associated executor of the `handler`, or to the `executor` if no such
+// associated executor exists.
+CPP_template(typename Executor, typename Function, typename Handler)(
+    requires ql::concepts::invocable<Function>)
+struct CallFunctionAndPassToHandler {
   Executor executor_;
   Function function_;
   Handler handler_;
@@ -51,6 +52,7 @@ CPP_template(typename Executor, typename Function,
       };
       net::post(net::bind_executor(handlerExec, std::move(doCall)));
     };
+    std::exception_ptr exception;
     try {
       // If `function_()` throws no exception, we have no
       // exception_ptr and the return value as the second argument.
@@ -60,27 +62,40 @@ CPP_template(typename Executor, typename Function,
       } else {
         callHandler(std::exception_ptr{}, function_());
       }
+      return;
     } catch (...) {
-      // If `function_()` throws, we propagate the exception to the
-      // handler, and have no return value.
-      if constexpr (isVoid) {
-        callHandler(std::current_exception());
-      } else {
-        // Unfortunately we need to pass a `Value{}` even in the case of an
-        // error. This is due to a limitation in Boost::Asio.
-        callHandler(std::current_exception(), Value{});
-      }
+      exception = std::current_exception();
+    }
+    // If `function_()` throws, we propagate the exception to the handler, and
+    // have no return value. The handler is posted only after the `catch` block
+    // has been left, so that this thread holds no reference to the exception
+    // anymore when the handler runs.
+    //
+    // NOTE: Otherwise, the handler could run on another thread, read the
+    // exception and release its reference while this thread still holds the
+    // reference of the `catch` block, so that this thread would free the
+    // exception when leaving the block.
+    //
+    // That is correct, but the reference count is maintained inside
+    // `libstdc++`, which is not instrumented, so ThreadSanitizer reports the
+    // freeing as a data race (see the entry for `exception_ptr::_M_release` in
+    // `misc/tsan-suppressions.txt`, which does not match this case).
+    if constexpr (isVoid) {
+      callHandler(std::move(exception));
+    } else {
+      // Unfortunately we need to pass a `Value{}` even in the case of an
+      // error. This is due to a limitation in Boost::Asio.
+      callHandler(std::move(exception), Value{});
     }
   }
 };
 // Explicit deduction guides, we need objects and not references as the template
 // parameters.
 CPP_template(typename Executor, typename Function, typename Handler)(
-    requires ql::concepts::invocable<std::decay_t<Function>>)
-    CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
-        -> CallFunctionAndPassToHandler<std::decay_t<Executor>,
-                                        std::decay_t<Function>,
-                                        std::decay_t<Handler>>;
+            requires ql::concepts::invocable<std::decay_t<Function>>)
+CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
+    -> CallFunctionAndPassToHandler<
+        std::decay_t<Executor>, std::decay_t<Function>, std::decay_t<Handler>>;
 }  // namespace detail
 
 // Run the `function` on the `executor` (e.g. a strand for synchronization or
@@ -97,13 +112,11 @@ CPP_template(typename Executor, typename Function, typename Handler)(
 // currently require, so the handler has to be called with a `Value` even on the
 // error path, where there is no result to report.
 CPP_template(typename Executor, typename CompletionToken, typename Function)(
-    requires ql::concepts::invocable<Function> CPP_and(
-        std::is_default_constructible_v<std::invoke_result_t<Function>> ||
-        std::is_void_v<std::invoke_result_t<
-            Function>>)) auto runFunctionOnExecutor(Executor executor,
-                                                    Function function,
-                                                    CompletionToken&&
-                                                        completionToken) {
+    requires ql::concepts::invocable<Function> &&
+    (std::is_default_constructible_v<std::invoke_result_t<Function>> ||
+     std::is_void_v<std::invoke_result_t<Function>>))
+auto runFunctionOnExecutor(Executor executor, Function function,
+                           CompletionToken&& completionToken) {
   using Value = std::invoke_result_t<Function>;
   static constexpr bool isVoid = std::is_void_v<Value>;
 
