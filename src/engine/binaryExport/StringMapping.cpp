@@ -10,11 +10,14 @@
 
 #include "engine/binaryExport/StringMapping.h"
 
+#include <stdexcept>
 #include <utility>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
+#include "index/TripleComponentConversions.h"
+#include "parser/TripleComponent.h"
 
 namespace qlever::binary_export {
 
@@ -71,11 +74,37 @@ Id StringMapping::remapId(Id id) {
     AD_CORRECTNESS_CHECK(strings_.size() == stringMapping_.size());
   }
 
-  // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
-  // are all zero and then performs a right shift. We have to shift the
-  // `distinctIndex` left by the same amount to counter this effect.
-  return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
-      distinctIndex << Id::numDatatypeBits));
+  return makeTransmittedId(distinctIndex);
+}
+
+// _____________________________________________________________________________
+TransmittedStrings::TransmittedStrings(std::vector<std::string> strings,
+                                       const Index& index,
+                                       LocalVocab& localVocab) {
+  ids_.reserve(strings.size());
+  for (auto& string : strings) {
+    ids_.push_back(stringToLocalId(std::move(string), index, localVocab));
+  }
+}
+
+// _____________________________________________________________________________
+Id TransmittedStrings::operator()(Id id) const {
+  auto index = StringMapping::getTransmittedIndex(id);
+  if (index >= ids_.size()) {
+    throw std::runtime_error{
+        "The result in QLever's binary export format refers to a string that "
+        "was not transmitted"};
+  }
+  return ids_[index];
+}
+
+// _____________________________________________________________________________
+Id stringToLocalId(std::string representation, const Index& index,
+                   LocalVocab& localVocab) {
+  TripleComponent tripleComponent{
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          std::move(representation))};
+  return toValueId(std::move(tripleComponent), index.getImpl(), localVocab);
 }
 
 }  // namespace qlever::binary_export
