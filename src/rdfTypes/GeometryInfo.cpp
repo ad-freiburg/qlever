@@ -156,7 +156,8 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
     info.serializationType_ = SerializationType::WKT;
   }
   // Before version 7, the WKT type was in the upper 4 bits of the centroid,
-  // which had 60 bits (only the legacy layout can read these versions).
+  // which had 60 bits. An index with the split layout never has these
+  // versions, because it is always built with 64-bit points.
   if (version < 7) {
     constexpr uint64_t numOldCentroidBits = 60;
     info.wktType_ = static_cast<uint8_t>(info.centroid_ >> numOldCentroidBits);

@@ -220,12 +220,9 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
-// 7: The WKT type is no longer in the upper 4 bits of the centroid, but in its
-//    own field `wktType_`, the byte 31, which was the upper byte of the 16-bit
-//    `serializationType_` (always zero before). The points (the centroid and
-//    the corners of the bounding box) use `GeoPoint::numDataBits`, which is 64
-//    with the split layout of an `Id`. This change violates the rules below,
-//    `fromSerialized` converts the records of the versions 5 and 6.
+// 7: The WKT type is its own field `wktType_` (the former upper byte of
+//    `serializationType_`) instead of the upper 4 bits of the centroid, so the
+//    points can use `GeoPoint::numDataBits`. `fromSerialized` converts 5 and 6.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -254,18 +251,12 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //   and remove the handling of the dropped versions from `fromSerialized` and
 //   `GEOMETRY_INFO_SIZE_PER_VERSION`.
 constexpr uint64_t GEOMETRY_INFO_VERSION = 7;
-#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
-// The points of the versions before 7 have 60 bits, which the split layout
-// cannot decode. An index with the split layout never has these versions.
-constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 7;
-#else
 constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 5;
-#endif
 
-// The size of the binary representation of `GeometryInfo` for each version,
-// starting at version 5 (the oldest version that can be read with the legacy
-// layout).
-inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION - 5 + 1>
+// The size of the binary representation of `GeometryInfo` for each loadable
+// version, starting at `MIN_LOADABLE_GEOMETRY_INFO_VERSION`.
+inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION -
+                                        MIN_LOADABLE_GEOMETRY_INFO_VERSION + 1>
     GEOMETRY_INFO_SIZE_PER_VERSION{48, 48, 48};
 
 // Return true iff a `GeometryInfo` of the given `version` can be read.
@@ -277,7 +268,8 @@ constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
 // The size of the binary representation of `GeometryInfo` for the given
 // loadable `version`.
 constexpr size_t geometryInfoSize(uint64_t version) {
-  return GEOMETRY_INFO_SIZE_PER_VERSION.at(version - 5);
+  return GEOMETRY_INFO_SIZE_PER_VERSION.at(version -
+                                           MIN_LOADABLE_GEOMETRY_INFO_VERSION);
 }
 
 // A geometry info object holds precomputed details on WKT literals.

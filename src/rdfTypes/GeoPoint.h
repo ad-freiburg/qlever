@@ -70,10 +70,9 @@ class GeoPoint {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }
 
-  // A GeoPoint stores two values (lat and lng), each quantized to
-  // `numDataBitsCoordinate` bits. How the two values are arranged in the
-  // `numDataBits` depends on the encoding (see `GeoPointEncodingEnum` and
-  // `encoding()` below). The numbers below are those of the legacy layout:
+  // A GeoPoint stores two values (lat and lng), each quantized to 30 bits.
+  // How the two 30-bit values are arranged in the 60 data bits depends on the
+  // encoding (see `GeoPointEncodingEnum` and `encoding()` below):
   //
   // `ZOrder`: The bits are interleaved (Morton or Z-order code): bit `i` of the
   // latitude sits at position `2 * i + 1`, bit `i` of the longitude at
@@ -87,9 +86,9 @@ class GeoPoint {
   // of the 60 bits. A geographic rectangle then only maps to one range per
   // quantized latitude, or, as a single range, to the whole latitude band.
   //
-  // The bit representation uses the whole payload of an `Id`: 60 bits with the
-  // legacy layout (30 per coordinate, a few centimeters), 64 bits with the
-  // split layout (32 per coordinate, a few millimeters).
+  // The numbers above are those of the legacy layout. With the split layout,
+  // the bit representation uses the whole 64-bit payload of an `Id` (32 bits
+  // per coordinate).
 #ifdef QLEVER_USE_ID_SPLIT_LAYOUT
   static constexpr T numDataBits = 64;
 #else

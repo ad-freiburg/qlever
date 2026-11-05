@@ -293,9 +293,8 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 }
 
 // Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
-// content, is read with the source CRS zeroed, the serialization type `WKT`,
-// and the WKT type from the upper 4 bits of the centroid. Only the legacy
-// layout can read version 5.
+// content, is read with the source CRS zeroed and the serialization type `WKT`.
+// Version 5 only has 60-bit points, so this only works with the legacy layout.
 #ifndef QLEVER_USE_ID_SPLIT_LAYOUT
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
@@ -317,10 +316,9 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     ww->finish();
   }
 
-  // Turn the geoinfo file into one of version 5: the current version has the
-  // same record size, but in version 5, the WKT type (now the byte 31) is in
-  // the upper 4 bits of the centroid (the bytes `[16, 24)`), and the bytes
-  // `[28, 32)` of a valid record could contain arbitrary content.
+  // Turn the geoinfo file into one of version 5: the version 6 has the same
+  // record size, but in version 5, the bytes `[28, 32)` of a valid record could
+  // contain arbitrary content.
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
   std::string contents;
   {
@@ -336,6 +334,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     auto record = contents.begin() + sizeof(uint64_t) + i * recordSize;
     if (std::any_of(record, record + recordSize,
                     [](char c) { return c != 0; })) {
+      // Before version 7, the WKT type (now the byte 31) was in the upper 4
+      // bits of the centroid (the bytes `[16, 24)`).
       uint64_t centroid;
       std::memcpy(&centroid, &*(record + 16), sizeof(centroid));
       centroid |= uint64_t{static_cast<uint8_t>(record[31])} << 60;
@@ -348,9 +348,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     out << contents;
   }
 
-  // Read the version 5 file. The source CRS must be "not computed" (the bytes
-  // `[28, 30)` zero), the serialization type `WKT`, and the rest the same as
-  // in the current version.
+  // Read the version 5 file. The fields in the bytes `[28, 31)` must be zero:
+  // the source CRS "not computed" and the serialization type `WKT`.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
@@ -362,9 +361,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
       EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
       EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
       auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
-      std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 30, 0);
+      std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 31, 0);
       EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
-      EXPECT_EQ(actual.value().getWktType(), expected.value().getWktType());
     }
   }
 }
