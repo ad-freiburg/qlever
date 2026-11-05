@@ -317,6 +317,14 @@ TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
   EXPECT_ANY_THROW(vocab->lookupBatch(indices));
 }
 
+// Test that `lookupBatch` on a vocabulary that was never opened fails with a
+// contract violation that names `open()`.
+TEST(VocabularyOnDisk, LookupBatchRequiresOpen) {
+  const VocabularyOnDisk vocab;
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(std::vector<size_t>{0}),
+                               ::testing::HasSubstr("open()"));
+}
+
 // Each batch yielded by `lookupBatchesStreamed` must equal the individual
 // `vocab[]` lookups for that batch's indices, and the batches must be yielded
 // in input order.
@@ -401,7 +409,7 @@ TEST(VocabularyOnDisk, AccessOperatorReadAhead) {
 }
 
 // Test that alternating between two vocabularies does not mix up their words
-// (a thread caches the words of only one vocabulary at a time).
+// (each vocabulary has its own read-ahead state per thread).
 TEST(VocabularyOnDisk, AccessOperatorReadAheadAlternatingVocabularies) {
   auto wordsA = makeWords(1000, "a");
   auto wordsB = makeWords(1000, "b");
@@ -434,6 +442,20 @@ TEST(VocabularyOnDisk, AccessOperatorReadAheadReusedAddress) {
   vocab.emplace(creatorB.createVocabulary(wordsB));
   ASSERT_EQ(&vocab.value(), address);
   expectLookupsYieldWords(*vocab, wordsB, stridedIndices(400, 1000, 1));
+}
+
+// Test that the read-ahead keeps working after the vocabulary was moved, also
+// when the move happens in the middle of a sequential run of lookups.
+TEST(VocabularyOnDisk, AccessOperatorReadAheadAfterMove) {
+  auto words = makeWords(1000);
+  VocabularyCreator creator{gtestCurrentTestName()};
+  VocabularyOnDisk vocab = creator.createVocabulary(words);
+  expectLookupsYieldWords(vocab, words, stridedIndices(0, 500, 1));
+  VocabularyOnDisk moved{std::move(vocab)};
+  expectLookupsYieldWords(moved, words, stridedIndices(500, 1000, 1));
+  VocabularyOnDisk assigned;
+  assigned = std::move(moved);
+  expectLookupsYieldWords(assigned, words, stridedIndices(0, 1000, 3));
 }
 
 // Test that words above `VOCABULARY_READ_AHEAD_MAX_WORD_DATA` are read

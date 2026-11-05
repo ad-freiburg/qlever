@@ -970,6 +970,44 @@ TEST(CompressedExternalIdTable, sorterWithSerialMerge) {
   testExternalSorter<0>(NUM_COLS, 0, 1_MB, 1);
 }
 
+namespace {
+// A `SortByOSP` that records whether it was ever called from a thread other
+// than the `callingThread_`.
+struct SortByOSPInCallingThread {
+  static inline std::thread::id callingThread_;
+  static inline std::atomic<bool> otherThreadWasSeen_ = false;
+  template <typename A, typename B>
+  bool operator()(const A& a, const B& b) const {
+    if (std::this_thread::get_id() != callingThread_) {
+      otherThreadWasSeen_ = true;
+    }
+    return SortByOSP{}(a, b);
+  }
+};
+}  // namespace
+
+// With `setDoAllWorkInCallingThread`, the sorter sorts its blocks and merges
+// them in the calling thread, and yields the same result as without it.
+TEST(CompressedExternalIdTable, sorterDoAllWorkInCallingThread) {
+  using Comp = SortByOSPInCallingThread;
+  Comp::callingThread_ = std::this_thread::get_id();
+  Comp::otherThreadWasSeen_ = false;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::string filename = gtestCurrentTestName();
+  IdTable input = createRandomlyFilledIdTable(10'000, NUM_COLS);
+  ad_utility::CompressedExternalIdTableSorter<Comp, 0> sorter{
+      filename, NUM_COLS, 10_kB, ad_utility::testing::makeAllocator(), 5_kB};
+  sorter.setDoAllWorkInCallingThread();
+  sorter.pushBlock(input);
+  auto blocks = sorter.getSortedBlocks<0>();
+  auto result = idTableFromBlockGenerator(blocks);
+  ql::ranges::sort(input, SortByOSP{});
+  EXPECT_THAT(result, ::testing::ElementsAreArray(input));
+  EXPECT_FALSE(Comp::otherThreadWasSeen_);
+  // The mode can only be set before the first row is pushed.
+  EXPECT_ANY_THROW(sorter.setDoAllWorkInCallingThread());
+}
+
 // _____________________________________________________________________________
 // Regression test: a sorter may be `clear()`ed as soon as the range with its
 // sorted output has been destroyed, which is exactly what the writers of the
@@ -1495,7 +1533,8 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   const std::string warning =
       "merge phase of the external sorter can only merge 1 chunks "
       "concurrently instead of the 8 chunks";
-  EXPECT_THAT(logOutput, ::testing::HasSubstr(warning));
+  EXPECT_THAT(logOutput, ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+                             ::testing::HasSubstr(warning)));
   EXPECT_EQ(logOutput.find(warning), logOutput.rfind(warning));
   for (const auto& result : results) {
     EXPECT_EQ(result.numRows(), numRows);

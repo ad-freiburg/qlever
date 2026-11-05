@@ -29,8 +29,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanNumBlocksInFlight_);
   add(maxNumThreadsPerQuery_);
-  add(rebuildIndexScanNumThreads_);
-  add(rebuildPermutationWriterNumThreads_);
+  add(rebuildIndexMaxNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
@@ -60,7 +59,7 @@ RuntimeParameters::RuntimeParameters() {
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
-  add(sparqlResultsJsonWithTime_);
+  add(sparqlResultsJsonWithMeta_);
   add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
