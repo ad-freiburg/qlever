@@ -29,10 +29,10 @@
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/IdTableUtils.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
@@ -413,7 +413,9 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
       [&distinctEstimators](IdTableStatic<0>& block) -> IdTableStatic<0> {
     for (size_t col = 1; col <= distinctEstimators.size(); ++col) {
       for (Id id : block.getColumn(col)) {
-        distinctEstimators[col - 1].add(id.getBits());
+        // Hash the bits, because they are not a single 64-bit integer for every
+        // `Id` layout.
+        distinctEstimators[col - 1].add(std::hash<Id::T>{}(id.getBits()));
       }
     }
     return std::move(block);

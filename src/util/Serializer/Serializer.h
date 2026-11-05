@@ -196,6 +196,15 @@ void operator>>(S& serializer, T&& t) {
   serializer | t;
 }
 
+// Read a value of type `T` from the `serializer` and return it. `T` has to be
+// default-constructible.
+CPP_template(typename T, typename S)(requires ReadSerializer<S>)
+T read(S& serializer) {
+  T value;
+  serializer >> value;
+  return value;
+}
+
 /// An empty struct that isn't needed by the users of this serialization
 /// framework. It is used internally to make argument-dependent lookup work.
 struct TrivialSerializationHelperTag {};
@@ -341,6 +350,35 @@ template <typename T, typename S>
 CPP_concept SupportsZeroCopyDeserialization =
     ZeroCopyReadSerializer<S> &&
     CPP_requires_ref(supportsZeroCopyDeserialization_, T, S);
+
+// Concept for read serializers that limit the memory that is allocated while
+// reading (see `AllocationLimitedReadSerializer`). Such a serializer has a
+// member function `checkAllocation(numElements, elementSize)`, which throws if
+// allocating memory for `numElements` elements of `elementSize` bytes each is
+// not acceptable.
+template <typename S>
+CPP_requires(allocationCheckingReadSerializerRequires,
+             requires(S& s, size_t numElements,
+                      size_t elementSize)(s.checkAllocation(numElements,
+                                                            elementSize)));
+
+template <typename S>
+CPP_concept AllocationCheckingReadSerializer =
+    ReadSerializer<S> &&
+    CPP_requires_ref(allocationCheckingReadSerializerRequires, S);
+
+// Has to be called by the `serialize` functions of read serializers before
+// they allocate memory for `numElements` elements of `elementSize` bytes each,
+// the number of which was read from the `serializer` (like the size of a
+// `std::vector`). This protects against allocating huge amounts of memory for
+// invalid input. It is a no-op unless `S` is an
+// `AllocationCheckingReadSerializer`.
+CPP_template(typename S)(requires ReadSerializer<S>)
+void checkAllocation(S& serializer, size_t numElements, size_t elementSize) {
+  if constexpr (AllocationCheckingReadSerializer<S>) {
+    serializer.checkAllocation(numElements, elementSize);
+  }
+}
 
 // Align the current write position to the alignment requirement of type `T`.
 // This adds padding bytes (zeros) if necessary. If the serializer does not use
