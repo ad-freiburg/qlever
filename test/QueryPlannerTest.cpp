@@ -2038,8 +2038,8 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
 TEST(QueryPlanner, substituteConstantVariables) {
   auto scan = h::IndexScanFromStrings;
 
-  // A `VALUES` clause with a single row also fixes a variable predicate, and
-  // its position in the group does not matter.
+  // A `VALUES` clause with a single row also fixes a variable predicate, also
+  // in a triple before it.
   h::expect("SELECT * { ?x ?p ?o VALUES (?x ?p) { (<a> <p>) } }",
             h::CartesianProductJoin(
                 scan("<a>", "<p>", "?o"),
@@ -2067,6 +2067,20 @@ TEST(QueryPlanner, substituteConstantVariables) {
   h::expect("SELECT * { VALUES ?x { <a> } MINUS { ?x <p> ?o } }",
             h::Minus(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) }")),
                      scan("?x", "<p>", "?o")));
+
+  // A triple before an `OPTIONAL`, `MINUS` or `BIND` is not fixed by a
+  // `VALUES` clause after it, so these are still connected to the triple.
+  auto values = h::ValuesClause("VALUES (?x) { (<a>) }");
+  h::expect(
+      "SELECT * { ?x <p> ?o OPTIONAL { ?x <q> ?z } VALUES ?x { <a> } }",
+      h::Join(h::OptionalJoin(scan("?x", "<p>", "?o"), scan("?x", "<q>", "?z")),
+              h::Sort(values)));
+  h::expect("SELECT * { ?x <p> ?o MINUS { ?x <q> ?z } VALUES ?x { <a> } }",
+            h::Join(h::Minus(scan("?x", "<p>", "?o"), scan("?x", "<q>", "?z")),
+                    h::Sort(values)));
+  h::expect("SELECT * { ?x <p> ?o BIND(?x AS ?y) VALUES ?x { <a> } }",
+            h::Join(h::Bind(scan("?x", "<p>", "?o"), "?x", Variable{"?y"}),
+                    h::Sort(values)));
 
   // A triple with a special predicate keeps its variables (a `ql:has-predicate`
   // triple with two constants can't be planned), and a variable predicate is

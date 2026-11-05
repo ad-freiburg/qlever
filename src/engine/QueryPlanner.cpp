@@ -349,33 +349,26 @@ TripleKind getTripleKind(const SparqlTriple& triple) {
 }  // namespace
 
 // _____________________________________________________________________________
-ad_utility::HashMap<Variable, TripleComponent>
-QueryPlanner::GraphPatternPlanner::getConstantVariables(
-    const ParsedQuery::GraphPattern& pattern) {
-  ad_utility::HashMap<Variable, TripleComponent> constants;
-  for (const auto& operation : pattern._graphPatterns) {
-    // A `BIND` with a constant expression.
-    if (const auto* bind = std::get_if<p::Bind>(&operation)) {
-      if (auto constant = getConstantOfBind(*bind)) {
-        constants.emplace(bind->_target, std::move(constant.value()));
-      }
-      continue;
-    }
-
-    // A `VALUES` clause with a single row, except for its `UNDEF` values.
-    const auto* values = std::get_if<p::Values>(&operation);
-    if (values == nullptr || values->_inlineValues._values.size() != 1) {
-      continue;
-    }
-    const auto& row = values->_inlineValues._values.at(0);
-    for (const auto& [variable, value] :
-         ::ranges::views::zip(values->_inlineValues._variables, row)) {
-      if (!value.isUndef()) {
-        constants.emplace(variable, value);
-      }
+void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
+  // Only a `VALUES` clause with a single row binds its variables to a single
+  // constant, except for its `UNDEF` values.
+  const auto& inlineValues = values._inlineValues;
+  if (inlineValues._values.size() != 1) {
+    return;
+  }
+  for (const auto& [variable, value] :
+       ::ranges::views::zip(inlineValues._variables, inlineValues._values[0])) {
+    if (!value.isUndef()) {
+      constants_.emplace(variable, value);
     }
   }
-  return constants;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::GraphPatternPlanner::addConstants(const p::Bind& bind) {
+  if (auto constant = getConstantOfBind(bind)) {
+    constants_.emplace(bind._target, std::move(constant.value()));
+  }
 }
 
 // _____________________________________________________________________________
@@ -3422,6 +3415,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::TransPath>) {
     return visitTransitivePath(arg);
   } else if constexpr (std::is_same_v<T, p::Values>) {
+    addConstants(arg);
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     visitGroupOptionalOrMinus(singlePlanVec(std::move(valuesPlan)));
   } else if constexpr (std::is_same_v<T, p::Service>) {
@@ -3484,8 +3478,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // the bound variables.
   v.collectAllContainedVariables(boundVariables_);
 
-  // Then collect the triples, with the variables replaced by their constants
-  // (see `substituteConstants`). Transform each triple with a property path to
+  // Then collect the triples. Transform each triple with a property path to
   // an equivalent form without property path (using `seedFromPropertyPath`).
   //
   // NOTE: The constants are not substituted at the ends of a property path (a
@@ -3494,9 +3487,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   for (const auto& triple : v._triples) {
     if (std::holds_alternative<Variable>(triple.p_) ||
         triple.getSimplePredicate().has_value()) {
-      auto substituted = triple;
-      substituteConstants(substituted);
-      candidateTriples_._triples.push_back(std::move(substituted));
+      candidateTriples_._triples.push_back(triple);
     } else {
       auto children = planner_.seedFromPropertyPath(
           triple.s_, std::get<PropertyPath>(triple.p_), triple.o_);
@@ -3525,6 +3516,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   // Assumption for now: BIND does not commute. This is always safe.
   optimizeCommutatively();
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
+  addConstants(v);
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
@@ -3827,6 +3819,12 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+  // Replace the variables of the triples by their constants (only now, as a
+  // `VALUES` clause after a triple also binds its variables, see
+  // `substituteConstants`).
+  ql::ranges::for_each(candidateTriples_._triples,
+                       [this](auto& triple) { substituteConstants(triple); });
+
   auto replacementPlans =
       planner_.createMaterializedViewJoinReplacements(candidateTriples_);
   auto tg = planner_.createTripleGraph(&candidateTriples_);

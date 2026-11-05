@@ -710,8 +710,8 @@ class QueryPlanner {
     // `fillDpTab`.
     FiltersAndOptionalSubstitutes filtersAndSubst_;
 
-    // The variables of the `rootPattern_` that are bound to a single constant,
-    // see `getConstantVariables`.
+    // The variables that are bound to a single constant by an already visited
+    // `VALUES` clause or `BIND` of the `rootPattern_`, see `addConstants`.
     ad_utility::HashMap<Variable, TripleComponent> constants_;
 
     // ________________________________________________________________________
@@ -722,17 +722,17 @@ class QueryPlanner {
           qec_{planner._qec},
           candidatePlans_{allocator()},
           filtersAndSubst_{
-              wrapFiltersWithoutSubstitutes(rootPattern->_filters)},
-          constants_{getConstantVariables(*rootPattern)} {}
+              wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
-    // Return the variables of `pattern` that are bound to a single constant by
-    // a direct child of `pattern`, which is a `VALUES` clause with a single row
-    // or a `BIND` with a constant expression, together with this constant.
+    // Add the variables that are bound to a single constant by `values` (if it
+    // has a single row) or by `bind` (if its expression is a constant) to
+    // `constants_`.
     //
-    // NOTE: Nested groups are not considered. In particular, a `VALUES` clause
-    // in an `OPTIONAL` or `MINUS` does not bind its variables in every row.
-    static ad_utility::HashMap<Variable, TripleComponent> getConstantVariables(
-        const ParsedQuery::GraphPattern& pattern);
+    // NOTE: Only the direct children of the `rootPattern_` are visited here, so
+    // nested groups are not considered. In particular, a `VALUES` clause in an
+    // `OPTIONAL` or `MINUS` does not bind its variables in every row.
+    void addConstants(const parsedQuery::Values& values);
+    void addConstants(const parsedQuery::Bind& bind);
 
     // Replace each variable of `triple` that has a constant in `constants_` by
     // this constant. The `VALUES` or `BIND` clause that binds the variable is
@@ -744,9 +744,12 @@ class QueryPlanner {
     //
     // NOTE 2: Only a triple that is evaluated by a plain index scan is changed
     // (the special predicates, e.g. `ql:has-predicate`, require variables in
-    // certain positions, see `TripleKind` in `QueryPlanner.cpp`). Using the
-    // variable of a `BIND` before the `BIND` is an error, so a `BIND` also only
-    // affects the triples after it.
+    // certain positions, see `TripleKind` in `QueryPlanner.cpp`).
+    //
+    // NOTE 3: This is called in `optimizeCommutatively`, so a constant only
+    // affects the triples that are planned together with or after its `VALUES`
+    // or `BIND`. A triple before an `OPTIONAL`, `MINUS` or `BIND` is planned
+    // before a later `VALUES` clause, so it must keep its variable for these.
     void substituteConstants(SparqlTriple& triple) const;
 
     // This function is called for each of the graph patterns that are contained
