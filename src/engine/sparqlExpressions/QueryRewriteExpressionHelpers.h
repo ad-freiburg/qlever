@@ -8,6 +8,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/TripleComponent.h"
+#include "util/HashMap.h"
 #include "util/UnitOfMeasurement.h"
 
 // This header declares utilities required during query planning for rewriting
@@ -60,6 +61,21 @@ struct De9imRelationCall : public GeoFunctionCall {
 // argument. Also implemented in `GeoExpression.cpp`.
 std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     const SparqlExpression& expr);
+
+// If `expr` has two children, one of which is a call `geof:distance(?a, ?b)`
+// (or one of the other distance functions), for example a filter
+// `geof:distance(?a, ?b) <= ?x` or `?x > geof:distance(?a, ?b)`, replace the
+// other child `?x` and the variable unit of a distance with unit by their
+// constant from `constants`, if they have one. This allows for the rewrite of
+// the filter to a `SpatialJoin` (see `getGeoDistanceFilter`). Implemented in
+// `GeoExpression.cpp`.
+//
+// NOTE: Only these positions are substituted (and not all variables in
+// arbitrary filters), because some expressions store their variable a second
+// time outside of their children (for example `PrefixRegexExpression`).
+void substituteConstantsInGeoDistanceFilter(
+    SparqlExpression& expr,
+    const ad_utility::HashMap<Variable, TripleComponent>& constants);
 
 }  // namespace sparqlExpression
 

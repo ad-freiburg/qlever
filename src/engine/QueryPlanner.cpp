@@ -64,6 +64,7 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
@@ -418,6 +419,28 @@ void QueryPlanner::GraphPatternPlanner::substituteConstants(
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
+
+  // Substitute the constants of all `VALUES` and `BIND` clauses of the group in
+  // the `geof:distance` filters, such that they can be rewritten to a
+  // `SpatialJoin`. Then clear them again, so that the triples only use the
+  // constants of the clauses visited before them, see `addConstants`.
+  //
+  // NOTE: A filter applies to the whole group, so it may also use the constant
+  // of a `BIND` after the triples (whose plan is built before the `BIND`).
+  for (const auto& child : rootPattern->_graphPatterns) {
+    child.visit([&optimizer](const auto& arg) {
+      using T = std::decay_t<decltype(arg)>;
+      if constexpr (ad_utility::SameAsAny<T, p::Values, p::Bind>) {
+        optimizer.addConstants(arg);
+      }
+    });
+  }
+  for (auto& filter : rootPattern->_filters) {
+    sparqlExpression::substituteConstantsInGeoDistanceFilter(
+        *filter.expression_.getPimpl(), optimizer.constants_);
+  }
+  optimizer.constants_.clear();
+
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
