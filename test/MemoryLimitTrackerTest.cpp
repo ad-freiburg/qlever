@@ -31,9 +31,10 @@ using ad_utility::detail::AllocationExceedsLimitException;
 using ad_utility::detail::SharedMemoryLimit;
 using Alloc = ad_utility::allocatorImpl::AllocatorWithLimit<char>;
 
-constexpr size_t maxSmall = SharedMemoryLimit::maxCachedAllocationSize;
-constexpr size_t refill = SharedMemoryLimit::cacheRefillSize;
-constexpr size_t maxCached = SharedMemoryLimit::maxCachedBytes;
+constexpr size_t maxSmall =
+    SharedMemoryLimit::maxCachedAllocationSize.getBytes();
+constexpr size_t refill = SharedMemoryLimit::cacheRefillSize.getBytes();
+constexpr size_t maxCached = SharedMemoryLimit::maxCachedBytes.getBytes();
 
 // Return `alloc.amountMemoryLeft()` as seen from a fresh thread, which has no
 // cache for the pool of `alloc`. This is the value of the shared counter.
@@ -340,7 +341,7 @@ TEST(MemoryLimitTracker, nonOwningCopyOutlivesOwner) {
     }
     nonOwning.reset();
   };
-  EXPECT_DEATH(outliveOwner(), "outlived the owner");
+  EXPECT_DEATH_IF_SUPPORTED(outliveOwner(), "outlived the owner");
 #else
   GTEST_SKIP() << "The lifetime checks are disabled in this build";
 #endif

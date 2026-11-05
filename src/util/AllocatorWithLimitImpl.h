@@ -195,8 +195,10 @@ class AllocatorWithLimit {
     return !(*this == v);
   }
 
-  // Create allocators with a fresh memory limit. The allocators share the
-  // ownership of that limit.
+  // Return an allocator with a new memory limit of `limit` (`makeLimited`), or
+  // with the maximal limit (`makeUnlimited`). The returned allocator owns the
+  // limit, and so do its copies, except for non-owning ones (see
+  // `nonOwningCopy()`).
   static AllocatorWithLimit makeUnlimited() {
     return makeLimited(MemorySize::max());
   }

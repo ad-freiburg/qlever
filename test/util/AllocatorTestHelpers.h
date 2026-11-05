@@ -5,6 +5,8 @@
 #ifndef QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H
 #define QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H
 
+#include <absl/base/no_destructor.h>
+
 #include "global/Id.h"
 #include "util/Allocator.h"
 #include "util/AllocatorWithLimit.h"
@@ -21,7 +23,7 @@ inline ad_utility::AllocatorWithLimit<Id> makeAllocator(
     // The owner is intentionally never destroyed, because non-owning copies
     // might be stored in objects with static storage duration that are
     // destroyed later.
-    static const auto* owner = new ad_utility::AllocatorWithLimit<Id>{
+    static const absl::NoDestructor<ad_utility::AllocatorWithLimit<Id>> owner{
         qlever::makeAllocatorWithLimit<Id>(memorySize)};
     return owner->nonOwningCopy();
   }
