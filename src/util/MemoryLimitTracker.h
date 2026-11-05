@@ -140,18 +140,28 @@ namespace detail {
 
 // The state that is shared by all copies of an allocator: the counter of the
 // free memory, the `ClearOnAllocation` hook, and a per-thread cache of free
-// memory.
+// memory. Small allocations (at most `maxCachedAllocationSize` bytes) are
+// served from the cache of the calling thread, so that they don't contend on
+// the shared counter.
 //
-// To avoid contention on the shared counter, small allocations (at most
-// `maxCachedAllocationSize` bytes) are served from the cache of the calling
-// thread: when that cache is empty, it reserves `cacheRefillSize` bytes at once
-// from the counter, and when deallocations make it grow beyond
-// `maxCachedBytes`, everything beyond `cacheRefillSize` is given back. Each
-// thread therefore holds at most `maxCachedBytes` of the budget that might
-// currently be unused. When an allocation fails, the calling thread's cache is
-// first returned to the counter, so small limits are still enforced exactly.
-// When a thread exits, its cache is returned to the counter, so that starting
-// and stopping threads never silently depletes a memory limit.
+// NOTE 1: An empty cache reserves `cacheRefillSize` bytes at once from the
+// counter. When deallocations make a cache grow beyond `maxCachedBytes`,
+// everything beyond `cacheRefillSize` is given back. Each thread therefore
+// holds at most `maxCachedBytes` of the budget that might currently be unused
+// and that the other threads cannot allocate.
+//
+// NOTE 2: When an allocation fails, the calling thread's cache is first
+// returned to the counter, so small limits are still enforced exactly. When a
+// thread exits, its cache is returned to the counter, so that starting and
+// stopping threads never silently depletes a memory limit.
+//
+// NOTE 3: The first small allocation of a thread via a limit, and the
+// destruction of a limit that served small allocations, lock the global
+// registry of `ThreadLocalMember`. Creating many short-lived limits that serve
+// small allocations on many threads at once is therefore expensive (32 threads
+// that each create, use once and destroy a limit in a loop need about 30
+// microseconds per limit, a single thread 60 nanoseconds). Prefer copies of a
+// long-lived allocator for small allocations.
 class SharedMemoryLimit {
  public:
   // Allocations up to this size are served from the per-thread cache.

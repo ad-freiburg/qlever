@@ -63,6 +63,12 @@ inline namespace QL_LIFETIME_CHECKS_NAMESPACE {
  * // now the total amount of memory allocated by limitedIntVec and
  * limitedStringVec may never exceed limitInBytes
  *
+ * NOTE: Prefer copies of one allocator (`as<U>()` for other types) over several
+ * allocators created from the same `memoryLeft` as above. Each of the latter
+ * has its own per-thread caches (see `detail::SharedMemoryLimit`), and when one
+ * of them is destroyed with all its copies, the bytes that other threads still
+ * have cached for it are lost from the shared counter.
+ *
  * NOTE: For `std::vector` in particular, prefer the wrapper
  * `ad_utility::VectorWithMemoryLimit` (see `VectorWithMemoryLimit.h`) over
  * using this allocator directly as in the example above: it works around a

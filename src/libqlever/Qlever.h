@@ -865,6 +865,9 @@ class Qlever {
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }
 
+  // The allocator of the query engine. It is a non-owning copy (see
+  // `nonOwningCopy()`), so neither it, nor any of its copies, nor memory
+  // allocated by them may outlive this instance.
   Allocator<Id>& allocator() { return allocator_; }
   const Allocator<Id>& allocator() const { return allocator_; }
 
