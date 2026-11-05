@@ -1730,7 +1730,10 @@ TEST(SparqlParser, Query) {
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
   expectQuery("SELECT (STDEV(?x) AS ?s) { ?x <p> ?y }",
-              m::WarningsOfParsedQuery({"`STDEV` aggregate is deprecated"}));
+              m::WarningsOfParsedQuery({"STDEV aggregate is deprecated"}));
+  // The deprecation warning is given once per query.
+  expectQuery("SELECT (STDEV(?x) AS ?s) (STDEV(?y) AS ?t) { ?x <p> ?y }",
+              m::WarningsOfParsedQuery({"STDEV aggregate is deprecated"}));
 
   // The variables of a trailing `VALUES` clause are visible in `ORDER BY` and
   // the `SELECT` clause (also with `GROUP BY`), but not in `GROUP BY` itself.

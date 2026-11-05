@@ -3280,9 +3280,13 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
 
     return makePtr(ti<GroupConcatExpression>, std::move(separator));
   } else if (functionName == "stdev") {
-    parsedQuery_.addWarning(
-        "The non-standard `STDEV` aggregate is deprecated, use the "
-        "standard-conforming `ql:stdev` instead");
+    // Warn once per query, also when `STDEV` occurs several times.
+    static constexpr std::string_view deprecationWarning =
+        "The non-standard STDEV aggregate is deprecated. Use the "
+        "standard-conforming ql:stdev instead.";
+    if (!ad_utility::contains(parsedQuery_.warnings(), deprecationWarning)) {
+      parsedQuery_.addWarning(std::string{deprecationWarning});
+    }
     return makePtr(ti<StdevExpression>);
   } else {
     AD_CORRECTNESS_CHECK(functionName == "sample");
