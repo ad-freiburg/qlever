@@ -2051,6 +2051,24 @@ TEST(QueryPlanner, substituteConstantVariables) {
                 h::Bind(h::NeutralElement(), "<a>", Variable{"?x"}),
                 scan("?s", "<p>", "<a>")));
 
+  // A constant `BIND` of a literal or a number also fixes the triples after it,
+  // and a triple may become fully constant.
+  auto p = TripleComponent::Iri::fromIriref("<p>");
+  h::expect("SELECT * { BIND(\"x\" AS ?x) ?s <p> ?x }",
+            h::CartesianProductJoin(
+                h::Bind(h::NeutralElement(), "\"x\"", Variable{"?x"}),
+                h::IndexScan(Variable{"?s"}, p,
+                             TripleComponent::Literal::fromStringRepresentation(
+                                 "\"x\""))));
+  h::expect("SELECT * { BIND(42 AS ?x) ?s <p> ?x }",
+            h::CartesianProductJoin(
+                h::Bind(h::NeutralElement(), "42", Variable{"?x"}),
+                h::IndexScan(Variable{"?s"}, p, Id::makeFromInt(42))));
+  h::expect(
+      "SELECT * { VALUES (?s ?o) { (<a> <b>) } ?s <p> ?o }",
+      h::CartesianProductJoin(h::ValuesClause("VALUES (?s\t?o) { (<a> <b>) }"),
+                              scan("<a>", "<p>", "<b>")));
+
   // A `VALUES` clause with more than one row, an `UNDEF` value, a
   // non-constant `BIND`, and a triple in a nested group are not substituted
   // (for a property path, see the `emptyPath...` tests).
