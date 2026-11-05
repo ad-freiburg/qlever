@@ -127,8 +127,11 @@ TEST(TaskQueueOnExecutor, destructorWaitsForAllTasks) {
 // that they may refer to objects that are destroyed right after the queue (for
 // example a reservation of a `MemoryBudget` in the vocabulary merger).
 TEST(TaskQueueOnExecutor, capturesAreDestroyedBeforeFinishReturns) {
-  net::thread_pool pool{4};
+  // The counter is declared before the pool (whose destructor joins the
+  // threads), so that it outlives the deleters below even if `finish()`
+  // returns too early.
   std::atomic<size_t> numDestroyedCaptures = 0;
+  net::thread_pool pool{4};
   constexpr size_t numTasks = 10;
   TaskQueueOnExecutor queue{pool.get_executor(), 3, "capturesAreDestroyed"};
   for (size_t i = 0; i < numTasks; ++i) {
