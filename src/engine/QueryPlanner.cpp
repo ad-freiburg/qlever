@@ -3485,9 +3485,11 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // Then collect the triples. Transform each triple with a property path to
   // an equivalent form without property path (using `seedFromPropertyPath`).
   //
-  // NOTE: The constants are not substituted at the ends of a property path (a
-  // constant at the end of a path with zero length matches even if it is not
-  // contained in the graph, while a variable does not).
+  // NOTE: The constants are not substituted at the ends of a transitive path
+  // like `<p>*` (a constant at the end of a path with zero length matches even
+  // if it is not contained in the graph, while a variable does not). This holds
+  // because `seedFromPropertyPath` turns it into a `TransPath`, not into
+  // triples. The triples of other paths, like `<p>/<q>`, are substituted.
   for (const auto& triple : v._triples) {
     if (std::holds_alternative<Variable>(triple.p_) ||
         triple.getSimplePredicate().has_value()) {
