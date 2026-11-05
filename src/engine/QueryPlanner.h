@@ -725,8 +725,9 @@ class QueryPlanner {
               wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
     // Add the variables that are bound to a single constant by `values` (if it
-    // has a single row) or by `bind` (if its expression is a constant) to
-    // `constants_`, except for internal IRIs (like `ql:langtag`).
+    // has a single row) or by `bind` (if its expression does not depend on the
+    // data, which is evaluated here) to `constants_`, except for internal IRIs
+    // (like `ql:langtag`).
     //
     // NOTE 1: Only the direct children of the `rootPattern_` are visited here,
     // so nested groups are not considered. In particular, a `VALUES` clause in

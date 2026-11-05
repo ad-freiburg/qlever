@@ -2051,37 +2051,22 @@ TEST(QueryPlanner, substituteConstantVariables) {
                 h::Bind(h::NeutralElement(), "<a>", Variable{"?x"}),
                 scan("?s", "<p>", "<a>")));
 
-  // A constant `BIND` of a literal or a number also fixes the triples after it,
-  // and a triple may become fully constant.
-  auto p = TripleComponent::Iri::fromIriref("<p>");
-  h::expect("SELECT * { BIND(\"x\" AS ?x) ?s <p> ?x }",
-            h::CartesianProductJoin(
-                h::Bind(h::NeutralElement(), "\"x\"", Variable{"?x"}),
-                h::IndexScan(Variable{"?s"}, p,
-                             TripleComponent::Literal::fromStringRepresentation(
-                                 "\"x\""))));
-  h::expect("SELECT * { BIND(42 AS ?x) ?s <p> ?x }",
-            h::CartesianProductJoin(
-                h::Bind(h::NeutralElement(), "42", Variable{"?x"}),
-                h::IndexScan(Variable{"?s"}, p, Id::makeFromInt(42))));
+  // A triple may become fully constant.
   h::expect(
       "SELECT * { VALUES (?s ?o) { (<a> <b>) } ?s <p> ?o }",
       h::CartesianProductJoin(h::ValuesClause("VALUES (?s\t?o) { (<a> <b>) }"),
                               scan("<a>", "<p>", "<b>")));
 
-  // A `VALUES` clause with more than one row, an `UNDEF` value, a
-  // non-constant or undefined `BIND`, and a triple in a nested group are not
-  // substituted (for a property path, see the `emptyPath...` tests).
+  // A `VALUES` clause with more than one row, an `UNDEF` value, an undefined
+  // `BIND`, and a triple in a nested group are not substituted (for a property
+  // path, see the `emptyPath...` tests, for a `BIND` with a non-constant
+  // expression, see `substituteConstantBindExpressions`).
   h::expect("SELECT * { VALUES ?x { <a> <b> } ?x <p> ?o }",
             h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) (<b>) }")),
                     scan("?x", "<p>", "?o")));
   h::expect("SELECT * { VALUES ?x { UNDEF } ?x <p> ?o }",
             h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (UNDEF) }")),
                     scan("?x", "<p>", "?o")));
-  h::expect(
-      "SELECT * { BIND(3 + 5 AS ?x) ?x <p> ?o }",
-      h::Join(h::Sort(h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"})),
-              scan("?x", "<p>", "?o")));
   {
     // An unknown function is an undefined `Id` in the syntax test mode.
     auto cleanup =
@@ -2126,6 +2111,63 @@ TEST(QueryPlanner, substituteConstantVariables) {
             h::Join(h::Sort(h::ValuesClause(absl::StrCat(
                         "VALUES (?p) { (", LANGUAGE_PREDICATE, ") }"))),
                     scan("?s", "?p", "?o")));
+}
+
+// Test that a `BIND` with an expression that does not depend on the data is
+// evaluated during query planning, and that its value is substituted in the
+// triples like a constant.
+TEST(QueryPlanner, substituteConstantBindExpressions) {
+  auto scan = h::IndexScanFromStrings;
+  auto query = [](std::string_view expression) {
+    return absl::StrCat("SELECT * { BIND(", expression, " AS ?x) ?x <p> ?o }");
+  };
+  auto bind = [](std::string_view expression) {
+    return h::Bind(h::NeutralElement(), expression, Variable{"?x"});
+  };
+  auto expectSubstituted = [&](std::string_view expression,
+                               TripleComponent value) {
+    h::expect(query(expression),
+              h::CartesianProductJoin(
+                  bind(expression),
+                  h::IndexScan(std::move(value),
+                               TripleComponent::Iri::fromIriref("<p>"),
+                               Variable{"?o"})));
+  };
+
+  // A number, a literal, and an IRI computed from constants.
+  expectSubstituted("3 + 5", Id::makeFromInt(8));
+  expectSubstituted(
+      "CONCAT(\"a\", \"b\")",
+      TripleComponent::Literal::fromStringRepresentation("\"ab\""));
+  expectSubstituted("IRI(CONCAT(\"http://x/\", \"a\"))",
+                    TripleComponent::Iri::fromIriref("<http://x/a>"));
+
+  // A non-deterministic expression and an expression with value UNDEF are not
+  // substituted.
+  for (std::string_view expression : {"RAND()", "1 / 0"}) {
+    h::expect(query(expression),
+              h::Join(h::Sort(bind(expression)), scan("?x", "<p>", "?o")));
+  }
+
+  // An `EXISTS` without variables is not substituted (it is evaluated by an
+  // `ExistsJoin`).
+  h::QetMatcher anyPlan = ::testing::_;
+  h::expect(query("EXISTS { <a> <b> <c> }"),
+            h::Join(anyPlan, scan("?x", "<p>", "?o")));
+
+  // A value that is contained in the knowledge graph (as a computed literal or
+  // as an IRI from the vocabulary) is matched, a value that is not contained
+  // is not matched.
+  auto* qec = ad_utility::testing::getQec("<a> <p> \"ab\"");
+  auto resultSize = [qec](std::string_view bindAndTriple) {
+    qec->clearCacheUnpinnedOnly();
+    auto qet =
+        h::parseAndPlan(absl::StrCat("SELECT * { ", bindAndTriple, " }"), qec);
+    return qet->getResult()->idTableView().size();
+  };
+  EXPECT_EQ(resultSize("BIND(CONCAT(\"a\", \"b\") AS ?x) <a> <p> ?x"), 1);
+  EXPECT_EQ(resultSize("BIND(CONCAT(\"a\", \"c\") AS ?x) <a> <p> ?x"), 0);
+  EXPECT_EQ(resultSize("BIND(<p> AS ?x) <a> ?x ?o"), 1);
 }
 
 // _____________________________________________________________________________

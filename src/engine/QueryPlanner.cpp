@@ -66,8 +66,10 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "index/ExportIds.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -289,23 +291,81 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 }
 
 namespace {
-// Return the constant to which `bind` binds its target variable, or
-// `std::nullopt` if its expression is not a constant IRI, literal or defined
-// `Id` (an undefined `Id` is created for an unknown function in the syntax test
-// mode).
-std::optional<TripleComponent> getConstantOfBind(const p::Bind& bind) {
-  using namespace sparqlExpression;
-  const auto* expression = bind._expression.getPimpl();
-  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
-    return TripleComponent{iri->value()};
-  } else if (const auto* literal =
-                 dynamic_cast<const StringLiteralExpression*>(expression)) {
-    return TripleComponent{literal->value()};
-  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
-             id != nullptr && !id->value().isUndefined()) {
-    return TripleComponent{id->value()};
+// Return the value of `expression` if it does not depend on the data, that is,
+// it contains no variables and is deterministic. Return `std::nullopt` if it
+// depends on the data, or if its value is UNDEF (e.g. for `1/0`) or can't occur
+// in a triple (a blank node or a text record).
+//
+// NOTE 1: The expression is evaluated on a single row without columns, like a
+// `BIND` at the beginning of a group (see `NeutralElementOperation`). `NOW()`
+// counts as deterministic, because its value is fixed when the query is parsed.
+// `EXISTS` is excluded, because it reads its value from the column of an
+// `ExistsJoin`.
+//
+// NOTE 2: An exception during the evaluation is propagated, the same query
+// would throw it when evaluating the `BIND` anyway.
+std::optional<TripleComponent> evaluateConstantExpression(
+    const sparqlExpression::SparqlExpressionPimpl& expression,
+    const QueryExecutionContext& qec,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  if (!expression.containedVariables().empty() ||
+      !expression.isDeterministic() ||
+      !expression.getExistsExpressions().empty()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+
+  // Evaluate the expression on a single row without columns.
+  IdTable input{0, qec.getAllocator()};
+  input.resize(1);
+  LocalVocab localVocab;
+  sparqlExpression::EvaluationContext context{qec,
+                                              VariableToColumnMap{},
+                                              input.asStaticView<0>(),
+                                              qec.getAllocator(),
+                                              localVocab,
+                                              cancellationHandle};
+  std::optional<Id> id;
+  std::visit(
+      [&](auto&& result) {
+        for (auto&& value : sparqlExpression::detail::makeGenerator(
+                 AD_FWD(result), 1, &context)) {
+          id = sparqlExpression::detail::constantExpressionResultToId(
+              std::move(value), localVocab);
+        }
+      },
+      expression.getPimpl()->evaluate(&context));
+  AD_CORRECTNESS_CHECK(id.has_value());
+
+  // Convert the `Id` to a `TripleComponent`. An `Id` that refers to a
+  // vocabulary is converted to its IRI or literal (an `Id` from `localVocab`
+  // must not outlive it).
+  using enum Datatype;
+  switch (id->getDatatype()) {
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case GeoPoint:
+      return TripleComponent{id.value()};
+    case VocabIndex:
+    case LocalVocabIndex:
+    case SecondaryVocabIndex:
+    case EncodedVal: {
+      auto literalOrIri = ql::exportIds::idToLiteralOrIri(
+          qec.getIndex().getImpl(), id.value(), localVocab);
+      AD_CORRECTNESS_CHECK(literalOrIri.has_value());
+      if (literalOrIri->isIri()) {
+        return TripleComponent{std::move(literalOrIri->getIri())};
+      }
+      return TripleComponent{std::move(literalOrIri->getLiteral())};
+    }
+    case Undefined:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+      return std::nullopt;
+  }
+  AD_FAIL();
 }
 
 // How the `QueryPlanner` evaluates a triple of a basic graph pattern: a plain
@@ -375,7 +435,8 @@ void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::addConstants(const p::Bind& bind) {
-  auto constant = getConstantOfBind(bind);
+  auto constant = evaluateConstantExpression(bind._expression, *qec_,
+                                             planner_.cancellationHandle_);
   if (constant.has_value() && !qlever::isInternalComponent(constant.value())) {
     constants_.emplace(bind._target, std::move(constant.value()));
   }
