@@ -335,8 +335,8 @@ TEST(RelationalExpression, StringAndString) {
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
-// An `IdOrLocalVocabEntry` that holds an `Id` is compared like that `Id`. The
-// comparison with an `Id` on the other side goes through `idGenerator`.
+// Test that an `IdOrLocalVocabEntry` that holds an `Id` is compared like that
+// `Id`, also with an `Id` on the other side (which goes through `idGenerator`).
 TEST(RelationalExpression, IdOrLocalVocabEntryHoldingId) {
   auto i = [](int64_t x) { return IdOrLocalVocabEntry{Id::makeFromInt(x)}; };
   auto id = [](int64_t x) { return Id::makeFromInt(x); };

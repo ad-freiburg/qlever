@@ -190,27 +190,37 @@ TEST(LocalVocabEntry, reanchoredTo) {
   }
 }
 
-// Test the copy assignment of `LocalVocabEntry` and `LocalVocabEntryView`,
-// which also copies the context and the cached position in the vocabulary.
+// Test that the copy assignment of `LocalVocabEntry` and `LocalVocabEntryView`
+// also copies the context (the target is anchored to another index) and yields
+// the same position in the vocabulary.
 TEST(LocalVocabEntry, copyAssignment) {
   using namespace ad_utility::testing;
   Index index = makeTestIndex(gtestCurrentTestName(), "<a> <b> <c> .");
+  Index otherIndex =
+      makeTestIndex(gtestCurrentTestName() + "-other", "<a> <b> <c> .");
   const auto& context = index.getImpl().getLocalVocabContext();
+  const auto& otherContext = otherIndex.getImpl().getLocalVocabContext();
   LocalVocabEntry entry = iriLocalVocabEntry("<x>", context);
   auto position = entry.positionInVocab();
 
-  LocalVocabEntry copy = LocalVocabEntry::literalWithoutQuotes("y", context);
+  // An owning entry anchored to the other index becomes a copy of `entry`.
+  LocalVocabEntry copy =
+      LocalVocabEntry::literalWithoutQuotes("y", otherContext);
   copy = entry;
   EXPECT_EQ(copy, entry);
   EXPECT_EQ(&copy.getContextForTesting(), &context);
   EXPECT_TRUE(copy.positionInVocab() == position);
 
-  LocalVocabEntry other = LocalVocabEntry::literalWithoutQuotes("y", context);
+  // A view anchored to the other index becomes a view of the characters of
+  // `entry`.
+  LocalVocabEntry other =
+      LocalVocabEntry::literalWithoutQuotes("y", otherContext);
   LocalVocabEntryView view{entry};
   LocalVocabEntryView viewCopy{other};
   viewCopy = view;
   EXPECT_EQ(viewCopy, entry);
   EXPECT_EQ(viewCopy.toStringRepresentation().data(),
             entry.toStringRepresentation().data());
+  EXPECT_EQ(&viewCopy.getContextForTesting(), &context);
   EXPECT_TRUE(viewCopy.positionInVocab() == position);
 }
