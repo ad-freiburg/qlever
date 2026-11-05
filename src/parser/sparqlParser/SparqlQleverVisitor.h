@@ -115,6 +115,11 @@ class SparqlQleverVisitor {
   // corresponding pattern.
   ad_utility::HashMap<std::string, NamedSubquery> namedSubqueries_{};
 
+  // True while the body of a (non-magic) `SERVICE` is parsed. Such a body is
+  // sent to the remote endpoint as the original query text, so it must not
+  // contain an `INCLUDE`.
+  bool isInsideRemoteService_ = false;
+
   // The `BASE` IRI of the query if any.
   std::optional<qlever::util::ParsedUri> baseIri_{};
 

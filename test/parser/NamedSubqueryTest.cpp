@@ -257,3 +257,23 @@ TEST(NamedSubquery, invalidQueries) {
             " { SELECT ?s WHERE { INCLUDE %a } } } }"),
       ::testing::HasSubstr("not supported inside SERVICE"));
 }
+
+// Test that an `INCLUDE` is allowed inside a magic `SERVICE`, which QLever
+// evaluates itself (here, `LAG` via two row number services).
+TEST(NamedSubquery, includeInsideMagicService) {
+  expectEquivalent(
+      "PREFIX rn: <https://qlever.cs.uni-freiburg.de/rowNumber/>"
+      "WITH %sub AS { ?s <p> ?o }"
+      "SELECT * WHERE {"
+      " SERVICE rn: { [] rn:bind ?n ."
+      " { SELECT ?s ?o WHERE { INCLUDE %sub } ORDER BY ?s ?o } }"
+      " OPTIONAL { SERVICE rn: { [] rn:bind ?n ; rn:offset 1 ."
+      " { SELECT ?s (?o AS ?prev) WHERE { INCLUDE %sub } ORDER BY ?s ?o } } } "
+      "}",
+      "PREFIX rn: <https://qlever.cs.uni-freiburg.de/rowNumber/>"
+      "SELECT * WHERE {"
+      " SERVICE rn: { [] rn:bind ?n ."
+      " { SELECT ?s ?o WHERE { ?s <p> ?o } ORDER BY ?s ?o } }"
+      " OPTIONAL { SERVICE rn: { [] rn:bind ?n ; rn:offset 1 ."
+      " { SELECT ?s (?o AS ?prev) WHERE { ?s <p> ?o } ORDER BY ?s ?o } } } }");
+}
