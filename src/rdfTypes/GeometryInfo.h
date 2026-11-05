@@ -22,7 +22,6 @@
 #include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/Constants.h"
-#include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 
