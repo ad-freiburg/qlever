@@ -51,7 +51,6 @@
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
-#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
