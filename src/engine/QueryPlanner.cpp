@@ -326,13 +326,8 @@ enum class TripleKind {
   HasPredicate
 };
 
-// Return the `TripleKind` of `triple`.
-TripleKind getTripleKind(const SparqlTriple& triple) {
-  auto predicate = triple.getSimplePredicate();
-  if (!predicate.has_value()) {
-    return TripleKind::IndexScan;
-  }
-  std::string_view iri = predicate.value();
+// Return the `TripleKind` of a triple with the predicate `iri`.
+TripleKind getTripleKind(std::string_view iri) {
   if (iri == CONTAINS_WORD_PREDICATE) {
     return TripleKind::TextWord;
   } else if (iri == CONTAINS_ENTITY_PREDICATE) {
@@ -348,6 +343,13 @@ TripleKind getTripleKind(const SparqlTriple& triple) {
     return TripleKind::HasPredicate;
   }
   return TripleKind::IndexScan;
+}
+
+// Return the `TripleKind` of `triple`.
+TripleKind getTripleKind(const SparqlTriple& triple) {
+  auto predicate = triple.getSimplePredicate();
+  return predicate.has_value() ? getTripleKind(predicate.value())
+                               : TripleKind::IndexScan;
 }
 }  // namespace
 
@@ -380,7 +382,7 @@ void QueryPlanner::GraphPatternPlanner::substituteConstants(
     SparqlTriple& triple) const {
   // Only a plain index scan is changed (the special predicates require
   // variables in certain positions).
-  if (getTripleKind(triple) != TripleKind::IndexScan) {
+  if (constants_.empty() || getTripleKind(triple) != TripleKind::IndexScan) {
     return;
   }
 
@@ -401,13 +403,10 @@ void QueryPlanner::GraphPatternPlanner::substituteConstants(
   // remains a plain index scan.
   if (const auto* variable = std::get_if<Variable>(&triple.p_)) {
     auto it = constants_.find(*variable);
-    if (it == constants_.end() || !it->second.isIri()) {
-      return;
-    }
-    auto substituted = triple;
-    substituted.p_ = PropertyPath::fromIri(it->second.getIri());
-    if (getTripleKind(substituted) == TripleKind::IndexScan) {
-      triple = std::move(substituted);
+    if (it != constants_.end() && it->second.isIri() &&
+        getTripleKind(it->second.getIri().toStringRepresentation()) ==
+            TripleKind::IndexScan) {
+      triple.p_ = PropertyPath::fromIri(it->second.getIri());
     }
   }
 }
