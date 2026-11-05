@@ -225,7 +225,7 @@ class IriView : public BasicIri<false> {
   // Only for the corresponding constructor of `LiteralOrIriView` (see there).
   friend class LiteralOrIriView;
   template <bool isOwning>
-  IriView([[maybe_unused]] const BasicIri<isOwning>& equal,
+  IriView(const BasicIri<isOwning>& equal [[maybe_unused]],
           std::string_view storage)
       : BasicIri<false>{storage} {
     AD_EXPENSIVE_CHECK(storage ==

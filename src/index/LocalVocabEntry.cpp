@@ -101,13 +101,14 @@ auto BasicLocalVocabEntry<LiteralOrIriT>::positionInVocabExpensiveCase() const
 
 // _____________________________________________________________________________
 template <typename LiteralOrIriT>
-void BasicLocalVocabEntry<LiteralOrIriT>::checkCanBeReanchoredTo(
-    [[maybe_unused]] const LocalVocabContext& newContext) const {
+auto BasicLocalVocabEntry<LiteralOrIriT>::reanchoredTo(
+    const LocalVocabContext& newContext) const -> Derived {
   AD_EXPENSIVE_CHECK(
       !this->isIri() ||
           !newContext.encodeAsId(this->toStringRepresentation()).has_value(),
       "An IRI that the new index encodes directly in an `Id` must not be "
       "stored in a `LocalVocabEntry`.");
+  return Derived{asLiteralOrIri(), newContext};
 }
 
 // Explicit instantiations.
@@ -132,20 +133,6 @@ BasicLocalVocabEntry<LiteralOrIriView>::compareThreeWay(
 // _____________________________________________________________________________
 LocalVocabEntry LocalVocabEntryView::toOwned() const {
   return LocalVocabEntry{asLiteralOrIri().toOwned(), *this};
-}
-
-// _____________________________________________________________________________
-LocalVocabEntryView LocalVocabEntryView::reanchoredTo(
-    const LocalVocabContext& newContext) const {
-  checkCanBeReanchoredTo(newContext);
-  return LocalVocabEntryView{asLiteralOrIri(), newContext};
-}
-
-// _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::reanchoredTo(
-    const LocalVocabContext& newContext) const {
-  checkCanBeReanchoredTo(newContext);
-  return LocalVocabEntry{asLiteralOrIri(), newContext};
 }
 
 // _____________________________________________________________________________

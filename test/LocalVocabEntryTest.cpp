@@ -189,3 +189,28 @@ TEST(LocalVocabEntry, reanchoredTo) {
         ::testing::HasSubstr("must not be stored in a `LocalVocabEntry`"));
   }
 }
+
+// Test the copy assignment of `LocalVocabEntry` and `LocalVocabEntryView`,
+// which also copies the context and the cached position in the vocabulary.
+TEST(LocalVocabEntry, copyAssignment) {
+  using namespace ad_utility::testing;
+  Index index = makeTestIndex(gtestCurrentTestName(), "<a> <b> <c> .");
+  const auto& context = index.getImpl().getLocalVocabContext();
+  LocalVocabEntry entry = iriLocalVocabEntry("<x>", context);
+  auto position = entry.positionInVocab();
+
+  LocalVocabEntry copy = LocalVocabEntry::literalWithoutQuotes("y", context);
+  copy = entry;
+  EXPECT_EQ(copy, entry);
+  EXPECT_EQ(&copy.getContextForTesting(), &context);
+  EXPECT_TRUE(copy.positionInVocab() == position);
+
+  LocalVocabEntry other = LocalVocabEntry::literalWithoutQuotes("y", context);
+  LocalVocabEntryView view{entry};
+  LocalVocabEntryView viewCopy{other};
+  viewCopy = view;
+  EXPECT_EQ(viewCopy, entry);
+  EXPECT_EQ(viewCopy.toStringRepresentation().data(),
+            entry.toStringRepresentation().data());
+  EXPECT_TRUE(viewCopy.positionInVocab() == position);
+}
