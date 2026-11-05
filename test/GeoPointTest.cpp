@@ -115,12 +115,11 @@ TEST(GeoPoint, bitRepresentation) {
   EXPECT_EQ(GeoPoint::interleaveCoordinates(0, 1), 0b01u);
   EXPECT_EQ(GeoPoint::interleaveCoordinates(0b11, 0b01), 0b1011u);
 
-  // The corners of the coordinate space have all 60 bits set, no bit set, only
-  // the longitude bits (the even positions), or only the latitude bits (the
-  // odd positions). The upper 4 bits are never set (they hold the datatype of
-  // an `Id`).
-  constexpr T allBits = (T{1} << 60) - 1;
-  constexpr T lngBits = 0x0555555555555555ULL;
+  // The corners of the coordinate space have all `numDataBits` set, no bit
+  // set, only the longitude bits (the even positions), or only the latitude
+  // bits (the odd positions). No bit above `numDataBits` is ever set.
+  constexpr T allBits = ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits);
+  constexpr T lngBits = 0x5555555555555555ULL & allBits;
   EXPECT_EQ(GeoPoint(90, 180).toBitRepresentation(), allBits);
   EXPECT_EQ(GeoPoint(-90, -180).toBitRepresentation(), 0u);
   EXPECT_EQ(GeoPoint(-90, 180).toBitRepresentation(), lngBits);
@@ -259,12 +258,12 @@ TEST(GeoPoint, latMajorEncoding) {
       [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
 
   // In `LatMajor`, the latitude is in the upper and the longitude in the lower
-  // 30 bits, in `ZOrder`, the bits are interleaved. Splitting is the inverse
-  // of combining.
+  // half of the bits, in `ZOrder`, the bits are interleaved. Splitting is the
+  // inverse of combining.
   constexpr T lat = 0b101;
   constexpr T lng = 0b11;
   static_assert(GeoPoint::combineCoordinates(lat, lng, E::LatMajor) ==
-                ((lat << 30) | lng));
+                ((lat << GeoPoint::numDataBitsCoordinate) | lng));
   static_assert(GeoPoint::combineCoordinates(lat, lng, E::ZOrder) ==
                 GeoPoint::interleaveCoordinates(lat, lng));
   for (auto encoding : {E::ZOrder, E::LatMajor}) {

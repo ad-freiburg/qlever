@@ -295,6 +295,8 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 
 // Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
 // content, is read with the source CRS zeroed and the serialization type `WKT`.
+// Version 5 only has 60-bit points, so this only works with the legacy layout.
+#ifndef QLEVER_USE_ID_SPLIT_LAYOUT
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
@@ -333,6 +335,12 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     auto record = contents.begin() + sizeof(uint64_t) + i * recordSize;
     if (std::any_of(record, record + recordSize,
                     [](char c) { return c != 0; })) {
+      // Before version 7, the WKT type (now the byte 31) was in the upper 4
+      // bits of the centroid (the bytes `[16, 24)`).
+      uint64_t centroid;
+      std::memcpy(&centroid, &*(record + 16), sizeof(centroid));
+      centroid |= uint64_t{static_cast<uint8_t>(record[31])} << 60;
+      std::memcpy(&*(record + 16), &centroid, sizeof(centroid));
       std::fill(record + 28, record + 32, '\xab');
     }
   }
@@ -341,7 +349,7 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     out << contents;
   }
 
-  // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
+  // Read the version 5 file. The fields in the bytes `[28, 31)` must be zero:
   // the source CRS "not computed" and the serialization type `WKT`.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
@@ -354,11 +362,12 @@ TEST(GeoVocabularyTest, ReadVersion5) {
       EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
       EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
       auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
-      std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
+      std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 31, 0);
       EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
     }
   }
 }
+#endif
 
 // _____________________________________________________________________________
 TEST(GeoVocabularyTest, WordWriterDestructor) {

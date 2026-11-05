@@ -57,7 +57,7 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
   T lat = quantizeCoordinate(getLat(), COORDINATE_LAT_MAX);
   T lng = quantizeCoordinate(getLng(), COORDINATE_LNG_MAX);
   auto bits = combineCoordinates(lat, lng, encoding());
-  // Ensure the highest 4 bits are 0
+  // Ensure that the bits above `numDataBits` are 0.
   AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
   return bits;
 }

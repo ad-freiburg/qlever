@@ -85,18 +85,27 @@ class GeoPoint {
   // `LatMajor`: The latitude is in the upper 30, the longitude in the lower 30
   // of the 60 bits. A geographic rectangle then only maps to one range per
   // quantized latitude, or, as a single range, to the whole latitude band.
+  //
+  // The numbers above are those of the legacy layout. With the split layout,
+  // the bit representation uses the whole 64-bit payload of an `Id` (32 bits
+  // per coordinate).
+#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
+  static constexpr T numDataBits = 64;
+#else
   static constexpr T numDataBits = 60;
+#endif
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
   static constexpr T coordinateMaskFreeBits =
       ad_utility::bitMaskForHigherBits(sizeof(T) * 8 - numDataBits);
-  // The largest quantized coordinate value (30 one-bits).
+  // The largest quantized coordinate value (`numDataBitsCoordinate` one-bits).
   static constexpr T maxCoordinateEncoded =
       ad_utility::bitMaskForLowerBits(numDataBitsCoordinate);
 
   // Quantize a coordinate in `[-maxValue, maxValue]` to an integer in
   // `[0, maxCoordinateEncoded]` and back. The quantization step is
-  // `2 * maxValue / maxCoordinateEncoded` (about 1.7e-7 degrees for the
-  // latitude, 3.4e-7 degrees for the longitude, i.e. a few centimeters).
+  // `2 * maxValue / maxCoordinateEncoded` (with 60 bits about 1.7e-7 degrees
+  // for the latitude, 3.4e-7 degrees for the longitude, i.e. a few
+  // centimeters).
   static T quantizeCoordinate(double value, double maxValue);
   static double dequantizeCoordinate(T quantized, double maxValue);
 
@@ -159,14 +168,13 @@ class GeoPoint {
   // Convert the value of this GeoPoint object to a single bitstring.
   // The conversion will reduce the precision and thus change the value.
   // However the lost precision should only be in the range of centimeters.
-  // Guarantees to only use the lower `numDataBits` (currently 60 bits), with
-  // the quantized lat and lng arranged according to `encoding()` (see above).
+  // Guarantees to only use the lower `numDataBits`, with the quantized lat and
+  // lng arranged according to `encoding()` (see above).
   T toBitRepresentation() const;
 
   // Restore a GeoPoint object from a single bitstring produced by the above
   // function. Due to the reduction of precision this object will not have the
-  // identical value. Ignores the upper 4 bits (only uses the lower
-  // `numDataBits`)
+  // identical value. Ignores the bits above the lower `numDataBits`.
   static GeoPoint fromBitRepresentation(T bits);
 
   // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
@@ -184,8 +192,8 @@ class GeoPoint {
  private:
   static inline std::atomic encoding_{GeoPointEncodingEnum::ZOrder};
 
-  // Spread the lower 30 bits of `x` to the even bit positions 0, 2, ..., 58,
-  // and the inverse (which ignores the odd bits).
+  // Spread the lower `numDataBitsCoordinate` bits of `x` to the even bit
+  // positions 0, 2, ..., and the inverse (which ignores the odd bits).
   static constexpr T spreadBits(T x) {
     x &= maxCoordinateEncoded;
     x = (x | (x << 16)) & 0x0000FFFF0000FFFFULL;

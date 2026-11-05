@@ -40,23 +40,14 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   // The binary representation must not contain implicit padding, see the
   // `static_assert` after the class in `GeometryInfo.h`.
   static_assert(sizeof(GeometryInfo) ==
-                sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
+                sizeof(boundingBox_) + sizeof(centroid_) +
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
-                    sizeof(serializationType_) + sizeof(metricLength_) +
-                    sizeof(metricArea_));
-  // The WktType only has 8 different values and we have 4 unused bits for the
-  // ValueId datatype of the centroid (it is always a point). Therefore we fold
-  // the attributes together. On OSM planet this will save approx. 1 GiB in
-  // index size.
-  AD_CORRECTNESS_CHECK(
-      wktType <= 7 && wktType < (1 << ValueId::numDatatypeBits) - 1,
-      "WKT Type out of range");
+                    sizeof(serializationType_) + sizeof(wktType_) +
+                    sizeof(metricLength_) + sizeof(metricArea_));
+  AD_CORRECTNESS_CHECK(wktType <= 7, "WKT Type out of range");
   AD_CORRECTNESS_CHECK(wktType > 0, "WKT Type indicates invalid geometry");
-  uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
-  uint64_t centroidBits = centroid.centroid().toBitRepresentation();
-  AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
-                       "Centroid bit representation exceeds available bits.");
-  geometryTypeAndCentroid_ = typeBits | centroidBits;
+  wktType_ = wktType;
+  centroid_ = centroid.centroid().toBitRepresentation();
 
   AD_CORRECTNESS_CHECK(
       sourceCrs.type() <=
@@ -164,6 +155,14 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
     info.sourceCrs_ = SourceCrsType{0};
     info.serializationType_ = SerializationType::WKT;
   }
+  // Before version 7, the WKT type was in the upper 4 bits of the centroid,
+  // which had 60 bits. An index with the split layout never has these
+  // versions, because it is always built with 64-bit points.
+  if (version < 7) {
+    constexpr uint64_t numOldCentroidBits = 60;
+    info.wktType_ = static_cast<uint8_t>(info.centroid_ >> numOldCentroidBits);
+    info.centroid_ &= bitMaskForLowerBits(numOldCentroidBits);
+  }
   return info;
 }
 
@@ -189,11 +188,7 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
 }
 
 // ____________________________________________________________________________
-GeometryType GeometryInfo::getWktType() const {
-  return GeometryType{
-      static_cast<uint8_t>((geometryTypeAndCentroid_ & bitMaskGeometryType) >>
-                           ValueId::numDataBits)};
-}
+GeometryType GeometryInfo::getWktType() const { return GeometryType{wktType_}; }
 
 // ____________________________________________________________________________
 std::optional<SourceCrsType> GeometryInfo::getSourceCrsType() const {
@@ -215,8 +210,7 @@ std::optional<std::string_view> SourceCrsType::asIri() const {
 
 // ____________________________________________________________________________
 Centroid GeometryInfo::getCentroid() const {
-  return Centroid{GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
-                                                  bitMaskCentroid)};
+  return Centroid{GeoPoint::fromBitRepresentation(centroid_)};
 }
 
 // ____________________________________________________________________________
