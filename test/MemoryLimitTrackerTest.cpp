@@ -49,9 +49,9 @@ void runOnThread(F f) {
   std::thread{std::move(f)}.join();
 }
 
-// A small allocation reserves a whole chunk from the shared counter, which then
-// serves the following small allocations of the same thread. The calling thread
-// sees the exact amount, other threads see the chunk as used.
+// Test that a small allocation reserves a whole chunk from the shared counter,
+// which then serves the following small allocations of the same thread. The
+// calling thread sees the exact amount, other threads see the chunk as used.
 TEST(MemoryLimitTracker, smallAllocationsUseThreadCache) {
   const MemorySize limit = 1_MB;
   auto alloc = Alloc::makeLimited(limit);
@@ -76,7 +76,7 @@ TEST(MemoryLimitTracker, smallAllocationsUseThreadCache) {
   EXPECT_EQ(alloc.amountMemoryLeft(), limit);
 }
 
-// Allocations that are larger than `maxCachedAllocationSize` bypass the cache.
+// Test that allocations larger than `maxCachedAllocationSize` bypass the cache.
 TEST(MemoryLimitTracker, largeAllocationsBypassCache) {
   const MemorySize limit = 1_MB;
   auto alloc = Alloc::makeLimited(limit);
@@ -88,8 +88,8 @@ TEST(MemoryLimitTracker, largeAllocationsBypassCache) {
   });
 }
 
-// If the shared counter cannot refill the cache, exactly the requested bytes
-// are reserved, so that small limits are enforced exactly.
+// Test that exactly the requested bytes are reserved when the shared counter
+// cannot refill the cache, so that small limits are enforced exactly.
 TEST(MemoryLimitTracker, smallLimitIsEnforcedExactly) {
   auto alloc = Alloc::makeLimited(100_B);
   char* p = alloc.allocate(60);
@@ -107,7 +107,7 @@ TEST(MemoryLimitTracker, smallLimitIsEnforcedExactly) {
   EXPECT_EQ(alloc.amountMemoryLeft(), 100_B);
 }
 
-// When a cache grows beyond `maxCachedBytes`, it gives everything beyond
+// Test that a cache that grows beyond `maxCachedBytes` gives everything beyond
 // `cacheRefillSize` back to the shared counter.
 TEST(MemoryLimitTracker, cacheIsDrained) {
   const MemorySize limit = 10_MB;
@@ -136,8 +136,9 @@ TEST(MemoryLimitTracker, cacheIsDrained) {
   EXPECT_EQ(alloc.amountMemoryLeft(), limit);
 }
 
-// Starting and stopping many threads that use the cache doesn't deplete the
-// budget, also when memory is allocated on one thread and freed on another.
+// Test that starting and stopping many threads that use the cache doesn't
+// deplete the budget, also when memory is allocated on one thread and freed on
+// another.
 TEST(MemoryLimitTracker, threadExitReturnsCache) {
   const MemorySize limit = 1_MB;
   auto alloc = Alloc::makeLimited(limit);
@@ -159,9 +160,9 @@ TEST(MemoryLimitTracker, threadExitReturnsCache) {
   EXPECT_EQ(alloc.amountMemoryLeft(), limit);
 }
 
-// Destroying a pool forgets the bytes that other (still running) threads have
-// cached for it, so that a new pool, which might reuse its slot, starts
-// with empty caches.
+// Test that destroying a pool forgets the bytes that other (still running)
+// threads have cached for it, so that a new pool, which might reuse its slot,
+// starts with empty caches.
 TEST(MemoryLimitTracker, poolDestructionClearsCachesOfOtherThreads) {
   std::atomic<int> step = 0;
   std::shared_ptr<Alloc> alloc =
@@ -191,8 +192,8 @@ TEST(MemoryLimitTracker, poolDestructionClearsCachesOfOtherThreads) {
   EXPECT_EQ(alloc->amountMemoryLeft(), 2_MB);
 }
 
-// The `ClearOnAllocation` hook might free memory into the cache of the
-// calling thread, which is then available to the retried allocation.
+// Test that memory which the `ClearOnAllocation` hook frees into the cache of
+// the calling thread is available to the retried allocation.
 TEST(MemoryLimitTracker, hookFreesIntoThreadCache) {
   std::function<void()> freeSomething;
   bool hookCalled = false;
@@ -211,8 +212,8 @@ TEST(MemoryLimitTracker, hookFreesIntoThreadCache) {
   EXPECT_EQ(alloc.amountMemoryLeft(), 2000_B);
 }
 
-// Bytes in the cache of the calling thread count as unused when decreasing the
-// memory limit.
+// Test that bytes in the cache of the calling thread count as unused when
+// decreasing the memory limit.
 TEST(MemoryLimitTracker, decreaseMemoryLimitUsesThreadCache) {
   const MemorySize limit = 1_MB;
   auto alloc = Alloc::makeLimited(limit);
@@ -235,8 +236,8 @@ struct AllocatesInDestructor {
   }
 };
 
-// Allocations in the destructors of `thread_local` objects that are destroyed
-// after the cache of the thread bypass the cache.
+// Test that allocations in the destructors of `thread_local` objects that are
+// destroyed after the cache of the thread bypass the cache.
 TEST(MemoryLimitTracker, allocationAfterCacheDestruction) {
   const MemorySize limit = 1_MB;
   auto alloc = Alloc::makeLimited(limit);
@@ -250,9 +251,9 @@ TEST(MemoryLimitTracker, allocationAfterCacheDestruction) {
   EXPECT_EQ(alloc.amountMemoryLeft(), limit);
 }
 
-// Many threads concurrently allocate and free blocks of random sizes, some of
-// which are freed on a different thread. Afterwards, the whole budget is
-// available again.
+// Test that the whole budget is available again after many threads concurrently
+// allocated and freed blocks of random sizes, some of them on a different
+// thread.
 TEST(MemoryLimitTracker, concurrentStressTest) {
   const MemorySize limit = 100_MB;
   auto alloc = Alloc::makeLimited(limit);
@@ -296,9 +297,9 @@ TEST(MemoryLimitTracker, concurrentStressTest) {
   EXPECT_EQ(alloc.amountMemoryLeft(), limit);
 }
 
-// A non-owning copy shares the budget of its owner. Copies of a non-owning
-// allocator (also rebound ones) are non-owning, too. The same is tested for the
-// PMR backend in `AllocatorPmrTest.cpp`.
+// Test that a non-owning copy shares the budget of its owner, and that copies
+// of a non-owning allocator (also rebound ones) are non-owning, too. The same
+// is tested for the PMR backend in `AllocatorPmrTest.cpp`.
 TEST(MemoryLimitTracker, nonOwningCopy) {
   auto owner = Alloc::makeLimited(8_B);
   EXPECT_TRUE(owner.isOwning());
@@ -324,8 +325,8 @@ TEST(MemoryLimitTracker, nonOwningCopy) {
   EXPECT_EQ(owner.amountMemoryLeft(), 8_B);
 }
 
-// A non-owning copy that outlives its owner terminates the program when the
-// lifetime checks are enabled.
+// Test that a non-owning copy that outlives its owner terminates the program
+// when the lifetime checks are enabled.
 TEST(MemoryLimitTracker, nonOwningCopyOutlivesOwner) {
 #ifdef QL_ENABLE_LIFETIME_CHECKS
   auto outliveOwner = []() {
