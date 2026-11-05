@@ -1,1 +1,3 @@
+addLinkAndDiscoverTest(StringMappingTest engine index)
+addLinkAndDiscoverTest(BinaryExportTest engine)
 addLinkAndDiscoverTest(IdRewriterTest engine)
