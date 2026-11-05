@@ -694,7 +694,8 @@ TEST(NonOwningTest, LiteralOrIriView) {
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));
 }
 
-// _____________________________________________________________________________
+// Test that `toOwned` yields an equal `LiteralOrIri` with its own copy of the
+// characters, for a view as well as for an owning object.
 TEST(LiteralOrIri, toOwned) {
   auto literal = LiteralOrIri{Literal::literalWithoutQuotes(
       "x", Iri::fromStringRepresentation("<http://example.org/dt>"))};

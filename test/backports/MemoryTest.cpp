@@ -59,7 +59,7 @@ TEST(MakeUniqueForOverwrite, nonTrivialTypeIsDefaultConstructed) {
   EXPECT_EQ(array[2].value_, 42);
 }
 
-// _____________________________________________________________________________
+// Test that `ql::to_address` returns a raw pointer unchanged.
 TEST(ToAddress, rawPointer) {
   int value = 42;
   EXPECT_EQ(ql::to_address(&value), &value);
@@ -67,7 +67,8 @@ TEST(ToAddress, rawPointer) {
   EXPECT_EQ(ql::to_address(null), nullptr);
 }
 
-// _____________________________________________________________________________
+// Test `ql::to_address` for the iterators of a vector, a string view and a
+// node-based set.
 TEST(ToAddress, iterators) {
   std::vector<int> vector{1, 2, 3};
   EXPECT_EQ(ql::to_address(vector.begin() + 1), &vector[1]);
@@ -85,7 +86,7 @@ TEST(ToAddress, iterators) {
       std::is_same_v<decltype(ql::to_address(set.begin())), const int*>);
 }
 
-// _____________________________________________________________________________
+// Test `ql::to_address` for a smart pointer.
 TEST(ToAddress, smartPointer) {
   auto pointer = std::make_unique<int>(42);
   EXPECT_EQ(ql::to_address(pointer), pointer.get());

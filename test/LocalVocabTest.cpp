@@ -722,7 +722,8 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
       ::testing::HasSubstr("Assertion"));
 }
 
-// _____________________________________________________________________________
+// Test that the addresses of the words of a `LocalVocab` (which are the
+// `LocalVocabIndex`es) stay stable when the arena and the hash table grow.
 TEST(LocalVocab, wordsHaveStableAddresses) {
   // Many words (and a single word that is much larger than the initial blocks
   // of the arena), such that the arena and the hash table of the words have to
@@ -753,7 +754,8 @@ TEST(LocalVocab, wordsHaveStableAddresses) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a word that is stored in one `LocalVocab` can be added to another
+// `LocalVocab`, which then owns a copy of it.
 TEST(LocalVocab, addWordsOfOtherLocalVocab) {
   auto* qec = ad_utility::testing::getQec(
       ad_utility::testing::TestIndexConfig{"<a> <b> <c> ."});
@@ -785,7 +787,8 @@ TEST(LocalVocab, addWordsOfOtherLocalVocab) {
   EXPECT_EQ(index2->toStringRepresentation(), word.toStringRepresentation());
 }
 
-// _____________________________________________________________________________
+// Test that `LocalVocabEntry`s and `LocalVocabEntryView`s compare and hash
+// alike, and that a view can be converted back to an owning entry.
 TEST(LocalVocab, viewsAndOwningEntries) {
   const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
   auto a = LocalVocabEntry::literalWithoutQuotes("a", context);
@@ -818,7 +821,8 @@ TEST(LocalVocab, viewsAndOwningEntries) {
   EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::ElementsAre(a));
 }
 
-// _____________________________________________________________________________
+// Test that a stored word keeps the structure of the entry it was created from
+// (and is not parsed again from its string representation).
 TEST(LocalVocab, wordsAreStoredWithTheirStructure) {
   using ad_utility::triple_component::Iri;
   using ad_utility::triple_component::Literal;

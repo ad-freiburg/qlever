@@ -214,8 +214,10 @@ class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
   }
 
   // It suffices to hash the base class `LiteralOrIriT` as the position in the
-  // vocab is redundant for those purposes. NOTE: The hashes of a
-  // `LocalVocabEntry` and a `LocalVocabEntryView` of the same word are equal.
+  // vocab is redundant for those purposes.
+  //
+  // NOTE: The hashes of a `LocalVocabEntry` and a `LocalVocabEntryView` of the
+  // same word are equal.
   template <typename H, typename V>
   friend auto AbslHashValue(H h, const V& entry)
       -> CPP_ret(H)(

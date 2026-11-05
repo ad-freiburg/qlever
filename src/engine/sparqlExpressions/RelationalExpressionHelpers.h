@@ -119,8 +119,10 @@ CPP_concept StoresStringOrId =
 // Convert a `LocalVocabEntryView` into the corresponding `ValueId`, which is
 // only valid as long as the `value` itself. This function also takes
 // `ValueId`s which are simply returned unchanged. This makes the usage of this
-// function easier. NOTE: There is no overload for a `LocalVocabEntry`, as an
-// `Id` can only point to a `LocalVocabEntryView`, use `withValueId` below.
+// function easier.
+//
+// NOTE: There is no overload for a `LocalVocabEntry`, as an `Id` can only
+// point to a `LocalVocabEntryView`, use `withValueId` below.
 CPP_template(typename S)(
     requires ad_utility::SimilarToAny<S, ValueId, LocalVocabEntryView>)
 Id makeValueId(const S& value, const EvaluationContext*) {

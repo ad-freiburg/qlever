@@ -67,9 +67,11 @@ inline LocalVocabEntry localVocabEntryFromStringRepresentation(
 // `LocalVocabIndex`. The words are stored in a `LocalVocab` that is owned by
 // the function (and shared by its copies), so the `Id`s are valid as long as
 // the function lives. Equal entries are mapped to the same `Id`. This is useful
-// for tests that need such `Id`s, but don't have a `LocalVocab` at hand. NOTE:
-// The `Id` is always of type `LocalVocabIndex`, even if the word is contained
-// in the vocabulary of the index (unlike for `getIdAndAddIfNotContained`).
+// for tests that need such `Id`s, but don't have a `LocalVocab` at hand.
+//
+// NOTE: The `Id` is always of type `LocalVocabIndex`, even if the word is
+// contained in the vocabulary of the index (unlike for
+// `getIdAndAddIfNotContained`).
 inline auto makeGetLocalVocabId() {
   return [localVocab =
               std::make_shared<LocalVocab>()](const LocalVocabEntry& entry) {
