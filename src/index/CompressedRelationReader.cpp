@@ -802,14 +802,11 @@ template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
     Iterator iterator) {
-  ad_utility::idColumnByteIO::decode(
-      IdColumnRef{iterator, numRowsToRead},
-      [&compressedBlock](ql::span<char> bytes) {
-        auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
-            compressedBlock.data(), compressedBlock.size(), bytes.data(),
-            bytes.size());
-        AD_CORRECTNESS_CHECK(numBytesActuallyRead == bytes.size());
-      });
+  ad_utility::idColumnByteIO::decode(IdColumnRef{iterator, numRowsToRead},
+                                     [&compressedBlock](const auto& buffers) {
+                                       ZstdWrapper::decompressToBuffers(
+                                           compressedBlock, buffers);
+                                     });
 }
 
 // ____________________________________________________________________________

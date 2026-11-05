@@ -19,6 +19,8 @@
 #include <utility>
 
 #include "backports/memory.h"
+#include "backports/numeric.h"
+#include "backports/span.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
 #include "util/File.h"
@@ -149,6 +151,42 @@ class CompressedBlockFile {
     AD_CORRECTNESS_CHECK(numBytesDecompressed == metadata.uncompressedSize_);
   }
 
+  // Append a block that consists of several `chunks`, which `readBlock` below
+  // reads back into targets of the same sizes. Each chunk is compressed as a
+  // ZSTD frame of its own, or, without compression, the chunks are written one
+  // after the other. Either way they are not copied into one buffer first.
+  BlockMetadata appendBlock(
+      const ql::span<const ql::span<const std::byte>> chunks) {
+    const size_t uncompressedSize = totalSize(chunks);
+    if (!compressionLevel_.has_value()) {
+      return {uncompressedSize, uncompressedSize, appendChunks(chunks)};
+    }
+    auto compressed = ZstdWrapper::compress(chunks, compressionLevel_.value());
+    return {compressed.size(), uncompressedSize,
+            appendBytes(compressed.data(), compressed.size())};
+  }
+
+  // Read the block that is described by `metadata` into the `targets`, which
+  // have to have the sizes of the chunks that the block was appended with.
+  void readBlock(const BlockMetadata& metadata,
+                 ql::span<const ql::span<std::byte>> targets) const {
+    if (compressionLevel_.has_value()) {
+      auto compressed =
+          ql::make_unique_for_overwrite<char[]>(metadata.compressedSize_);
+      readBytes(metadata, compressed.get());
+      ZstdWrapper::decompressToBuffers(
+          {compressed.get(), metadata.compressedSize_}, targets);
+      return;
+    }
+    // Without compression, the chunks are stored one after the other.
+    AD_CORRECTNESS_CHECK(totalSize(targets) == metadata.uncompressedSize_);
+    size_t offset = metadata.offsetInFile_;
+    for (auto target : targets) {
+      readBlock({target.size(), target.size(), offset}, target.data());
+      offset += target.size();
+    }
+  }
+
   // Truncate the file, such that it can be reused. All the metadata that were
   // returned by previous calls to `appendBlock` become invalid.
   //
@@ -189,6 +227,20 @@ class CompressedBlockFile {
     return static_cast<size_t>(offset);
   }
 
+  // Like `appendBytes`, but for several `chunks`, which are written one after
+  // the other into a single reserved range.
+  size_t appendChunks(const ql::span<const ql::span<const std::byte>> chunks) {
+    const auto file = file_.rlock();
+    const auto offset =
+        nextOffset_.fetch_add(static_cast<off_t>(totalSize(chunks)));
+    auto position = offset;
+    for (auto chunk : chunks) {
+      file->write(chunk.data(), chunk.size(), position);
+      position += static_cast<off_t>(chunk.size());
+    }
+    return static_cast<size_t>(offset);
+  }
+
   // Read the `compressedSize_` bytes of the block that is described by
   // `metadata` into `target`.
   void readBytes(const BlockMetadata& metadata, void* target) const {
@@ -198,6 +250,14 @@ class CompressedBlockFile {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metadata.compressedSize_);
+  }
+
+  // The total number of bytes of the `chunks`.
+  template <typename Chunk>
+  static size_t totalSize(ql::span<const Chunk> chunks) {
+    return ql::transform_reduce(chunks.begin(), chunks.end(), size_t{0},
+                                std::plus{},
+                                [](const auto& chunk) { return chunk.size(); });
   }
 };
 

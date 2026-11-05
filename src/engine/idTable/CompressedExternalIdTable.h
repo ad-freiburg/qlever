@@ -242,9 +242,8 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(lower < upper);
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed = idColumnByteIO::encode(
-        column.subspan(lower, upper - lower), [](auto bytes) {
-          return ZstdWrapper::compress(bytes.data(), bytes.size());
-        });
+        column.subspan(lower, upper - lower),
+        [](const auto& chunks) { return ZstdWrapper::compress(chunks); });
 
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
@@ -404,10 +403,8 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    idColumnByteIO::decode(col, [&compressed](ql::span<char> bytes) {
-      auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
-          compressed.data(), compressed.size(), bytes.data(), bytes.size());
-      AD_CORRECTNESS_CHECK(numBytesDecompressed == bytes.size());
+    idColumnByteIO::decode(col, [&compressed](const auto& buffers) {
+      ZstdWrapper::decompressToBuffers(compressed, buffers);
     });
   }
 

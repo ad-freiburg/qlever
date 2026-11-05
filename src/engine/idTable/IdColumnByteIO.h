@@ -10,9 +10,9 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNBYTEIO_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNBYTEIO_H
 
-#include <cstring>
+#include <array>
+#include <cstddef>
 
-#include "backports/memory.h"
 #include "backports/span.h"
 #include "engine/idTable/splitLayout/IdColumn.h"
 #include "global/Id.h"
@@ -25,61 +25,42 @@
 // `IdTable`. In both cases a column has `BYTES_PER_ID_COLUMN_ENTRY` bytes per
 // `Id` on disk.
 //
-// `encode` calls `useBytes` with the bytes of the column (a
-// `ql::span<const char>`) and returns its result. The bytes are only valid
-// during the call. `decode` calls `fillBytes` with a `ql::span<char>` of that
-// size, which it has to fill completely, and stores the bytes in the column.
+// The bytes of a column consist of one chunk per contiguous array in memory,
+// so they are never copied. `encode` calls `useBytes` with a `std::array` of
+// `ql::span<const std::byte>`, one per chunk, and returns its result. `decode`
+// calls `fillBytes` with a `std::array` of `ql::span<std::byte>` of the same
+// sizes, which it has to fill completely. The callers compress each chunk as a
+// ZSTD frame of its own, see `ZstdWrapper::compress` and
+// `ZstdWrapper::decompressToBuffers`.
 namespace ad_utility::idColumnByteIO {
 
-// A column of whole `Id`s: its bytes are the `Id`s in memory, without a copy.
+// A column of whole `Id`s: one chunk, the `Id`s in memory.
 template <typename UseBytes>
 auto encode(ql::span<const Id> column, UseBytes&& useBytes) {
-  return AD_FWD(useBytes)(
-      ql::span<const char>{reinterpret_cast<const char*>(column.data()),
-                           column.size() * sizeof(Id)});
+  return AD_FWD(useBytes)(std::array{ql::as_bytes(column)});
 }
 
 template <typename FillBytes>
 void decode(ql::span<Id> column, FillBytes&& fillBytes) {
-  AD_FWD(fillBytes)
-  (ql::span<char>{reinterpret_cast<char*>(column.data()),
-                  column.size() * sizeof(Id)});
+  AD_FWD(fillBytes)(std::array{ql::as_writable_bytes(column)});
 }
 
-// A column of the split layout: the payloads of all the `Id`s, followed by
-// their datatypes. The two arrays are copied into one buffer and back.
+// A column of the split layout: two chunks, the payloads of all the `Id`s and
+// then their datatypes.
 template <typename UseBytes>
 auto encode(columnBasedIdTable::splitLayout::ConstIdColumnRef column,
             UseBytes&& useBytes) {
-  const auto payloads = column.rawPayloads();
-  const auto datatypes = column.rawDatatypes();
-  const size_t numPayloadBytes = payloads.size() * sizeof(Id::PayloadType);
-  const size_t numDatatypeBytes = datatypes.size() * sizeof(Id::DatatypeType);
-  const auto bytes =
-      ql::make_unique_for_overwrite<char[]>(numPayloadBytes + numDatatypeBytes);
-  std::memcpy(bytes.get(), payloads.data(), numPayloadBytes);
-  std::memcpy(bytes.get() + numPayloadBytes, datatypes.data(),
-              numDatatypeBytes);
-  return AD_FWD(useBytes)(
-      ql::span<const char>{bytes.get(), numPayloadBytes + numDatatypeBytes});
+  return AD_FWD(useBytes)(std::array{ql::as_bytes(column.rawPayloads()),
+                                     ql::as_bytes(column.rawDatatypes())});
 }
 
 template <typename FillBytes>
 void decode(columnBasedIdTable::splitLayout::IdColumnRef column,
             FillBytes&& fillBytes) {
-  const auto payloads = column.rawPayloads();
-  const auto datatypes = column.rawDatatypes();
-  const size_t numPayloadBytes = payloads.size() * sizeof(Id::PayloadType);
-  const size_t numDatatypeBytes = datatypes.size() * sizeof(Id::DatatypeType);
-  const auto bytes =
-      ql::make_unique_for_overwrite<char[]>(numPayloadBytes + numDatatypeBytes);
   AD_FWD(fillBytes)
-  (ql::span<char>{bytes.get(), numPayloadBytes + numDatatypeBytes});
-  std::memcpy(payloads.data(), bytes.get(), numPayloadBytes);
-  std::memcpy(datatypes.data(), bytes.get() + numPayloadBytes,
-              numDatatypeBytes);
+  (std::array{ql::as_writable_bytes(column.rawPayloads()),
+              ql::as_writable_bytes(column.rawDatatypes())});
 }
-
 }  // namespace ad_utility::idColumnByteIO
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNBYTEIO_H
