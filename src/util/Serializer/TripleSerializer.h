@@ -84,7 +84,7 @@ void serializeLocalVocab(Serializer& serializer, const LocalVocab& vocab) {
 
   auto writeWordSet = [&serializer](const auto& words) {
     ql::ranges::for_each(words, [&serializer](const auto& localVocabEntry) {
-      serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
+      serializer << Id::makeFromLocalVocabIndex(&localVocabEntry).getBits();
       serializer << localVocabEntry.toStringRepresentation();
     });
   };

@@ -72,7 +72,8 @@ TEST(AsyncBlockWriter, blocksAreAppendedInOrder) {
   auto writer = makeParallelWriter(makeCollectingWordCallback(words));
   std::vector<std::pair<std::string, bool>> expected;
   {
-    AsyncBlockWriter blockWriter{writer};
+    MemoryBudget budget{ad_utility::MemorySize::gigabytes(1)};
+    AsyncBlockWriter blockWriter{writer, budget};
     for (size_t i = 0; i < 50; ++i) {
       std::string word = absl::StrFormat("\"w%02d\"", i);
       expected.emplace_back(word, true);
@@ -95,7 +96,8 @@ TEST(AsyncBlockWriter, exceptionIsPropagated) {
         ++numCalls;
         throw std::runtime_error{"The vocabulary could not be written"};
       });
-  AsyncBlockWriter blockWriter{writer};
+  MemoryBudget budget{ad_utility::MemorySize::gigabytes(1)};
+  AsyncBlockWriter blockWriter{writer, budget};
   blockWriter.push(0, blockOf(makeSegment({"\"a\""}, 0, 1, writer), 0));
   blockWriter.push(0, blockOf(makeSegment({"\"b\""}, 0, 1, writer), 1));
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
@@ -114,7 +116,8 @@ TEST(AsyncBlockWriter, exceptionOfPrepareIsPropagated) {
   std::atomic<size_t> numAppended = 0;
   SingleVocabularyParallelWriter writer{
       std::make_unique<ThrowingPrepareBlockWriter>(numAppended)};
-  AsyncBlockWriter blockWriter{writer};
+  MemoryBudget budget{ad_utility::MemorySize::gigabytes(1)};
+  AsyncBlockWriter blockWriter{writer, budget};
   for (size_t i = 0; i < 5; ++i) {
     blockWriter.push(
         0,
@@ -135,7 +138,8 @@ TEST(AsyncBlockWriter, pushAfterFailureIsIgnored) {
         ++numCalls;
         throw std::runtime_error{"The vocabulary could not be written"};
       });
-  AsyncBlockWriter blockWriter{writer};
+  MemoryBudget budget{ad_utility::MemorySize::gigabytes(1)};
+  AsyncBlockWriter blockWriter{writer, budget};
   blockWriter.push(0, blockOf(makeSegment({"\"a\""}, 0, 1, writer), 0));
   ASSERT_TRUE(waitUntil([&blockWriter]() { return blockWriter.hasFailed(); }));
   blockWriter.push(0, blockOf(makeSegment({"\"b\""}, 0, 1, writer), 1));
