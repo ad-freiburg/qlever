@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
 #include "engine/StringMapping.h"
@@ -32,8 +33,7 @@ namespace {
 // Return a `std::string_view` wrapping the passed value. It is not restricted
 // to integral types, because it is also used for `Id::T`, which is a struct in
 // the split layout.
-template <typename T>
-requires std::is_trivially_copyable_v<T>
+CPP_template(typename T)(requires std::is_trivially_copyable_v<T>)
 std::string_view raw(const T& value) {
   return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
 }
@@ -59,7 +59,7 @@ AD_ALWAYS_INLINE static Id toExportableId(Id originalId,
 // representation requires increasing `ad_utility::binaryQleverExportVersion`.
 // The following assertions only detect a change of the datatype tags.
 #ifdef QLEVER_USE_ID_SPLIT_LAYOUT
-static_assert(ad_utility::binaryQleverExportVersion == 2);
+static_assert(ad_utility::binaryQleverExportVersion == 1337);
 #else
 static_assert(ad_utility::binaryQleverExportVersion == 1);
 static_assert(Id::numDatatypeBits == 4);
