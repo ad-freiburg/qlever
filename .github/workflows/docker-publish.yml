@@ -93,6 +93,17 @@ jobs:
       # namespaced, so it can only be set here on the host.
       - name: Write core dumps to the working directory of the crashing process
         run: sudo sysctl -w kernel.core_pattern=core.%p
+      # The spurious stalls and crashes of the arm64 Docker build only occur
+      # with some kernels of the runners, so record the kernel, the CPU (and
+      # which errata workarounds are active for it), and the memory settings.
+      - name: Print kernel and CPU information
+        run: |
+          uname -a
+          lscpu
+          sudo dmesg | grep -iE 'errat|workaround|sve|sme|fpsimd|hyper-?v|hv_|kvm|contpte|thp' | head -n 100
+          grep -r . /sys/devices/system/cpu/vulnerabilities/ || true
+          grep -r . /sys/kernel/mm/transparent_hugepage/ 2> /dev/null | grep -E 'enabled|defrag' || true
+          cat /proc/sys/abi/sve_default_vector_length || true
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
         with:
