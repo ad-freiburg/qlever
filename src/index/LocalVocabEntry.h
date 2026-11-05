@@ -42,7 +42,7 @@ namespace localVocabEntryDetail {
 // Note: The values here actually are `Id`s, but we cannot store the `Id` type
 // directly because of cyclic dependencies. This is defined outside of
 // `BasicLocalVocabEntry`, so that both instantiations of it use the same type.
-static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
+inline constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
 using IdProxy = ad_utility::TypedIndex<IdBitRepresentation, proxyTag>;
 
 // The position of a word in the vocabulary, see

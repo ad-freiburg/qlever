@@ -56,10 +56,10 @@ std::optional<Id> idInMainVocab(const LocalVocabEntryView& entry) {
 // index nor in the `secondaryVocab` (see `addNewWordsToSecondaryVocab`). The
 // `handledEntries` are the `LocalVocabEntry`s that have already been handled
 // (also by previous calls), each of which is handled only once.
-void collectNewWords(
-    ConstIdColumnRef column, const SecondaryVocabulary& secondaryVocab,
-    ad_utility::HashSet<LocalVocabIndex>& handledEntries,
-    ad_utility::HashSet<std::string>& newWords) {
+void collectNewWords(ConstIdColumnRef column,
+                     const SecondaryVocabulary& secondaryVocab,
+                     ad_utility::HashSet<LocalVocabIndex>& handledEntries,
+                     ad_utility::HashSet<std::string>& newWords) {
   for (Id id : column) {
     if (id.getDatatype() != Datatype::LocalVocabIndex) {
       continue;
