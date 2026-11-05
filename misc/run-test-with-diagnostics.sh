@@ -239,12 +239,16 @@ print(f"=== The command terminated with exit status {status}")
 gdb.execute(f"quit {status}")
 EOF
 
-# If the command has terminated in the meantime (it is then a zombie, because
-# this script hasn't waited for it yet), `gdb` could neither attach to it nor
-# tell its exit status.
+# Stop the command, so that it can't terminate between the following check and
+# the attaching of `gdb` (which resumes it). If the command has terminated
+# before, `gdb` could neither attach to it nor tell its exit status. Then it is
+# either a zombie, or it has already been reaped by `bash` (which reaps
+# terminated children in the background and keeps their exit status for
+# `wait`), in which case its `/proc` entry doesn't exist anymore.
+kill -STOP "$PID" 2> /dev/null
 STATE=$(cat "/proc/$PID/stat" 2> /dev/null)
 STATE="${STATE##*) }"
-if [ "${STATE%% *}" = "Z" ]; then
+if [ -z "$STATE" ] || [ "${STATE%% *}" = "Z" ]; then
   rm -f "$GDB_SCRIPT"
   wait "$PID"
   STATUS=$?
