@@ -37,17 +37,22 @@ permissions:
 
 jobs:
   build:
-    # Only run for PRs with the `run-full-ci` label, see `README.md`.
+    # Only run for PRs with the `run-full-ci` label, see `README.md`, or with
+    # the `run-arm64-docker` label, which runs only the arm64 build (to rerun
+    # just that build, e.g. when hunting a spurious failure).
     if: >-
       github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'run-arm64-docker')
     strategy:
       matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
+        include: >-
+          ${{ fromJSON(
+            (github.event_name == 'pull_request' &&
+             !contains(github.event.pull_request.labels.*.name, 'run-full-ci'))
+            && '[{"platform": "linux/arm64", "runner": "ubuntu-24.04-arm"}]'
+            || '[{"platform": "linux/amd64", "runner": "ubuntu-24.04"},
+                 {"platform": "linux/arm64", "runner": "ubuntu-24.04-arm"}]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
