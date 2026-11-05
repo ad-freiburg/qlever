@@ -625,6 +625,28 @@ TEST_F(DeltaTriplesTest, insertTriplesAddsHasWordTriples) {
                                  {{lit("\"Café\""), hasWord, lit("\"cafe\""),
                                    TripleComponent{1}}},
                                  {}));
+
+  // For an index with `ql:has-word` triples restricted to the predicate
+  // `<label>`, only the literals that are inserted as the object of a triple
+  // with that predicate get `ql:has-word` triples, also if the same literal is
+  // inserted with another predicate as well.
+  ad_utility::testing::TestIndexConfig configRestricted{"<x> <label> 44"};
+  configRestricted.addHasWordTriples = true;
+  configRestricted.hasWordRestrictPredicates = {"<label>"};
+  const IndexImpl& indexRestricted =
+      ad_utility::testing::getQec(configRestricted)->getIndex().getImpl();
+  DeltaTriples deltaTriplesRestricted(indexRestricted);
+  auto& localVocabRestricted = deltaTriplesRestricted.localVocab();
+  auto triplesRestricted = makeIdTriples(
+      indexRestricted, localVocabRestricted,
+      {"<a> <b> \"abc\"", "<a> <label> \"abc\"", "<a> <b> \"def\""});
+  ql::ranges::sort(triplesRestricted);
+  deltaTriplesRestricted.insertTriples(cancellationHandle, triplesRestricted);
+  EXPECT_THAT(
+      deltaTriplesRestricted,
+      internalTriplesAre(
+          indexRestricted, localVocabRestricted,
+          {{lit("\"abc\""), hasWord, lit("\"abc\""), TripleComponent{1}}}, {}));
 }
 
 // Test that a literal inserted by an update can be found via `ql:has-word`.

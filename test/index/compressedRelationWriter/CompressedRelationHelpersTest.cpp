@@ -167,6 +167,21 @@ TEST(CompressedRelationWriter, makeLargeRelationMetadata) {
       ::testing::HasSubstr("numRows != 0"));
 }
 
+// Test that `permutedColIndices` permutes the first three columns and keeps
+// the graph column and the payload columns in place.
+TEST(CompressedRelationHelpers, permutedColIndices) {
+  using compressedRelationHelpers::permutedColIndices;
+  using ::testing::ElementsAre;
+  EXPECT_THAT(permutedColIndices(qlever::KeyOrder{1, 0, 2, 3}, 5),
+              ElementsAre(1, 0, 2, 3, 4));
+  EXPECT_THAT(permutedColIndices(qlever::KeyOrder{2, 0, 1, 3}, 4),
+              ElementsAre(2, 0, 1, 3));
+  // The graph column must not be permuted.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      permutedColIndices(qlever::KeyOrder{0, 1, 3, 2}, 4),
+      ::testing::HasSubstr("graph column"));
+}
+
 // Test the capacity rules and the checks of the `SmallRelationsBlockBuilder`.
 TEST(SmallRelationsBlockBuilder, buildBlocks) {
   // Three small relations with the `col0` IDs 1, 2, and 3.
@@ -237,6 +252,14 @@ TEST(SmallRelationsBlockBuilder, buildBlocks) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       smallBuilder.takeBlock(IdTable{2, relations.getAllocator()}),
       ::testing::HasSubstr("freshBuffer.numColumns()"));
+
+  // The buffer can only be released if it is empty.
+  AD_EXPECT_THROW_WITH_MESSAGE(std::move(smallBuilder).releaseBuffer(),
+                               ::testing::HasSubstr("empty()"));
+  SmallRelationsBlockBuilder emptyBuilder{freshBuffer(), 4};
+  IdTable released = std::move(emptyBuilder).releaseBuffer();
+  EXPECT_TRUE(released.empty());
+  EXPECT_EQ(released.numColumns(), 3);
 }
 
 namespace {

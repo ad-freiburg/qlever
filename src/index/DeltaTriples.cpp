@@ -252,7 +252,11 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
         index_, localVocab_);
   }
 
+  // The objects for which the `ql:langtag` and the `ql:has-word` triples have
+  // already been added (separately, because the latter depend on the
+  // predicate, see below).
   ad_utility::HashSet<Id> addedObjects;
+  ad_utility::HashSet<Id> addedHasWordObjects;
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
@@ -264,15 +268,35 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
     const auto& literal = optionalLiteralOrIri.value().getLiteral();
 
+    // Return the predicate of the triple as an IRI (cached, because there are
+    // typically few distinct predicates).
+    auto getPredicate = [this, &ids]() -> const auto& {
+      return predicateCache_.getOrCompute(
+          ids.at(1).getBits(), [this](Id::T bits) {
+            auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
+                index_, Id::fromBits(bits), localVocab_, true);
+            AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
+            AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
+            return std::move(optionalPredicate.value().getIri());
+          });
+    };
+
     // The `ql:has-word` triples and the `ql:langtag` triple of a literal do not
-    // depend on the triple in which the literal occurs. Because we don't track
-    // the exact counts of existing objects, we just conservatively add these
-    // internal triples once per object on insertion, and never remove them.
-    // This is inefficient, but never wrong because queries that use these
-    // internal triples will always join these internal triples with a regular
-    // index scan.
+    // depend on the subject of the triple in which the literal occurs. Because
+    // we don't track the exact counts of existing objects, we just
+    // conservatively add these internal triples once per object on insertion,
+    // and never remove them. This is inefficient, but never wrong because
+    // queries that use these internal triples will always join these internal
+    // triples with a regular index scan.
+    //
+    // NOTE: As in the index builder, the `ql:has-word` triples are only added
+    // if the predicate is one of the `--has-word-restrict-predicates` (or none
+    // are set).
     bool isNewObject = insertion && addedObjects.insert(objectId).second;
-    if (isNewObject && index_.addHasWordTriples()) {
+    if (insertion && index_.addHasWordTriples() &&
+        index_.hasWordTriplesForPredicate(
+            getPredicate().toStringRepresentation()) &&
+        addedHasWordObjects.insert(objectId).second) {
       addHasWordTriples(objectId, literal, internalTriples);
     }
     if (!literal.hasLanguageTag()) {
@@ -280,14 +304,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
 
     // Extra triple `<subject> @language@<predicate> "object"@language`.
-    const auto& predicate =
-        predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
-          auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
-              index_, Id::fromBits(bits), localVocab_, true);
-          AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
-          AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
-          return std::move(optionalPredicate.value().getIri());
-        });
+    const auto& predicate = getPredicate();
     auto langtag = literal.getLanguageTag();
     auto specialPredicate = predicate.withLanguageTag(langtag);
     Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
@@ -495,9 +512,9 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   tracer.endTrace("rewriteLocalVocabEntries");
-  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
-  AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
-                     triples.end());
+  // Check that `triples` is sorted and without duplicates.
+  AD_EXPENSIVE_CHECK(ql::ranges::adjacent_find(
+                         triples, std::greater_equal<>{}) == triples.end());
   tracer.beginTrace("removeExistingTriples");
   ql::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);

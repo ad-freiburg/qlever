@@ -65,6 +65,13 @@ inline constexpr std::string_view HAS_WORD_NORMALIZATION_KEY =
 inline constexpr std::string_view ADD_HAS_WORD_TRIPLES_KEY =
     "add-has-word-triples";
 
+// The key under which the predicates to which the `ql:has-word` triples are
+// restricted are stored in the configuration of an index. An index that was
+// built before this key existed has no entry for it; its `ql:has-word` triples
+// are not restricted.
+inline constexpr std::string_view HAS_WORD_RESTRICT_PREDICATES_KEY =
+    "has-word-restrict-predicates";
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_INDEX_HASWORDNORMALIZATION_H
