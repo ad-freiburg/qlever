@@ -90,10 +90,13 @@ class GeoPoint {
   // for the WKT type, which `GeometryInfo` stores in the upper 4 bits of the
   // centroid.
   static constexpr T numDataBits = 60;
-  static constexpr T numTypeBits = 4;
+  // The remaining upper bits of the 64-bit representation. They are zero in
+  // the result of `toBitRepresentation()` and hold the datatype when a point is
+  // stored as an `Id`. `GeometryInfo` uses them for the WKT type of a geometry.
+  static constexpr T numTypeBits = sizeof(T) * 8 - numDataBits;
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
   static constexpr T coordinateMaskFreeBits =
-      ad_utility::bitMaskForHigherBits(sizeof(T) * 8 - numDataBits);
+      ad_utility::bitMaskForHigherBits(numTypeBits);
   // The largest quantized coordinate value (30 one-bits).
   static constexpr T maxCoordinateEncoded =
       ad_utility::bitMaskForLowerBits(numDataBitsCoordinate);

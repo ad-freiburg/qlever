@@ -44,10 +44,11 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(serializationType_) + sizeof(metricLength_) +
                     sizeof(metricArea_));
-  // The WktType only has 8 different values and we have 4 unused bits for the
-  // ValueId datatype of the centroid (it is always a point). Therefore we fold
-  // the attributes together. On OSM planet this will save approx. 1 GiB in
-  // index size.
+  // The WKT type has only 8 different values, and the bit representation of a
+  // `GeoPoint` leaves its upper `GeoPoint::numTypeBits` bits free (they hold
+  // the datatype when the point is stored as an `Id`). Therefore we fold the
+  // two attributes together, which saves about 1 GB of index size on OSM
+  // planet.
   AD_CORRECTNESS_CHECK(
       wktType <= 7 && wktType < (1 << GeoPoint::numTypeBits) - 1,
       "WKT Type out of range");
