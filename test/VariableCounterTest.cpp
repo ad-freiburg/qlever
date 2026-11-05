@@ -293,6 +293,14 @@ TEST(VariableCounterTest, MagicServices) {
           "qlext:variable ?x ;"
           "qlext:variable ?y . } }"),
       counts({{V{"?x"}, 1}, {V{"?y"}, 1}}));
+
+  // Row number.
+  EXPECT_THAT(
+      parseAndCount("SELECT * {"
+                    "SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> {"
+                    "[] <bind> ?n ."
+                    "{ SELECT ?x { ?x <p> ?y } ORDER BY ?x } } }"),
+      counts({{V{"?n"}, 1}, {V{"?x"}, 1}, {V{"?y"}, 1}}));
 }
 
 }  // namespace

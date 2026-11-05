@@ -23,13 +23,13 @@
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/GeoPointEncoding.h"
 #include "index/GraphNameManager.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
@@ -40,6 +40,7 @@
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
 #include "index/VocabularyMerger.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
@@ -143,6 +144,16 @@ class IndexImpl {
 
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
+
+  // If not empty, the `ql:has-word` triples are only added for literals that
+  // are the object of a triple with one of these predicates (IRIs in the format
+  // of `Iri::toStringRepresentation`, sorted and without duplicates).
+  std::vector<std::string> hasWordRestrictPredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -341,19 +352,16 @@ class IndexImpl {
   // access this `IndexImpl`, e.g. right after construction and before the
   // first query is answered.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          Serializer>) void loadVocabularyFromZeroCopyBlob(Serializer&
-                                                               serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<Serializer>)
+  void loadVocabularyFromZeroCopyBlob(Serializer& serializer) {
     vocab_.loadFromZeroCopyDeserializer(serializer);
   }
 
   // Serialize the currently loaded vocabulary to `serializer`. See
   // `Vocabulary::writeAsZeroCopyBlob` for details and restrictions.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::WriteSerializer<
-          Serializer>) void writeVocabularyToZeroCopyBlob(Serializer&
-                                                              serializer)
-      const {
+      requires ad_utility::serialization::WriteSerializer<Serializer>)
+  void writeVocabularyToZeroCopyBlob(Serializer& serializer) const {
     vocab_.writeAsZeroCopyBlob(serializer);
   }
 
@@ -443,6 +451,16 @@ class IndexImpl {
       ad_utility::GeoPointEncoding encoding) {
     geoPointEncodingForIndexBuilding_ = encoding;
   }
+
+  // Set the normalization of the words of the `ql:has-word` triples; see
+  // `ad_utility::HasWordNormalization` for details.
+  void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
+    hasWordNormalization_ = normalization;
+  }
+
+  // Set the `hasWordRestrictPredicates_`. Throw if one of them is not a valid
+  // IRI in angle brackets.
+  void setHasWordRestrictPredicates(const std::vector<std::string>& predicates);
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
@@ -548,10 +566,13 @@ class IndexImpl {
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
   // that has wordOrPrefix as a prefix. Returned IdTable has columns:
-  // textRecord, word. Sorted by textRecord.
+  // textRecord, word. Sorted by textRecord. If several blocks have to be
+  // merged, they are sorted using the `sortConfig`, the cancellation handle of
+  // which is also checked once per block.
   IdTable getWordPostingsForTerm(
       const std::string& wordOrPrefix,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const SortConfig& sortConfig) const;
 
   // Returns a set of textRecords and their corresponding entities and
   // scores. Each textRecord contains its corresponding entity and the term.
@@ -559,10 +580,12 @@ class IndexImpl {
   // textRecord.
   // NOTE: This returns a superset because it contains the whole block and
   // unfitting words are filtered out later by the join with the
-  // TextIndexScanForWords operation.
+  // TextIndexScanForWords operation. The `sortConfig` is used as in
+  // `getWordPostingsForTerm`.
   IdTable getEntityMentionsForWord(
       const std::string& term,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const SortConfig& sortConfig) const;
 
   size_t getIndexOfBestSuitedElTerm(
       const std::vector<std::string>& terms) const;
@@ -684,12 +707,6 @@ class IndexImpl {
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
-
-  // _____________________________________________________________________________
-  size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpecification,
-      const Permutation::Enum& permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
 
  protected:
   // Private member functions
@@ -839,8 +856,7 @@ class IndexImpl {
   // `permutation` specifies which permutation to write.
   // `internal` specifies whether this is an internal permutation and adjusts
   // the filename of the generated file on disk accordingly.
-  // The blocks are compressed and written on the `executor`, by at most
-  // `rebuild-permutation-writer-num-threads` threads at the same time.
+  // The blocks are compressed and written on the `executor`.
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
   // OSP/OPS) and the metadata for the written permutation.
@@ -896,6 +912,8 @@ class IndexImpl {
    *              record. It is checked that no duplicates occur in one block
    *              but when combining multiple blocks they have to be accounted
    *              for.
+   * @param sortConfig: Used to sort the merged blocks. Its cancellation
+   *                    handle is also checked once per block.
    */
   IdTable mergeTextBlockResults(
       absl::FunctionRef<IdTable(const TextBlockMetaData&,
@@ -904,7 +922,7 @@ class IndexImpl {
           reader,
       const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      TextScanMode textScanMode) const;
+      TextScanMode textScanMode, const SortConfig& sortConfig) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
@@ -921,6 +939,8 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, writePatternsToFile);
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
   FRIEND_TEST(IndexImpl, dateOfIndexBuild);
+  FRIEND_TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex);
+  FRIEND_TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex);
 
   bool isLiteral(std::string_view object) const;
 
@@ -980,36 +1000,36 @@ class IndexImpl {
   // Create the SPO and SOP permutations. Additionally, count the number of
   // distinct actual (not internal) subjects in the input and write it to the
   // metadata. Also builds the patterns if specified.
-  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-      std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-          size_t numColumns, BlocksOfTriples sortedTriples,
-          NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
+                                                      1))
+  std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
+      size_t numColumns, BlocksOfTriples sortedTriples,
+      NextSorter&&... nextSorter);
 
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
-  CPP_template(typename... NextSorter)(requires(
-      sizeof...(NextSorter) <=
-      1)) void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
-                               NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
+                                                      1))
+  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
+                       NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
   // metadata. The meta-data JSON file for the index statistics will only be
   // written iff `doWriteConfiguration` is true. That parameter is set to
   // `false` when building the additional permutations for the internal triples.
-  CPP_template(typename... NextSorter)(
-      requires(sizeof...(NextSorter) <=
-               1)) void createPSOAndPOSImpl(size_t numColumns,
-                                            BlocksOfTriples sortedTriples,
-                                            bool doWriteConfiguration,
-                                            NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
+                                                      1))
+  void createPSOAndPOSImpl(size_t numColumns, BlocksOfTriples sortedTriples,
+                           bool doWriteConfiguration,
+                           NextSorter&&... nextSorter);
 
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
-  CPP_template(typename... NextSorter)(requires(
-      sizeof...(NextSorter) <=
-      1)) void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
-                               NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
+                                                      1))
+  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
+                       NextSorter&&... nextSorter);
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.
@@ -1110,9 +1130,8 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state. The permutations are scanned on the `executor`, each
-  // scan by at most `rebuild-index-scan-num-threads` threads at the
-  // same time. `progress` is called (possibly from several threads) with the
+  // triples shared state. The permutations are scanned on the `executor`.
+  // `progress` is called (possibly from several threads) with the
   // number of newly scanned rows; this is used by the index rebuild for
   // progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(

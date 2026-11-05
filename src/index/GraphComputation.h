@@ -24,10 +24,11 @@
 // distinct graphs, otherwise returns the distinct graphs as a vector. The
 // `preexistingGraphs` is used to initialize the vector of distinct graphs, so
 // this function can be used to extend existing metadata.
-CPP_template(typename T)(requires ql::ranges::range<T>&& ql::concepts::same_as<
-                         ql::ranges::range_value_t<T>, Id>)
-    std::optional<std::vector<Id>> computeDistinctGraphs(
-        T&& idRange, ql::span<const Id> preexistingGraphs = {}) {
+CPP_template(typename T)(
+    requires ql::ranges::range<T> &&
+    ql::concepts::same_as<ql::ranges::range_value_t<T>, Id>)
+std::optional<std::vector<Id>> computeDistinctGraphs(
+    T&& idRange, ql::span<const Id> preexistingGraphs = {}) {
   AD_CORRECTNESS_CHECK(preexistingGraphs.size() <=
                        MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA);
   size_t foundGraphs = preexistingGraphs.size();
@@ -60,8 +61,8 @@ inline bool hasOnlyOneGraph(const std::optional<std::vector<Id>>& graphs) {
 // in the block metadata. The `block` may be an owning `IdTable` or a (possibly
 // column-permuted) view of one.
 CPP_template(typename Block)(requires IdTableLike<Block>)
-    std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-        const Block& block) {
+std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
+    const Block& block) {
   AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.

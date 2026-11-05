@@ -139,9 +139,8 @@ class Iri : public BasicIri<true> {
   // is moved into the `Iri` instead of being copied. Note that this only binds
   // to rvalues of exactly `std::string`; for everything else (in particular
   // lvalues) the `std::string_view` overload above is chosen.
-  CPP_template(typename S)(
-      requires ql::concepts::same_as<S, std::string>) static Iri
-      fromIriref(S&& stringWithBrackets) {
+  CPP_template(typename S)(requires ql::concepts::same_as<S, std::string>)
+  static Iri fromIriref(S&& stringWithBrackets) {
     return fromOwnedIriref(std::move(stringWithBrackets));
   }
 

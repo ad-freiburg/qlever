@@ -17,3 +17,5 @@ addLinkAndDiscoverTest(IdMapWritersTest index)
 addLinkAndDiscoverTest(AsyncBlockWriterTest index)
 
 addLinkAndDiscoverTest(SegmentPipelineTest index)
+
+addLinkAndDiscoverTest(MemoryBudgetTest)

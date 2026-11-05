@@ -78,10 +78,9 @@ namespace namedResultCacheSerializer {
 // generic serialization of a `NamedResultCache::Value` below does (for the
 // current version).
 CPP_template(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void readValue(Serializer& serializer,
-                                    NamedResultCache::Value& arg,
-                                    uint16_t entriesVersion) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void readValue(Serializer& serializer, NamedResultCache::Value& arg,
+               uint16_t entriesVersion) {
   using namespace ad_utility::serialization;
   // Deserialize the LocalVocab and get the ID mapping.
   AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);

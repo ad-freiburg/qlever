@@ -34,6 +34,7 @@
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
@@ -45,6 +46,7 @@
 #include "parser/ParsedQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -507,7 +509,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // taken into account. Also note that here `childLeft_` not `childLeft` is
   // used, because `leftSelectedCols` and `rightSelectedCols` are applied after
   // swapping tables back in case of a `WITHIN` join.
-  std::vector<ColumnIndex> leftSelectedCols;
+  qlm::vector<ColumnIndex> leftSelectedCols{allocator()};
   for (auto [var, colInfo] :
        copySortedByColumnIndex(childLeft_->getVariableColumns())) {
     leftSelectedCols.push_back(colInfo.columnIndex_);
@@ -515,7 +517,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  std::vector<ColumnIndex> rightSelectedCols;
+  qlm::vector<ColumnIndex> rightSelectedCols{allocator()};
   for (const auto& [var, colInfo] : varsAndColInfo) {
     rightSelectedCols.push_back(colInfo.columnIndex_);
   }
@@ -664,6 +666,10 @@ std::unique_ptr<Operation> SpatialJoin::cloneWithNewChildren(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  if (auto result = makeTreeWithDistanceVariable(bind)) {
+    return result;
+  }
+
   // The left child keeps all its columns.
   if (childLeft_ != nullptr) {
     if (auto result = pushDownBindToChild(bind, {childLeft_, childRight_}, 0)) {
@@ -691,6 +697,41 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   return SpatialJoin{_executionContext, std::move(config), childLeft_,
                      childRight_, substitutesFilterOp_}
       .pushDownBindToChild(bind, {childLeft_, childRight_}, 1);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const {
+  // Only `libspatialjoin` with `WITHIN_DIST` computes the exact distances.
+  if (!isConstructed() || config_.distanceVariable_.has_value() ||
+      getAlgorithm() != SpatialJoinAlgorithm::LIBSPATIALJOIN ||
+      getJoinType() != SpatialJoinType::WITHIN_DIST) {
+    return std::nullopt;
+  }
+
+  // The `BIND` expression must be the distance between the two join variables
+  // (in any order) in a unit of length.
+  auto call = sparqlExpression::getGeoDistanceExpressionParameters(
+      *bind._expression.getPimpl());
+  if (!call.has_value() || !call->left_.isVariable() ||
+      !call->right_.isVariable() ||
+      !ad_utility::detail::isLengthUnit(call->unit_)) {
+    return std::nullopt;
+  }
+  const auto& left = call->left_.getVariable();
+  const auto& right = call->right_.getVariable();
+  if (!(left == config_.left_ && right == config_.right_) &&
+      !(left == config_.right_ && right == config_.left_)) {
+    return std::nullopt;
+  }
+
+  auto config = config_;
+  config.distanceVariable_ = bind._target;
+  config.distanceUnit_ = call->unit_;
+  return _executionContext->makeShared<QueryExecutionTree>(
+      _executionContext, std::make_unique<SpatialJoin>(
+                             _executionContext, std::move(config), childLeft_,
+                             childRight_, substitutesFilterOp_));
 }
 
 // _____________________________________________________________________________
