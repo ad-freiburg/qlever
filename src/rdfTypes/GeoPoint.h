@@ -85,6 +85,10 @@ class GeoPoint {
   // `LatMajor`: The latitude is in the upper 30, the longitude in the lower 30
   // of the 60 bits. A geographic rectangle then only maps to one range per
   // quantized latitude, or, as a single range, to the whole latitude band.
+  //
+  // TODO<pas-kes> Use all 64 bits with the split layout. This needs a new place
+  // for the WKT type, which `GeometryInfo` stores in the upper 4 bits of the
+  // centroid.
   static constexpr T numDataBits = 60;
   static constexpr T numTypeBits = 4;
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
