@@ -458,9 +458,9 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   tracer.endTrace("rewriteLocalVocabEntries");
-  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
-  AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
-                     triples.end());
+  // Check that `triples` is sorted and without duplicates.
+  AD_EXPENSIVE_CHECK(ql::ranges::adjacent_find(
+                         triples, std::greater_equal<>{}) == triples.end());
   tracer.beginTrace("removeExistingTriples");
   ql::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
