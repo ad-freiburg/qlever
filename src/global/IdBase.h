@@ -344,8 +344,6 @@ class IdBase {
         static_cast<uint64_t>(derived().getPayloadBits()));
   }
 
-  // TODO<joka921> implement dates
-
   // Create an `Id` for a GeoPoint object (representing a POINT from WKT).
   static Derived makeFromGeoPoint(GeoPoint p) {
     return Derived::fromBits(Datatype::GeoPoint, p.toBitRepresentation());
@@ -610,9 +608,10 @@ class IdBase {
   // are stripped to store it in the payload: 4 for the legacy `ValueId` with
   // its 60 payload bits, 0 for the `SplitLayoutId`.
   static constexpr int numStrippedBits() {
-    return Derived::numDataBits >= 64
-               ? 0
-               : 64 - static_cast<int>(Derived::numDataBits);
+    // A payload with more than 64 bits would need a different storage of these
+    // 64-bit values, so it is not supported.
+    static_assert(Derived::numDataBits <= 64);
+    return 64 - static_cast<int>(Derived::numDataBits);
   }
 
   // Helper function for the implementation of the unsigned index types. The
