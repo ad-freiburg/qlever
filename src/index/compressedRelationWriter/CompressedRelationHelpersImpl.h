@@ -1,6 +1,6 @@
-// Copyright 2021 - 2025 The QLever Authors, in particular:
+// Copyright 2021 - 2026 The QLever Authors, in particular:
 //
-// 2021 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2021 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025        Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -8,15 +8,19 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
-#define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
+#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONHELPERSIMPL_H_
+#define QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONHELPERSIMPL_H_
 
+#include <algorithm>
 #include <array>
 #include <functional>
 #include <optional>
+#include <utility>
 
+#include "backports/algorithm.h"
 #include "backports/numeric.h"
-#include "index/CompressedRelationWriter.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
+#include "util/Algorithm.h"
 #include "util/ExceptionHandling.h"
 
 namespace compressedRelationHelpers {
@@ -218,6 +222,145 @@ class DistinctIdCounter {
   }
 };
 
+// Return true if a relation with `numRows` rows is small for a permutation with
+// the given `blocksize`. Small relations are batched together into blocks of
+// small relations (for which no metadata is stored), while large relations are
+// stored in blocks of their own.
+inline bool isSmallRelation(size_t numRows, size_t blocksize) {
+  return static_cast<double>(numRows) <= 0.8 * static_cast<double>(blocksize);
+}
+
+// Return the index of the first element `e` in `range[begin, end)` for which
+// `projection(e) != value`, or `end` if there is no such element. This is
+// the implementation of `findFirstTripleChange` below.
+template <typename Range, typename Value, typename Projection>
+size_t findFirstDifferent(const Range& range, size_t begin, size_t end,
+                          const Value& value, const Projection& projection) {
+  auto it = ql::ranges::find_if(
+      range.begin() + begin, range.begin() + end,
+      [&value](const auto& projected) { return projected != value; },
+      projection);
+  return static_cast<size_t>(it - range.begin());
+}
+
+// Return the index of the first row in `rows[begin, end)` whose first three
+// columns differ from the `lastTriple`, or `end` if there is no such row.
+// This is the first position at which a new block for a large relation may
+// be started, because equal triples (when disregarding the graph and the
+// payload columns) have to stay in the same block.
+//
+// Note: The rows are compared row-wise (and on the bits of the `Id`s, which
+// is much cheaper, see `pickFirstThreeColumnsOfIdsWithoutLocalVocab`).
+// Scanning each of the three columns separately and taking the minimum of
+// the resulting offsets would use the cache more efficiently, but it would
+// also be slower if one of the columns is (almost) constant. This function
+// is only called at the end of a (nearly) complete block of a large relation
+// (when cutting a relation into blocks, and at the boundaries between the
+// input blocks in `TripleAlignedBlockBuffer`), and it then typically finds a
+// differing row immediately, so it is not a bottleneck (unless in a very
+// degenerate case) and we keep the simpler implementation.
+template <typename Rows, typename Triple>
+size_t findFirstTripleChange(const Rows& rows, size_t begin, size_t end,
+                             const Triple& lastTriple) {
+  return findFirstDifferent(rows, begin, end, lastTriple,
+                            pickFirstThreeColumnsOfIdsWithoutLocalVocab);
+}
+
+// Return the end of the run of rows of an input block that starts at row
+// `begin` and consists of all rows that have the same `col0` ID as that row.
+// Such a run is exactly the part of one relation that is contained in the
+// input block. The end is found by an exponential ("galloping") search over
+// the sorted `col0` column, see `ad_utility::gallopingPartitionPoint`.
+//
+// NOTE: A linear scan would be slow for the long run of a large relation
+// (which may span the complete input block), and a binary search would be
+// slow for the short runs of the many small relations. The galloping search
+// finds a short run with a handful of comparisons and a long run with a
+// logarithmic number of them. The comparison is performed on the bits of the
+// `Id`s, which is much cheaper, see `bitsOfIdWithoutLocalVocab`.
+template <typename Col0>
+size_t findEndOfRun(const Col0& col0, size_t begin) {
+  const auto col0Bits = bitsOfIdWithoutLocalVocab(col0[begin]);
+  auto belongsToRun = [col0Bits](Id id) {
+    return bitsOfIdWithoutLocalVocab(id) == col0Bits;
+  };
+  // Note: The row `begin` is guaranteed to belong to the run, so the search
+  // starts after it.
+  auto it = ad_utility::gallopingPartitionPoint(col0.begin() + begin + 1,
+                                                col0.end(), belongsToRun);
+  return static_cast<size_t>(it - col0.begin());
+}
+
+// Cut the `rows` of a large relation into slices of about `blocksize` rows
+// each and call `sliceCallback(begin, end)` for the row range of each slice,
+// in order. Rows that agree in their first three columns are never split
+// across two slices, so a slice may be larger than `blocksize`. The `rows`
+// must not be empty.
+template <typename Rows, typename SliceCallback>
+void forEachSliceOfLargeBlock(const Rows& rows, size_t blocksize,
+                              SliceCallback sliceCallback) {
+  const size_t numRows = rows.numRows();
+  AD_CORRECTNESS_CHECK(numRows > 0 && blocksize > 0);
+  size_t begin = 0;
+  while (begin < numRows) {
+    size_t end = std::min(begin + blocksize, numRows);
+    // Never split rows whose first three columns are equal across two
+    // blocks.
+    while (end < numRows &&
+           pickFirstThreeColumnsOfIdsWithoutLocalVocab(rows[end]) ==
+               pickFirstThreeColumnsOfIdsWithoutLocalVocab(rows[end - 1])) {
+      ++end;
+    }
+    sliceCallback(begin, end);
+    begin = end;
+  }
+}
+
+// A buffer that turns the sorted blocks of a large relation into blocks that
+// can be written as they are, because rows that agree in their first three
+// columns (the triple without the graph) never end up in two different
+// blocks. Each block is buffered until the next one shows that its last triple
+// does not continue; the rows at the beginning of the next block that continue
+// it are moved into the buffered block. Feed the blocks in order via `push`,
+// and get the last block via `finish`.
+template <typename Block>
+class TripleAlignedBlockBuffer {
+ private:
+  std::optional<Block> bufferedBlock_;
+
+ public:
+  // Add the next sorted `block`. Return the previously buffered block if it is
+  // complete now, and `std::nullopt` otherwise. Empty blocks are ignored.
+  std::optional<Block> push(Block block) {
+    if (block.empty()) {
+      return std::nullopt;
+    }
+    if (!bufferedBlock_.has_value()) {
+      bufferedBlock_ = std::move(block);
+      return std::nullopt;
+    }
+    const auto lastTriple =
+        pickFirstThreeColumnsOfIdsWithoutLocalVocab(bufferedBlock_->back());
+    const size_t numContinuingRows =
+        findFirstTripleChange(block, 0, block.numRows(), lastTriple);
+    if (numContinuingRows > 0) {
+      bufferedBlock_->insertAtEnd(block, 0, numContinuingRows);
+      block.erase(block.begin(), block.begin() + numContinuingRows);
+    }
+    // If the `block` consists only of rows that continue the buffered block,
+    // then the next block might continue it as well, so nothing is complete
+    // yet.
+    if (block.empty()) {
+      return std::nullopt;
+    }
+    return std::exchange(bufferedBlock_, std::move(block));
+  }
+
+  // Return the last buffered block, if any. This has to be called after the
+  // last `push`.
+  std::optional<Block> finish() { return std::exchange(bufferedBlock_, {}); }
+};
+
 }  // namespace compressedRelationHelpers
 
-#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
+#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_COMPRESSEDRELATIONHELPERSIMPL_H_
