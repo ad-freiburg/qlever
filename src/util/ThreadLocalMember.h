@@ -10,17 +10,133 @@
 #ifndef QLEVER_SRC_UTIL_THREADLOCALMEMBER_H
 #define QLEVER_SRC_UTIL_THREADLOCALMEMBER_H
 
+#include <absl/base/attributes.h>
+#include <absl/base/no_destructor.h>
+#include <absl/functional/any_invocable.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <mutex>
+#include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "backports/concepts.h"
+#include "backports/span.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
+#include "util/NoCopyNoMove.h"
+#include "util/Synchronized.h"
 
 namespace ad_utility {
+
+namespace detail {
+
+// The global bookkeeping of `ThreadLocalMember` (see below), which connects
+// the objects with the values of the threads: it assigns each object a small
+// id, which is reused after the object is destroyed, and it keeps track of the
+// threads that have values. All member functions are threadsafe. Except for
+// the fast path of `getOrAllocateId`, they lock the single `Synchronized`
+// state. They are only called on the slow paths of `ThreadLocalMember`.
+//
+// `Object` and `Thread` are the types of the objects and of the values of a
+// thread. `Thread` must have the member functions `reset(uint32_t id)`, which
+// resets the value for the object with the `id`, and `resize(size_t size)`.
+template <typename Object, typename Thread>
+class ThreadLocalMemberRegistry : public NoCopyNoMove {
+ public:
+  // The value of an id that has not been assigned yet.
+  static constexpr uint32_t noId = std::numeric_limits<uint32_t>::max();
+
+ private:
+  struct State {
+    // The object for each id, `nullptr` for ids that are currently unused.
+    std::vector<Object*> objects_;
+    // The ids that are currently unused, to keep the ids (and therefore the
+    // per-thread arrays) small.
+    std::vector<uint32_t> freeIds_;
+    // The values of all threads that currently have some.
+    std::vector<Thread*> threads_;
+  };
+  Synchronized<State, std::mutex> state_;
+
+ public:
+  // Return the value of `id`. If it is `noId`, then first assign an unused id
+  // to `object` and store it in `id`.
+  uint32_t getOrAllocateId(std::atomic<uint32_t>& id, Object* object) {
+    // If the id was already assigned (e.g. by another thread), then return it
+    // without locking. The acquire synchronizes with the release below.
+    uint32_t result = id.load(std::memory_order_acquire);
+    if (result != noId) {
+      return result;
+    }
+    auto state = state_.wlock();
+    // Check again, because another thread might have assigned the id while
+    // this thread was waiting for the lock.
+    result = id.load(std::memory_order_relaxed);
+    if (result != noId) {
+      return result;
+    }
+    if (!state->freeIds_.empty()) {
+      result = state->freeIds_.back();
+      state->freeIds_.pop_back();
+      state->objects_[result] = object;
+    } else {
+      AD_CORRECTNESS_CHECK(state->objects_.size() < noId);
+      result = static_cast<uint32_t>(state->objects_.size());
+      state->objects_.push_back(object);
+    }
+    // The release synchronizes with the acquire above and in
+    // `ThreadLocalMember::getIfExists`. It makes the resets in a previous
+    // `releaseId` of the same id visible to the threads that see the id.
+    id.store(result, std::memory_order_release);
+    return result;
+  }
+
+  // Mark `id` as unused, and reset its value in all threads.
+  void releaseId(uint32_t id) {
+    auto state = state_.wlock();
+    for (Thread* thread : state->threads_) {
+      thread->reset(id);
+    }
+    state->objects_[id] = nullptr;
+    state->freeIds_.push_back(id);
+  }
+
+  // Register the values of a thread.
+  void registerThread(Thread* thread) {
+    state_.wlock()->threads_.push_back(thread);
+  }
+
+  // Call `thread.resize(size)`. This has to be synchronized with
+  // `releaseId`, which might reset values of the same thread concurrently.
+  void resize(Thread& thread, size_t size) {
+    auto lock = state_.wlock();
+    thread.resize(size);
+  }
+
+  // Call `forEachLiveObject(object, id)` for each object that is alive and has
+  // an id smaller than `numIds`, and then unregister the values of the
+  // `thread`. The objects cannot be destroyed concurrently, because
+  // `releaseId` waits for the lock.
+  template <typename ForEachLiveObject>
+  void unregisterThread(Thread* thread, size_t numIds,
+                        const ForEachLiveObject& forEachLiveObject) {
+    auto state = state_.wlock();
+    numIds = std::min(numIds, state->objects_.size());
+    for (size_t id = 0; id < numIds; ++id) {
+      if (Object* object = state->objects_[id]) {
+        forEachLiveObject(*object, static_cast<uint32_t>(id));
+      }
+    }
+    auto& threads = state->threads_;
+    threads.erase(ql::ranges::find(threads, thread));
+  }
+};
+
+}  // namespace detail
 
 // Emulate a non-static `thread_local` data member, which C++ doesn't have: each
 // object of this class holds one value of type `T` per thread. The value of
@@ -30,107 +146,93 @@ namespace ad_utility {
 // When a thread exits, the `OnThreadExit` callback of each object is called
 // with the value of that thread, e.g. to give resources that the value holds
 // back to the object. When an object is destroyed, its values in all threads
-// are discarded.
+// are reset to `T{}`.
 //
 // The implementation is similar to `folly::ThreadLocal`: each object lazily
 // gets a small id, which is reused after the object is destroyed, and each
-// thread has an array of values that is indexed by these ids. A global mutex
-// (one per `T`) is only locked on the slow paths: when an object is used for
-// the first time on a thread, when an object is destroyed, and when a thread
-// exits.
+// thread has an array of values that is indexed by these ids. The ids and the
+// threads are managed by a `detail::ThreadLocalMemberRegistry` (one per `T`).
 template <typename T>
-class ThreadLocalMember {
+class ThreadLocalMember : public NoCopyNoMove {
+  static_assert(std::is_default_constructible_v<T>,
+                "The values of a `ThreadLocalMember` are created as `T{}`");
+
  public:
   // Called with the value of a thread when that thread exits. It is called
-  // while the global mutex is held, and must not throw. It might also be
-  // called with a default-constructed value for a thread that never accessed
-  // the object.
-  using OnThreadExit = std::function<void(T&)>;
+  // while the registry is locked, and must not throw. It might also
+  // be called with a default-constructed value for a thread that never
+  // accessed the object.
+  //
+  // NOTE: A thread may exit while the `ThreadLocalMember` is being destroyed,
+  // so the callback can run until the destructor has released the id. It must
+  // therefore only use state that outlives the `ThreadLocalMember`, e.g. the
+  // members of the owning object that are declared before it.
+  using OnThreadExit = absl::AnyInvocable<void(T&)>;
 
  private:
   class ThreadValues;
+  using Registry =
+      detail::ThreadLocalMemberRegistry<ThreadLocalMember, ThreadValues>;
 
   // The part of a thread's values that is read on the hot path. It is
   // trivially destructible and constant-initialized, so accessing it requires
   // no initialization guard.
   struct FastState {
-    T* values_ = nullptr;
-    size_t numValues_ = 0;
+    ql::span<T> values_;
     // Set when the `ThreadValues` of this thread were destroyed at thread
     // exit. Accesses that happen afterwards (e.g. in the destructors of other
     // `thread_local` objects) then get no value.
     bool isDestroyed_ = false;
   };
-  static inline thread_local FastState fastState_;
-
-  // The global bookkeeping, all members are protected by `mutex_`.
-  struct Registry {
-    std::mutex mutex_;
-    // The object for each id, `nullptr` for ids that are currently unused.
-    std::vector<ThreadLocalMember*> objects_;
-    // The ids that are currently unused, to keep the ids (and therefore the
-    // per-thread arrays) small.
-    std::vector<uint32_t> freeIds_;
-    // The values of all threads that currently have some.
-    std::vector<ThreadValues*> threads_;
-
-    // Return the single global registry. It is intentionally never destroyed,
-    // because threads may exit, and objects with static storage duration may
-    // be destroyed, after the destruction of all function-local static
-    // variables.
-    static Registry& get() {
-      static auto* registry = new Registry{};
-      return *registry;
-    }
-  };
-
-  static constexpr uint32_t noId = std::numeric_limits<uint32_t>::max();
+  static_assert(std::is_trivially_destructible_v<FastState>);
+  ABSL_CONST_INIT static inline thread_local FastState fastState_{};
 
   // The index of this object's value in the per-thread arrays. It is assigned
   // lazily by `getOrCreate()`, s.t. objects that are never used never lock
   // the registry.
-  std::atomic<uint32_t> id_{noId};
+  std::atomic<uint32_t> id_{Registry::noId};
   OnThreadExit onThreadExit_;
 
  public:
-  // Construct with the given callback for exiting threads.
-  explicit ThreadLocalMember(OnThreadExit onThreadExit)
-      : onThreadExit_{std::move(onThreadExit)} {}
+  // Construct without a callback for exiting threads.
+  ThreadLocalMember() = default;
 
-  // Discard the values of all threads.
+  // Construct with the given callback for exiting threads. The callback is
+  // constructed in place: moving an `absl::AnyInvocable` that stores a
+  // stateless lambda triggers a false positive `-Wuninitialized` in GCC 13+.
+  CPP_template(typename F)(
+      requires std::is_constructible_v<OnThreadExit, F &&>)
+  explicit ThreadLocalMember(F&& onThreadExit)
+      : onThreadExit_{std::forward<F>(onThreadExit)} {}
+
+  // Reset the values of all threads.
   ~ThreadLocalMember() {
     // There are no concurrent users of an object that is being destroyed.
     uint32_t id = id_.load(std::memory_order_relaxed);
-    if (id == noId) {
-      return;
+    if (id != Registry::noId) {
+      ad_utility::terminateIfThrows(
+          [id] { registry().releaseId(id); },
+          "Releasing the id of a `ThreadLocalMember`");
     }
-    auto& registry = Registry::get();
-    std::lock_guard lock{registry.mutex_};
-    for (auto* thread : registry.threads_) {
-      thread->reset(id);
-    }
-    registry.objects_[id] = nullptr;
-    registry.freeIds_.push_back(id);
   }
-
-  // The values are tied to the address of the object, so it can be neither
-  // copied nor moved.
-  ThreadLocalMember(const ThreadLocalMember&) = delete;
-  ThreadLocalMember& operator=(const ThreadLocalMember&) = delete;
 
   // Return the value of the calling thread, or `nullptr` if it hasn't been
   // created yet.
   T* getIfExists() const noexcept {
-    // The acquire synchronizes with the release in `getOrCreate`, which
-    // happens after a previous object with the same id reset its values.
+    // The acquire synchronizes with the release in `getOrAllocateId`.
     uint32_t id = id_.load(std::memory_order_acquire);
-    const auto& state = fastState_;
-    return id < state.numValues_ ? state.values_ + id : nullptr;
+    const auto& values = fastState_.values_;
+    return id < values.size() ? &values[id] : nullptr;
   }
 
   // Return the value of the calling thread, and create it (as `T{}`) if it
   // doesn't exist yet. Return `nullptr` if the values of the calling thread
   // were already destroyed because the thread is exiting.
+  //
+  // NOTE: The returned pointer (also that of `getIfExists()`) is invalidated
+  // when the calling thread creates the value of another `ThreadLocalMember`
+  // with the same `T`, because the array of the thread might grow, and when
+  // the thread exits.
   T* getOrCreate() {
     if (T* value = getIfExists()) {
       return value;
@@ -138,81 +240,70 @@ class ThreadLocalMember {
     if (fastState_.isDestroyed_) {
       return nullptr;
     }
-    auto& registry = Registry::get();
-    std::lock_guard lock{registry.mutex_};
-    uint32_t id = id_.load(std::memory_order_relaxed);
-    if (id == noId) {
-      id = allocateId(registry);
-      id_.store(id, std::memory_order_release);
+    uint32_t id = registry().getOrAllocateId(id_, this);
+    // Only lock the registry if the array of this thread is too small. It is
+    // large enough e.g. if this thread already has values of objects with
+    // larger ids, and the id of this object was assigned just now.
+    if (id >= fastState_.values_.size()) {
+      registry().resize(ThreadValues::getForCurrentThread(), size_t{id} + 1);
     }
-    ThreadValues::getForCurrentThread().ensureSize(size_t{id} + 1);
-    return fastState_.values_ + id;
+    return &fastState_.values_[id];
   }
 
  private:
-  // Assign an unused id to this object and return it. The registry's `mutex_`
-  // must be held.
-  uint32_t allocateId(Registry& registry) {
-    if (!registry.freeIds_.empty()) {
-      uint32_t id = registry.freeIds_.back();
-      registry.freeIds_.pop_back();
-      registry.objects_[id] = this;
-      return id;
-    }
-    AD_CORRECTNESS_CHECK(registry.objects_.size() < noId);
-    registry.objects_.push_back(this);
-    return static_cast<uint32_t>(registry.objects_.size() - 1);
+  // Return the single registry for `T`. It is intentionally never destroyed,
+  // because threads may exit, and objects with static storage duration may
+  // be destroyed, after the destruction of all function-local static
+  // variables.
+  static Registry& registry() {
+    static absl::NoDestructor<Registry> instance;
+    return *instance;
   }
 
   // The values of a single thread. They are owned by a `thread_local` object
   // of this class, the destructor of which calls the `OnThreadExit` callbacks.
-  class ThreadValues {
+  class ThreadValues : public NoCopyNoMove {
    private:
     std::vector<T> values_;
 
    public:
-    // Register in the registry, the `mutex_` of which must be held.
-    ThreadValues() { Registry::get().threads_.push_back(this); }
+    ThreadValues() { registry().registerThread(this); }
 
-    // Call the `OnThreadExit` callbacks of all objects that are still alive
-    // and unregister.
+    // Call the `OnThreadExit` callbacks and unregister.
     ~ThreadValues() {
-      auto& registry = Registry::get();
-      std::lock_guard lock{registry.mutex_};
-      size_t numIds = std::min(values_.size(), registry.objects_.size());
-      for (size_t id = 0; id < numIds; ++id) {
-        if (auto* object = registry.objects_[id]) {
-          object->onThreadExit_(values_[id]);
-        }
-      }
-      auto& threads = registry.threads_;
-      threads.erase(std::find(threads.begin(), threads.end(), this));
-      fastState_ = {nullptr, 0, true};
+      ad_utility::terminateIfThrows(
+          [this] {
+            registry().unregisterThread(
+                this, values_.size(),
+                [this](ThreadLocalMember& object, uint32_t id) {
+                  if (object.onThreadExit_) {
+                    object.onThreadExit_(values_[id]);
+                  }
+                });
+          },
+          "Unregistering the values of an exiting thread from a "
+          "`ThreadLocalMember`");
+      fastState_ = {{}, true};
     }
 
-    ThreadValues(const ThreadValues&) = delete;
-    ThreadValues& operator=(const ThreadValues&) = delete;
-
     // Return the values of the calling thread, creating them on the first
-    // call. The registry's `mutex_` must be held and the values must not have
-    // been destroyed yet (see `FastState::isDestroyed_`).
+    // call. The values must not have been destroyed yet (see
+    // `FastState::isDestroyed_`).
     static ThreadValues& getForCurrentThread() {
       static thread_local ThreadValues values;
       return values;
     }
 
-    // Make sure that there are at least `size` values. The registry's `mutex_`
-    // must be held, because other threads might concurrently `reset` values.
-    void ensureSize(size_t size) {
-      if (size > values_.size()) {
-        values_.resize(std::max(size, 2 * values_.size()));
-        fastState_.values_ = values_.data();
-        fastState_.numValues_ = values_.size();
-      }
+    // Grow to at least `size` values, which must be more than the current
+    // number of values. Only called via `Registry::resize`.
+    void resize(size_t size) {
+      AD_CORRECTNESS_CHECK(size > values_.size());
+      values_.resize(std::max(size, 2 * values_.size()));
+      fastState_.values_ = values_;
     }
 
     // Reset the value with the given `id`, the object of which is being
-    // destroyed. The registry's `mutex_` must be held.
+    // destroyed. Only called via `Registry::releaseId`.
     void reset(uint32_t id) {
       if (id < values_.size()) {
         values_[id] = T{};

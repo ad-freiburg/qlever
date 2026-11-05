@@ -289,12 +289,12 @@ class MemoryLimitTracker {
       : MemoryLimitTracker{makeSharedAllocationMemoryLeft(limit),
                            std::move(clearOnAllocation)} {}
 
-  // Copying is cheap and shares the underlying budget and hook. The move
-  // operations of `MaybeOwningPtr` deliberately COPY the source rather than
-  // steal it, so that a moved-from tracker remains valid and continues to
-  // share the same memory budget and hook. This mirrors the semantics
-  // required by `AllocatorWithLimit` (a moved-from allocator must still hold a
-  // usable tracker).
+  // Copying is cheap and shares the underlying budget and hook. As
+  // `MaybeOwningPtr` has no move operations, moving falls back to copying
+  // rather than stealing, so that a moved-from tracker remains valid and
+  // continues to share the same memory budget and hook. This mirrors the
+  // semantics required by `AllocatorWithLimit` (a moved-from allocator must
+  // still hold a usable tracker).
   MemoryLimitTracker(const MemoryLimitTracker&) = default;
   MemoryLimitTracker& operator=(const MemoryLimitTracker&) = default;
   MemoryLimitTracker(MemoryLimitTracker&&) noexcept = default;

@@ -37,8 +37,38 @@
 #include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
+#include "util/UninitializedAllocator.h"
 
 namespace qlever {
+
+namespace {
+// Read the complete contents of the blob file with the given `filename`. The
+// buffer is not zero-initialized, because it is completely overwritten by the
+// read.
+std::vector<char, ad_utility::default_init_allocator<char>>
+readCompressedBlobFile(const std::string& filename) {
+  // A directory can be opened like a file, but its size is reported as the
+  // maximal file size, which we must not try to allocate.
+  if (!ql::filesystem::is_regular_file(filename)) {
+    throw std::runtime_error{
+        absl::StrCat("The blob file \"", filename,
+                     "\" does not exist or is not a regular file")};
+  }
+  ad_utility::File file{filename, "r"};
+  std::vector<char, ad_utility::default_init_allocator<char>> compressedBlob(
+      file.sizeOfFile());
+  auto numBytesRead =
+      file.read(compressedBlob.data(), compressedBlob.size(), 0);
+  AD_CORRECTNESS_CHECK(
+      static_cast<size_t>(numBytesRead) == compressedBlob.size(), [&]() {
+        return absl::StrCat("Could not read the complete blob file \"",
+                            filename, "\" (expected ", compressedBlob.size(),
+                            " bytes, but read ", numBytesRead,
+                            "), was it modified while it was being read?");
+      });
+  return compressedBlob;
+}
+}  // namespace
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
@@ -84,6 +114,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
           allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
+  // Reject invalid configurations before loading anything.
+  config.validate();
   // Set runtime parameters relevant for caching and propagate them to the
   // cache.
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
@@ -103,8 +135,9 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 
   // If `skipLoading` is set, we do not touch the on-disk index at all; the
   // instance is expected to be populated later from a blob (see
-  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
-  if (skipLoading) {
+  // `deserializeVocabAndNamedCacheFromCompressedBlob`). A blob file from the
+  // `config` is loaded in any case (see below).
+  if (skipLoading && !config.compressedBlobFilename_.has_value()) {
     return;
   }
 
@@ -114,19 +147,36 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   auto snapshot = indexAndViewsSnapshot();
   auto& [index, materializedViewsManager] = *snapshot;
 
-  // Load the index from disk.
-  index.usePatterns() = enablePatternTrick_;
-  index.loadAllPermutations() = !config.onlyPsoAndPos_;
-  index.doNotLoadPermutations() = config.doNotLoadPermutations_;
-  index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
-  if (config.loadTextIndex_) {
-    index.addTextFromOnDiskIndex();
+  // Load the index from the blob file if one is given, and from disk
+  // otherwise. A blob has no text index (`validate` has checked that
+  // `loadTextIndex_` is not set in this case).
+  if (config.compressedBlobFilename_.has_value()) {
+    const auto& filename = config.compressedBlobFilename_.value();
+    AD_LOG_INFO << "Loading the index from the blob file \"" << filename
+                << "\" ..." << std::endl;
+    deserializeVocabAndNamedCacheFromCompressedBlob(
+        readCompressedBlobFile(filename));
+    loadedFromBlob_ = true;
+  } else {
+    index.usePatterns() = enablePatternTrick_;
+    index.loadAllPermutations() = !config.onlyPsoAndPos_;
+    index.doNotLoadPermutations() = config.doNotLoadPermutations_;
+    index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
+    if (config.loadTextIndex_) {
+      index.addTextFromOnDiskIndex();
+    }
   }
   if (config.indexDescription_.has_value()) {
     index.setKbName(config.indexDescription_.value());
   }
   if (config.textDescription_.has_value()) {
     index.setTextName(config.textDescription_.value());
+  }
+
+  // An index that is loaded from a blob has no files on disk, and hence no
+  // materialized views (`validate` has checked that none are to be preloaded).
+  if (loadedFromBlob_) {
+    return;
   }
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
@@ -190,6 +240,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setSettingsFile(config.settingsFile_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
+  index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
+  index.getImpl().setHasWordRestrictPredicates(
+      config.hasWordRestrictPredicates_);
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
@@ -274,6 +327,7 @@ UpdateMetadata Qlever::applyUpdate(
     const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+  throwIfLoadedFromBlob("An update");
   const auto& qet = plannedUpdate.queryExecutionTree();
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
   AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
@@ -337,6 +391,7 @@ DeltaTriplesCount Qlever::clearDeltaTriples() const {
 // _____________________________________________________________________________
 nlohmann::json Qlever::vacuumDeltaTriples(
     SharedCancellationHandle handle) const {
+  throwIfLoadedFromBlob("Vacuuming the delta triples");
   auto snapshot = indexAndViewsSnapshot();
   return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
       [handle](auto& deltaTriples) { return deltaTriples.vacuum(handle); });
@@ -447,6 +502,12 @@ void IndexBuilderConfig::validate() const {
         "must be between 1 and ",
         MAX_INDEX_ROWS_PER_BLOCK));
   }
+  if (!hasWordRestrictPredicates_.empty() && !addHasWordTriples_) {
+    throw std::invalid_argument(
+        "The predicates to which the `ql:has-word` triples are restricted "
+        "(`has-word-restrict-predicates`) require the option "
+        "`add-has-word-triples`");
+  }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
   }
@@ -466,11 +527,55 @@ void IndexBuilderConfig::validate() const {
 }
 
 // ___________________________________________________________________________
+void EngineConfig::validate() const {
+  if (!compressedBlobFilename_.has_value()) {
+    return;
+  }
+  auto throwUnsupported = [](std::string_view option) {
+    throw std::invalid_argument(absl::StrCat(
+        "An index that is loaded from a blob (`compressedBlobFilename_`, "
+        "`--read-from-blob-file` of `qlever-server`) has no permutations and "
+        "no files on disk, so it cannot be combined with ",
+        option));
+  };
+  if (persistUpdates_) {
+    throwUnsupported(
+        "persisting updates (`persistUpdates_`, which is true by default, or "
+        "`--persist-updates`)");
+  }
+  if (loadTextIndex_) {
+    throwUnsupported("loading a text index (`loadTextIndex_`, `--text`)");
+  }
+  if (rebuildIndexStrategy_.has_value()) {
+    throwUnsupported(
+        "automatic index rebuilds (`rebuildIndexStrategy_`, "
+        "`--rebuild-index-strategy`)");
+  }
+  if (!preloadMaterializedViews_.empty()) {
+    throwUnsupported(
+        "preloading materialized views (`preloadMaterializedViews_`, "
+        "`--preload-materialized-views`)");
+  }
+}
+
+// ___________________________________________________________________________
+void Qlever::throwIfLoadedFromBlob(std::string_view operation) const {
+  if (loadedFromBlob_) {
+    throw std::runtime_error(
+        absl::StrCat(operation,
+                     " is not supported for an index that is loaded from a "
+                     "blob, because it has no permutations and no files on "
+                     "disk"));
+  }
+}
+
+// ___________________________________________________________________________
 void Qlever::writeMaterializedView(
     std::string name, std::string query,
     const std::vector<DatasetClause>& datasetClauses,
     SharedCancellationHandle cancellationHandle,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
+  throwIfLoadedFromBlob("Writing a materialized view");
   auto plan = parseAndPlanQuery(std::move(query), datasetClauses,
                                 std::move(cancellationHandle), requestTimer);
   const auto& viewsManager =
@@ -494,6 +599,7 @@ bool Qlever::unloadMaterializedView(const std::string& name) const {
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
+  throwIfLoadedFromBlob("Loading a materialized view");
   auto indexAndViews = indexAndViewsSnapshot();
   auto qec = createQueryExecutionContext(indexAndViews, executor_);
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
@@ -501,6 +607,7 @@ void Qlever::loadMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 void Qlever::deleteMaterializedView(std::string name) const {
+  throwIfLoadedFromBlob("Deleting a materialized view");
   const auto indexAndViews = indexAndViewsSnapshot();
   indexAndViews->materializedViewsManager_.deleteView(name);
 }
@@ -652,6 +759,7 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
 Qlever::RebuildResult Qlever::rebuildIndexToDisk(
     Index& index, const IndexSwapConfig& config,
     const ad_utility::SharedCancellationHandle& handle) const {
+  throwIfLoadedFromBlob("An index rebuild");
   const std::string& indexBaseName = config.newIndexSource();
   ql::filesystem::path directory =
       ql::filesystem::path{indexBaseName}.parent_path();

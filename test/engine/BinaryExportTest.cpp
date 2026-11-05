@@ -17,6 +17,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "ValuesForTesting.h"
 #include "engine/BinaryExport.h"
 #include "engine/QueryExecutionTree.h"
@@ -37,8 +38,8 @@ Id transmitted(size_t i) {
 Id localVocabId(LocalVocab& localVocab, std::string word,
                 const QueryExecutionContext& qec) {
   return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation(std::move(word),
-                                                qec.getLocalVocabContext())));
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          std::move(word), qec.getLocalVocabContext())));
 }
 
 // The bytes of the trivially copyable `value`.

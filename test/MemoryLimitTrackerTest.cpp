@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <optional>
 #include <random>
 #include <thread>
 #include <vector>
@@ -297,6 +298,52 @@ TEST(MemoryLimitTracker, concurrentStressTest) {
     thread.join();
   }
   EXPECT_EQ(alloc.amountMemoryLeft(), limit);
+}
+
+// A non-owning copy shares the budget of its owner. Copies of a non-owning
+// allocator (also rebound ones) are non-owning, too. The same is tested for the
+// PMR backend in `AllocatorPmrTest.cpp`.
+TEST(MemoryLimitTracker, nonOwningCopy) {
+  auto owner = Alloc::makeLimited(8_B);
+  EXPECT_TRUE(owner.isOwning());
+  auto nonOwning = owner.nonOwningCopy();
+  EXPECT_FALSE(nonOwning.isOwning());
+  EXPECT_EQ(nonOwning, owner);
+
+  char* p = nonOwning.allocate(4);
+  EXPECT_EQ(owner.amountMemoryLeft(), 4_B);
+
+  Alloc copy{nonOwning};
+  EXPECT_FALSE(copy.isOwning());
+  auto moved = std::move(copy);
+  EXPECT_FALSE(moved.isOwning());
+  auto rebound = nonOwning.as<int>();
+  EXPECT_FALSE(rebound.isOwning());
+  EXPECT_EQ(rebound.amountMemoryLeft(), 4_B);
+
+  // A non-owning copy of a non-owning copy is fine as well.
+  auto nonOwning2 = moved.nonOwningCopy();
+  EXPECT_FALSE(nonOwning2.isOwning());
+  nonOwning2.deallocate(p, 4);
+  EXPECT_EQ(owner.amountMemoryLeft(), 8_B);
+}
+
+// A non-owning copy that outlives its owner terminates the program when the
+// lifetime checks are enabled.
+TEST(MemoryLimitTracker, nonOwningCopyOutlivesOwner) {
+#ifdef QL_ENABLE_LIFETIME_CHECKS
+  auto outliveOwner = []() {
+    std::optional<Alloc> nonOwning;
+    {
+      auto owner = Alloc::makeLimited(8_B);
+      nonOwning.emplace(owner.nonOwningCopy());
+    }
+    nonOwning.reset();
+  };
+  EXPECT_DEATH(outliveOwner(), "outlived the owner");
+#else
+  GTEST_SKIP() << "The lifetime checks are disabled in this build";
+#endif
 }
 
 }  // namespace
