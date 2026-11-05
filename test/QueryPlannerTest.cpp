@@ -2070,8 +2070,8 @@ TEST(QueryPlanner, substituteConstantVariables) {
                               scan("<a>", "<p>", "<b>")));
 
   // A `VALUES` clause with more than one row, an `UNDEF` value, a
-  // non-constant `BIND`, and a triple in a nested group are not substituted
-  // (for a property path, see the `emptyPath...` tests).
+  // non-constant or undefined `BIND`, and a triple in a nested group are not
+  // substituted (for a property path, see the `emptyPath...` tests).
   h::expect("SELECT * { VALUES ?x { <a> <b> } ?x <p> ?o }",
             h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) (<b>) }")),
                     scan("?x", "<p>", "?o")));
@@ -2082,6 +2082,15 @@ TEST(QueryPlanner, substituteConstantVariables) {
       "SELECT * { BIND(3 + 5 AS ?x) ?x <p> ?o }",
       h::Join(h::Sort(h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"})),
               scan("?x", "<p>", "?o")));
+  {
+    // An unknown function is an undefined `Id` in the syntax test mode.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
+    h::expect(
+        "SELECT * { BIND(<f>() AS ?x) ?x <p> ?o }",
+        h::Join(h::Sort(h::Bind(h::NeutralElement(), "<f>()", Variable{"?x"})),
+                scan("?x", "<p>", "?o")));
+  }
   h::expect("SELECT * { VALUES ?x { <a> } MINUS { ?x <p> ?o } }",
             h::Minus(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) }")),
                      scan("?x", "<p>", "?o")));

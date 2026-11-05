@@ -290,7 +290,9 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 
 namespace {
 // Return the constant to which `bind` binds its target variable, or
-// `std::nullopt` if its expression is not a constant IRI, literal or `Id`.
+// `std::nullopt` if its expression is not a constant IRI, literal or defined
+// `Id` (an undefined `Id` is created for an unknown function in the syntax test
+// mode).
 std::optional<TripleComponent> getConstantOfBind(const p::Bind& bind) {
   using namespace sparqlExpression;
   const auto* expression = bind._expression.getPimpl();
@@ -299,7 +301,8 @@ std::optional<TripleComponent> getConstantOfBind(const p::Bind& bind) {
   } else if (const auto* literal =
                  dynamic_cast<const StringLiteralExpression*>(expression)) {
     return TripleComponent{literal->value()};
-  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression)) {
+  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
+             id != nullptr && !id->value().isUndefined()) {
     return TripleComponent{id->value()};
   }
   return std::nullopt;
