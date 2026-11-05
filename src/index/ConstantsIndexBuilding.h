@@ -158,11 +158,11 @@ constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_GROUPS = 8;
 // whole output in memory until the pipeline behind the merge takes it, see
 // `vocabularyMergeOptions`.
 //
-// NOTE: The chunks are cut by bytes and not by words, because the cost of
+// NOTE 1: The chunks are cut by bytes and not by words, because the cost of
 // comparing two words grows with their length, so that all chunks cost about
 // the same to merge.
 //
-// NOTE: Smaller chunks mean more chunks in flight for the same memory, which
+// NOTE 2: Smaller chunks mean more chunks in flight for the same memory, which
 // matters more than the overhead per chunk: on dblp (507 partial
 // vocabularies) with a memory limit of 2 GB, chunks of 128 MB allowed only two
 // chunks in flight, which made the merge three times slower than with chunks

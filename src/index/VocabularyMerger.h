@@ -30,7 +30,7 @@
 // it that are understandable (and testable) on their own live in
 // `src/index/vocabulary_merger/`, and all of them are made available by this
 // header: the `VocabularyMetaData` (the return type of `mergeVocabulary`), the
-// concepts for its callbacks, the `IdMap` types, the `detail::MergeWord`, and
+// concepts for its callbacks, the `IdMap` types, the `detail::MergedWord`, and
 // the individual stages of the merging pipeline (see below).
 namespace ad_utility::vocabulary_merger {
 

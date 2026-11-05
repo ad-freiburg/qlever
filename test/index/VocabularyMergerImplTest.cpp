@@ -83,7 +83,7 @@ TEST(IndexVocabularyMergerImpl, vocabularyMergeOptions) {
   const size_t parallelism = ad_utility::globalExecutorNumThreads();
   const size_t inputPerChunk = VOCAB_MERGER_INPUT_PER_CHUNK.getBytes();
 
-  // The output blocks are the batches of the pipeline behind the merge.
+  // The output blocks are cut into segments behind the merge.
   auto options = vocabularyMergeOptions(3, 0, MemorySize::gigabytes(4));
   EXPECT_EQ(options.outputBlockSize.maxNumElements(),
             VOCAB_MERGER_WORD_BATCH_SIZE);
@@ -116,7 +116,6 @@ TEST(IndexVocabularyMergerImpl, vocabularyMergeOptions) {
                 3, VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD * parallelism));
 }
 
-// _____________________________________________________________________________
 // Test that the memory of the vocabulary merge is split between the chunks of
 // the merge and the data behind it, without losing or adding any byte.
 TEST(IndexVocabularyMergerImpl, splitMemoryOfVocabularyMerge) {
