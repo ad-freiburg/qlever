@@ -73,7 +73,7 @@ Id StringMapping::remapId(Id id) {
 
   // The `distinctIndex` is not a pointer, so it is stored directly as the
   // payload, without `Id::makeFromLocalVocabIndex`.
-  return Id::fromBits(LocalVocabIndex, distinctIndex);
+  return Id::fromBits(Datatype::LocalVocabIndex, distinctIndex);
 }
 
 }  // namespace qlever::binary_export
