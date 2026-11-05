@@ -849,13 +849,14 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(NumGeometries) == 4);
   static_assert(sizeof(SourceCrsType) == 2);
   static_assert(sizeof(MetricArea) == sizeof(double));
-  static_assert(sizeof(SerializationType) == 2);
+  static_assert(sizeof(SerializationType) == 1);
 
-  using EncodedGeometryTypeAndCentroid = uint64_t;
+  using EncodedCentroid = uint64_t;
+  using WktType = uint8_t;
   static_assert(sizeof(GeometryInfo) ==
-                sizeof(EncodedGeometryTypeAndCentroid) +
-                    sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(SourceCrsType) + sizeof(SerializationType) +
+                sizeof(EncodedCentroid) + sizeof(EncodedBoundingBox) +
+                    sizeof(NumGeometries) + sizeof(SourceCrsType) +
+                    sizeof(SerializationType) + sizeof(WktType) +
                     sizeof(MetricLength) + sizeof(MetricArea));
 }
 

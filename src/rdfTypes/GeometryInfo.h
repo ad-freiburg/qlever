@@ -188,7 +188,7 @@ struct MetricArea {
 // are supported (in the future possibly e.g. GeoJSON or KML). The value zero
 // is `WKT`, because all records written before this field was taken into use
 // are WKT literals, see the rules at `GEOMETRY_INFO_VERSION`.
-enum class SerializationType : uint16_t { WKT };
+enum class SerializationType : uint8_t { WKT };
 
 // Class for internal exception handling of errors from `s2geometry`.
 class InvalidPolygonError : public std::runtime_error {
@@ -220,6 +220,12 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
+// 7: The WKT type is no longer in the upper 4 bits of the centroid, but in its
+//    own field `wktType_`, the byte 31, which was the upper byte of the 16-bit
+//    `serializationType_` (always zero before). The points (the centroid and
+//    the corners of the bounding box) use `GeoPoint::numDataBits`, which is 64
+//    with the split layout of an `Id`. This change violates the rules below,
+//    `fromSerialized` converts the records of the versions 5 and 6.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -247,14 +253,20 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
 //   and remove the handling of the dropped versions from `fromSerialized` and
 //   `GEOMETRY_INFO_SIZE_PER_VERSION`.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 7;
+#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
+// The points of the versions before 7 have 60 bits, which the split layout
+// cannot decode. An index with the split layout never has these versions.
+constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 7;
+#else
 constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 5;
+#endif
 
-// The size of the binary representation of `GeometryInfo` for each loadable
-// version, starting at `MIN_LOADABLE_GEOMETRY_INFO_VERSION`.
-inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION -
-                                        MIN_LOADABLE_GEOMETRY_INFO_VERSION + 1>
-    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48};
+// The size of the binary representation of `GeometryInfo` for each version,
+// starting at version 5 (the oldest version that can be read with the legacy
+// layout).
+inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION - 5 + 1>
+    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48, 48};
 
 // Return true iff a `GeometryInfo` of the given `version` can be read.
 constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
@@ -265,8 +277,7 @@ constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
 // The size of the binary representation of `GeometryInfo` for the given
 // loadable `version`.
 constexpr size_t geometryInfoSize(uint64_t version) {
-  return GEOMETRY_INFO_SIZE_PER_VERSION.at(version -
-                                           MIN_LOADABLE_GEOMETRY_INFO_VERSION);
+  return GEOMETRY_INFO_SIZE_PER_VERSION.at(version - 5);
 }
 
 // A geometry info object holds precomputed details on WKT literals.
@@ -279,7 +290,7 @@ class GeometryInfo {
   // cannot be all-zero. This is currently used by the disk serialization of
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
-  uint64_t geometryTypeAndCentroid_;
+  uint64_t centroid_;
   uint32_t numGeometries_;
   // The CRS named by the IRI of the literal (before the projection to CRS84),
   // see `SourceCrsType`. This was the reserved field `reservedSourceCrs_` in
@@ -288,17 +299,15 @@ class GeometryInfo {
   SourceCrsType sourceCrs_;
   // The serialization format of the literal, see `SerializationType`.
   SerializationType serializationType_ = SerializationType::WKT;
+  // The WKT type (1 to 7). It is never zero, so the binary representation is
+  // never all-zero (see above).
+  uint8_t wktType_;
   MetricLength metricLength_;
   MetricArea metricArea_;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
   //   int64_t parsedGeometryOffset_ = -1;
-
-  static constexpr uint64_t bitMaskGeometryType =
-      bitMaskForHigherBits(GeoPoint::numTypeBits);
-  static constexpr uint64_t bitMaskCentroid =
-      bitMaskForLowerBits(GeoPoint::numDataBits);
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -334,7 +343,7 @@ class GeometryInfo {
   // Create geometry info for a GeoPoint object.
   static GeometryInfo fromGeoPoint(const GeoPoint& point);
 
-  // Extract the WKT geometry type from geometryTypeAndCentroid_.
+  // Get the WKT geometry type.
   GeometryType getWktType() const;
 
   // Parse an arbitrary WKT literal and return only the geometry type.
@@ -349,7 +358,7 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and return only the contained CRS type.
   static std::optional<SourceCrsType> getSourceCrsType(std::string_view wkt);
 
-  // Extract centroid from geometryTypeAndCentroid_ and convert it to GeoPoint.
+  // Convert the centroid to a GeoPoint.
   Centroid getCentroid() const;
 
   // Parse an arbitrary WKT literal and compute only the centroid.

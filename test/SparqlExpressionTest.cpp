@@ -2131,7 +2131,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto v = ValueId::makeFromGeoPoint(p);
 
   // Should provide the same values, however with some precision loss, as the
-  // bit representation only uses 30 bits per coordinate, not a full double
+  // bit representation only uses `GeoPoint::numDataBitsCoordinate` bits per
+  // coordinate, not a full double
   auto actualValues = GeoPoint::fromBitRepresentation(
       GeoPoint(26.8, 24.3).toBitRepresentation());
   auto actualLat = actualValues.getLat();
