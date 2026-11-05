@@ -305,15 +305,46 @@ std::optional<TripleComponent> getConstantOfBind(const p::Bind& bind) {
   return std::nullopt;
 }
 
-// Return true iff `iri` is a special predicate that is not answered by an index
-// scan (e.g. `ql:has-predicate`, `ql:contains-word`, `<max-distance-in-meters:
-// ...>` or a materialized view column), see `seedWithScansAndText`.
-bool isSpecialPredicate(std::string_view iri) {
-  return ql::starts_with(iri,
-                         QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET) ||
-         ql::starts_with(iri, MAX_DIST_IN_METERS) ||
-         ql::starts_with(iri, NEAREST_NEIGHBORS) ||
-         ql::starts_with(iri, MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET);
+// How the `QueryPlanner` evaluates a triple of a basic graph pattern: a plain
+// index scan or a special operation for a special predicate.
+//
+// NOTE: Each special predicate must have its own kind, on which
+// `createTripleGraph` and `seedWithScansAndText` dispatch (the latter with a
+// `switch` without `default`, so a kind without a handler is a compiler
+// warning). Do not special-case a predicate of kind `IndexScan` elsewhere: only
+// in triples of this kind, variables may be replaced by constants (see
+// `GraphPatternPlanner::substituteConstants`).
+enum class TripleKind {
+  IndexScan,
+  TextWord,
+  TextEntity,
+  SpatialJoin,
+  MaterializedView,
+  HasPredicate
+};
+
+// Return the `TripleKind` of `triple`.
+TripleKind getTripleKind(const SparqlTriple& triple) {
+  auto predicate = triple.getSimplePredicate();
+  if (!predicate.has_value()) {
+    return TripleKind::IndexScan;
+  }
+  std::string_view iri = predicate.value();
+  if (iri == CONTAINS_WORD_PREDICATE) {
+    return TripleKind::TextWord;
+  } else if (iri == CONTAINS_ENTITY_PREDICATE) {
+    return TripleKind::TextEntity;
+  } else if ((ql::starts_with(iri, MAX_DIST_IN_METERS) ||
+              ql::starts_with(iri, NEAREST_NEIGHBORS)) &&
+             ql::ends_with(iri, '>')) {
+    return TripleKind::SpatialJoin;
+  } else if (ql::starts_with(iri,
+                             MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET)) {
+    return TripleKind::MaterializedView;
+  } else if (iri == HAS_PREDICATE_PREDICATE) {
+    return TripleKind::HasPredicate;
+  }
+  return TripleKind::IndexScan;
 }
 }  // namespace
 
@@ -350,9 +381,9 @@ QueryPlanner::GraphPatternPlanner::getConstantVariables(
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::substituteConstants(
     SparqlTriple& triple) const {
-  // The special predicates require variables in certain positions.
-  auto predicate = triple.getSimplePredicate();
-  if (predicate.has_value() && isSpecialPredicate(predicate.value())) {
+  // Only a plain index scan is changed (the special predicates require
+  // variables in certain positions).
+  if (getTripleKind(triple) != TripleKind::IndexScan) {
     return;
   }
 
@@ -369,12 +400,17 @@ void QueryPlanner::GraphPatternPlanner::substituteConstants(
   substitute(triple.s_);
   substitute(triple.o_);
 
-  // A variable predicate can only be replaced by an IRI that is not special.
+  // A variable predicate can only be replaced by an IRI, and only if the triple
+  // remains a plain index scan.
   if (const auto* variable = std::get_if<Variable>(&triple.p_)) {
     auto it = constants_.find(*variable);
-    if (it != constants_.end() && it->second.isIri() &&
-        !isSpecialPredicate(it->second.getIri().toStringRepresentation())) {
-      triple.p_ = PropertyPath::fromIri(it->second.getIri());
+    if (it == constants_.end() || !it->second.isIri()) {
+      return;
+    }
+    auto substituted = triple;
+    substituted.p_ = PropertyPath::fromIri(it->second.getIri());
+    if (getTripleKind(substituted) == TripleKind::IndexScan) {
+      triple = std::move(substituted);
     }
   }
 }
@@ -641,7 +677,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   std::vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    if (t.getSimplePredicate() == CONTAINS_WORD_PREDICATE) {
+    auto kind = getTripleKind(t);
+    if (kind == TripleKind::TextWord) {
       std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
       // Add one node for each word
@@ -660,7 +697,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
             TripleGraph::Node{tg._nodeStorage.size(), t.s_.getVariable(), s, t},
             tg);
       }
-    } else if (t.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
+    } else if (kind == TripleKind::TextEntity) {
       entityTriples.push_back(&t);
     } else {
       countNode();
@@ -958,50 +995,41 @@ auto QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index");
     }
 
-    // Backward compatibility with spatial search predicates.
-    // GCC's `-Wdangling-reference` cannot trace through `std::visit` to see
-    // that the returned reference points into the variant, not the visitor.
-    DISABLE_DANGLING_REFERENCE_WARNINGS
-    const auto& input = std::visit(
-        ad_utility::OverloadCallOperator{
-            [](const PropertyPath& propertyPath) -> const std::string& {
-              AD_CORRECTNESS_CHECK(propertyPath.isIri());
-              return propertyPath.getIri().toStringRepresentation();
-            },
-            [](const Variable& var) -> const std::string& {
-              return var.name();
-            }},
-        node.triple_.p_);
-    GCC_REENABLE_WARNINGS
-    if ((ql::starts_with(input, MAX_DIST_IN_METERS) ||
-         ql::starts_with(input, NEAREST_NEIGHBORS)) &&
-        ql::ends_with(input, '>')) {
-      parsedQuery::SpatialQuery config{node.triple_};
-      auto plan = makeSubtreePlan<SpatialJoin>(
-          _qec, config.toSpatialJoinConfiguration(), std::nullopt,
-          std::nullopt);
-      if (ql::starts_with(input, NEAREST_NEIGHBORS)) {
-        plan._qet->getRootOperation()->addWarning(absl::StrCat(
-            "The special predicate <nearest-neighbors:...> is deprecated due "
-            "to confusing semantics. Please upgrade your query to the new "
-            "syntax 'SERVICE ",
-            SPATIAL_SEARCH_IRI,
-            " { ... }'. For more information, please see the QLever Docs "
-            "(https://docs.qlever.dev/geosparql/)."));
+    // Seed the special predicates with their operations, see `TripleKind`.
+    switch (getTripleKind(node.triple_)) {
+      case TripleKind::TextWord:
+      case TripleKind::TextEntity:
+        // The text triples are text nodes, see above.
+        AD_FAIL();
+      case TripleKind::SpatialJoin: {
+        // Backward compatibility with spatial search predicates.
+        parsedQuery::SpatialQuery config{node.triple_};
+        auto plan = makeSubtreePlan<SpatialJoin>(
+            _qec, config.toSpatialJoinConfiguration(), std::nullopt,
+            std::nullopt);
+        if (ql::starts_with(node.triple_.getSimplePredicate().value(),
+                            NEAREST_NEIGHBORS)) {
+          plan._qet->getRootOperation()->addWarning(absl::StrCat(
+              "The special predicate <nearest-neighbors:...> is deprecated due "
+              "to confusing semantics. Please upgrade your query to the new "
+              "syntax 'SERVICE ",
+              SPATIAL_SEARCH_IRI,
+              " { ... }'. For more information, please see the QLever Docs "
+              "(https://docs.qlever.dev/geosparql/)."));
+        }
+        pushPlan(plan);
+        continue;
       }
-      pushPlan(plan);
-      continue;
-    }
-
-    if (ql::starts_with(input, MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET)) {
-      parsedQuery::MaterializedViewQuery config{node.triple_};
-      pushPlan(getMaterializedViewIndexScanPlan(config));
-      continue;
-    }
-
-    if (input == HAS_PREDICATE_PREDICATE) {
-      pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
-      continue;
+      case TripleKind::MaterializedView: {
+        parsedQuery::MaterializedViewQuery config{node.triple_};
+        pushPlan(getMaterializedViewIndexScanPlan(config));
+        continue;
+      }
+      case TripleKind::HasPredicate:
+        pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
+        continue;
+      case TripleKind::IndexScan:
+        break;
     }
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
@@ -1305,7 +1333,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
     textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
   auto plan = [this, &node, &textLimits, &cvar, &word]() {
-    if (node.triple_.getSimplePredicate() != CONTAINS_ENTITY_PREDICATE) {
+    if (getTripleKind(node.triple_) != TripleKind::TextEntity) {
       return makeSubtreePlan<TextIndexScanForWord>(_qec, cvar, word);
     }
     if (node._variables.size() == 2) {

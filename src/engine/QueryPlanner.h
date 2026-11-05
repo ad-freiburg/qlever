@@ -742,10 +742,11 @@ class QueryPlanner {
     // which are sorted by the remaining variables and thus avoid joins and
     // sorts.
     //
-    // NOTE 2: A triple with a special predicate (e.g. `ql:has-predicate`) is
-    // left unchanged, because these require variables in certain positions.
-    // Using the variable of a `BIND` before the `BIND` is an error, so a
-    // `BIND` also only affects the triples after it.
+    // NOTE 2: Only a triple that is evaluated by a plain index scan is changed
+    // (the special predicates, e.g. `ql:has-predicate`, require variables in
+    // certain positions, see `TripleKind` in `QueryPlanner.cpp`). Using the
+    // variable of a `BIND` before the `BIND` is an error, so a `BIND` also only
+    // affects the triples after it.
     void substituteConstants(SparqlTriple& triple) const;
 
     // This function is called for each of the graph patterns that are contained
