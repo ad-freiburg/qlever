@@ -373,7 +373,7 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
 // merged words (the merge folds the occurrences of a word within a block, but
 // not across blocks). This exercises the deliberate holding back of the last
 // distinct word by `buildSegment`.
-TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
+TEST(MergeVocabulary, duplicateWordsAcrossBlockBoundaries) {
   // The merged words come in blocks of 100000. Three partial vocabularies with
   // the same 120000 words yield 360000 occurrences, so we get several blocks,
   // and as 100000 is not divisible by three, the occurrences of a word are
@@ -422,7 +422,7 @@ TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
 // boundary. The merged word has to become external, which is only correct
 // because `buildSegment` holds the word back until no further occurrence of it
 // can arrive.
-TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
+TEST(MergeVocabulary, externalizationAcrossBlockBoundaries) {
   // The last word is the only one that occurs in both partial vocabularies,
   // and only its occurrence in the second one is marked as external.
   static constexpr size_t numWords = 100'000;
@@ -508,7 +508,7 @@ TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
 // Merge a number of words that is large enough for the merged words to come
 // in several blocks, and check that all the mappings arrive in the correct ID
 // map, in the correct order.
-TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
+TEST(MergeVocabulary, manyWordsInSeveralBlocks) {
   // The merged words come in blocks of 100000, so this leads to several
   // blocks, of which the last one is only partially filled.
   static constexpr size_t numWords = 250'000;
