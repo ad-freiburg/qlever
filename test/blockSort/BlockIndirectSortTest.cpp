@@ -16,6 +16,7 @@
 #include <array>
 #include <atomic>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <cstddef>
@@ -397,6 +398,22 @@ TEST(BlockIndirectSort, defaultParameters) {
   blockIndirectSort(values, FuzzCompare<std::less<>>{}, numPoolThreads,
                     threadPool().get_executor());
   EXPECT_EQ(Uint32Values::toKeys(values), expected);
+}
+
+// Without parallelism, the sort runs in the calling thread and never uses the
+// executor, so it also works with an executor that no thread runs.
+TEST(BlockIndirectSort, singleThreadRunsInCallingThread) {
+  net::io_context notRunning;
+  std::vector<Key> keys(100'000);
+  std::iota(keys.begin(), keys.end(), Key{0});
+  auto values = Uint32Values::fromKeys(keys);
+  ql::ranges::shuffle(values, std::mt19937_64{5});
+  blockIndirectSort(values, std::less<>{}, 1, notRunning.get_executor());
+  EXPECT_EQ(Uint32Values::toKeys(values), keys);
+  ql::ranges::shuffle(values, std::mt19937_64{6});
+  blockIndirectSort(values, std::less<>{}, 1, notRunning.get_executor(),
+                    std::make_shared<ad_utility::CancellationHandle<>>());
+  EXPECT_EQ(Uint32Values::toKeys(values), keys);
 }
 
 // Both functions of the public interface accept lvalue containers as well as

@@ -98,7 +98,7 @@ std::optional<uint64_t> parseSendLimit(
 // Determine whether the `send` parameter (see `parseSendLimit`) should be
 // applied to a response of the given `mediaType`. This always holds for
 // `qleverJson`; for `sparqlJson` it only holds if the runtime parameter
-// `sparql-results-json-with-time` is enabled (the default).
+// `sparql-results-json-with-meta` is enabled (the default).
 bool considerSendParameter(ad_utility::MediaType mediaType);
 
 }  // namespace detail
