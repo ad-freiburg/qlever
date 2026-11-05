@@ -14,13 +14,13 @@
 
 #include <vector>
 
-#include "../util/GTestHelpers.h"
-#include "../util/IdTableHelpers.h"
-#include "../util/IndexTestHelpers.h"
-#include "../util/LocalVocabEntryTestHelpers.h"
-#include "ValuesForTesting.h"
-#include "engine/BinaryExport.h"
+#include "../../util/GTestHelpers.h"
+#include "../../util/IdTableHelpers.h"
+#include "../../util/IndexTestHelpers.h"
+#include "../../util/LocalVocabEntryTestHelpers.h"
+#include "../ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/binaryExport/BinaryExport.h"
 #include "global/Id.h"
 #include "parser/SelectClause.h"
 
