@@ -1456,6 +1456,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // separately (with duplicates removed) because we need them in `Service.cpp`
   // when computing the result for this operation.
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  // Remember that we are inside a remote `SERVICE` while parsing the body (an
+  // `INCLUDE` is rejected there), and restore the previous state afterwards.
   bool wasInsideRemoteService = std::exchange(isInsideRemoteService_, true);
   absl::Cleanup restoreIsInsideRemoteService{[this, wasInsideRemoteService]() {
     isInsideRemoteService_ = wasInsideRemoteService;
