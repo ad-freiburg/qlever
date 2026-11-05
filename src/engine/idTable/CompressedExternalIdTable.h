@@ -720,6 +720,11 @@ class CompressedExternalIdTableBase {
   // called once.
   std::atomic<bool> transformAndPushWasCalled_ = false;
 
+  // If `true`, then the blocks are transformed, compressed, and written in the
+  // calling thread instead of on the `blockWritePool_`, see
+  // `transformAndWriteBlock`.
+  bool transformInCallingThread_ = false;
+
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
  public:
@@ -920,19 +925,27 @@ class CompressedExternalIdTableBase {
       return recycledBlock;
     }
     ++numBlocksPushed_;
-    setFuture(boost::asio::post(
-        blockWritePool_.get_executor(),
-        boost::asio::use_future([block = std::move(block), this]() mutable
-                                -> IdTableStatic<NumStaticCols> {
-          blockTransformation_(block);
-          // NOTE: The round trip via the dynamic table moves the columns, and
-          // so does the `clear()`, so the block that we give back keeps its
-          // memory and already has the capacity that the next block needs.
-          IdTable dynamicBlock = std::move(block).toDynamic();
-          this->writer_.writeIdTable(dynamicBlock);
-          dynamicBlock.clear();
-          return std::move(dynamicBlock).template toStatic<NumStaticCols>();
-        })));
+    auto transformAndWrite = [block = std::move(block),
+                              this]() mutable -> IdTableStatic<NumStaticCols> {
+      blockTransformation_(block);
+      // NOTE: The round trip via the dynamic table moves the columns, and
+      // so does the `clear()`, so the block that we give back keeps its
+      // memory and already has the capacity that the next block needs.
+      IdTable dynamicBlock = std::move(block).toDynamic();
+      this->writer_.writeIdTable(dynamicBlock);
+      dynamicBlock.clear();
+      return std::move(dynamicBlock).template toStatic<NumStaticCols>();
+    };
+    if (transformInCallingThread_) {
+      // The future is already ready, so the next `waitForFuture` doesn't wait.
+      std::promise<IdTableStatic<NumStaticCols>> promise;
+      promise.set_value(transformAndWrite());
+      setFuture(promise.get_future());
+    } else {
+      setFuture(boost::asio::post(
+          blockWritePool_.get_executor(),
+          boost::asio::use_future(std::move(transformAndWrite))));
+    }
     return recycledBlock;
   }
 
@@ -1117,13 +1130,21 @@ inline std::atomic<bool>
 // or the sort has to become non-blocking (see `blockIndirectSortAsync`).
 //
 // The sort can be cancelled via the `cancellationHandle`.
+//
+// If `inCallingThread` is `true`, then the sort runs completely in the calling
+// thread instead, without using the global thread pool. Then none of the above
+// restrictions applies, see
+// `CompressedExternalIdTableSorter::setDoAllWorkInCallingThread`.
 template <typename Range, typename Comparator>
 void sortBlockRange(
     Range& block, const Comparator& comparator,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    bool inCallingThread = false) {
   ad_utility::blockSort::blockIndirectSort(
       ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
-      static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
+      inCallingThread
+          ? 1u
+          : static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
       ad_utility::globalExecutor(), cancellationHandle);
 }
 
@@ -1132,9 +1153,11 @@ template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
   ad_utility::SharedCancellationHandle cancellationHandle_;
+  // See the `inCallingThread` argument of `sortBlockRange`.
+  bool inCallingThread_ = false;
   template <typename T>
   void operator()(T& block) {
-    sortBlockRange(block, comparator_, cancellationHandle_);
+    sortBlockRange(block, comparator_, cancellationHandle_, inCallingThread_);
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
@@ -1271,6 +1294,30 @@ class CompressedExternalIdTableSorter
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
     this->setAsyncPushExecutor(mergeExecutor_);
+  }
+
+  // Make this sorter do all its work in the thread that calls its member
+  // functions (`push`, `pushBlock`, `getSortedBlocks`,
+  // `finishAndGetRunsInput`, ...): the sorting, compressing, and writing of the
+  // blocks (instead of on the dedicated background thread and on the global
+  // thread pool), and the merge (as with a parallelism of one, see
+  // `setMergeExecutor`). Then the calling thread never waits for a task of
+  // another thread, so the sorter can be used from a thread of a thread pool
+  // (in particular the global one), even if all the threads of that pool use
+  // such a sorter at the same time.
+  //
+  // NOTE: The compression of a block may still be helped by other threads of
+  // the global thread pool, but the calling thread then runs the tasks itself
+  // as well and only waits for tasks that are already running, see
+  // `ad_utility::runIndexedTasksOnExecutor`.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight, and no block has been
+  // pushed yet.
+  void setDoAllWorkInCallingThread() {
+    AD_CONTRACT_CHECK(this->numElementsPushed_ == 0);
+    this->blockTransformation_.inCallingThread_ = true;
+    this->transformInCallingThread_ = true;
+    mergeParallelism_ = 1;
   }
 
   // Asynchronously push all the rows of the `table`, in a way that several
