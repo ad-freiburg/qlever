@@ -865,33 +865,6 @@ TEST(IndexTest, normalizedTriples) {
       ::testing::HasSubstr("not a valid regular expression"));
 }
 
-// _____________________________________________________________________________
-TEST(IndexTest, wordTriplePredicates) {
-  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.addHasWordTriples() = true;
-  index.addNormalizedTriples() = true;
-  auto process = [&index](std::string predicate) {
-    return index.processTriple(
-        TurtleTriple{iri("<s>"), iri(std::move(predicate)), lit("\"Café\"")});
-  };
-  // By default, the triples are added for all predicates.
-  auto result = process("<p>");
-  EXPECT_EQ(result.wordFrequencies_.size(), 1);
-  EXPECT_EQ(result.normalized_, "cafe");
-
-  index.setWordTriplePredicates({"<p>", "<q>"});
-  result = process("<q>");
-  EXPECT_EQ(result.wordFrequencies_.size(), 1);
-  EXPECT_EQ(result.normalized_, "cafe");
-  result = process("<r>");
-  EXPECT_TRUE(result.wordFrequencies_.empty());
-  EXPECT_EQ(result.normalized_, std::nullopt);
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      index.setWordTriplePredicates({"<p>", "q"}),
-      ::testing::HasSubstr("is not an IRI in angle brackets"));
-}
-
 // Test the names of the normalizations in the option of `qlever-index`.
 TEST(IndexTest, hasWordNormalizationNames) {
   using ad_utility::HasWordNormalization;
@@ -906,6 +879,68 @@ TEST(IndexTest, hasWordNormalizationNames) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       HasWordNormalization::fromString("uppercase"),
       ::testing::HasSubstr("is not a valid has-word normalization"));
+}
+
+// Test that `setHasWordRestrictPredicates` restricts the `ql:has-word` triples
+// to literals that are the object of one of the given predicates.
+TEST(IndexTest, hasWordRestrictPredicates) {
+  // An index with `ql:has-word` triples in which the IRIs with prefix
+  // `http://e/` are encoded as `Id`s, and a function that returns the number
+  // of words extracted from `"Café"` as the object of `predicate`.
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.addHasWordTriples() = true;
+  index.setPrefixesForEncodedValues({"http://e/"});
+  auto numWords = [&index](TripleComponent predicate) {
+    return index
+        .processTriple(
+            TurtleTriple{iri("<s>"), std::move(predicate), lit("\"Café\"")})
+        .wordFrequencies_.size();
+  };
+  auto encoded = [&index](std::string_view predicate) {
+    return index.encodedIriManager().encode(predicate).value();
+  };
+
+  // By default, the triples are added for all predicates.
+  EXPECT_EQ(numWords(iri("<p>")), 1);
+
+  // With predicates set, the triples are only added for these predicates, also
+  // if the parser has encoded the predicate as an `Id`.
+  index.setHasWordRestrictPredicates({"<q>", "<http://e/1>", "<p>"});
+  EXPECT_EQ(numWords(iri("<q>")), 1);
+  EXPECT_EQ(numWords(iri("<r>")), 0);
+  EXPECT_EQ(numWords(encoded("<http://e/1>")), 1);
+  EXPECT_EQ(numWords(encoded("<http://e/2>")), 0);
+
+  // A predicate that is not a valid IRI in angle brackets is rejected, and the
+  // previously set predicates stay in effect.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setHasWordRestrictPredicates({"<r>", "q"}),
+      ::testing::HasSubstr("is not a valid IRI reference"));
+  EXPECT_EQ(numWords(iri("<r>")), 0);
+  EXPECT_EQ(numWords(iri("<q>")), 1);
+}
+
+// Test that `setHasWordRestrictPredicates` also restricts the `ql:normalized`
+// triples, also without `ql:has-word` triples.
+TEST(IndexTest, hasWordRestrictPredicatesNormalized) {
+  // An index with only `ql:normalized` triples, and a function that returns the
+  // normalized form of `"Café"` as the object of `predicate`.
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.addNormalizedTriples() = true;
+  auto normalized = [&index](std::string predicate) {
+    return index
+        .processTriple(TurtleTriple{iri("<s>"), iri(std::move(predicate)),
+                                    lit("\"Café\"")})
+        .normalized_;
+  };
+
+  // By default, the triple is added for all predicates.
+  EXPECT_EQ(normalized("<p>"), "cafe");
+
+  // With predicates set, the triple is only added for these predicates.
+  index.setHasWordRestrictPredicates({"<p>", "<q>"});
+  EXPECT_EQ(normalized("<q>"), "cafe");
+  EXPECT_EQ(normalized("<r>"), std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -1375,26 +1410,6 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_EQ(uniquePredicates, 3);
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
-
-  // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "no limit") must give the same result. Together with the default
-  // of 1 used by the calls above and below, this exercises the translation of
-  // the runtime parameter to a concurrency-limited executor on both of its
-  // branches. Use a separate base name, so that the permutation that was
-  // already finalized above stays intact.
-  {
-    auto cleanupParameter = setRuntimeParameterForTest<
-        &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
-    index.setOnDiskBase(onDiskBase + ".unthrottled");
-    auto [uniquePredicatesUnthrottled, metaUnthrottled] =
-        index.createPermutationWithoutMetadata(
-            4,
-            ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
-                tables.at(0).clone(), tables.at(1).clone()}},
-            permutation, false, executor());
-    index.setOnDiskBase(onDiskBase);
-    EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
-  }
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
@@ -1957,6 +1972,38 @@ TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex) {
   configuration.erase(key);
   indexImpl.applyConfiguration(configuration);
   EXPECT_EQ(indexImpl.hasWordNormalization_, HasWordNormalization::Lowercase);
+}
+
+// Test that the predicates to which the `ql:has-word` triples are restricted
+// are recorded in the configuration of a built index and applied when loading.
+TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex) {
+  const std::string key{ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY};
+  using Predicates = std::vector<std::string>;
+
+  // An index built with unsorted predicates and a duplicate records them sorted
+  // and without the duplicate.
+  TestIndexConfig config{"<a> <b> \"Café\" ."};
+  config.addHasWordTriples = true;
+  config.hasWordRestrictPredicates = {"<q>", "<b>", "<q>"};
+  auto index = makeTestIndex("hasWordRestrictPredicates", std::move(config));
+  EXPECT_EQ(index.getImpl().configurationJson()[key],
+            (Predicates{"<b>", "<q>"}));
+
+  // Loading a configuration applies the recorded predicates, and a
+  // configuration without the key (an older index) gives no restriction.
+  auto configuration = minimalValidConfiguration();
+  configuration[key] = Predicates{"<b>", "<q>"};
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordRestrictPredicates_, (Predicates{"<b>", "<q>"}));
+  configuration.erase(key);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_TRUE(indexImpl.hasWordRestrictPredicates_.empty());
+
+  // Recorded predicates that are not sorted are rejected.
+  configuration[key] = Predicates{"<q>", "<b>"};
+  EXPECT_ANY_THROW(indexImpl.applyConfiguration(configuration));
 }
 
 // _____________________________________________________________________________

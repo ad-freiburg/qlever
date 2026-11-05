@@ -1,0 +1,1 @@
+addLinkAndDiscoverTest(ChunkWriterTest index)

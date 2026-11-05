@@ -1435,6 +1435,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == ROW_NUMBER_IRI) {
+    return visitMagicServiceQuery<parsedQuery::RowNumberQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
              ql::starts_with(serviceIri.toStringRepresentation(),
                              EXTERNAL_VALUES_IRI_PREFIX)) {

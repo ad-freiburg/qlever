@@ -136,8 +136,8 @@ EMSCRIPTEN_BINDINGS(qlever) {
                 &qlever::CommonConfig::addNormalizedTriples_)
       .property("normalizationRegexes",
                 &qlever::CommonConfig::normalizationRegexes_)
-      .property("wordTriplePredicates",
-                &qlever::CommonConfig::wordTriplePredicates_)
+      .property("hasWordRestrictPredicates",
+                &qlever::CommonConfig::hasWordRestrictPredicates_)
       .function("setMemoryLimitMB",
                 optional_override([](qlever::CommonConfig& self, double mb) {
                   self.memoryLimit_ = memorySizeFromMegabytes(mb);

@@ -165,8 +165,9 @@ class IndexImpl {
 
   // If not empty, the `ql:has-word` and `ql:normalized` triples are only added
   // for literals that are the object of a triple with one of these predicates
-  // (IRIs in angle brackets).
-  ad_utility::HashSet<std::string> wordTriplePredicates_;
+  // (IRIs in the format of `Iri::toStringRepresentation`, sorted and without
+  // duplicates).
+  std::vector<std::string> hasWordRestrictPredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -485,9 +486,9 @@ class IndexImpl {
   // "Café (Paris), Olé!" becomes "cafe ole".
   std::string normalizeLiteralContent(std::string_view content) const;
 
-  // Set the `wordTriplePredicates_`. Throw if one of them is not an IRI in
-  // angle brackets.
-  void setWordTriplePredicates(const std::vector<std::string>& predicates);
+  // Set the `hasWordRestrictPredicates_`. Throw if one of them is not a valid
+  // IRI in angle brackets.
+  void setHasWordRestrictPredicates(const std::vector<std::string>& predicates);
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
@@ -883,8 +884,7 @@ class IndexImpl {
   // `permutation` specifies which permutation to write.
   // `internal` specifies whether this is an internal permutation and adjusts
   // the filename of the generated file on disk accordingly.
-  // The blocks are compressed and written on the `executor`, by at most
-  // `rebuild-permutation-writer-num-threads` threads at the same time.
+  // The blocks are compressed and written on the `executor`.
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
   // OSP/OPS) and the metadata for the written permutation.
@@ -968,6 +968,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
   FRIEND_TEST(IndexImpl, dateOfIndexBuild);
   FRIEND_TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex);
+  FRIEND_TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex);
 
   bool isLiteral(std::string_view object) const;
 
@@ -1157,9 +1158,8 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state. The permutations are scanned on the `executor`, each
-  // scan by at most `rebuild-index-scan-num-threads` threads at the
-  // same time. `progress` is called (possibly from several threads) with the
+  // triples shared state. The permutations are scanned on the `executor`.
+  // `progress` is called (possibly from several threads) with the
   // number of newly scanned rows; this is used by the index rebuild for
   // progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
