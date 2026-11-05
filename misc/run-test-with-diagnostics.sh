@@ -15,19 +15,24 @@
 # Environment variables:
 #   QLEVER_TEST_STALL_SECONDS: The time after which a test counts as stalled
 #     (default: 10). Healthy tests of the Docker build take at most 5 s.
+#   QLEVER_TEST_NUM_SAMPLES, QLEVER_TEST_SAMPLE_INTERVAL: The number of samples
+#     that are taken of a stalled command (see `print_sample`, default: 2), and
+#     the seconds between them (default: 0.5). The stacks are only dumped after
+#     the last sample, and a stall may end before.
 #   QLEVER_TEST_DIAGNOSTICS_DIR: If set, the diagnostics are also appended to a
 #     file in this directory, because `ctest --output-on-failure` only shows
 #     the output of failed tests, but a stalled test may still pass.
 #
 # What is collected:
 #
-# 1. If the command is still running after `QLEVER_TEST_STALL_SECONDS`, three
-#    samples (1 s apart) of the state, the consumed CPU time (user and kernel),
-#    the page faults, the time spent waiting for a CPU, and the kernel wait
-#    channel of each of its threads, various counters of the machine (see
-#    `print_sample`), and the stacks of all threads (via `gdb`). Then `gdb` stays attached until the command terminates, so
-#    that a later crash is reported with the signal info, the registers, and
-#    the stacks of all threads.
+# 1. If the command is still running after `QLEVER_TEST_STALL_SECONDS`, a few
+#    samples of the state, the consumed CPU time (user and kernel), the page
+#    faults, the time spent waiting for a CPU, and the kernel wait channel of
+#    each of its threads, various counters of the machine (see
+#    `print_sample`), and the stacks of all threads (via `gdb`). Then `gdb`
+#    stays attached until the command terminates, so that a later crash is
+#    reported with the signal info, the registers, and the stacks of all
+#    threads.
 #
 # 2. If the command is terminated by a signal before it counts as stalled, the
 #    same crash report from its core dump, if there is one. This requires that
@@ -47,6 +52,8 @@ if [ $# -eq 0 ]; then
 fi
 
 STALL_SECONDS="${QLEVER_TEST_STALL_SECONDS:-10}"
+NUM_SAMPLES="${QLEVER_TEST_NUM_SAMPLES:-2}"
+SAMPLE_INTERVAL="${QLEVER_TEST_SAMPLE_INTERVAL:-0.5}"
 DIAGNOSTICS_DIR="${QLEVER_TEST_DIAGNOSTICS_DIR:-}"
 
 # Let a crashing command leave a core dump (if the hard limit allows it).
@@ -142,7 +149,13 @@ print_sample() {
       echo "pressure $RESOURCE: $(tr '\n' ' ' < "/proc/pressure/$RESOURCE")"
     fi
   done
-  echo "vmstat: $(grep -E '^(pgfault|pgmajfault|pgmigrate_success|pgmigrate_fail|numa_hint_faults|numa_pages_migrated|thp_fault_alloc|thp_fault_fallback|thp_split_page|compact_stall|allocstall_normal|allocstall_movable|pswpin|pswpout) ' /proc/vmstat | tr '\n' ' ')"
+  # The counters of `/proc/vmstat` that are printed.
+  local COUNTERS=""
+  COUNTERS+="pgfault|pgmajfault|pgmigrate_success|pgmigrate_fail|numa_hint_faults|"
+  COUNTERS+="numa_pages_migrated|thp_fault_alloc|thp_fault_fallback|thp_split_page|"
+  COUNTERS+="thp_collapse_alloc|compact_stall|compact_daemon_wake|compact_success|"
+  COUNTERS+="compact_fail|allocstall_normal|allocstall_movable|pswpin|pswpout"
+  echo "vmstat: $(grep -E "^($COUNTERS) " /proc/vmstat | tr '\n' ' ')"
   echo "IPIs (per CPU): $(grep -E '^ *IPI[0-9]+:' /proc/interrupts | tr -s ' ' | tr '\n' ';')"
   for FILE in cpu.stat memory.events memory.pressure; do
     if [ -r "/sys/fs/cgroup/$FILE" ]; then
@@ -174,10 +187,10 @@ print_sample() {
 echo "=== Kernel: $(uname -a)"
 echo "=== CPU features: $(grep -m 1 -i '^features' /proc/cpuinfo)"
 print_sample
-sleep 1
-print_sample
-sleep 1
-print_sample
+for ((SAMPLE = 1; SAMPLE < NUM_SAMPLES; ++SAMPLE)); do
+  sleep "$SAMPLE_INTERVAL"
+  print_sample
+done
 
 # The `gdb` script that dumps the stacks of all threads, and then resumes the
 # command and reports each fatal signal that it receives, until it terminates.
