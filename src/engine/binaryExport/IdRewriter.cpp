@@ -13,67 +13,43 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <stdexcept>
 #include <utility>
 
-#include "backports/algorithm.h"
-#include "index/TripleComponentConversions.h"
-#include "parser/TripleComponent.h"
-
 namespace qlever::binary_export {
-
-// Convert the string representation of a literal or IRI to a local `Id` in
-// the same way as for any other input (see `toValueId`): an IRI that can be
-// encoded with a local pattern becomes an `EncodedVal`, a word of the
-// vocabularies of the local index the corresponding `VocabIndex` or
-// `SecondaryVocabIndex`, and only the remaining words are added to `vocab`.
-static Id stringToId(std::string representation,
-                     const QueryExecutionContext& qec, LocalVocab& vocab) {
-  TripleComponent tripleComponent{
-      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-          std::move(representation))};
-  return toValueId(std::move(tripleComponent), qec.getIndex().getImpl(), vocab);
-}
 
 // _____________________________________________________________________________
 IdRewriter::IdRewriter(const QueryExecutionContext& qec,
                        std::vector<encodedIri::Pattern> remotePatterns,
                        GeoPointEncodingEnum remoteGeoPointEncoding)
     : qec_{&qec},
-      remotePatterns_{std::move(remotePatterns)},
-      prefixMapping_{getPrefixMapping(qec, remotePatterns_)},
+      encodedIriRewriter_{qec.getIndex(), std::move(remotePatterns)},
+      blankNodeRewriter_{qec.getIndex().getBlankNodeManager()},
       remoteGeoPointEncoding_{remoteGeoPointEncoding} {}
 
 // _____________________________________________________________________________
-void IdRewriter::startBatch(std::vector<std::string> transmittedStrings) {
-  transmittedIds_.clear();
-  transmittedIds_.reserve(transmittedStrings.size());
-  for (auto& string : transmittedStrings) {
-    transmittedIds_.push_back(
-        stringToId(std::move(string), *qec_, localVocab_));
-  }
-  decodedIris_.clear();
-}
-
-// _____________________________________________________________________________
-void IdRewriter::rewriteRows(IdTable& table, size_t firstRow) {
+void IdRewriter::rewriteBatch(IdTable& table, size_t firstRow,
+                              std::vector<std::string> transmittedStrings) {
+  TransmittedStrings strings{std::move(transmittedStrings), qec_->getIndex(),
+                             localVocab_};
   for (auto column : table.getColumns()) {
     for (Id& id : column.subspan(firstRow)) {
-      id = (*this)(id);
+      id = rewrite(id, strings);
     }
   }
 }
 
 // _____________________________________________________________________________
-Id IdRewriter::operator()(Id id) {
+Id IdRewriter::rewrite(Id id, const TransmittedStrings& transmittedStrings) {
   switch (id.getDatatype()) {
     case Datatype::EncodedVal:
-      return rewriteEncodedVal(id);
+      return encodedIriRewriter_(id, localVocab_);
     case Datatype::BlankNodeIndex:
-      return rewriteBlankNode(id);
+      return blankNodeRewriter_(id);
     case Datatype::LocalVocabIndex:
-      return rewriteString(id);
+      return transmittedStrings(id);
     case Datatype::GeoPoint:
-      return rewriteGeoPoint(id);
+      return rewriteGeoPoint(id, remoteGeoPointEncoding_);
     default:
       // All other IDs that the exporter sends are self-contained, see
       // `toExportableId`.
@@ -88,54 +64,8 @@ Id IdRewriter::operator()(Id id) {
 }
 
 // _____________________________________________________________________________
-Id IdRewriter::rewriteEncodedVal(Id id) {
-  auto [prefixIdx, payload] =
-      EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
-  if (auto it = prefixMapping_.find(prefixIdx); it != prefixMapping_.end()) {
-    return EncodedIriManager::makeIdFromPrefixIdxAndPayload(it->second,
-                                                            payload);
-  }
-  if (prefixIdx >= remotePatterns_.size()) {
-    throw std::runtime_error{
-        "The result in QLever's binary export format contains an encoded IRI "
-        "with an unknown pattern"};
-  }
-  // The decoded IRI might be encoded with a different local pattern.
-  auto [it, inserted] = decodedIris_.try_emplace(id.getBits(), Id{});
-  if (inserted) {
-    it->second =
-        stringToId(encodedIri::decodeToIri(remotePatterns_[prefixIdx], payload),
-                   *qec_, localVocab_);
-  }
-  return it->second;
-}
-
-// _____________________________________________________________________________
-Id IdRewriter::rewriteBlankNode(Id id) {
-  auto [it, inserted] = blankNodeMapping_.try_emplace(id.getBits(), Id{});
-  if (inserted) {
-    it->second = Id::makeFromBlankNodeIndex(blankNodeVocab_.getBlankNodeIndex(
-        qec_->getIndex().getBlankNodeManager()));
-  }
-  return it->second;
-}
-
-// _____________________________________________________________________________
-Id IdRewriter::rewriteString(Id id) const {
-  // Undo the shift done by `StringMapping::remapId`.
-  auto index =
-      reinterpret_cast<size_t>(id.getLocalVocabIndex()) >> Id::numDatatypeBits;
-  if (index >= transmittedIds_.size()) {
-    throw std::runtime_error{
-        "The result in QLever's binary export format refers to a string that "
-        "was not transmitted"};
-  }
-  return transmittedIds_[index];
-}
-
-// _____________________________________________________________________________
-Id IdRewriter::rewriteGeoPoint(Id id) const {
-  if (remoteGeoPointEncoding_ == GeoPoint::encoding()) {
+Id IdRewriter::rewriteGeoPoint(Id id, GeoPointEncodingEnum remoteEncoding) {
+  if (remoteEncoding == GeoPoint::encoding()) {
     return id;
   }
   // NOTE: Decoding the point to a `GeoPoint` and encoding it again would also
@@ -143,37 +73,16 @@ Id IdRewriter::rewriteGeoPoint(Id id) const {
   // coordinates, so only the bits of the payload are converted.
   return Id::fromBits(
       Datatype::GeoPoint,
-      GeoPoint::convertEncoding(id.getPayloadBits(), remoteGeoPointEncoding_,
+      GeoPoint::convertEncoding(id.getPayloadBits(), remoteEncoding,
                                 GeoPoint::encoding()));
 }
 
 // _____________________________________________________________________________
 LocalVocab IdRewriter::takeLocalVocab() {
-  if (!blankNodeMapping_.empty()) {
-    // NOTE: `mergeWith` marks the `blankNodeVocab_` as copied, which only
-    // forbids adding words, but not blank nodes, to it.
-    localVocab_.mergeWith(blankNodeVocab_);
-  }
-  // The IDs of the current batch might point into the old local vocab.
-  transmittedIds_.clear();
-  decodedIris_.clear();
+  blankNodeRewriter_.addBlankNodesTo(localVocab_);
+  // The IDs of the decoded IRIs might point into the old local vocab.
+  encodedIriRewriter_.clearDecodedIris();
   return std::exchange(localVocab_, LocalVocab{});
-}
-
-// _____________________________________________________________________________
-ad_utility::HashMap<uint8_t, uint8_t> IdRewriter::getPrefixMapping(
-    const QueryExecutionContext& qec,
-    const std::vector<encodedIri::Pattern>& patterns) {
-  ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
-  const auto& localPatterns = qec.getIndex().encodedIriManager().patterns_;
-  for (const auto& [index, pattern] : ::ranges::views::enumerate(patterns)) {
-    auto patternIt = ql::ranges::find(localPatterns, pattern);
-    if (patternIt != localPatterns.end()) {
-      prefixMapping[index] = static_cast<uint8_t>(
-          ql::ranges::distance(localPatterns.begin(), patternIt));
-    }
-  }
-  return prefixMapping;
 }
 
 }  // namespace qlever::binary_export
