@@ -27,6 +27,8 @@
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
 
+class Index;
+
 namespace sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -190,6 +192,9 @@ struct NormalizedStringGetter : Mixin<NormalizedStringGetter> {
                                         const EvaluationContext*) const;
   std::optional<std::string> operator()(const LiteralOrIri& s,
                                         const EvaluationContext*) const;
+
+  // Return the normalized form of the string `s` for the given `index`.
+  static std::string normalize(std::string_view s, const Index& index);
 };
 
 // This class can be used as the `ValueGetter` argument of Expression

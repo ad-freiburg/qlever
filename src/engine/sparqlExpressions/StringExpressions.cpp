@@ -15,6 +15,7 @@
 #include <boost/url.hpp>
 #endif
 
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
@@ -160,6 +161,33 @@ Expr makeLowercaseExpression(Expr child) {
 
 Expr makeNormalizeExpression(Expr child) {
   return make<NormalizeExpression>(child);
+}
+
+// _____________________________________________________________________________
+Expr foldNormalizeExpressions(SparqlExpression& expression,
+                              const Index& index) {
+  // Fold the children first, so that the argument of a `ql:normalize` is
+  // already a string literal if it is a folded `ql:normalize` itself.
+  for (auto& child : expression.children()) {
+    if (auto folded = foldNormalizeExpressions(*child, index)) {
+      child = std::move(folded);
+    }
+  }
+
+  // Fold `expression` itself if it is a `ql:normalize` whose argument is a
+  // string literal.
+  if (dynamic_cast<const NormalizeExpression*>(&expression) == nullptr) {
+    return nullptr;
+  }
+  const auto* literal = dynamic_cast<const StringLiteralExpression*>(
+      expression.children()[0].get());
+  if (literal == nullptr) {
+    return nullptr;
+  }
+  return std::make_unique<StringLiteralExpression>(
+      ad_utility::triple_component::Literal::literalWithoutQuotes(
+          detail::NormalizedStringGetter::normalize(
+              literal->value().getContent(), index)));
 }
 
 Expr makeUppercaseExpression(Expr child) {
