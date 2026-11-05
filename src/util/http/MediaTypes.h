@@ -50,7 +50,7 @@ enum class MediaType {
 // on the format. The 1337 is deliberately far from the regular versions (which
 // evolve independently of the layout) for as long as the split layout is
 // experimental.
-#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
+#ifdef QLEVER_USE_SPLIT_LAYOUT
 inline constexpr uint16_t binaryQleverExportVersion = 1337;
 #else
 inline constexpr uint16_t binaryQleverExportVersion = 1;

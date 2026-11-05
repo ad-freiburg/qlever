@@ -30,7 +30,7 @@ namespace qlever::binary_export {
 // of the datatype tags.
 static_assert(ad_utility::binaryQleverExportVersion ==
               (std::is_same_v<Id::T, uint64_t> ? 1 : 1337));
-#ifndef QLEVER_USE_ID_SPLIT_LAYOUT
+#ifndef QLEVER_USE_SPLIT_LAYOUT
 static_assert(Id::numDatatypeBits == 4);
 #endif
 static constexpr auto datatypesOfVersion1 = []() {
