@@ -82,6 +82,12 @@ jobs:
             type=sha,prefix=commit-,enable={{is_default_branch}},priority=201
             # For pull requests, derive a version from the PR number.
             type=ref,event=pr
+      # Let a unit test that crashes during the Docker build leave a core dump
+      # in its working directory, which `misc/run-test-with-diagnostics.sh`
+      # then analyzes (see the `Dockerfile`). The core pattern is not
+      # namespaced, so it can only be set here on the host.
+      - name: Write core dumps to the working directory of the crashing process
+        run: sudo sysctl -w kernel.core_pattern=core.%p
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - name: Login to Docker Hub
