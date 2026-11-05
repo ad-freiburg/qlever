@@ -345,11 +345,15 @@ TripleKind getTripleKind(std::string_view iri) {
   return TripleKind::IndexScan;
 }
 
-// Return the `TripleKind` of `triple`.
+// Return the `TripleKind` of `triple`, the predicate of which must be an IRI or
+// a variable (property paths are transformed before planning).
 TripleKind getTripleKind(const SparqlTriple& triple) {
   auto predicate = triple.getSimplePredicate();
-  return predicate.has_value() ? getTripleKind(predicate.value())
-                               : TripleKind::IndexScan;
+  if (!predicate.has_value()) {
+    AD_CORRECTNESS_CHECK(std::holds_alternative<Variable>(triple.p_));
+    return TripleKind::IndexScan;
+  }
+  return getTripleKind(predicate.value());
 }
 }  // namespace
 
