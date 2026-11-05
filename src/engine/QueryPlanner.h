@@ -710,6 +710,10 @@ class QueryPlanner {
     // `fillDpTab`.
     FiltersAndOptionalSubstitutes filtersAndSubst_;
 
+    // The variables of the `rootPattern_` that are bound to a single constant,
+    // see `getConstantVariables`.
+    ad_utility::HashMap<Variable, TripleComponent> constants_;
+
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
                         ParsedQuery::GraphPattern* rootPattern)
@@ -718,7 +722,31 @@ class QueryPlanner {
           qec_{planner._qec},
           candidatePlans_{allocator()},
           filtersAndSubst_{
-              wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
+              wrapFiltersWithoutSubstitutes(rootPattern->_filters)},
+          constants_{getConstantVariables(*rootPattern)} {}
+
+    // Return the variables of `pattern` that are bound to a single constant by
+    // a direct child of `pattern`, which is a `VALUES` clause with a single row
+    // or a `BIND` with a constant expression, together with this constant.
+    //
+    // NOTE: Nested groups are not considered. In particular, a `VALUES` clause
+    // in an `OPTIONAL` or `MINUS` does not bind its variables in every row.
+    static ad_utility::HashMap<Variable, TripleComponent> getConstantVariables(
+        const ParsedQuery::GraphPattern& pattern);
+
+    // Replace each variable of `triple` that has a constant in `constants_` by
+    // this constant. The `VALUES` or `BIND` clause that binds the variable is
+    // still planned, so the variable remains bound in the result.
+    //
+    // NOTE 1: The fixed constant allows for index scans with fewer variables,
+    // which are sorted by the remaining variables and thus avoid joins and
+    // sorts.
+    //
+    // NOTE 2: A triple with a special predicate (e.g. `ql:has-predicate`) is
+    // left unchanged, because these require variables in certain positions.
+    // Using the variable of a `BIND` before the `BIND` is an error, so a
+    // `BIND` also only affects the triples after it.
+    void substituteConstants(SparqlTriple& triple) const;
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions

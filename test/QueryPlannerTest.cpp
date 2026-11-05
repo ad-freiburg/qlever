@@ -2067,6 +2067,17 @@ TEST(QueryPlanner, substituteConstantVariables) {
   h::expect("SELECT * { VALUES ?x { <a> } MINUS { ?x <p> ?o } }",
             h::Minus(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) }")),
                      scan("?x", "<p>", "?o")));
+
+  // A triple with a special predicate keeps its variables (a `ql:has-predicate`
+  // triple with two constants can't be planned), and a variable predicate is
+  // not replaced by a special predicate.
+  EXPECT_NO_THROW(h::parseAndPlan(
+      "SELECT * { VALUES (?s ?p) { (<a> <b>) } ?s ql:has-predicate ?p }",
+      ad_utility::testing::getQec()));
+  h::expect("SELECT * { VALUES ?p { ql:has-predicate } ?s ?p ?o }",
+            h::Join(h::Sort(h::ValuesClause(absl::StrCat(
+                        "VALUES (?p) { (", HAS_PREDICATE_PREDICATE, ") }"))),
+                    scan("?s", "?p", "?o")));
 }
 
 // _____________________________________________________________________________
@@ -4304,10 +4315,10 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                                   "?_QLever_internal_variable_qp_1")),
       qec);
 
-  // The dynamic programming planner binds the path to the join of the `VALUES`
-  // clause and the index scan. The `?var` of that join is guaranteed to be part
-  // of the knowledge graph, so no existence check is required.
-  h::expectWithGivenBudgets(
+  // The path is bound to the join of the `VALUES` clause and the index scan.
+  // The `?var` of that join is guaranteed to be part of the knowledge graph, so
+  // no existence check is required.
+  h::expect(
       "SELECT * { VALUES ?var { 1 2 } . ?var <c> <d> . ?other <a>* ?var }",
       h::transitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
@@ -4315,7 +4326,7 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                   h::IndexScanFromStrings("?var", "<c>", "<d>")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")),
-      qec, {16, 64'000'000});
+      qec);
   // With a single value, the `?var` of the index scan is replaced by it, so the
   // path is bound to the `VALUES` clause directly (which requires an existence
   // check).
