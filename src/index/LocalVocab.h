@@ -59,6 +59,9 @@ class LocalVocab {
     // The arena holds the words, their characters, and the internal arrays of
     // `words_` (the arrays that `words_` replaces when it grows remain in the
     // arena until the set is destroyed).
+    //
+    // NOTE: The arena must be declared before `words_`, which returns its
+    // memory to the arena when it is destroyed.
     ql::pmr::monotonic_buffer_resource arena_;
 
     // Both set types never move their elements, and leave the set unchanged
