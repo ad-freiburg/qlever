@@ -13,10 +13,10 @@
 #include <array>
 #include <cstddef>
 
+#include "backports/concepts.h"
 #include "backports/span.h"
 #include "engine/idTable/splitLayout/IdColumn.h"
 #include "global/Id.h"
-#include "util/Forward.h"
 
 // The bytes of a column of `Id`s on disk, in the permutations of the index and
 // in the temporary files of the external sorter and of the parallel merge. The
@@ -26,40 +26,50 @@
 // `Id` on disk.
 //
 // The bytes of a column consist of one chunk per contiguous array in memory,
-// so they are never copied. `encode` calls `useBytes` with a `std::array` of
-// `ql::span<const std::byte>`, one per chunk, and returns its result. `decode`
-// calls `fillBytes` with a `std::array` of `ql::span<std::byte>` of the same
-// sizes, which it has to fill completely. The callers compress each chunk as a
-// ZSTD frame of its own, see `ZstdWrapper::compress` and
-// `ZstdWrapper::decompressToBuffers`.
+// so they are never copied. `encode` calls `useBytes` with the chunks (see
+// `ConstChunks`) and returns its result. `decode` calls `fillBytes` with
+// buffers of the same sizes (see `Chunks`), which it has to fill completely.
+// The callers compress each chunk as a ZSTD frame of its own, see
+// `ZstdWrapper::compress` and `ZstdWrapper::decompressToBuffers`.
 namespace ad_utility::idColumnByteIO {
 
+// The chunks of a column, one per contiguous array in memory.
+using ConstChunks = ql::span<const ql::span<const std::byte>>;
+using Chunks = ql::span<const ql::span<std::byte>>;
+
 // A column of whole `Id`s: one chunk, the `Id`s in memory.
-template <typename UseBytes>
-auto encode(ql::span<const Id> column, UseBytes&& useBytes) {
-  return AD_FWD(useBytes)(std::array{ql::as_bytes(column)});
+CPP_template(typename UseBytes)(
+    requires ql::concepts::invocable<UseBytes, ConstChunks>)
+auto encode(ql::span<const Id> column, UseBytes useBytes) {
+  std::array chunks{ql::as_bytes(column)};
+  return useBytes(ConstChunks{chunks});
 }
 
-template <typename FillBytes>
-void decode(ql::span<Id> column, FillBytes&& fillBytes) {
-  AD_FWD(fillBytes)(std::array{ql::as_writable_bytes(column)});
+CPP_template(typename FillBytes)(
+    requires ql::concepts::invocable<FillBytes, Chunks>)
+void decode(ql::span<Id> column, FillBytes fillBytes) {
+  std::array chunks{ql::as_writable_bytes(column)};
+  fillBytes(Chunks{chunks});
 }
 
 // A column of the split layout: two chunks, the payloads of all the `Id`s and
 // then their datatypes.
-template <typename UseBytes>
+CPP_template(typename UseBytes)(
+    requires ql::concepts::invocable<UseBytes, ConstChunks>)
 auto encode(columnBasedIdTable::splitLayout::ConstIdColumnRef column,
-            UseBytes&& useBytes) {
-  return AD_FWD(useBytes)(std::array{ql::as_bytes(column.rawPayloads()),
-                                     ql::as_bytes(column.rawDatatypes())});
+            UseBytes useBytes) {
+  std::array chunks{ql::as_bytes(column.rawPayloads()),
+                    ql::as_bytes(column.rawDatatypes())};
+  return useBytes(ConstChunks{chunks});
 }
 
-template <typename FillBytes>
+CPP_template(typename FillBytes)(
+    requires ql::concepts::invocable<FillBytes, Chunks>)
 void decode(columnBasedIdTable::splitLayout::IdColumnRef column,
-            FillBytes&& fillBytes) {
-  AD_FWD(fillBytes)
-  (std::array{ql::as_writable_bytes(column.rawPayloads()),
-              ql::as_writable_bytes(column.rawDatatypes())});
+            FillBytes fillBytes) {
+  std::array chunks{ql::as_writable_bytes(column.rawPayloads()),
+                    ql::as_writable_bytes(column.rawDatatypes())};
+  fillBytes(Chunks{chunks});
 }
 }  // namespace ad_utility::idColumnByteIO
 
