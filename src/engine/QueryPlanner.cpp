@@ -358,7 +358,7 @@ void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
   }
   for (const auto& [variable, value] :
        ::ranges::views::zip(inlineValues._variables, inlineValues._values[0])) {
-    if (!value.isUndef()) {
+    if (!value.isUndef() && !qlever::isInternalComponent(value)) {
       constants_.emplace(variable, value);
     }
   }
@@ -366,7 +366,8 @@ void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::addConstants(const p::Bind& bind) {
-  if (auto constant = getConstantOfBind(bind)) {
+  auto constant = getConstantOfBind(bind);
+  if (constant.has_value() && !qlever::isInternalComponent(constant.value())) {
     constants_.emplace(bind._target, std::move(constant.value()));
   }
 }

@@ -726,11 +726,15 @@ class QueryPlanner {
 
     // Add the variables that are bound to a single constant by `values` (if it
     // has a single row) or by `bind` (if its expression is a constant) to
-    // `constants_`.
+    // `constants_`, except for internal IRIs (like `ql:langtag`).
     //
-    // NOTE: Only the direct children of the `rootPattern_` are visited here, so
-    // nested groups are not considered. In particular, a `VALUES` clause in an
-    // `OPTIONAL` or `MINUS` does not bind its variables in every row.
+    // NOTE 1: Only the direct children of the `rootPattern_` are visited here,
+    // so nested groups are not considered. In particular, a `VALUES` clause in
+    // an `OPTIONAL` or `MINUS` does not bind its variables in every row.
+    //
+    // NOTE 2: A triple with an internal IRI is evaluated on the internal
+    // permutation, which contains other triples than the regular one that the
+    // triple with the variable is evaluated on.
     void addConstants(const parsedQuery::Values& values);
     void addConstants(const parsedQuery::Bind& bind);
 

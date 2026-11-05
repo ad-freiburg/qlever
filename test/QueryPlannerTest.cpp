@@ -2110,6 +2110,13 @@ TEST(QueryPlanner, substituteConstantVariables) {
             h::Join(h::Sort(h::ValuesClause(absl::StrCat(
                         "VALUES (?p) { (", HAS_PREDICATE_PREDICATE, ") }"))),
                     scan("?s", "?p", "?o")));
+
+  // An internal IRI is not substituted (a triple with it is evaluated on the
+  // internal permutation, which contains other triples).
+  h::expect("SELECT * { VALUES ?p { ql:langtag } ?s ?p ?o }",
+            h::Join(h::Sort(h::ValuesClause(absl::StrCat(
+                        "VALUES (?p) { (", LANGUAGE_PREDICATE, ") }"))),
+                    scan("?s", "?p", "?o")));
 }
 
 // _____________________________________________________________________________
