@@ -24,6 +24,7 @@
 #include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
 #include "backports/algorithm.h"
+#include "global/Id.h"
 #include "global/VocabIndex.h"
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -236,13 +237,15 @@ SingleVocabularyParallelWriter makeParallelWriter(Callback callback) {
 // A `ParallelWordWriterBase` with two sub-vocabularies, which simulates a
 // `SplitVocabulary` of a main and a geo vocabulary for testing purposes: the
 // WKT literals go to the second sub-vocabulary, and the index of a word is
-// its position in its sub-vocabulary, with the marker bit `1 << 59` for the
-// geo vocabulary. The words of each sub-vocabulary are collected in `words_`
+// its position in its sub-vocabulary, with the marker bit of the
+// `SplitGeoVocabulary` (the topmost bit of a vocabulary index) for the geo
+// vocabulary. The words of each sub-vocabulary are collected in `words_`
 // and `geoWords_`, together with their `isExternal` flags.
 class TestSplitWriter : public ParallelWordWriterBase {
  public:
   // The marker bit that the indices of the geo words carry.
-  static constexpr uint64_t geoMarker = uint64_t{1} << 59;
+  static constexpr uint64_t geoMarker = uint64_t{1}
+                                        << (ValueId::numVocabIndexBits - 1);
   std::vector<std::pair<std::string, bool>> words_;
   std::vector<std::pair<std::string, bool>> geoWords_;
 
