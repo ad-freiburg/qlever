@@ -20,7 +20,8 @@
 #include <set>
 #include <vector>
 
-#include "./util/GTestHelpers.h"
+#include "../../util/GTestHelpers.h"
+#include "../../util/IndexTestHelpers.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationReader.h"
@@ -28,7 +29,6 @@
 #include "index/LocatedTriples.h"
 #include "index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
-#include "util/GlobalExecutor.h"
 
 // NOTE: The chunkwise writer needs the parallel merge, which only exists in the
 // C++20 mode of the build.
@@ -113,7 +113,8 @@ WriteResult writeRows(const TestRows& rows, const std::string& basename,
   auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
   Sorter sorter{basename + ".sorter", config.numColumns_, config.sorterMemory_,
                 allocator};
-  sorter.setMergeExecutor(ad_utility::globalExecutor(), config.parallelism_);
+  sorter.setMergeExecutor(ad_utility::testing::multiThreadExecutor(),
+                          config.parallelism_);
   {
     IdTable input{config.numColumns_, allocator};
     input.resize(rows.size());
@@ -132,7 +133,7 @@ WriteResult writeRows(const TestRows& rows, const std::string& basename,
     return WriterAndCallback{
         std::make_unique<CompressedRelationWriter>(
             config.numColumns_, ad_utility::File{filename, "w"},
-            config.blocksize_, ad_utility::globalExecutor()),
+            config.blocksize_, ad_utility::testing::multiThreadExecutor()),
         [&metadata](ql::span<const CompressedRelationMetadata> md) {
           metadata.insert(metadata.end(), md.begin(), md.end());
         }};
@@ -154,14 +155,14 @@ WriteResult writeRows(const TestRows& rows, const std::string& basename,
     if (fail && config.failingCallbackThrows_) {
       throw std::runtime_error{"callback failed by throwing"};
     }
-    boost::asio::post(ad_utility::globalExecutor(), [block,
-                                                     done = std::move(done),
-                                                     fail]() {
-      // Touch the block to make sure that it is alive.
-      AD_CORRECTNESS_CHECK(!block->empty());
-      done(fail ? std::make_exception_ptr(std::runtime_error{"callback failed"})
-                : nullptr);
-    });
+    boost::asio::post(ad_utility::testing::multiThreadExecutor(),
+                      [block, done = std::move(done), fail]() {
+                        // Touch the block to make sure that it is alive.
+                        AD_CORRECTNESS_CHECK(!block->empty());
+                        done(fail ? std::make_exception_ptr(
+                                        std::runtime_error{"callback failed"})
+                                  : nullptr);
+                      });
   });
   result.result_ = createPermutationPair(
       basename, makeWriter(basename + ".perm1", result.metadata1_),
@@ -192,7 +193,7 @@ IdTable scanRelation(const std::string& filename,
   return reader.scan(
       CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
       additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-      emptyLocatedTriples, ad_utility::globalExecutor());
+      emptyLocatedTriples, ad_utility::testing::multiThreadExecutor());
 }
 
 // Return the `rows` permuted by the `permutation` (the first three columns

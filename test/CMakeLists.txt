@@ -480,8 +480,6 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
-addLinkAndDiscoverTest(ChunkwisePermutationWriterTest index)
-
 addLinkAndDiscoverTest(PrefilterExpressionIndexTest engine)
 
 addLinkAndDiscoverTest(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)

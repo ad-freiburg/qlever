@@ -282,8 +282,7 @@ class ChunkwisePermutationWriter
 //
 // NOTE: In the C++17 mode of the build there is no parallel merge and hence
 // no chunkwise writer, so this function throws. A caller has to use the
-// classical `CompressedRelationWriter::createPermutationPair` in that mode,
-// see `IndexImpl::createPSOAndPOSChunkwise` for an example.
+// classical `CompressedRelationWriter::createPermutationPair` in that mode.
 template <typename Sorter>
 PermutationPairResult createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
