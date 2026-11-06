@@ -289,25 +289,6 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 }
 
 namespace {
-// Return the constant to which `bind` binds its target variable, or
-// `std::nullopt` if its expression is not a constant IRI, literal or defined
-// `Id` (an undefined `Id` is created for an unknown function in the syntax test
-// mode).
-std::optional<TripleComponent> getConstantOfBind(const p::Bind& bind) {
-  using namespace sparqlExpression;
-  const auto* expression = bind._expression.getPimpl();
-  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
-    return TripleComponent{iri->value()};
-  } else if (const auto* literal =
-                 dynamic_cast<const StringLiteralExpression*>(expression)) {
-    return TripleComponent{literal->value()};
-  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
-             id != nullptr && !id->value().isUndefined()) {
-    return TripleComponent{id->value()};
-  }
-  return std::nullopt;
-}
-
 // How the `QueryPlanner` evaluates a triple of a basic graph pattern: a plain
 // index scan or a special operation for a special predicate.
 //
@@ -375,7 +356,7 @@ void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::addConstants(const p::Bind& bind) {
-  auto constant = getConstantOfBind(bind);
+  auto constant = bind._expression.getConstantValue();
   if (constant.has_value() && !qlever::isInternalComponent(constant.value())) {
     constants_.emplace(bind._target, std::move(constant.value()));
   }
