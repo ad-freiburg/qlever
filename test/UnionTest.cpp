@@ -1127,6 +1127,37 @@ TEST(Union, sortedUnionImplRequiresCancellationHandle) {
       ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
+// Test that a lazy `SortedUnionImpl` doesn't reserve memory for a full chunk
+// up front, which would fail with a tight memory limit and many concurrent
+// unions, even if the inputs are tiny (see issue #3898).
+TEST(Union, lazySortedUnionImplDoesNotReserveFullChunk) {
+  using Range = std::vector<Result::IdTableVocabPair>;
+  // A full chunk of a single column would need 8 MB.
+  auto allocator =
+      ad_utility::testing::makeAllocator(ad_utility::MemorySize::megabytes(1));
+  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
+  std::vector<ColumnIndex> targetOrder{0};
+  auto makeRange = [](const VectorTable& values) {
+    Range range;
+    range.emplace_back(makeIdTableFromVector(values), LocalVocab{});
+    return range;
+  };
+  sortedUnion::SortedUnionImpl sortedUnion{
+      sortedUnion::IterationData<Range>{nullptr, makeRange({{1}, {3}}), {0}},
+      sortedUnion::IterationData<Range>{nullptr, makeRange({{2}}), {0}},
+      true,
+      columnOrigins,
+      allocator,
+      ql::span<const ColumnIndex>{targetOrder},
+      [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
+      std::make_shared<ad_utility::CancellationHandle<>>()};
+  IdTable result{1, ad_utility::testing::makeAllocator()};
+  for (const auto& pair : sortedUnion) {
+    result.insertAtEnd(pair.idTable_);
+  }
+  EXPECT_EQ(result, makeIdTableFromVector({{1}, {2}, {3}}));
+}
+
 // Test that the non-lazy merge of a sorted union checks for cancellation
 // after every `Union::chunkSize` merged rows.
 TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
