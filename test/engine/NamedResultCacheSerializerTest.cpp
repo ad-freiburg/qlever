@@ -13,6 +13,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -20,6 +21,7 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
+using ad_utility::testing::iriLocalVocabEntry;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
@@ -86,7 +88,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
   LocalVocab localVocab;
   [[maybe_unused]] auto local =
-      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
           "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
@@ -200,11 +202,11 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/1>", localVocabContext));
+      iriLocalVocabEntry("<http://example.org/1>", localVocabContext));
 
   LocalVocab vocab2;
   vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/2>", localVocabContext));
+      iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
   cache.store("query-1", NamedResultCache::Value{
                              std::make_shared<const IdTable>(table1.clone()),
@@ -317,7 +319,8 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
 TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   using namespace namedResultCacheSerializer;
   auto writeWithVersion = [](uint16_t version) {
-    return [version](auto& serializer, const NamedResultCache::Value& v) {
+    return [version](auto& serializer, [[maybe_unused]] const std::string& key,
+                     const NamedResultCache::Value& v) {
       writeValue(serializer, v,
                  ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
                  v.resultSortedOn_, /*writeLocalVocabWords=*/true, version);
@@ -406,6 +409,48 @@ TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
 }
 
 // _____________________________________________________________________________
+// Test that `writeEntries` calls `writeEntry` once per entry, in the order of
+// the keys, with the key that belongs to the value, and that `writeEntry` can
+// use the key to modify the written value.
+TEST_F(NamedResultCacheSerializerTest, WriteEntriesPassesKeyOfEachValue) {
+  using namespace namedResultCacheSerializer;
+  NamedResultCache cache;
+  for (std::string key : {"c", "a", "b"}) {
+    cache.store(key, makeSimpleValue(absl::StrCat("key-", key)));
+  }
+  std::vector<std::string> visitedKeys;
+  auto writeEntry = [&visitedKeys](auto& serializer, const std::string& key,
+                                   const NamedResultCache::Value& v) {
+    visitedKeys.push_back(key);
+    EXPECT_EQ(v.cacheKey_, absl::StrCat("key-", key));
+    // Write a copy of the value, the cache key of which is derived from the
+    // `key`.
+    NamedResultCache::Value copy{v.result_,
+                                 v.varToColMap_,
+                                 v.resultSortedOn_,
+                                 v.localVocab_.clone(),
+                                 absl::StrCat("written-", key),
+                                 std::nullopt};
+    writeValue(serializer, copy,
+               ExplicitIdTableOperation::viewOf(copy.result_).getColumns(),
+               copy.resultSortedOn_, /*writeLocalVocabWords=*/true,
+               formatVersion);
+  };
+  ByteBufferWriteSerializer writer;
+  writeEntries(writer, cache.getAllEntriesSortedByKey(), writeEntry,
+               formatVersion);
+  EXPECT_THAT(visitedKeys, ElementsAre("a", "b", "c"));
+
+  NamedResultCache readCache;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  readCache.readFromSerializer(reader, alloc_, qec_->getLocalVocabContext());
+  ASSERT_EQ(readCache.numEntries(), 3);
+  for (std::string key : {"a", "b", "c"}) {
+    EXPECT_EQ(readCache.get(key)->cacheKey_, absl::StrCat("written-", key));
+  }
+}
+
+// _____________________________________________________________________________
 // Test that `getAllEntriesSortedByKey` returns all entries of the cache,
 // sorted by their key, no matter in which order they were stored.
 TEST_F(NamedResultCacheSerializerTest, GetAllEntriesSortedByKey) {
@@ -491,7 +536,7 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+  localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
       "<http://example.org/test>", qec_->getLocalVocabContext()));
   ASSERT_EQ(localVocab.size(), 1);
 

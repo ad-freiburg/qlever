@@ -324,6 +324,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"centroid", &makeCentroidExpression},
       {"envelope", &makeEnvelopeExpression},
       {"geometryType", &makeGeometryTypeExpression},
+      {"getSRID", &makeCrsTypeExpression},
       {"minX", &makeBoundingCoordinateExpression<MIN_X>},
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
@@ -551,11 +552,11 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
       if (auto encodedId = encodedIriManager_->encode(iriString)) {
         return TripleComponent{*encodedId};
       }
-      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           iriString);
     } else {
       static_assert(ad_utility::isSimilar<T, Literal>);
-      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           item.toSparql());
     }
   };
@@ -1368,8 +1369,8 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 // _____________________________________________________________________________
 CPP_variadic_template_def(typename T, typename... Args)(
     requires std::is_constructible_v<T, Args...>)
-    parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
-        Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
+parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
+    Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
   T target{AD_FWD(args)...};
   auto parseGraphPattern =
       [&target](const parsedQuery::GraphPatternOperation& op) {
@@ -1434,6 +1435,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == ROW_NUMBER_IRI) {
+    return visitMagicServiceQuery<parsedQuery::RowNumberQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
              ql::starts_with(serviceIri.toStringRepresentation(),
                              EXTERNAL_VALUES_IRI_PREFIX)) {
@@ -1967,7 +1970,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+    return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
         visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     return std::visit(

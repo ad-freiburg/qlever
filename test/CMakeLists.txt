@@ -325,15 +325,13 @@ addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
+addLinkAndDiscoverTestNoLibs(MaybeOwningPtrTest)
+
+addLinkAndDiscoverTestNoLibs(ThreadLocalMemberTest)
+
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
-
-# this test runs for quite some time and might have spurious failures!
-# Therefore it is compiled, but not run. If you want to run it,
-# change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser testUtil)
-#addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
@@ -418,6 +416,8 @@ addLinkAndDiscoverTest(DurationTest qlever_util)
 addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
+
+addLinkAndDiscoverTest(TieTest qlever_util)
 
 addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
@@ -538,6 +538,10 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
+addLinkAndDiscoverTest(ComparisonOfIntAndDoubleTest)
+
+addLinkAndDiscoverTest(OrderByComparatorTest engine)
+
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
@@ -654,6 +658,8 @@ addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTest(ParallelExecutorTest)
+
+addLinkAndDiscoverTest(MathTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 

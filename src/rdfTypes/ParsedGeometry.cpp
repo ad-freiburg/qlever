@@ -98,10 +98,17 @@ std::optional<ParsedGeometry> ParsedGeometry::fromWktLiteral(
   AD_CORRECTNESS_CHECK(batch.foldedPoints.empty() &&
                        batch.foldedSimpleLines.empty() &&
                        batch.foldedBoxAreas.empty() && batch.refs.empty());
+  // A line with two points (a "simple line") is not stored, because whether
+  // `sj::Sweeper::add` treats it as one depends on the query (not for a
+  // `WITHIN_DIST` join, where its implicit second point would be padded). It
+  // is then parsed at query time as before.
+  if (!batch.simpleLines.empty()) {
+    return std::nullopt;
+  }
   ParsedGeometry result;
   auto placeholder = serializedId(placeholderId);
-  for (const auto* cands : {&batch.points, &batch.simpleLines, &batch.lines,
-                            &batch.simpleAreas, &batch.areas}) {
+  for (const auto* cands :
+       {&batch.points, &batch.lines, &batch.simpleAreas, &batch.areas}) {
     for (const auto& cand : *cands) {
       // Find the placeholder id inside the serialized geometry. A second
       // occurrence (in the coordinates, in theory) would make the position
@@ -158,8 +165,6 @@ std::optional<ParsedGeometry> ParsedGeometry::fromWktLiteral(
       switch (type) {
         case sj::POINT:
           return batch.points;
-        case sj::SIMPLE_LINE:
-          return batch.simpleLines;
         case sj::LINE:
           return batch.lines;
         case sj::SIMPLE_POLYGON:

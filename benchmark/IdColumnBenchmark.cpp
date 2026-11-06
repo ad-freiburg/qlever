@@ -92,8 +92,7 @@ class IdColumnBenchmark : public BenchmarkInterface {
     results.addMeasurement(
         "ranges::sort " + std::to_string(numIds) + " random Ids", [&ids] {
           IdColumnVector vec{ids.begin(), ids.end(), makeTestAllocator()};
-          ql::ranges::sort(vec.asView(), {},
-                           [](const Id id) { return getBitsCompat(id); });
+          ql::ranges::sort(vec.asView(), {}, Id::getBitsL);
           AD_LOG_INFO << "size " << vec.size() << std::endl;
         });
     return results;

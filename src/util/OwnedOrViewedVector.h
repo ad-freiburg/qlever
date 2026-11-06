@@ -101,9 +101,9 @@ class OwnedOrViewedVector {
   // is valid and unchanged. The layout that is read here is the one that is
   // written by the serialization below (which is the same as the one of a
   // `std::vector<T>` or `ql::span<const T>`).
-  CPP_template(typename S)(requires serialization::ZeroCopyReadSerializer<
-                           S>) static OwnedOrViewedVector
-      fromZeroCopyDeserializer(S& serializer) {
+  CPP_template(typename S)(
+      requires serialization::ZeroCopyReadSerializer<S>)
+  static OwnedOrViewedVector fromZeroCopyDeserializer(S& serializer) {
     return OwnedOrViewedVector{
         serialization::zeroCopyDeserializeToSpan<T>(serializer)};
   }

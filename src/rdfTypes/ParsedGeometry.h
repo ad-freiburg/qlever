@@ -80,7 +80,8 @@ class ParsedGeometry {
   // Parse `wktLiteral` (with quotes and datatype, as stored in the vocabulary)
   // and preprocess it with `sweeper`, which must be configured with
   // `sweeperConfig`. Return `std::nullopt` if `libspatialjoin` yields no
-  // geometry for the literal.
+  // geometry for the literal, or if the literal is a line with two points
+  // (which `libspatialjoin` treats differently depending on the query).
   static std::optional<ParsedGeometry> fromWktLiteral(
       std::string_view wktLiteral, sj::Sweeper& sweeper);
 

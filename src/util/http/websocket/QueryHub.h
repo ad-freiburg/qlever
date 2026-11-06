@@ -7,6 +7,7 @@
 
 #include <absl/container/flat_hash_map.h>
 
+#include "util/Synchronized.h"
 #include "util/http/beast.h"
 #include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"

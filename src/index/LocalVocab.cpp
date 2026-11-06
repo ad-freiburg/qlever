@@ -62,8 +62,9 @@ Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntry& word) {
   // `positionInVocab` returns a half-open range that is at most one wide, so
   // `lowerBound != upperBound` means that `word` does have a representation
   // outside of a local vocab, and the bits of `lowerBound` then are exactly the
-  // corresponding `Id`: a `VocabIndex` if `word` is in the vocabulary of the
-  // index, an `EncodedVal` if it is directly encodable (`EncodedIriManager`).
+  // corresponding `Id`, e.g. a `VocabIndex` if `word` is in the vocabulary of
+  // the index. (A `LocalVocabEntry` never stores an IRI that is encoded
+  // directly in an `Id`, see `toIdOrLocalVocabEntry`.)
   auto [lowerBound, upperBound] = word.positionInVocab();
   if (lowerBound != upperBound) {
     return Id::fromBits(lowerBound.get());

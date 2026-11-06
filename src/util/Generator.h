@@ -105,8 +105,8 @@ class generator_promise {
   };
 
   CPP_template(typename DetailT)(
-      requires ad_utility::SimilarTo<GetDetails, DetailT>) DetailAwaiter
-      await_transform([[maybe_unused]] DetailT&& detail) {
+      requires ad_utility::SimilarTo<GetDetails, DetailT>)
+  DetailAwaiter await_transform([[maybe_unused]] DetailT&& detail) {
     return {*this};
   }
 

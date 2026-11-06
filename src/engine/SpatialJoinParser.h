@@ -62,6 +62,8 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   size_t getPrefilterCounter();
   size_t getParseCounter();
   size_t getFromIndexCounter();
+  // The number of parsed geometries that were skipped as invalid WKT is given
+  // by `getNumInvalid` of the base class.
 
  protected:
   void processQueue(size_t t) override;
