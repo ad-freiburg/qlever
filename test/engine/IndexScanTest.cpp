@@ -461,11 +461,11 @@ TEST(IndexScan, additionalColumn) {
   EXPECT_THAT(res.idTableView(), ::testing::ElementsAreArray(exp));
 }
 
-// Test that the graphs by which an `IndexScan` is to be filtered is correctly
-// reflected in its cache key and its `ScanSpecification`.
 // Test the cases in which `makeCopyWithSelectedBlocks` does not restrict the
 // scan. Only in the last case is the selector called (and declines).
 TEST(IndexScan, makeCopyWithSelectedBlocksWithoutRestriction) {
+  // A relation `<p>` with four numeric objects in one block, and a selector
+  // that counts its calls and never restricts.
   TestIndexConfig config{"<a> <p> 1 . <b> <p> 2 . <c> <p> 4 . <d> <p> 5 ."};
   config.rowsPerBlock = 4;
   auto* qec = getQec(std::move(config));
@@ -494,10 +494,14 @@ TEST(IndexScan, makeCopyWithSelectedBlocksWithoutRestriction) {
   EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Tc{int64_t{3}}}).has_value());
   EXPECT_EQ(numCalls, 0);
 
+  // A scan with a variable and a non-empty result calls the selector, which
+  // declines.
   EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}}).has_value());
   EXPECT_EQ(numCalls, 1);
 }
 
+// Test that the graphs by which an `IndexScan` is to be filtered is correctly
+// reflected in its cache key and its `ScanSpecification`.
 TEST(IndexScan, namedGraphs) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;

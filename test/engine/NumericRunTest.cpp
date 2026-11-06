@@ -28,8 +28,10 @@ constexpr int64_t minInt = ValueId::IntegerType::min();
 constexpr int64_t maxInt = ValueId::IntegerType::max();
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that `getRunOfId` returns the run of each kind of numeric `Id`, and
+// `std::nullopt` for other datatypes.
 TEST(NumericRun, getRunOfId) {
+  // The boundary values of each run.
   EXPECT_EQ(getRunOfId(IntId(0)), IntNonNegative);
   EXPECT_EQ(getRunOfId(IntId(maxInt)), IntNonNegative);
   EXPECT_EQ(getRunOfId(IntId(-1)), IntNegative);
@@ -40,21 +42,28 @@ TEST(NumericRun, getRunOfId) {
   EXPECT_EQ(getRunOfId(DoubleId(-0.0)), DoubleNegative);
   EXPECT_EQ(getRunOfId(DoubleId(-infValue)), DoubleNegative);
   EXPECT_EQ(getRunOfId(DoubleId(-nanValue)), DoubleNegativeNan);
+
+  // Non-numeric `Id`s.
   EXPECT_EQ(getRunOfId(UndefId()), std::nullopt);
   EXPECT_EQ(getRunOfId(Id::makeFromBool(true)), std::nullopt);
 }
 
-// _____________________________________________________________________________
+// Test that `getCommonNumericDatatype` returns the datatype only if both `Id`s
+// are `Int`s or both are `Double`s.
 TEST(NumericRun, getCommonNumericDatatype) {
+  // The same numeric datatype, in different runs.
   EXPECT_EQ(getCommonNumericDatatype(IntId(3), IntId(-3)), Datatype::Int);
   EXPECT_EQ(getCommonNumericDatatype(DoubleId(1.0), DoubleId(-nanValue)),
             Datatype::Double);
+
+  // Different datatypes, or a non-numeric one.
   EXPECT_EQ(getCommonNumericDatatype(IntId(3), DoubleId(1.0)), std::nullopt);
   EXPECT_EQ(getCommonNumericDatatype(UndefId(), IntId(1)), std::nullopt);
   EXPECT_EQ(getCommonNumericDatatype(IntId(1), UndefId()), std::nullopt);
 }
 
-// _____________________________________________________________________________
+// Test that the enumerators of `NumericRun` and `getRunsInInternalOrder` are in
+// the internal order of the `Id`s.
 TEST(NumericRun, runsInInternalOrderMatchTheBits) {
   // One sample per run, in the order of the enumerators.
   std::vector<Id> samples{IntId(5),       IntId(-5),
@@ -64,7 +73,8 @@ TEST(NumericRun, runsInInternalOrderMatchTheBits) {
   for (size_t i = 0; i < samples.size(); ++i) {
     EXPECT_EQ(toIndex(getRunOfId(samples[i]).value()), i);
   }
-  // The enumerators are in the internal order, and so is
+
+  // The samples, and thus the enumerators, are sorted by bits, and so is
   // `getRunsInInternalOrder`.
   EXPECT_TRUE(ql::ranges::is_sorted(samples, {}, &Id::getBits));
   EXPECT_THAT(getRunsInInternalOrder(Datatype::Int),
@@ -72,12 +82,16 @@ TEST(NumericRun, runsInInternalOrderMatchTheBits) {
   EXPECT_THAT(getRunsInInternalOrder(Datatype::Double),
               ::testing::ElementsAre(DoubleNonNegative, DoublePositiveNan,
                                      DoubleNegative, DoubleNegativeNan));
+
+  // The datatype of a run.
   EXPECT_EQ(getDatatype(IntNegative), Datatype::Int);
   EXPECT_EQ(getDatatype(DoubleNegativeNan), Datatype::Double);
 }
 
-// _____________________________________________________________________________
+// Test that `getRunsInSemanticOrder` returns the runs in the order of `ORDER
+// BY ASC` and `ORDER BY DESC`, each with its direction.
 TEST(NumericRun, getRunsInSemanticOrder) {
+  // Compare as pairs, because `RunWithDirection` has no `operator==`.
   auto toPairs = [](const std::vector<RunWithDirection>& runs) {
     std::vector<std::pair<NumericRun, bool>> result;
     for (auto [run, reversed] : runs) {
@@ -86,12 +100,17 @@ TEST(NumericRun, getRunsInSemanticOrder) {
     return result;
   };
   using P = std::pair<NumericRun, bool>;
+
+  // Ints, ascending and descending.
   EXPECT_THAT(
       toPairs(getRunsInSemanticOrder(Datatype::Int, false)),
       ::testing::ElementsAre(P{IntNegative, false}, P{IntNonNegative, false}));
   EXPECT_THAT(
       toPairs(getRunsInSemanticOrder(Datatype::Int, true)),
       ::testing::ElementsAre(P{IntNonNegative, true}, P{IntNegative, true}));
+
+  // Doubles, ascending and descending (the negative doubles are the only run
+  // that is traversed in reverse for `ASC`).
   EXPECT_THAT(toPairs(getRunsInSemanticOrder(Datatype::Double, false)),
               ::testing::ElementsAre(
                   P{DoubleNegative, true}, P{DoubleNonNegative, false},
