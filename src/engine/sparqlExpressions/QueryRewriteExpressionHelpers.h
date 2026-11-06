@@ -13,10 +13,8 @@
 // This header declares utilities required during query planning for rewriting
 // parts of queries. The implementation of the
 // `getGeoFunctionExpressionParameters` and `getGeoDistanceExpressionParameters`
-// functions can be found in `GeoExpression.cpp`. Additionally note the
-// `getGeoDistanceFilter` function from `RelationalExpressions.cpp` for
-// extracting information from expressions of the form `geof:distance(?a, ?b) <=
-// constant`.
+// functions can be found in `GeoExpression.cpp`. Expressions of the form
+// `geof:distance(?a, ?b) <= constant` are recognized in `engine/filterFacts`.
 
 namespace sparqlExpression {
 

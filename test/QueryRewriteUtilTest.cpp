@@ -6,6 +6,7 @@
 
 #include "./QueryRewriteUtilTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/SpatialJoin.h"
@@ -45,41 +46,6 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParameters) {
 
   auto [expr4, exp4] = makeUnrelated();
   checkGeoDistanceCall(getGeoDistanceExpressionParameters(*expr4), exp4);
-}
-
-// _____________________________________________________________________________
-TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
-  auto D = &ValueId::makeFromDouble;
-
-  auto [dExpr1, dExp1] = makeTwoArgumentDist();
-  auto expr1 = leSprql(std::move(dExpr1), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr1), dExp1,
-                         // Expect unit converted: 10 km in meters
-                         10'000);
-
-  auto [dExpr2, dExp2] = makeThreeArgumentDist();
-  auto expr2 = leSprql(std::move(dExpr2), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr2), dExp2,
-                         // Expect unit converted: 10 miles in meters
-                         16'093.44);
-
-  auto [dExpr3, dExp3] = makeMetricDist();
-  auto expr3 = leSprql(std::move(dExpr3), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr3), dExp3, 10);
-
-  auto [dExpr4, dExp4] = makeUnrelated();
-  auto expr4 = leSprql(std::move(dExpr4), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr4), dExp4, 10);
-
-  // "<" relation is unsupported
-  auto [dExpr5, dExp5] = makeMetricDist();
-  auto expr5 = ltSprql(std::move(dExpr5), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr5), std::nullopt, 10);
-
-  // Non-numeric comparison is unsupported
-  auto [dExpr6, dExp6] = makeMetricDist();
-  auto expr6 = ltSprql(std::move(dExpr6), ValueId::makeFromGeoPoint({1, 1}));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
 }
 
 // _____________________________________________________________________________
@@ -255,6 +221,38 @@ TEST(QueryRewriteUtilTest, GetGeoFunctionExpressionParametersWithFixedValue) {
       makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}));
   checkGeoFunctionCall(getGeoFunctionExpressionParameters(*unsupportedArgPtr),
                        std::nullopt);
+}
+
+// Test that a FILTER is split into its conjuncts iff one of them is a fact,
+// and that each conjunct keeps its original input as descriptor.
+TEST(QueryRewriteUtilTest, SplitFiltersWithFacts) {
+  auto split = [](std::string_view filter) {
+    auto query = ad_utility::testing::parseQuery(absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * { ?a <p> ?b . ?x <p> ?y . FILTER(",
+        filter, ") }"));
+    auto filters = query._rootGraphPattern._filters;
+    splitFiltersWithFacts(filters);
+    std::vector<std::string> descriptors;
+    for (const auto& f : filters) {
+      descriptors.push_back(f.expression_.getDescriptor());
+    }
+    return descriptors;
+  };
+  using ::testing::ElementsAre;
+
+  // A conjunct that is a fact, also in a nested `&&`.
+  EXPECT_THAT(split("geof:distance(?y, ?b) <= 0.5 && ?x != ?a"),
+              ElementsAre("geof:distance(?y, ?b) <= 0.5", "?x != ?a"));
+  EXPECT_THAT(
+      split("?x != ?a && (geof:distance(?y, ?b) < 0.5 && ?x != <c>)"),
+      ElementsAre("?x != ?a", "geof:distance(?y, ?b) < 0.5", "?x != <c>"));
+
+  // No conjunct is a fact, or the FILTER is no `&&`.
+  for (std::string_view filter : {"geof:distance(?y, ?b) > 0.5 && ?x != ?a",
+                                  "geof:distance(?y, ?b) <= 0.5 || ?x != ?a"}) {
+    EXPECT_THAT(split(filter), ElementsAre(absl::StrCat("(", filter, ")")));
+  }
 }
 
 }  // namespace

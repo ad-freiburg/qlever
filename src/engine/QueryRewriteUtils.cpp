@@ -9,6 +9,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/Values.h"
+#include "engine/filterFacts/Recognizers.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -60,12 +61,18 @@ getSpatialJoinConfigForFilter(
                                 call.value().pattern_};
     return std::pair{std::move(config), std::move(call).value()};
   }
-  // The filter body is a maximum distance spatial search (direct body of
-  // filter is a comparison).
-  if (auto call = getGeoDistanceFilter(filterBody)) {
-    LibSpatialJoinConfig config{call.value().first.function_,
-                                call.value().second, std::nullopt};
-    return std::pair{std::move(config), std::move(call).value().first};
+  // The filter body bounds the distance between two geometries (see
+  // `filterFacts::recognizeDistanceBound`).
+  auto conjuncts = filterFacts::canonicalize(filterBody);
+  if (conjuncts.size() != 1) {
+    return std::nullopt;
+  }
+  if (auto bound = filterFacts::recognizeDistanceBound(conjuncts[0])) {
+    using enum SpatialJoinType::Enum;
+    return std::pair{
+        LibSpatialJoinConfig{WITHIN_DIST, bound->maxMeters_, std::nullopt},
+        sparqlExpression::GeoFunctionCall{WITHIN_DIST, std::move(bound->a_),
+                                          std::move(bound->b_)}};
   }
   return std::nullopt;
 }
@@ -109,4 +116,23 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
           std::move(right.variable_), std::nullopt, PayloadVariables::all(),
           SpatialJoinAlgorithm::LIBSPATIALJOIN, std::nullopt},
       std::move(left.child_), std::move(right.child_), true);
+}
+
+// _____________________________________________________________________________
+void splitFiltersWithFacts(std::vector<SparqlFilter>& filters) {
+  std::vector<SparqlFilter> result;
+  for (auto& filter : filters) {
+    auto conjuncts = filterFacts::canonicalize(*filter.expression_.getPimpl());
+    bool hasFact = ql::ranges::any_of(conjuncts, [](const auto& conjunct) {
+      return filterFacts::recognizeDistanceBound(conjunct).has_value();
+    });
+    if (conjuncts.size() > 1 && hasFact) {
+      for (auto& conjunct : filter.expression_.splitConjunction()) {
+        result.push_back(SparqlFilter{std::move(conjunct)});
+      }
+    } else {
+      result.push_back(std::move(filter));
+    }
+  }
+  filters = std::move(result);
 }

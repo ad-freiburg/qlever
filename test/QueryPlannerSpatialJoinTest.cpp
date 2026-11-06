@@ -1332,6 +1332,35 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                                      std::nullopt, scan("?x", "<p>", "?y"),
                                      scan("?a", "<p>", "?b")));
 
+  // Comparison with `<` (the maximum distance of the `SpatialJoin` is the
+  // largest `double` below 500)
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) < 0.5)"
+      " }",
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
+
+  // A distance conjunct of a FILTER with `&&` (the other conjunct is applied
+  // as a FILTER on top)
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(?x != ?a && geof:distance(?y, ?b) <= 0.5)"
+      " }",
+      h::Filter("?x != ?a",
+                h::spatialJoinFilterSubstitute(
+                    500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                    PayloadVariables::all(), algo, type, std::nullopt,
+                    scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+
   // Metric distance function
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "

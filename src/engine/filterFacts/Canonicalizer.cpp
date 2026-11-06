@@ -65,8 +65,7 @@ Conjunct toConjunct(const SparqlExpression& expression) {
     return Opaque{&expression};
   }
 
-  // Convert the number from the unit of the distance to meters (in the same
-  // way as `getGeoDistanceFilter`).
+  // Convert the number from the unit of the distance to meters.
   double meters =
       ad_utility::detail::valueInUnitToKilometer(number.value(), call->unit_) *
       1000;
