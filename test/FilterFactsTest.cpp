@@ -91,11 +91,13 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   using ::testing::Key;
   using ::testing::UnorderedElementsAre;
   auto query = ad_utility::testing::parseQuery(
-      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(?gb AS ?y) ?b <p> ?gb . "
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(STR(?x) AS ?u) "
+      "BIND(?gb AS ?y) ?b <p> ?gb . "
       "BIND(RAND() AS ?z) BIND(NOW() AS ?n) BIND(?ga AS ?w) ?w <q> ?o . "
       "VALUES (?r ?s) { (1 UNDEF) } }");
   auto defs = collectDefinitions(query._rootGraphPattern._graphPatterns);
 
+  // `?x` is only used by a later `BIND`, `?u` uses `?x`, which may be unbound,
   // `?y` is bound before `?gb`, `?z` and `?n` are not deterministic, and `?w`
   // is bound again by a later triple.
   EXPECT_THAT(defs.expressions_, UnorderedElementsAre(Key(V{"?x"})));

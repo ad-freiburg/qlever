@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/ParsedQuery.h"
+#include "parser/VariableCounter.h"
 #include "util/UnitOfMeasurement.h"
 
 namespace filterFacts {
@@ -49,52 +50,6 @@ bool isSubstitutable(const SparqlExpression& expression,
                             });
 }
 
-// Add the variables that `operation` may bind to `variables`. Return false if
-// they are not known (for the less common kinds of operations), then any
-// variable may be bound.
-bool collectBoundVariables(const parsedQuery::GraphPatternOperation& operation,
-                           ad_utility::HashSet<Variable>& variables) {
-  namespace p = parsedQuery;
-  auto collectAll = [&variables](const ParsedQuery::GraphPattern& pattern) {
-    return ql::ranges::all_of(pattern._graphPatterns,
-                              [&variables](const auto& child) {
-                                return collectBoundVariables(child, variables);
-                              });
-  };
-  return operation.visit([&variables, &collectAll](const auto& arg) {
-    using T = std::decay_t<decltype(arg)>;
-    if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
-      arg.collectAllContainedVariables(variables);
-      return true;
-    } else if constexpr (std::is_same_v<T, p::Values>) {
-      variables.insert(arg._inlineValues._variables.begin(),
-                       arg._inlineValues._variables.end());
-      return true;
-    } else if constexpr (std::is_same_v<T, p::Bind>) {
-      variables.insert(arg._target);
-      return true;
-    } else if constexpr (std::is_same_v<T, p::Minus>) {
-      return true;
-    } else if constexpr (std::is_same_v<T, p::Optional>) {
-      return collectAll(arg._child);
-    } else if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (const auto* graphVariable =
-              std::get_if<p::GroupGraphPattern::GraphVar>(&arg.graphSpec_)) {
-        variables.insert(graphVariable->first);
-      }
-      return collectAll(arg._child);
-    } else if constexpr (std::is_same_v<T, p::Union>) {
-      return collectAll(arg._child1) && collectAll(arg._child2);
-    } else if constexpr (std::is_same_v<T, p::Subquery>) {
-      const auto& visible = arg.get().getVisibleVariables();
-      variables.insert(visible.begin(), visible.end());
-      return true;
-    } else {
-      return false;
-    }
-  });
-}
-
 }  // namespace
 
 // _____________________________________________________________________________
@@ -105,14 +60,21 @@ Definitions collectDefinitions(
   // and `VALUES` count (ignoring nested groups etc. is conservative).
   ad_utility::HashSet<Variable> alwaysBound;
   for (const auto& operation : group) {
-    // Remove the `BIND`s whose target `operation` may bind again (where the
-    // expression is undefined, the target is then bound freely, so it is not
-    // equivalent to the expression).
-    ad_utility::HashSet<Variable> boundByOperation;
-    bool isKnown = collectBoundVariables(operation, boundByOperation);
-    absl::erase_if(defs.expressions_, [&](const auto& definition) {
-      return !isKnown || boundByOperation.contains(definition.first);
-    });
+    // Remove the `BIND`s whose target `operation` may bind again, that is, any
+    // variable that `operation` contains (where the expression is undefined,
+    // the target is then bound freely, so it is not equivalent to the
+    // expression).
+    //
+    // NOTE: A later `BIND` cannot bind the target again (the target of a
+    // `BIND` must not be in scope before it), so its expression may use the
+    // target.
+    if (!std::holds_alternative<parsedQuery::Bind>(operation)) {
+      parsedQuery::VariableCounter variables;
+      variables(operation);
+      absl::erase_if(defs.expressions_, [&variables](const auto& definition) {
+        return variables.counts().contains(definition.first);
+      });
+    }
 
     // Add the definitions of `operation`.
     if (const auto* bgp =
