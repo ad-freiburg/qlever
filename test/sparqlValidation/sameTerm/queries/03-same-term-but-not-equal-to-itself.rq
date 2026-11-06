@@ -1,0 +1,8 @@
+# Terms that are the same term as themselves, but not equal (`=`) to themselves:
+# only the NaNs.
+PREFIX : <http://example.org/>
+SELECT ?a WHERE {
+  ?a :p ?x .
+  FILTER (sameTerm(?x, ?x) && !(?x = ?x))
+}
+ORDER BY ?a

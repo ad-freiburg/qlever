@@ -538,6 +538,23 @@ struct IntValueGetter : Mixin<IntValueGetter> {
   std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
 };
 
+// Value getter that returns the RDF term itself (and not its value, its string,
+// etc.), unchanged. Used for the `sameTerm` function, which compares RDF terms.
+// NOTE: The overload for a `LocalVocabEntry` deliberately does not take a
+// `LiteralOrIri`, because the `LocalVocabEntry` caches the position of its word
+// in the vocabulary of the index, which is required to compare it with an `Id`.
+struct RdfTermValueGetter : Mixin<RdfTermValueGetter> {
+  using Value = IdOrLocalVocabEntry;
+  using Mixin<RdfTermValueGetter>::operator();
+  IdOrLocalVocabEntry operator()(ValueId id, const EvaluationContext*) const {
+    return id;
+  }
+  IdOrLocalVocabEntry operator()(LocalVocabEntry entry,
+                                 const EvaluationContext*) const {
+    return entry;
+  }
+};
+
 // Dummy value getter that always returns true, only used for unit tests.
 struct AlwaysTrueValueGetter : Mixin<AlwaysTrueValueGetter> {
   using Value = bool;

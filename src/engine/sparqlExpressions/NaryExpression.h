@@ -169,6 +169,8 @@ SparqlExpression::Ptr makeConvertToDateExpression(SparqlExpression::Ptr child);
 
 // Implemented in RdfTermExpressions.cpp
 SparqlExpression::Ptr makeDatatypeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSameTermExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
 
 // Implemented in LangExpression.cpp
 SparqlExpression::Ptr makeLangExpression(SparqlExpression::Ptr child);

@@ -753,6 +753,7 @@ template struct TypeErasedValueGetter<
 template struct TypeErasedValueGetter<StringOrDateGetter>;
 template struct TypeErasedValueGetter<IntValueGetter>;
 template struct TypeErasedValueGetter<RegexValueGetter>;
+template struct TypeErasedValueGetter<RdfTermValueGetter>;
 template struct TypeErasedValueGetter<AlwaysTrueValueGetter>;
 template struct TypeErasedValueGetter<NumericOrDateValueGetter>;
 

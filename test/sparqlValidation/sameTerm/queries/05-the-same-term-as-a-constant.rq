@@ -1,0 +1,28 @@
+# For each `?constant` from the query, the subjects whose object is the same
+# term. Each `?case` names the constant (the result only contains IRIs, so that
+# it does not depend on how an engine formats literals).
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX : <http://example.org/>
+SELECT ?case ?a WHERE {
+  VALUES (?case ?constant) {
+    (:integer1 1)
+    (:integerWithLeadingZero01 "01"^^xsd:integer)
+    (:int1 "1"^^xsd:int)
+    (:decimal1 1.0)
+    (:doubleNegativeZero "-0.0E0"^^xsd:double)
+    (:doubleNaN "NaN"^^xsd:double)
+    (:booleanTrue true)
+    (:booleanOne "1"^^xsd:boolean)
+    (:string1 "1")
+    (:xsdString1 "1"^^xsd:string)
+    (:langEn1 "1"@en)
+    (:customDatatype1 "1"^^:datatype)
+    (:iriOne :one)
+    (:encodedIri <http://example.org/enc/1>)
+    (:date "2025-01-01"^^xsd:date)
+    (:notContained "not contained")
+  }
+  ?a :p ?x .
+  FILTER sameTerm(?x, ?constant)
+}
+ORDER BY ?case ?a
