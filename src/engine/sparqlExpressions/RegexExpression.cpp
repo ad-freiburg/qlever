@@ -297,7 +297,9 @@ auto PrefixRegexExpression::getEstimatesForFilterExpression(
   // problems.
   double reductionFactor =
       std::pow(10, std::min<size_t>(8, prefixRegex_.size()));
-  size_t sizeEstimate = inputSize / static_cast<size_t>(reductionFactor);
+  // At least one row unless the input is empty (see the relational filters).
+  size_t sizeEstimate = std::max<size_t>(
+      inputSize > 0, inputSize / static_cast<size_t>(reductionFactor));
   size_t costEstimate = firstSortedVariable == variable_
                             ? sizeEstimate
                             : sizeEstimate + inputSize;
