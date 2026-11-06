@@ -922,8 +922,9 @@ endif ()
 
 # Use the `SplitLayoutId` (a full 64-bit payload and a datatype byte) instead of
 # the legacy `ValueId` as `Id`, see `src/global/Id.h`.
-option(USE_SPLIT_LAYOUT "Use SplitLayoutId instead of ValueId as Id" OFF)
+# TODO<pas-kes> Make this an `option()` once the split layout is usable.
 if (USE_SPLIT_LAYOUT)
+    message(WARNING "USE_SPLIT_LAYOUT is experimental and not usable yet")
     add_compile_definitions(QLEVER_USE_SPLIT_LAYOUT)
     # `LocalVocabEntry` caches its position in the vocabulary in atomics of the
     # bit representation of an `Id`, which has 16 bytes in the split layout.
