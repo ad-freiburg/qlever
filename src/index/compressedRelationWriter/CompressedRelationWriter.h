@@ -44,9 +44,12 @@
 // The writer of a single chunk of a parallel merge and the state that all such
 // writers share (see `index/chunkwisePermutationWriter/ChunkWriter.h`), and the
 // writer of a complete pair of permutations that drives them (see
-// `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`), which need
-// access to the thread-safe internals of the `CompressedRelationWriter` below.
+// `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`) together
+// with its consolidation of the chunks (see `BoundaryConsolidator.h` there),
+// which need access to the thread-safe internals of the
+// `CompressedRelationWriter` below.
 namespace chunkwisePermutationWriter {
+class BoundaryConsolidator;
 class ChunkwisePermutationWriter;
 class ChunkWriter;
 struct ChunkWriterContext;
@@ -461,6 +464,7 @@ class CompressedRelationWriter {
   // compressed and written, as determined by the runtime parameter
   // `permutation-writer-num-blocks-in-flight`.
   static size_t getNumBlocksInFlight();
+  friend class chunkwisePermutationWriter::BoundaryConsolidator;
   friend class chunkwisePermutationWriter::ChunkwisePermutationWriter;
   friend class chunkwisePermutationWriter::ChunkWriter;
   friend struct chunkwisePermutationWriter::ChunkWriterContext;

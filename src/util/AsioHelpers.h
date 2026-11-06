@@ -137,6 +137,39 @@ auto runFunctionOnExecutor(Executor executor, Function function,
       std::move(initiatingFunction), completionToken);
 }
 
+// Run the coroutine `awaitable` on the `executor` (via `co_spawn`). As soon as
+// it has completed, the completion handler which is obtained from the
+// `completionToken` is posted to its associated executor (or to the `executor`
+// if it has none), with the exception that the coroutine threw (or `nullptr`)
+// and, unless `T` is `void`, its result (a default-constructed `T` if it
+// threw). Unlike a plain `co_spawn`, the handler is therefore never invoked
+// inline from inside the coroutine machinery, but always via a `post`.
+template <typename T, typename Executor, typename CompletionToken>
+auto coSpawnWithPostedCompletion(Executor executor, net::awaitable<T> awaitable,
+                                 CompletionToken&& completionToken) {
+  static constexpr bool isVoid = std::is_void_v<T>;
+  using DummyRes = std::conditional_t<isVoid, int, T>;
+  using Signature = std::conditional_t<isVoid, void(std::exception_ptr),
+                                       void(std::exception_ptr, DummyRes)>;
+  auto initiatingFunction = [executor, awaitable = std::move(awaitable)](
+                                auto handler) mutable {
+    auto handlerExecutor = net::get_associated_executor(handler, executor);
+    net::co_spawn(
+        executor, std::move(awaitable),
+        [handlerExecutor, handler = std::move(handler)](
+            std::exception_ptr exception, auto... result) mutable {
+          net::post(
+              handlerExecutor,
+              [handler = std::move(handler), exception = std::move(exception),
+               ... result = std::move(result)]() mutable {
+                std::move(handler)(std::move(exception), std::move(result)...);
+              });
+        });
+  };
+  return net::async_initiate<CompletionToken, Signature>(
+      std::move(initiatingFunction), completionToken);
+}
+
 /// Helper function, that checks a cancellation handle regularly while waiting
 /// on an awaitable object that doesn't do this on its own. It's always better
 /// to integrate cancellation checks right into the awaitable itself, but

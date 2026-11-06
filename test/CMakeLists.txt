@@ -567,6 +567,8 @@ endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
+addLinkAndDiscoverTest(OrderedResultMailboxTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)

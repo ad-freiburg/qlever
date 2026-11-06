@@ -1,0 +1,165 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include <map>
+#include <vector>
+
+#include "../../util/GTestHelpers.h"
+#include "../../util/IndexTestHelpers.h"
+#include "./ChunkWriterTestHelpers.h"
+#include "index/chunkwisePermutationWriter/BoundaryConsolidator.h"
+#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+
+// NOTE: The `BoundaryConsolidator` only exists in the C++20 mode of the build.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+namespace {
+using namespace chunkWriterTestHelpers;
+
+// Split the `rows` (which have to be sorted) into chunks at the given
+// `boundaries` (the indices of the first rows of all the chunks but the first
+// one, in ascending order; equal indices yield empty chunks), write every
+// chunk with a `ChunkWriter` of its own (one after the other, with input
+// blocks of `inputBlockSize` rows), feed their results to a
+// `BoundaryConsolidator` in order, and check that both permutations and their
+// metadata contain exactly the `rows`.
+void consolidateAndCheck(const TestRows& rows,
+                         const std::vector<size_t>& boundaries,
+                         size_t inputBlockSize = 7,
+                         source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  TwinWriters writers{gtestCurrentTestName()};
+  std::vector<CompressedRelationMetadata> metadata1;
+  std::vector<CompressedRelationMetadata> metadata2;
+  BoundaryConsolidator consolidator{
+      writers.context_,
+      [&metadata1](ql::span<const CompressedRelationMetadata> md) {
+        metadata1.insert(metadata1.end(), md.begin(), md.end());
+      },
+      [&metadata2](ql::span<const CompressedRelationMetadata> md) {
+        metadata2.insert(metadata2.end(), md.begin(), md.end());
+      },
+      ad_utility::testing::multiThreadExecutor(),
+      ad_utility::MemorySize::megabytes(10)};
+
+  std::vector<size_t> begins{0};
+  begins.insert(begins.end(), boundaries.begin(), boundaries.end());
+  const size_t numChunks = begins.size();
+  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
+    size_t begin = begins.at(chunkIndex);
+    size_t end =
+        chunkIndex + 1 < numChunks ? begins.at(chunkIndex + 1) : rows.size();
+    ASSERT_LE(begin, end);
+    ChunkResult result;
+    {
+      ChunkWriter writer{writers.context_, chunkIndex, numChunks};
+      result = processRows(writer, subRows(rows, begin, end), inputBlockSize);
+    }
+    consolidator.addChunkResult(std::move(result));
+  }
+  EXPECT_EQ(consolidator.numRows(), rows.size());
+  auto result = consolidator.finish();
+  writers.blocks1_ = std::move(result.blockMetadata_);
+  writers.blocks2_ = std::move(result.blockMetadataSwitched_);
+
+  // Group the expected rows by their relation.
+  std::map<int64_t, TestRows> relations;
+  for (const auto& row : rows) {
+    relations[row[0]].push_back(row);
+  }
+  EXPECT_EQ(result.numDistinctCol0_, relations.size());
+  std::vector<std::pair<int64_t, size_t>> expectedMetadata;
+  for (const auto& [col0, relationRows] : relations) {
+    writers.expectCompleteRelation(col0, relationRows);
+    if (!compressedRelationHelpers::isSmallRelation(relationRows.size(),
+                                                    BLOCKSIZE)) {
+      expectedMetadata.emplace_back(col0, relationRows.size());
+    }
+  }
+  // Exactly the large relations have metadata, in the order of the relations.
+  auto toPairs = [](const std::vector<CompressedRelationMetadata>& metadata) {
+    std::vector<std::pair<int64_t, size_t>> pairs;
+    for (const auto& md : metadata) {
+      pairs.emplace_back(static_cast<int64_t>(md.col0Id_.getVocabIndex().get()),
+                         md.numRows_);
+    }
+    return pairs;
+  };
+  EXPECT_EQ(toPairs(metadata1), expectedMetadata);
+  EXPECT_EQ(toPairs(metadata2), expectedMetadata);
+}
+}  // namespace
+
+// Test a single chunk, which needs no consolidation of boundary parts.
+TEST(BoundaryConsolidator, singleChunk) {
+  consolidateAndCheck(concat({relation(1, 5), relation(2, 30), relation(3, 3)}),
+                      {});
+}
+
+// Test a small relation that is split into small parts by several chunks,
+// with small relations before and after it.
+TEST(BoundaryConsolidator, smallRelationAcrossThreeChunks) {
+  auto rows = concat({relation(1, 4), relation(2, 12), relation(3, 2)});
+  // Relation 2 occupies the rows `[4, 16)`.
+  consolidateAndCheck(rows, {7, 11});
+}
+
+// Test a relation that only consists of small parts, but that is large as a
+// whole, so its twin rows are sorted in memory.
+TEST(BoundaryConsolidator, largeRelationFromSmallParts) {
+  auto rows = concat({relation(1, 3), relation(2, 30), relation(3, 3)});
+  // Relation 2 occupies the rows `[3, 33)`, which are split into parts of 10,
+  // 10 (a chunk that consists of that relation only), and 10 rows.
+  consolidateAndCheck(rows, {13, 23});
+}
+
+// Test a large relation that consists of large and small parts, so the runs of
+// the twin sorters of the large parts and the twin rows of the small parts are
+// merged.
+TEST(BoundaryConsolidator, largeRelationFromLargeAndSmallParts) {
+  auto rows = concat({relation(1, 5), relation(2, 120), relation(3, 4)});
+  // Relation 2 occupies the rows `[5, 125)`: a large last part of chunk 0, a
+  // small part that spans the whole chunk 1, a large part that spans the
+  // whole chunk 2, and a large first part of chunk 3.
+  consolidateAndCheck(rows, {50, 55, 100});
+  // The same with different input block sizes, so that the chunks cut their
+  // blocks at different positions.
+  consolidateAndCheck(rows, {50, 55, 100}, 1);
+  consolidateAndCheck(rows, {50, 55, 100}, 64);
+}
+
+// Test that the metadata of the boundary relations and of the relations in
+// the middle of the chunks is emitted in the order of the relations.
+TEST(BoundaryConsolidator, boundaryAndMiddleRelationsInOrder) {
+  auto rows = concat({relation(1, 30), relation(2, 20), relation(3, 25),
+                      relation(4, 6), relation(5, 40), relation(6, 2)});
+  // Relation 2 (rows `[30, 50)`) is split into two small parts, relation 5
+  // (rows `[81, 121)`) into a small and a large part. Relations 3 and 4 lie in
+  // the middle of chunk 1.
+  consolidateAndCheck(rows, {40, 85});
+}
+
+// Test chunks without any rows, also between the parts of a relation.
+TEST(BoundaryConsolidator, emptyChunks) {
+  auto rows = concat({relation(1, 10), relation(2, 50), relation(3, 1)});
+  consolidateAndCheck(rows, {0, 20, 20, 40, 61, 61});
+  consolidateAndCheck({}, {0, 0});
+}
+
+// Test a boundary between two different relations, so that the first part of
+// a chunk belongs to a new relation.
+TEST(BoundaryConsolidator, boundaryBetweenRelations) {
+  auto rows = concat({relation(1, 10), relation(2, 40), relation(3, 10)});
+  consolidateAndCheck(rows, {10, 50});
+}
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
