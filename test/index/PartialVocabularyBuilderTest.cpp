@@ -170,10 +170,14 @@ class MockIndex {
   }
 };
 
-// Create the triple `<s{i}> <p> <o{i}>` in the default graph.
-TurtleTriple makeTriple(size_t i) {
-  return TurtleTriple{iri(absl::StrCat("<s", i, ">")), iri("<p>"),
-                      iri(absl::StrCat("<o", i, ">"))};
+// Create the triple `<s{i}> <p> <o{i}>` in the default graph. If
+// `subjectPadding` is nonzero, append that many `x` characters to the subject,
+// so that the strings of the triple can dominate the memory of a partial
+// vocabulary.
+TurtleTriple makeTriple(size_t i, size_t subjectPadding = 0) {
+  return TurtleTriple{
+      iri(absl::StrCat("<s", i, std::string(subjectPadding, 'x'), ">")),
+      iri("<p>"), iri(absl::StrCat("<o", i, ">"))};
 }
 
 // The `toRdfLiteral` representation of `component`.
@@ -211,11 +215,11 @@ struct RunResult {
   size_t numCallsWithReusedBuffer_;
 };
 RunResult run(MockIndex& index, std::vector<std::vector<TurtleTriple>> batches,
-              size_t linesPerPartial, size_t numThreads,
+              FirstPassMemoryBudget budget, size_t numThreads,
               std::optional<size_t> failAtBatch = std::nullopt) {
   TripleComponentComparator comparator;
 
-  FirstPassSharedState<MockIndex> shared{&index, &comparator, linesPerPartial};
+  FirstPassSharedState<MockIndex> shared{&index, &comparator, budget};
   // Outlives `runTaskChains` (and hence the `MockParser` that writes it).
   std::atomic<size_t> numCallsWithReusedBuffer{0};
   runTaskChains(shared, numThreads,
@@ -228,6 +232,18 @@ RunResult run(MockIndex& index, std::vector<std::vector<TurtleTriple>> batches,
                 });
   return {shared.nextPartialVocabIdx_.load(), shared.numTriples_.load(),
           shared.stopRequested_.load(), numCallsWithReusedBuffer.load()};
+}
+
+// Call `run` above with a memory budget that is never reached, so that a task
+// chain writes its partial vocabulary as soon as it has at least
+// `maxTriplesPerPartial` input triples.
+RunResult run(MockIndex& index, std::vector<std::vector<TurtleTriple>> batches,
+              size_t maxTriplesPerPartial, size_t numThreads,
+              std::optional<size_t> failAtBatch = std::nullopt) {
+  return run(index, std::move(batches),
+             FirstPassMemoryBudget{ad_utility::MemorySize::terabytes(1),
+                                   maxTriplesPerPartial},
+             numThreads, failAtBatch);
 }
 }  // namespace
 
@@ -297,7 +313,7 @@ TEST(PartialVocabularyBuilder, severalChainsRacingForBatches) {
   // checked.
   constexpr size_t numBatches = 20;
   constexpr size_t batchSize = 3;
-  constexpr size_t linesPerPartial = 5;
+  constexpr size_t maxTriplesPerPartial = 5;
   std::vector<std::vector<TurtleTriple>> batches;
   std::vector<StringTriple> expectedTriples;
   for (size_t b = 0; b < numBatches; ++b) {
@@ -310,7 +326,7 @@ TEST(PartialVocabularyBuilder, severalChainsRacingForBatches) {
   ql::ranges::sort(expectedTriples);
 
   MockIndex index;
-  auto result = run(index, batches, linesPerPartial, 4);
+  auto result = run(index, batches, maxTriplesPerPartial, 4);
   EXPECT_EQ(result.numTriples_, numBatches * batchSize);
   EXPECT_FALSE(result.stopRequested_);
 
@@ -321,11 +337,11 @@ TEST(PartialVocabularyBuilder, severalChainsRacingForBatches) {
   size_t expectedIdx = 0;
   for (const auto& [idx, vocab] : written) {
     EXPECT_EQ(idx, expectedIdx++);
-    // A chain writes as soon as it has at least `linesPerPartial` triples,
-    // checked after each complete batch, so no partial vocabulary is empty or
-    // larger than that threshold plus one batch.
+    // A chain writes as soon as it has at least `maxTriplesPerPartial`
+    // triples, checked after each complete batch, so no partial vocabulary is
+    // empty or larger than that threshold plus one batch.
     EXPECT_GE(vocab.triples_.size(), 1u);
-    EXPECT_LE(vocab.triples_.size(), linesPerPartial + batchSize - 1);
+    EXPECT_LE(vocab.triples_.size(), maxTriplesPerPartial + batchSize - 1);
     auto expectedWords = specialWords();
     for (const auto& triple : vocab.triples_) {
       expectedWords.insert(triple.begin(), triple.end());
@@ -406,4 +422,127 @@ TEST(PartialVocabularyBuilder, errorFromWithinHandlerIsPropagated) {
   AD_EXPECT_THROW_WITH_MESSAGE(run(index, batches, 1, 2),
                                HasSubstr("write error"));
   EXPECT_TRUE(index.written().empty());
+}
+
+// _____________________________________________________________________________
+TEST(PartialVocabularyBuilder, memoryBudgetDeterminesPartialVocabularies) {
+  // Twenty batches with a single triple each, whose strings take about 300 KB
+  // each. The strings are stored in blocks of `MonotonicBuffer::BLOCK_SIZE`
+  // (1 MiB), three of them per block. With a budget of 3 MB, a single chain
+  // therefore writes a partial vocabulary as soon as the third block has been
+  // allocated, i.e. after every seventh triple.
+  constexpr size_t numBatches = 20;
+  constexpr size_t stringSize = 300'000;
+  static_assert(MonotonicBuffer::BLOCK_SIZE == 1 << 20);
+  std::vector<std::vector<TurtleTriple>> batches;
+  std::vector<StringTriple> expectedTriples;
+  for (size_t b = 0; b < numBatches; ++b) {
+    batches.push_back({makeTriple(b, stringSize)});
+    expectedTriples.push_back(expectedStringTriple(batches.back().front()));
+  }
+  ql::ranges::sort(expectedTriples);
+
+  MockIndex index;
+  auto result =
+      run(index, batches,
+          FirstPassMemoryBudget{ad_utility::MemorySize::megabytes(3)}, 1);
+  EXPECT_EQ(result.numTriples_, numBatches);
+  EXPECT_GE(result.numPartialVocabularies_, 2u);
+  EXPECT_LE(result.numPartialVocabularies_, 4u);
+  const auto& written = index.written();
+  ASSERT_EQ(written.size(), result.numPartialVocabularies_);
+  for (const auto& [idx, vocab] : written) {
+    // No partial vocabulary has more strings than fit into 3 MB, and all but
+    // the last one are (almost) full.
+    EXPECT_LE(vocab.triples_.size() * stringSize, 3'000'000u);
+    if (idx + 1 < written.size()) {
+      EXPECT_GE(vocab.triples_.size() * stringSize, 2'000'000u);
+    }
+  }
+  EXPECT_EQ(index.allTriplesSorted(), expectedTriples);
+}
+
+// _____________________________________________________________________________
+TEST(PartialVocabularyBuilder, tinyMemoryBudgetStillTakesOneBatchEach) {
+  // Even with a budget of a single byte, every partial vocabulary contains at
+  // least one complete batch.
+  std::vector<std::vector<TurtleTriple>> batches{
+      {makeTriple(0), makeTriple(1)}, {makeTriple(2)}, {makeTriple(3)}};
+  MockIndex index;
+  auto result = run(index, batches,
+                    FirstPassMemoryBudget{ad_utility::MemorySize::bytes(1)}, 1);
+  EXPECT_EQ(result.numPartialVocabularies_, 3u);
+  EXPECT_EQ(result.numTriples_, 4u);
+  const auto& written = index.written();
+  ASSERT_EQ(written.size(), 3u);
+  EXPECT_EQ(written.at(0).triples_.size(), 2u);
+  EXPECT_EQ(written.at(1).triples_.size(), 1u);
+  EXPECT_EQ(written.at(2).triples_.size(), 1u);
+}
+
+// _____________________________________________________________________________
+TEST(PartialVocabularyBuilder, largeMemoryBudgetYieldsOnePartialVocabulary) {
+  // With a budget that is never reached, a single chain writes exactly one
+  // partial vocabulary at the end of its input.
+  std::vector<std::vector<TurtleTriple>> batches;
+  for (size_t b = 0; b < 50; ++b) {
+    batches.push_back({makeTriple(2 * b), makeTriple(2 * b + 1)});
+  }
+  MockIndex index;
+  auto result =
+      run(index, batches,
+          FirstPassMemoryBudget{ad_utility::MemorySize::gigabytes(1)}, 1);
+  EXPECT_EQ(result.numPartialVocabularies_, 1u);
+  EXPECT_EQ(result.numTriples_, 100u);
+}
+
+// _____________________________________________________________________________
+TEST(PartialVocabularyBuilder, computeMemoryPerTaskChain) {
+  using ad_utility::MemorySize;
+  // The parser gets `NUM_PARSER_BUFFERS_PER_THREAD` buffers per thread, the
+  // rest of the limit is divided evenly among the threads.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    auto result = computeMemoryPerTaskChain(MemorySize::gigabytes(10),
+                                            MemorySize::megabytes(10), 4);
+    EXPECT_EQ(result.getBytes(), (MemorySize::gigabytes(10).getBytes() -
+                                  4 * NUM_PARSER_BUFFERS_PER_THREAD *
+                                      MemorySize::megabytes(10).getBytes()) /
+                                     4);
+    EXPECT_THAT(logStream.str(), ::testing::Not(HasSubstr("too small")));
+  }
+
+  // A limit that is too small for the given number of threads yields the
+  // minimum and a warning: for 100 MB, the parser alone (960 MB for 32
+  // threads) exceeds the limit, for 1 GB the remaining 40 MB are not enough
+  // for 32 threads.
+  for (auto limit : {MemorySize::megabytes(100), MemorySize::gigabytes(1)}) {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    auto result =
+        computeMemoryPerTaskChain(limit, MemorySize::megabytes(10), 32);
+    EXPECT_EQ(result, MIN_MEMORY_PER_TASK_CHAIN);
+    EXPECT_THAT(logStream.str(), HasSubstr("too small"));
+    EXPECT_THAT(logStream.str(), HasSubstr("32 threads"));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(PartialVocabularyBuilder, itemMapAndBufferCountsItsMemory) {
+  ItemMapAndBuffer items;
+  EXPECT_EQ(items.numBytesAllocated(), 0u);
+  // A single string allocates a whole block of the buffer, and the hash map
+  // allocates its backing array.
+  auto word = items.buffer_.addString("hello");
+  items.map_.try_emplace(word, PartialVocabIndexWithExternalFlag{0, false});
+  EXPECT_GE(items.numBytesAllocated(), MonotonicBuffer::BLOCK_SIZE);
+  // A string that is larger than a block gets a block of its own.
+  std::string large(3 * MonotonicBuffer::BLOCK_SIZE, 'a');
+  EXPECT_EQ(items.buffer_.addString(large), large);
+  EXPECT_GE(items.numBytesAllocated(), 4 * MonotonicBuffer::BLOCK_SIZE);
+  EXPECT_LT(items.numBytesAllocated(), 5 * MonotonicBuffer::BLOCK_SIZE);
+  // The strings are deallocated by `clear`, but the hash map keeps its memory.
+  items.clear();
+  EXPECT_GT(items.numBytesAllocated(), 0u);
+  EXPECT_LT(items.numBytesAllocated(), MonotonicBuffer::BLOCK_SIZE);
+  EXPECT_TRUE(items.map_.empty());
 }

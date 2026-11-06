@@ -198,8 +198,9 @@ void Index::setSettingsFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
-  return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
+void Index::setMaxTriplesPerPartialVocabularyOnlyForTesting(
+    std::optional<size_t> maxTriples) {
+  pimpl_->setMaxTriplesPerPartialVocabularyOnlyForTesting(maxTriples);
 }
 
 // ____________________________________________________________________________
