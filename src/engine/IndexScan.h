@@ -50,6 +50,16 @@ class IndexScan final : public Operation {
   using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
   VarsToKeep varsToKeep_;
 
+  // The prefilters already applied to this scan (see
+  // `getUpdatedQueryExecutionTreeWithPrefilterApplied`), each as the string of
+  // its `PrefilterExpression` plus its variable. Applying one of them again
+  // is a no-op. The query planner prefilters the seed scans of a group graph
+  // pattern once (see `QueryPlanner::prefilterSeeds`); without this memo, the
+  // `Filter` on top of every candidate plan would evaluate the same prefilter
+  // on the same scan again, which costs a walk over the block metadata each
+  // time.
+  std::vector<std::string> appliedPrefilters_;
+
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
             LocatedTriplesSharedState locatedTriplesSharedState,
@@ -267,6 +277,15 @@ class IndexScan final : public Operation {
   // delta triples is small compared to the total number of triples and there
   // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
+
+  // For a prefiltered scan with a fixed first column that keeps most of the
+  // blocks of its relation (e.g. after a `!=` prefilter), the size estimate
+  // from the relation's metadata minus the rows of the dropped blocks. This
+  // is cheap when few blocks were dropped, whereas summing the rows of the
+  // kept blocks walks almost the whole relation. `std::nullopt` if the
+  // relation has no metadata entry, has updates, or lost at least as many
+  // blocks as it kept; the caller then sums the kept blocks.
+  std::optional<std::pair<bool, size_t>> sizeEstimateFromDroppedBlocks() const;
 
   std::string getCacheKeyImpl() const override;
 

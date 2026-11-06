@@ -301,34 +301,38 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
   if (idRange.empty()) {
     return {};
   }
-  std::vector<ValueIdItPair> mixedDatatypeRanges;
-  // Ensure that `idRange` holds access to even number of ValueIds.
   AD_CORRECTNESS_CHECK(idRange.size() % 2 == 0);
-  const auto checkDifferentDtype = [](const auto& idPair) {
-    auto firstId = idPair.begin();
-    auto dType1 = (*firstId).getDatatype();
-    auto dType2 = (*std::next(firstId)).getDatatype();
-    // ValueIds representing LocalVocab and Vocab entries are contained in mixed
-    // and sorted order over the CompressedBlockMetadata values. Thus, we don't
-    // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
-    if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
-        (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
-      return false;
-    }
-    return dType1 != dType2;
+
+  // `VocabIndex` and `LocalVocabIndex` count as one datatype here.
+  auto group = [](Datatype datatype) {
+    return datatype == LocalVocabIndex ? VocabIndex : datatype;
   };
-  ql::ranges::for_each(idRange | ranges::views::chunk(2) |
-                           ranges::views::filter(checkDifferentDtype),
-                       [&mixedDatatypeRanges](const auto& idPair) {
-                         auto firstId = idPair.begin();
-                         mixedDatatypeRanges.emplace_back(firstId,
-                                                          std::next(firstId));
-                       });
+
+  // The IDs in `idRange` (first and last ID of each block) are sorted, and the
+  // datatype is the most significant part of an ID, so the datatypes form
+  // sorted runs. Find the end of each run by binary search, which costs
+  // O(#datatypes * log #blocks) instead of a pass over all blocks. A block has
+  // mixed datatypes iff a run ends between its first ID (even position) and
+  // its last ID (odd position).
+  std::vector<ValueIdItPair> mixedDatatypeRanges;
+  auto begin = idRange.begin();
+  auto end = idRange.end();
+  auto runBegin = begin;
+  while (runBegin != end) {
+    auto currentGroup = group((*runBegin).getDatatype());
+    auto runEnd = ql::ranges::partition_point(
+        runBegin, end, [&group, currentGroup](const ValueId& id) {
+          return group(id.getDatatype()) == currentGroup;
+        });
+    if (runEnd != end && (runEnd - begin) % 2 == 1) {
+      mixedDatatypeRanges.emplace_back(std::prev(runEnd), runEnd);
+    }
+    runBegin = runEnd;
+  }
   return detail::mapping::mapValueIdItRangesToBlockItRanges(
       mixedDatatypeRanges, idRange, blockRange);
 }
 
-// Return `CompOp`s as string.
 static std::string getRelationalOpStr(const CompOp relOp) {
   using enum CompOp;
   switch (relOp) {
