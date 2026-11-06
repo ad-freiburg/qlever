@@ -15,7 +15,7 @@
 // this header, not the implementation header. The CMake option
 // `USE_SPLIT_LAYOUT` chooses between the legacy `ValueId` and the
 // `SplitLayoutId`.
-#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
+#ifdef QLEVER_USE_SPLIT_LAYOUT
 #include "engine/idTable/splitLayout/SplitLayoutId.h"
 using Id = columnBasedIdTable::splitLayout::SplitLayoutId;
 #else

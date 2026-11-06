@@ -911,7 +911,7 @@ endif ()
 # the legacy `ValueId` as `Id`, see `src/global/Id.h`.
 option(USE_SPLIT_LAYOUT "Use SplitLayoutId instead of ValueId as Id" OFF)
 if (USE_SPLIT_LAYOUT)
-    add_compile_definitions(QLEVER_USE_ID_SPLIT_LAYOUT)
+    add_compile_definitions(QLEVER_USE_SPLIT_LAYOUT)
     # `LocalVocabEntry` caches its position in the vocabulary in atomics of the
     # bit representation of an `Id`, which has 16 bytes in the split layout.
     # On Linux (for example with GCC), atomics of 16 bytes are calls into

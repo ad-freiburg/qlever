@@ -35,7 +35,7 @@ inline auto nonOverflowingNBitGenerator =
                                                 ValueId::IntegerType::max());
 // With the split layout, an `Id` holds every `int64_t`, so there are no
 // integers that overflow.
-#ifndef QLEVER_USE_ID_SPLIT_LAYOUT
+#ifndef QLEVER_USE_SPLIT_LAYOUT
 inline auto overflowingNBitGenerator =
     ad_utility::SlowRandomIntGenerator<int64_t>(
         ValueId::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
@@ -127,7 +127,7 @@ inline auto makeRandomIds = []() {
   addIdsFromGenerator(indexGenerator, &makeBlankNodeId, ids);
   addIdsFromGenerator(indexGenerator, &makeSecondaryVocabId, ids);
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-#ifndef QLEVER_USE_ID_SPLIT_LAYOUT
+#ifndef QLEVER_USE_SPLIT_LAYOUT
   addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
 #endif
