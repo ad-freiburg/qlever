@@ -17,10 +17,13 @@
 #include <memory>
 
 #include "backports/memory_resource.h"
+#include "util/MaybeOwningPtr.h"
 #include "util/MemoryLimitTracker.h"
 #include "util/MemorySize/MemorySize.h"
 
 namespace ad_utility {
+// See `util/MaybeOwningPtr.h` for the purpose of this inline namespace.
+inline namespace QL_LIFETIME_CHECKS_NAMESPACE {
 
 template <typename T>
 class PmrAllocator;
@@ -95,38 +98,43 @@ class LimitedMemoryResource : public ql::pmr::memory_resource {
 template <typename T>
 class PmrAllocator {
  private:
-  // The allocator is represented by two members that intentionally play
-  // different roles:
-  //
-  //   * `resource_` (raw pointer) is the resource actually used for every
-  //     `allocate`/`deallocate`. This mirrors `ql::pmr::polymorphic_allocator`,
-  //     which stores only a non-owning `memory_resource*` and relies on the
-  //     caller to keep the resource alive.
-  //
-  //   * `owner_` (shared pointer) *optionally* co-owns that resource, purely to
-  //     manage its lifetime.
-  // Two cases:
+  // The resource that is used for every `allocate`/`deallocate`. There are
+  // three cases:
   //
   //   1. QLever-created resources (via the `makePmrAllocator*` factories, e.g.
   //      the default construction path). These `LimitedMemoryResource`s have no
   //      external owner, yet the allocator is copied into many long-lived
-  //      containers that outlive the factory call. Here `owner_` holds the
-  //      `shared_ptr` so the resource stays alive for as long as any copy of
+  //      containers that outlive the factory call. Here `resource_` shares the
+  //      ownership, so the resource stays alive for as long as any copy of
   //      the allocator (and therefore any buffer allocated from it) exists.
   //      This is the PMR equivalent of how `AllocatorWithLimit` shares its
-  //      `AllocationMemoryLeft` state via a `shared_ptr`.
+  //      `AllocationMemoryLeft` state.
   //
   //   2. Platform-provided resources (via `makePmrAllocatorFromResource`, e.g.
   //      an externally injected pool). Their lifetime is owned and guaranteed
-  //      by the platform (typically static), so QLever must NOT take ownership:
-  //      in this case `owner_ == nullptr` and only the raw `resource_` pointer
-  //      is used - exactly the standard non-owning `polymorphic_allocator`
+  //      by the platform (typically static), so QLever must NOT take ownership.
+  //      This is exactly the standard non-owning `polymorphic_allocator`
   //      contract.
-  std::shared_ptr<ql::pmr::memory_resource> owner_;
-  ql::pmr::memory_resource* resource_;
+  //
+  //   3. Non-owning copies of case 1 (via `nonOwningCopy()`), copying which
+  //      costs no atomic operation. Their owner has to outlive them, which is
+  //      checked when the expensive checks are enabled.
+  MaybeOwningPtr<ql::pmr::memory_resource> resource_;
 
   template <typename U>
   friend class PmrAllocator;
+
+  // Return the underlying `LimitedMemoryResource`, or throw if the underlying
+  // resource is of a different type.
+  LimitedMemoryResource& limitedResourceOrThrow() const {
+    auto* limited = dynamic_cast<LimitedMemoryResource*>(resource_.get());
+    if (limited == nullptr) {
+      throw std::runtime_error{
+          "The memory limit cannot be changed, because this allocator does not "
+          "enforce one"};
+    }
+    return *limited;
+  }
 
  public:
   using value_type = T;
@@ -145,41 +153,58 @@ class PmrAllocator {
   using propagate_on_container_swap = std::true_type;
 
   // Construct from a non-owning resource pointer: the resource is owned and
-  // kept alive elsewhere (e.g. a platform-provided pool). `owner_` stays
-  // null and QLever never deletes the resource.
+  // kept alive elsewhere (e.g. a platform-provided pool) and QLever never
+  // deletes the resource.
   explicit PmrAllocator(ql::pmr::memory_resource* resource)
-      : owner_{nullptr}, resource_{resource} {}
+      : resource_{
+            MaybeOwningPtr<ql::pmr::memory_resource>::makeUncheckedNonOwning(
+                resource)} {}
 
-  // Construct from an owning resource: QLever co-owns it via `owner_` so it is
-  // kept alive for all copies of this allocator (used by the factories that
-  // create a `LimitedMemoryResource` on the fly).
+  // Construct from an owning resource: QLever co-owns it so it is kept alive
+  // for all copies of this allocator (used by the factories that create a
+  // `LimitedMemoryResource` on the fly).
   explicit PmrAllocator(std::shared_ptr<ql::pmr::memory_resource> resource)
-      : owner_{std::move(resource)}, resource_{owner_.get()} {}
+      : resource_{std::move(resource)} {}
 
   PmrAllocator() = delete;
 
   // Rebinding copy constructor (STL requirement + `default_init_allocator`).
   template <typename U>
   PmrAllocator(const PmrAllocator<U>& other) noexcept
-      : owner_{other.owner_}, resource_{other.resource_} {}
+      : resource_{other.resource_} {}
 
   PmrAllocator(const PmrAllocator&) = default;
   PmrAllocator& operator=(const PmrAllocator&) = default;
 
-  // Move construction/assignment deliberately *copy* (rather than steal) the
-  // owning `shared_ptr`. Stealing it would leave the moved-from allocator with
-  // a dangling `resource_` but a null `owner_`; if that moved-from allocator is
-  // subsequently reused to allocate (e.g. an emptied `IdTable` column that is
-  // filled again) it would produce a buffer whose deallocation no longer keeps
-  // the resource alive, leading to a use-after-free of the `memory_resource`
-  // when the buffer is finally freed. By keeping `owner_` intact, *every*
-  // allocator that ever referred to an owned resource keeps that resource alive
-  // for its whole lifetime. This can only extend a resource's lifetime, never
-  // shorten it, so the resource always outlives all buffers allocated from it.
+  // Move construction and assignment deliberately copy (rather than steal) the
+  // ownership of the resource, so that a moved-from allocator stays usable.
+  //
+  // NOTE: Stealing the ownership would leave the moved-from allocator with a
+  // dangling `resource_`. If that allocator is reused to allocate (e.g. an
+  // emptied `IdTable` column that is filled again), the deallocation of the new
+  // buffer would no longer keep the resource alive, a use-after-free of the
+  // `memory_resource` when the buffer is finally freed. By keeping the
+  // ownership intact, every allocator that ever referred to an owned resource
+  // keeps it alive for its whole lifetime. This can only extend a resource's
+  // lifetime, never shorten it, so the resource always outlives all buffers
+  // allocated from it.
   PmrAllocator(PmrAllocator&& other) noexcept : PmrAllocator(other) {}
   PmrAllocator& operator=(PmrAllocator&& other) noexcept {
     return *this = other;
   }
+
+  // Return an allocator for the same resource that doesn't share its
+  // ownership, so that copying it costs no atomic operation. This allocator (or
+  // another owning copy of it) has to outlive the result, all its copies, and
+  // all memory allocated by them. This is checked when the expensive checks are
+  // enabled (see `util/MaybeOwningPtr.h`). Use this for long-lived allocators
+  // that are copied very often.
+  PmrAllocator nonOwningCopy() const {
+    return PmrAllocator{resource_.nonOwningCopy()};
+  }
+
+  // Return true iff this allocator keeps its resource alive.
+  bool isOwning() const { return resource_.isOwning(); }
 
   // Obtain an allocator for another type sharing the same resource.
   template <typename U>
@@ -198,18 +223,29 @@ class PmrAllocator {
   // Bytes still available. If the underlying resource is a
   // `LimitedMemoryResource` its budget is reported, otherwise "unlimited".
   [[nodiscard]] MemorySize amountMemoryLeft() const {
-    if (auto* limited = dynamic_cast<LimitedMemoryResource*>(resource_)) {
+    if (auto* limited = dynamic_cast<LimitedMemoryResource*>(resource_.get())) {
       return limited->tracker_.amountMemoryLeft();
     }
     return MemorySize::max();
   }
 
-  ql::pmr::memory_resource* resource() const { return resource_; }
+  // Increase or decrease the memory limit by `n`, with the same semantics as
+  // the corresponding functions of `AllocatorWithLimit`. Throw if the
+  // underlying resource is not a `LimitedMemoryResource`, because such a
+  // resource enforces no limit that could be changed.
+  void increaseMemoryLimit(MemorySize n) {
+    limitedResourceOrThrow().tracker_.increaseMemoryLimit(n);
+  }
+  void decreaseMemoryLimit(MemorySize n) {
+    limitedResourceOrThrow().tracker_.decreaseMemoryLimit(n);
+  }
+
+  ql::pmr::memory_resource* resource() const { return resource_.get(); }
 
   // Two allocators are equal iff they refer to the same resource.
   template <typename V>
   bool operator==(const PmrAllocator<V>& v) const {
-    return resource_ == v.resource_;
+    return resource_.get() == v.resource_.get();
   }
   template <typename V>
   bool operator!=(const PmrAllocator<V>& v) const {
@@ -236,6 +272,11 @@ class PmrAllocator {
     return PmrAllocator{std::static_pointer_cast<ql::pmr::memory_resource>(
         std::move(resource))};
   }
+
+ private:
+  // Constructor for `nonOwningCopy()`.
+  explicit PmrAllocator(MaybeOwningPtr<ql::pmr::memory_resource> resource)
+      : resource_{std::move(resource)} {}
 };
 
 // Create a `PmrAllocator` backed by a fresh `LimitedMemoryResource`
@@ -275,6 +316,7 @@ PmrAllocator<T> makePmrAllocatorFromResource(
   return PmrAllocator<T>{resource};
 }
 
+}  // namespace QL_LIFETIME_CHECKS_NAMESPACE
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_ALLOCATORPMR_H

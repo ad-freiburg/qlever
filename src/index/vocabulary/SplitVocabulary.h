@@ -135,12 +135,12 @@ class SplitVocabulary {
   // Bit masks for extracting and adding marker and vocabIndex bits
   static constexpr uint64_t markerBitMaskSize = ad_utility::bitMaskSizeForValue(
       numberOfVocabs - 1);  // Range of marker: [0..numberOfVocabs-1]
-  static constexpr uint64_t markerBitMask =
-      ad_utility::bitMaskForHigherBits(ValueId::numDatatypeBits +
-                                       markerBitMaskSize) &
-      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+  // The marker takes the topmost bits of a vocabulary index (see
+  // `ValueId::numVocabIndexBits`).
   static constexpr uint64_t markerShift =
-      ValueId::numDataBits - markerBitMaskSize;
+      ValueId::numVocabIndexBits - markerBitMaskSize;
+  static constexpr uint64_t markerBitMask =
+      ad_utility::bitMaskForLowerBits(markerBitMaskSize) << markerShift;
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 

@@ -260,6 +260,9 @@ template <auto isSomethingFunction, const auto& prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    case Datatype::Undefined:
+      // An unbound argument is an error, see `IsValueIdValueGetter`.
+      return Id::makeUndefined();
     case Datatype::VocabIndex:
       // See instantiations below for what `isSomethingFunction` is.
       return Id::makeFromBool(std::invoke(isSomethingFunction,
@@ -279,10 +282,7 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Double:
     case Datatype::Date:
     case Datatype::GeoPoint:
-      if constexpr (prefix == isLiteralPrefix) {
-        return Id::makeFromBool(true);
-      }
-    case Datatype::Undefined:
+      return Id::makeFromBool(prefix == isLiteralPrefix);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::BlankNodeIndex:
@@ -492,10 +492,10 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 
 //______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
-    requires(concepts::same_as<sparqlExpression::IdOrLocalVocabEntry, T> ||
-             concepts::same_as<std::optional<std::string>, T>)) T
-    getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
-             ValueGetter& valueGetter) {
+    requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
+             concepts::same_as<std::optional<std::string>, T>))
+T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
+           ValueGetter& valueGetter) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
@@ -512,7 +512,7 @@ CPP_template(typename T, typename ValueGetter)(
     case Date:
     case GeoPoint:
     case Undefined:
-      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLocalVocabEntry>) {
+      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
         return Id::makeUndefined();
       } else {
         return std::nullopt;
@@ -522,9 +522,9 @@ CPP_template(typename T, typename ValueGetter)(
 }
 
 //_____________________________________________________________________________
-sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return getValue<sparqlExpression::IdOrLocalVocabEntry>(id, context, *this);
+  return getValue<sparqlExpression::IdOrLiteralOrIri>(id, context, *this);
 }
 
 //______________________________________________________________________________
@@ -554,13 +554,12 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
-    const LiteralOrIri& litOrIri, const EvaluationContext* context) const {
-  return LocalVocabEntry{
-      LiteralOrIri{litOrIri.isIri() ? litOrIri.getIri()
-                                    : Iri::fromIrirefWithoutBrackets(
-                                          litOrIri.getLiteral().getContent())},
-      context->getLocalVocabContext()};
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  return LiteralOrIri{
+      litOrIri.isIri()
+          ? litOrIri.getIri()
+          : Iri::fromIrirefWithoutBrackets(litOrIri.getLiteral().getContent())};
 }
 
 //______________________________________________________________________________
@@ -743,6 +742,8 @@ template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::BoundingBox>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::NumGeometries>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::SourceCrsType>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricLength>>;
 template struct TypeErasedValueGetter<

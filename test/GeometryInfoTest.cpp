@@ -1,7 +1,14 @@
-//  Copyright 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 #include <util/geo/Geo.h>
@@ -252,7 +259,8 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
   ASSERT_NEAR(g.getMetricLength().length(), 900, 0.0001);
   ASSERT_NEAR(g.getMetricArea().area(), 5, 0.0001);
-  ASSERT_EQ(g.getSourceCrsType().value().type(), util::geo::CRSType::WGS84);
+  ASSERT_EQ(g.getSourceCrsType().value(),
+            SourceCrsType{util::geo::CRSType::WGS84});
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -410,16 +418,35 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
 
   // Syntactically valid literals without a geometry: `EMPTY`, an unsupported
   // CRS, coordinates out of range.
-  for (auto lit :
-       {litLineStringEmpty, litUnsupportedCrsIri, litCoordOutOfRange}) {
+  for (auto lit : {litLineStringEmpty, litPointEmpty, litUnsupportedCrsIri,
+                   litCoordOutOfRange}) {
     EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
     EXPECT_EQ(GeometryInfo::fromWktLiteral(lit), std::nullopt) << lit;
   }
 
-  // Malformed literals. `POINT EMPTY` is rejected by the strict mode.
+  // Malformed literals.
   for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
-                   litInvalidCoord, litInvalidCrsIri, litPointEmpty}) {
+                   litInvalidCoord, litInvalidCrsIri}) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+
+  // Edge cases from https://github.com/ad-freiburg/util/issues/20 and
+  // https://github.com/ad-freiburg/util/pull/21: signed and exponent notation
+  // and nested collections are valid, degenerate geometries, trailing garbage,
+  // a missing closing bracket and a malformed number are not.
+  auto wkt = [](std::string_view s) {
+    return absl::StrCat(
+        "\"", s, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  };
+  for (auto s :
+       {"POINT(1e3 2)", "POINT(1.5e-3 2)", "POINT(+1 -2)",
+        "GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 2)),POINT(3 4))"}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
+  }
+  for (auto s : {"POINT(1 2, 3 4)", "POINT(1 2 foo)", "LINESTRING(1 2)",
+                 "MULTILINESTRING((1 1, 2 2), (3 3))", "POINT(1.1.1)",
+                 "GEOMETRYCOLLECTION(POINT(1 1)"}) {
+    EXPECT_FALSE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
   }
 
   // All geometry computations use the strict mode, so they don't skip the
@@ -614,11 +641,15 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
               parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
                                           CRSType::WEB_MERCATOR}));
 
-  // Test an empty `LINESTRING`, which leads to a `std::runtime_error`.
-  auto parseRes5 = parseWkt(emptyLitLineString);
-  EXPECT_THAT(parseRes5, parseResultNear(ParseResult{
-                             std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
-                             CRSType::UNSUPPORTED}));
+  // Test empty geometries, which lead to a `std::runtime_error`. In
+  // particular, `POINT EMPTY` must not yield a point with sentinel
+  // coordinates.
+  for (auto lit : {emptyLitLineString, litLineStringEmpty, litPointEmpty}) {
+    EXPECT_THAT(parseWkt(lit), parseResultNear(ParseResult{
+                                   std::nullopt, WKTType::NONE,
+                                   CRSType::UNSUPPORTED, CRSType::UNSUPPORTED}))
+        << lit;
+  }
 }
 
 // ____________________________________________________________________________
@@ -1062,6 +1093,29 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
           GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
           GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
       Optional(Eq(0.0)));
+
+  // A small square and a line that passes it at a distance of about 111 m,
+  // but whose vertices are more than 1 km away. The distance must be the same
+  // if the line is a member of a collection or of a multi-line with many
+  // members. Regression test for a bug in `pb_util`, where such lines were
+  // reduced to their vertices.
+  {
+    auto wkt = [](std::string_view content) {
+      return GeoPointOrWkt{
+          absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX)};
+    };
+    auto square = wkt("POLYGON((0 0,0.001 0,0.001 0.001,0 0.001,0 0))");
+    std::string line = "(-0.01 0.002,0.01 0.002)";
+    std::vector<std::string> lines(17, line);
+    for (const auto& other :
+         {wkt(absl::StrCat("LINESTRING", line)),
+          wkt(absl::StrCat("GEOMETRYCOLLECTION(LINESTRING", line, ")")),
+          wkt(absl::StrCat("MULTILINESTRING(", absl::StrJoin(lines, ","),
+                           ")"))}) {
+      EXPECT_THAT(computeMetricDistance(square, other),
+                  Optional(DoubleNear(111.32, 0.01)));
+    }
+  }
 
   // Test invalid case.
   EXPECT_EQ(computeMetricDistance(

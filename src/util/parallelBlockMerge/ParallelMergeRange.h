@@ -20,6 +20,7 @@
 #include <absl/cleanup/cleanup.h>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/use_future.hpp>
 #include <cstddef>
 #include <exception>
 #include <future>
@@ -99,7 +100,7 @@ class ParallelMergeRange
     AD_CONTRACT_CHECK(state_ != nullptr);
     AD_CONTRACT_CHECK(sink_ != nullptr);
     AD_CONTRACT_CHECK(numPrefetchedBlocks > 0);
-    mergeIsComplete_ = state_->asyncWaitForCompletion();
+    mergeIsComplete_ = state_->asyncWaitForCompletion(net::use_future);
     prefetcher_ = std::make_unique<Prefetcher>(std::move(executor), sink_,
                                                numPrefetchedBlocks);
   }

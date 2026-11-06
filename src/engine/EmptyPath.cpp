@@ -301,7 +301,7 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
     return ad_utility::InputRangeTypeErased<IdTable>{
         index.getPermutation(permutation)
             .getDistinctCol0Ids(scanSpec, addGraphColumn, std::move(ids),
-                                cancellationHandle_, locatedTriplesState(),
+                                cancellationHandle(), locatedTriplesState(),
                                 executor())};
   };
   // The rows of one of the scans above, as a flat range of `EntityAndGraph`.
@@ -390,9 +390,12 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
                                               bool& hasWarnedAboutUndef) const {
   // A lazy child hands out several tables, each of which may contain UNDEF
   // values, so warn only once.
-  // NOTE: The QLever JSON export writes the `warnings` field before consuming
-  // the result, so this warning only makes it into the response if some
-  // operation above materializes the result eagerly (e.g. an `ORDER BY`).
+  //
+  // NOTE: The `application/qlever-results+json` export writes the `warnings`
+  // field before consuming the result, so there this warning only makes it
+  // into the response if some operation above materializes the result eagerly
+  // (e.g. an `ORDER BY`). The `application/sparql-results+json` export writes
+  // its `meta` field after the result and thus always includes it.
   if (!std::exchange(hasWarnedAboutUndef, true)) {
     addWarning(
         "The empty path is applied to a column that contains UNDEF values. "
@@ -439,7 +442,7 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   ids.reserve(joinColumn.size());
   ql::ranges::copy_if(joinColumn, std::back_inserter(ids), Id::isDefinedL);
   bool hasUndef = ids.size() != joinColumn.size();
-  ql::ranges::sort(ids);
+  sortConfig().sort(ids, std::less<>{});
   // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the
   // return types between `std::ranges` and `range-v3`.
   ids.erase(::ranges::unique(ids), ids.end());

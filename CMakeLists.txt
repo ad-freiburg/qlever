@@ -317,7 +317,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 4ec7405bcc0639f93a0b9435d29859ef0770c080 # branch fork-for-qlever
+        GIT_TAG e049028af3d076f6c20ba52826dfee2ab0f75f87 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -328,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 5d1c09eef18bd122cadd9144870fd6bee53d4057
+        GIT_TAG 74f526a2f06a107d5c151bcf076802505c1a28ce
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -784,6 +784,13 @@ if (EMSCRIPTEN)
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
+# The library `pb_util_geo` of `spatialjoin` uses the JSON writer of
+# `pb_util_json`, but does not link against it. With `BUILD_SHARED_LIBS`, the
+# linker of Ubuntu 26.04 (binutils 2.46, and also `mold`) then rejects every
+# executable that links against `libpb_util_geo.so` with "undefined reference
+# to `util::json::Writer::...`".
+target_link_libraries(pb_util_geo PUBLIC pb_util_json)
+
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest
 # of the build can link against the correct one without further case
@@ -804,6 +811,19 @@ target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-c
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+    # Disable `-Wuninitialized` for all targets that use `gmock`, only for
+    # GCC 16 and newer in C++26 mode.
+    #
+    # NOTE: In that mode, GCC wrongly reports the temporary that is bound to the
+    # `const&` in `PropertyMatcher::MatchAndExplainImpl` (`gmock-matchers.h`)
+    # as used uninitialized, for every use of `::testing::Property`. The
+    # warning is emitted in the translation units of the tests, not of `gmock`
+    # itself. This is a bug in GCC, not in `googletest`, see
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124380.
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
+        CMAKE_CXX_STANDARD GREATER_EQUAL 26)
+        target_compile_options(gmock INTERFACE -Wno-uninitialized)
+    endif ()
 endif ()
 include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
@@ -887,6 +907,17 @@ add_compile_definitions(QLEVER_COMPILETIME_LOGLEVEL=${LOG_LEVEL_${LOGLEVEL_NAME}
 option(BRANCHLESS_LOGGING "Use the coverage-friendly branchless implementation of the `AD_LOG_...` macros" OFF)
 if (BRANCHLESS_LOGGING)
     add_compile_definitions(QLEVER_BRANCHLESS_LOGGING)
+endif ()
+
+# The conditions of the `AD_CORRECTNESS_CHECK` macro (see `src/util/Exception.h`)
+# are invariants that never fail, so branches inside these conditions (e.g.
+# from `&&` or `||`) can never be fully covered by unit tests. With this option,
+# the condition is evaluated inside a lambda that is excluded from the coverage
+# instrumentation. It is used for the coverage build; see `src/util/Exception.h`
+# for why this option is not set unconditionally.
+option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
+if (COVERAGE_FRIENDLY_CHECKS)
+    add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
 endif ()
 
 ##################################################

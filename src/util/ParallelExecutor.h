@@ -27,6 +27,7 @@
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/Executor.h"
+#include "util/Math.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 #include "util/jthread.h"
@@ -107,13 +108,13 @@ auto runTasksInParallel(std::vector<std::packaged_task<R()>>&& tasks)
 // NOTE: The calling thread blocks until all the tasks have finished, so it must
 // not be a thread of the `executor`.
 CPP_template(typename ChunkFunction)(
-    requires ql::concepts::invocable<
-        const ChunkFunction&, detail::FirstArgumentT<ChunkFunction>&, size_t,
-        size_t>) auto computeInParallelChunks(const qlever::Executor& executor,
-                                              size_t numElements,
-                                              size_t chunkSize,
-                                              const ChunkFunction& computeChunk,
-                                              size_t numTasks = 0) {
+    requires ql::concepts::invocable<const ChunkFunction&,
+                                     detail::FirstArgumentT<ChunkFunction>&,
+                                     size_t, size_t>)
+auto computeInParallelChunks(const qlever::Executor& executor,
+                             size_t numElements, size_t chunkSize,
+                             const ChunkFunction& computeChunk,
+                             size_t numTasks = 0) {
   // The `Result` is the type of the first argument of `computeChunk`.
   using Result = detail::FirstArgumentT<ChunkFunction>;
   // Guard against a subtle bug: if `computeChunk` took its first parameter by
@@ -134,7 +135,7 @@ CPP_template(typename ChunkFunction)(
   if (numTasks == 0) {
     numTasks = std::max(1u, std::thread::hardware_concurrency());
   }
-  size_t numChunks = (numElements + chunkSize - 1) / chunkSize;
+  size_t numChunks = ceilDiv(numElements, chunkSize);
   // Tasks beyond the number of chunks would have nothing to do.
   numTasks = std::min(numTasks, numChunks);
   // The index of the next chunk that has not been handed out yet. Taking the
