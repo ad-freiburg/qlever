@@ -138,6 +138,13 @@ class SmallRelationsBlockBuilder {
     return Block{firstCol0_, lastCol0_,
                  std::exchange(buffer_, std::move(freshBuffer))};
   }
+
+  // Return the (empty) buffer of this builder, e.g. to recycle it. The builder
+  // must not be used anymore afterwards.
+  IdTable releaseBuffer() && {
+    AD_CONTRACT_CHECK(empty());
+    return std::move(buffer_);
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_SMALLRELATIONSBLOCKBUILDER_H

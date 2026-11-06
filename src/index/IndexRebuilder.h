@@ -62,9 +62,9 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
 // `cancellationHandle` can be used to cancel the rebuild. In this case, the new
 // index will be left in an incomplete state and should be deleted by the
 // caller.
-// The old permutations are read and the new ones are written on the
-// `executor`, by at most `rebuild-index-max-num-threads` tasks at the same time
-// (for the whole rebuild together).
+// The old permutations are read and the new ones are written on a thread pool
+// that belongs to the rebuild alone, with `rebuild-index-max-num-threads`
+// threads.
 // Return the datastructures used for mapping to be used in further
 // post-processing.
 indexRebuilder::IndexRebuildMapping materializeToIndex(
@@ -73,7 +73,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::vector<LocalVocabIndex>& entries,
     const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    qlever::Executor executor, const std::string& logFileName);
+    const std::string& logFileName);
 
 }  // namespace qlever
 

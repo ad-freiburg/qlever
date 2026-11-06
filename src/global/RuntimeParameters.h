@@ -75,22 +75,18 @@ struct RuntimeParameters {
   // occupying all the threads of the pool. The value must be at least `1`
   // (enforced by a parameter constraint).
   SizeT maxNumThreadsPerQuery_{6, "max-num-threads-per-query"};
-  // The maximum number of tasks that a runtime index rebuild (see
-  // `IndexRebuilder`) runs at the same time on the global thread pool. A value
-  // of 0 means "no limit".
-  //
-  // NOTE 1: The limit applies to the rebuild as a whole and not to its
-  // individual scans and writers: the reading and decompressing of the blocks
+  // The number of threads of the thread pool on which a runtime index rebuild
+  // (see `IndexRebuilder`) runs: the reading and decompressing of the blocks
   // of the old permutations (also for the recomputation of the statistics) and
-  // the compressing and writing of the blocks of the new ones share it, so
-  // each of them may use as many threads as are currently free within it. Not
-  // covered are the threads that remap the triples of each permutation (they
-  // are not on the pool) and the sorting of the twin relations of large
-  // relations (see `PermutationWriter`), which uses the pool directly.
+  // the compressing and writing of the blocks of the new ones. A value of 0
+  // means "as many as there are hardware threads".
   //
-  // NOTE 2: This is the analogue of `max-num-threads-per-query` for the
-  // rebuild. When the pool is idle, the rebuild uses this many of its threads,
-  // and when the pool is busy, it shares them with the queries.
+  // NOTE: The pool belongs to the rebuild alone, so its tasks never wait
+  // behind the query work on the global thread pool; the operating system
+  // shares the cores between the two pools. Not on the pool are the threads
+  // that drive the permutations (one per pair plus one for the patterns, see
+  // `materializeToIndex`) and the compression threads of the vocabulary writer
+  // (see `CompressedVocabulary::DiskWriterFromUncompressedWords`).
   SizeT rebuildIndexMaxNumThreads_{0, "rebuild-index-max-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
   // the internal PSO+POS) that a runtime index rebuild processes in

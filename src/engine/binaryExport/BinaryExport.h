@@ -8,13 +8,16 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_BINARY_EXPORT_H
-#define QLEVER_SRC_ENGINE_BINARY_EXPORT_H
+#ifndef QLEVER_SRC_ENGINE_BINARYEXPORT_BINARYEXPORT_H
+#define QLEVER_SRC_ENGINE_BINARYEXPORT_BINARYEXPORT_H
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <string>
+#include <vector>
+
 #include "engine/QueryExecutionTree.h"
-#include "engine/StringMapping.h"
+#include "engine/binaryExport/StringMapping.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "parser/SelectClause.h"
@@ -85,7 +88,7 @@ class ExportBatch {
 // Export the result of `qet` in QLever's binary format, which is used for the
 // efficient transfer of results between two QLever instances (see
 // `ad_utility::MediaType::binaryQleverExport`). The format consists of a
-// header (see `Header` in the `.cpp` file), followed by the IDs of the
+// header (see `Header` in `BinaryFormat.h`), followed by the IDs of the
 // rows (as produced by `toExportableId` in the `.cpp` file), which are
 // interrupted by batches of the strings that the non-trivial IDs refer to (see
 // `StringMapping`). The format always ends with such a batch. Only the selected
@@ -117,4 +120,4 @@ class BinaryExportHelpers {
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H
+#endif  // QLEVER_SRC_ENGINE_BINARYEXPORT_BINARYEXPORT_H

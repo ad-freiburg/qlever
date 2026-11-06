@@ -8,6 +8,7 @@
 #define QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <cstdint>
 #include <limits>
@@ -547,8 +548,12 @@ class ValueId {
       if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
-      } else if constexpr (ad_utility::SimilarToAny<T, double, int64_t,
-                                                    uint64_t>) {
+      } else if constexpr (ad_utility::isSimilar<T, double>) {
+        // NOTE: `%f` is what `std::to_string` did for floating-point values
+        // before C++26. Since C++26, it produces the shortest round-trip
+        // representation instead (`42` instead of `42.000000`).
+        ostr << absl::StrFormat("%f", value);
+      } else if constexpr (ad_utility::SimilarToAny<T, int64_t, uint64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");

@@ -45,10 +45,9 @@
 #include "util/RegexSet.h"
 #include "util/Timer.h"
 
-// The stages behind the parallel merge of the partial vocabularies (see
-// `mergeVocabulary` in `index/VocabularyMerger.h`, whose current pipeline a
-// follow-up PR replaces with the `SegmentPipeline` below). This is not part of
-// the public interface of that header.
+// The stages behind the parallel merge of the partial vocabularies (see the
+// comment above `mergeVocabulary` in `index/VocabularyMerger.h`). This is not
+// part of the public interface of that header.
 namespace ad_utility::vocabulary_merger::detail {
 
 // Cut the blocks of merged words, which arrive in the order of the vocabulary,
@@ -173,9 +172,8 @@ class SegmentCutter {
 // entries of a committed segment are held separately, so that each is released
 // as soon as its writer is done with it.
 //
-// NOTE 1: All the member functions are called by a single thread (the one
-// that receives the merged blocks), which must not be a thread of the global
-// executor.
+// NOTE 1: All the member functions are called by a single thread, the one that
+// runs `mergeVocabulary`, which must not be a thread of the global executor.
 //
 // NOTE 2: The pipeline is neither copyable nor movable, because the tasks and
 // the sink of the `committer_` refer to it.
@@ -320,6 +318,13 @@ class SegmentPipeline : public ad_utility::NoCopyNoMove {
     idMapWriters_.finish();
     AD_LOG_INFO << committer_.progressBar().getFinalProgressString()
                 << std::flush;
+    // NOTE: `peak()` locks the mutex of the budget, so it is called before the
+    // log statement, which holds the global lock of the log while it evaluates
+    // its operands. Otherwise ThreadSanitizer reports a (spurious)
+    // lock-order-inversion with code that logs while holding another mutex
+    // that lives at the same stack address in a later call (`std::mutex` has a
+    // trivial destructor, so ThreadSanitizer cannot tell the two apart).
+    const auto peakMemory = memoryBudget_.peak();
     AD_LOG_INFO
         << "Time spent by the stages behind the vocabulary merge: "
            "preparing "
@@ -329,7 +334,7 @@ class SegmentPipeline : public ad_utility::NoCopyNoMove {
         << Milliseconds{std::chrono::duration_cast<std::chrono::milliseconds>(
                idMapWriters_.busyTime())}
         << "; peak memory of the data behind the merge "
-        << memoryBudget_.peak().asString() << " (limit "
+        << peakMemory.asString() << " (limit "
         << memoryBudget_.limit().asString() << ")" << std::endl;
     return metaData;
   }

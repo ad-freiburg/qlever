@@ -1475,7 +1475,7 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
 
 // Test that a SELECT query can be exported in QLever's binary format.
 TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
-  // The format itself is tested in `engine/BinaryExportTest.cpp`.
+  // The format itself is tested in `engine/binaryExport/BinaryExportTest.cpp`.
   auto result = runQueryStreamableResult(
       "<s> <p> <o> .", "SELECT ?o WHERE { <s> <p> ?o }",
       ad_utility::MediaType::binaryQleverExport);

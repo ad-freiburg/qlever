@@ -189,7 +189,7 @@ TEST(SegmentCommitter, noEmptyBlocks) {
   }
 
   BlockPieces emptyBlock{{}, 0, 42};
-  WordBlock words = gatherWords(emptyBlock);
+  WordBlock words = gatherWords(std::move(emptyBlock));
   EXPECT_EQ(words.numWords(), 0u);
   EXPECT_EQ(words.firstPosition_, 42u);
 }

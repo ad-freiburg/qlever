@@ -9,6 +9,7 @@
 #include <atomic>
 #include <sstream>
 #include <stdexcept>
+#include <type_traits>
 
 #include "./util/GTestHelpers.h"
 #include "util/ExceptionHandling.h"
@@ -198,27 +199,20 @@ TEST(ExceptionCollector, isThreadSafe) {
 }
 
 // _____________________________________________________________________________
-TEST(ExceptionCollector, destructorRethrowsWhenRethrowWasNeverCalled) {
-  // If the user forgets to call `rethrow()`, the captured exception is
-  // surfaced from the destructor instead of being silently swallowed.
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      {
-        ad_utility::ExceptionCollector collector;
-        try {
-          throw std::runtime_error{"forgotten"};
-        } catch (...) {
-          collector(std::current_exception());
-        }
-        // No call to `rethrow()` — the destructor must rethrow.
-      },
-      ::testing::StrEq("forgotten"), std::runtime_error);
-}
-
-// _____________________________________________________________________________
-TEST(ExceptionCollector, destructorLogsWhenRethrowWouldTerminate) {
-  // If the destructor runs while another exception is already propagating,
-  // rethrowing would call `std::terminate`. The captured exception must be
-  // logged instead, and the original exception must continue to propagate.
+TEST(ExceptionCollector, destructorDropsUncollectedException) {
+  static_assert(std::is_nothrow_destructible_v<ad_utility::ExceptionCollector>);
+  // If `rethrowIfException()` is never called, the captured exception is
+  // silently dropped by the destructor.
+  EXPECT_NO_THROW({
+    ad_utility::ExceptionCollector collector;
+    try {
+      throw std::runtime_error{"dropped"};
+    } catch (...) {
+      collector(std::current_exception());
+    }
+  });
+  // The same holds if the destructor runs while another exception propagates,
+  // which then reaches the caller unchanged.
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       {
         ad_utility::ExceptionCollector collector;
@@ -227,8 +221,6 @@ TEST(ExceptionCollector, destructorLogsWhenRethrowWouldTerminate) {
         } catch (...) {
           collector(std::current_exception());
         }
-        // Throw a different exception. The collector destructor will run while
-        // this one is in flight and must not call `std::terminate`.
         throw std::logic_error{"propagated to caller"};
       },
       ::testing::StrEq("propagated to caller"), std::logic_error);
