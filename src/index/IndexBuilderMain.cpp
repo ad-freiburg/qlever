@@ -288,12 +288,28 @@ int main(int argc, char** argv) {
       ", the default is `lowercase`.");
   add("has-word-normalization", po::value(&config.hasWordNormalization_),
       hasWordNormalizationDescription.c_str());
+  add("add-normalized-triples", po::bool_switch(&config.addNormalizedTriples_),
+      "Add a triple `<literal> ql:normalized \"normalized literal\"` for each "
+      "literal. The normalized literal is obtained by removing the matches of "
+      "the `--normalization-regexes`, removing accents, and lowercasing the "
+      "words of the literal, separated by single spaces. Accents are all "
+      "nonspacing marks, which in some scripts (e.g. Devanagari or Thai) "
+      "also include vowel signs. This enables efficient matching of literals "
+      "via their normalized form.");
+  add("normalization-regexes",
+      po::value(&config.normalizationRegexes_)->composing()->multitoken(),
+      "Space-separated list of regexes (RE2 syntax), whose matches are "
+      "replaced by a space before a literal is normalized for "
+      "`--add-normalized-triples` (in the given order), e.g. `\\(.*?\\)` "
+      "to remove text in parentheses, or `(?i)\\bltd\\b` to remove "
+      "this word case-insensitively.");
   add("has-word-restrict-predicates",
       po::value(&config.hasWordRestrictPredicates_)->composing()->multitoken(),
       "Space-separated list of predicate IRIs in angle brackets. If "
-      "specified, the `ql:has-word` triples are only added for literals that "
-      "are the object of a triple with one of these predicates. Requires "
-      "`--add-has-word-triples`.");
+      "specified, the `ql:has-word` and `ql:normalized` triples are only "
+      "added for literals that are the object of a triple with one of these "
+      "predicates. Requires `--add-has-word-triples` or "
+      "`--add-normalized-triples`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
