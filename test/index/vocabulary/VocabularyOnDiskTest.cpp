@@ -8,18 +8,21 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
+#include <unistd.h>
 
 #include <optional>
 #include <random>
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
+#include "../../util/PageCacheReadTestHelpers.h"
+#include "../../util/RuntimeParametersTestHelpers.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/File.h"
 #include "util/Forward.h"
@@ -302,6 +305,137 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
   auto result = vocab->lookupBatch(indices);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
                                                                 indices);
+}
+
+// With `vocabulary-page-cache-fast-path`, the words and offsets that
+// are in the page cache are read before the batch manager sees the rest. The
+// result must be byte-identical to the result without the fast path, for runs
+// of consecutive indices as well as for reordered and duplicated indices.
+TEST(VocabularyOnDisk, LookupBatchPageCacheFastPathIsByteIdentical) {
+  ad_utility::detail::resetPageCacheFastPathSupport();
+  if (!ad_utility::pageCacheFastPathIsSupported()) {
+    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not compiled in";
+  }
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 13> indices{0, 1, 2, 3, 4, 2, 0, 3, 1, 1, 4, 0, 3};
+  auto resetParameter = setRuntimeParameterForTest<
+      &RuntimeParameters::vocabularyPageCacheFastPath_>(false);
+  const auto withoutFastPath = vocab->lookupBatch(indices);
+  setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(true);
+  const auto withFastPath = vocab->lookupBatch(indices);
+  EXPECT_THAT(*withFastPath, ::testing::ElementsAreArray(*withoutFastPath));
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      *vocab, withFastPath, indices);
+}
+
+namespace {
+// Count the page-cache reads; none of them finds anything cached.
+size_t numCountedPageCacheReads = 0;
+int64_t countedNothingCached(int fd, const ::iovec* iov, int iovcnt,
+                             int64_t offset) noexcept {
+  ++numCountedPageCacheReads;
+  return pageCacheReadTestHelpers::nothingCached(fd, iov, iovcnt, offset);
+}
+}  // namespace
+
+// `lookupBatch` reads the runtime parameter for every lookup: with the
+// parameter off, no page-cache read is attempted.
+TEST(VocabularyOnDisk, LookupBatchFollowsThePageCacheFastPathParameter) {
+  // An earlier real `preadv2(RWF_NOWAIT)` may have switched the fast path off;
+  // this test injects its own page-cache read. `open()` decides whether to use
+  // the fast path, so this must come before `createExampleVocabulary()`.
+  ad_utility::detail::resetPageCacheFastPathSupport();
+  if (!ad_utility::pageCacheFastPathIsSupported()) {
+    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not compiled in";
+  }
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 4> indices{0, 1, 3, 2};
+  auto resetParameter = setRuntimeParameterForTest<
+      &RuntimeParameters::vocabularyPageCacheFastPath_>(true);
+  pageCacheReadTestHelpers::ScopedPageCacheRead inject{&countedNothingCached};
+  numCountedPageCacheReads = 0;
+
+  setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(false);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      *vocab, vocab->lookupBatch(indices), indices);
+  EXPECT_EQ(numCountedPageCacheReads, 0u);
+
+  setRuntimeParameter<&RuntimeParameters::vocabularyPageCacheFastPath_>(true);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      *vocab, vocab->lookupBatch(indices), indices);
+  EXPECT_GT(numCountedPageCacheReads, 0u);
+}
+
+// Every other page-cache read finds nothing cached, starting with the second
+// read after `numEveryOtherReadCalls` was reset.
+namespace {
+size_t numEveryOtherReadCalls = 0;
+// Serve the whole run with blocking `pread` (every byte that exists),
+// without involving the real `preadv2(RWF_NOWAIT)`.
+int64_t fullyCached(int fd, const ::iovec* iov, int iovcnt,
+                    int64_t offset) noexcept {
+  int64_t total = 0;
+  for (const ::iovec& iovec :
+       ql::span<const ::iovec>{iov, static_cast<size_t>(iovcnt)}) {
+    auto* base = static_cast<char*>(iovec.iov_base);
+    size_t remaining = iovec.iov_len;
+    while (remaining > 0) {
+      const ssize_t numBytesRead = ::pread(fd, base, remaining, offset + total);
+      if (numBytesRead <= 0) {
+        return numBytesRead < 0 ? int64_t{-1} : total;
+      }
+      base += numBytesRead;
+      remaining -= static_cast<size_t>(numBytesRead);
+      total += numBytesRead;
+    }
+  }
+  return total;
+}
+int64_t everyOtherReadCached(int fd, const ::iovec* iov, int iovcnt,
+                             int64_t offset) noexcept {
+  if (numEveryOtherReadCalls++ % 2 == 1) {
+    return pageCacheReadTestHelpers::nothingCached(fd, iov, iovcnt, offset);
+  }
+  return fullyCached(fd, iov, iovcnt, offset);
+}
+}  // namespace
+
+// With the fast path on, reads that the page-cache read does not serve (all or
+// some of them, and all after the fast path was found unsupported) go
+// through the batch manager; the result always matches `operator[]`.
+TEST(VocabularyOnDisk, LookupBatchPageCacheMissesGoThroughTheManager) {
+  ad_utility::detail::resetPageCacheFastPathSupport();
+  if (!ad_utility::pageCacheFastPathIsSupported()) {
+    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not compiled in";
+  }
+  using pageCacheReadTestHelpers::ScopedPageCacheRead;
+  auto resetParameter = setRuntimeParameterForTest<
+      &RuntimeParameters::vocabularyPageCacheFastPath_>(true);
+  auto vocab = createExampleVocabulary();
+  // Runs of consecutive indices, reordered and duplicated indices.
+  std::array<size_t, 13> indices{0, 1, 2, 3, 4, 2, 0, 3, 1, 1, 4, 0, 3};
+  auto check = [&]() {
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        *vocab, vocab->lookupBatch(indices), indices);
+  };
+  {
+    ScopedPageCacheRead inject{&pageCacheReadTestHelpers::nothingCached};
+    check();
+  }
+  {
+    numEveryOtherReadCalls = 0;
+    ScopedPageCacheRead inject{&everyOtherReadCached};
+    check();
+  }
+  {
+    ScopedPageCacheRead inject{&pageCacheReadTestHelpers::notSupported};
+    check();
+    EXPECT_FALSE(ad_utility::pageCacheFastPathIsSupported());
+    // `vocabulary-page-cache-fast-path` is still on, but the fast path is not
+    // used any more.
+    check();
+  }
+  EXPECT_TRUE(ad_utility::pageCacheFastPathIsSupported());
 }
 
 // An empty batch is an invalid request and must throw.

@@ -14,7 +14,11 @@
 #include <gtest/gtest_prod.h>
 
 #include <cstdint>
+#include <memory>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -34,30 +38,10 @@
 #endif
 
 #include "backports/span.h"
+#include "util/IoUringManagerConcepts.h"
+#include "util/PageCacheFirstPolicy.h"
 
 namespace ad_utility {
-
-template <typename T>
-CPP_requires(ReadPolicy_,
-             requires(T& policy, int fd, ql::span<const size_t> numBytes,
-                      ql::span<const uint64_t> offsets, ql::span<char*> buffers,
-                      typename T::BatchHandle handle)(
-                 concepts::constructible_from<T, unsigned>,
-                 // Must provide `addBatch` with the following parameters.
-                 policy.addBatch(fd, numBytes, offsets, buffers, handle),
-                 // Must provide a `wait` method with the following interface.
-                 policy.wait(handle)));
-
-// The pluggable I/O backend of `BatchManager`: it specifies how the reads in a
-// batch are carried out. See `IoUringPolicy` (asynchronous, via io_uring) and
-// `SyncIoPolicy` (blocking `pread` fallback) below. Must additionally be
-// constructible from a ringsize (`unsigned`). Also require that `T` must expose
-// an unsigned integral `BatchHandle` type.
-template <typename T>
-CPP_concept ReadPolicyConcept =
-    concepts::constructible_from<T, unsigned> &&
-    concepts::unsigned_integral<typename T::BatchHandle> &&
-    CPP_requires_ref(ReadPolicy_, T);
 
 // Abstract base of `BatchManager` so a pool can hold managers of different
 // `ReadPolicy`s behind a unified interface and pick the backend at runtime.
@@ -72,6 +56,11 @@ class BatchManagerBase {
                                              ql::span<char*> buffers) = 0;
 
   virtual void wait(BatchHandle handle) = 0;
+
+  // Switch the page-cache fast path of this manager on or off (see
+  // `PageCacheFirstPolicy`). Takes effect for the batches added afterwards.
+  // Managers without a page-cache fast path ignore it.
+  virtual void setPageCacheFastPath([[maybe_unused]] bool enabled) noexcept {}
 };
 
 // `BatchManager` owns the batch bookkeeping (minting a `BatchHandle` per batch,
@@ -112,6 +101,14 @@ class BatchManager final : public BatchManagerBase {
 
   // Block until every read in `handle` has completed.
   void wait(BatchHandle handle) override { policy_.wait(handle); }
+
+  // Forward the switch to the policy if it has one.
+  void setPageCacheFastPath([[maybe_unused]] bool enabled) noexcept override {
+    if constexpr (CPP_requires_ref(detail::HasPageCacheFastPathSwitch,
+                                   ReadPolicy)) {
+      policy_.setPageCacheFastPath(enabled);
+    }
+  }
 
  private:
   [[no_unique_address]] ReadPolicy policy_;
@@ -245,18 +242,36 @@ using BatchIoManager = BatchManager<IoUringPolicy>;
 using BatchIoManager = BatchManager<SyncIoPolicy>;
 #endif
 
+namespace detail {
+// Build a `BatchManager` for `Policy`, decorated with `PageCacheFirstPolicy` if
+// the page-cache fast path is supported.
+template <typename Policy>
+std::unique_ptr<BatchManagerBase> makeBatchManagerFor(unsigned ringSize) {
+  static_assert(ReadPolicyConcept<Policy>,
+                "makeBatchManagerFor's Policy must satisfy the "
+                "ReadPolicyConcept.");
+  if (pageCacheFastPathIsSupported()) {
+    return std::make_unique<BatchManager<PageCacheFirstPolicy<Policy>>>(
+        ringSize);
+  }
+  return std::make_unique<BatchManager<Policy>>(ringSize);
+}
+}  // namespace detail
+
 // Build a batch manager. When io_uring is compiled in and the runtime flag
 // `preferIoUring` is set, try to build an `IoUringManager`. If its setup
 // syscall fails at runtime clear `preferIoUring` and fall back to a
 // `SyncIoManager`. Passing the flag by reference makes this probe-once: after
 // the first failure, every subsequent call goes straight to the sync manager,
-// so we don't repeat a failing syscall.
+// so we don't repeat a failing syscall. Where `preadv2(RWF_NOWAIT)` is
+// available, the manager serves page-cache hits first (`PageCacheFirstPolicy`,
+// switched with `BatchManagerBase::setPageCacheFastPath`).
 inline std::unique_ptr<BatchManagerBase> makeBatchManager(
     bool& preferIoUring, unsigned ringSize = 256) {
 #ifdef QLEVER_HAS_IO_URING
   if (preferIoUring) {
     try {
-      return std::make_unique<BatchManager<IoUringPolicy>>(ringSize);
+      return detail::makeBatchManagerFor<IoUringPolicy>(ringSize);
     } catch (const std::exception& e) {
       preferIoUring = false;
       AD_LOG_WARN << "io_uring is compiled in but unavailable at runtime ("
@@ -269,7 +284,7 @@ inline std::unique_ptr<BatchManagerBase> makeBatchManager(
 #else
   preferIoUring = false;
 #endif
-  return std::make_unique<BatchManager<SyncIoPolicy>>(ringSize);
+  return detail::makeBatchManagerFor<SyncIoPolicy>(ringSize);
 }
 
 }  // namespace ad_utility
