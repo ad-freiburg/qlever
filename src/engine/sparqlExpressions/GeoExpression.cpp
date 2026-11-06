@@ -334,6 +334,63 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
+// _____________________________________________________________________________
+void substituteConstantsInGeoDistanceFilter(
+    SparqlExpression& expr,
+    const ad_utility::HashMap<Variable, TripleComponent>& constants) {
+  // Only an expression with two children (for example a comparison) is
+  // handled.
+  auto children = expr.children();
+  if (children.size() != 2) {
+    return;
+  }
+
+  // Replace the `childIndex`-th child of `parent` by an expression for its
+  // constant if it is a variable that has one.
+  auto substitute = [&constants](SparqlExpression& parent, size_t childIndex) {
+    const auto* variable = dynamic_cast<const VariableExpression*>(
+        parent.children()[childIndex].get());
+    if (variable == nullptr) {
+      return;
+    }
+    auto it = constants.find(variable->value());
+    if (it == constants.end()) {
+      return;
+    }
+    const auto& constant = it->second;
+    SparqlExpression::Ptr constantExpression;
+    if (constant.isIri()) {
+      constantExpression = std::make_unique<IriExpression>(constant.getIri());
+    } else if (constant.isLiteral()) {
+      constantExpression =
+          std::make_unique<StringLiteralExpression>(constant.getLiteral());
+    } else {
+      // An IRI is handled above, so no `EncodedIriManager` is required.
+      auto id = toValueIdIfNotString(constant, nullptr);
+      if (!id.has_value()) {
+        return;
+      }
+      constantExpression = std::make_unique<IdExpression>(id.value());
+    }
+    parent.replaceChild(childIndex, std::move(constantExpression));
+  };
+
+  // For each side that is a distance call, substitute the other side (the
+  // maximum distance) and the unit of the call.
+  for (size_t i : {0, 1}) {
+    auto& distance = *children[i];
+    bool hasUnit = dynamic_cast<const DistWithUnitExpression*>(&distance);
+    if (!hasUnit && !dynamic_cast<const DistExpression*>(&distance) &&
+        !dynamic_cast<const MetricDistExpression*>(&distance)) {
+      continue;
+    }
+    substitute(expr, 1 - i);
+    if (hasUnit) {
+      substitute(distance, 2);
+    }
+  }
+}
+
 }  // namespace sparqlExpression
 
 // Explicit instantiations for the different geometric relations to avoid linker
