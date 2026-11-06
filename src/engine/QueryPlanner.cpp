@@ -235,6 +235,18 @@ SubtreePlanVec QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     checkCancellation();
   }
 
+  // The rows above (GROUP BY, HAVING, VALUES, DISTINCT, ORDER BY) add the same
+  // operation to every plan of the previous row, so plans that differed only
+  // in their sort order become indistinguishable (for example, every plan of
+  // a `SELECT DISTINCT` subquery ends in the same `Sort` + `Distinct`). The
+  // rows of the dynamic programming keep only the cheapest plan per pruning
+  // key, and so should the last row: for a subquery or a group, all its plans
+  // become candidates of the outer planning, where every pair of plans of
+  // two children is tried, so duplicates multiply the planning time there.
+  if (plans.size() > 1) {
+    pruneByPruningKey(plans.back());
+  }
+
   // Now find the cheapest execution plan and store that as the optimal
   // plan for this graph pattern.
   SubtreePlanVec& lastRow = plans.back();
@@ -1272,21 +1284,38 @@ SubtreePlanVec QueryPlanner::merge(const SubtreePlanVec& a,
   // Therefore we mapped plans and use contained triples + ordering var
   // as key.
   AD_LOG_TRACE << "Pruning...\n";
-  SubtreePlanVec prunedPlans{allocator()};
-
-  auto pruneCandidates = [&](auto& actualCandidates) {
-    for (auto& [key, value] : actualCandidates) {
-      (void)key;  // silence unused warning
-      size_t minIndex = findCheapestExecutionTree(value);
-      prunedPlans.push_back(std::move(value[minIndex]));
-      checkCancellation();
-    }
-  };
-
-  pruneCandidates(candidates);
+  SubtreePlanVec prunedPlans = keepCheapestPerKey(std::move(candidates));
 
   AD_LOG_TRACE << "Got " << prunedPlans.size() << " pruned plans from \n";
   return prunedPlans;
+}
+
+// _____________________________________________________________________________
+SubtreePlanVec QueryPlanner::keepCheapestPerKey(
+    ad_utility::HashMap<std::string, SubtreePlanVec> candidatesByKey) const {
+  SubtreePlanVec prunedPlans{allocator()};
+  for (auto& [key, value] : candidatesByKey) {
+    (void)key;  // silence unused warning
+    size_t minIndex = findCheapestExecutionTree(value);
+    prunedPlans.push_back(std::move(value[minIndex]));
+    checkCancellation();
+  }
+  return prunedPlans;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::pruneByPruningKey(SubtreePlanVec& row) const {
+  if (row.size() <= 1) {
+    return;
+  }
+  ad_utility::HashMap<std::string, SubtreePlanVec> candidatesByKey;
+  for (auto& plan : row) {
+    candidatesByKey
+        .try_emplace(getPruningKey(plan, plan._qet->resultSortedOn()),
+                     allocator())
+        .first->second.push_back(std::move(plan));
+  }
+  row = keepCheapestPerKey(std::move(candidatesByKey));
 }
 
 // _____________________________________________________________________________
