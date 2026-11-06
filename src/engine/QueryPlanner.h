@@ -710,6 +710,10 @@ class QueryPlanner {
     // `fillDpTab`.
     FiltersAndOptionalSubstitutes filtersAndSubst_;
 
+    // The variables that are bound to a single constant by an already visited
+    // `VALUES` clause or `BIND` of the `rootPattern_`, see `addConstants`.
+    ad_utility::HashMap<Variable, TripleComponent> constants_;
+
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
                         ParsedQuery::GraphPattern* rootPattern)
@@ -719,6 +723,39 @@ class QueryPlanner {
           candidatePlans_{allocator()},
           filtersAndSubst_{
               wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
+
+    // Add the variables that are bound to a single constant by `values` (if it
+    // has a single row) or by `bind` (if its expression does not depend on the
+    // data, which is evaluated here) to `constants_`, except for internal IRIs
+    // (like `ql:langtag`).
+    //
+    // NOTE 1: Only the direct children of the `rootPattern_` are visited here,
+    // so nested groups are not considered. In particular, a `VALUES` clause in
+    // an `OPTIONAL` or `MINUS` does not bind its variables in every row.
+    //
+    // NOTE 2: A triple with an internal IRI is evaluated on the internal
+    // permutation, which contains other triples than the regular one that the
+    // triple with the variable is evaluated on.
+    void addConstants(const parsedQuery::Values& values);
+    void addConstants(const parsedQuery::Bind& bind);
+
+    // Replace each variable of `triple` that has a constant in `constants_` by
+    // this constant. The `VALUES` or `BIND` clause that binds the variable is
+    // still planned, so the variable remains bound in the result.
+    //
+    // NOTE 1: The fixed constant allows for index scans with fewer variables,
+    // which are sorted by the remaining variables and thus avoid joins and
+    // sorts.
+    //
+    // NOTE 2: Only a triple that is evaluated by a plain index scan is changed
+    // (the special predicates, e.g. `ql:has-predicate`, require variables in
+    // certain positions, see `TripleKind` in `QueryPlanner.cpp`).
+    //
+    // NOTE 3: This is called in `optimizeCommutatively`, so a constant only
+    // affects the triples that are planned together with or after its `VALUES`
+    // or `BIND`. A triple before an `OPTIONAL`, `MINUS` or `BIND` is planned
+    // before a later `VALUES` clause, so it must keep its variable for these.
+    void substituteConstants(SparqlTriple& triple) const;
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions

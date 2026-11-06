@@ -20,6 +20,7 @@ class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
+  using ConstantColumns = std::vector<std::pair<ColumnIndex, Variable>>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
@@ -43,6 +44,17 @@ class IndexScan final : public Operation {
   // that they are bound to.
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
+
+  // Fixed components of the scan triple that are also part of the result, each
+  // as a column with the constant value of the component that is bound to a
+  // variable (see `makeTreeWithBindColumn`). The `ColumnIndex` is the position
+  // of the component in the permuted triple.
+  //
+  // NOTE: These columns come after the additional columns. A column that is not
+  // needed is removed instead of stripped (see `makeTreeWithStrippedColumns`).
+  // The `Id` of the component is never a `LocalVocabIndex` (which the result
+  // would have to keep alive).
+  ConstantColumns constantColumns_;
 
   // If set, then only the specified variables will be part of the result.
   // Can be used to strip some columns that are not needed by the remainder
@@ -74,7 +86,8 @@ class IndexScan final : public Operation {
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
-            std::vector<Variable> additionalVariables, Graphs graphsToFilter,
+            std::vector<Variable> additionalVariables,
+            ConstantColumns constantColumns, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
             bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
             bool sizeEstimateIsExact, size_t sizeEstimate);
@@ -93,6 +106,7 @@ class IndexScan final : public Operation {
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
   }
+  const ConstantColumns& constantColumns() const { return constantColumns_; }
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
@@ -325,6 +339,16 @@ class IndexScan final : public Operation {
   std::vector<float> computeMultiplicitiesForView(
       const MaterializedView& view) const;
 
+  // Return the `Id` of the fixed component of each of the `constantColumns_`.
+  std::vector<Id> getConstantColumnIds() const;
+
+  // Implementation of `makeTreeWithBindColumn` for a `bind` of a constant that
+  // equals a fixed component of the scan triple: Return a copy of this scan
+  // with an additional constant column for the target of the `bind`. If the
+  // `bind` is not of this form, return `std::nullopt`.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const;
+
   // Return a lambda that takes an `idTable` that has the result without any
   // columns stripped, and applies the column subset that leads to the correct
   // stripping of the columns. This function can also be used if no columns are
@@ -334,11 +358,18 @@ class IndexScan final : public Operation {
   // practice the effect would be limited, because the reader has to read all
   // columns in many cases anyway (e.g. because of UPDATEs or GRAPH duplicate
   // filtering etc.)
+  //
+  // The lambda also appends the `constantColumns_` to the `idTable`.
   auto makeApplyColumnSubset() const {
     bool hasSubset = varsToKeep_.has_value();
     auto cols =
         hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
-    return [cols = std::move(cols)](auto&& table) {
+    return [cols = std::move(cols),
+            constantIds = getConstantColumnIds()](auto&& table) {
+      for (Id id : constantIds) {
+        table.addEmptyColumn();
+        ql::ranges::fill(table.getColumn(table.numColumns() - 1), id);
+      }
       if (cols.has_value()) {
         table.setColumnSubset(cols.value());
       }
