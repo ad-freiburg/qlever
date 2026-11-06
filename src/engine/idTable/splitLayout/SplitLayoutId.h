@@ -43,6 +43,8 @@ class SplitLayoutId
   // topmost bits (see `SplitVocabulary` and `GeoCellGrid`). Not the whole
   // payload, so that `SegmentLocalId` can store the index of the
   // sub-vocabulary in the remaining 4 bits of a single 64-bit word.
+  // TODO<pas-kes> Decouple `SegmentLocalId` from the `Id`, then use all 64
+  // bits here.
   static constexpr PayloadType numVocabIndexBits = 60;
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
