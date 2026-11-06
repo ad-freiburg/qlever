@@ -86,6 +86,8 @@ SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTransformExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeSimplifyGeometryExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeAsGeoJsonExpression(SparqlExpression::Ptr child);
