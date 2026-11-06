@@ -49,7 +49,8 @@ double numDistinctValues(QueryExecutionTree& tree, size_t col) {
          atLeastOne(tree.getMultiplicity(col));
 }
 
-// Return `base + base^2 + ... + base^exponent` for `base >= 1`.
+// Return `base + base^2 + ... + base^exponent` for `base >= 0` (the sum is
+// zero for an empty graph, where the out-degree is zero).
 double geometricSum(double base, double exponent) {
   return base == 1 ? exponent
                    : base * (std::pow(base, exponent) - 1) / (base - 1);
