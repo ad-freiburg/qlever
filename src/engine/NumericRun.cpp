@@ -75,10 +75,14 @@ std::vector<RunWithDirection> getRunsInSemanticOrder(Datatype type,
             {NumericRun::IntNonNegative, false}};
   } else {
     AD_CORRECTNESS_CHECK(type == Datatype::Double);
-    // NOTE: The SPARQL standard does not say where `NaN`s go. Putting them
+    // The negative doubles first (reversed), then the non-negative ones, then
+    // all `NaN`s.
+    //
+    // NOTE 1: The SPARQL standard does not say where `NaN`s go. Putting them
     // last is how the regular comparator of `ORDER BY` does it (see
     // `OrderByComparator`).
-    // NOTE: Negative doubles are the only reversed run: their bit patterns
+    //
+    // NOTE 2: Negative doubles are the only reversed run: their bit patterns
     // (sign-magnitude) increase with the absolute value, so internally they
     // are sorted from -0 down to -inf.
     runs = {{NumericRun::DoubleNegative, true},

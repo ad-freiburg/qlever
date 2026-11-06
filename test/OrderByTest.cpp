@@ -457,6 +457,8 @@ TEST(OrderBy, sortedInputWithoutFastPath) {
 // Test that `ORDER BY` on a sorted input with a single sort column handles the
 // `LIMIT` and `OFFSET` itself, with and without the fast path.
 TEST(OrderBy, limitOffsetOnSortedInput) {
+  // Inputs of ints, of doubles (with all special values), and of mixed
+  // datatypes.
   auto I = ad_utility::testing::IntId;
   auto D = ad_utility::testing::DoubleId;
   auto U = Id::makeUndefined();
@@ -605,6 +607,7 @@ void expectLimitedResultsAreSlices(
 // same values plus 0.5); the third block spans the boundary between the
 // non-negative and the negative numbers.
 TEST(OrderBy, limitPushedIntoIndexScan) {
+  // The index described above.
   std::vector<int> values{1, 2, 3, 4, 5, 6, 7, 8, -5, -4, -3, -2};
   std::string turtle;
   for (int i : values) {
@@ -615,6 +618,8 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
   config.rowsPerBlock = 3;
   auto* qec = ad_utility::testing::getQec(std::move(config));
 
+  // Run a query, and compute the expected result (the subjects with the given
+  // `prefix`, sorted by value) for a given direction, `OFFSET` and `LIMIT`.
   auto query = [qec](const std::string& queryString) {
     return queryWithOrderByAtRoot(qec, queryString);
   };
@@ -632,6 +637,8 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
     return result;
   };
 
+  // All combinations of predicate, direction, `OFFSET` and `LIMIT` give the
+  // correct result and take the fast path.
   for (auto [predicate, prefix] : {std::pair{"p", "s"}, std::pair{"q", "t"}}) {
     for (bool isDescending : {false, true}) {
       for (size_t offset : {0, 1, 2, 4, 7}) {
@@ -677,6 +684,8 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
 // `<k>`, whose only block also holds the row of `<j>` (a block at the border
 // of the relation).
 TEST(OrderBy, limitPushedIntoIndexScanSpecialCases) {
+  // The relations described above, and `<p>` with seven ints, three rows per
+  // block.
   std::string turtle;
   for (int i = 1; i <= 7; ++i) {
     absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . ");
@@ -689,6 +698,7 @@ TEST(OrderBy, limitPushedIntoIndexScanSpecialCases) {
   config.rowsPerBlock = 3;
   auto* qec = ad_utility::testing::getQec(std::move(config));
 
+  // With every `LIMIT` and `OFFSET`, the result is a slice of the complete one.
   for (std::string_view predicate : {"p", "i", "k", "m", "n"}) {
     for (std::string_view direction : {"ASC", "DESC"}) {
       expectLimitedResultsAreSlices(
@@ -711,6 +721,8 @@ TEST(OrderBy, limitPushedIntoIndexScanSpecialCases) {
 // rows than its blocks hold (graph filter, merged duplicates). `<s1> <p> 1`,
 // `<s2> <p> 2`, and `<s7> <p> 7` are in both graphs.
 TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
+  // Twelve ints for `<p>` in `<g1>`, three of them also in `<g2>`, three rows
+  // per block.
   std::string nquads;
   auto addQuad = [&nquads](int i, std::string_view graph) {
     absl::StrAppend(&nquads, "<s", i, "> <p> \"", i,
@@ -728,6 +740,8 @@ TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
   config.rowsPerBlock = 3;
   auto* qec = ad_utility::testing::getQec(std::move(config));
 
+  // With every dataset, `LIMIT` and `OFFSET`, the result is a slice of the
+  // complete one.
   for (std::string_view dataset :
        {"", "FROM <g1>", "FROM <g2>", "FROM <g1> FROM <g2>"}) {
     for (std::string_view direction : {"ASC", "DESC"}) {
@@ -786,6 +800,8 @@ TEST(OrderBy, selectBlocksForLimit) {
 // of a block also covers the deleted triples located in it); for `<r>`, the
 // only triple with an `Int` object is deleted (the metadata is not narrowed).
 TEST(OrderBy, limitPushedIntoIndexScanAfterDeletions) {
+  // Twelve doubles for `<p>` and `<r>`, and one int for `<r>`, three rows per
+  // block.
   std::string turtle;
   for (int i = 1; i <= 12; ++i) {
     absl::StrAppend(&turtle, "<s", i, "> <p> ", i, ".5 . <s", i, "> <r> ", i,
@@ -796,11 +812,13 @@ TEST(OrderBy, limitPushedIntoIndexScanAfterDeletions) {
   config.rowsPerBlock = 3;
   auto index = std::make_shared<Index>(
       ad_utility::testing::makeTestIndex(std::move(config)));
+
+  // Delete two nonexistent triples with an int object from `<p>` and the only
+  // int triple of `<r>` (`deleteTriples` requires the triples to be sorted).
   auto getId = ad_utility::testing::makeGetId(*index);
   auto g = getId(std::string(DEFAULT_GRAPH_IRI));
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  // `deleteTriples` requires the triples to be sorted.
   DeltaTriples::Triples triplesToDelete{
       IdTriple<0>{
           {getId("<s1>"), getId("<p>"), ad_utility::testing::IntId(1), g}},
@@ -812,6 +830,8 @@ TEST(OrderBy, limitPushedIntoIndexScanAfterDeletions) {
   index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
     deltaTriples.deleteTriples(cancellationHandle, std::move(triplesToDelete));
   });
+
+  // A `QueryExecutionContext` on the index with the deletions.
   QueryResultCache cache;
   NamedResultCache namedCache;
   QueryExecutionContext qec{index,
@@ -822,6 +842,7 @@ TEST(OrderBy, limitPushedIntoIndexScanAfterDeletions) {
                             std::make_shared<MaterializedViewsManager>(),
                             ad_utility::testing::singleThreadExecutor()};
 
+  // With every `LIMIT` and `OFFSET`, the result is a slice of the complete one.
   for (std::string_view predicate : {"p", "r"}) {
     for (std::string_view direction : {"ASC", "DESC"}) {
       expectLimitedResultsAreSlices(
