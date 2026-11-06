@@ -33,7 +33,8 @@ WKTParser::~WKTParser() {
   ad_utility::terminateIfThrows(
       [this]() {
         _cancelled = true;
-        // An empty batch is the end event of the job queue (see `done()`).
+        // An empty batch is the end event of the job queue (see `done()`). The
+        // queue never removes it, so one end event stops all threads.
         _jobs.add({});
         for (auto& thread : _thrds) {
           if (thread.joinable()) {
