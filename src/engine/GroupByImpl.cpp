@@ -326,15 +326,17 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
           _aliases,
           &sparqlExpression::SparqlExpressionPimpl::readsAllVisibleColumns,
           &Alias::_expression)) {
-    std::set<Variable> usedVariables{_groupByVariables.begin(),
+    using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+    std::set<Variable> groupByVariables{_groupByVariables.begin(),
                                      _groupByVariables.end()};
+    columnStrippingHelpers::VarsRequiredFromSubtree usedVariables(
+      &groupByVariables);
     for (const auto& alias : _aliases) {
-      for (const auto* var : alias._expression.containedVariables()) {
-        usedVariables.insert(*var);
-      }
+        auto result = usedVariables.addVarsFromExpression(alias._expression);
+        AD_CORRECTNESS_CHECK(result == AddVarsResult::Success);
     }
-    subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-        std::move(subtree), usedVariables);
+    subtree = usedVariables.stripSubtree(std::move(subtree));
   }
 
   // Sort `groupByVariables` to ensure that the cache key is order invariant.
