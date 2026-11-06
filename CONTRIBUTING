@@ -1,0 +1,28 @@
+QLever is an open-source project. The copyright is jointly held by the authors
+of the codebase (each for their own contributions). This is true regardless of
+whether this is acknowledged in the individual files of the codebase or not.
+
+QLever is licensed under the Apache License, Version 2.0. The license can be
+found in the `LICENSE` file in the root directory of the repository or under
+https://www.apache.org/licenses/LICENSE-2.0. The usage rights are determined by
+this license. Everyone who contributes to the codebase implicitly agrees to the
+terms of this license. QLever or any part of its codebase may not be used
+except in compliance with this license.
+
+For the sake of clarity and acknowledgment, the top of each file lists the main
+authors of that file, using the format from the following example. An author or
+organization should be listed only if the contribution was significant, not for
+minor changes. The email can be omitted if there are good reasons to do so. We
+also add a reference to the Apache license, but we keep it very brief.
+
+// Copyright 2020 - 2025 The QLever Authors, in particular:
+// 
+// 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2025        Brandon Harris, BMW
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// BMW = Bayerische Motorenwerke Aktiengesellschaft
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
