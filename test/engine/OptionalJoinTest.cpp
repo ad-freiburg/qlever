@@ -15,6 +15,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
@@ -28,6 +29,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 #include "index/TripleComponentConversions.h"
+#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -412,9 +414,9 @@ TEST(OptionalJoin, gallopingJoin) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
@@ -474,9 +476,9 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
@@ -1191,8 +1193,8 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   std::vector<Result::IdTableVocabPair> tAndV;
 
   auto i = [&qec2](int i) {
-    return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">")),
-                           qec2->getLocalVocabContext()};
+    return localVocabEntry(iri(absl::StrCat("<local-payload-", i, ">")),
+                           qec2->getLocalVocabContext());
   };
   LocalVocab v;
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));
@@ -1480,4 +1482,38 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
       EXPECT_NE(id, Id::makeUndefined());
     }
   }
+}
+
+// Test that `IndexNestedLoopJoin` requires a cancellation handle.
+TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
+  auto makeResult = []() {
+    return std::make_shared<const Result>(makeIdTableFromVector({{1}}),
+                                          std::vector<ColumnIndex>{0},
+                                          LocalVocab{});
+  };
+  auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
+    joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
+        JoinColumns{{0, 0}}, makeResult(), makeResult(), std::move(handle));
+  };
+  EXPECT_NO_THROW(
+      makeJoin(std::make_shared<ad_utility::CancellationHandle<>>()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeJoin(nullptr),
+      ::testing::HasSubstr("cancellationHandle_ != nullptr"));
+}
+
+// Test that the probe loop of the index nested loop join checks the
+// cancellation handle: with a cancelled handle, `computeLeftExistance` throws
+// instead of finishing the loop.
+TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
+  auto makeResult = []() {
+    return std::make_shared<const Result>(makeIdTableFromVector({{1}, {2}}),
+                                          std::vector<ColumnIndex>{0},
+                                          LocalVocab{});
+  };
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
+      JoinColumns{{0, 0}}, makeResult(), makeResult(), handle);
+  EXPECT_THROW(join.computeLeftExistance(), ad_utility::CancellationException);
 }

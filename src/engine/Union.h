@@ -122,6 +122,27 @@ class Union : public Operation {
   // to `targetOrder_`. Only meaningful if `targetOrder_` is not empty.
   std::vector<ColumnIndex> sortOrderForSubtree(size_t subtreeIndex) const;
 
+  // Return true iff the result column `column` is missing in one of the
+  // children and can never be UNDEF in the other child. Such a column decides
+  // the comparison of a row of the left child with a row of the right child,
+  // because it is UNDEF for all rows of the one child and UNDEF is smaller
+  // than every other `Id`.
+  bool isDecidingColumn(ColumnIndex column) const;
+
+  // Return true iff the concatenation of the (sorted) children is already
+  // sorted according to `targetOrder_`, so that the merge is not needed. This
+  // is the case if `targetOrder_` is empty, or if the first sort column is
+  // missing in the left child and a deciding column (see `isDecidingColumn`).
+  bool isSortedByConcatenation() const;
+
+  // Return the prefix of `targetOrder_` that the merge of the two children has
+  // to compare, namely up to and including the first deciding column (see
+  // `isDecidingColumn`). The columns after it never matter.
+  ql::span<const ColumnIndex> comparatorOrder() const;
+
+  FRIEND_TEST(Union, isDecidingColumnAndComparatorOrder);
+  FRIEND_TEST(Union, isSortedByConcatenation);
+
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   std::unique_ptr<Operation> cloneImpl() const override;
