@@ -84,7 +84,7 @@ TEST(IndexVocabularyMergerImpl, vocabularyMergeOptions) {
   const size_t parallelism = ad_utility::globalExecutorNumThreads();
   const size_t inputPerChunk = VOCAB_MERGER_INPUT_PER_CHUNK.getBytes();
 
-  // The output blocks are the batches of the pipeline behind the merge.
+  // The output blocks are cut into segments behind the merge.
   auto options = vocabularyMergeOptions(3, 0, MemorySize::gigabytes(4));
   EXPECT_EQ(options.outputBlockSize.maxNumElements(),
             VOCAB_MERGER_WORD_BATCH_SIZE);
@@ -107,12 +107,30 @@ TEST(IndexVocabularyMergerImpl, vocabularyMergeOptions) {
   options = vocabularyMergeOptions(3, 0, MemorySize::terabytes(100));
   EXPECT_EQ(options.maxNumChunksInFlight,
             VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD * parallelism);
-  // In between, the memory decides: one chunk takes twice its input plus one
-  // block per partial vocabulary.
+  // In between, the memory decides: one chunk takes three times its input
+  // plus one block per partial vocabulary.
   const size_t memoryPerChunk =
-      2 * (3 * PARTIAL_VOCAB_BLOCK_SIZE.getBytes() + inputPerChunk);
+      3 * (3 * PARTIAL_VOCAB_BLOCK_SIZE.getBytes() + inputPerChunk);
   options = vocabularyMergeOptions(3, 0, MemorySize::bytes(3 * memoryPerChunk));
   EXPECT_EQ(options.maxNumChunksInFlight,
             std::min<size_t>(
                 3, VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD * parallelism));
+}
+
+// Test that the memory of the vocabulary merge is split between the chunks of
+// the merge and the data behind it, without losing or adding any byte.
+TEST(IndexVocabularyMergerImpl, splitMemoryOfVocabularyMerge) {
+  using ad_utility::MemorySize;
+  using ad_utility::vocabulary_merger::splitMemoryOfVocabularyMerge;
+  for (auto memory : {MemorySize::bytes(0), MemorySize::bytes(1),
+                      MemorySize::bytes(1001), MemorySize::gigabytes(5)}) {
+    auto [forChunks, forSegments] = splitMemoryOfVocabularyMerge(memory);
+    EXPECT_EQ(forChunks + forSegments, memory);
+    EXPECT_LE(forChunks, memory);
+  }
+  auto [forChunks, forSegments] =
+      splitMemoryOfVocabularyMerge(MemorySize::gigabytes(4));
+  EXPECT_EQ(forChunks,
+            MemorySize::gigabytes(4) * VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS);
+  EXPECT_GT(forSegments, MemorySize::bytes(0));
 }
