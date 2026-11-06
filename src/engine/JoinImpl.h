@@ -200,7 +200,7 @@ class JoinImpl : public Operation {
   // for the child, bounded by the number of rows that the join reads of it if
   // it is an index scan that the join reads only partially.
   std::vector<size_t> getNumRowsReadOfChildrenOr(
-      absl::FunctionRef<size_t(QueryExecutionTree&)> fallback);
+      absl::FunctionRef<size_t(QueryExecutionTree&)> fallback) const;
 
   // Commonly used code for the various known-to-be-empty cases.
   Result createEmptyResult() const;

@@ -267,7 +267,7 @@ std::optional<size_t> getNumRowsReadOfPartialScanIfPresent(
 
 // _____________________________________________________________________________
 std::vector<size_t> JoinImpl::getNumRowsReadOfChildrenOr(
-    absl::FunctionRef<size_t(QueryExecutionTree&)> fallback) {
+    absl::FunctionRef<size_t(QueryExecutionTree&)> fallback) const {
   // The bound never raises the `fallback` (which is zero for a cached scan
   // with `zero-cost-estimate-for-cached-subtree`).
   auto numRowsRead = [fallback](QueryExecutionTree& child,
