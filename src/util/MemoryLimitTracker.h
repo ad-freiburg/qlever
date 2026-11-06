@@ -363,8 +363,9 @@ class MemoryLimitTracker {
   }
 
  private:
-  explicit MemoryLimitTracker(MaybeOwningPtr<SharedMemoryLimit> sharedLimit)
-      : sharedLimit_{std::move(sharedLimit)} {}
+  explicit MemoryLimitTracker(
+      const MaybeOwningPtr<SharedMemoryLimit>& sharedLimit)
+      : sharedLimit_{sharedLimit} {}
 };
 
 }  // namespace QL_LIFETIME_CHECKS_NAMESPACE
