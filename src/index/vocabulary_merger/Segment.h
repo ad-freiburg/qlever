@@ -286,7 +286,8 @@ class SegmentBuilder {
         // that the words within a block are distinct (see
         // `MergedBlock::addWord`, which the logic above relies on).
         if (pendingWord_.has_value()) {
-          checkVocabularyOrder(comparator, pendingWord_->iriOrLiteral(),
+          checkVocabularyOrder(comparator, pendingWord_->geoSortKey_,
+                               pendingWord_->iriOrLiteral(), word.geoSortKey_,
                                word.iriOrLiteral());
         }
         commitPendingWord();
