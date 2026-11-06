@@ -202,6 +202,22 @@ class TripleComponent {
   const Id& getId() const { return std::get<Id>(_variant); }
   Id& getId() { return std::get<Id>(_variant); }
 
+  // Return the value if this is a number (an `int64_t` or `double`, or an `Int`
+  // or `Double` `Id`), and `std::nullopt` otherwise (e.g. for the string
+  // "500").
+  std::optional<double> getNumber() const {
+    if (isInt()) {
+      return static_cast<double>(getInt());
+    } else if (isDouble()) {
+      return getDouble();
+    } else if (isId() && getId().getDatatype() == Datatype::Int) {
+      return static_cast<double>(getId().getInt());
+    } else if (isId() && getId().getDatatype() == Datatype::Double) {
+      return getId().getDouble();
+    }
+    return std::nullopt;
+  }
+
   // Access the underlying variant (mostly used for testing)
   const auto& getVariant() const { return _variant; }
 
