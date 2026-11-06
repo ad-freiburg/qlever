@@ -165,8 +165,10 @@ class SharedMemoryLimit {
   // The amount of memory that a thread reserves from the shared counter at
   // once.
   static constexpr MemorySize cacheRefillSize = MemorySize::kilobytes(32);
-  // The maximal amount of memory that a thread keeps in its cache.
-  static constexpr MemorySize maxCachedBytes = 2 * cacheRefillSize;
+  // The maximal amount of memory that a thread keeps in its cache, twice the
+  // refill size (`operator*` of `MemorySize` is not `constexpr` in C++17).
+  static constexpr MemorySize maxCachedBytes =
+      MemorySize::bytes(2 * cacheRefillSize.getBytes());
 
  private:
   std::shared_ptr<AllocationMemoryLeft> memoryLeft_;
