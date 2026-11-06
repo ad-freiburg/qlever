@@ -42,7 +42,7 @@ class OrderedResultMailbox : public NoCopyNoMove {
   std::vector<std::optional<T>> results_;
   std::vector<bool> isDone_;
   std::exception_ptr exception_;
-  std::atomic<bool> stopRequested_{false};
+  std::atomic<bool> wasStopRequested_{false};
 
  public:
   // Create a mailbox without any slots, see `setNumSlots`.
@@ -83,7 +83,7 @@ class OrderedResultMailbox : public NoCopyNoMove {
     std::unique_lock lock{mutex_};
     auto isDoneOrStopped = [this, index]() {
       return isDone_.at(index) || exception_ != nullptr ||
-             stopRequested_.load();
+             wasStopRequested_.load();
     };
     while (!isDoneOrStopped()) {
       conditionVariable_.wait_for(lock, tickInterval);
@@ -94,7 +94,7 @@ class OrderedResultMailbox : public NoCopyNoMove {
     if (exception_ != nullptr) {
       std::rethrow_exception(exception_);
     }
-    AD_CORRECTNESS_CHECK(isDone_.at(index) && !stopRequested_.load(),
+    AD_CORRECTNESS_CHECK(isDone_.at(index) && !wasStopRequested_.load(),
                          "The tasks were stopped before slot ", index,
                          " was done");
     auto result = std::move(results_.at(index));
@@ -125,13 +125,13 @@ class OrderedResultMailbox : public NoCopyNoMove {
       // NOTE: The lock makes sure that a consumer that has just checked the
       // predicate in `take` doesn't miss the notification below.
       std::lock_guard lock{mutex_};
-      stopRequested_.store(true);
+      wasStopRequested_.store(true);
     }
     conditionVariable_.notify_all();
   }
 
   // Return `true` iff a stop has been requested (or an exception stored).
-  bool stopRequested() const noexcept { return stopRequested_.load(); }
+  bool stopRequested() const noexcept { return wasStopRequested_.load(); }
 
   // Rethrow the stored exception, if there is one.
   void rethrowIfException() const {

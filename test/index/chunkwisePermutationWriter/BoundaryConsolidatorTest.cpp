@@ -64,7 +64,7 @@ void consolidateAndCheck(const TestRows& rows,
       ChunkWriter writer{writers.context_, chunkIndex, numChunks};
       result = processRows(writer, subRows(rows, begin, end), inputBlockSize);
     }
-    consolidator.addChunkResult(std::move(result));
+    consolidator.addChunkResult(chunkIndex, std::move(result));
   }
   EXPECT_EQ(consolidator.numRows(), rows.size());
   auto result = consolidator.finish();
@@ -160,6 +160,33 @@ TEST(BoundaryConsolidator, emptyChunks) {
 TEST(BoundaryConsolidator, boundaryBetweenRelations) {
   auto rows = concat({relation(1, 10), relation(2, 40), relation(3, 10)});
   consolidateAndCheck(rows, {10, 50});
+}
+
+// Test that the chunks have to be added in order, and that equal rows at the
+// boundary of two consecutive chunks are detected.
+TEST(BoundaryConsolidator, invariantsAreChecked) {
+  // Rows 7 and 8 are equal (the merge would never split them across chunks).
+  auto rows = concat({relation(1, 5), relation(2, 10)});
+  rows.insert(rows.begin() + 8, rows.at(7));
+  TwinWriters writers{gtestCurrentTestName()};
+  auto ignoreMetadata =
+      []([[maybe_unused]] ql::span<const CompressedRelationMetadata> md) {};
+  BoundaryConsolidator consolidator{writers.context_, ignoreMetadata,
+                                    ignoreMetadata,
+                                    ad_utility::testing::multiThreadExecutor(),
+                                    ad_utility::MemorySize::megabytes(10)};
+  auto writeChunk = [&writers, &rows](size_t chunkIndex, size_t begin,
+                                      size_t end) {
+    ChunkWriter writer{writers.context_, chunkIndex, 2};
+    return processRows(writer, subRows(rows, begin, end), 7);
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      consolidator.addChunkResult(1, writeChunk(1, 8, rows.size())),
+      ::testing::HasSubstr("in order"));
+  consolidator.addChunkResult(0, writeChunk(0, 0, 8));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      consolidator.addChunkResult(1, writeChunk(1, 8, rows.size())),
+      ::testing::HasSubstr("equal rows"));
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

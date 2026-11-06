@@ -144,26 +144,27 @@ WriteResult writeRows(const TestRows& rows, const std::string& basename,
   // A synchronous callback.
   callbacks.push_back([&numRowsSeen](SharedBlock block, DoneCallback done) {
     numRowsSeen.fetch_add(block->numRows());
-    done(nullptr);
+    std::move(done)(nullptr);
   });
   // An asynchronous callback (its `done` is invoked from another task), which
   // optionally fails for one block.
-  callbacks.push_back([&numBlocksSeen, &config](SharedBlock block,
-                                                DoneCallback done) {
-    size_t blockIndex = numBlocksSeen.fetch_add(1);
-    bool fail = config.failingCallbackBlock_ == blockIndex;
-    if (fail && config.failingCallbackThrows_) {
-      throw std::runtime_error{"callback failed by throwing"};
-    }
-    boost::asio::post(ad_utility::testing::multiThreadExecutor(),
-                      [block, done = std::move(done), fail]() {
-                        // Touch the block to make sure that it is alive.
-                        AD_CORRECTNESS_CHECK(!block->empty());
-                        done(fail ? std::make_exception_ptr(
-                                        std::runtime_error{"callback failed"})
-                                  : nullptr);
-                      });
-  });
+  callbacks.push_back(
+      [&numBlocksSeen, &config](SharedBlock block, DoneCallback done) {
+        size_t blockIndex = numBlocksSeen.fetch_add(1);
+        bool fail = config.failingCallbackBlock_ == blockIndex;
+        if (fail && config.failingCallbackThrows_) {
+          throw std::runtime_error{"callback failed by throwing"};
+        }
+        boost::asio::post(
+            ad_utility::testing::multiThreadExecutor(),
+            [block, done = std::move(done), fail]() mutable {
+              // Touch the block to make sure that it is alive.
+              AD_CORRECTNESS_CHECK(!block->empty());
+              std::move(done)(fail ? std::make_exception_ptr(
+                                         std::runtime_error{"callback failed"})
+                                   : nullptr);
+            });
+      });
   result.result_ = createPermutationPair(
       basename, makeWriter(basename + ".perm1", result.metadata1_),
       makeWriter(basename + ".perm2", result.metadata2_), sorter,

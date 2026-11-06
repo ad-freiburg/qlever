@@ -155,7 +155,7 @@ void ChunkwisePermutationWriter::consolidate() {
                            [this]() { statistics_.reportProgress(); });
     statistics_.consolidationWaitTimer_.stop();
     statistics_.consolidationWorkTimer_.cont();
-    consolidator_.addChunkResult(std::move(chunk));
+    consolidator_.addChunkResult(chunkIndex, std::move(chunk));
     statistics_.consolidationWorkTimer_.stop();
   }
 }

@@ -10,8 +10,9 @@
 #ifndef QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_OPTIONS_H
 #define QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_OPTIONS_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <exception>
-#include <functional>
 #include <memory>
 
 #include "engine/idTable/IdTable.h"
@@ -33,13 +34,15 @@ using PermutationPairResult = CompressedRelationWriter::PermutationPairResult;
 // `ChunkwisePermutationWriter.h`. The callback may finish its work
 // asynchronously (for example by pushing the block to the next external sorter
 // via `asyncPushBlock`), which is why it is handed the `done` callback: it has
-// to be invoked exactly once, as soon as the callback is done with the `block`,
-// with the exception that occurred (or `nullptr`). The `block` is kept alive
-// for as long as the callback holds on to its `shared_ptr`. The number of
-// blocks for which the callbacks are in flight at the same time is bounded, see
-// `Options::numCallbackBlocksInFlight_`.
-using DoneCallback = std::function<void(std::exception_ptr)>;
-using ConcurrentBlockCallback = std::function<void(SharedBlock, DoneCallback)>;
+// to be invoked exactly once (which its rvalue qualification enforces, so it is
+// invoked as `std::move(done)(exception)`), as soon as the callback is done
+// with the `block`, with the exception that occurred (or `nullptr`). The
+// `block` is kept alive for as long as the callback holds on to its
+// `shared_ptr`. The number of blocks for which the callbacks are in flight at
+// the same time is bounded, see `Options::numCallbackBlocksInFlight_`.
+using DoneCallback = absl::AnyInvocable<void(std::exception_ptr) &&>;
+using ConcurrentBlockCallback =
+    absl::AnyInvocable<void(SharedBlock, DoneCallback)>;
 
 // The tuning knobs of the writer.
 struct Options {
@@ -52,7 +55,8 @@ struct Options {
   // a sink of the merge, not the consumer of a range), and because they run on
   // the global thread pool, from which the view must not be consumed. Removing
   // the duplicates per chunk is correct, because the merge never splits equal
-  // rows across chunks.
+  // rows across chunks. This property is asserted by
+  // `BoundaryConsolidator::addChunkResult`.
   bool removeDuplicates_ = false;
   // The memory limit of the twin sorter of a single chunk, which sorts the
   // twin rows of a large relation. The sorter only needs a file (and hence the
@@ -60,7 +64,7 @@ struct Options {
   // one sorter per running chunk holds rows in memory at a time, because the
   // sorters of finished boundary parts only keep their runs on disk (see
   // `ChunkWriterContext::twinSorterMemoryPerChunk_`), and the results of
-  // finished chunks are bounded, see `finishChunkImpl`.
+  // finished chunks are small, see `ChunkwisePermutationWriter::chunkResults_`.
   ad_utility::MemorySize twinSorterMemoryPerChunk_ =
       ad_utility::MemorySize::megabytes(256);
   // The memory limit of the parallel merge that sorts the twin rows of a

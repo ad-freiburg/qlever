@@ -83,7 +83,7 @@ class DispatcherFixture {
     ASSERT_FALSE(pendingDones_.empty());
     auto done = std::move(pendingDones_.front());
     pendingDones_.erase(pendingDones_.begin());
-    done(std::move(exception));
+    std::move(done)(std::move(exception));
     ioContext_.poll();
     ioContext_.restart();
   }
@@ -134,10 +134,10 @@ TEST(ConcurrentCallbackDispatcher, exceptionsAreReported) {
   boost::asio::io_context ioContext;
   std::vector<std::exception_ptr> reported;
   std::vector<ConcurrentBlockCallback> callbacks;
-  callbacks.push_back(
-      []([[maybe_unused]] SharedBlock block, DoneCallback done) {
-        done(std::make_exception_ptr(std::runtime_error{"via done"}));
-      });
+  callbacks.push_back([]([[maybe_unused]] SharedBlock block,
+                         DoneCallback done) {
+    std::move(done)(std::make_exception_ptr(std::runtime_error{"via done"}));
+  });
   callbacks.push_back([]([[maybe_unused]] SharedBlock block,
                          [[maybe_unused]] DoneCallback done) {
     throw std::runtime_error{"thrown"};

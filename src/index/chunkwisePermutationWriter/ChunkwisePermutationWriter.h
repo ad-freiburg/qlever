@@ -56,12 +56,13 @@
 //   private to the chunk (and that merges serially, in the thread of the
 //   chunk). The metadata of these relations is collected per chunk.
 // * The first and the last relation of a chunk may continue in the neighboring
-//   chunks, so the chunk returns them as a `BoundaryPart` (see below) instead
-//   of writing them: for a small part all the rows are kept in memory, for a
-//   large part the chunk writes the complete blocks in its middle directly and
-//   keeps only the rows before the first and after the last of those blocks in
-//   memory, together with its twin sorter. A relation may also span several
-//   complete chunks, each of which then consists of a single such part.
+//   chunks, so the chunk returns them as a `BoundaryPart` (see `ChunkWriter.h`)
+//   instead of writing them: for a small part all the rows are kept in memory,
+//   for a large part the chunk writes the complete blocks in its middle
+//   directly and keeps only the rows before the first and after the last of
+//   those blocks in memory, together with its twin sorter. A relation may also
+//   span several complete chunks, each of which then consists of a single such
+//   part.
 // * The consolidation on the driving thread concatenates the parts of a
 //   relation in chunk order: the rows that two adjacent parts keep in memory
 //   are written as blocks (such that triples which are equal when disregarding

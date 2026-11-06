@@ -10,10 +10,11 @@
 #ifndef QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_CONCURRENTCALLBACKDISPATCHER_H
 #define QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_CONCURRENTCALLBACKDISPATCHER_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -36,7 +37,13 @@ namespace net = boost::asio;
 // `cancel` has been called, no more callbacks are invoked.
 class ConcurrentCallbackDispatcher : public ad_utility::NoCopyNoMove {
  public:
-  using ReportException = std::function<void(std::exception_ptr)>;
+  // The function to which the exceptions of the callbacks are reported. It is
+  // called from the thread that invokes the `done` of a callback (or that
+  // invokes a throwing callback), so it is called concurrently and has to be
+  // thread-safe. It must not block either, because it runs on the threads of
+  // the callbacks (typically the threads of the pool). It is called without
+  // any lock of the dispatcher, so it may call `cancel`.
+  using ReportException = absl::AnyInvocable<void(std::exception_ptr)>;
 
  private:
   using Semaphore = ad_utility::AsyncResourcePool<void>;
@@ -46,7 +53,7 @@ class ConcurrentCallbackDispatcher : public ad_utility::NoCopyNoMove {
   ReportException reportException_;
   // Bounds the number of blocks for which the callbacks are in flight.
   Semaphore permits_;
-  std::atomic<bool> cancelled_{false};
+  std::atomic<bool> wasCancelled_{false};
 
   // The number of blocks for which the callbacks are currently in flight,
   // protected by `mutex_`.
@@ -57,7 +64,8 @@ class ConcurrentCallbackDispatcher : public ad_utility::NoCopyNoMove {
  public:
   // Create a dispatcher for the `callbacks`, which allows for at most
   // `maxNumBlocksInFlight` blocks (at least one) at the same time. The waits
-  // for a free slot are completed on the `executor`.
+  // for a free slot are completed on the `executor`. The `reportException`
+  // has to be thread-safe and non-blocking, see `ReportException`.
   ConcurrentCallbackDispatcher(net::any_io_executor executor,
                                std::vector<ConcurrentBlockCallback> callbacks,
                                size_t maxNumBlocksInFlight,

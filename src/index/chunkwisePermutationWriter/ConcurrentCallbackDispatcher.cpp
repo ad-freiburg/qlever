@@ -35,13 +35,14 @@ net::awaitable<bool> ConcurrentCallbackDispatcher::asyncDispatch(
     co_return true;
   }
   // NOTE: The `cancel` of the semaphore is not sticky (see
-  // `AsyncResourcePool::cancel`), hence the additional checks of `cancelled_`.
-  if (cancelled_.load()) {
+  // `AsyncResourcePool::cancel`), hence the additional checks of
+  // `wasCancelled_`.
+  if (wasCancelled_.load()) {
     co_return false;
   }
   auto [errorCode, permit] =
       co_await permits_.asyncAcquire(net::as_tuple(net::use_awaitable));
-  if (errorCode || cancelled_.load()) {
+  if (errorCode || wasCancelled_.load()) {
     co_return false;
   }
   invokeCallbacks(std::move(block), std::move(permit), std::move(keepAlive));
@@ -50,7 +51,7 @@ net::awaitable<bool> ConcurrentCallbackDispatcher::asyncDispatch(
 
 // _____________________________________________________________________________
 void ConcurrentCallbackDispatcher::cancel() {
-  cancelled_.store(true);
+  wasCancelled_.store(true);
   permits_.cancel();
 }
 
@@ -89,6 +90,9 @@ void ConcurrentCallbackDispatcher::invokeCallbacks(
     // after which the owner may destroy the dispatcher at any time.
     auto keepAlive = join->keepAlive_;
     auto* self = join->self_;
+    // NOTE: This runs on the thread of the callback, so the `reportException_`
+    // is called concurrently, which its contract allows (see
+    // `ReportException`).
     if (exception != nullptr) {
       self->reportException_(std::move(exception));
     }
@@ -101,12 +105,17 @@ void ConcurrentCallbackDispatcher::invokeCallbacks(
       self->conditionVariable_.notify_all();
     }
   };
-  for (const auto& callback : callbacks_) {
-    // NOTE: A callback that throws (instead of reporting its exception via
-    // `done`) is treated as if it had reported the exception. It must not
-    // throw after it has invoked `done`.
+  for (auto& callback : callbacks_) {
+    // Every callback gets a `DoneCallback` of its own, because a
+    // `DoneCallback` is consumed by its (single) invocation. A callback that
+    // throws (instead of reporting its exception via its `DoneCallback`) is
+    // treated as if it had reported the exception, so it must not throw after
+    // it has invoked its `DoneCallback`.
+    //
+    // NOTE: The callbacks are called concurrently for different blocks, which
+    // their contract allows (see `ConcurrentBlockCallback`).
     try {
-      callback(block, done);
+      callback(block, DoneCallback{done});
     } catch (...) {
       done(std::current_exception());
     }
