@@ -234,15 +234,17 @@ class DeltaTriples {
     return static_cast<int64_t>(triplesSetsInternal_.triplesDeleted_.size());
   }
 
-  // From the triples that are explicitly being added to the index, compute a
-  // bunch of triples to be inserted into the internal permutation to make
-  // things like efficient language filters and `ql:has-word` work. This
-  // currently performs a lookup from disk to check the language tag, but in the
-  // future this may be implemented more efficiently. If `insertion` is false,
-  // this indicates that the triples are meant for deletion. In that case no
-  // triples are returned that may be unsafe to delete. In particular this
-  // refers to triples of the form `<object> ql:langtag <@language>` and
-  // `<object> ql:has-word "word"`.
+  // Return the internal triples that the given `triples` give rise to (for the
+  // language filters and for `ql:has-word`; the index builder adds the same
+  // triples in `mapTripleToIds`, see `IndexBuilderTypes.h`).
+  //
+  // NOTE 1: If `insertion` is false, the triples are meant for deletion, and
+  // only the internal triples that are safe to delete are returned. The
+  // triples `<object> ql:langtag <@language>` and `<object> ql:has-word "word"`
+  // are never deleted, because the object might still occur in other triples.
+  //
+  // NOTE 2: This currently looks up each object on disk to check whether it is
+  // a literal, but in the future this may be implemented more efficiently.
   Triples makeInternalTriples(const Triples& triples, bool insertion);
 
   // Append to `internalTriples` one triple `<literal> ql:has-word "word"` for
