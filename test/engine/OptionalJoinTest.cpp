@@ -1510,9 +1510,11 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
 // Test that `IndexNestedLoopJoin` requires a cancellation handle.
 TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
   auto makeResult = []() {
-    return std::make_shared<const Result>(makeIdTableFromVector({{1}}),
-                                          std::vector<ColumnIndex>{0},
-                                          LocalVocab{});
+    return std::make_shared<const Result>(
+        makeIdTableFromVector({{1}}),
+        qlm::vector<ColumnIndex>(
+            {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
+        LocalVocab{});
   };
   auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
     joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
@@ -1530,9 +1532,11 @@ TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
 // instead of finishing the loop.
 TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
   auto makeResult = []() {
-    return std::make_shared<const Result>(makeIdTableFromVector({{1}, {2}}),
-                                          std::vector<ColumnIndex>{0},
-                                          LocalVocab{});
+    return std::make_shared<const Result>(
+        makeIdTableFromVector({{1}, {2}}),
+        qlm::vector<ColumnIndex>(
+            {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
+        LocalVocab{});
   };
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   handle->cancel(ad_utility::CancellationState::MANUAL);
