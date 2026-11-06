@@ -122,6 +122,12 @@ using GreaterEqualExpression =
 
 using InExpression = relational::InExpression;
 
+// Return the comparison of `expression` if it is one of the six relational
+// expressions above (e.g. `Comparison::LT` for `a < b`), and `std::nullopt`
+// otherwise.
+std::optional<valueIdComparators::Comparison> getComparison(
+    const SparqlExpression& expression);
+
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
