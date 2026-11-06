@@ -640,6 +640,8 @@ class IndexImpl {
 
   bool& addHasWordTriples();
 
+  bool addHasWordTriples() const;
+
   bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -979,6 +981,27 @@ class IndexImpl {
   //    together with their term frequencies
   // 3. If the IRI or literal can be encoded directly into an `Id`, do so
   ProcessedTriple processTriple(TurtleTriple&& triple) const;
+
+  // Return the distinct words of the `content` of a literal together with their
+  // term frequencies. These are the words of the `ql:has-word` triples of the
+  // literal, normalized according to `hasWordNormalization_`.
+  ad_utility::HashMap<std::string, size_t> computeHasWordFrequencies(
+      std::string_view content) const;
+
+  // Return true if the `ql:has-word` triples are added for the literals that
+  // are the object of a triple with the predicate returned by `getPredicate`
+  // (in the format of `Iri::toStringRepresentation`), see
+  // `hasWordRestrictPredicates_`.
+  //
+  // NOTE: `getPredicate` is only called if the `ql:has-word` triples are
+  // restricted to certain predicates, so that the predicate is decoded only
+  // when needed.
+  template <typename GetPredicate>
+  bool hasWordTriplesForPredicate(const GetPredicate& getPredicate) const {
+    return hasWordRestrictPredicates_.empty() ||
+           ql::ranges::binary_search(hasWordRestrictPredicates_,
+                                     getPredicate());
+  }
 
  protected:
   /**

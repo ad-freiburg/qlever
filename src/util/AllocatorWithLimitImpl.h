@@ -38,6 +38,8 @@
 // why it lives in this dedicated namespace rather than directly in
 // `ad_utility`.
 namespace ad_utility::allocatorImpl {
+// See `util/MaybeOwningPtr.h` for the purpose of this inline namespace.
+inline namespace QL_LIFETIME_CHECKS_NAMESPACE {
 
 /**
  * @brief Class to concurrently allocate memory up to a specified limit on the
@@ -60,6 +62,12 @@ namespace ad_utility::allocatorImpl {
  *
  * // now the total amount of memory allocated by limitedIntVec and
  * limitedStringVec may never exceed limitInBytes
+ *
+ * NOTE: Prefer copies of one allocator (`as<U>()` for other types) over several
+ * allocators created from the same `memoryLeft` as above. Each of the latter
+ * has its own per-thread caches (see `detail::SharedMemoryLimit`), and when one
+ * of them is destroyed with all its copies, the bytes that other threads still
+ * have cached for it are lost from the shared counter.
  *
  * NOTE: For `std::vector` in particular, prefer the wrapper
  * `ad_utility::VectorWithMemoryLimit` (see `VectorWithMemoryLimit.h`) over
@@ -101,6 +109,21 @@ class AllocatorWithLimit {
   AllocatorWithLimit<U> as() const {
     return AllocatorWithLimit<U>(*this);
   }
+
+  // Return an allocator with the same limit that doesn't keep the shared
+  // memory limit alive, so that copying it costs no atomic
+  // operation. This allocator (or another owning copy of it) has to outlive the
+  // result, all its copies, and all memory allocated by them. This is checked
+  // when the expensive checks are enabled (see `util/MaybeOwningPtr.h`). Use
+  // this for long-lived allocators that are copied very often, e.g. the
+  // allocator of the query engine.
+  AllocatorWithLimit nonOwningCopy() const {
+    return AllocatorWithLimit{tracker_.nonOwningCopy()};
+  }
+
+  // Return true iff this allocator keeps its memory limit alive, i.e. it is
+  // not a non-owning copy.
+  bool isOwning() const { return tracker_.isOwning(); }
 
   // This allocator has no default constructor, as it always requires a memory
   // limit. Note that some standard-library implementations (in particular
@@ -178,6 +201,10 @@ class AllocatorWithLimit {
     return !(*this == v);
   }
 
+  // Return an allocator with a new memory limit of `limit` (`makeLimited`), or
+  // with the maximal limit (`makeUnlimited`). The returned allocator owns the
+  // limit, and so do its copies, except for non-owning ones (see
+  // `nonOwningCopy()`).
   static AllocatorWithLimit makeUnlimited() {
     return makeLimited(MemorySize::max());
   }
@@ -187,8 +214,14 @@ class AllocatorWithLimit {
     return AllocatorWithLimit{makeSharedAllocationMemoryLeft(limit),
                               std::move(clearOnAllocation)};
   }
+
+ private:
+  // Constructor for `nonOwningCopy()`.
+  explicit AllocatorWithLimit(detail::MemoryLimitTracker tracker)
+      : tracker_{std::move(tracker)} {}
 };
 
+}  // namespace QL_LIFETIME_CHECKS_NAMESPACE
 }  // namespace ad_utility::allocatorImpl
 
 #endif  // QLEVER_SRC_UTIL_ALLOCATORWITHLIMITIMPL_H

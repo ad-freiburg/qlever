@@ -171,9 +171,9 @@ constexpr inline std::string_view CACHED_RESULT_WITH_NAME_PREFIX =
         string_constants::detail::cachedResultWithNamePrefix>();
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
-    "geof:", "http://www.opengis.net/def/function/geosparql/"};
+    "geof", "http://www.opengis.net/def/function/geosparql/"};
 constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
-    "math:", "http://www.w3.org/2005/xpath-functions/math#"};
+    "math", "http://www.w3.org/2005/xpath-functions/math#"};
 constexpr inline std::pair<std::string_view, std::string_view> XSD_PREFIX = {
     "xsd", "http://www.w3.org/2001/XMLSchema#"};
 constexpr inline std::pair<std::string_view, std::string_view> QL_PREFIX = {
