@@ -17,6 +17,7 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "engine/filterFacts/Canonicalizer.h"
 #include "engine/filterFacts/Recognizers.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 
 namespace {
 
@@ -63,6 +64,7 @@ auto constraint(Comparison op, double meters) {
 // Test that `distance < number` and `distance <= number` become a
 // `Constraint` with the number in meters, also in a nested `&&`.
 TEST(FilterFactsCanonicalizer, Distance) {
+  // Expect that `filter` is a single `Constraint` `distance op meters`.
   auto expect = [](std::string_view filter, Comparison op, double meters,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
@@ -76,13 +78,40 @@ TEST(FilterFactsCanonicalizer, Distance) {
   expect("geof:metricDistance(?ga, ?gb) < 500", Comparison::LT, 500);
   expect("geof:distance(?ga, ?gb, unit:MI) < 1", Comparison::LT, 1609.344);
 
-  // Each conjunct of `&&` is canonicalized on its own.
+  // A number in meters is exactly the number of the FILTER (whereas
+  // `1001 / 1000 * 1000` and `63.7 / 1000 * 1000` are not), and a number in
+  // kilometers is exactly 1000 times it.
+  for (auto [filter, factor] : std::vector<std::pair<std::string_view, double>>{
+           {"geof:metricDistance(?ga, ?gb) <= 1001", 1},
+           {"geof:distance(?ga, ?gb, unit:M) < 63.7", 1},
+           {"geof:distance(?ga, ?gb) <= 1.1", 1000}}) {
+    auto result = canonical(filter);
+    const auto& comparison =
+        *result.query_._rootGraphPattern._filters[0].expression_.getPimpl();
+    auto number = dynamic_cast<const sparqlExpression::IdExpression&>(
+                      *comparison.children()[1])
+                      .value();
+    double expected = number.getDatatype() == Datatype::Int
+                          ? static_cast<double>(number.getInt())
+                          : number.getDouble();
+    ASSERT_EQ(result.conjuncts_.size(), 1u);
+    EXPECT_EQ(std::get<Constraint>(result.conjuncts_[0]).rhs_,
+              expected * factor)
+        << filter;
+  }
+
+  // Each conjunct of `&&` is canonicalized on its own, and the `Opaque` one
+  // points to its subexpression.
   auto result = canonical(
       "geof:metricDistance(?ga, ?gb) <= 500 && "
       "(?a != ?b && geof:metricDistance(?ga, ?gb) < 400)");
-  EXPECT_THAT(result.conjuncts_, ElementsAre(constraint(Comparison::LE, 500),
-                                             VariantWith<Opaque>(::testing::_),
-                                             constraint(Comparison::LT, 400)));
+  const auto& root =
+      *result.query_._rootGraphPattern._filters[0].expression_.getPimpl();
+  const auto* notEqual = root.children()[1]->children()[0].get();
+  EXPECT_THAT(result.conjuncts_,
+              ElementsAre(constraint(Comparison::LE, 500),
+                          VariantWith<Opaque>(Opaque{notEqual}),
+                          constraint(Comparison::LT, 400)));
 }
 
 // Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
@@ -117,7 +146,8 @@ TEST(FilterFactsCanonicalizer, Opaque) {
         "geof:metricDistance(?ga, ?gb) <= \"500\"",
         "geof:metricDistance(?ga, ?gb) <= ?a",
         "geof:metricDistance(?ga, ?gb) + 1 <= 500", "?a <= 500", "BOUND(?a)",
-        "geof:metricDistance(?ga, ?gb) <= 500 || ?a = 1"}) {
+        "geof:metricDistance(?ga, ?gb) <= 500 || ?a = 1",
+        "geof:distance(?ga, ?gb, unit:M2) <= 500"}) {
     auto result = canonical(filter);
     EXPECT_THAT(result.conjuncts_,
                 ElementsAre(VariantWith<Opaque>(
@@ -127,14 +157,16 @@ TEST(FilterFactsCanonicalizer, Opaque) {
   }
 }
 
-// Test that `distance <= c` and `distance < c` for a number `c >= 0` between
-// two different geometries (at least one of them a variable) are recognized
-// as `DistanceBound`.
+// Test that `distance <= c` and `distance < c` for a finite number `c >= 0`
+// between two different geometries (at least one of them a variable) are
+// recognized as `DistanceBound`.
 TEST(FilterFactsRecognizers, DistanceBound) {
+  // Recognize the `DistanceBound` of the single conjunct of `filter` (while
+  // the parsed query is alive), and a constant point.
   auto recognize = [](std::string_view filter) {
-    auto conjuncts = canonical(filter).conjuncts_;
-    AD_CORRECTNESS_CHECK(conjuncts.size() == 1);
-    return recognizeDistanceBound(conjuncts[0]);
+    auto result = canonical(filter);
+    AD_CORRECTNESS_CHECK(result.conjuncts_.size() == 1);
+    return recognizeDistanceBound(result.conjuncts_[0]);
   };
   auto point = std::string{
       "\"POINT(7.8 48.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
@@ -148,6 +180,11 @@ TEST(FilterFactsRecognizers, DistanceBound) {
       ::testing::Optional(DistanceBound{
           V{"?ga"}, V{"?gb"},
           std::nextafter(500.0, -std::numeric_limits<double>::infinity())}));
+  EXPECT_THAT(
+      recognize("geof:metricDistance(?ga, ?gb) < 1001"),
+      ::testing::Optional(::testing::Field(
+          &DistanceBound::maxMeters_,
+          std::nextafter(1001.0, -std::numeric_limits<double>::infinity()))));
 
   // A constant geometry on one side.
   EXPECT_THAT(
@@ -155,11 +192,14 @@ TEST(FilterFactsRecognizers, DistanceBound) {
       ::testing::Optional(
           ::testing::Field(&DistanceBound::a_, TripleComponent{V{"?ga"}})));
 
-  // A negative maximum distance, the same variable or two constants, or no
-  // `Constraint` at all.
+  // A negative, infinite or NaN maximum distance, the same variable or two
+  // constants, or no `Constraint` at all.
+  auto xsdDouble = std::string{"^^<http://www.w3.org/2001/XMLSchema#double>"};
   for (std::string filter :
        {std::string{"geof:metricDistance(?ga, ?gb) <= -1"},
         std::string{"geof:metricDistance(?ga, ?gb) < 0"},
+        absl::StrCat("geof:metricDistance(?ga, ?gb) <= \"INF\"", xsdDouble),
+        absl::StrCat("geof:metricDistance(?ga, ?gb) <= \"NaN\"", xsdDouble),
         std::string{"geof:metricDistance(?ga, ?ga) <= 500"},
         absl::StrCat("geof:metricDistance(", point, ", ", point, ") <= 500"),
         std::string{"BOUND(?a)"}}) {

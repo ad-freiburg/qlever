@@ -30,14 +30,14 @@ std::optional<DistanceBound> recognizeDistanceBound(const Conjunct& conjunct) {
     return std::nullopt;
   }
 
-  // The maximum distance must not be negative (for `<`, it is the largest
-  // `double` below the number).
+  // Compute the maximum distance (for `<`, the largest `double` below the
+  // number), and return `std::nullopt` if it is negative, infinite or NaN.
   double maxMeters = constraint->rhs_;
   if (constraint->op_ == Comparison::LT) {
     maxMeters =
         std::nextafter(maxMeters, -std::numeric_limits<double>::infinity());
   }
-  if (!(maxMeters >= 0)) {
+  if (!std::isfinite(maxMeters) || maxMeters < 0) {
     return std::nullopt;
   }
   return DistanceBound{distance.a_, distance.b_, maxMeters};
