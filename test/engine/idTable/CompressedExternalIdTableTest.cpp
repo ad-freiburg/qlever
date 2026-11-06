@@ -648,7 +648,8 @@ TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
 
   // The `BlockSorter` keeps at least the key rows of a block after a sort.
   {
-    ad_utility::BlockSorter<SortByOSP> blockSorter;
+    ad_utility::BlockSorter<SortByOSP> blockSorter{
+        {}, std::make_shared<ad_utility::CancellationHandle<>>()};
     IdTableStatic<NUM_COLS> copy = block.clone().toStatic<NUM_COLS>();
     blockSorter(copy);
     EXPECT_GE(
@@ -2183,7 +2184,9 @@ TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
   auto makeSorter = [&filename](size_t numRows) {
     return OspSorter<>{
         filename, NUM_COLS,
-        memoryForBlocksize(numRows == 5'000 ? 100 : 10'000, NUM_COLS),
+        memoryForBlocksize(
+            numRows == 5'000 ? 100 : 10'000, NUM_COLS,
+            ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS)),
         ad_utility::testing::makeAllocator(), 5_kB};
   };
   for (size_t numRows : {5'000u, 100u, 0u}) {
