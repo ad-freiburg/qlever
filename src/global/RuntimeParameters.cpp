@@ -54,6 +54,7 @@ RuntimeParameters::RuntimeParameters() {
   add(geoPrefilterPlanningMaxRows_);
   add(geoPrefilterPlanningMaxCost_);
   add(spatialJoinMaxNumThreads_);
+  add(spatialJoinFixedGeometryAlgorithm_);
   add(patternTrickNumTasksInFlight_);
   add(sortNumTasksInFlight_);
   add(spatialJoinPrefilterMaxSize_);

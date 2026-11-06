@@ -193,6 +193,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.throwOnInvalidWkt_);
   check(params.enablePrefilterOnIndexScans_);
   check(params.spatialJoinMaxNumThreads_);
+  check(params.spatialJoinFixedGeometryAlgorithm_);
   check(params.patternTrickNumTasksInFlight_);
   check(params.sortNumTasksInFlight_);
   check(params.spatialJoinPrefilterMaxSize_);

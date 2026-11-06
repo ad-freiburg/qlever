@@ -180,6 +180,13 @@ struct RuntimeParameters {
                                      "geo-prefilter-planning-max-cost"};
   // The maximum number of threads to be used by the spatial join algorithms.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
+  // If `true`, a spatial join with the `libspatialjoin` algorithm whose one
+  // side is a single point or polygon and whose other side consists of
+  // points checks the points directly, without `libspatialjoin` (see
+  // `FixedGeometryAlgorithm`). The results are the same; `false` is useful
+  // for comparing the two.
+  Bool spatialJoinFixedGeometryAlgorithm_{
+      true, "spatial-join-fixed-geometry-algorithm"};
   // The maximum number of tasks of the parallel counting loops of the pattern
   // trick (see `CountAvailablePredicates`) that run at the same time. They run
   // on the query's executor, so `max-num-threads-per-query` still bounds the

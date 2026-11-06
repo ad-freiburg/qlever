@@ -40,6 +40,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
+#include "engine/spatialJoinAlgorithms/FixedGeometryAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/S2GeometryAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
@@ -763,6 +764,14 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return S2GeometryAlgorithm{_executionContext, params, config_, this}.run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    // If one side is a single point or polygon and the other side consists
+    // of points, check the points directly instead of running the sweep of
+    // `libspatialjoin` (which costs more than the checks for small inputs).
+    if (auto result =
+            FixedGeometryAlgorithm{_executionContext, params, config_, this}
+                .runIfApplicable()) {
+      return std::move(result.value());
+    }
     auto [bbLeft, bbRight] = prepareLibspatialjoinBoundingBoxCols();
     return LibspatialjoinAlgorithm{_executionContext, params,
                                    config_,           this,
