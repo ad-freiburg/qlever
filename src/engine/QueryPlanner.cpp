@@ -1877,6 +1877,60 @@ QueryPlanner::wrapFiltersWithoutSubstitutes(
 }
 
 // _____________________________________________________________________________
+void QueryPlanner::prefilterSeeds(
+    SubtreePlanVec& seeds, size_t numTripleNodes,
+    const FiltersAndOptionalSubstitutes& filters) const {
+  if (_qec == nullptr || filters.empty() ||
+      !getRuntimeParameter<
+          &RuntimeParameters::enablePrefilterOnIndexScans_>()) {
+    return;
+  }
+
+  // The prefilters of all filters, computed once. Non-deterministic filters
+  // (e.g. `RAND() < 0.5`) are only applied at the end of the group, see
+  // `applyFiltersIfPossible`, and get no prefilter here either. Filters with
+  // a substitute (a special join) are handled by the substitute's own logic.
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+  std::vector<std::vector<PrefilterVariablePair>> prefilters;
+  for (const auto& filterAndSubst : filters) {
+    const auto& expression = filterAndSubst.filter_.expression_;
+    if (expression.isDeterministic() && !filterAndSubst.hasSubstitute()) {
+      prefilters.push_back(expression.getPrefilterExpressionForMetadata(
+          _qec->getLocalVocabContext()));
+    } else {
+      prefilters.emplace_back();
+    }
+  }
+  if (ql::ranges::all_of(prefilters,
+                         [](const auto& pairs) { return pairs.empty(); })) {
+    return;
+  }
+
+  // Prefilter each seed scan of the group's own triples. These have a single
+  // node id below `numTripleNodes`; the plans of nested groups have higher ids.
+  for (auto& seed : seeds) {
+    if (seed._idsOfIncludedNodes >= (uint64_t{1} << numTripleNodes) ||
+        seed._idsOfIncludedFilters != 0 ||
+        dynamic_cast<const IndexScan*>(seed._qet->getRootOperation().get()) ==
+            nullptr) {
+      continue;
+    }
+    for (const auto& pairs : prefilters) {
+      if (pairs.empty()) {
+        continue;
+      }
+      auto prefiltered =
+          seed._qet->getRootOperation()
+              ->getUpdatedQueryExecutionTreeWithPrefilterApplied(pairs);
+      if (prefiltered.has_value()) {
+        seed._qet = std::move(prefiltered.value());
+      }
+    }
+    checkCancellation();
+  }
+}
+
+// _____________________________________________________________________________
 SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
                                           std::vector<SparqlFilter> filters,
                                           TextLimitMap& textLimits,
@@ -1889,6 +1943,7 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // If we have FILTER statements that can also be answered by a special join,
   // add the respective query plans as filter substitutes.
   auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
+  prefilterSeeds(initialPlans, tg._nodeMap.size(), filtersAndOptSubstitutes);
 
   // The scans of the geometry variables of the spatial joins are prefiltered
   // with the rectangles known for them once, here, and not once per

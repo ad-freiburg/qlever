@@ -664,6 +664,20 @@ class QueryPlanner {
                               const SubtreePlanMatrix& children,
                               ReplacementPlans replacementPlans);
 
+  // Apply the prefilters of `filters` to the seed scans of this group graph
+  // pattern's own triples (the first `numTripleNodes` node ids), once, before
+  // the dynamic programming starts. A prefiltered scan is semantically
+  // interchangeable with the original one within the group, because every
+  // filter is applied to each final plan of the group at the latest at its
+  // end, and prefiltering only drops blocks without matching rows. Doing it
+  // here instead of in the `Filter` of every candidate plan evaluates each
+  // prefilter once per scan, not once per candidate, and gives the dynamic
+  // programming the prefiltered size estimates from the first round on. The
+  // plans of nested groups (`OPTIONAL`, `MINUS`, subqueries) are left alone,
+  // and so are filters with a substitute (see `seedFilterSubstitutes`).
+  void prefilterSeeds(SubtreePlanVec& seeds, size_t numTripleNodes,
+                      const FiltersAndOptionalSubstitutes& filters) const;
+
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
   // are not in fact connected (via their variables).
