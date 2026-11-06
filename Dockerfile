@@ -61,8 +61,16 @@ ARG RUN_TESTS=true
 ARG QLEVER_ENABLE_LTO=false
 WORKDIR /qlever/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DQLEVER_ENABLE_LTO=${QLEVER_ENABLE_LTO} -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -DCMAKE_TEST_LAUNCHER=/qlever/misc/run-test-with-diagnostics.sh -GNinja ..
+# `MALLOC_CONF` keeps `jemalloc` from returning freed memory to the kernel
+# (via `madvise`) in the tests. On the arm64 GitHub runners with the kernel
+# `7.0.0-1017-azure`, this triggers a kernel bug: a CPU keeps faulting on a
+# valid page (the test stalls), and writes can land in the wrong place (the
+# test index is corrupted, or a `Bus error`). See the `REPORT.md` on the
+# `arm64-stall-repro` branch of `joka921/QLever` for the analysis. The test
+# processes are short-lived, so not returning memory costs nothing.
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && { \
+        MALLOC_CONF=dirty_decay_ms:-1,muzzy_decay_ms:-1 \
         QLEVER_TEST_DIAGNOSTICS_DIR=/qlever/build/test-diagnostics \
           ctest --rerun-failed --output-on-failure; \
         STATUS=$?; \
