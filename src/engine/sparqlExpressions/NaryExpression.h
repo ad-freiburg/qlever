@@ -29,6 +29,8 @@ SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
                                         SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
                                         SparqlExpression::Ptr child2);
+// Return true iff `expression` is an `&&` (made by `makeAndExpression`).
+bool isAndExpression(const SparqlExpression& expression);
 SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeMultiplyExpression(SparqlExpression::Ptr child1,
