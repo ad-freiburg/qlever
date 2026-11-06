@@ -41,16 +41,6 @@ class NowDatetimeExpression : public SparqlExpression {
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
-// Return true iff `expression` is or contains `NOW()`.
-inline bool containsNow(const SparqlExpression& expression) {
-  if (dynamic_cast<const NowDatetimeExpression*>(&expression)) {
-    return true;
-  }
-  return ql::ranges::any_of(expression.children(), [](const auto& child) {
-    return containsNow(*child);
-  });
-}
-
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NOWDATETIMEEXPRESSION_H

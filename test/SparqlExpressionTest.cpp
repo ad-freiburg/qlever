@@ -22,7 +22,6 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
-#include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -3131,15 +3130,14 @@ TEST(NaryExpressionTypeErased, isDeterministic) {
 }
 
 // Test the functions that inspect the structure of an expression:
-// `splitConjunction`, `isAndExpression`, `isOrExpression`, `getComparison` and
-// `containsNow`.
+// `splitConjunction`, `isAndExpression`, `isOrExpression` and `getComparison`.
 TEST(SparqlExpression, structureInspection) {
   using enum valueIdComparators::Comparison;
 
-  // A FILTER with five conjuncts, one of which is an `||` with `NOW()`.
+  // A FILTER with five conjuncts, one of which is an `||`.
   auto query = ad_utility::testing::parseQuery(
       "SELECT * { ?a ?b ?c FILTER(?a < 1 && ?a <= 2 && ?a > 0 && "
-      "(?b >= 2 || NOW() = ?c) && ?c != 3) }");
+      "(?b >= 2 || ?c = 3) && ?c != 3) }");
   const auto& filter = query._rootGraphPattern._filters.at(0).expression_;
 
   // The FILTER is split into its conjuncts, each with its original input as
@@ -3156,7 +3154,7 @@ TEST(SparqlExpression, structureInspection) {
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a < 1"),
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a <= 2"),
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a > 0"),
-          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?b>=2||NOW()=?c"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?b>=2||?c=3"),
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?c != 3")));
 
   // `isAndExpression` and `isOrExpression` recognize only their own operator.
@@ -3174,11 +3172,6 @@ TEST(SparqlExpression, structureInspection) {
   EXPECT_EQ(getComparison(*c[3]->children()[1]), EQ);
   EXPECT_EQ(getComparison(*c[4]), NE);
   EXPECT_EQ(getComparison(*c[3]), std::nullopt);
-
-  // `containsNow` finds `NOW()` at any depth.
-  EXPECT_TRUE(containsNow(*filter.getPimpl()));
-  EXPECT_TRUE(containsNow(*c[3]));
-  EXPECT_FALSE(containsNow(*c[0]));
 }
 
 }  // anonymous namespace
