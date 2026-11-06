@@ -278,6 +278,8 @@ class IdBase {
   static Derived makeFromLocalVocabIndex(LocalVocabIndex index) {
     // The lowest `numStrippedBits()` bits of a `LocalVocabIndex` are always
     // zero, because of its alignment, so they can be stripped.
+    // TODO<pas-kes> With the split layout nothing is stripped, so the
+    // `alignas(16)` of `LocalVocabEntry` is only needed for the legacy layout.
     static_assert(alignof(decltype(*index)) >=
                   (size_t{1} << numStrippedBits()));
     return Derived::fromBits(
@@ -336,6 +338,8 @@ class IdBase {
   // Store or load a `Date` object.
   // NOTE: These functions cannot be `constexpr`, because
   // `DateYearOrDuration` is not a literal type.
+  // TODO<pas-kes> The split layout has 4 more payload bits, which could give a
+  // `Date` a higher precision (a finer time or a larger range of years).
   static Derived makeFromDate(DateYearOrDuration d) noexcept {
     return Derived::fromBits(Datatype::Date, absl::bit_cast<uint64_t>(d));
   }
