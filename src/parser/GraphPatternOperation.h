@@ -9,7 +9,6 @@
 
 #include <limits>
 #include <memory>
-#include <optional>
 #include <vector>
 
 #include "backports/concepts.h"
@@ -219,12 +218,6 @@ struct Bind {
     result.push_back(&_target);
     return std::move(result) | ql::views::transform(ad_utility::dereference);
   }
-
-  // Return the constant to which this `BIND` binds its target variable, or
-  // `std::nullopt` if its expression is not a constant IRI, literal, or defined
-  // `Id` (an undefined `Id` is created for an unknown function in the syntax
-  // test mode).
-  std::optional<TripleComponent> getConstant() const;
 
   [[nodiscard]] std::string getDescriptor() const;
 };
