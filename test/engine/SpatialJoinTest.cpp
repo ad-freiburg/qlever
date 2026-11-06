@@ -8,6 +8,7 @@
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <memory>
@@ -31,6 +32,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -1086,6 +1088,32 @@ TEST(SpatialJoin, clone) {
 }
 
 }  // namespace stringRepresentation
+
+// Children whose size estimate is zero (here, empty `VALUES`) must not make
+// the size estimate of the spatial join zero, nor its multiplicities
+// infinite: both propagate to the operations above, where a join then
+// estimates 2^63 rows and the planner avoids the small side at all costs.
+TEST(SpatialJoin, sizeEstimateAndMultiplicityWithEmptyChildren) {
+  auto* qec = buildTestQEC();
+  auto emptyValues = [qec](const Variable& var) {
+    parsedQuery::SparqlValues values;
+    values._variables = {var};
+    return ad_utility::makeExecutionTree<Values>(qec, std::move(values));
+  };
+  auto left = emptyValues(Variable{"?point1"});
+  auto right = emptyValues(Variable{"?point2"});
+  ASSERT_EQ(left->getSizeEstimate(), 0u);
+  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                               Variable{"?point2"}},
+      left, right);
+  EXPECT_GE(spatialJoin->getSizeEstimate(), 1u);
+  for (size_t i = 0; i < spatialJoin->getResultWidth(); ++i) {
+    EXPECT_TRUE(std::isfinite(spatialJoin->getMultiplicity(i))) << i;
+    EXPECT_GE(spatialJoin->getMultiplicity(i), 1) << i;
+  }
+}
 
 namespace getMultiplicityAndSizeEstimate {
 

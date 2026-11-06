@@ -1129,6 +1129,18 @@ TEST(RelationalExpression, FilterEstimates) {
   testImpl(TI<EqualExpression>, 200);
   // NotEqual is estimated to leave all of the initial 200'000 values.
   testImpl(TI<NotEqualExpression>, 200'000);
+
+  // A small input still leaves at least one row (an estimate of zero makes
+  // the multiplicities of the operations above infinite), an empty input
+  // leaves none.
+  auto expression = LessThanExpression{
+      std::array<SparqlExpression::Ptr, 2>{makeVar("?x"), makeInt(30)}};
+  EXPECT_EQ(expression.getEstimatesForFilterExpression(5, Variable{"?y"})
+                .sizeEstimate,
+            1);
+  EXPECT_EQ(expression.getEstimatesForFilterExpression(0, Variable{"?y"})
+                .sizeEstimate,
+            0);
 }
 
 // _____________________________________________________________________________
