@@ -527,6 +527,10 @@ SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
   return std::make_unique<OrExpression>(std::move(child1), std::move(child2));
 }
 
+bool isOrExpression(const SparqlExpression& expression) {
+  return dynamic_cast<const OrExpression*>(&expression) != nullptr;
+}
+
 SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
                                         SparqlExpression::Ptr child2) {
   return std::make_unique<PowExpression>(std::move(child1), std::move(child2));

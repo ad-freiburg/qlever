@@ -615,6 +615,26 @@ template class RelationalExpression<Comparison::GE>;
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
+std::optional<valueIdComparators::Comparison> getComparison(
+    const SparqlExpression& expression) {
+  using enum valueIdComparators::Comparison;
+  if (dynamic_cast<const LessThanExpression*>(&expression)) {
+    return LT;
+  } else if (dynamic_cast<const LessEqualExpression*>(&expression)) {
+    return LE;
+  } else if (dynamic_cast<const EqualExpression*>(&expression)) {
+    return EQ;
+  } else if (dynamic_cast<const NotEqualExpression*>(&expression)) {
+    return NE;
+  } else if (dynamic_cast<const GreaterThanExpression*>(&expression)) {
+    return GT;
+  } else if (dynamic_cast<const GreaterEqualExpression*>(&expression)) {
+    return GE;
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr) {
   // TODO<ullingerc> Add support for more optimizable filters:

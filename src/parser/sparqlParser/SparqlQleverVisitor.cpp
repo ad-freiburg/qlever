@@ -1469,6 +1469,12 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // separately (with duplicates removed) because we need them in `Service.cpp`
   // when computing the result for this operation.
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  // Remember that we are inside a remote `SERVICE` while parsing the body (an
+  // `INCLUDE` is rejected there), and restore the previous state afterwards.
+  bool wasInsideRemoteService = std::exchange(isInsideRemoteService_, true);
+  absl::Cleanup restoreIsInsideRemoteService{[this, wasInsideRemoteService]() {
+    isInsideRemoteService_ = wasInsideRemoteService;
+  }};
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
   // Note: The `visit` call in the line above has filled the `visibleVariables_`
   // member with all the variables visible inside the graph pattern.
@@ -1820,17 +1826,16 @@ ParsedQuery::GraphPattern Visitor::visitSoleInclude(
     Parser::IncludeClauseContext* includeCtx,
     Parser::GroupGraphPatternContext* ctx) {
   const auto name = includeCtx->NAMED_SUBQUERY_NAME()->getText();
-  // The body of a `SERVICE` is sent to the remote endpoint as the original
-  // query text, where the definition of the named subquery does not exist.
-  for (auto* parent = ctx->parent; parent != nullptr; parent = parent->parent) {
-    if (dynamic_cast<Parser::ServiceGraphPatternContext*>(parent) != nullptr) {
-      reportError(
-          includeCtx,
-          absl::StrCat("`INCLUDE ", name,
-                       "` is not supported inside SERVICE, because the body "
-                       "of a SERVICE is evaluated by the remote endpoint, "
-                       "which does not know the named subquery"));
-    }
+  // The body of a remote `SERVICE` is sent to the remote endpoint as the
+  // original query text, where the definition of the named subquery does not
+  // exist. (The body of a magic `SERVICE` is evaluated by QLever itself.)
+  if (isInsideRemoteService_) {
+    reportError(includeCtx,
+                absl::StrCat("`INCLUDE ", name,
+                             "` is not supported inside SERVICE, because the "
+                             "body of a SERVICE is evaluated by the remote "
+                             "endpoint, which does not know the named "
+                             "subquery"));
   }
   // The group must be the body of a subquery. The `visit` call reports the
   // error for a misplaced `INCLUDE` and does not return.
@@ -2719,6 +2724,17 @@ ExpressionPtr Visitor::visit(Parser::ConditionalOrExpressionContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::ConditionalAndExpressionContext* ctx) {
   auto children = visitVector(ctx->valueLogical());
   AD_CONTRACT_CHECK(!children.empty());
+  // Give each conjunct its original input as descriptor (unless it already
+  // has one), for the FILTERs that are split into their conjuncts (see
+  // `SparqlExpressionPimpl::splitConjunction`).
+  if (children.size() > 1) {
+    for (auto&& [child, childCtx] :
+         ::ranges::views::zip(children, ctx->valueLogical())) {
+      if (child->descriptor().empty()) {
+        child->descriptor() = getOriginalInputForContext(childCtx);
+      }
+    }
+  }
   auto result = std::move(children.front());
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {

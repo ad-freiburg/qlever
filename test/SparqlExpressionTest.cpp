@@ -12,6 +12,7 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "./printers/LocalVocabEntryPrinters.h"
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -21,6 +22,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -3126,6 +3128,57 @@ TEST(NaryExpressionTypeErased, isDeterministic) {
 
   EXPECT_TRUE(makeTypeErasedOrExpression(var(), var())->isDeterministic());
   EXPECT_FALSE(makeTypeErasedOrExpression(var(), rand())->isDeterministic());
+}
+
+// Test the functions that inspect the structure of an expression:
+// `splitConjunction`, `isAndExpression`, `isOrExpression`, `getComparison` and
+// `containsNow`.
+TEST(SparqlExpression, structureInspection) {
+  using enum valueIdComparators::Comparison;
+
+  // A FILTER with five conjuncts, one of which is an `||` with `NOW()`.
+  auto query = ad_utility::testing::parseQuery(
+      "SELECT * { ?a ?b ?c FILTER(?a < 1 && ?a <= 2 && ?a > 0 && "
+      "(?b >= 2 || NOW() = ?c) && ?c != 3) }");
+  const auto& filter = query._rootGraphPattern._filters.at(0).expression_;
+
+  // The FILTER is split into its conjuncts, each with its original input as
+  // descriptor (except for the parenthesized `||`, which keeps its descriptor
+  // without whitespace from the parser).
+  auto conjuncts = filter.splitConjunction();
+  std::vector<const SparqlExpression*> c;
+  for (const auto& conjunct : conjuncts) {
+    c.push_back(conjunct.getPimpl());
+  }
+  EXPECT_THAT(
+      conjuncts,
+      ::testing::ElementsAre(
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a < 1"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a <= 2"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a > 0"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?b>=2||NOW()=?c"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?c != 3")));
+
+  // `isAndExpression` and `isOrExpression` recognize only their own operator.
+  EXPECT_TRUE(isAndExpression(*filter.getPimpl()));
+  EXPECT_FALSE(isOrExpression(*filter.getPimpl()));
+  EXPECT_TRUE(isOrExpression(*c[3]));
+  EXPECT_FALSE(isAndExpression(*c[3]));
+
+  // `getComparison` returns the comparison of each of the six relational
+  // expressions, and `std::nullopt` for every other expression.
+  EXPECT_EQ(getComparison(*c[0]), LT);
+  EXPECT_EQ(getComparison(*c[1]), LE);
+  EXPECT_EQ(getComparison(*c[2]), GT);
+  EXPECT_EQ(getComparison(*c[3]->children()[0]), GE);
+  EXPECT_EQ(getComparison(*c[3]->children()[1]), EQ);
+  EXPECT_EQ(getComparison(*c[4]), NE);
+  EXPECT_EQ(getComparison(*c[3]), std::nullopt);
+
+  // `containsNow` finds `NOW()` at any depth.
+  EXPECT_TRUE(containsNow(*filter.getPimpl()));
+  EXPECT_TRUE(containsNow(*c[3]));
+  EXPECT_FALSE(containsNow(*c[0]));
 }
 
 }  // anonymous namespace
