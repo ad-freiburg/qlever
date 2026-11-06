@@ -472,18 +472,6 @@ TEST_F(SplitLayoutIdTest, fromBitsWithDatatype) {
   testFromBits(fromDatatype);
 }
 
-// Test the overload of `fromBits` that takes a single integer. It creates an
-// `Id` of type `Undefined` with this payload, as for the special `Id`s (see
-// `SpecialIds.h`), which are not `UNDEF`.
-TEST_F(SplitLayoutIdTest, fromBitsWithSingleInteger) {
-  auto special = SplitLayoutId::fromBits(uint64_t{3});
-  EXPECT_EQ(special.getDatatype(), Datatype::Undefined);
-  EXPECT_EQ(special.getPayloadBits(), 3u);
-  EXPECT_FALSE(special.isUndefined());
-  EXPECT_EQ(SplitLayoutId::fromBits(uint64_t{0}),
-            SplitLayoutId::makeUndefined());
-}
-
 // Test that the overloads of `fromBits` accept every value of the datatype
 // byte, also one that is not a `Datatype`, like `fromBits` of the legacy
 // `ValueId` for the values of its 4 datatype bits.
@@ -743,7 +731,6 @@ TEST_F(SplitLayoutIdTest, toDebugString) {
   // zero). Sometimes `Id`s with type undefined but non-zero data bits are
   // used. The following test tests some of these internal `Id`s.
   test(SplitLayoutId::fromBits(Datatype::Undefined, 100), "U:100");
-  test(SplitLayoutId::fromBits(uint64_t{100}), "U:100");
   test(SplitLayoutId::makeFromDouble(42.0), "D:42.000000");
   test(SplitLayoutId::makeFromInt(-42), "I:-42");
   test(SplitLayoutId::makeFromBool(false), "B:false");
@@ -800,7 +787,7 @@ TEST_F(SplitLayoutIdTest, byteRepresentation) {
   EXPECT_TRUE(bytesEqual(SplitLayoutId::makeFromBool(true),
                          SplitLayoutId::fromBits(Datatype::Bool, 1)));
   EXPECT_TRUE(bytesEqual(SplitLayoutId::makeUndefined(),
-                         SplitLayoutId::fromBits(uint64_t{0})));
+                         SplitLayoutId::fromBits(Datatype::Undefined, 0)));
   EXPECT_TRUE(bytesEqual(SplitLayoutId::makeFromInt(5).incremented(),
                          SplitLayoutId::makeFromInt(6)));
   EXPECT_TRUE(

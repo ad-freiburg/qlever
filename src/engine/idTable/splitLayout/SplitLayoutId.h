@@ -129,14 +129,6 @@ class SplitLayoutId
     return {payload, datatype};
   }
 
-  // Create an `Id` of type `Undefined` with the given `payload`. Unlike the
-  // `fromBits` of the legacy `ValueId`, the argument contains no datatype bits.
-  // This is used for the special `Id`s, which are not `UNDEF` (see
-  // `SpecialIds.h`).
-  static constexpr SplitLayoutId fromBits(PayloadType payload) noexcept {
-    return {payload, Datatype::Undefined};
-  }
-
   // Return the smallest and largest possible `SplitLayoutId` wrt the underlying
   // representation. Note: The datatype byte of `max()` is `0xFF`, which is
   // not a valid `Datatype`. Such IDs must only be used as sentinel values
@@ -165,7 +157,8 @@ class SplitLayoutId
   // (including the zeroed padding). This is much faster than serializing the
   // datatype and payload separately, especially for large contiguous arrays of
   // IDs.
-  // TODO<pas-kes>: Is this wasteful to persist, with 7 unused bytes?
+  // TODO<pas-kes>: Is this wasteful to persist, with 7 unused bytes
+  // Will be fixed with an custom serializeFunction later on.
   template <typename U>
   friend void allowTrivialSerialization(SplitLayoutId, U);
 
