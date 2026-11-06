@@ -115,6 +115,11 @@ class SparqlQleverVisitor {
   // corresponding pattern.
   ad_utility::HashMap<std::string, NamedSubquery> namedSubqueries_{};
 
+  // True while the body of a (non-magic) `SERVICE` is parsed. Such a body is
+  // sent to the remote endpoint as the original query text, so it must not
+  // contain an `INCLUDE`.
+  bool isInsideRemoteService_ = false;
+
   // The `BASE` IRI of the query if any.
   std::optional<qlever::util::ParsedUri> baseIri_{};
 
@@ -703,9 +708,11 @@ class SparqlQleverVisitor {
       const antlr4::ParserRuleContext* context);
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
-  // `visitIriOrFunction`.
+  // `visitIriOrFunction`. `distinct` is true if the argument list starts with
+  // `DISTINCT`, which is only allowed for custom aggregates like `ql:stdev`.
   ExpressionPtr processIriFunctionCall(const TripleComponent::Iri& iri,
                                        std::vector<ExpressionPtr> argList,
+                                       bool distinct,
                                        const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);

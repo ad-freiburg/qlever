@@ -333,7 +333,8 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
   IdTable result = leftRes->cloneIdTable(cancellationChecker());
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      joinColumns_, std::move(leftRes), std::move(rightRes)};
+      joinColumns_, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
   addExistsColumn(result, nestedLoopJoin.computeLeftExistance());
   return std::optional{
       Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
@@ -355,7 +356,8 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
   auto rightRes = right_->getResult(false);
 
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      joinColumns_, std::move(leftRes), std::move(rightRes)};
+      joinColumns_, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
   auto result = nestedLoopJoin.computeRightExistance(
       [this](auto&& idTable, LocalVocab localVocab,
              const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {
@@ -429,14 +431,20 @@ struct LazyExistsJoinImpl
   // consumed, we can fast-forward and skip expensive checks.
   FastForwardState allRowsFromLeftExist_ = FastForwardState::Unknown;
 
+  // A fully materialized left side is a single (possibly large) block, so the
+  // cancellation has to be checked while processing a block.
+  ad_utility::SharedCancellationHandle cancellationHandle_;
+
   // Convert result to an owned range of `IdTableVocabPair`s. This is used for
   // the left side.
   static Result::LazyResult toOwnedRange(
-      const std::shared_ptr<const Result>& result) {
+      const std::shared_ptr<const Result>& result,
+      const ad_utility::SharedCancellationHandle& cancellationHandle) {
     if (result->isFullyMaterialized()) {
       return ad_utility::InputRangeTypeErased{
-          std::array{Result::IdTableVocabPair{result->cloneIdTable(),
-                                              result->getCopyOfLocalVocab()}}};
+          std::array{Result::IdTableVocabPair{
+              result->cloneIdTable(cancellationHandle->cancellationChecker()),
+              result->getCopyOfLocalVocab()}}};
     }
     return result->idTables();
   }
@@ -457,16 +465,17 @@ struct LazyExistsJoinImpl
 
   // Construct an instance of `LazyExistsJoinImpl` with the given left and right
   // join columns as well as the respective results.
-  explicit LazyExistsJoinImpl(std::shared_ptr<const Result> left,
-                              std::shared_ptr<const Result> right,
-                              ColumnIndex leftJoinColumn,
-                              ColumnIndex rightJoinColumn)
+  explicit LazyExistsJoinImpl(
+      std::shared_ptr<const Result> left, std::shared_ptr<const Result> right,
+      ColumnIndex leftJoinColumn, ColumnIndex rightJoinColumn,
+      ad_utility::SharedCancellationHandle cancellationHandle)
       : left_{std::move(left)},
         right_{std::move(right)},
-        leftRange_{toOwnedRange(left_)},
+        leftRange_{toOwnedRange(left_, cancellationHandle)},
         rightRange_{toRangeView(right_)},
         leftJoinColumn_{leftJoinColumn},
-        rightJoinColumn_{rightJoinColumn} {}
+        rightJoinColumn_{rightJoinColumn},
+        cancellationHandle_{std::move(cancellationHandle)} {}
 
   // Fetch and store the next non-empty result from `rightRange_` in
   // `currentRight_`.
@@ -540,16 +549,20 @@ struct LazyExistsJoinImpl
       auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
       if (allRowsFromLeftExist_ != FastForwardState::Unknown) {
-        ql::ranges::fill(outputColumn, Id::makeFromBool(allRowsFromLeftExist_ ==
-                                                        FastForwardState::Yes));
+        ad_utility::chunkedFill(
+            outputColumn,
+            Id::makeFromBool(allRowsFromLeftExist_ == FastForwardState::Yes),
+            ad_utility::CANCELLATION_CHECK_CHUNK_SIZE,
+            cancellationHandle_->cancellationChecker());
       } else {
         auto leftJoinColumn = idTable.getColumn(leftJoinColumn_);
-
-        for (size_t rowIndex = 0; rowIndex < leftJoinColumn.size();
-             rowIndex++) {
-          outputColumn[rowIndex] =
-              Id::makeFromBool(hasMatch(leftJoinColumn[rowIndex]));
-        }
+        ad_utility::chunkedForLoop<ad_utility::CANCELLATION_CHECK_CHUNK_SIZE>(
+            0, leftJoinColumn.size(),
+            [this, &outputColumn, &leftJoinColumn](size_t rowIndex) {
+              outputColumn[rowIndex] =
+                  Id::makeFromBool(hasMatch(leftJoinColumn[rowIndex]));
+            },
+            cancellationHandle_->cancellationChecker());
       }
     }
     return result;
@@ -574,7 +587,8 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
   auto [leftCol, rightCol] = joinColumns_.at(0);
 
   Result::LazyResult generator{
-      LazyExistsJoinImpl{std::move(left), std::move(right), leftCol, rightCol}};
+      LazyExistsJoinImpl{std::move(left), std::move(right), leftCol, rightCol,
+                         cancellationHandle()}};
 
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}

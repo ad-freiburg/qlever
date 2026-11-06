@@ -262,6 +262,19 @@ class TransitivePathBase : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  // Estimates from which the size, cost and multiplicity estimates are
+  // derived, see `computeEstimates` for details.
+  struct Estimates {
+    double size_;
+    // The number of graph nodes that are visited when computing the hull.
+    double numVisitedNodes_;
+    // The average number of result rows per row of the start side.
+    double rowsPerStartRow_;
+    double startMultiplicity_;
+    double targetMultiplicity_;
+  };
+  Estimates computeEstimates();
+
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   Result::Generator fillTableWithHullImpl(NodeGenerator hull,
                                           size_t startSideCol,

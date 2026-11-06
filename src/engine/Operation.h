@@ -477,8 +477,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
     return getExecutionContext()->executor();
   }
 
-  // How the in-memory sorts of this `Operation` run in parallel, see
-  // `QueryExecutionContext::sortConfig`.
+  // How the in-memory sorts of this `Operation` run in parallel and are
+  // cancelled, see `QueryExecutionContext::sortConfig`.
   const SortConfig& sortConfig() const {
     return getExecutionContext()->sortConfig();
   }

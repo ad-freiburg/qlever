@@ -13,6 +13,7 @@
 #include <absl/functional/any_invocable.h>
 
 #include <algorithm>
+#include <atomic>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/strand.hpp>
 #include <chrono>
@@ -25,20 +26,21 @@
 #include <vector>
 
 #include "index/vocabulary/VocabularyTypes.h"
+#include "index/vocabulary_merger/MemoryBudget.h"
 #include "index/vocabulary_merger/SegmentCommitter.h"
-#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
 #include "util/ParseableDuration.h"
+#include "util/RunFunctionOnExecutor.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
 // The stage of the vocabulary merger that writes the blocks of words to the
-// vocabulary (see `SegmentPipeline` in
-// `index/vocabulary_merger/SegmentPipeline.h`). This is not part of the public
-// interface of `index/VocabularyMerger.h`.
+// vocabulary (see the comment above `mergeVocabulary` in
+// `index/VocabularyMerger.h`). This is not part of the public interface of
+// that header.
 namespace ad_utility::vocabulary_merger::detail {
 
 // The state that the `AsyncBlockWriterPerSubVocabulary`s of an
@@ -52,6 +54,15 @@ struct AsyncBlockWriterSharedState {
   // blocks.
   ad_utility::timer::ThreadSafeTimer prepareBusyTime_;
   ad_utility::timer::ThreadSafeTimer appendBusyTime_;
+  // The number of blocks that have been pushed, but not appended (or skipped)
+  // yet.
+  std::atomic<size_t> numPendingBlocks_ = 0;
+  // The budget that the gathered words of a block are accounted for in while
+  // the block is prepared (see `MemoryBudget`).
+  MemoryBudget& memoryBudget_;
+
+  explicit AsyncBlockWriterSharedState(MemoryBudget& memoryBudget)
+      : memoryBudget_{memoryBudget} {}
 
   // Whether one of the tasks has thrown an exception that has not been
   // rethrown yet.
@@ -98,7 +109,8 @@ class AsyncBlockWriterPerSubVocabulary {
 
   BlockWriterBase& blockWriter_;
   AsyncBlockWriterSharedState& sharedState_;
-  boost::asio::strand<qlever::Executor> strand_;
+  boost::asio::strand<qlever::Executor> strand_{
+      boost::asio::make_strand(ad_utility::globalExecutor())};
   // The number of blocks registered so far, which is the index of the next
   // one. Only touched on the `strand_`.
   size_t numBlocks_ = 0;
@@ -120,7 +132,6 @@ class AsyncBlockWriterPerSubVocabulary {
                                    size_t maxNumPendingBlocks)
       : blockWriter_{blockWriter},
         sharedState_{sharedState},
-        strand_{boost::asio::make_strand(ad_utility::globalExecutor())},
         queue_{strand_, maxNumPendingBlocks, "Writing the merged vocabulary"} {}
 
   // Write the next `block`. Block while the maximal number of blocks is
@@ -159,9 +170,19 @@ class AsyncBlockWriterPerSubVocabulary {
   // NOTE: The return type is explicit, because `push` above uses this
   // function.
   absl::AnyInvocable<AppendBlock()> makePreparationLambda(BlockPieces block) {
-    return [this, block = std::move(block)]() {
+    return [this, block = std::move(block)]() mutable {
       auto measurement = sharedState_.prepareBusyTime_.startMeasurement();
-      return blockWriter_.prepare(gatherWords(block));
+      // The pieces keep (parts of) their segments alive, which are no longer
+      // needed once the words are gathered (they are released by
+      // `gatherWords`, before the completion handler is posted).
+      WordBlock words = gatherWords(std::move(block));
+      // With the pieces, the reservations of their segments may be gone, so
+      // the gathered `words` are accounted for here, until `prepare` has
+      // consumed them (this keeps `prepare` independent of the budget). The
+      // reservation is released when this lambda returns.
+      auto reservedWhilePreparing =
+          sharedState_.memoryBudget_.reserve(memorySizeOf(words));
+      return blockWriter_.prepare(std::move(words));
     };
   }
 
@@ -214,6 +235,7 @@ class AsyncBlockWriterPerSubVocabulary {
       exceptionCollector.wrap(
           [&block]() { std::move(block.appendBlock_)(); })();
     }
+    --sharedState_.numPendingBlocks_;
     return std::move(block.done_);
   }
 };
@@ -236,8 +258,11 @@ class AsyncBlockWriter {
 
  public:
   // Construct from the `writer` of the vocabulary, which has to stay alive,
-  // and which is not finished by this class.
-  explicit AsyncBlockWriter(ParallelWordWriterBase& writer) {
+  // and which is not finished by this class. The gathered words of each block
+  // are accounted for in the `memoryBudget` (which has to stay alive as well)
+  // while the block is prepared.
+  AsyncBlockWriter(ParallelWordWriterBase& writer, MemoryBudget& memoryBudget)
+      : sharedState_{memoryBudget} {
     for (uint8_t sub = 0; sub < writer.numSubVocabularies(); ++sub) {
       subVocabularyWriters_.push_back(
           std::make_unique<AsyncBlockWriterPerSubVocabulary>(
@@ -253,6 +278,7 @@ class AsyncBlockWriter {
       return;
     }
     ++numBlocks_;
+    ++sharedState_.numPendingBlocks_;
     subVocabularyWriters_.at(sub)->push(std::move(block));
   }
 
@@ -260,11 +286,15 @@ class AsyncBlockWriter {
   // rethrown yet. The caller should then stop pushing blocks.
   bool hasFailed() const { return sharedState_.hasFailed(); }
 
+  // The number of blocks that have been pushed, but not appended (or skipped)
+  // yet. If it is zero, no task holds any part of a segment.
+  size_t numPendingBlocks() const { return sharedState_.numPendingBlocks_; }
+
   // Wait until all the blocks are appended, and rethrow the first exception
   // that one of the tasks threw, if any. After this, no more blocks may be
   // pushed. The `writer` is not finished.
   void finish() {
-    for (auto& subVocabularyWriter : subVocabularyWriters_) {
+    for (const auto& subVocabularyWriter : subVocabularyWriters_) {
       subVocabularyWriter->finish();
     }
     sharedState_.exceptionCollector_.rethrowIfException();

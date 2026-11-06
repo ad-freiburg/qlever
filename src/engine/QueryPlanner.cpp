@@ -52,6 +52,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
+#include "engine/RowNumber.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -77,6 +78,7 @@
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/ParseException.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -463,6 +465,13 @@ SubtreePlanVec QueryPlanner::getOrderByRow(
     for (auto& ord : pq._orderBy) {
       auto idx = parent._qet->getVariableColumnOrNullopt(ord.variable_);
       if (!idx.has_value()) {
+        if (pq.orderByVariablesMustBeBound_) {
+          throw InvalidSparqlQueryException(absl::StrCat(
+              "Variable ", ord.variable_.name(),
+              " is used in the ORDER BY clause of the subquery of a row number "
+              "SERVICE, but is not bound, so the row numbers would not follow "
+              "the requested order."));
+        }
         continue;
       }
       sortIndices.emplace_back(idx.value(), ord.isDescending_);
@@ -3337,6 +3346,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitTextSearch(arg);
   } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
     visitExternalValues(arg);
+  } else if constexpr (std::is_same_v<T, p::RowNumberQuery>) {
+    visitRowNumber(arg);
   } else if constexpr (std::is_same_v<T, p::NamedCachedResult>) {
     visitNamedCachedResult(arg);
   } else if constexpr (std::is_same_v<T, p::MaterializedViewQuery>) {
@@ -3566,6 +3577,31 @@ void QueryPlanner::GraphPatternPlanner::visitExternalValues(
   auto externalValues =
       qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
+  visitGroupOptionalOrMinus(singlePlanVec(std::move(candidate)));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitRowNumber(
+    parsedQuery::RowNumberQuery& rowNumberQuery) {
+  // Require all variables of the `ORDER BY` of the sorted subquery (see
+  // `RowNumberQuery::validate`) to be bound (the row numbers depend on the
+  // order).
+  //
+  // NOTE: The flag is a member of the `ParsedQuery` of this subquery and only
+  // read when planning its `ORDER BY` clause, so it does not leak into nested
+  // subqueries or row number services, which have their own `ParsedQuery`.
+  AD_CORRECTNESS_CHECK(rowNumberQuery.childGraphPattern_.has_value());
+  std::get<parsedQuery::Subquery>(
+      rowNumberQuery.childGraphPattern_->_graphPatterns.at(0))
+      .get()
+      .orderByVariablesMustBeBound_ = true;
+
+  // Plan the subquery and add the row numbers on top of its cheapest plan.
+  SubtreePlan child =
+      optimizeSingle(&rowNumberQuery.childGraphPattern_.value());
+  auto candidate = makeSubtreePlan<RowNumber>(
+      qec_, std::move(child._qet), rowNumberQuery.rowNumberVariable_.value(),
+      rowNumberQuery.offset_);
   visitGroupOptionalOrMinus(singlePlanVec(std::move(candidate)));
 }
 
