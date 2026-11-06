@@ -85,6 +85,23 @@ TEST(FilterFactsCanonicalizer, Distance) {
                                              constraint(Comparison::LT, 400)));
 }
 
+// Test that only the columns of `VALUES` without `UNDEF` and the `BIND`s whose
+// target is equivalent to their expression are definitions.
+TEST(FilterFactsCanonicalizer, CollectDefinitions) {
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  auto query = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(?gb AS ?y) ?b <p> ?gb . "
+      "BIND(RAND() AS ?z) BIND(NOW() AS ?n) BIND(?ga AS ?w) ?w <q> ?o . "
+      "VALUES (?r ?s) { (1 UNDEF) } }");
+  auto defs = collectDefinitions(query._rootGraphPattern._graphPatterns);
+
+  // `?y` is bound before `?gb`, `?z` and `?n` are not deterministic, and `?w`
+  // is bound again by a later triple.
+  EXPECT_THAT(defs.expressions_, UnorderedElementsAre(Key(V{"?x"})));
+  EXPECT_THAT(defs.constants_, UnorderedElementsAre(Key(V{"?r"})));
+}
+
 // Test that every other expression stays `Opaque`.
 TEST(FilterFactsCanonicalizer, Opaque) {
   for (std::string_view filter :

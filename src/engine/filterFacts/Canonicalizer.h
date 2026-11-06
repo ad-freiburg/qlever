@@ -16,7 +16,9 @@
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/TripleComponent.h"
+#include "util/HashMap.h"
 
 // The recognition of facts in FILTERs. A FILTER can be written in many
 // equivalent ways, for example `geof:distance(?a, ?b, unit:M) <= 500`,
@@ -30,6 +32,25 @@
 // NOTE: The canonical form only models the shapes that the recognizers need.
 // Every other expression stays `Opaque`, so it is never rewritten.
 namespace filterFacts {
+
+// What is statically known about the variables of a group graph pattern, from
+// its `VALUES` and `BIND` clauses (but not from nested groups).
+struct Definitions {
+  // The values of a variable from a `VALUES` clause of the group without
+  // `UNDEF` in the column of the variable. Every result row of the group binds
+  // the variable to one of these values.
+  ad_utility::HashMap<Variable, std::vector<TripleComponent>> constants_;
+  // The expressions of the `BIND(e AS ?v)` clauses of the group that are
+  // equivalent to their target `?v`: `e` is deterministic, its variables are
+  // always bound before the `BIND`, and no later pattern of the group may bind
+  // `?v`. The pointers point into the group, which must outlive this struct.
+  ad_utility::HashMap<Variable, const sparqlExpression::SparqlExpression*>
+      expressions_;
+};
+
+// Collect the `Definitions` from the direct children of a group graph pattern.
+Definitions collectDefinitions(
+    const std::vector<parsedQuery::GraphPatternOperation>& group);
 
 // `geof:distance(a_, b_)` in meters. `a_` and `b_` are variables or constant
 // geometries.
