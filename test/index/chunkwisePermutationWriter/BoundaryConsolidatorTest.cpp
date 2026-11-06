@@ -71,7 +71,8 @@ void consolidateAndCheck(const TestRows& rows,
   writers.blocks1_ = std::move(result.blockMetadata_);
   writers.blocks2_ = std::move(result.blockMetadataSwitched_);
 
-  // Group the expected rows by their relation.
+  // Group the expected rows by their relation. A `std::map` (and not a hash
+  // map) is used, because the relations are iterated in their order below.
   std::map<int64_t, TestRows> relations;
   for (const auto& row : rows) {
     relations[row[0]].push_back(row);
@@ -135,6 +136,15 @@ TEST(BoundaryConsolidator, largeRelationFromLargeAndSmallParts) {
   // blocks at different positions.
   consolidateAndCheck(rows, {50, 55, 100}, 1);
   consolidateAndCheck(rows, {50, 55, 100}, 64);
+}
+
+// Test a large relation that only consists of large parts, so the sorter for
+// the twin rows of the small parts stays empty.
+TEST(BoundaryConsolidator, largeRelationFromLargePartsOnly) {
+  auto rows = concat({relation(1, 5), relation(2, 100), relation(3, 4)});
+  // Relation 2 occupies the rows `[5, 105)`: a large last part of chunk 0 and
+  // a large first part of chunk 1, with 50 rows each.
+  consolidateAndCheck(rows, {55});
 }
 
 // Test that the metadata of the boundary relations and of the relations in

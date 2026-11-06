@@ -12,8 +12,10 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/use_future.hpp>
+#include <chrono>
+#include <future>
 #include <memory>
-#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -32,6 +34,26 @@ SharedBlock makeSharedBlock() {
   block.resize(1);
   block(0, 0) = Id::makeFromInt(42);
   return std::make_shared<const Block>(std::move(block));
+}
+
+// Start an `asyncDispatch` of a block on the `dispatcher`, run the `ioContext`
+// until it has no more ready work, and return the future of the result.
+std::future<bool> dispatchBlock(
+    boost::asio::io_context& ioContext,
+    std::shared_ptr<ConcurrentCallbackDispatcher> dispatcher) {
+  auto future =
+      boost::asio::co_spawn(ioContext,
+                            ConcurrentCallbackDispatcher::asyncDispatch(
+                                std::move(dispatcher), makeSharedBlock()),
+                            boost::asio::use_future);
+  ioContext.poll();
+  ioContext.restart();
+  return future;
+}
+
+// Return `true` iff the `future` is ready, without blocking.
+bool isReady(const std::future<bool>& future) {
+  return future.wait_for(std::chrono::seconds{0}) == std::future_status::ready;
 }
 
 // A dispatcher on a single-threaded `io_context` (so the tests are
@@ -63,19 +85,9 @@ class DispatcherFixture {
         });
   }
 
-  // Start an `asyncDispatch` of a block, and return the place where its
-  // result is stored once it is complete.
-  std::shared_ptr<std::optional<bool>> dispatch() {
-    auto result = std::make_shared<std::optional<bool>>();
-    boost::asio::co_spawn(
-        ioContext_, dispatcher_->asyncDispatch(makeSharedBlock(), dispatcher_),
-        [result](std::exception_ptr exception, bool value) {
-          EXPECT_EQ(exception, nullptr);
-          *result = value;
-        });
-    ioContext_.poll();
-    ioContext_.restart();
-    return result;
+  // Start an `asyncDispatch` of a block, see `dispatchBlock`.
+  std::future<bool> dispatch() {
+    return dispatchBlock(ioContext_, dispatcher_);
   }
 
   // Invoke the oldest pending `done` with the given `exception`.
@@ -96,7 +108,7 @@ TEST(ConcurrentCallbackDispatcher, noCallbacks) {
   DispatcherFixture fixture{0, 1};
   EXPECT_TRUE(fixture.dispatcher_->empty());
   for (size_t i = 0; i < 3; ++i) {
-    EXPECT_EQ(*fixture.dispatch(), true);
+    EXPECT_TRUE(fixture.dispatch().get());
   }
   fixture.dispatcher_->waitUntilIdle();
 }
@@ -109,16 +121,17 @@ TEST(ConcurrentCallbackDispatcher, boundedNumberOfBlocksInFlight) {
   auto first = fixture.dispatch();
   auto second = fixture.dispatch();
   auto third = fixture.dispatch();
-  EXPECT_EQ(*first, true);
-  EXPECT_EQ(*second, true);
+  EXPECT_TRUE(first.get());
+  EXPECT_TRUE(second.get());
   // The third block has to wait for a free slot.
-  EXPECT_FALSE(third->has_value());
+  EXPECT_FALSE(isReady(third));
   EXPECT_EQ(fixture.pendingDones_.size(), 4u);
   // A single callback of the first block is not enough.
   fixture.finishOldest();
-  EXPECT_FALSE(third->has_value());
+  EXPECT_FALSE(isReady(third));
   fixture.finishOldest();
-  EXPECT_EQ(*third, true);
+  ASSERT_TRUE(isReady(third));
+  EXPECT_TRUE(third.get());
   EXPECT_EQ(fixture.pendingDones_.size(), 4u);
   while (!fixture.pendingDones_.empty()) {
     fixture.finishOldest();
@@ -148,14 +161,10 @@ TEST(ConcurrentCallbackDispatcher, exceptionsAreReported) {
         reported.push_back(std::move(exception));
       });
   for (size_t i = 0; i < 2; ++i) {
-    std::optional<bool> result;
-    boost::asio::co_spawn(
-        ioContext, dispatcher->asyncDispatch(makeSharedBlock(), nullptr),
-        [&result](std::exception_ptr, bool value) { result = value; });
-    ioContext.poll();
-    ioContext.restart();
+    auto result = dispatchBlock(ioContext, dispatcher);
     // The single slot is free again, because both callbacks are done.
-    EXPECT_EQ(result, true);
+    ASSERT_TRUE(isReady(result));
+    EXPECT_TRUE(result.get());
   }
   dispatcher->waitUntilIdle();
   ASSERT_EQ(reported.size(), 4u);
@@ -172,26 +181,27 @@ TEST(ConcurrentCallbackDispatcher, cancel) {
   DispatcherFixture fixture{1, 1};
   auto first = fixture.dispatch();
   auto second = fixture.dispatch();
-  EXPECT_EQ(*first, true);
-  EXPECT_FALSE(second->has_value());
+  EXPECT_TRUE(first.get());
+  EXPECT_FALSE(isReady(second));
   fixture.dispatcher_->cancel();
   fixture.ioContext_.poll();
   fixture.ioContext_.restart();
-  EXPECT_EQ(*second, false);
+  ASSERT_TRUE(isReady(second));
+  EXPECT_FALSE(second.get());
   // A slot becomes free, but the dispatcher stays cancelled.
   fixture.finishOldest();
-  EXPECT_EQ(*fixture.dispatch(), false);
+  EXPECT_FALSE(fixture.dispatch().get());
   EXPECT_TRUE(fixture.pendingDones_.empty());
   fixture.dispatcher_->waitUntilIdle();
 }
 
-// Test that the `keepAlive` of a block is held until its last callback is
+// Test that the dispatcher is kept alive until the last callback of a block is
 // done.
-TEST(ConcurrentCallbackDispatcher, keepAliveIsHeldUntilDone) {
+TEST(ConcurrentCallbackDispatcher, dispatcherIsKeptAliveUntilDone) {
   DispatcherFixture fixture{2, 1};
   std::weak_ptr<ConcurrentCallbackDispatcher> weak = fixture.dispatcher_;
   auto result = fixture.dispatch();
-  EXPECT_EQ(*result, true);
+  EXPECT_TRUE(result.get());
   // The fixture's own pointer plus the one that the pending callbacks hold.
   EXPECT_EQ(weak.use_count(), 2);
   fixture.finishOldest();

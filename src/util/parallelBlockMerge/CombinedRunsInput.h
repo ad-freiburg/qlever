@@ -10,11 +10,11 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_COMBINEDRUNSINPUT_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_COMBINEDRUNSINPUT_H
 
-#include <algorithm>
 #include <cstddef>
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
@@ -107,7 +107,7 @@ class CombinedRunsInput : public ad_utility::NoCopy {
   // within that input.
   std::pair<const Input&, size_t> locate(size_t run) const {
     AD_CORRECTNESS_CHECK(run < numRuns());
-    auto it = std::upper_bound(runOffsets_.begin(), runOffsets_.end(), run);
+    auto it = ql::ranges::upper_bound(runOffsets_, run);
     size_t inputIdx = static_cast<size_t>(it - runOffsets_.begin()) - 1;
     return {inputs_.at(inputIdx), run - runOffsets_.at(inputIdx)};
   }

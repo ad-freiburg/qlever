@@ -30,22 +30,26 @@ ConcurrentCallbackDispatcher::ConcurrentCallbackDispatcher(
 
 // _____________________________________________________________________________
 net::awaitable<bool> ConcurrentCallbackDispatcher::asyncDispatch(
-    SharedBlock block, std::shared_ptr<void> keepAlive) {
-  if (callbacks_.empty()) {
+    std::shared_ptr<ConcurrentCallbackDispatcher> self, SharedBlock block) {
+  AD_CONTRACT_CHECK(self != nullptr);
+  if (self->callbacks_.empty()) {
     co_return true;
   }
-  // NOTE: The `cancel` of the semaphore is not sticky (see
-  // `AsyncResourcePool::cancel`), hence the additional checks of
-  // `wasCancelled_`.
-  if (wasCancelled_.load()) {
+  // NOTE: The `cancel` of the semaphore only completes the waits that are
+  // pending at the time of the `cancel`, it is not sticky (see
+  // `AsyncResourcePool::cancel`). Therefore `wasCancelled_` is checked twice:
+  // before the wait (for a `cancel` that happened before this call, after
+  // which the wait would succeed as soon as a slot is free), and after the
+  // wait (for a `cancel` that happened while the wait was already succeeding).
+  if (self->wasCancelled_.load()) {
     co_return false;
   }
   auto [errorCode, permit] =
-      co_await permits_.asyncAcquire(net::as_tuple(net::use_awaitable));
-  if (errorCode || wasCancelled_.load()) {
+      co_await self->permits_.asyncAcquire(net::as_tuple(net::use_awaitable));
+  if (errorCode || self->wasCancelled_.load()) {
     co_return false;
   }
-  invokeCallbacks(std::move(block), std::move(permit), std::move(keepAlive));
+  invokeCallbacks(std::move(self), std::move(block), std::move(permit));
   co_return true;
 }
 
@@ -63,33 +67,32 @@ void ConcurrentCallbackDispatcher::waitUntilIdle() {
 
 // _____________________________________________________________________________
 void ConcurrentCallbackDispatcher::invokeCallbacks(
-    SharedBlock block, Permit permit, std::shared_ptr<void> keepAlive) {
+    std::shared_ptr<ConcurrentCallbackDispatcher> self, SharedBlock block,
+    Permit permit) {
   // The state that the `done` callbacks of all the callbacks of this block
   // share. The permit is given back (and the block is no longer in flight)
   // once the last of them is done.
   struct Join {
-    ConcurrentCallbackDispatcher* self_;
-    std::shared_ptr<void> keepAlive_;
+    std::shared_ptr<ConcurrentCallbackDispatcher> self_;
     Permit permit_;
     std::atomic<size_t> remaining_;
-    Join(ConcurrentCallbackDispatcher* self, std::shared_ptr<void> keepAlive,
-         Permit permit, size_t remaining)
-        : self_{self},
-          keepAlive_{std::move(keepAlive)},
+    Join(std::shared_ptr<ConcurrentCallbackDispatcher> self, Permit permit,
+         size_t remaining)
+        : self_{std::move(self)},
           permit_{std::move(permit)},
           remaining_{remaining} {
       std::lock_guard lock{self_->mutex_};
       ++self_->numBlocksInFlight_;
     }
   };
-  auto join = std::make_shared<Join>(this, std::move(keepAlive),
-                                     std::move(permit), callbacks_.size());
+  auto& callbacks = self->callbacks_;
+  auto join = std::make_shared<Join>(std::move(self), std::move(permit),
+                                     callbacks.size());
   auto done = [join](std::exception_ptr exception) {
-    // NOTE: The copy of the `keepAlive_` keeps this dispatcher alive until this
+    // NOTE: The copy of the `self_` keeps the dispatcher alive until this
     // function has returned, in particular across the `notify_all` below,
     // after which the owner may destroy the dispatcher at any time.
-    auto keepAlive = join->keepAlive_;
-    auto* self = join->self_;
+    auto self = join->self_;
     // NOTE: This runs on the thread of the callback, so the `reportException_`
     // is called concurrently, which its contract allows (see
     // `ReportException`).
@@ -105,7 +108,7 @@ void ConcurrentCallbackDispatcher::invokeCallbacks(
       self->conditionVariable_.notify_all();
     }
   };
-  for (auto& callback : callbacks_) {
+  for (auto& callback : callbacks) {
     // Every callback gets a `DoneCallback` of its own, because a
     // `DoneCallback` is consumed by its (single) invocation. A callback that
     // throws (instead of reporting its exception via its `DoneCallback`) is

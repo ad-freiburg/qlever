@@ -93,12 +93,12 @@ class BoundaryConsolidator : public ad_utility::NoCopyNoMove {
 
   // Consolidate the `chunk`, which has to be the result of the chunk with the
   // given `chunkIndex`. The chunks have to be added in order, starting with
-  // index 0, which is checked. A chunk without any rows is skipped, in
-  // particular it doesn't complete the boundary relation that is currently
-  // open. Also check that the last row of the previous chunk and the first row
-  // of this chunk are not equal, because the merge never splits equal rows
-  // across chunks (which makes the removal of duplicates per chunk correct,
-  // see `Options::removeDuplicates_`).
+  // index 0, which is checked. A chunk without any rows (which is rare in
+  // practice) is skipped, in particular it doesn't complete the boundary
+  // relation that is currently open. Also check that the last row of the
+  // previous chunk and the first row of this chunk are not equal, because the
+  // merge never splits equal rows across chunks (which makes the removal of
+  // duplicates per chunk correct, see `Options::removeDuplicates_`).
   void addChunkResult(size_t chunkIndex, ChunkResult chunk);
 
   // Write the boundary relation that is still open (if any), pass the last
@@ -140,6 +140,15 @@ class BoundaryConsolidator : public ad_utility::NoCopyNoMove {
   // metadata.
   CompressedRelationMetadata writeTwinOfBoundaryRelation(
       Id col0Id, std::vector<BoundaryPart>& parts);
+
+  // Merge the `inputs` (the runs of the twin rows of the parts of a boundary
+  // relation, whose blocks have the given `inputBlockSizePerColumn`) with a
+  // parallel merge, which may spill to files with the `spillFilename`, and
+  // return the merged blocks.
+  ad_utility::InputRangeTypeErased<Block> mergeTwinRuns(
+      std::vector<ad_utility::CompressedIdTableRunsInput<0>> inputs,
+      ad_utility::MemorySize inputBlockSizePerColumn,
+      const std::string& spillFilename);
 
   CompressedRelationWriter& writer1() { return context_.writer1_; }
   CompressedRelationWriter& writer2() { return context_.writer2_; }

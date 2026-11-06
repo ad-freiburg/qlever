@@ -75,14 +75,18 @@ class ConcurrentCallbackDispatcher : public ad_utility::NoCopyNoMove {
   bool empty() const { return callbacks_.empty(); }
 
   // Wait until there is a free slot for another block, then invoke all the
-  // callbacks for the `block`. Return `false` (without invoking any callback)
-  // iff the dispatcher was cancelled before. If there are no callbacks, then
-  // return `true` right away. The `keepAlive` is held until the
-  // last callback for the `block` is done, and it has to keep this dispatcher
-  // alive, because the callbacks may be done at any time, in particular after
-  // `waitUntilIdle` has returned to the owner of this dispatcher.
-  net::awaitable<bool> asyncDispatch(SharedBlock block,
-                                     std::shared_ptr<void> keepAlive);
+  // callbacks of the dispatcher `self` for the `block`. Return `false`
+  // (without invoking any callback) iff the dispatcher was cancelled before.
+  // If there are no callbacks, then return `true` right away. The `self` is
+  // held until the last callback for the `block` is done, because the
+  // callbacks may be done at any time, in particular after `waitUntilIdle` has
+  // returned to the owner of the dispatcher. If the dispatcher is a member of
+  // another object (which its `ReportException` typically refers to), then
+  // `self` should be an aliasing `shared_ptr` that keeps that object alive,
+  // e.g. `std::shared_ptr<ConcurrentCallbackDispatcher>{shared_from_this(),
+  // &dispatcher_}`.
+  static net::awaitable<bool> asyncDispatch(
+      std::shared_ptr<ConcurrentCallbackDispatcher> self, SharedBlock block);
 
   // Make all current and future calls to `asyncDispatch` return `false`. The
   // callbacks that are already in flight are not affected.
@@ -92,10 +96,11 @@ class ConcurrentCallbackDispatcher : public ad_utility::NoCopyNoMove {
   void waitUntilIdle();
 
  private:
-  // Invoke all the `callbacks_` for the `block`, and give the `permit` back
-  // (and release the `keepAlive`) once all of them are done.
-  void invokeCallbacks(SharedBlock block, Permit permit,
-                       std::shared_ptr<void> keepAlive);
+  // Invoke all the `callbacks_` of the dispatcher `self` for the `block`, and
+  // give the `permit` back (and release the `self`) once all of them are done.
+  static void invokeCallbacks(
+      std::shared_ptr<ConcurrentCallbackDispatcher> self, SharedBlock block,
+      Permit permit);
 };
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
