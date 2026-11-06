@@ -23,6 +23,7 @@ add_library(index
         CompressedRelationMetadata.cpp CompressedRelationReader.cpp
         CompressedRelationReaderBlockSelection.cpp compressedRelationWriter/CompressedRelationWriter.cpp
         chunkwisePermutationWriter/ChunkWriter.cpp
+        chunkwisePermutationWriter/ChunkwisePermutationWriter.cpp
         DistinctCol0Ids.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
