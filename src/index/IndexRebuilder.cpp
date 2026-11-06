@@ -28,6 +28,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <vector>
 
@@ -41,7 +42,6 @@
 #include "index/LocalVocabEntry.h"
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
-#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
@@ -454,17 +454,24 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::vector<LocalVocabIndex>& entries,
     const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    qlever::Executor executor, const std::string& logFileName) {
+    const std::string& logFileName) {
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
-  // All the work of the rebuild on the `executor` (the scans of the old
-  // permutations and the writers of the new ones) shares a single limit, see
-  // the runtime parameter `rebuild-index-max-num-threads`.
-  executor = ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
-      getRuntimeParameterAsOptional<
-          &RuntimeParameters::rebuildIndexMaxNumThreads_>());
+  // All the work of the rebuild (the scans of the old permutations and the
+  // writers of the new ones) runs on a thread pool of its own, with as many
+  // threads as the runtime parameter `rebuild-index-max-num-threads` says.
+  //
+  // NOTE: The pool is declared first, so that it is destroyed last: the
+  // writers below hold strands on its executor, and the threads that drive the
+  // permutations (see `threadPool` below) wait for tasks on it.
+  size_t numThreads =
+      getRuntimeParameter<&RuntimeParameters::rebuildIndexMaxNumThreads_>();
+  if (numThreads == 0) {
+    numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+  }
+  boost::asio::thread_pool rebuildPool{numThreads};
+  qlever::Executor executor = rebuildPool.get_executor();
 
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration
@@ -479,6 +486,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
 
   REBUILD_LOG_INFO << "Rebuilding index from current data (including updates)"
                    << std::endl;
+  REBUILD_LOG_INFO << "Using a thread pool with " << numThreads
+                   << " threads for the rebuild" << std::endl;
 
   // Pass `numSteps` newly processed steps on to `progressBar` and write a
   // progress line to the rebuild's log file whenever one is due.
