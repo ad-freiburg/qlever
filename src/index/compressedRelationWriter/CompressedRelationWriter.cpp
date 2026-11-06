@@ -231,6 +231,13 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
   return finishLargeRelation(distinctCol1Counter.getAndReset());
 }
 
+// The instantiation for the twins of the relations that span several chunks of
+// a parallel merge (see `chunkwisePermutationWriter::BoundaryConsolidator`,
+// whose call site doesn't see the definition above).
+template CompressedRelationMetadata
+CompressedRelationWriter::addCompleteLargeRelation(
+    Id col0Id, ad_utility::InputRangeTypeErased<IdTableStatic<0>>&&);
+
 // _____________________________________________________________________________
 void CompressedRelationWriter::writeLargeRelationBlockInSlices(Id col0Id,
                                                                IdTable block) {
