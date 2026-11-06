@@ -285,11 +285,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
-      reportError(ctx,
-                  absl::StrCat("Function ", prefixName, functionName, " takes ",
-                               numArgs < 5 ? wordForNumArgs[numArgs]
-                                           : std::to_string(numArgs),
-                               numArgs == 1 ? " argument" : " arguments"));
+      reportError(ctx, absl::StrCat("Function ", prefixName, ":", functionName,
+                                    " takes ",
+                                    numArgs < 5 ? wordForNumArgs[numArgs]
+                                                : std::to_string(numArgs),
+                                    numArgs == 1 ? " argument" : " arguments"));
     }
   };
 

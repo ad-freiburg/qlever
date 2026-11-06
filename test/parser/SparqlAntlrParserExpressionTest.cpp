@@ -517,6 +517,18 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(
       absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\", ?c)"));
 
+  // The error message names the function with its prefix and a colon, for
+  // the prefixes stored with and without a colon.
+  expectFunctionCallFails(
+      absl::StrCat(ql, "stdev>(?a, ?b)"),
+      ::testing::HasSubstr("Function ql:stdev takes one argument"));
+  expectFunctionCallFails(
+      absl::StrCat(xsd, "integer>()"),
+      ::testing::HasSubstr("Function xsd:integer takes one argument"));
+  expectFunctionCallFails(
+      absl::StrCat(math, "sqrt>(?a, ?b)"),
+      ::testing::HasSubstr("Function math:sqrt takes one argument"));
+
   // `DISTINCT` before the argument list is only allowed for custom aggregates.
   expectFunctionCallFails(absl::StrCat(ql, "toEpoch>(DISTINCT ?x)"),
                           ::testing::HasSubstr("DISTINCT"));
