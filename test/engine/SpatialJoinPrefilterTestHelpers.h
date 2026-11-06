@@ -285,7 +285,7 @@ inline void runParsingAndSweeper(
 
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
-        numGeomInvalidLeft, numThreadsLeft] =
+        numGeomInvalidLeft, numThreadsLeft, numGeomFromIndexLeft] =
       sjAlgo.parse(false,
                    {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
                    sweeper, 1, std::nullopt);
@@ -298,7 +298,7 @@ inline void runParsingAndSweeper(
     prefilterBox = sweeper.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
-        numGeomInvalidRight, numThreadsRight] =
+        numGeomInvalidRight, numThreadsRight, numGeomFromIndexRight] =
       sjAlgo.parse(
           true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
           sweeper, 1, prefilterBox);
