@@ -127,10 +127,11 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
       "VALUES (?r ?s) { (1 UNDEF) } BIND(500 AS ?c) ?c <q> ?o2 }");
   auto defs = collectDefinitions(query._rootGraphPattern._graphPatterns);
 
-  // `?x` is only used by a later `BIND`, `?u` uses `?x`, which may be unbound,
-  // `?y` is bound before `?gb`, `?z` and `?n` are not deterministic, and `?w`
-  // is bound again by a later triple.
-  EXPECT_THAT(defs.expressions_, UnorderedElementsAre(Key(V{"?x"})));
+  // `?x` is only used by a later `BIND` and `NOW()` is the same in all rows,
+  // but `?u` uses `?x`, which may be unbound, `?y` is bound before `?gb`, `?z`
+  // is not deterministic, and `?w` is bound again by a later triple.
+  EXPECT_THAT(defs.expressions_,
+              UnorderedElementsAre(Key(V{"?x"}), Key(V{"?n"})));
 
   // The target of a `BIND` of a constant has this value, even if a later
   // triple binds it again.

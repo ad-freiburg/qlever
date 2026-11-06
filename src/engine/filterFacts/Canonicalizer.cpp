@@ -11,7 +11,6 @@
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/ParsedQuery.h"
@@ -31,8 +30,7 @@ bool isSubstitutable(const SparqlExpression& expression,
                      const ad_utility::HashSet<Variable>& alwaysBound) {
   std::vector<const SparqlExpression*> exists;
   expression.getExistsExpressions(exists);
-  return expression.isDeterministic() &&
-         !sparqlExpression::containsNow(expression) && exists.empty() &&
+  return expression.isDeterministic() && exists.empty() &&
          ql::ranges::all_of(expression.containedVariables(),
                             [&alwaysBound](const Variable* variable) {
                               return alwaysBound.contains(*variable);
