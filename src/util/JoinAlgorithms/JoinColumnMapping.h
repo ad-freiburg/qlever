@@ -21,7 +21,7 @@ namespace ad_utility {
 // columns. They also write a result where the join columns come first, then the
 // non-join columns of the left input and then the non-join columns of the right
 // input. This format is different from the formats that the join operations
-// (`Join`, `OptionalJoin`, `MultiColumnJoin` etc.) provide and expect: The
+// (`Join`, `OptionalJoin`, `Minus` etc.) provide and expect: The
 // columns of the input are arbitrarily ordered and there is an explicit data
 // structure that contains the information which columns are the join columns.
 // The output must be first all columns from the left input (in the same order)

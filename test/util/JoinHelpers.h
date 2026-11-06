@@ -83,7 +83,7 @@ inline auto makeJoinLambda() {
             qec, a.clone(), std::move(leftVariables), false, std::vector{jc1});
         auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, b.clone(), std::move(rightVariables), false, std::vector{jc2});
-        JoinImpl join{qec, leftTree, rightTree, jc1, jc2, true, false};
+        JoinImpl join{qec, leftTree, rightTree, {{jc1, jc2}}, true, false};
         return join.join(a.asStaticView<0>(), b.asStaticView<0>(), result);
       }};
 }

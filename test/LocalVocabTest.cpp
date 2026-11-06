@@ -18,7 +18,6 @@
 #include "engine/HasPredicateScan.h"
 #include "engine/Join.h"
 #include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
@@ -372,9 +371,9 @@ TEST(LocalVocab, propagation) {
 
   // MULTI-COLUMN JOIN operation with exactly one non-empty local vocab and with
   // two non-empty local vocabs.
-  MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2));
+  Join multiJoin1(testQec, qet(values1), qet(values2), {{0, 0}, {1, 1}});
   checkLocalVocab(multiJoin1, localVocab1);
-  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values3));
+  Join multiJoin2(testQec, qet(values1), qet(values3), {{0, 0}, {1, 1}});
   checkLocalVocab(multiJoin2, localVocab13);
 
   // ORDER BY operation (the third argument are the indices of the columns to be

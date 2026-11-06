@@ -116,9 +116,12 @@ class IndexScan final : public Operation {
   // Return two generators that lazily yield the results of `s1` and `s2` in
   // blocks, but only the blocks that can theoretically contain matching rows
   // when performing a join on the first column of the result of `s1` with the
-  // first column of the result of `s2`.
+  // first column of the result of `s2`. For a join on the first
+  // `numJoinColumns` columns of both scans, the blocks are only filtered by the
+  // first column, which yields a superset of the required blocks.
   static std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
-  lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2);
+  lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2,
+                            size_t numJoinColumns = 1);
 
   // Return a generator that lazily yields the result in blocks, but only
   // the blocks that can theoretically contain matching rows when performing a

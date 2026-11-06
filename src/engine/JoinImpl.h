@@ -22,28 +22,44 @@
 #include "util/TypeTraits.h"
 
 class JoinImpl : public Operation {
+ public:
+  using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+
+  // The maximal number of join columns for which the specialized (lazy and
+  // prefiltered) join algorithms are instantiated. Joins with more join
+  // columns always fully materialize their inputs.
+  static constexpr size_t MAX_NUM_JOIN_COLS_FOR_LAZY_JOIN = 3;
+
  private:
   std::shared_ptr<QueryExecutionTree> left_;
   std::shared_ptr<QueryExecutionTree> right_;
 
-  ColumnIndex leftJoinCol_;
-  ColumnIndex rightJoinCol_;
+  // The pairs `(leftColumn, rightColumn)` of join columns. Both children are
+  // sorted by their join columns in this order.
+  JoinColumns joinColumns_;
 
-  Variable joinVar_{"?notSet"};
+  // The join variables, in the same order as `joinColumns_`.
+  std::vector<Variable> joinVars_;
 
   bool sizeEstimateComputed_;
   size_t sizeEstimate_;
 
   std::vector<float> multiplicities_;
 
-  // If set to false, the join column will not be part of the result.
+  // If set to false, the join column will not be part of the result. Can
+  // only be set to false if there is exactly one join column.
   bool keepJoinColumn_ = true;
 
  public:
-  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
+  // Join `t1` and `t2` on the given `joinColumns`, which are pairs of
+  // `(columnOfT1, columnOfT2)`. If there are several join columns, their order
+  // might be changed s.t. one of the children doesn't have to be sorted, see
+  // `chooseJoinColumnOrder` below. `keepJoinColumn == false` is only supported
+  // for a single join column. `allowSwappingChildrenOnlyForTesting` should only
+  // ever be changed by tests.
   JoinImpl(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-           std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool keepJoinColumn = true,
+           std::shared_ptr<QueryExecutionTree> t2, JoinColumns joinColumns,
+           bool keepJoinColumn = true,
            bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
@@ -61,6 +77,22 @@ class JoinImpl : public Operation {
     }
     return sizeEstimate_;
   }
+
+  // Return the number of join columns.
+  size_t getNumJoinColumns() const { return joinColumns_.size(); }
+
+  // Return the join columns as pairs `(leftColumn, rightColumn)`.
+  const JoinColumns& getJoinColumns() const { return joinColumns_; }
+
+  // Reorder the `joinColumns` (pairs of `(colOfT1, colOfT2)`) s.t. one of the
+  // children is already sorted by its join columns, if possible. Children that
+  // are `IndexScan`s that support the prefiltered join are preferred.
+  // Otherwise, the join columns are sorted by the column index of the child
+  // with the smaller cache key. The result doesn't depend on the order of `t1`
+  // and `t2` (apart from the order within the pairs).
+  static JoinColumns chooseJoinColumnOrder(const QueryExecutionTree& t1,
+                                           const QueryExecutionTree& t2,
+                                           JoinColumns joinColumns);
 
   size_t getCostEstimate() override;
 
@@ -82,8 +114,9 @@ class JoinImpl : public Operation {
       const Variable& variable) const override;
 
   /**
-   * @brief Joins IdTables a and b on join column jc2, returning
-   * the result in dynRes. Creates a cross product for matching rows.
+   * @brief Join the fully materialized inputs `a` and `b` (the results of the
+   * left and right child) on the `joinColumns_` and store the result in
+   * `result`. Creates a cross product for matching rows.
    *
    * This should be a switch, which should decide which algorithm to use for
    * joining two IdTables.
@@ -99,10 +132,19 @@ class JoinImpl : public Operation {
   void join(const IdTableView<0>& a, const IdTableView<0>& b,
             IdTable* result) const;
 
+  // Implementation of `join` (see above) for more than one join column. If
+  // the join columns contain no UNDEF values, a galloping join or a simple
+  // zipper join is used. Otherwise, the more expensive variant of
+  // `zipperJoinWithUndef` that finds compatible rows with UNDEF values is used,
+  // and the result is sorted afterwards if required.
+  void multiColumnJoin(const IdTableView<0>& a, const IdTableView<0>& b,
+                       IdTable* result) const;
+
  public:
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we
-  // don't have any optimization left to try.
+  // don't have any optimization left to try. Requires that
+  // `lazyJoinAlgorithmsAreApplicable()` is true.
   Result lazyJoin(std::shared_ptr<const Result> a,
                   std::shared_ptr<const Result> b, bool requestLaziness) const;
 
@@ -139,9 +181,27 @@ class JoinImpl : public Operation {
       std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
  private:
+  // Return true iff the lazy and prefiltered join algorithms can be used. This
+  // is always the case for a single join column. For more join columns, it
+  // requires that there are at most `MAX_NUM_JOIN_COLS_FOR_LAZY_JOIN` join
+  // columns, none of which can contain UNDEF values, as those algorithms can
+  // only handle UNDEF values in the first join column, and only if it is the
+  // only join column.
+  bool lazyJoinAlgorithmsAreApplicable() const;
+
+  // Call `f` with a `std::integral_constant<size_t, numJoinColumns>`. Requires
+  // that `lazyJoinAlgorithmsAreApplicable()` is true.
+  template <typename F>
+  decltype(auto) callWithNumJoinColumns(F&& f) const;
+
+  // Compute the result by fully materializing both inputs. This is used when
+  // `lazyJoinAlgorithmsAreApplicable()` is false.
+  Result computeResultFullyMaterialized();
+
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.
+  template <size_t NumJoinCols>
   Result computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // A special implementation that is called when exactly one of the children is
@@ -149,7 +209,7 @@ class JoinImpl : public Operation {
   // argument `idTableIsRightInput` determines whether the `IndexScan` is the
   // left or the right child of this `Join`. This needs to be known to determine
   // the correct order of the columns in the result.
-  template <bool idTableIsRightInput>
+  template <size_t NumJoinCols, bool idTableIsRightInput>
   Result computeResultForIndexScanAndIdTable(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
@@ -158,6 +218,7 @@ class JoinImpl : public Operation {
   // `IndexScan` and the left child is a lazy result. (The constructor will
   // ensure the correct order if they are initially swapped). This allows the
   // `IndexScan` to skip rows that won't match in the join operation.
+  template <size_t NumJoinCols>
   Result computeResultForIndexScanAndLazyOperation(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
@@ -204,6 +265,28 @@ class JoinImpl : public Operation {
   // Helper function to create the commonly used instance of this class.
   ad_utility::AddCombinedRowToIdTable makeRowAdder(
       std::function<void(IdTable&, LocalVocab&)> callback) const;
+
+  // Return true iff the join columns of the `side`-th child (0 for left, 1 for
+  // right) are exactly the columns `0, ..., numJoinColumns - 1` in this order,
+  // which is the case for all `IndexScan`s that are not sorted.
+  bool joinColumnsArePrefix(size_t side) const;
+
+  // Return a view of the join columns of the `side`-th child (0 for left, 1
+  // for right).
+  auto joinColumnsOfSide(size_t side) const {
+    return joinColumns_ |
+           ql::views::transform([side](const auto& jc) { return jc.at(side); });
+  }
+
+  // Compute the size estimate and multiplicities for more than one join
+  // column.
+  void computeSizeEstimateAndMultiplicitiesMultiColumn();
+
+  // Compute the join columns (as pairs `(leftCol, rightCol)`) of `left` and
+  // `right` for the given `joinVars`.
+  static JoinColumns computeJoinColumns(const QueryExecutionTree& left,
+                                        const QueryExecutionTree& right,
+                                        const std::vector<Variable>& joinVars);
 };
 
 #endif  // QLEVER_SRC_ENGINE_JOINIMPL_H

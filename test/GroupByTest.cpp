@@ -1608,6 +1608,13 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   // The join is not on the GROUPED Variable.
   testFailure(variablesOnlyY, aliasesCountX, validJoinWhenGroupingByX);
 
+  // The join must have a single join column.
+  auto multiColumnJoin = makeExecutionTree<Join>(
+      qec, xyScan, xyzScanSortedByX,
+      QueryExecutionTree::getJoinColumns(*xyScan, *xyzScanSortedByX));
+  ASSERT_EQ(getOperation(multiColumnJoin).getJoinColumns().size(), 2);
+  testFailure(variablesOnlyX, aliasesCountX, multiColumnJoin);
+
   // Everything is valid for the following example.
   GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX,
                       validJoinWhenGroupingByX};

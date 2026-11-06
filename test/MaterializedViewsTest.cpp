@@ -2453,7 +2453,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   }
 
   // `BIND` push down through the remaining operations: `ExistsJoin`, `Minus`,
-  // `MultiColumnJoin`, `OptionalJoin`, `Union`, `NeutralOptional`, `Bind`,
+  // multi-column `Join`, `OptionalJoin`, `Union`, `NeutralOptional`, `Bind`,
   // `CartesianProductJoin`, and `Filter`. Each tree is built manually (instead
   // of going through the query planner) so that the test is independent of
   // query planning heuristics.
@@ -2498,7 +2498,8 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       return makeExecutionTree<Minus>(qec, left, right);
     };
     auto mcj = [qec](auto left, auto right) {
-      return makeExecutionTree<MultiColumnJoin>(qec, left, right);
+      auto joinColumns = QueryExecutionTree::getJoinColumns(*left, *right);
+      return makeExecutionTree<Join>(qec, left, right, std::move(joinColumns));
     };
     auto optional = [qec](auto left, auto right) {
       return makeExecutionTree<OptionalJoin>(qec, left, right);
@@ -2536,10 +2537,10 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     expectPush(minus(sharesS(), view()), std::nullopt);
     expectPush(minus(view(), scan("?s", "<p1>", "?bind")), std::nullopt);
 
-    // `MultiColumnJoin`: succeeds iff a child covering `?o` accepts.
-    expectPush(mcj(view(), sharesSAndO()),
-               h::MultiColumnJoin(pushedView,
-                                  h::IndexScanFromStrings("?s", "<p3>", "?o")));
+    // Multi-column `Join`: succeeds iff a child covering `?o` accepts.
+    expectPush(
+        mcj(view(), sharesSAndO()),
+        h::Join(pushedView, h::IndexScanFromStrings("?s", "<p3>", "?o")));
     expectPush(mcj(scan("?s", "<p4>", "?w"), scan("?s", "<p5>", "?w")),
                std::nullopt);
 
@@ -2981,9 +2982,9 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
         *plannedQueryRight.queryExecutionTree().getRootOperation());
     AD_EXPECT_THROW_WITH_MESSAGE(
         IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight),
-        ::testing::HasSubstr(
-            "The two IndexScans for a lazy single-column join have "
-            "more than one column in common."));
+        ::testing::HasSubstr("The number of common columns of the two "
+                             "IndexScans for a lazy join doesn't match the "
+                             "number of join columns."));
   }
 }
 

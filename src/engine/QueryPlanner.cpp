@@ -41,7 +41,6 @@
 #include "engine/Load.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/NeutralOptional.h"
@@ -2383,28 +2382,19 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(plan));
   }
 
-  if (jcs.size() >= 2) {
-    // If there are two or more join columns use a multiColumnJoin.
-    SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
-    mergeSubtreePlanIds(plan, a, b);
-    candidates.push_back(plan);
-    return candidates;
-  }
-
-  // CASE: JOIN ON ONE COLUMN ONLY.
-
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
   // loading the full has-predicate predicate.
-  if (auto opt = createJoinWithHasPredicateScan(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
+  if (jcs.size() == 1) {
+    if (auto opt = createJoinWithHasPredicateScan(a, b, jcs)) {
+      candidates.push_back(std::move(opt.value()));
+    }
   }
 
   // "NORMAL" CASE:
-  // The join class takes care of sorting the subtrees if necessary
-  SubtreePlan plan =
-      makeSubtreePlan<Join>(_qec, a._qet, b._qet, jcs[0][0], jcs[0][1]);
+  // The join class takes care of sorting the subtrees if necessary.
+  SubtreePlan plan = makeSubtreePlan<Join>(_qec, a._qet, b._qet, jcs);
   mergeSubtreePlanIds(plan, a, b);
   candidates.push_back(std::move(plan));
 
