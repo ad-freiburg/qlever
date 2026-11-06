@@ -167,6 +167,14 @@ class QueryPlanner {
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;
+    // The filters whose rectangle the result of this plan is already
+    // restricted to (by the block prefilter of a scan or a
+    // `GeoRectangleRowFilter`, see `applyGeoRectanglePrefilters`), although
+    // the filter itself is not applied yet. Such a plan computes a subset of
+    // the rows of the same plan without the restriction, so the two must not
+    // be compared by cost before the filter is applied to both; see
+    // `getPruningKey`.
+    uint64_t idsOfPartiallyAppliedFilters_ = 0;
     bool containsFilterSubstitute_ = false;
     bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
@@ -359,6 +367,32 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+  // Prefilter the seeds of the triples that bind a geometry variable of a
+  // spatial join (a filter substitute) with a rectangle that is known for
+  // that variable at planning time: the scan that is sorted by the variable
+  // gets its blocks pruned, every scan that binds the variable gets a row
+  // filter with the same size estimate (both as alternatives to the
+  // unprefiltered scans, the dynamic programming decides by cost), and
+  // replacement plans (from materialized views) get the prefilter forwarded
+  // to their scans. A
+  // rectangle is known for the fixed side of a spatial join (a one-row
+  // `VALUES` created by the rewriting of the filter, or a variable bound by a
+  // `BIND` of a constant expression), and for a geometry variable that is
+  // bound by a small part of the query that is cheap to evaluate (which is
+  // then evaluated here, see the runtime parameters
+  // `geo-prefilter-planning-max-rows` and `geo-prefilter-planning-max-cost`),
+  // and it carries over to the other side of that join and from there along
+  // further spatial joins (see the implementation for the rules). A spatial
+  // join between a fixed side and a prefiltered side is told the selectivity
+  // within the remaining rows (see `SpatialJoin::setGeometrySideSelectivity`).
+  // This is done once, before the dynamic programming, so that it costs one
+  // prefilter evaluation per permutation of the triple and not one per
+  // candidate plan; the DP then decides by cost where the spatial joins go.
+  void applyGeoRectanglePrefilters(SubtreePlanVec& seeds,
+                                   FiltersAndOptionalSubstitutes& filters,
+                                   SubtreePlanMatrix& replacementPlans,
+                                   const TripleGraph& tg) const;
+
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which
@@ -530,6 +564,17 @@ class QueryPlanner {
       const SubtreePlan& plan,
       const std::vector<ColumnIndex>& orderedOnColumns) const;
 
+  // Keep only the cheapest plan of each entry of `candidatesByKey` (the plans
+  // with the same pruning key) and return them.
+  SubtreePlanVec keepCheapestPerKey(
+      ad_utility::HashMap<std::string, SubtreePlanVec> candidatesByKey) const;
+
+  // Keep only the cheapest plan per pruning key (see `getPruningKey`) in
+  // `row`. The rows of the dynamic programming have this property by
+  // construction (see `merge`), the rows for the query-level modifiers
+  // (`GROUP BY`, `DISTINCT`, `ORDER BY`, ...) only after this function.
+  void pruneByPruningKey(SubtreePlanVec& row) const;
+
   // Configure the behavior of the `applyFiltersIfPossible` function below.
   enum class FilterMode {
     // Only apply matching filters, that is filters are only added to plans that
@@ -629,6 +674,20 @@ class QueryPlanner {
                               TextLimitMap& textLimits,
                               const SubtreePlanMatrix& children,
                               ReplacementPlans replacementPlans);
+
+  // Apply the prefilters of `filters` to the seed scans of this group graph
+  // pattern's own triples (the first `numTripleNodes` node ids), once, before
+  // the dynamic programming starts. A prefiltered scan is semantically
+  // interchangeable with the original one within the group, because every
+  // filter is applied to each final plan of the group at the latest at its
+  // end, and prefiltering only drops blocks without matching rows. Doing it
+  // here instead of in the `Filter` of every candidate plan evaluates each
+  // prefilter once per scan, not once per candidate, and gives the dynamic
+  // programming the prefiltered size estimates from the first round on. The
+  // plans of nested groups (`OPTIONAL`, `MINUS`, subqueries) are left alone,
+  // and so are filters with a substitute (see `seedFilterSubstitutes`).
+  void prefilterSeeds(SubtreePlanVec& seeds, size_t numTripleNodes,
+                      const FiltersAndOptionalSubstitutes& filters) const;
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -830,6 +889,7 @@ class QueryPlanner {
       bool useGreedyPlanning);
   FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
               findApplicableReplacementPlansGreedyOverlap);
+  FRIEND_TEST(GeoRectanglePrefilter, pruningKeyOfPartiallyAppliedFilter);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples

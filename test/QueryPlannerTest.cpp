@@ -4673,3 +4673,75 @@ TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
   // When the tree is destroyed, the memory is released again.
   EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
 }
+
+// Test that the scans of a group graph pattern are prefiltered once at the
+// seed level (`QueryPlanner::prefilterSeeds`): the `Filter` on top of the
+// final plan sits on a prefiltered scan and finds nothing left to prefilter.
+// With prefiltering disabled, the scan stays as it is.
+TEST(QueryPlanner, prefilterSeedScansOnce) {
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> 1 . <b> <p> 2 . <c> <p> 3 . <d> <p> 4 . <e> <p> 5 .");
+  std::string query = "SELECT * { ?x <p> ?o FILTER(?o > 3) }";
+  auto prefilterOfTheFilter = [&]() {
+    return parseQuery(query)
+        ._rootGraphPattern._filters.at(0)
+        .expression_.getPrefilterExpressionForMetadata(
+            qec->getLocalVocabContext());
+  };
+
+  // The plan is a `Filter` on a scan that was prefiltered at the seed level.
+  // A prefiltered scan is not cached (this is also how `FilterTest` checks
+  // for prefiltering), and the filter's prefilter applies to it no more.
+  {
+    auto tree = h::parseAndPlan(query, qec);
+    const auto* filter =
+        dynamic_cast<const Filter*>(tree->getRootOperation().get());
+    ASSERT_NE(filter, nullptr);
+    auto scan = filter->getSubtree()->getRootOperation();
+    ASSERT_NE(dynamic_cast<const IndexScan*>(scan.get()), nullptr);
+    EXPECT_FALSE(scan->canResultBeCached());
+    EXPECT_FALSE(scan->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                         prefilterOfTheFilter())
+                     .has_value());
+  }
+
+  // With prefiltering disabled, the scan is untouched and the prefilter would
+  // still apply to it.
+  {
+    [[maybe_unused]] const auto& rtp = setRuntimeParameterForTest<
+        &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+    auto tree = h::parseAndPlan(query, qec);
+    const auto* filter =
+        dynamic_cast<const Filter*>(tree->getRootOperation().get());
+    ASSERT_NE(filter, nullptr);
+    auto scan = filter->getSubtree()->getRootOperation();
+    ASSERT_NE(dynamic_cast<const IndexScan*>(scan.get()), nullptr);
+    EXPECT_TRUE(scan->canResultBeCached());
+    EXPECT_TRUE(scan->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                        prefilterOfTheFilter())
+                    .has_value());
+  }
+}
+
+// Test that the rows for the query-level modifiers (`DISTINCT`, `GROUP BY`,
+// `ORDER BY`) keep only one plan per pruning key. Without a modifier, the
+// last row has one plan per sort order of the result. With a modifier, all
+// these plans end in the same operation and become indistinguishable, and a
+// subquery or group must not hand such duplicates to the outer planning,
+// where every pair of plans of two children is tried.
+TEST(QueryPlanner, queryLevelRowsArePrunedByKey) {
+  auto numPlans = [](const std::string& query) {
+    ParsedQuery pq = parseQuery(query);
+    return makeQueryPlanner().createExecutionTrees(pq, true).size();
+  };
+  std::string triples = "WHERE { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }";
+
+  // Several plans without a modifier, one per sort order.
+  EXPECT_GT(numPlans("SELECT ?x ?z " + triples), 1u);
+
+  // One plan with a modifier.
+  EXPECT_EQ(numPlans("SELECT DISTINCT ?x ?z " + triples), 1u);
+  EXPECT_EQ(numPlans("SELECT ?x (COUNT(?z) AS ?c) " + triples + " GROUP BY ?x"),
+            1u);
+  EXPECT_EQ(numPlans("SELECT ?x ?z " + triples + " ORDER BY ?z"), 1u);
+}

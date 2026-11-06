@@ -106,13 +106,18 @@ template <typename W>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, ParallelWordWriterBase& writer,
                      ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes)
+                     const ad_utility::RegexSet& blankNodeIriRegexes,
+                     std::function<uint64_t(std::string_view)> geoSortKeyFn)
     -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>) {
   using detail::InputWord;
   using detail::MergedBlock;
-  // Return true iff `p1` is smaller than `p2` according to the order of the
-  // IRI or literal.
+  // Return true iff `p1` is smaller than `p2` in the order of the merged
+  // vocabulary: by geo sort key first (all keys are 0 without a geo cell grid,
+  // see `geoSortKeyFn`), then by the order of the IRI or literal.
   auto lessThan = [&comparator](const InputWord& p1, const InputWord& p2) {
+    if (p1.geoSortKey_ != p2.geoSortKey_) {
+      return p1.geoSortKey_ < p2.geoSortKey_;
+    }
     return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
   // The index of the partial vocabulary that a merged word comes from is
@@ -130,7 +135,8 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   // the merged blocks in the order of the vocabulary. The blocks stay in
   // memory, and a chunk keeps its slot until this thread has taken its output,
   // see `vocabularyMergeOptions`.
-  PartialVocabularyRunsInput input{basename, numPartialVocabularies};
+  PartialVocabularyRunsInput input{basename, numPartialVocabularies,
+                                   std::move(geoSortKeyFn)};
   const auto inputStatistics = input.statistics();
   const auto [memoryForChunks, memoryForSegments] =
       splitMemoryOfVocabularyMerge(memoryToUse);
@@ -139,8 +145,11 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   const size_t maxSegmentsInFlight = maxNumSegmentsInFlight();
   AD_LOG_INFO << "Merging " << input.numRuns() << " partial vocabularies ("
               << inputStatistics.numWords_ << " words in "
-              << inputStatistics.numBlocks_ << " blocks) in "
-              << options.targetNumChunks() << " chunks, using "
+              << inputStatistics.numBlocks_ << " blocks, block index "
+              << ad_utility::MemorySize::bytes(
+                     inputStatistics.numBytesOfBlockIndex_)
+                     .asString()
+              << ") in " << options.targetNumChunks() << " chunks, using "
               << options.parallelism() << " threads, up to "
               << options.maxNumChunksInFlight << " chunks and up to "
               << maxSegmentsInFlight << " segments in flight ..." << std::endl;
@@ -270,13 +279,22 @@ inline void writePartialVocabularyToFile(const ItemVec& entries,
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+template <typename GeoSortKeyFn>
+ItemVec vocabMapsToVector(const ItemMapAndBuffer& map,
+                          const GeoSortKeyFn& geoSortKeyFn) {
   ItemVec entries;
   entries.resize(map.map_.size());
   using T = ItemVec::value_type;
   ql::ranges::transform(map.map_, entries.begin(),
-                        [](auto& el) -> T { return {el.first, el.second}; });
+                        [&geoSortKeyFn](auto& el) -> T {
+                          return {el.first, el.second, geoSortKeyFn(el.first)};
+                        });
   return entries;
+}
+
+// _____________________________________________________________________________
+inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+  return vocabMapsToVector(map, [](std::string_view) { return uint64_t{0}; });
 }
 
 // _____________________________________________________________________

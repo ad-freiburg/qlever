@@ -12,6 +12,8 @@
 #ifndef QLEVER_SRC_ENGINE_JOINIMPL_H
 #define QLEVER_SRC_ENGINE_JOINIMPL_H
 
+#include <absl/functional/function_ref.h>
+
 #include "backports/concepts.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
@@ -40,13 +42,20 @@ class JoinImpl : public Operation {
   bool keepJoinColumn_ = true;
 
  public:
-  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
+  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests
+  // and by `getUpdatedQueryExecutionTreeWithPrefilterApplied`, which has to
+  // keep the column layout of the original join.
   JoinImpl(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
            ColumnIndex t2JoinCol, bool keepJoinColumn = true,
            bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
+
+  // See `Join::getUpdatedQueryExecutionTreeWithPrefilterApplied`.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      const std::vector<PrefilterVariablePair>& prefilters) const override;
 
   std::string getDescriptor() const override;
 
@@ -63,6 +72,8 @@ class JoinImpl : public Operation {
   }
 
   size_t getCostEstimate() override;
+
+  std::vector<size_t> getCostEstimatesChargedForChildren() override;
 
   bool knownEmptyResult() override {
     return left_->knownEmptyResult() || right_->knownEmptyResult();
@@ -191,6 +202,12 @@ class JoinImpl : public Operation {
   static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
                            const IdTable& dynB, ColumnIndex jc2,
                            IdTable* dynRes);
+
+  // For each child (in the order of `getChildren()`), the number of rows that
+  // the join reads of it if it is an index scan that the join reads only
+  // partially, and the result of `fallback` for the child otherwise.
+  std::vector<size_t> getNumRowsReadOfChildrenOr(
+      absl::FunctionRef<size_t(QueryExecutionTree&)> fallback);
 
   // Commonly used code for the various known-to-be-empty cases.
   Result createEmptyResult() const;

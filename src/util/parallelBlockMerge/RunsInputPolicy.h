@@ -88,8 +88,8 @@ CPP_requires(
         // The number of elements in a single block, available without I/O.
         std::is_convertible_v<decltype(t.numElementsInBlock(runIdx, blockIdx)),
                               size_t>,
-        // The first and the last element of a single block, available without
-        // I/O.
+        // The last element of a single block and a lower bound of its first
+        // element (see below), available without I/O.
         std::is_convertible_v<decltype(t.firstElement(runIdx, blockIdx)),
                               typename T::Element>,
         std::is_convertible_v<decltype(t.lastElement(runIdx, blockIdx)),
@@ -123,15 +123,23 @@ CPP_requires(
 //
 // IMPORTANT: There is deliberately no separate notion of a *key*. The merge
 // splits on whole elements and applies the `Comparator` to them and only to
-// them, so `firstElement(runIdx, blockIdx)` and `lastElement(runIdx, blockIdx)`
-// have to be equivalent to the first and the last element of
-// `getBlock(runIdx, blockIdx)`: the `Comparator` must not be able to
-// distinguish them. `Element` need not be the value type of `Block` (it may for
-// example be an owning type that corresponds to a proxy reference, or a type
-// that only stores those parts of an element that the comparator looks at), it
-// only has to be morally the same value. Anything weaker silently breaks the
-// merge, because a chunk trims its first and its last input block by exactly
-// these bounds, see `ChunkMerger`.
+// them, so `lastElement(runIdx, blockIdx)` has to be equivalent to the last
+// element of `getBlock(runIdx, blockIdx)`: the `Comparator` must not be able
+// to distinguish them. `Element` need not be the value type of `Block` (it may
+// for example be an owning type that corresponds to a proxy reference, or a
+// type that only stores those parts of an element that the comparator looks
+// at), it only has to be morally the same value. Anything weaker silently
+// breaks the merge, because the chunks are split at these elements and a chunk
+// trims its first and its last input block by exactly these bounds, see
+// `ChunkMerger`.
+//
+// `firstElement(runIdx, blockIdx)` is only used to leave out the blocks that
+// lie entirely beyond the end of a chunk (see `blockRangeForRun` in
+// `MergeHelpers.h`). It may therefore be any lower bound of the first element
+// of the block that is not smaller than the last element of the previous
+// block, for example that last element itself, which saves storing a second
+// element per block. A block that is included because of a bound that is too
+// low is read and trimmed to nothing.
 //
 // `getBlock(runIdx, blockIdx)` returns the block itself. This is typically
 // somewhat expensive, as it might perform I/O, decompression, etc.
@@ -145,6 +153,11 @@ CPP_requires(
 // blocks are of a different type than its input blocks (for example because the
 // merge combines equal elements, see `appendToBlock`) declares that type as
 // `T::OutputBlock`, which is then also the type that the merge yields.
+// Optionally, an input can provide `reserveBlock(block, numElements)`, which
+// reserves the memory for `numElements` elements in an (empty) output block.
+// If it exists and the number of elements per output block is bounded (see
+// `OutputBlockSize`), the merge calls it for every new output block, so that
+// the block is allocated once instead of growing in several steps.
 //
 // All member functions must be `const` and thread-safe. This is what makes the
 // chunks of a merge independent of each other not only in principle, but also

@@ -42,10 +42,12 @@
 #include "util/Timer.h"
 
 // The writer of a single chunk of a parallel merge and the state that all such
-// writers share (see `index/chunkwisePermutationWriter/ChunkWriter.h`), which
-// need access to the thread-safe internals of the `CompressedRelationWriter`
-// below.
+// writers share (see `index/chunkwisePermutationWriter/ChunkWriter.h`), and the
+// writer of a complete pair of permutations that drives them (see
+// `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`), which need
+// access to the thread-safe internals of the `CompressedRelationWriter` below.
 namespace chunkwisePermutationWriter {
+class ChunkwisePermutationWriter;
 class ChunkWriter;
 struct ChunkWriterContext;
 }  // namespace chunkwisePermutationWriter
@@ -75,6 +77,9 @@ class CompressedRelationWriter {
   // The small relations that will be stored in the same block.
   SmallRelationsBlockBuilder smallRelations_{IdTable{numColumns_, allocator_},
                                              rowsPerBlock_};
+  // The ZSTD compression level of the blocks, see the runtime parameter
+  // `permutation-compression-level`, which is read once at construction.
+  int compressionLevel_;
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
@@ -129,6 +134,7 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
+        compressionLevel_{getCompressionLevel()},
         executor_{std::move(executor)},
         numBlocksInFlight_{getNumBlocksInFlight()},
         blockWriteQueue_{makeBlockWriteQueue(executor_, numBlocksInFlight_)} {
@@ -459,8 +465,12 @@ class CompressedRelationWriter {
   // compressed and written, as determined by the runtime parameter
   // `permutation-writer-num-blocks-in-flight`.
   static size_t getNumBlocksInFlight();
+  friend class chunkwisePermutationWriter::ChunkwisePermutationWriter;
   friend class chunkwisePermutationWriter::ChunkWriter;
   friend struct chunkwisePermutationWriter::ChunkWriterContext;
+
+  // Return the compression level of the blocks, see `compressionLevel_`.
+  static int getCompressionLevel();
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);

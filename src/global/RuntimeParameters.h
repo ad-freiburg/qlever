@@ -170,8 +170,23 @@ struct RuntimeParameters {
   // prefilter-free baseline, or for debugging, as wrong results may be
   // related to the `PrefilterExpression`s.
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
+  // The query planner evaluates a small part of a query at planning time if
+  // that gives it the rectangle of a geometry variable of a spatial join
+  // (see `QueryPlanner::applyGeoRectanglePrefilters`), but only if the size
+  // and the cost estimates of the cheapest plan of that part are at most
+  // these values.
+  SizeT geoPrefilterPlanningMaxRows_{1'000, "geo-prefilter-planning-max-rows"};
+  SizeT geoPrefilterPlanningMaxCost_{10'000'000,
+                                     "geo-prefilter-planning-max-cost"};
   // The maximum number of threads to be used by the spatial join algorithms.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
+  // If `true`, a spatial join with the `libspatialjoin` algorithm whose one
+  // side is a single point or polygon and whose other side consists of
+  // points checks the points directly, without `libspatialjoin` (see
+  // `FixedGeometryAlgorithm`). The results are the same; `false` is useful
+  // for comparing the two.
+  Bool spatialJoinFixedGeometryAlgorithm_{
+      true, "spatial-join-fixed-geometry-algorithm"};
   // The maximum number of tasks of the parallel counting loops of the pattern
   // trick (see `CountAvailablePredicates`) that run at the same time. They run
   // on the query's executor, so `max-num-threads-per-query` still bounds the
@@ -256,6 +271,12 @@ struct RuntimeParameters {
   // to set this parameter, but derives it from its `--num-threads` option.
   SizeT permutationWriterNumBlocksInFlight_{
       4, "permutation-writer-num-blocks-in-flight"};
+
+  // The ZSTD compression level of the blocks of the permutations that the
+  // index builder writes (the default of 3 is the default of ZSTD). A lower
+  // level (e.g. 1) compresses noticeably faster and decompresses equally fast,
+  // at the price of a slightly larger index.
+  SizeT permutationCompressionLevel_{3, "permutation-compression-level"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};

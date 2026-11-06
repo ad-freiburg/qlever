@@ -463,6 +463,41 @@ TEST(IndexScan, additionalColumn) {
 
 // Test that the graphs by which an `IndexScan` is to be filtered is correctly
 // reflected in its cache key and its `ScanSpecification`.
+// Test the cases in which `makeCopyWithSelectedBlocks` does not restrict the
+// scan. Only in the last case is the selector called (and declines).
+TEST(IndexScan, makeCopyWithSelectedBlocksWithoutRestriction) {
+  TestIndexConfig config{"<a> <p> 1 . <b> <p> 2 . <c> <p> 4 . <d> <p> 5 ."};
+  config.rowsPerBlock = 4;
+  auto* qec = getQec(std::move(config));
+  size_t numCalls = 0;
+  auto selector = [&numCalls](const IndexScan::BlocksOfSortedVariable&)
+      -> std::optional<std::vector<size_t>> {
+    ++numCalls;
+    return std::nullopt;
+  };
+  auto makeCopy = [qec, &selector](const SparqlTripleSimple& triple,
+                                   const LimitOffsetClause& limitOffset = {}) {
+    IndexScan scan{qec, Permutation::POS, triple};
+    scan.applyLimitOffset(limitOffset, true);
+    return scan.makeCopyWithSelectedBlocks(selector);
+  };
+
+  // The scan has a `LIMIT` of its own.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}},
+                        LimitOffsetClause{._limit = 1})
+                   .has_value());
+  // No blocks, because `<a>` is not a predicate.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<a>"), Var{"?x"}}).has_value());
+  // No variable.
+  EXPECT_FALSE(makeCopy({iri("<a>"), iri("<p>"), Tc{int64_t{1}}}).has_value());
+  // An empty result, although the block of `<p>` covers the value `3`.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Tc{int64_t{3}}}).has_value());
+  EXPECT_EQ(numCalls, 0);
+
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}}).has_value());
+  EXPECT_EQ(numCalls, 1);
+}
+
 TEST(IndexScan, namedGraphs) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;
@@ -2433,4 +2468,100 @@ TEST(IndexScan, isDistinctBy) {
   ASSERT_TRUE(
       std::dynamic_pointer_cast<IndexScan>(strippedGraph->getRootOperation()));
   EXPECT_FALSE(strippedGraph->getRootOperation()->isDistinctBy(SC{0, 1, 2, 3}));
+}
+
+// Test that a prefilter that was already applied to a scan is not applied
+// again (the query planner relies on this when it prefilters the seed scans
+// once, see `QueryPlanner::prefilterSeeds`), while a different prefilter still
+// is, and that the prefiltered copy remembers both.
+TEST(IndexScan, prefilterAlreadyAppliedIsNotAppliedAgain) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  std::string kg =
+      "<a> <price_tag> 10.00 . <b> <price_tag> 12.00 . <b> <price_tag> "
+      "12.001 . <b> <price_tag> 21.99 . <b> <price_tag> 24.33 . <b> "
+      "<price_tag> 147.32 . <b> <price_tag> 189.99 . <b> <price_tag> 194.67 "
+      ".";
+  auto qec = getQec(kg);
+  // In the POS permutation `?price` is the first free column, so prefilters
+  // on it apply.
+  SparqlTripleSimple triple{Tc{Variable{"?b"}}, iri("<price_tag>"),
+                            Tc{Variable{"?price"}}};
+  IndexScan scan{qec, Permutation::POS, triple};
+  auto prefilter = [](auto expression) {
+    return makePrefilterVec(pr(std::move(expression), Variable{"?price"}));
+  };
+  auto asScan = [](const auto& optTree) -> const IndexScan& {
+    return dynamic_cast<const IndexScan&>(*optTree.value()->getRootOperation());
+  };
+
+  // The first application prefilters the scan, the same prefilter again is a
+  // no-op.
+  auto once = scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      prefilter(gt(DoubleId(12.00))));
+  ASSERT_TRUE(once.has_value());
+  EXPECT_FALSE(asScan(once)
+                   .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                       prefilter(gt(DoubleId(12.00))))
+                   .has_value());
+
+  // A different prefilter still applies, after which both are remembered.
+  auto twice = asScan(once).getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      prefilter(le(IntId(174))));
+  ASSERT_TRUE(twice.has_value());
+  EXPECT_FALSE(asScan(twice)
+                   .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                       prefilter(gt(DoubleId(12.00))))
+                   .has_value());
+  EXPECT_FALSE(asScan(twice)
+                   .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                       prefilter(le(IntId(174))))
+                   .has_value());
+  EXPECT_TRUE(asScan(twice)
+                  .getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                      prefilter(lt(DoubleId(147.32))))
+                  .has_value());
+}
+
+// Test the size estimate of a prefiltered scan on a relation with its own
+// metadata entry: it is computed from the metadata minus the dropped blocks
+// when most blocks are kept (see `IndexScan::sizeEstimateFromDroppedBlocks`),
+// and from the kept blocks otherwise. Both ways must agree.
+TEST(IndexScan, sizeEstimateOfPrefilteredScanFromRelationMetadata) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  // 49 triples `<x_i> <p> i` and one triple with `<q>`, two rows per block, so
+  // in POS `<p>` has 25 blocks (the last one with a single row) and a
+  // metadata entry.
+  std::string kg;
+  for (size_t i = 0; i < 49; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> ", i, " . ");
+  }
+  kg += "<x0> <q> 0 .";
+  TestIndexConfig config{kg};
+  config.rowsPerBlock = 2;
+  auto qec = getQec(std::move(config));
+  SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<p>"), Tc{Variable{"?o"}}};
+  IndexScan scan{qec, Permutation::POS, triple};
+  ASSERT_EQ(scan.getSizeEstimate(), 49u);
+
+  auto estimateAfter = [&](auto expression) {
+    auto prefiltered = scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+        makePrefilterVec(pr(std::move(expression), Variable{"?o"})));
+    AD_CORRECTNESS_CHECK(prefiltered.has_value());
+    auto& prefilteredScan =
+        dynamic_cast<IndexScan&>(*prefiltered.value()->getRootOperation());
+    return std::pair{prefilteredScan.getSizeEstimate(),
+                     prefilteredScan.sizeEstimateIsExactForTesting()};
+  };
+  using EstimateAndExact = std::pair<size_t, bool>;
+  // Few blocks dropped (the metadata path): the first 5 of 25 blocks, all
+  // of them entirely `<p>`, so the estimate is exact.
+  EXPECT_EQ(estimateAfter(ge(IntId(10))), EstimateAndExact(39, true));
+  // Nothing dropped.
+  EXPECT_EQ(estimateAfter(neq(IntId(10))), EstimateAndExact(49, true));
+  // The dropped last block holds a single row of `<p>`.
+  EXPECT_EQ(estimateAfter(lt(IntId(48))), EstimateAndExact(48, true));
+  // Most blocks dropped (the kept-blocks path).
+  EXPECT_EQ(estimateAfter(ge(IntId(40))), EstimateAndExact(9, true));
 }

@@ -1,11 +1,20 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_INDEXSCAN_H
 #define QLEVER_SRC_ENGINE_INDEXSCAN_H
 
+#include <absl/functional/function_ref.h>
+
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "engine/Operation.h"
 #include "index/CompressedRelationReader.h"
@@ -33,6 +42,11 @@ class IndexScan final : public Operation {
   Graphs graphsToFilter_;
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
+  // If this scan is a prefiltered copy (see
+  // `makeCopyWithPrefilteredScanSpecAndBlocks`), the total number of rows of
+  // the blocks of the original, unprefiltered scan. Used for runtime
+  // statistics (e.g. the geo prefilter funnel of the spatial join).
+  std::optional<uint64_t> numBlockRowsBeforePrefilter_ = std::nullopt;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -49,6 +63,16 @@ class IndexScan final : public Operation {
   // of the query.
   using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
   VarsToKeep varsToKeep_;
+
+  // The prefilters already applied to this scan (see
+  // `getUpdatedQueryExecutionTreeWithPrefilterApplied`), each as the string of
+  // its `PrefilterExpression` plus its variable. Applying one of them again
+  // is a no-op. The query planner prefilters the seed scans of a group graph
+  // pattern once (see `QueryPlanner::prefilterSeeds`); without this memo, the
+  // `Filter` on top of every candidate plan would evaluate the same prefilter
+  // on the same scan again, which costs a walk over the block metadata each
+  // time.
+  std::vector<std::string> appliedPrefilters_;
 
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
@@ -98,6 +122,43 @@ class IndexScan final : public Operation {
   size_t getResultWidth() const override;
 
   std::vector<ColumnIndex> resultSortedOn() const override;
+
+  // The metadata of the blocks of this scan, as passed to the block selector
+  // of `makeCopyWithSelectedBlocks` below. For each block: the first and the
+  // last value of the first sorted variable in the block, the number of rows
+  // of the block that are guaranteed to be in the result of the scan (see
+  // `CompressedRelationReader::getNumRowsLowerBound`), and whether the block
+  // is completely inside the scanned relation. A block at the border of the
+  // relation also holds triples of other relations, so its `first_` or `last_`
+  // may belong to another relation and its rows only partially to this scan.
+  // `firstIdOfScan_` and `lastIdOfScan_` are the values of the sorted variable
+  // in the first and the last row of the scan result.
+  struct BlockOfSortedVariable {
+    Id first_;
+    Id last_;
+    size_t numRowsLowerBound_;
+    bool completelyInsideScan_;
+  };
+  struct BlocksOfSortedVariable {
+    Id firstIdOfScan_;
+    Id lastIdOfScan_;
+    std::vector<BlockOfSortedVariable> blocks_;
+  };
+  // Given the metadata of all blocks of this scan in scan order, return the
+  // indices of the blocks to keep (sorted, unique), or `std::nullopt` to keep
+  // all blocks. Not stored beyond the call.
+  using BlockSelector = absl::FunctionRef<std::optional<std::vector<size_t>>(
+      const BlocksOfSortedVariable&)>;
+
+  // Return a copy of this scan that only reads the blocks chosen by
+  // `selectBlocks`, or `std::nullopt` if no restriction was made. No
+  // restriction is possible if the scan has no variable, or has a
+  // `LIMIT`/`OFFSET` of its own (which is applied while scanning and does not
+  // combine with a block restriction), or if the scan result is empty. The
+  // caller is responsible for the correctness of the selection, i.e. that the
+  // rows it needs are contained in the kept blocks.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeCopyWithSelectedBlocks(
+      BlockSelector selectBlocks) const;
 
   // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
   // none of the prefilters in `prefilterVariablePairs` applies, return
@@ -268,6 +329,15 @@ class IndexScan final : public Operation {
   // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
+  // For a prefiltered scan with a fixed first column that keeps most of the
+  // blocks of its relation (e.g. after a `!=` prefilter), the size estimate
+  // from the relation's metadata minus the rows of the dropped blocks. This
+  // is cheap when few blocks were dropped, whereas summing the rows of the
+  // kept blocks walks almost the whole relation. `std::nullopt` if the
+  // relation has no metadata entry, has updates, or lost at least as many
+  // blocks as it kept; the caller then sums the kept blocks.
+  std::optional<std::pair<bool, size_t>> sizeEstimateFromDroppedBlocks() const;
+
   std::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
@@ -275,6 +345,13 @@ class IndexScan final : public Operation {
   // its cache key (which is that of the unfiltered scan). Thus, this method
   // returns `false` if prefiltered `BlockMetadataRanges` are contained.
   bool resultDoesMatchCacheKey() const override;
+
+ public:
+  // See `numBlockRowsBeforePrefilter_` above; `nullopt` if this scan was not
+  // prefiltered.
+  const std::optional<uint64_t>& numBlockRowsBeforePrefilter() const {
+    return numBlockRowsBeforePrefilter_;
+  }
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -294,6 +371,16 @@ class IndexScan final : public Operation {
   // column of the resulting `IdTable`.
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
+
+  // Return the result of
+  // `getSortedVariableAndMetadataColumnIndexForPrefiltering` if the blocks of
+  // this scan can be restricted (by prefiltering or by
+  // `makeCopyWithSelectedBlocks`), else `std::nullopt`. They cannot be
+  // restricted if the scan has a `LIMIT`/`OFFSET` of its own (which is applied
+  // while scanning all blocks, see `getLazyScan`), if there are no blocks, or
+  // if the scan has no variable to restrict by.
+  std::optional<std::pair<Variable, ColumnIndex>>
+  getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted() const;
 
   // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
   // `Permutation` class.
@@ -338,7 +425,10 @@ class IndexScan final : public Operation {
     bool hasSubset = varsToKeep_.has_value();
     auto cols =
         hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
-    return [cols = std::move(cols)](auto&& table) {
+    // NOTE: The `table` is moved out of, the callers (the blocks of a lazy
+    // scan, see `getLazyScan`, and `materializedIndexScan`) do not use it
+    // afterwards. Taking it by value would copy each block of a lazy scan.
+    return [cols = std::move(cols)](auto& table) {
       if (cols.has_value()) {
         table.setColumnSubset(cols.value());
       }
@@ -346,7 +436,6 @@ class IndexScan final : public Operation {
     };
   }
 
- public:
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;

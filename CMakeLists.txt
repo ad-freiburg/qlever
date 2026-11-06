@@ -329,6 +329,11 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG 74f526a2f06a107d5c151bcf076802505c1a28ce
+        # Drop the `fsync` of the sorted event file. The file is already
+        # unlinked at that point, so the call protects nothing, and it costs
+        # 28 to 42 ms per spatial join on an NVMe RAID whose drives sleep
+        # after a few seconds of idleness. To be fixed upstream.
+        PATCH_COMMAND sed -i "/^  fsync(newFile)/d" src/spatialjoin/Sweeper.cpp
         SYSTEM
         EXCLUDE_FROM_ALL
 )

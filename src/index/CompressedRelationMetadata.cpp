@@ -38,6 +38,22 @@ static std::array<Id, 3> getMaskedTriple(
   }
 }
 
+// _____________________________________________________________________________
+Id CompressedBlockMetadataNoBlockIndex::PermutedTriple::getId(
+    size_t columnIndex) const {
+  switch (columnIndex) {
+    case 0:
+      return col0Id_;
+    case 1:
+      return col1Id_;
+    case 2:
+      return col2Id_;
+    default:
+      // columnIndex out of bounds
+      AD_FAIL();
+  }
+}
+
 bool CompressedBlockMetadataNoBlockIndex::containsInconsistentTriples(
     size_t columnIndex) const {
   return getMaskedTriple(firstTriple_, columnIndex) !=

@@ -1,17 +1,25 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/IndexScan.h"
 
 #include <absl/container/inlined_vector.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
 
+#include "engine/GeoRectangleRowFilter.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -273,19 +281,10 @@ bool IndexScan::isDistinctByImpl(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
-  // If there is a LIMIT or OFFSET clause that constrains the scan, we cannot
-  // apply prefiltering. Also, if there is no block metadata, there is nothing
-  // to prefilter.
-  if (!getLimitOffset().isUnconstrained() ||
-      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
-    return std::nullopt;
-  }
-
   // Get the variable by which this `IndexScan` is sorted, and its
-  // corresponding column index. If there is no variable, we cannot apply
-  // prefiltering (and there typically is no need to).
+  // corresponding column index, if prefiltering is possible at all.
   auto sortedVarAndColIndex =
-      getSortedVariableAndMetadataColumnIndexForPrefiltering();
+      getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted();
   if (!sortedVarAndColIndex.has_value()) {
     return std::nullopt;
   }
@@ -296,20 +295,41 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   const auto& [sortedVar, colIndex] = sortedVarAndColIndex.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
-  if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges =
-        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
-                                getScanSpecAndBlocks().getBlockMetadataSpan(),
-                                colIndex),
-            scanSpecAndBlocks_.blockMetadata_);
-
-    return makeCopyWithPrefilteredScanSpecAndBlocks(
-        {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  if (it == prefilterVariablePairs.end()) {
+    // No prefilter applies.
+    return std::nullopt;
   }
 
-  // If no prefilter applies, return `std::nullopt`.
-  return std::nullopt;
+  // A prefilter that was already applied to this scan would not remove any
+  // further blocks, so skip the (block metadata walk of the) evaluation.
+  auto key = absl::StrCat(it->first->asString(0), " on ", sortedVar.name());
+  if (ad_utility::contains(appliedPrefilters_, key)) {
+    return std::nullopt;
+  }
+
+  const auto& blockMetadataRanges =
+      prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+          it->first->evaluate(getIndex(),
+                              getScanSpecAndBlocks().getBlockMetadataSpan(),
+                              colIndex),
+          scanSpecAndBlocks_.blockMetadata_);
+  auto copy = makeCopyWithPrefilteredScanSpecAndBlocks(
+      {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  auto& copiedScan = dynamic_cast<IndexScan&>(*copy->getRootOperation());
+  copiedScan.appliedPrefilters_ = appliedPrefilters_;
+  copiedScan.appliedPrefilters_.push_back(std::move(key));
+  // A geo rectangle can only prune whole blocks here (and for `GeoPoint`s
+  // only by latitude), so also drop the remaining rows outside the
+  // rectangle one by one, before any operation above the scan sees them.
+  if (const auto* geoRectangle =
+          dynamic_cast<const prefilterExpressions::GeoRectangleExpression*>(
+              it->first.get())) {
+    auto geometryColumn = copy->getVariableColumn(sortedVar);
+    return ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
+        getExecutionContext(), std::move(copy), geometryColumn,
+        geoRectangle->rectangle());
+  }
+  return copy;
 }
 
 // _____________________________________________________________________________
@@ -339,6 +359,69 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   return variableToColumnMap;
 }
 
+// Turn the sorted, unique `indices` into `blocks` into ranges, merging
+// adjacent blocks.
+static BlockMetadataRanges getRangesOfSelectedBlocks(
+    const std::vector<BlockMetadataIt>& blocks,
+    const std::vector<size_t>& indices) {
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(indices) &&
+                    ql::ranges::adjacent_find(indices) == indices.end());
+  BlockMetadataRanges ranges;
+  for (size_t index : indices) {
+    AD_CONTRACT_CHECK(index < blocks.size());
+    auto it = blocks[index];
+    if (!ranges.empty() && ranges.back().end() == it) {
+      ranges.back() = BlockMetadataRange{ranges.back().begin(), it + 1};
+    } else {
+      ranges.emplace_back(it, it + 1);
+    }
+  }
+  return ranges;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeCopyWithSelectedBlocks(BlockSelector selectBlocks) const {
+  auto sortedVarAndColIndex =
+      getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted();
+  if (!sortedVarAndColIndex.has_value()) {
+    return std::nullopt;
+  }
+  const size_t colIdx = sortedVarAndColIndex.value().second;
+  // The bounds of the scan result, which also tell whether it is empty.
+  auto metadataAndBlocks = getMetadataForScan();
+  if (!metadataAndBlocks.has_value()) {
+    return std::nullopt;
+  }
+
+  // Describe each block for the selector, and keep its iterator to turn the
+  // selection back into ranges.
+  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
+  const auto& locatedTriples =
+      permutation().getLocatedTriplesForPermutation(locatedTriplesState());
+  const auto& bounds = metadataAndBlocks.value().firstAndLastTriple_;
+  BlocksOfSortedVariable blocksOfSortedVariable{
+      bounds.firstTriple_.getId(colIdx), bounds.lastTriple_.getId(colIdx), {}};
+  std::vector<BlockMetadataIt> iterators;
+  for (const auto& range : scanSpecAndBlocks_.blockMetadata_) {
+    for (auto it = range.begin(); it != range.end(); ++it) {
+      blocksOfSortedVariable.blocks_.push_back(
+          {it->firstTriple_.getId(colIdx), it->lastTriple_.getId(colIdx),
+           CompressedRelationReader::getNumRowsLowerBound(scanSpec, *it,
+                                                          locatedTriples),
+           CompressedRelationReader::isBlockCompletelyInScan(scanSpec, *it)});
+      iterators.push_back(it);
+    }
+  }
+
+  auto selected = selectBlocks(blocksOfSortedVariable);
+  if (!selected.has_value()) {
+    return std::nullopt;
+  }
+  return makeCopyWithPrefilteredScanSpecAndBlocks(
+      {scanSpec, getRangesOfSelectedBlocks(iterators, selected.value())});
+}
+
 //______________________________________________________________________________
 std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
@@ -361,6 +444,16 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
   std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
       indexScan->computeSizeEstimate();
+  // Remember the row total of the unprefiltered blocks for runtime
+  // statistics (e.g. the geo prefilter funnel of the spatial join). If this
+  // scan is itself already a prefiltered copy (e.g. a plan-time prefiltered
+  // scan that is prefiltered again at runtime), keep the row total of the
+  // original, completely unprefiltered scan. The size estimate of the
+  // unprefiltered scan is that total (up to the rows of neighboring relations
+  // in its first and last block), and unlike a loop over all blocks it is
+  // O(1) for a relation with its own metadata entry.
+  indexScan->numBlockRowsBeforePrefilter_ =
+      numBlockRowsBeforePrefilter_.value_or(sizeEstimate_);
   return copy;
 }
 
@@ -379,7 +472,7 @@ IdTable IndexScan::materializedIndexScan() const {
       locatedTriplesState(), executor(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
-  idTable = makeApplyColumnSubset()(std::move(idTable));
+  idTable = makeApplyColumnSubset()(idTable);
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   return idTable;
 }
@@ -452,9 +545,60 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   //
   // NOTE: Starting from C++20, we could use `std::midpoint` to compute the
   // mean of `lower` and `upper` in a safe way.
+  if (numVariables() == 2 && scanSpecAndBlocksIsPrefiltered_) {
+    if (auto estimate = sizeEstimateFromDroppedBlocks(); estimate.has_value()) {
+      return estimate.value();
+    }
+  }
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
   return {lower == upper, lower + (upper - lower) / 2};
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<bool, size_t>>
+IndexScan::sizeEstimateFromDroppedBlocks() const {
+  const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
+  AD_CORRECTNESS_CHECK(col0Id.has_value());
+  auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
+  if (!metadata.has_value()) {
+    return std::nullopt;
+  }
+  // All blocks of the relation, and the ranges of them that were kept.
+  auto allBlocks = getScanSpecAndBlocks().getBlockMetadataSpan();
+  const auto& keptRanges = scanSpecAndBlocks_.blockMetadata_;
+  size_t numKept = scanSpecAndBlocks_.sizeBlockMetadata_;
+  if (allBlocks.empty() || numKept == 0 ||
+      allBlocks.size() - numKept >= numKept) {
+    return std::nullopt;
+  }
+  if (permutation()
+          .getLocatedTriplesForPermutation(locatedTriplesState())
+          .containsLocatedTriplesInBlockRange(allBlocks.front().blockIndex_,
+                                              allBlocks.back().blockIndex_)) {
+    return std::nullopt;
+  }
+  // Subtract the rows of the dropped blocks (the gaps before, between, and
+  // after the kept ranges). A dropped block that also holds rows of a
+  // neighboring relation (possible for the first and last block of the
+  // relation) makes the estimate inexact.
+  size_t rows = metadata->numRows_;
+  bool exact = true;
+  auto dropBlocksBefore = [&](const CompressedBlockMetadata* it,
+                              const CompressedBlockMetadata* until) {
+    for (; it != until; ++it) {
+      rows -= std::min(rows, it->numRows_);
+      exact = exact && it->firstTriple_.col0Id_ == *col0Id &&
+              it->lastTriple_.col0Id_ == *col0Id;
+    }
+  };
+  const CompressedBlockMetadata* next = allBlocks.data();
+  for (const auto& range : keptRanges) {
+    dropBlocksBefore(next, std::to_address(range.begin()));
+    next = std::to_address(range.end());
+  }
+  dropBlocksBefore(next, allBlocks.data() + allBlocks.size());
+  return std::pair{exact, rows};
 }
 
 // _____________________________________________________________________________
@@ -600,6 +744,17 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   const auto& tripleComp = permutedTriple.at(colIdx);
   AD_CORRECTNESS_CHECK(tripleComp->isVariable());
   return std::make_pair(tripleComp->getVariable(), colIdx);
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<Variable, ColumnIndex>>
+IndexScan::getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted()
+    const {
+  if (!getLimitOffset().isUnconstrained() ||
+      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
+    return std::nullopt;
+  }
+  return getSortedVariableAndMetadataColumnIndexForPrefiltering();
 }
 
 // ___________________________________________________________________________

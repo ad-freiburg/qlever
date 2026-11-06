@@ -51,7 +51,10 @@ RuntimeParameters::RuntimeParameters() {
   add(divisionByZeroIsUndef_);
   add(throwOnInvalidWkt_);
   add(enablePrefilterOnIndexScans_);
+  add(geoPrefilterPlanningMaxRows_);
+  add(geoPrefilterPlanningMaxCost_);
   add(spatialJoinMaxNumThreads_);
+  add(spatialJoinFixedGeometryAlgorithm_);
   add(patternTrickNumTasksInFlight_);
   add(sortNumTasksInFlight_);
   add(spatialJoinPrefilterMaxSize_);
@@ -68,6 +71,7 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
   add(permutationWriterNumBlocksInFlight_);
+  add(permutationCompressionLevel_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);

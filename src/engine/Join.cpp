@@ -50,6 +50,11 @@ std::vector<ColumnIndex> Join::resultSortedOn() const {
 size_t Join::getCostEstimate() { return impl_->getCostEstimate(); }
 
 // _____________________________________________________________________________
+std::vector<size_t> Join::getCostEstimatesChargedForChildren() {
+  return impl_->getCostEstimatesChargedForChildren();
+}
+
+// _____________________________________________________________________________
 bool Join::knownEmptyResult() { return impl_->knownEmptyResult(); }
 
 // _____________________________________________________________________________
@@ -58,6 +63,13 @@ float Join::getMultiplicity(size_t col) { return impl_->getMultiplicity(col); }
 // _____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> Join::getChildrenImpl() const {
   return impl_->getChildren();
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Join::getUpdatedQueryExecutionTreeWithPrefilterApplied(
+    const std::vector<PrefilterVariablePair>& prefilters) const {
+  return impl_->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilters);
 }
 
 // _____________________________________________________________________________

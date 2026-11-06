@@ -1,13 +1,19 @@
-//  Copyright 2024 - 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller <github@Jonathan24680>, UFR
+// 2024 - 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <memory>
@@ -31,6 +37,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -1087,6 +1094,32 @@ TEST(SpatialJoin, clone) {
 
 }  // namespace stringRepresentation
 
+// Children whose size estimate is zero (here, empty `VALUES`) must not make
+// the size estimate of the spatial join zero, nor its multiplicities
+// infinite: both propagate to the operations above, where a join then
+// estimates 2^63 rows and the planner avoids the small side at all costs.
+TEST(SpatialJoin, sizeEstimateAndMultiplicityWithEmptyChildren) {
+  auto* qec = buildTestQEC();
+  auto emptyValues = [qec](const Variable& var) {
+    parsedQuery::SparqlValues values;
+    values._variables = {var};
+    return ad_utility::makeExecutionTree<Values>(qec, std::move(values));
+  };
+  auto left = emptyValues(Variable{"?point1"});
+  auto right = emptyValues(Variable{"?point2"});
+  ASSERT_EQ(left->getSizeEstimate(), 0u);
+  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                               Variable{"?point2"}},
+      left, right);
+  EXPECT_GE(spatialJoin->getSizeEstimate(), 1u);
+  for (size_t i = 0; i < spatialJoin->getResultWidth(); ++i) {
+    EXPECT_TRUE(std::isfinite(spatialJoin->getMultiplicity(i))) << i;
+    EXPECT_GE(spatialJoin->getMultiplicity(i), 1) << i;
+  }
+}
+
 namespace getMultiplicityAndSizeEstimate {
 
 // Represents addLeftChildFirst, MultiplicityOrSizeEst
@@ -1414,9 +1447,13 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // sweeper; none of the values of `?b` (two invalid literals and one point
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
-  EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                             HasKeyMatching("num-geoms-parsed", Eq(3)),
-                             HasKeyMatching("num-geoms-invalid", Eq(2))));
+  // Of the three values of `?b` (the larger side), the point outside `?a`'s
+  // box is dropped by the prefilter; the two invalid literals survive it (they
+  // are never prefiltered) but fail to parse.
+  EXPECT_THAT(details,
+              AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
+                    HasKeyMatching("num-geoms-after-bbox-prefilter", Eq(2)),
+                    HasKeyMatching("num-geoms-invalid", Eq(2))));
   EXPECT_THAT(spatialJoin->collectWarnings(),
               Contains(HasSubstr(
                   "Spatial Join of ?a and ?b using contains: skipped rows with "

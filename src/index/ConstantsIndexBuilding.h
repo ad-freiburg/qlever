@@ -59,6 +59,13 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
 // is also the unit of a single `pread`, so it should not be tiny.
 constexpr inline ad_utility::MemorySize PARTIAL_VOCAB_BLOCK_SIZE =
     ad_utility::MemorySize::kilobytes(32);
+// A block of a partial vocabulary ends after the shortest of this many words
+// from the one that makes the block reach `PARTIAL_VOCAB_BLOCK_SIZE` on (see
+// `PartialVocabularyWriter`). The merge keeps the last word of every block in
+// memory, so a short last word matters: the word at which a block reaches the
+// size is a long one more often than not, and on data with long WKT literals
+// the last words were several times longer than the average word.
+constexpr inline size_t PARTIAL_VOCAB_BLOCK_CUT_WINDOW = 8;
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 
@@ -188,7 +195,7 @@ constexpr inline size_t VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD = 4;
 // words cuts a chunk of `VOCAB_MERGER_INPUT_PER_CHUNK` of input into at most
 // `VOCAB_MERGER_INPUT_PER_CHUNK / (17 * VOCAB_MERGER_WORD_BATCH_SIZE)` blocks
 // (about 20 for the current values), and a merged word takes less than three
-// times its serialized size (a `MergedWord` of 32 bytes and an `Occurrence` of
+// times its serialized size (a `MergedWord` of 40 bytes and an `Occurrence` of
 // 16 bytes next to the word, see `MergedBlock::memorySizeOfAppended`), so the
 // memory cuts it into fewer than `3 * VOCAB_MERGER_INPUT_PER_CHUNK /
 // VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` blocks (about 10). The factor `8` is a
