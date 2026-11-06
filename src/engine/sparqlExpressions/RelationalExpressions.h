@@ -128,10 +128,10 @@ using InExpression = relational::InExpression;
 // * `geof:distance(?variable1, ?variable2) <= constant`
 // * `geof:distance(?variable1, ?variable2, unit-constant) <= constant`
 // * `geof:metricDistance(?variable1, ?variable2) <= constant`
-// for rewriting filters to spatial joins. Each form can also use `<` instead
-// of `<=`, then the returned maximum distance (in meters) is the largest
-// `double` below the constant (because a spatial join includes the maximum
-// distance).
+// for rewriting filters to spatial joins. Each form may also use `<` instead
+// of `<=`. The returned maximum distance (in meters) is then the largest
+// `double` below the constant, because a spatial join includes the maximum
+// distance. A filter with a negative maximum distance is not rewritten.
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr);
 

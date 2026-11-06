@@ -678,6 +678,15 @@ getGeoDistanceFilter(const SparqlExpression& expr) {
     maxDist = std::nextafter(maxDist, -std::numeric_limits<double>::infinity());
   }
 
+  // A negative maximum distance (`< 0` or a negative constant) matches
+  // nothing, leave such a filter to the regular `Filter` operation.
+  //
+  // NOTE: `libspatialjoin` treats a negative maximum distance as "no distance
+  // limit" and would report all intersecting pairs instead.
+  if (maxDist < 0) {
+    return std::nullopt;
+  }
+
   return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
 }
 

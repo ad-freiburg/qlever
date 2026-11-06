@@ -88,6 +88,18 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   auto [dExpr6, dExp6] = makeMetricDist();
   auto expr6 = ltSprql(std::move(dExpr6), ValueId::makeFromGeoPoint({1, 1}));
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
+
+  // A negative maximum distance ("< 0" or a negative constant) is not
+  // rewritten, "<= 0" is.
+  auto [dExpr7, dExp7] = makeMetricDist();
+  auto expr7 = ltSprql(std::move(dExpr7), D(0));
+  checkGeoDistanceFilter(getGeoDistanceFilter(*expr7), std::nullopt, 0);
+  auto [dExpr8, dExp8] = makeMetricDist();
+  auto expr8 = leSprql(std::move(dExpr8), D(-1));
+  checkGeoDistanceFilter(getGeoDistanceFilter(*expr8), std::nullopt, 0);
+  auto [dExpr9, dExp9] = makeMetricDist();
+  auto expr9 = leSprql(std::move(dExpr9), D(0));
+  checkGeoDistanceFilter(getGeoDistanceFilter(*expr9), dExp9, 0);
 }
 
 // _____________________________________________________________________________
