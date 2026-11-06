@@ -37,17 +37,22 @@ permissions:
 
 jobs:
   build:
-    # Only run for PRs with the `run-full-ci` label, see `README.md`.
+    # Only run for PRs with the `run-full-ci` label, see `README.md`, or with
+    # the `run-arm64-docker` label, which runs only the arm64 build (to rerun
+    # just that build, e.g. when hunting a spurious failure).
     if: >-
       github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'run-arm64-docker')
     strategy:
       matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
+        include: >-
+          ${{ fromJSON(
+            (github.event_name == 'pull_request' &&
+             !contains(github.event.pull_request.labels.*.name, 'run-full-ci'))
+            && '[{"platform": "linux/arm64", "runner": "ubuntu-24.04-arm"}]'
+            || '[{"platform": "linux/amd64", "runner": "ubuntu-24.04"},
+                 {"platform": "linux/arm64", "runner": "ubuntu-24.04-arm"}]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -82,8 +87,33 @@ jobs:
             type=sha,prefix=commit-,enable={{is_default_branch}},priority=201
             # For pull requests, derive a version from the PR number.
             type=ref,event=pr
+      # Let a unit test that crashes during the Docker build leave a core dump
+      # in its working directory, which `misc/run-test-with-diagnostics.sh`
+      # then analyzes (see the `Dockerfile`). The core pattern is not
+      # namespaced, so it can only be set here on the host.
+      - name: Write core dumps to the working directory of the crashing process
+        run: sudo sysctl -w kernel.core_pattern=core.%p
+      # The spurious stalls and crashes of the arm64 Docker build only occur
+      # with some kernels of the runners, so record the kernel, the CPU (and
+      # which errata workarounds are active for it), and the memory settings.
+      - name: Print kernel and CPU information
+        run: |
+          uname -a
+          lscpu
+          sudo dmesg | grep -iE 'errat|workaround|sve|sme|fpsimd|hyper-?v|hv_|kvm|contpte|thp' | head -n 100
+          grep -r . /sys/devices/system/cpu/vulnerabilities/ || true
+          grep -r . /sys/kernel/mm/transparent_hugepage/ 2> /dev/null | grep -E 'enabled|defrag' || true
+          cat /proc/sys/abi/sve_default_vector_length || true
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+        with:
+          # By default, BuildKit clips the output of a single build step after
+          # 2 MiB. The output of `ctest` alone is close to that, so the output
+          # of failed tests and the test diagnostics (which are printed at the
+          # end, see the `Dockerfile`) would be lost.
+          driver-opts: |
+            env.BUILDKIT_STEP_LOG_MAX_SIZE=-1
+            env.BUILDKIT_STEP_LOG_MAX_SPEED=-1
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v4

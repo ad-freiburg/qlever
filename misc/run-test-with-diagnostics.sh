@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+
+# Run the given command (a test binary with its arguments) and collect
+# diagnostics if it stalls or crashes. The exit status is always the one of the
+# command itself, so the diagnostics never change whether a test passes.
+#
+# This is meant as the `CMAKE_TEST_LAUNCHER` of `ctest` (see the `Dockerfile`).
+# It was added to diagnose rare failures of single unit tests in the arm64
+# Docker build: a corrupted test index (unwritten heap memory in a single
+# column of POS) or a `Bus error`, which often coincided with a stall of the
+# test for seconds to more than an hour (instead of a few milliseconds).
+#
+# Usage: run-test-with-diagnostics.sh <command> [<args>...]
+#
+# Environment variables:
+#   QLEVER_TEST_STALL_SECONDS: The time after which a test counts as stalled
+#     (default: 10). Healthy tests of the Docker build take at most 5 s.
+#   QLEVER_TEST_NUM_SAMPLES, QLEVER_TEST_SAMPLE_INTERVAL: The number of samples
+#     that are taken of a stalled command (see `print_sample`, default: 2), and
+#     the seconds between them (default: 0.5). The stacks are only dumped after
+#     the last sample, and a stall may end before.
+#   QLEVER_TEST_DIAGNOSTICS_DIR: If set, the diagnostics are also appended to a
+#     file in this directory, because `ctest --output-on-failure` only shows
+#     the output of failed tests, but a stalled test may still pass.
+#
+# What is collected:
+#
+# 1. If the command is still running after `QLEVER_TEST_STALL_SECONDS`, a few
+#    samples of the state, the consumed CPU time (user and kernel), the page
+#    faults, the time spent waiting for a CPU, and the kernel wait channel of
+#    each of its threads, various counters of the machine (see
+#    `print_sample`), and the stacks of all threads (via `gdb`). Then `gdb`
+#    stays attached until the command terminates, so that a later crash is
+#    reported with the signal info, the registers, and the stacks of all
+#    threads.
+#
+# 2. If the command is terminated by a signal before it counts as stalled, the
+#    same crash report from its core dump, if there is one. This requires that
+#    `kernel.core_pattern` is `core.%p` (which the CI sets on the host, the
+#    setting is not namespaced). The core dump is deleted afterwards.
+#
+# NOTE: After a stall, `gdb` replaces this script via `exec`, so that it becomes
+# the parent of the command. That way, attaching to the command is also allowed
+# with `kernel.yama.ptrace_scope = 1` (the default of Ubuntu), which only
+# allows a process to trace its descendants.
+
+set -u
+
+if [ $# -eq 0 ]; then
+  echo "Usage: $0 <command> [<args>...]" >&2
+  exit 2
+fi
+
+STALL_SECONDS="${QLEVER_TEST_STALL_SECONDS:-10}"
+NUM_SAMPLES="${QLEVER_TEST_NUM_SAMPLES:-2}"
+SAMPLE_INTERVAL="${QLEVER_TEST_SAMPLE_INTERVAL:-0.5}"
+DIAGNOSTICS_DIR="${QLEVER_TEST_DIAGNOSTICS_DIR:-}"
+
+# Let a crashing command leave a core dump (if the hard limit allows it).
+ulimit -c unlimited 2> /dev/null
+
+# All core dumps that are newer than this marker were written while the command
+# ran (by the command itself, or by the children of the death tests).
+CORE_MARKER=$(mktemp)
+trap 'rm -f "$CORE_MARKER"' EXIT
+
+"$@" &
+PID=$!
+sleep "$STALL_SECONDS" &
+SLEEPER_PID=$!
+
+# Append all further output of this script (and of the `gdb` that replaces it)
+# also to a file in the `DIAGNOSTICS_DIR`.
+redirect_output_to_diagnostics_file() {
+  if [ -n "$DIAGNOSTICS_DIR" ]; then
+    mkdir -p "$DIAGNOSTICS_DIR"
+    exec > >(tee -a "$DIAGNOSTICS_DIR/$(basename "$1")-$PID.txt") 2>&1
+  fi
+}
+
+# Print the `gdb` command line options that disable everything that is not
+# needed (or might hang) in a non-interactive environment.
+GDB_OPTIONS=(-q -nx -batch -iex "set debuginfod enabled off"
+  -iex "set pagination off" -iex "set confirm off"
+  -iex "set print thread-events off")
+
+# Delete the core dumps that were written while the command ran.
+delete_core_dumps() {
+  find . -maxdepth 1 -name 'core.*' -newer "$CORE_MARKER" -delete 2> /dev/null
+}
+
+# Wait for whichever of the two finishes first.
+wait -n -p FINISHED_PID "$PID" "$SLEEPER_PID"
+STATUS=$?
+if [ "$FINISHED_PID" = "$PID" ]; then
+  kill "$SLEEPER_PID" 2> /dev/null
+  wait "$SLEEPER_PID" 2> /dev/null
+  # An exit status above 128 means that the command was killed by a signal.
+  if [ "$STATUS" -gt 128 ]; then
+    redirect_output_to_diagnostics_file "$1"
+    echo ""
+    echo "=== CRASH DIAGNOSTICS: \`$*\` (pid $PID) was terminated by" \
+      "SIG$(kill -l "$((STATUS - 128))") at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [ -f "core.$PID" ]; then
+      gdb "${GDB_OPTIONS[@]}" -ex "print \$_siginfo" -ex "info registers" \
+        -ex "x/i \$pc" -ex "info threads" -ex "thread apply all bt" \
+        "$1" "core.$PID"
+    else
+      echo "=== No core dump \`core.$PID\` (core pattern:" \
+        "\`$(cat /proc/sys/kernel/core_pattern)\`, core size limit:" \
+        "$(ulimit -c), hard limit: $(ulimit -Hc))"
+    fi
+  fi
+  delete_core_dumps
+  exit "$STATUS"
+fi
+
+redirect_output_to_diagnostics_file "$1"
+echo ""
+echo "=== STALL DIAGNOSTICS: \`$*\` (pid $PID) is still running after" \
+  "${STALL_SECONDS}s at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "=== Status of pid $PID:"
+grep -E '^(State|Threads|VmPeak|VmRSS|VmSwap|voluntary_ctxt_switches|nonvoluntary_ctxt_switches):' \
+  "/proc/$PID/status"
+echo "=== Memory:"
+free -m
+echo "=== All processes:"
+ps -eo pid,ppid,stat,pcpu,rss,etime,args --sort=-pcpu | head -n 30
+
+# Print one line per thread of the command with its state, the CPU time that it
+# has consumed so far in user and in kernel mode (in clock ticks), its minor and
+# major page faults, the time that it has spent on and waiting for a CPU (in ns,
+# from `schedstat`), the kernel function in which it is waiting, its current
+# system call (`running` if it is running in user mode), and its kernel stack
+# (if readable). Also print the load, the CPU line of `/proc/stat` (whose eighth
+# number is the steal time, which is the time that the hypervisor didn't give to
+# this machine), the pressure, the page fault, migration, and huge page counters
+# of the kernel, the inter-processor interrupts, and the CPU and memory
+# statistics of the cgroup. This needs no `ptrace`, and several samples tell
+# threads that spin apart from threads that are blocked, from threads that don't
+# get a CPU, and from threads that are stuck in the kernel (e.g. in a storm of
+# page faults or traps).
+print_sample() {
+  echo "=== Sample at $(date -u +%H:%M:%S.%N)"
+  echo "loadavg: $(cat /proc/loadavg)"
+  echo "$(head -n 1 /proc/stat) (user nice system idle iowait irq softirq steal)"
+  for RESOURCE in cpu memory io; do
+    if [ -r "/proc/pressure/$RESOURCE" ]; then
+      echo "pressure $RESOURCE: $(tr '\n' ' ' < "/proc/pressure/$RESOURCE")"
+    fi
+  done
+  # The counters of `/proc/vmstat` that are printed.
+  local COUNTERS=""
+  COUNTERS+="pgfault|pgmajfault|pgmigrate_success|pgmigrate_fail|numa_hint_faults|"
+  COUNTERS+="numa_pages_migrated|thp_fault_alloc|thp_fault_fallback|thp_split_page|"
+  COUNTERS+="thp_collapse_alloc|compact_stall|compact_daemon_wake|compact_success|"
+  COUNTERS+="compact_fail|allocstall_normal|allocstall_movable|pswpin|pswpout"
+  echo "vmstat: $(grep -E "^($COUNTERS) " /proc/vmstat | tr '\n' ' ')"
+  echo "IPIs (per CPU): $(grep -E '^ *IPI[0-9]+:' /proc/interrupts | tr -s ' ' | tr '\n' ';')"
+  for FILE in cpu.stat memory.events memory.pressure; do
+    if [ -r "/sys/fs/cgroup/$FILE" ]; then
+      echo "cgroup $FILE: $(tr '\n' ' ' < "/sys/fs/cgroup/$FILE")"
+    fi
+  done
+  echo "Threads of pid $PID (tid, name, state, user ticks, system ticks," \
+    "minor faults, major faults, schedstat [ns on CPU, ns waiting for a CPU," \
+    "timeslices], wchan, syscall):"
+  for TASK in /proc/"$PID"/task/*; do
+    # The name (field 2) is in parentheses and may contain spaces, so the
+    # fields are counted from the closing parenthesis.
+    STAT=$(cat "$TASK/stat" 2> /dev/null) || continue
+    NAME="${STAT#*(}"
+    NAME="${NAME%)*}"
+    read -r -a FIELDS <<< "${STAT##*) }"
+    echo "$(basename "$TASK") ($NAME) ${FIELDS[0]} ${FIELDS[11]} ${FIELDS[12]}" \
+      "${FIELDS[7]} ${FIELDS[9]}" \
+      "[$(cat "$TASK/schedstat" 2> /dev/null)]" \
+      "$(cat "$TASK/wchan" 2> /dev/null)" \
+      "$(cut -d ' ' -f 1 "$TASK/syscall" 2> /dev/null)"
+    # Only the kernel stacks of the threads that are not sleeping are of
+    # interest, and reading them requires `CAP_SYS_ADMIN`.
+    if [ "${FIELDS[0]}" != "S" ]; then
+      sed 's/^/    /' "$TASK/stack" 2> /dev/null
+    fi
+  done
+}
+echo "=== Kernel: $(uname -a)"
+echo "=== CPU features: $(grep -m 1 -i '^features' /proc/cpuinfo)"
+print_sample
+for ((SAMPLE = 1; SAMPLE < NUM_SAMPLES; ++SAMPLE)); do
+  sleep "$SAMPLE_INTERVAL"
+  print_sample
+done
+
+# The `gdb` script that dumps the stacks of all threads, and then resumes the
+# command and reports each fatal signal that it receives, until it terminates.
+# Its exit status is the one that the command would have had without `gdb`.
+GDB_SCRIPT=$(mktemp --suffix=.py)
+cat > "$GDB_SCRIPT" << 'EOF'
+import os
+
+import gdb
+
+# The script is a temporary file, see below.
+try:
+    os.remove(__file__)
+except Exception:
+    pass
+
+
+def run(command):
+    try:
+        gdb.execute(command)
+    except gdb.error as error:
+        print(f"({command}: {error})")
+
+
+print("=== Stacks of all threads:")
+run("info threads")
+run("thread apply all bt")
+run("handle all nostop noprint pass")
+for signal in ["SIGSEGV", "SIGBUS", "SIGILL", "SIGFPE", "SIGABRT"]:
+    run(f"handle {signal} stop print pass")
+print("=== Resuming the command until it terminates")
+for _ in range(5):
+    run("continue")
+    if gdb.selected_inferior().pid == 0:
+        break
+    print("=== The command received a fatal signal, its state:")
+    run("print $_siginfo")
+    run("info registers")
+    run("x/i $pc")
+    run("thread apply all bt")
+else:
+    run("kill")
+
+
+def convenienceVariable(name):
+    value = gdb.convenience_variable(name)
+    return None if value is None else int(value)
+
+
+exitSignal = convenienceVariable("_exitsignal")
+exitCode = convenienceVariable("_exitcode")
+if exitSignal is not None:
+    status = 128 + exitSignal
+elif exitCode is not None:
+    status = exitCode
+else:
+    status = 1
+print(f"=== The command terminated with exit status {status}")
+gdb.execute(f"quit {status}")
+EOF
+
+# Stop the command, so that it can't terminate between the following check and
+# the attaching of `gdb` (which resumes it). If the command has terminated
+# before, `gdb` could neither attach to it nor tell its exit status. Then it is
+# either a zombie, or it has already been reaped by `bash` (which reaps
+# terminated children in the background and keeps their exit status for
+# `wait`), in which case its `/proc` entry doesn't exist anymore.
+kill -STOP "$PID" 2> /dev/null
+STATE=$(cat "/proc/$PID/stat" 2> /dev/null)
+STATE="${STATE##*) }"
+if [ -z "$STATE" ] || [ "${STATE%% *}" = "Z" ]; then
+  rm -f "$GDB_SCRIPT"
+  wait "$PID"
+  STATUS=$?
+  echo "=== The command terminated with exit status $STATUS"
+  exit "$STATUS"
+fi
+
+# NOTE: `exec` replaces this script, so the `EXIT` trap doesn't run anymore.
+rm -f "$CORE_MARKER"
+exec gdb "${GDB_OPTIONS[@]}" -p "$PID" -x "$GDB_SCRIPT"
