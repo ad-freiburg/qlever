@@ -18,7 +18,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -30,7 +29,6 @@
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MergeBlock.h"
-#include "index/vocabulary_merger/QueueWord.h"
 #include "index/vocabulary_merger/Segment.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/RegexSet.h"
@@ -51,24 +49,6 @@ inline auto BN = ad_utility::testing::BlankNodeId;
 
 // A `WordComparator` that simply compares the words lexicographically.
 constexpr std::less<> lessThan{};
-
-// The order of merged words given as (geo sort key, word) pairs, as the
-// `WordBatchBuilder` expects it (see `KeyedWordComparator`): by key first,
-// then lexicographically.
-constexpr auto keyedLessThan = [](uint64_t key1, std::string_view word1,
-                                  uint64_t key2, std::string_view word2) {
-  return std::tie(key1, word1) < std::tie(key2, word2);
-};
-
-// Create the `QueueWord` for the occurrence of `word` with the given
-// `localIndex` in the partial vocabulary `partialFileId`.
-inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
-    std::string word, bool isExternal, size_t partialFileId,
-    uint64_t localIndex) {
-  return ad_utility::vocabulary_merger::detail::QueueWord{
-      TripleComponentWithIndex{std::move(word), isExternal, localIndex},
-      partialFileId};
-}
 
 // The buffer pools (see `index/vocabulary_merger/MergeBlock.h`) of the blocks
 // that the helpers below create. Their buffers are small, so that a block of a
@@ -176,8 +156,8 @@ struct PartialVocabularyFiles {
   // The file that holds the words of each of the partial vocabularies.
   std::vector<std::string> wordsFiles_;
   // The file that holds the ID map of each of the partial vocabularies. Hand
-  // these to the `IdMapBatchWriter` and the `VocabularyMergePipeline`, which
-  // take the filenames directly.
+  // these to the `IdMapWriters` and the `SegmentPipeline`, which take the
+  // filenames directly.
   std::vector<std::string> idMapFiles_;
 };
 
