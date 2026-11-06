@@ -8,6 +8,7 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
+#include "global/Constants.h"
 #include "index/IdTableUtils.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -250,7 +251,24 @@ void MultiColumnJoin::computeMultiColumnJoin(
   auto checkCancellationLambda = cancellationChecker();
 
   const size_t numOutOfOrder = [&]() {
-    if (isCheap) {
+    // Without UNDEF values, use the galloping join if one input is much
+    // smaller than the other (like `Join` does for a single join column). The
+    // first argument to `gallopingJoin` is always the smaller input.
+    if (isCheap && right.size() / left.size() > GALLOP_THRESHOLD) {
+      ad_utility::gallopingJoin(leftJoinColumns, rightJoinColumns,
+                                ql::ranges::lexicographical_compare, addRow,
+                                ad_utility::noop, checkCancellationLambda);
+      return size_t{0};
+    } else if (isCheap && left.size() / right.size() > GALLOP_THRESHOLD) {
+      auto addRowSwapped = [&addRow](const auto& itRight, const auto& itLeft) {
+        addRow(itLeft, itRight);
+      };
+      ad_utility::gallopingJoin(rightJoinColumns, leftJoinColumns,
+                                ql::ranges::lexicographical_compare,
+                                addRowSwapped, ad_utility::noop,
+                                checkCancellationLambda);
+      return size_t{0};
+    } else if (isCheap) {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
           ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
