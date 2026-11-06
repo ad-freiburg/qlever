@@ -12,6 +12,7 @@
 #include "engine/binaryExport/BinaryFormat.h"
 
 #include <array>
+#include <type_traits>
 
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
@@ -22,9 +23,16 @@ namespace qlever::binary_export {
 
 // The format transfers the bits of `Id`s directly, so a change of their
 // representation requires increasing `ad_utility::binaryQleverExportVersion`.
-// The following assertions only detect a change of the datatype tags.
-static_assert(ad_utility::binaryQleverExportVersion == 1);
+// Version 1 transfers the `Id`s of the legacy layout (`Id::T` is a `uint64_t`)
+// and version 1337 the ones of the split layout. The first assertion ties the
+// version to the actual type of `Id::T`, so that a version that does not match
+// the layout does not compile. The remaining assertions only detect a change
+// of the datatype tags.
+static_assert(ad_utility::binaryQleverExportVersion ==
+              (std::is_same_v<Id::T, uint64_t> ? 1 : 1337));
+#ifndef QLEVER_USE_SPLIT_LAYOUT
 static_assert(Id::numDatatypeBits == 4);
+#endif
 static constexpr auto datatypesOfVersion1 = []() {
   using enum Datatype;
   return std::to_array({Undefined, Bool, Int, Double, VocabIndex,
