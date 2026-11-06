@@ -460,6 +460,10 @@ void IndexImpl::prepareIndexBuild() {
   // the same way.
   configurationJson_[std::string{ad_utility::HAS_WORD_NORMALIZATION_KEY}] =
       hasWordNormalization_;
+  // Whether the index has `ql:has-word` triples is stored so that the server
+  // can later add them for the literals that are inserted by an update.
+  configurationJson_[std::string{ad_utility::ADD_HAS_WORD_TRIPLES_KEY}] =
+      addHasWordTriples_;
   // The predicates to which the `ql:has-word` triples are restricted are
   // stored, so that the configuration of the index records for which literals
   // it has `ql:has-word` triples.
@@ -640,14 +644,11 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                         std::string_view b) {
       return cmp(a, b, TripleComponentComparator::Level::TOTAL);
     };
-    auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
-    auto& wordCallback = *wordCallbackPtr;
-    wordCallback.readableName() = "internal vocabulary";
-    auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numPartialVocabularies, sortPred, wordCallback,
+    auto writer = vocab_.makeParallelWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
+    writer->readableName() = "internal vocabulary";
+    return ad_utility::vocabulary_merger::mergeVocabulary(
+        onDiskBase_, numPartialVocabularies, sortPred, *writer,
         memoryLimitIndexBuilding(), blankNodeIriRegexes_);
-    wordCallback.finish();
-    return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
   idOfHasPatternDuringIndexBuilding_ =
@@ -1286,6 +1287,9 @@ bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
 bool& IndexImpl::addHasWordTriples() { return addHasWordTriples_; }
 
 // _____________________________________________________________________________
+bool IndexImpl::addHasWordTriples() const { return addHasWordTriples_; }
+
+// _____________________________________________________________________________
 bool& IndexImpl::doNotLoadPermutations() { return doNotLoadPermutations_; }
 
 // ____________________________________________________________________________
@@ -1598,12 +1602,17 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
                  ad_utility::HasWordNormalization::Lowercase);
 
+  // Whether this index has `ql:has-word` triples (an index built before this
+  // key existed is treated as having none).
+  loadDataMember(ad_utility::ADD_HAS_WORD_TRIPLES_KEY, addHasWordTriples_,
+                 false);
+
   // The predicates to which the `ql:has-word` triples of this index are
   // restricted. They were stored sorted and without duplicates.
   //
   // NOTE: `std::greater_equal` finds the first pair that is not strictly
   // increasing, so the check covers both the sortedness (needed for the binary
-  // search in `processTriple`) and the uniqueness.
+  // search in `hasWordTriplesForPredicate`) and the uniqueness.
   loadDataMember(ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY,
                  hasWordRestrictPredicates_, std::vector<std::string>{});
   AD_CORRECTNESS_CHECK(ql::ranges::adjacent_find(hasWordRestrictPredicates_,
@@ -1655,21 +1664,31 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                  GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 1));
 }
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 std::vector<std::string> IndexImpl::getNormalizedWords(
-    std::string_view text) const {
+    std::string_view content) const {
   // With `LowercaseNoAccents`, remove the accents before the tokenization
   // (combining marks are not alphanumeric and would otherwise split words).
-  // `textWithoutAccents` owns the result, so that `text` stays valid during
-  // the tokenization.
-  std::string textWithoutAccents;
+  // `contentWithoutAccents` owns the result, so that `content` stays valid
+  // during the tokenization.
+  std::string contentWithoutAccents;
   if (hasWordNormalization_ ==
       ad_utility::HasWordNormalization::LowercaseNoAccents) {
-    textWithoutAccents = ad_utility::removeAccentsUtf8(text);
-    text = textWithoutAccents;
+    contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
+    content = contentWithoutAccents;
   }
   return ::ranges::to<std::vector<std::string>>(
-      tokenizeAndNormalizeText(text, vocab_.getLocaleManager()));
+      tokenizeAndNormalizeText(content, vocab_.getLocaleManager()));
+}
+
+// _____________________________________________________________________________
+ad_utility::HashMap<std::string, size_t> IndexImpl::computeHasWordFrequencies(
+    std::string_view content) const {
+  ad_utility::HashMap<std::string, size_t> wordFrequencies;
+  for (auto& word : getNormalizedWords(content)) {
+    ++wordFrequencies[std::move(word)];
+  }
+  return wordFrequencies;
 }
 
 // ___________________________________________________________________________
@@ -1681,29 +1700,24 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     if (lit.hasLanguageTag()) {
       result.langtag_ = std::string(lit.getLanguageTag());
     }
-    // Check if the predicate is one of the `hasWordRestrictPredicates_` (or
-    // none are set). The predicate is an `Id` if the parser has encoded it, see
-    // `EncodedIriManager`. In this case, `decodedPredicate` owns its string, so
-    // that `needle` is a reference in both cases (no copy of the IRI).
-    auto predicateAllowsHasWord = [this, &predicate = triple.predicate_]() {
-      if (hasWordRestrictPredicates_.empty()) {
-        return true;
-      }
-      std::string decodedPredicate;
-      const std::string& needle =
-          predicate.isIri()
-              ? predicate.getIri().toStringRepresentation()
-              : (decodedPredicate =
-                     encodedIriManager().toString(predicate.getId()));
-      return ql::ranges::binary_search(hasWordRestrictPredicates_, needle);
+    // Return the predicate as a string. The predicate is an `Id` if the parser
+    // has encoded it, see `EncodedIriManager`. In this case,
+    // `decodedPredicate` owns its string, so that the result is a reference in
+    // both cases (no copy of the IRI).
+    std::string decodedPredicate;
+    auto getPredicate = [this, &predicate = triple.predicate_,
+                         &decodedPredicate]() -> const std::string& {
+      return predicate.isIri()
+                 ? predicate.getIri().toStringRepresentation()
+                 : (decodedPredicate =
+                        encodedIriManager().toString(predicate.getId()));
     };
 
     // Extract the words of the literal for the `ql:has-word` triples and count
-    // their term frequencies.
-    if (addHasWordTriples_ && predicateAllowsHasWord()) {
-      for (auto& word : getNormalizedWords(lit.getContent())) {
-        ++result.wordFrequencies_[std::move(word)];
-      }
+    // their term frequencies (only if the predicate is one of the
+    // `hasWordRestrictPredicates_`, or none are set).
+    if (addHasWordTriples_ && hasWordTriplesForPredicate(getPredicate)) {
+      result.wordFrequencies_ = computeHasWordFrequencies(lit.getContent());
     }
   }
 
@@ -2254,9 +2268,9 @@ void IndexImpl::setHasWordRestrictPredicates(
             .toStringRepresentation());
   }
 
-  // Sort them (for the binary search in `processTriple`) and remove duplicates
-  // (the stored predicates are checked to be strictly increasing when they are
-  // loaded, see `applyConfiguration`).
+  // Sort them (for the binary search in `hasWordTriplesForPredicate`) and
+  // remove duplicates (the stored predicates are checked to be strictly
+  // increasing when they are loaded, see `applyConfiguration`).
   ql::ranges::sort(validated);
   validated.erase(std::unique(validated.begin(), validated.end()),
                   validated.end());

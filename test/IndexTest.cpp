@@ -1975,6 +1975,35 @@ TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex) {
   EXPECT_ANY_THROW(indexImpl.applyConfiguration(configuration));
 }
 
+// Test that whether an index has `ql:has-word` triples is recorded in the
+// configuration of a built index and applied when loading, with `false` for an
+// index that was built before the key existed.
+TEST(IndexImpl, addHasWordTriplesOfBuiltAndLoadedIndex) {
+  const std::string key{ad_utility::ADD_HAS_WORD_TRIPLES_KEY};
+
+  // An index built with or without `ql:has-word` triples records this.
+  for (bool addHasWordTriples : {false, true}) {
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
+    config.addHasWordTriples = addHasWordTriples;
+    auto index =
+        makeTestIndex(absl::StrCat("addHasWordTriples.", addHasWordTriples),
+                      std::move(config));
+    EXPECT_EQ(index.getImpl().configurationJson()[key], addHasWordTriples);
+  }
+
+  // Loading a configuration applies the recorded value, and a configuration
+  // without the key (an older index) gives `false`.
+  auto configuration = minimalValidConfiguration();
+  configuration[key] = true;
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_TRUE(indexImpl.addHasWordTriples());
+  configuration.erase(key);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_FALSE(indexImpl.addHasWordTriples());
+}
+
 // _____________________________________________________________________________
 TEST(IndexImpl, dateOfIndexBuild) {
   auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");

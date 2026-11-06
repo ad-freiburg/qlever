@@ -703,9 +703,11 @@ class SparqlQleverVisitor {
       const antlr4::ParserRuleContext* context);
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
-  // `visitIriOrFunction`.
+  // `visitIriOrFunction`. `distinct` is true if the argument list starts with
+  // `DISTINCT`, which is only allowed for custom aggregates like `ql:stdev`.
   ExpressionPtr processIriFunctionCall(const TripleComponent::Iri& iri,
                                        std::vector<ExpressionPtr> argList,
+                                       bool distinct,
                                        const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);

@@ -60,6 +60,12 @@ const inline HasWordNormalization HasWordNormalization::LowercaseNoAccents{
 inline constexpr std::string_view HAS_WORD_NORMALIZATION_KEY =
     "has-word-normalization";
 
+// The key under which it is stored in the configuration of an index whether
+// the index has `ql:has-word` triples. An index that was built before this key
+// existed has no entry for it and is treated as having none.
+inline constexpr std::string_view ADD_HAS_WORD_TRIPLES_KEY =
+    "add-has-word-triples";
+
 // The key under which the predicates to which the `ql:has-word` triples are
 // restricted are stored in the configuration of an index. An index that was
 // built before this key existed has no entry for it; its `ql:has-word` triples
