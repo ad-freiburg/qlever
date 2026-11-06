@@ -56,8 +56,9 @@ bool isSubstitutable(const SparqlExpression& expression,
 Definitions collectDefinitions(
     const std::vector<parsedQuery::GraphPatternOperation>& group) {
   Definitions defs;
-  // The variables that are always bound by the patterns so far. Only triples
-  // and `VALUES` count (ignoring nested groups etc. is conservative).
+  // The variables that are always bound by the patterns so far. Only triples,
+  // `VALUES` and `BIND`s of constants count (ignoring nested groups etc. is
+  // conservative).
   ad_utility::HashSet<Variable> alwaysBound;
   for (const auto& operation : group) {
     // Remove the `BIND`s whose target `operation` may bind again, that is, any
