@@ -32,9 +32,9 @@ namespace net = boost::asio;
 // `ChunkResult`s in the order of the chunks, concatenates the `BoundaryPart`s
 // of the relations that cross the boundaries of the chunks, writes them (and
 // their twins), and emits the metadata of all the relations in the order of
-// the relations. It runs on a single thread, which must not
-// be a thread of the pool (it uses the blocking parts of the two writers and
-// a parallel merge on the `executor`).
+// the relations. It runs on a single thread, which must not be a thread of the
+// pool (it uses the blocking parts of the two writers and a parallel merge on
+// the `executor`).
 //
 // NOTE on thread safety: The consolidator has no writers of its own, it uses
 // the `writer1_` and `writer2_` of the `ChunkWriterContext`, which the chunks
@@ -103,8 +103,8 @@ class BoundaryConsolidator : public ad_utility::NoCopyNoMove {
 
   // Write the boundary relation that is still open (if any), pass the last
   // metadata on to the callbacks, finish the two writers, and return their
-  // blocks. Must be called exactly once, after the
-  // results of all the chunks have been added.
+  // blocks. Must be called exactly once, after the results of all the chunks
+  // have been added.
   PermutationPairResult finish();
 
   // The total number of rows of all the chunks that have been added so far.

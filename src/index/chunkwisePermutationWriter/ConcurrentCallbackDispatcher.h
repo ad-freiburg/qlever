@@ -68,9 +68,10 @@ class ConcurrentCallbackDispatcher : public ad_utility::NoCopyNoMove {
 
  public:
   // Create a dispatcher for the `callbacks`, which allows for at most
-  // `maxNumBlocksInFlight` blocks (at least one) at the same time. The waits
-  // for a free slot are completed on the `executor`. The `reportException`
-  // has to be thread-safe and non-blocking, see `ReportException`.
+  // `maxNumBlocksInFlight` blocks (a `0` counts as one) at the same time. The
+  // waits for a free slot are completed on the `executor`. The
+  // `reportException` has to be thread-safe and non-blocking, see
+  // `ReportException`.
   ConcurrentCallbackDispatcher(net::any_io_executor executor,
                                std::vector<ConcurrentBlockCallback> callbacks,
                                size_t maxNumBlocksInFlight,
@@ -97,7 +98,9 @@ class ConcurrentCallbackDispatcher : public ad_utility::NoCopyNoMove {
   // callbacks that are already in flight are not affected.
   void cancel();
 
-  // Block until no callbacks are in flight anymore.
+  // Block until no callbacks are in flight anymore. A dispatch that still
+  // waits for a free slot is not in flight yet, so all the calls to
+  // `asyncDispatch` have to be complete before this is called.
   void waitUntilIdle();
 
  private:

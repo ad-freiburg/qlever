@@ -112,8 +112,9 @@ void ConcurrentCallbackDispatcher::invokeCallbacks(
     // Every callback gets a `DoneCallback` of its own, because a
     // `DoneCallback` is consumed by its (single) invocation. A callback that
     // throws (instead of reporting its exception via its `DoneCallback`) is
-    // treated as if it had reported the exception, so it must not throw after
-    // it has invoked its `DoneCallback`.
+    // treated as if it had reported the exception, so it must not throw once
+    // it has invoked its `DoneCallback` or passed it on (the block would then
+    // be counted as done twice).
     //
     // NOTE: The callbacks are called concurrently for different blocks, which
     // their contract allows (see `ConcurrentBlockCallback`).
