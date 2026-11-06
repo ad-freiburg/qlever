@@ -95,8 +95,6 @@ IdTable copyRowRangesWithLimitOffset(
     const IdTableView<0>& input, const std::vector<RowRange>& ranges,
     const LimitOffsetClause& limitOffset,
     const ad_utility::AllocatorWithLimit<Id>& allocator) {
-  // NOTE: `std::copy` and not `ql::ranges::copy`, because only the former
-  // reliably becomes a `memmove` (see the description of #3436).
   size_t numRowsToSkip = limitOffset._offset;
   IdTable result{input.numColumns(), allocator};
   result.resize(limitOffset.actualSize(input.numRows()));
@@ -121,7 +119,10 @@ IdTable copyRowRangesWithLimitOffset(
                             : rangeBegin + numRowsToSkip;
     numRowsToSkip = 0;
 
-    // Copy that part.
+    // Copy that part, column by column.
+    //
+    // NOTE: `std::copy` and not `ql::ranges::copy`, because only the former
+    // reliably becomes a `memmove` (see the description of #3436).
     for (size_t i = 0; i < input.numColumns(); ++i) {
       auto source = input.getColumn(i).subspan(begin, numRows);
       auto target = result.getColumn(i).begin() + offset;
@@ -147,14 +148,14 @@ struct BlocksSplitByRun {
   // same run. These are the only blocks that may be skipped.
   std::array<std::vector<size_t>, numNumericRuns> blocksWithinOneRun_;
   // All other blocks, which are always read: the ones at the border of the
-  // scan, whose first or last triple may belong to another relation, the ones
+  // scan (their first or last triple may belong to another relation), the ones
   // that span more than one run, and the ones whose first or last `Id` is not
-  // of the datatype of the scan. The latter happens with updates, where the
-  // first and last triple of a block are only bounds: they also cover the
-  // deleted triples located in the block, which need not exist (see
-  // `LocatedTriplesPerBlock::updateAugmentedMetadata`), and they are not
-  // narrowed when a triple is deleted, so they may be of a datatype that the
-  // scan no longer yields.
+  // of the datatype of the scan.
+  //
+  // NOTE: The latter happens with updates. The first and last triple of a
+  // block are then only bounds, which also cover the deleted triples located
+  // in the block, even nonexistent ones, and which are not narrowed when a
+  // triple is deleted (see `LocatedTriplesPerBlock::updateAugmentedMetadata`).
   std::vector<size_t> blocksToAlwaysRead_;
 };
 
