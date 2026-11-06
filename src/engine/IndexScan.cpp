@@ -15,7 +15,6 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
@@ -1253,21 +1252,7 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const {
-  using namespace sparqlExpression;
-
-  // Get the constant of the `bind`, return `std::nullopt` if its expression is
-  // not a constant IRI, literal, or defined `Id`.
-  const auto* expression = bind._expression.getPimpl();
-  std::optional<TripleComponent> constant;
-  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
-    constant = TripleComponent{iri->value()};
-  } else if (const auto* literal =
-                 dynamic_cast<const StringLiteralExpression*>(expression)) {
-    constant = TripleComponent{literal->value()};
-  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
-             id != nullptr && !id->value().isUndefined()) {
-    constant = TripleComponent{id->value()};
-  }
+  auto constant = bind.getConstant();
   if (!constant.has_value()) {
     return std::nullopt;
   }
