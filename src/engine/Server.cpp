@@ -1715,7 +1715,7 @@ Awaitable<qlever::IndexSwapConfig> Server::rebuildIndex(
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
   auto coroutine = ad_utility::runFunctionOnExecutor(
-      queryThreadPool_.get_executor(),
+      rebuildThreadPool_.get_executor(),
       [this, &index, &handle, &config] {
         return qlever().rebuildIndexToDisk(index, config, handle);
       },

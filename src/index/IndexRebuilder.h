@@ -19,7 +19,6 @@
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
-#include "util/Executor.h"
 
 namespace qlever {
 
@@ -49,6 +48,11 @@ std::optional<Id> tryRemapBlankNodeId(Id original,
 // id space left by random allocation of blank node ids.
 Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
                     uint64_t minBlankNodeIndex);
+
+// Return the number of threads of the thread pool of a rebuild (see
+// `materializeToIndex`): the runtime parameter `rebuild-index-max-num-threads`,
+// or the number of threads of the global thread pool if it is 0.
+size_t getRebuildIndexNumThreads();
 }  // namespace indexRebuilder
 
 // Build a new index based on the existing state of the engine.
@@ -62,9 +66,9 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
 // `cancellationHandle` can be used to cancel the rebuild. In this case, the new
 // index will be left in an incomplete state and should be deleted by the
 // caller.
-// The old permutations are read and the new ones are written on the
-// `executor`, by at most `rebuild-index-max-num-threads` tasks at the same time
-// (for the whole rebuild together).
+// The old permutations are read and the new ones are written on a thread pool
+// of the rebuild's own (see `indexRebuilder::getRebuildIndexNumThreads`), so
+// that the rebuild does not compete with queries for the global thread pool.
 // Return the datastructures used for mapping to be used in further
 // post-processing.
 indexRebuilder::IndexRebuildMapping materializeToIndex(
@@ -73,7 +77,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::vector<LocalVocabIndex>& entries,
     const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    qlever::Executor executor, const std::string& logFileName);
+    const std::string& logFileName);
 
 }  // namespace qlever
 

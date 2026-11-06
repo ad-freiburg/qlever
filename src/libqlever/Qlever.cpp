@@ -772,7 +772,7 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
           .getCurrentLocatedTriplesSharedStateWithVocab();
   auto mapping =
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
-                         ownedBlocks, handle, executor_, logFileName);
+                         ownedBlocks, handle, logFileName);
   auto indexAndViews = std::allocate_shared<IndexAndViews>(
       allocator(), Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
