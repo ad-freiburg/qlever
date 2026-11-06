@@ -27,6 +27,24 @@
 
 using std::string;
 
+// The configuration of jemalloc, which is the allocator of this binary if it
+// was found at build time (see `CMakeLists.txt`); the symbol is ignored
+// otherwise. The index builder allocates, frees, and reallocates very large
+// buffers (sorter blocks, merge output blocks) all the time. By default,
+// jemalloc returns allocations above its `oversize_threshold` (8 MB) to the
+// OS immediately when they are freed, so that each such allocation is faulted
+// in page by page again, which costs a large share of the CPU time of the
+// index build. Disabling the threshold lets those allocations be reused like
+// all the others. A small number of arenas makes the reuse work across the
+// threads (a freed buffer is only reused by allocations from the same arena),
+// which also keeps the resident memory lower. NOTE: Transparent huge pages
+// (`thp:always`) were measured to make the index build slower, because
+// every freshly faulted huge page is zeroed completely. Both settings above
+// can be overridden by the `MALLOC_CONF` environment variable.
+extern "C" {
+const char* malloc_conf = "oversize_threshold:0,narenas:2";
+}
+
 namespace po = boost::program_options;
 
 // Check that `values` has exactly one or `numFiles` many entries. An empty
