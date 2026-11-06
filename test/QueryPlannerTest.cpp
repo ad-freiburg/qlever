@@ -340,9 +340,8 @@ TEST(QueryPlanner, joinOfFullScans) {
             h::Join(scan("?s", "?p", "?x"), scan("?x", "?p2", "?o2")));
 
   // Join between two full index scans on two columns.
-  h::expect(
-      "SELECT * {?s ?p ?x. ?x ?p2 ?s .}",
-      h::MultiColumnJoin(scan("?s", "?p", "?x"), scan("?x", "?p2", "?s")));
+  h::expect("SELECT * {?s ?p ?x. ?x ?p2 ?s .}",
+            h::Join(scan("?s", "?p", "?x"), scan("?x", "?p2", "?s")));
 
   // Join between two full index scans, one of which has a FILTER which can be
   // applied before the JOIN.
@@ -522,12 +521,12 @@ TEST(QueryPlanner, threeVarTriplesTCJ) {
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?p ?x . ?x ?p ?o }",
-      h::MultiColumnJoin(scan("<s>", "?p", "?x"), scan("?x", "?p", "?o")), qec);
+      h::Join(scan("<s>", "?p", "?x"), scan("?x", "?p", "?o")), qec);
 
   h::expect(
       "SELECT ?s ?p ?o WHERE {"
       "?s ?p ?o . ?s ?p <x> }",
-      h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s", "?p", "<x>")), qec);
+      h::Join(scan("?s", "?p", "?o"), scan("?s", "?p", "<x>")), qec);
 }
 
 TEST(QueryPlanner, threeVarXthreeVarException) {
@@ -535,7 +534,7 @@ TEST(QueryPlanner, threeVarXthreeVarException) {
   h::expect(
       "SELECT ?s ?s2 WHERE {"
       "?s ?p ?o . ?s2 ?p ?o }",
-      h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s2", "?p", "?o")));
+      h::Join(scan("?s", "?p", "?o"), scan("?s2", "?p", "?o")));
 }
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
@@ -619,108 +618,12 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
   QueryPlanner qp = makeQueryPlanner();
   auto qet = qp.createExecutionTree(pq);
 
-  // There are four possible outcomes of this test with the same size
-  // estimate. It is currently very hard to make the query planning
-  // deterministic in a test scenario, so we allow all four candidates
-
-  // delete all whitespace from the strings to make the matching easier.
-  auto strip = [](std::string s) {
-    s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
-    return s;
-  };
-  std::string possible1 = strip(
-      "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN PSO with P = "
-      "\"<Film_performance>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & "
-      "1]\n  |X|\n    {\n    SORT(internal) on columns:asc(2) asc(1) \n    "
-      "{\n      JOIN\n      {\n        SCAN PSO with P = "
-      "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
-      "[0]\n      |X|\n      {\n        SCAN PSO with P = "
-      "\"<Spouse_(or_domestic_partner)>\"\n        qet-width: 2 \n      } "
-      "join-column: [0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  "
-      "}\n  join-columns: [2 & 1]\n  qet-width: 3 \n}");
-  std::string possible2 = strip(
-      "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN POS with P = "
-      "\"<Film_performance>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & "
-      "1]\n  |X|\n    {\n    SORT(internal) on columns:asc(1) asc(2) \n    "
-      "{\n      JOIN\n      {\n        SCAN PSO with P = "
-      "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
-      "[0]\n      |X|\n      {\n        SCAN PSO with P = "
-      "\"<Spouse_(or_domestic_partner)>\"\n        qet-width: 2 \n      } "
-      "join-column: [0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  "
-      "}\n  join-columns: [1 & 2]\n  qet-width: 3 \n}");
-  std::string possible3 = strip(
-      "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN POS with P = "
-      "\"<Spouse_(or_domestic_partner)>\"\n    qet-width: 2 \n  }\n  "
-      "join-columns: [0 & 1]\n  |X|\n    {\n    SORT(internal) on "
-      "columns:asc(1) asc(2) \n    {\n      JOIN\n      {\n        SCAN POS "
-      "with P = \"<Film_performance>\"\n        qet-width: 2 \n      } "
-      "join-column: [0]\n      |X|\n      {\n        SCAN POS with P = "
-      "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
-      "[0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  }\n  "
-      "join-columns: [1 & 2]\n  qet-width: 3 \n}");
-  std::string possible4 = strip(R"xxx(MULTI_COLUMN_JOIN
-        {
-          SCAN PSO with P = "<Film_performance>"
-          qet-width: 2
-        } join-columns: [0 & 1]
-        |X|
-        {
-          SORT(internal) on columns:asc(1) asc(2)
-          {
-            JOIN
-            {
-              SCAN POS with P = "<Spouse_(or_domestic_partner)>"
-              qet-width: 2
-            } join-column: [0]
-            |X|
-            {
-              SCAN PSO with P = "<Film_performance>"
-              qet-width: 2
-            } join-column: [0]
-            qet-width: 3
-          }
-          qet-width: 3
-        } join-columns: [1 & 2]
-        qet-width: 3
-        })xxx");
-  std::string possible5 = strip(R"xxx(MULTI_COLUMN_JOIN
-{
-  SCAN POS with P = "<Film_performance>"
-  qet-width: 2
-} join-columns: [0 & 1]
-|X|
-{
-  SORT / ORDER BY on columns:asc(2) asc(1)
-  {
-    JOIN
-    {
-      SCAN POS with P = "<Spouse_(or_domestic_partner)>"
-      qet-width: 2
-    } join-column: [0]
-    |X|
-    {
-      SCAN PSO with P = "<Film_performance>"
-      qet-width: 2
-    } join-column: [0]
-    qet-width: 3
-  }
-  qet-width: 3
-} join-columns: [2 & 1]
-qet-width: 3
-}
-)xxx");
-
-  auto actual = strip(qet->getCacheKey());
-
-  if (actual != possible1 && actual != possible2 && actual != possible3 &&
-      actual != possible4 && actual != possible5) {
-    // TODO<joka921> Make this work, there are just too many possibilities.
-    /*
-    FAIL() << "query execution tree is none of the possible trees, it is "
-              "actually "
-           << qet->getCacheKey() << '\n' << actual << '\n'
-           */
-  }
+  // There are several possible plans with the same size estimate, so we only
+  // check that the cyclic query is planned with a join on two columns at the
+  // root.
+  auto join = std::dynamic_pointer_cast<const Join>(qet->getRootOperation());
+  ASSERT_TRUE(join);
+  EXPECT_EQ(join->getJoinColumns().size(), 2u);
 }
 
 TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
@@ -996,7 +899,7 @@ TEST(QueryPlanner, RowNumber) {
           rowNumberService("[] <bind> ?n ; <offset> 1 .", "?y2",
                            "INTERNAL SORT BY ?x ?y2"),
           " }"),
-      h::MultiColumnJoin(
+      h::Join(
           rowNumber(h::OrderBy({{Variable{"?x"}, Asc}, {Variable{"?y"}, Desc}},
                                h::IndexScanFromStrings("?x", "<p>", "?y"))),
           rowNumber(h::IndexScanFromStrings("?x", "<p>", "?y2"))),
@@ -3501,10 +3404,8 @@ TEST(QueryPlanner, testDistributiveJoinInUnionWithMultipleJoinColumns) {
   h::expectWithGivenBudgets(
       "SELECT * WHERE { ?s <P31> ?o . "
       "{ ?s <P279> ?o } UNION { ?s <P280> ?o } }",
-      h::Union(h::MultiColumnJoin(
-                   scan, h::IndexScanFromStrings("?s", "<P279>", "?o")),
-               h::MultiColumnJoin(
-                   scan, h::IndexScanFromStrings("?s", "<P280>", "?o"))),
+      h::Union(h::Join(scan, h::IndexScanFromStrings("?s", "<P279>", "?o")),
+               h::Join(scan, h::IndexScanFromStrings("?s", "<P280>", "?o"))),
       ad_utility::testing::getQec(), {4, 16, 64'000'000});
 }
 
@@ -3860,7 +3761,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
     h::expectWithGivenBudgets(query, completeHull(1, isAScan), std::nullopt,
                               dpBudgets);
     h::expectWithGivenBudgets(
-        query, h::MultiColumnJoin(h::Sort(isAScan), h::Sort(completeHull(1))),
+        query, h::Join(h::Sort(isAScan), h::Sort(completeHull(1))),
         std::nullopt, greedyBudgets);
     // Verify query planning also works when ?g is the first variable.
     query = "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>+ ?b } }";
@@ -3868,23 +3769,22 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
     h::expectWithGivenBudgets(query, completeHull(1, values), std::nullopt,
                               dpBudgets);
     h::expectWithGivenBudgets(
-        query, h::MultiColumnJoin(h::Sort(values), h::Sort(completeHull(1))),
-        std::nullopt, greedyBudgets);
+        query, h::Join(h::Sort(values), h::Sort(completeHull(1))), std::nullopt,
+        greedyBudgets);
 
     // Ensure join with too many columns doesn't result in an exception. (This
     // could be optimized in the future.)
     h::expect(
         "SELECT * "
         "{ VALUES (?g ?a ?b) { (1 1 1) } GRAPH ?g { ?a <label>+ ?b } }",
-        h::MultiColumnJoin(
-            h::Sort(h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }")),
-            h::Sort(h::transitivePath(
-                left, right, 1, std::numeric_limits<size_t>::max(),
-                // Sort by ?g
-                h::Sort(h::IndexScanFromStrings(
-                    "?_QLever_internal_variable_qp_0", "<label>",
-                    "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                    {Variable{"?g"}}, {3}))))));
+        h::Join(h::Sort(h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }")),
+                h::Sort(h::transitivePath(
+                    left, right, 1, std::numeric_limits<size_t>::max(),
+                    // Sort by ?g
+                    h::Sort(h::IndexScanFromStrings(
+                        "?_QLever_internal_variable_qp_0", "<label>",
+                        "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                        {Variable{"?g"}}, {3}))))));
 
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
@@ -4330,15 +4230,14 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
       qec, {16, 64'000'000});
   // Double bind is currently not supported
   h::expect("SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
-            h::MultiColumnJoin(
-                h::Sort(h::transitivePath(
-                    left, right1, 1, std::numeric_limits<size_t>::max(),
-                    // The sort is because of missing graph permutations.
-                    h::Sort(h::IndexScanFromStrings(
-                        "?_QLever_internal_variable_qp_0", "<a>",
-                        "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                        {Variable{"?g"}}, {3})))),
-                h::IndexScanFromStrings("?s", "<b>", "?o")),
+            h::Join(h::Sort(h::transitivePath(
+                        left, right1, 1, std::numeric_limits<size_t>::max(),
+                        // The sort is because of missing graph permutations.
+                        h::Sort(h::IndexScanFromStrings(
+                            "?_QLever_internal_variable_qp_0", "<a>",
+                            "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                            {Variable{"?g"}}, {3})))),
+                    h::IndexScanFromStrings("?s", "<b>", "?o")),
             qec);
 
   TransitivePathSide right2{std::nullopt, 1, Variable{"?g"}, 1};

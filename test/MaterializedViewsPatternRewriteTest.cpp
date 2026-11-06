@@ -477,8 +477,8 @@ TEST_F(MaterializedViewsPatternRewriteContextTest,
   // A degenerate chain (`?a <p1> ?b . ?b <p2> ?a`) must be rejected for
   // rewriting (thus planned normally).
   qpExpect(qlv(), "SELECT * { ?x <p1> ?v . ?v <p2> ?x }",
-           h::MultiColumnJoin(h::IndexScanFromStrings("?x", "<p1>", "?v"),
-                              h::IndexScanFromStrings("?v", "<p2>", "?x")));
+           h::Join(h::IndexScanFromStrings("?x", "<p1>", "?v"),
+                   h::IndexScanFromStrings("?v", "<p2>", "?x")));
 
   // The same holds for a degenerate chain where the middle and the end are
   // the same variable.

@@ -637,12 +637,13 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
 
 // _____________________________________________________________________________
 std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
-IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
+IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2,
+                                     size_t numJoinColumns) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
   AD_CONTRACT_CHECK(s1.numVariables_ >= 1 && s2.numVariables_ >= 1);
-  // This function only works for single column joins. This means that the first
-  // variable of both scans must be equal, but all other variables of the scans
-  // (if present) must be different.
+  AD_CONTRACT_CHECK(numJoinColumns >= 1);
+  // The first variable of both scans must be equal, and exactly
+  // `numJoinColumns - 1` of the other variables of the scans must be common.
   const auto& getFirstVariable = [](const IndexScan& scan) {
     auto numVars = scan.numVariables();
     AD_CORRECTNESS_CHECK(numVars <= 3);
@@ -678,9 +679,9 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   for (auto& var : other1) {
     other2.insert(var);
   }
-  AD_CONTRACT_CHECK(other2.size() == numTotal,
-                    "The two IndexScans for a lazy single-column join have "
-                    "more than one column in common.");
+  AD_CONTRACT_CHECK(numTotal - other2.size() == numJoinColumns - 1,
+                    "The number of common columns of the two IndexScans for a "
+                    "lazy join doesn't match the number of join columns.");
 
   auto metaBlocks1 = s1.getMetadataForScan();
   auto metaBlocks2 = s2.getMetadataForScan();

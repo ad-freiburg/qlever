@@ -1148,6 +1148,10 @@ GroupByImpl::checkIfJoinWithFullScan(const Join& join) const {
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
   }
+  // The optimization is only valid for a join on a single column.
+  if (join.getJoinColumns().size() != 1) {
+    return std::nullopt;
+  }
   const Variable& groupByVariable = _groupByVariables.front();
 
   auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();

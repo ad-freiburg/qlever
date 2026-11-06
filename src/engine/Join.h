@@ -12,20 +12,33 @@
 #ifndef QLEVER_SRC_ENGINE_JOIN_H
 #define QLEVER_SRC_ENGINE_JOIN_H
 
+#include <array>
 #include <memory>
+#include <vector>
 
 // `Join` adds no members beyond the Pimpl handle, so all dependencies are
 // pulled in transitively via the `Operation` base class.
 #include "engine/Operation.h"
 
-// This Operation implements ordinary joins with a single join column. It is
+// This `Operation` implements ordinary joins on one or more join columns. It is
 // implemented via the Pimpl idiom; for details see `JoinImpl.h`.
 
 // Forward declaration of the impl class.
 class JoinImpl;
 class Join : public Operation {
  public:
-  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
+  using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+
+  // Join `t1` and `t2` on the given `joinColumns`, which are pairs of
+  // `(columnOfT1, columnOfT2)`. `keepJoinColumn == false` is only supported for
+  // a single join column. `allowSwappingChildrenOnlyForTesting` should only
+  // ever be changed by tests.
+  Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+       std::shared_ptr<QueryExecutionTree> t2, JoinColumns joinColumns,
+       bool keepJoinColumn = true,
+       bool allowSwappingChildrenOnlyForTesting = true);
+
+  // Convenience constructor for a join on a single join column.
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
        ColumnIndex t2JoinCol, bool keepJoinColumn = true,
@@ -46,6 +59,10 @@ class Join : public Operation {
   size_t getCostEstimate() override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
+
+  // Return the join columns as pairs `(leftColumn, rightColumn)`, where left
+  // and right refer to the order of the children in `getChildren()`.
+  const JoinColumns& getJoinColumns() const;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;

@@ -18,13 +18,20 @@ using std::string;
 
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+           std::shared_ptr<QueryExecutionTree> t2, JoinColumns joinColumns,
+           bool keepJoinColumn, bool allowSwappingChildrenOnlyForTesting)
+    : Operation(qec),
+      impl_(std::make_unique<JoinImpl>(qec, std::move(t1), std::move(t2),
+                                       std::move(joinColumns), keepJoinColumn,
+                                       allowSwappingChildrenOnlyForTesting)) {}
+
+// _____________________________________________________________________________
+Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
            ColumnIndex t2JoinCol, bool keepJoinColumn,
            bool allowSwappingChildrenOnlyForTesting)
-    : Operation(qec),
-      impl_(std::make_unique<JoinImpl>(qec, std::move(t1), std::move(t2),
-                                       t1JoinCol, t2JoinCol, keepJoinColumn,
-                                       allowSwappingChildrenOnlyForTesting)) {}
+    : Join(qec, std::move(t1), std::move(t2), {{t1JoinCol, t2JoinCol}},
+           keepJoinColumn, allowSwappingChildrenOnlyForTesting) {}
 
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::unique_ptr<JoinImpl>&& impl)
@@ -54,6 +61,11 @@ bool Join::knownEmptyResult() { return impl_->knownEmptyResult(); }
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) { return impl_->getMultiplicity(col); }
+
+// _____________________________________________________________________________
+auto Join::getJoinColumns() const -> const JoinColumns& {
+  return impl_->getJoinColumns();
+}
 
 // _____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> Join::getChildrenImpl() const {

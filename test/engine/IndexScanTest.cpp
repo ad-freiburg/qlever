@@ -352,6 +352,15 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     // If both scans have two variables, then the second variable must not
     // match.
     testLazyScanThrows(kg, abc, abc);
+
+    // For a join on two columns, the second variable must match.
+    auto qec = getQec(kg);
+    IndexScan s1{qec, Permutation::PSO, abc};
+    IndexScan s2{qec, Permutation::PSO, xqz};
+    EXPECT_NO_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s1, 2));
+    EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s1, 3));
+    EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s2, 2));
+    EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s1, 0));
   }
 }
 

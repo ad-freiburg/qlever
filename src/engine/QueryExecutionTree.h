@@ -206,7 +206,7 @@ class QueryExecutionTree {
 
   // The return type of the `getSortedTreesAndJoinColumns` function below. It is
   // deliberately stored as a tuple vs. a struct with named members, so that we
-  // can use `std::tie` on it (see for example `MultiColumnJoin.cpp`).
+  // can use `std::tie` on it (see for example `Minus.cpp`).
   using SortedTreesAndJoinColumns =
       std::tuple<std::shared_ptr<QueryExecutionTree>,
                  std::shared_ptr<QueryExecutionTree>,

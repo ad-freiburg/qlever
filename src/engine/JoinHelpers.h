@@ -105,16 +105,18 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
   return IteratorWithSingleCol<numJoinColumns>{std::move(range)};
 }
 
+template <size_t NumJoinCols = 1>
 using MaterializedInputView =
-    std::array<IdTableAndFirstCols<1, IdTableView<0>>, 1>;
+    std::array<IdTableAndFirstCols<NumJoinCols, IdTableView<0>>, 1>;
 
 // Wrap a fully materialized result in a `IdTableAndFirstCol` and an array. It
 // then fulfills the concept `view<IdTableAndFirstCol>` which is required by the
 // lazy join algorithms. Note: The `convertGenerator` function above
 // conceptually does exactly the same for lazy inputs.
-inline MaterializedInputView asSingleTableView(
+template <size_t NumJoinCols = 1>
+MaterializedInputView<NumJoinCols> asSingleTableView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
-  return {makeIdTableAndFirstCols<1>(
+  return {makeIdTableAndFirstCols<NumJoinCols>(
       result.idTableView().asColumnSubsetView(permutation),
       result.getCopyOfLocalVocab())};
 }
@@ -122,12 +124,15 @@ inline MaterializedInputView asSingleTableView(
 // Wrap a result either in an array with a single element or in a range wrapping
 // the lazy result generator. Note that the lifetime of the view is coupled to
 // the lifetime of the result.
-inline std::variant<LazyInputView<1>, MaterializedInputView> resultToView(
-    const Result& result, const std::vector<ColumnIndex>& permutation) {
+template <size_t NumJoinCols = 1>
+std::variant<LazyInputView<NumJoinCols>, MaterializedInputView<NumJoinCols>>
+resultToView(const Result& result,
+             const std::vector<ColumnIndex>& permutation) {
   if (result.isFullyMaterialized()) {
-    return asSingleTableView(result, permutation);
+    return asSingleTableView<NumJoinCols>(result, permutation);
   }
-  return convertGenerator(result.idTables(), permutation);
+  return convertGenerator<Result::LazyResult, NumJoinCols>(result.idTables(),
+                                                           permutation);
 }
 
 // Part of the implementation of `createResult`. This function is called when

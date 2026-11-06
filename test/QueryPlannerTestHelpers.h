@@ -29,7 +29,6 @@
 #include "engine/Join.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
@@ -312,7 +311,6 @@ inline auto IndexScanFromStrings =
 
 // For the following Join algorithms the order of the children is not
 // important.
-inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
@@ -341,13 +339,12 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
                                      Vec& children, const auto& self) -> void {
     const Operation* operation = tree.getRootOperation().get();
     auto join = dynamic_cast<const ::Join*>(operation);
-    auto multiColJoin = dynamic_cast<const ::MultiColumnJoin*>(operation);
     // Also allow the INTERNAL SORT BY operations that are needed for the
     // joins.
     // TODO<joka921> is this the right place to also check that those have
     // the correct columns?
     auto sort = dynamic_cast<const ::Sort*>(operation);
-    if (!join && !sort && !multiColJoin) {
+    if (!join && !sort) {
       children.push_back(tree);
     } else {
       for (const auto& child : operation->getChildren()) {
