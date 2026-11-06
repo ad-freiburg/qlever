@@ -789,7 +789,8 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree = unionOperation.makeSortedTree({0, 1, 2, 3});
+    auto tree =
+        unionOperation.makeSortedTree(std::vector<ColumnIndex>{0, 1, 2, 3});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
@@ -807,7 +808,8 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree = unionOperation.makeSortedTree({0, 3, 1, 2});
+    auto tree =
+        unionOperation.makeSortedTree(std::vector<ColumnIndex>{0, 3, 1, 2});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
@@ -1019,14 +1021,15 @@ TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
   // The result of the union has to be sorted on `?a`, which is its column 0.
   Union unionOperation{qec, makeOptionalJoin(), std::move(other),
                        std::vector<ColumnIndex>{0}};
-  auto expectChildrenAreSorted =
-      [&unionOperation](ad_utility::source_location loc =
-                            AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(loc);
-        for (const auto* child : unionOperation.getChildren()) {
-          EXPECT_TRUE(child->getRootOperation()->isSortedBy({0}));
-        }
-      };
+  auto expectChildrenAreSorted = [&unionOperation](
+                                     ad_utility::source_location loc =
+                                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    for (const auto* child : unionOperation.getChildren()) {
+      EXPECT_TRUE(
+          child->getRootOperation()->isSortedBy(std::vector<ColumnIndex>{0}));
+    }
+  };
   // Both children are already sorted, so the constructor added no `Sort`.
   expectChildrenAreSorted();
 

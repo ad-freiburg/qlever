@@ -98,7 +98,7 @@ class Sort : public Operation {
 
  public:
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const override;
+      ql::span<const ColumnIndex> sortColumns) const override;
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(

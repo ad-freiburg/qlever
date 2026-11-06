@@ -11,6 +11,7 @@
 
 #include <memory>
 
+#include "backports/span.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -537,8 +538,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // Helper function to check hif the result of this operation is
   // already sorted accordigngly.
-  virtual bool isSortedBy(
-      const std::vector<ColumnIndex>& sortColumns) const final;
+  virtual bool isSortedBy(ql::span<const ColumnIndex> sortColumns) const final;
 
   // Try to create a version of this operation that is sorted on the given
   // `sortColumns`. The default implementation returns `std::nullopt`, assuming
@@ -546,7 +546,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // override this function if they are able to provide more efficient
   // implementations.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const;
+      ql::span<const ColumnIndex> sortColumns) const;
 
   // Return true iff the result of this operation is guaranteed to contain no
   // two rows that agree on all columns in `distinctIndices`. In other words,
@@ -554,13 +554,13 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // no-op. Any result with at most one row is trivially distinct wrt any
   // columns; beyond that, the per-class `isDistinctByImpl` decides.
   virtual bool isDistinctBy(
-      const std::vector<ColumnIndex>& distinctIndices) const final;
+      ql::span<const ColumnIndex> distinctIndices) const final;
 
   // Per-class component of `isDistinctBy` (see above). The default
   // conservatively returns `false`. Subclasses that can guarantee distinctness
   // (e.g. a full `IndexScan` for `?s ?p ?o`) should override this.
   virtual bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const;
+      ql::span<const ColumnIndex> distinctIndices) const;
 
   // Try to create a version of this operation with a `DISTINCT` over the given
   // `distinctIndices` pushed down into the tree, if that makes the operation
@@ -573,7 +573,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // only be called on operations that are not already distinct wrt
   // `distinctIndices`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
-      const std::vector<ColumnIndex>& distinctIndices) const;
+      ql::span<const ColumnIndex> distinctIndices) const;
 
   // Try to create a version of this operation that only contains the given
   // `variables`, and therefore strips away all other columns. The default

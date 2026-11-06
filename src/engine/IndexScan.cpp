@@ -225,7 +225,7 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
 
 // _____________________________________________________________________________
 bool IndexScan::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // Duplicate triples are removed during scanning, so the result contains every
   // matching triple (or quad, if a graph column is present) exactly once. Its
   // rows are therefore uniquely identified by the triple's variable columns

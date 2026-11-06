@@ -42,7 +42,7 @@ class Distinct : public Operation {
   // in `keepIndices_`, hence it is also distinct wrt any superset of
   // `keepIndices_`.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
   // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
   // Dispatches to the right WIDTH via `callFixedSizeVi`.

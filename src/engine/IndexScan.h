@@ -202,7 +202,7 @@ class IndexScan final : public Operation {
   // never known to be distinct, because they are not deduplicated. See the
   // implementation for details.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
   // Full index scans will never be able to fit in the cache on datasets the
   // size of wikidata, so we don't even need to try and waste performance.

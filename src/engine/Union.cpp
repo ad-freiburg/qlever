@@ -501,10 +501,11 @@ void Union::onLimitOffsetChanged(const LimitOffsetClause&,
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return ad_utility::makeExecutionTree<Union>(
-      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
+      _executionContext, _subtrees.at(0), _subtrees.at(1),
+      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()));
 }
 
 // _____________________________________________________________________________
