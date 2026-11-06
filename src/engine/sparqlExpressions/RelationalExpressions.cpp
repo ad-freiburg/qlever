@@ -617,6 +617,14 @@ template class RelationalExpression<Comparison::GE>;
 
 namespace sparqlExpression {
 
+namespace {
+// Return true iff `expr` is a `T`.
+template <typename T>
+bool isExpressionOfType(const SparqlExpression& expr) {
+  return dynamic_cast<const T*>(&expr) != nullptr;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr) {
@@ -627,9 +635,8 @@ getGeoDistanceFilter(const SparqlExpression& expr) {
   // function.
 
   // Supported comparison operators
-  bool isLessThan = dynamic_cast<const LessThanExpression*>(&expr) != nullptr;
-  if (!isLessThan &&
-      dynamic_cast<const LessEqualExpression*>(&expr) == nullptr) {
+  bool isLessThan = isExpressionOfType<LessThanExpression>(expr);
+  if (!isLessThan && !isExpressionOfType<LessEqualExpression>(expr)) {
     return std::nullopt;
   }
 

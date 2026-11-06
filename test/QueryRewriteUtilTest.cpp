@@ -80,6 +80,7 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   auto expr5 = ltSprql(std::move(dExpr5), D(10));
   auto filter5 = getGeoDistanceFilter(*expr5);
   checkGeoDistanceFilter(filter5, dExp5, 10);
+  EXPECT_LT(filter5.value().second, 10.0);
   EXPECT_EQ(filter5.value().second,
             std::nextafter(10.0, -std::numeric_limits<double>::infinity()));
 
