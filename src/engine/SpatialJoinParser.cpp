@@ -14,12 +14,13 @@ namespace ad_utility::detail::parallel_wkt_parser {
 WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
                      bool usePrefiltering,
                      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-                     const Index& index)
+                     bool requireContainment, const Index& index)
     : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
       _numSkipped(numThreads),
       _numParsed(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
+      _requireContainment(requireContainment),
       _index(index) {
   for (size_t i = 0; i < _thrds.size(); i++) {
     _thrds[i] = std::thread(&WKTParser::processQueue, this, i);
@@ -54,7 +55,7 @@ void WKTParser::processQueue(size_t t) {
         if (_usePrefiltering &&
             LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
                 _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
-                job.boundingBox)) {
+                job.boundingBox, _requireContainment)) {
           prefilterCounter++;
           continue;
         }
