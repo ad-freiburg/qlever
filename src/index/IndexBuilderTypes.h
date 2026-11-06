@@ -386,6 +386,10 @@ void mapTripleToIds(Triple&& triple, ItemMapManager& map, IndexPtr* index,
 
   // Fourth, if applicable, add the internal triple
   // `<literal> ql:normalized "normalized literal"`.
+  //
+  // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
+  // for adding these internal triples for update triples. If you change
+  // this code, you probably also have to change that one.
   if (lt.normalized_.has_value()) {
     auto normalizedPredId = map.getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(NORMALIZED_PREDICATE)});

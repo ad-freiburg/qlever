@@ -289,6 +289,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.addHasWordTriples() = c.addHasWordTriples;
     index.getImpl().setHasWordNormalization(c.hasWordNormalization);
     index.getImpl().setHasWordRestrictPredicates(c.hasWordRestrictPredicates);
+    index.getImpl().addNormalizedTriples() = c.addNormalizedTriples;
+    index.getImpl().setNormalizationRegexes(c.normalizationRegexes);
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     if (c.parseInParallel.has_value()) {

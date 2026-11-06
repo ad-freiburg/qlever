@@ -471,6 +471,16 @@ void IndexImpl::prepareIndexBuild() {
   configurationJson_[std::string{
       ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY}] =
       hasWordRestrictPredicates_;
+  // Whether the index has `ql:normalized` triples and the regexes of their
+  // normalization are stored, so that the server can later add them for the
+  // literals that are inserted by an update.
+  configurationJson_[std::string{ad_utility::ADD_NORMALIZED_TRIPLES_KEY}] =
+      addNormalizedTriples_;
+  configurationJson_[std::string{ad_utility::NORMALIZATION_REGEXES_KEY}] =
+      ::ranges::to<std::vector<std::string>>(
+          normalizationRegexes_ | ql::views::transform([](const auto& regex) {
+            return regex->pattern();
+          }));
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1619,6 +1629,16 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   AD_CORRECTNESS_CHECK(ql::ranges::adjacent_find(hasWordRestrictPredicates_,
                                                  std::greater_equal<>{}) ==
                        hasWordRestrictPredicates_.end());
+
+  // Whether this index has `ql:normalized` triples and the regexes of their
+  // normalization (an index built before these keys existed is treated as
+  // having none).
+  loadDataMember(ad_utility::ADD_NORMALIZED_TRIPLES_KEY, addNormalizedTriples_,
+                 false);
+  std::vector<std::string> normalizationRegexes;
+  loadDataMember(ad_utility::NORMALIZATION_REGEXES_KEY, normalizationRegexes,
+                 std::vector<std::string>{});
+  setNormalizationRegexes(normalizationRegexes);
 
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a

@@ -2035,6 +2035,43 @@ TEST(IndexImpl, addHasWordTriplesOfBuiltAndLoadedIndex) {
   EXPECT_FALSE(indexImpl.addHasWordTriples());
 }
 
+// Test that whether an index has `ql:normalized` triples and the regexes of
+// their normalization are recorded in the configuration of a built index and
+// applied when loading, with no `ql:normalized` triples for an index that was
+// built before the keys existed.
+TEST(IndexImpl, addNormalizedTriplesOfBuiltAndLoadedIndex) {
+  const std::string addKey{ad_utility::ADD_NORMALIZED_TRIPLES_KEY};
+  const std::string regexesKey{ad_utility::NORMALIZATION_REGEXES_KEY};
+  using Regexes = std::vector<std::string>;
+
+  // An index built with `ql:normalized` triples records this and the regexes.
+  TestIndexConfig config{"<a> <b> \"Café (Paris)\" ."};
+  config.addNormalizedTriples = true;
+  config.normalizationRegexes = {"\\(.*?\\)"};
+  auto index = makeTestIndex("addNormalizedTriples", std::move(config));
+  EXPECT_EQ(index.getImpl().configurationJson()[addKey], true);
+  EXPECT_EQ(index.getImpl().configurationJson()[regexesKey],
+            (Regexes{"\\(.*?\\)"}));
+
+  // Loading a configuration applies the recorded values (so that the literals
+  // of an update are normalized like those of the index build), and a
+  // configuration without the keys (an older index) gives no `ql:normalized`
+  // triples.
+  auto configuration = minimalValidConfiguration();
+  configuration[addKey] = true;
+  configuration[regexesKey] = Regexes{"\\(.*?\\)"};
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_TRUE(std::as_const(indexImpl).addNormalizedTriples());
+  EXPECT_EQ(indexImpl.normalizeLiteralContent("Café (Paris)"), "cafe");
+  configuration.erase(addKey);
+  configuration.erase(regexesKey);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_FALSE(std::as_const(indexImpl).addNormalizedTriples());
+  EXPECT_EQ(indexImpl.normalizeLiteralContent("Café (Paris)"), "cafe paris");
+}
+
 // _____________________________________________________________________________
 TEST(IndexImpl, dateOfIndexBuild) {
   auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");

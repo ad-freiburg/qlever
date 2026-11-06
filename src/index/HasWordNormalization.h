@@ -72,6 +72,16 @@ inline constexpr std::string_view ADD_HAS_WORD_TRIPLES_KEY =
 inline constexpr std::string_view HAS_WORD_RESTRICT_PREDICATES_KEY =
     "has-word-restrict-predicates";
 
+// The keys under which it is stored in the configuration of an index whether
+// the index has `ql:normalized` triples, and the regexes of their normalization
+// (see `IndexImpl::normalizeLiteralContent`). An index that was built before
+// these keys existed has no entries for them and is treated as having no
+// `ql:normalized` triples.
+inline constexpr std::string_view ADD_NORMALIZED_TRIPLES_KEY =
+    "add-normalized-triples";
+inline constexpr std::string_view NORMALIZATION_REGEXES_KEY =
+    "normalization-regexes";
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_INDEX_HASWORDNORMALIZATION_H

@@ -131,6 +131,11 @@ struct TestIndexConfig {
   // The predicates to which the `ql:has-word` triples are restricted (see
   // `IndexImpl::setHasWordRestrictPredicates`).
   std::vector<std::string> hasWordRestrictPredicates;
+  // If true, add a `ql:normalized` triple for each literal during index
+  // building, with the given `normalizationRegexes` (see
+  // `IndexImpl::normalizeLiteralContent`).
+  bool addNormalizedTriples = false;
+  std::vector<std::string> normalizationRegexes;
   // The words of the secondary vocabulary of the index (see
   // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
   // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not
@@ -177,7 +182,8 @@ struct TestIndexConfig {
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
+        c.addHasWordTriples, c.hasWordRestrictPredicates,
+        c.addNormalizedTriples, c.normalizationRegexes, c.secondaryVocabWords,
         c.numThreads, c.parseInParallel, c.additionalSettings,
         c.geoPointEncoding.value());
   }
@@ -187,8 +193,9 @@ struct TestIndexConfig {
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
       bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, hasWordRestrictPredicates, secondaryVocabWords,
-      numThreads, parseInParallel, additionalSettings, geoPointEncoding)
+      addHasWordTriples, hasWordRestrictPredicates, addNormalizedTriples,
+      normalizationRegexes, secondaryVocabWords, numThreads, parseInParallel,
+      additionalSettings, geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

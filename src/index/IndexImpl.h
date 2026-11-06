@@ -472,6 +472,7 @@ class IndexImpl {
   }
 
   bool& addNormalizedTriples() { return addNormalizedTriples_; }
+  bool addNormalizedTriples() const { return addNormalizedTriples_; }
 
   // Set the regexes for `normalizeLiteralContent`. Throw if one of them is not
   // a valid regular expression (as understood by Google's RE2 library).
@@ -988,14 +989,13 @@ class IndexImpl {
   ad_utility::HashMap<std::string, size_t> computeHasWordFrequencies(
       std::string_view content) const;
 
-  // Return true if the `ql:has-word` triples are added for the literals that
-  // are the object of a triple with the predicate returned by `getPredicate`
-  // (in the format of `Iri::toStringRepresentation`), see
+  // Return true if the `ql:has-word` and `ql:normalized` triples are added for
+  // the literals that are the object of a triple with the predicate returned by
+  // `getPredicate` (in the format of `Iri::toStringRepresentation`), see
   // `hasWordRestrictPredicates_`.
   //
-  // NOTE: `getPredicate` is only called if the `ql:has-word` triples are
-  // restricted to certain predicates, so that the predicate is decoded only
-  // when needed.
+  // NOTE: `getPredicate` is only called if these triples are restricted to
+  // certain predicates, so that the predicate is decoded only when needed.
   template <typename GetPredicate>
   bool hasWordTriplesForPredicate(const GetPredicate& getPredicate) const {
     return hasWordRestrictPredicates_.empty() ||
