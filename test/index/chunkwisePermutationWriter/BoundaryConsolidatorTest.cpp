@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <future>
 #include <map>
 #include <vector>
 
@@ -28,13 +29,16 @@ using namespace chunkWriterTestHelpers;
 // Split the `rows` (which have to be sorted) into chunks at the given
 // `boundaries` (the indices of the first rows of all the chunks but the first
 // one, in ascending order; equal indices yield empty chunks), write every
-// chunk with a `ChunkWriter` of its own (one after the other, with input
-// blocks of `inputBlockSize` rows), feed their results to a
-// `BoundaryConsolidator` in order, and check that both permutations and their
-// metadata contain exactly the `rows`.
+// chunk with a `ChunkWriter` of its own (with input blocks of `inputBlockSize`
+// rows), feed their results to a `BoundaryConsolidator` in order, and check
+// that both permutations and their metadata contain exactly the `rows`. The
+// chunks run one after the other, or all at the same time on threads of their
+// own if `concurrentChunks` is set (then the consolidation of the first chunks
+// overlaps with the writing of the later ones, as in a real merge).
 void consolidateAndCheck(const TestRows& rows,
                          const std::vector<size_t>& boundaries,
                          size_t inputBlockSize = 7,
+                         bool concurrentChunks = false,
                          source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   TwinWriters writers{gtestCurrentTestName()};
@@ -54,16 +58,23 @@ void consolidateAndCheck(const TestRows& rows,
   std::vector<size_t> begins{0};
   begins.insert(begins.end(), boundaries.begin(), boundaries.end());
   const size_t numChunks = begins.size();
-  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
+  auto writeChunk = [&](size_t chunkIndex) {
     size_t begin = begins.at(chunkIndex);
     size_t end =
         chunkIndex + 1 < numChunks ? begins.at(chunkIndex + 1) : rows.size();
-    ASSERT_LE(begin, end);
-    ChunkResult result;
-    {
-      ChunkWriter writer{writers.context_, chunkIndex, numChunks};
-      result = processRows(writer, subRows(rows, begin, end), inputBlockSize);
+    AD_CONTRACT_CHECK(begin <= end);
+    ChunkWriter writer{writers.context_, chunkIndex, numChunks};
+    return processRows(writer, subRows(rows, begin, end), inputBlockSize);
+  };
+  std::vector<std::future<ChunkResult>> futures;
+  if (concurrentChunks) {
+    for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
+      futures.push_back(std::async(std::launch::async, writeChunk, chunkIndex));
     }
+  }
+  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
+    ChunkResult result = concurrentChunks ? futures.at(chunkIndex).get()
+                                          : writeChunk(chunkIndex);
     consolidator.addChunkResult(chunkIndex, std::move(result));
   }
   EXPECT_EQ(consolidator.numRows(), rows.size());
@@ -163,6 +174,24 @@ TEST(BoundaryConsolidator, emptyChunks) {
   auto rows = concat({relation(1, 10), relation(2, 50), relation(3, 1)});
   consolidateAndCheck(rows, {0, 20, 20, 40, 61, 61});
   consolidateAndCheck({}, {0, 0});
+}
+
+// Test chunks that run at the same time on different threads, while the
+// consolidator already processes the results of the first chunks: the two
+// writers are shared by the chunks and the consolidator. The relations cover
+// small and large boundary parts as well as relations in the middle of the
+// chunks.
+TEST(BoundaryConsolidator, concurrentChunks) {
+  auto rows = concat({relation(1, 30), relation(2, 100), relation(3, 5),
+                      relation(4, 60), relation(5, 3), relation(6, 80),
+                      relation(7, 40)});
+  // The large relations 2, 4, 6, and 7 occupy the rows `[30, 130)`,
+  // `[135, 195)`, `[198, 278)`, and `[278, 318)`, so chunks 2 and 4 consist of
+  // a single relation, and chunks 1, 3, 5, and 6 have two boundary parts.
+  std::vector<size_t> boundaries{20, 60, 110, 140, 170, 230, 280};
+  for (size_t i = 0; i < 3; ++i) {
+    consolidateAndCheck(rows, boundaries, 7, true);
+  }
 }
 
 // Test a boundary between two different relations, so that the first part of

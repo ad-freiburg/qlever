@@ -10,13 +10,17 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <future>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
@@ -208,6 +212,72 @@ TEST(ConcurrentCallbackDispatcher, dispatcherIsKeptAliveUntilDone) {
   EXPECT_EQ(weak.use_count(), 2);
   fixture.finishOldest();
   EXPECT_EQ(weak.use_count(), 1);
+}
+
+// Test the dispatcher with real concurrency: many blocks are dispatched from
+// the threads of one pool, and the callbacks are done on the threads of
+// another. The bound on the blocks in flight holds throughout, every callback
+// is invoked and done for every block, the exceptions of all the blocks are
+// reported, and `waitUntilIdle` returns only after the last `done`.
+TEST(ConcurrentCallbackDispatcher, concurrentDispatchesAndDones) {
+  constexpr size_t NUM_BLOCKS = 300;
+  constexpr size_t NUM_CALLBACKS = 3;
+  constexpr size_t MAX_BLOCKS_IN_FLIGHT = 4;
+  boost::asio::thread_pool dispatchPool{4};
+  boost::asio::thread_pool donePool{4};
+  // The number of callbacks that are currently in flight, its maximum so far,
+  // the number of callbacks that are done, and the number of exceptions that
+  // were reported. The first callback of every seventh block (the blocks with
+  // the values `0, 7, 14, ...`) reports an exception via its `done`.
+  std::atomic<size_t> callbacksInFlight{0};
+  std::atomic<size_t> maxCallbacksInFlight{0};
+  std::atomic<size_t> numDones{0};
+  std::atomic<size_t> numReportedExceptions{0};
+  std::vector<ConcurrentBlockCallback> callbacks;
+  for (size_t i = 0; i < NUM_CALLBACKS; ++i) {
+    callbacks.push_back([&, i](SharedBlock block, DoneCallback done) {
+      size_t inFlight = callbacksInFlight.fetch_add(1) + 1;
+      maxCallbacksInFlight.store(
+          std::max(maxCallbacksInFlight.load(), inFlight));
+      bool reportsException = i == 0 && (*block)(0, 0).getInt() % 7 == 0;
+      boost::asio::post(
+          donePool, [&, done = std::move(done), reportsException]() mutable {
+            std::this_thread::sleep_for(std::chrono::microseconds{200});
+            callbacksInFlight.fetch_sub(1);
+            numDones.fetch_add(1);
+            std::move(done)(reportsException ? std::make_exception_ptr(
+                                                   std::runtime_error{"failed"})
+                                             : nullptr);
+          });
+    });
+  }
+  auto dispatcher = std::make_shared<ConcurrentCallbackDispatcher>(
+      dispatchPool.get_executor(), std::move(callbacks), MAX_BLOCKS_IN_FLIGHT,
+      [&numReportedExceptions](std::exception_ptr exception) {
+        EXPECT_NE(exception, nullptr);
+        numReportedExceptions.fetch_add(1);
+      });
+
+  std::vector<std::future<bool>> results;
+  for (size_t i = 0; i < NUM_BLOCKS; ++i) {
+    Block block{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    block.push_back({Id::makeFromInt(static_cast<int64_t>(i))});
+    results.push_back(boost::asio::co_spawn(
+        dispatchPool,
+        ConcurrentCallbackDispatcher::asyncDispatch(
+            dispatcher, std::make_shared<const Block>(std::move(block))),
+        boost::asio::use_future));
+  }
+  for (auto& result : results) {
+    EXPECT_TRUE(result.get());
+  }
+  dispatcher->waitUntilIdle();
+  EXPECT_EQ(callbacksInFlight.load(), 0u);
+  EXPECT_EQ(numDones.load(), NUM_BLOCKS * NUM_CALLBACKS);
+  EXPECT_LE(maxCallbacksInFlight.load(), MAX_BLOCKS_IN_FLIGHT * NUM_CALLBACKS);
+  EXPECT_EQ(numReportedExceptions.load(), (NUM_BLOCKS + 6) / 7);
+  donePool.join();
+  dispatchPool.join();
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
