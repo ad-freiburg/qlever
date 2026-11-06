@@ -12,7 +12,6 @@
 #include <string_view>
 #include <vector>
 
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
@@ -76,22 +75,6 @@ const ParsedQuery& Subquery::get() const { return *_subquery; }
 // _____________________________________________________________________________
 void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
   ad_utility::appendVector(_triples, std::move(other._triples));
-}
-
-// ____________________________________________________________________________
-std::optional<TripleComponent> Bind::getConstant() const {
-  using namespace sparqlExpression;
-  const auto* expression = _expression.getPimpl();
-  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
-    return TripleComponent{iri->value()};
-  } else if (const auto* literal =
-                 dynamic_cast<const StringLiteralExpression*>(expression)) {
-    return TripleComponent{literal->value()};
-  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
-             id != nullptr && !id->value().isUndefined()) {
-    return TripleComponent{id->value()};
-  }
-  return std::nullopt;
 }
 
 // ____________________________________________________________________________
