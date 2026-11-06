@@ -296,6 +296,10 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       spec.parseInParallelSetExplicitly_ = true;
     }
     index.getImpl().setVocabularyTypeForIndexBuilding(vocabularyType);
+    if (c.geoCellGridLevel > 0) {
+      index.getImpl().setGeoCellGridForIndexBuilding(
+          ad_utility::GeoCellGrid{c.geoCellGridLevel});
+    }
     index.getImpl().setGeoPointEncodingForIndexBuilding(c.geoPointEncoding);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
         !c.encodedIriPatterns.empty()) {
