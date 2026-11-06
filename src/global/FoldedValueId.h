@@ -9,6 +9,7 @@
 
 #include <absl/base/casts.h>
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <cstdint>
 #include <exception>
@@ -142,8 +143,8 @@ class ValueId : public qlever::IdBase<ValueId, uint64_t, uint64_t, uint8_t> {
 
   // Enable the serialization of `ValueId` in the `ad_utility::serialization`
   // framework.
-  template <typename U>
-  friend void allowTrivialSerialization(ValueId, U);
+  template <typename T>
+  friend void allowTrivialSerialization(ValueId, T);
 
  private:
   // The comparison of two `Id`s that are bitwise comparable (see

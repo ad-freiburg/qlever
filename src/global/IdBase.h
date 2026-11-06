@@ -541,6 +541,11 @@ class IdBase {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<ValueType, bool>) {
         ostr << (value ? "true" : "false");
+      } else if constexpr (ad_utility::isSimilar<T, double>) {
+        // NOTE: `%f` is what `std::to_string` did for floating-point values
+        // before C++26. Since C++26, it produces the shortest round-trip
+        // representation instead (`42` instead of `42.000000`).
+        ostr << absl::StrFormat("%f", value);
       } else if constexpr (ad_utility::isSimilar<ValueType,
                                                  DateYearOrDuration>) {
         ostr << value.toStringAndType().first;

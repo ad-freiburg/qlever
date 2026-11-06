@@ -317,7 +317,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 9814a99e4458936acdf012eb0bed4fbcd569a181 # branch fork-for-qlever
+        GIT_TAG e049028af3d076f6c20ba52826dfee2ab0f75f87 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -811,6 +811,19 @@ target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-c
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+    # Disable `-Wuninitialized` for all targets that use `gmock`, only for
+    # GCC 16 and newer in C++26 mode.
+    #
+    # NOTE: In that mode, GCC wrongly reports the temporary that is bound to the
+    # `const&` in `PropertyMatcher::MatchAndExplainImpl` (`gmock-matchers.h`)
+    # as used uninitialized, for every use of `::testing::Property`. The
+    # warning is emitted in the translation units of the tests, not of `gmock`
+    # itself. This is a bug in GCC, not in `googletest`, see
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124380.
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
+        CMAKE_CXX_STANDARD GREATER_EQUAL 26)
+        target_compile_options(gmock INTERFACE -Wno-uninitialized)
+    endif ()
 endif ()
 include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
