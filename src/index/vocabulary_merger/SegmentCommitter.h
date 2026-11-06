@@ -58,8 +58,10 @@ struct BlockPieces {
 // Gather the words of the `block` into one `WordBlock` (see
 // `index/vocabulary/VocabularyTypes.h`), which also carries their precomputed
 // payload. This is per-word work, which the `SegmentCommitter` leaves to its
-// sink.
-inline WordBlock gatherWords(const BlockPieces& block) {
+// sink. The `block` is taken by value, so that the pieces (and thus the
+// segments that they keep alive) are released as soon as the call ends, also
+// if it throws.
+inline WordBlock gatherWords(BlockPieces block) {
   WordBlock result;
   result.firstPosition_ = block.firstPosition_;
   result.isExternal_.reserve(block.numWords_);
