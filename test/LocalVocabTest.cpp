@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/hash/hash.h>
 #include <gmock/gmock.h>
 
 #include <sstream>
@@ -719,4 +720,128 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       vocab.reserveBlankNodeBlocksFromExplicitIndices(indices, &bnm),
       ::testing::HasSubstr("Assertion"));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, wordsHaveStableAddresses) {
+  // Many words (and a single word that is much larger than the initial blocks
+  // of the arena), such that the arena and the hash table of the words have to
+  // grow several times, which must not change the addresses of the words.
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  LocalVocab localVocab;
+  std::vector<std::pair<LocalVocabIndex, std::string>> indices;
+  auto add = [&](std::string content) {
+    auto word = LocalVocabEntry::literalWithoutQuotes(content, context);
+    indices.emplace_back(localVocab.getIndexAndAddIfNotContained(word),
+                         std::string{word.toStringRepresentation()});
+  };
+  for (size_t i = 0; i < 20'000; ++i) {
+    add(std::to_string(i));
+    if (i == 10'000) {
+      add(std::string(1'000'000, 'x'));
+    }
+  }
+  ASSERT_EQ(localVocab.size(), indices.size());
+  for (const auto& [index, representation] : indices) {
+    EXPECT_EQ(index->toStringRepresentation(), representation);
+    EXPECT_EQ(localVocab.getIndexOrNullopt(*index), index);
+  }
+  // The words of the vocab are views into characters that are owned by the
+  // vocab (and not by the words that were added).
+  for (const auto& [index, representation] : indices) {
+    EXPECT_NE(index->toStringRepresentation().data(), representation.data());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, addWordsOfOtherLocalVocab) {
+  auto* qec = ad_utility::testing::getQec(
+      ad_utility::testing::TestIndexConfig{"<a> <b> <c> ."});
+  const auto& context = qec->getLocalVocabContext();
+  LocalVocab vocab1;
+  auto word = ad_utility::testing::iriLocalVocabEntry("<bb>", context);
+  LocalVocabIndex index1 = vocab1.getIndexAndAddIfNotContained(word);
+  // Compute (and thereby cache) the position of the stored word.
+  auto position = index1->positionInVocab();
+
+  // Adding the stored word to another vocab makes a copy of it (including the
+  // cached position), adding it again doesn't.
+  LocalVocab vocab2;
+  LocalVocabIndex index2 = vocab2.getIndexAndAddIfNotContained(*index1);
+  EXPECT_NE(index1, index2);
+  EXPECT_NE(index1->toStringRepresentation().data(),
+            index2->toStringRepresentation().data());
+  EXPECT_EQ(*index1, *index2);
+  EXPECT_EQ(index2->positionInVocab(), position);
+  EXPECT_EQ(vocab2.getIndexAndAddIfNotContained(*index1), index2);
+  EXPECT_EQ(vocab2.getIndexAndAddIfNotContained(word), index2);
+  EXPECT_EQ(vocab2.getIndexOrNullopt(*index1), index2);
+  EXPECT_EQ(vocab2.size(), 1);
+  EXPECT_EQ(vocab2.getIdAndAddIfNotContained(*index1),
+            Id::makeFromLocalVocabIndex(index2));
+
+  // The word lives as long as `vocab2`, even if `vocab1` is destroyed.
+  vocab1 = LocalVocab{};
+  EXPECT_EQ(index2->toStringRepresentation(), word.toStringRepresentation());
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, viewsAndOwningEntries) {
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  auto a = LocalVocabEntry::literalWithoutQuotes("a", context);
+  auto b = LocalVocabEntry::literalWithoutQuotes("b", context);
+  LocalVocab localVocab;
+  const LocalVocabEntryView& viewOfA =
+      *localVocab.getIndexAndAddIfNotContained(a);
+  // A view of an entry that refers to the characters of the entry itself.
+  LocalVocabEntryView viewOfB{b};
+  EXPECT_EQ(viewOfB.toStringRepresentation().data(),
+            b.toStringRepresentation().data());
+
+  // Owning entries and views can be compared with each other.
+  EXPECT_EQ(viewOfA, a);
+  EXPECT_EQ(a, viewOfA);
+  EXPECT_NE(viewOfA, b);
+  EXPECT_NE(viewOfA, viewOfB);
+  EXPECT_EQ(viewOfA.compareThreeWay(b), ql::strong_ordering::less);
+  EXPECT_EQ(b.compareThreeWay(viewOfA), ql::strong_ordering::greater);
+  EXPECT_EQ(viewOfA.compareThreeWay(a), ql::strong_ordering::equal);
+  EXPECT_LT(viewOfA, viewOfB);
+  EXPECT_EQ(absl::HashOf(viewOfA), absl::HashOf(a));
+
+  // An owning copy of a view.
+  LocalVocabEntry copyOfA = viewOfA.toOwned();
+  EXPECT_EQ(copyOfA, a);
+  EXPECT_NE(copyOfA.toStringRepresentation().data(),
+            viewOfA.toStringRepresentation().data());
+  EXPECT_EQ(&copyOfA.getContextForTesting(), &context);
+  EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::ElementsAre(a));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, wordsAreStoredWithTheirStructure) {
+  using ad_utility::triple_component::Iri;
+  using ad_utility::triple_component::Literal;
+  using ad_utility::triple_component::LiteralView;
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  // A literal with a datatype that contains a quote, for which the position of
+  // the datatype can't be determined from the string representation alone.
+  LocalVocabEntry word{Literal::literalWithoutQuotes(
+                           "x", Iri::fromStringRepresentation("<a\"b>")),
+                       context};
+  EXPECT_ANY_THROW(
+      LiteralView::fromStringRepresentation(word.toStringRepresentation()));
+
+  LocalVocab localVocab;
+  const LocalVocabEntryView& stored =
+      *localVocab.getIndexAndAddIfNotContained(word);
+  EXPECT_NE(stored.toStringRepresentation().data(),
+            word.toStringRepresentation().data());
+  EXPECT_EQ(stored, word);
+  EXPECT_EQ(stored.getLiteral().getContent(), "x");
+  EXPECT_EQ(stored.getLiteral().getDatatype(), "a\"b");
+
+  // The same holds for a view of the entry itself.
+  LocalVocabEntryView view{word};
+  EXPECT_EQ(view.getLiteral().getDatatype(), "a\"b");
 }

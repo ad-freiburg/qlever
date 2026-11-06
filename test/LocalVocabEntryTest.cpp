@@ -165,6 +165,15 @@ TEST(LocalVocabEntry, reanchoredTo) {
   EXPECT_TRUE(newPosition ==
               iriLocalVocabEntry("<x>", newContext).positionInVocab());
 
+  // Reanchoring a view yields a view of the same characters.
+  LocalVocabEntryView view{entry};
+  LocalVocabEntryView reanchoredView = view.reanchoredTo(newContext);
+  EXPECT_EQ(reanchoredView, entry);
+  EXPECT_EQ(reanchoredView.toStringRepresentation().data(),
+            entry.toStringRepresentation().data());
+  EXPECT_EQ(&reanchoredView.getContextForTesting(), &newContext);
+  EXPECT_TRUE(reanchoredView.positionInVocab() == newPosition);
+
   // Literals are never encoded and can always be reanchored.
   LocalVocabEntry literal = LocalVocabEntry::literalWithoutQuotes(
       "http://example.org/42", oldContext);
@@ -179,4 +188,29 @@ TEST(LocalVocabEntry, reanchoredTo) {
         encodable.reanchoredTo(newContext),
         ::testing::HasSubstr("must not be stored in a `LocalVocabEntry`"));
   }
+}
+
+// Test the copy assignment of `LocalVocabEntry` and `LocalVocabEntryView`,
+// which also copies the context and the cached position in the vocabulary.
+TEST(LocalVocabEntry, copyAssignment) {
+  using namespace ad_utility::testing;
+  Index index = makeTestIndex(gtestCurrentTestName(), "<a> <b> <c> .");
+  const auto& context = index.getImpl().getLocalVocabContext();
+  LocalVocabEntry entry = iriLocalVocabEntry("<x>", context);
+  auto position = entry.positionInVocab();
+
+  LocalVocabEntry copy = LocalVocabEntry::literalWithoutQuotes("y", context);
+  copy = entry;
+  EXPECT_EQ(copy, entry);
+  EXPECT_EQ(&copy.getContextForTesting(), &context);
+  EXPECT_TRUE(copy.positionInVocab() == position);
+
+  LocalVocabEntry other = LocalVocabEntry::literalWithoutQuotes("y", context);
+  LocalVocabEntryView view{entry};
+  LocalVocabEntryView viewCopy{other};
+  viewCopy = view;
+  EXPECT_EQ(viewCopy, entry);
+  EXPECT_EQ(viewCopy.toStringRepresentation().data(),
+            entry.toStringRepresentation().data());
+  EXPECT_TRUE(viewCopy.positionInVocab() == position);
 }

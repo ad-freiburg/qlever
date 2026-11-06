@@ -335,6 +335,19 @@ TEST(RelationalExpression, StringAndString) {
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
+// An `IdOrLocalVocabEntry` that holds an `Id` is compared like that `Id`. The
+// comparison with an `Id` on the other side goes through `idGenerator`.
+TEST(RelationalExpression, IdOrLocalVocabEntryHoldingId) {
+  auto i = [](int64_t x) { return IdOrLocalVocabEntry{Id::makeFromInt(x)}; };
+  auto id = [](int64_t x) { return Id::makeFromInt(x); };
+  testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry, IdOrLocalVocabEntry>(
+      {i(1), i(2)}, {i(3), i(-1)}, {i(4), i(4)});
+  testLessThanGreaterThanEqualHelper<Id, IdOrLocalVocabEntry>(
+      {id(1), i(2)}, {id(3), i(-1)}, {id(4), i(4)});
+  testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry, Id>(
+      {i(1), id(2)}, {i(3), id(-1)}, {i(4), id(4)});
+}
+
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   auto* qec = getQec();
   auto lve = [qec](std::string_view literal) {

@@ -1828,7 +1828,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
         LocalVocabEntry entry = ad_utility::testing::iriLocalVocabEntry(
             "<zzz>", index.getLocalVocabContext());
-        Id id = Id::makeFromLocalVocabIndex(&entry);
+        auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+        Id id = getLocalVocabId(entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
                                    {IdTriple{{id, id, id, id}}});
