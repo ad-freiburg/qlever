@@ -536,8 +536,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
   //    see QleverTest.cpp.
   virtual void getExternalValues(std::vector<ExternalValues*>& externalValues);
 
-  // Helper function to check hif the result of this operation is
-  // already sorted accordigngly.
+  // Return true iff the result of this operation is sorted by `sortColumns`
+  // (that is, iff `sortColumns` is a prefix of `resultSortedOn()`).
   virtual bool isSortedBy(ql::span<const ColumnIndex> sortColumns) const final;
 
   // Try to create a version of this operation that is sorted on the given
