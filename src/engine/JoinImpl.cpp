@@ -255,26 +255,26 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
       right_->getSizeEstimate() *
       (static_cast<double>(nofDistinctInResult) / nofDistinctRight);
 
+  constexpr double corrFactor = JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR;
+
   double jcMultiplicityInResult = left_->getMultiplicity(leftJoinCol_) *
                                   right_->getMultiplicity(rightJoinCol_);
   sizeEstimate_ = std::max(
-      size_t(1),
-      static_cast<size_t>(JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR *
-                          jcMultiplicityInResult * nofDistinctInResult));
+      size_t(1), static_cast<size_t>(corrFactor * jcMultiplicityInResult *
+                                     nofDistinctInResult));
 
-  AD_LOG_TRACE << "Estimated size as: " << sizeEstimate_
-               << " := " << JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR << " * "
-               << jcMultiplicityInResult << " * " << nofDistinctInResult
-               << std::endl;
+  AD_LOG_TRACE << "Estimated size as: " << sizeEstimate_ << " := " << corrFactor
+               << " * " << jcMultiplicityInResult << " * "
+               << nofDistinctInResult << std::endl;
 
   for (auto i = ColumnIndex{0}; i < left_->getResultWidth(); ++i) {
     double oldMult = left_->getMultiplicity(i);
-    double m = std::max(1.0, oldMult * right_->getMultiplicity(rightJoinCol_) *
-                                 JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR);
+    double m = std::max(
+        1.0, oldMult * right_->getMultiplicity(rightJoinCol_) * corrFactor);
     if (i != leftJoinCol_ && nofDistinctLeft != nofDistinctInResult) {
       double oldDist = left_->getSizeEstimate() / oldMult;
       double newDist = std::min(oldDist, adaptSizeLeft);
-      m = (sizeEstimate_ / JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR) / newDist;
+      m = (sizeEstimate_ / corrFactor) / newDist;
     }
     if (i != leftJoinCol_ || keepJoinColumn_) {
       multiplicities_.emplace_back(m);
@@ -285,12 +285,12 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
       continue;
     }
     double oldMult = right_->getMultiplicity(i);
-    double m = std::max(1.0, oldMult * left_->getMultiplicity(leftJoinCol_) *
-                                 JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR);
+    double m = std::max(
+        1.0, oldMult * left_->getMultiplicity(leftJoinCol_) * corrFactor);
     if (i != rightJoinCol_ && nofDistinctRight != nofDistinctInResult) {
       double oldDist = right_->getSizeEstimate() / oldMult;
       double newDist = std::min(oldDist, adaptSizeRight);
-      m = (sizeEstimate_ / JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR) / newDist;
+      m = (sizeEstimate_ / corrFactor) / newDist;
     }
     multiplicities_.emplace_back(m);
   }
