@@ -196,9 +196,9 @@ class JoinImpl : public Operation {
                            const IdTable& dynB, ColumnIndex jc2,
                            IdTable* dynRes);
 
-  // For each child (in the order of `getChildren()`), the number of rows that
-  // the join reads of it if it is an index scan that the join reads only
-  // partially, and the result of `fallback` for the child otherwise.
+  // For each child (in the order of `getChildren()`), the result of `fallback`
+  // for the child, bounded by the number of rows that the join reads of it if
+  // it is an index scan that the join reads only partially.
   std::vector<size_t> getNumRowsReadOfChildrenOr(
       absl::FunctionRef<size_t(QueryExecutionTree&)> fallback);
 

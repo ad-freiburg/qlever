@@ -1309,6 +1309,16 @@ TEST(JoinTest, costEstimateOfJoinWithIndexScan) {
   EXPECT_EQ(twoScans.getCostEstimate(), twoScans.getSizeEstimate() + 40);
   EXPECT_THAT(twoScans.getCostEstimatesChargedForChildren(),
               ::testing::ElementsAre(10, 10));
+
+  // A cached scan with `zero-cost-estimate-for-cached-subtree` keeps its zero
+  // cost, the bound does not raise it.
+  [[maybe_unused]] auto scanResult = makeScan()->getResult();
+  auto cleanupZero = setRuntimeParameterForTest<
+      &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(true);
+  auto cachedScan = makeScan();
+  ASSERT_EQ(cachedScan->getCostEstimate(), 0u);
+  Join withCachedScan{qec, one, cachedScan, 0, 0};
+  EXPECT_EQ(withCachedScan.getCostEstimatesChargedForChildren().at(1), 0u);
 }
 
 // _____________________________________________________________________________
