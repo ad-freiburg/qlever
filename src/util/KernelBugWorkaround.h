@@ -41,12 +41,14 @@ enum class Status { NotNeeded, DisabledByUser, NoJemalloc, Applied };
 // `jemalloc` never return freed memory to the kernel (by setting its
 // `dirty_decay_ms` to -1 for all arenas, also for those that are created
 // later), and log a warning. Call this early in `main`. The memory of the
-// process then stays at its peak.
+// process then stays at its peak. On other operating systems than Linux, do
+// nothing and return `Status::NotNeeded`.
 Status applyIfNeeded();
 
 // The same, but with the `machine` and `release` of the kernel and the
 // presence of the environment variable `disableEnvVar` given explicitly (for
-// testing).
+// testing). On other operating systems than Linux, the workaround is never
+// available, so return `Status::NoJemalloc` instead of `Status::Applied`.
 Status applyIfNeeded(std::string_view machine, std::string_view release,
                      bool disabledByUser);
 

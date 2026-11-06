@@ -12,9 +12,11 @@
 
 #include "util/KernelBugWorkaround.h"
 
+#ifdef __linux__
 // The control interface of `jemalloc` (a null pointer without `jemalloc`).
 extern "C" int mallctl(const char* name, void* oldp, size_t* oldlenp,
                        void* newp, size_t newlen) __attribute__((weak));
+#endif
 
 using namespace ad_utility::kernelBugWorkaround;
 
@@ -60,6 +62,12 @@ TEST(KernelBugWorkaround, applyIfNeeded) {
   // The overload without arguments must work on any machine.
   [[maybe_unused]] auto status = applyIfNeeded();
 
+#ifndef __linux__
+  // The workaround is only available on Linux.
+  EXPECT_EQ(applyIfNeeded(), Status::NotNeeded);
+  EXPECT_EQ(applyIfNeeded("aarch64", "7.0.0-1017-azure", false),
+            Status::NoJemalloc);
+#else
   if (mallctl == nullptr) {
     EXPECT_EQ(applyIfNeeded("aarch64", "7.0.0-1017-azure", false),
               Status::NoJemalloc);
@@ -75,4 +83,5 @@ TEST(KernelBugWorkaround, applyIfNeeded) {
   decay = 0;
   ASSERT_EQ(mallctl("arena.0.dirty_decay_ms", &decay, &size, nullptr, 0), 0);
   EXPECT_EQ(decay, -1);
+#endif
 }
