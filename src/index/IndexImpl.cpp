@@ -1665,7 +1665,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<std::string, size_t> IndexImpl::computeHasWordFrequencies(
+std::vector<std::string> IndexImpl::getNormalizedWords(
     std::string_view content) const {
   // With `LowercaseNoAccents`, remove the accents before the tokenization
   // (combining marks are not alphanumeric and would otherwise split words).
@@ -1677,11 +1677,15 @@ ad_utility::HashMap<std::string, size_t> IndexImpl::computeHasWordFrequencies(
     contentWithoutAccents = ad_utility::removeAccentsUtf8(content);
     content = contentWithoutAccents;
   }
+  return ::ranges::to<std::vector<std::string>>(
+      tokenizeAndNormalizeText(content, vocab_.getLocaleManager()));
+}
 
-  // Count the occurrences of each normalized word.
+// _____________________________________________________________________________
+ad_utility::HashMap<std::string, size_t> IndexImpl::computeHasWordFrequencies(
+    std::string_view content) const {
   ad_utility::HashMap<std::string, size_t> wordFrequencies;
-  for (auto&& word :
-       tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
+  for (auto& word : getNormalizedWords(content)) {
     ++wordFrequencies[std::move(word)];
   }
   return wordFrequencies;

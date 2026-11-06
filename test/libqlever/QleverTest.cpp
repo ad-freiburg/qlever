@@ -232,6 +232,40 @@ TEST(LibQlever, fulltextIndex) {
   }
 }
 
+// Test that an index built with the `ql:has-word` normalization
+// `lowercase-no-accents` finds literals by their words without accents, and
+// that `ql:normalize` normalizes query words the same way.
+TEST(LibQlever, hasWordNormalization) {
+  // An index with a single literal with accents and the normalization
+  // `lowercase-no-accents`.
+  std::string filename = "libQleverHasWordNormalization.ttl";
+  ad_utility::makeOfstream(filename) << "<s> <p> \"Café Olé\" .";
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "LibQlever.hasWordNormalization";
+  c.addHasWordTriples_ = true;
+  c.hasWordNormalization_ =
+      ad_utility::HasWordNormalization::LowercaseNoAccents;
+  Qlever::buildIndex(c);
+  Qlever engine{EngineConfig{c}};
+
+  // The word without accent finds the literal, the word with accent does not.
+  auto findLiteral = [&engine](std::string_view word) {
+    return engine.query(
+        absl::StrCat("SELECT ?s WHERE { ?s <p> ?o . ?o ql:has-word \"", word,
+                     "\" }"),
+        ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(findLiteral("ole"), "?s\n<s>\n");
+  EXPECT_EQ(findLiteral("olé"), "?s\n");
+
+  // With `ql:normalize`, the word with accent also finds the literal.
+  EXPECT_EQ(engine.query("SELECT ?s WHERE { ?s <p> ?o . ?o ql:has-word ?w . "
+                         "FILTER(?w = ql:normalize(\"OLÉ\")) }",
+                         ad_utility::MediaType::tsv),
+            "?s\n<s>\n");
+}
+
 // _____________________________________________________________________________
 TEST(IndexBuilderConfig, validate) {
   IndexBuilderConfig c;

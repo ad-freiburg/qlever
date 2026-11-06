@@ -177,9 +177,9 @@ struct TestIndexConfig {
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
-        c.numThreads, c.parseInParallel, c.additionalSettings,
-        c.geoPointEncoding.value());
+        c.addHasWordTriples, c.hasWordNormalization.value(),
+        c.hasWordRestrictPredicates, c.secondaryVocabWords, c.numThreads,
+        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -187,8 +187,9 @@ struct TestIndexConfig {
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
       bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, hasWordRestrictPredicates, secondaryVocabWords,
-      numThreads, parseInParallel, additionalSettings, geoPointEncoding)
+      addHasWordTriples, hasWordNormalization, hasWordRestrictPredicates,
+      secondaryVocabWords, numThreads, parseInParallel, additionalSettings,
+      geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

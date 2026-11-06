@@ -4673,3 +4673,59 @@ TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
   // When the tree is destroyed, the memory is released again.
   EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
 }
+
+// Test that a `ql:normalize` with a string literal as its argument is folded to
+// the normalized literal, so that a `FILTER` on the words of the `ql:has-word`
+// triples gets a prefilter.
+TEST(QueryPlanner, foldNormalizeExpressions) {
+  // An index with the `ql:has-word` triples of 21 literals (in blocks of two
+  // rows), and a function that plans and executes `query` and returns the
+  // number of rows of its scan of the `ql:has-word` triples.
+  std::string turtle = "<s> <p> \"Café Olé\" .";
+  for (size_t i = 0; i < 20; ++i) {
+    absl::StrAppend(&turtle, " <s", i, "> <p> \"word", i, "\" .");
+  }
+  ad_utility::testing::TestIndexConfig config{std::move(turtle)};
+  config.addHasWordTriples = true;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  auto numRowsOfHasWordScan = [qec](std::string query) {
+    qec->clearCacheUnpinnedOnly();
+    auto qet = h::parseAndPlan(std::move(query), qec);
+    qet->getResult();
+    std::vector<const RuntimeInformation*> infos{
+        &qet->getRootOperation()->runtimeInfo()};
+    while (!infos.empty()) {
+      const auto* info = infos.back();
+      infos.pop_back();
+      if (info->descriptor_.starts_with("IndexScan") &&
+          info->descriptor_.find("has-word") != std::string::npos) {
+        return info->numRows_;
+      }
+      for (const auto& child : info->children_) {
+        infos.push_back(child.get());
+      }
+    }
+    ADD_FAILURE() << "No scan of the `ql:has-word` triples in the plan";
+    return size_t{0};
+  };
+  std::string triples = "?s <p> ?o . ?o ql:has-word ?w . ";
+
+  // With `ql:normalize`, the `FILTER` reads as few rows as with the normalized
+  // literal, which are fewer than all rows.
+  auto numRows = numRowsOfHasWordScan(absl::StrCat(
+      "SELECT ?s { ", triples, "FILTER(?w = ql:normalize(\"OLÉ\")) }"));
+  EXPECT_EQ(numRows, numRowsOfHasWordScan(absl::StrCat(
+                         "SELECT ?s { ", triples, "FILTER(?w = \"olé\") }")));
+  EXPECT_LT(numRows,
+            numRowsOfHasWordScan(absl::StrCat("SELECT ?s { ", triples, "}")));
+
+  // A `BIND` of `ql:normalize` has the same plan as a `BIND` of the normalized
+  // literal.
+  auto planOfBind = [qec, &triples](std::string_view expression) {
+    return h::parseAndPlan(absl::StrCat("SELECT ?s { BIND(", expression,
+                                        " AS ?w) ", triples, "}"),
+                           qec)
+        ->getCacheKey();
+  };
+  EXPECT_EQ(planOfBind("ql:normalize(\"OLÉ\")"), planOfBind("\"olé\""));
+}

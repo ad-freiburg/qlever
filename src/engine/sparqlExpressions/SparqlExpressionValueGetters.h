@@ -27,6 +27,8 @@
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
 
+class Index;
+
 namespace sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -177,6 +179,22 @@ struct StringValueGetter : Mixin<StringValueGetter> {
                                         const EvaluationContext*) const {
     return std::string(s.getContent());
   }
+};
+
+// The string value (see `StringValueGetter`), split into words that are
+// normalized like the words of the `ql:has-word` triples of the index (see
+// `IndexImpl::getNormalizedWords`), joined by a single space. Used by
+// `ql:normalize`.
+struct NormalizedStringGetter : Mixin<NormalizedStringGetter> {
+  using Value = std::optional<std::string>;
+  using Mixin<NormalizedStringGetter>::operator();
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const;
+
+  // Return the normalized form of the string `s` for the given `index`.
+  static std::string normalize(std::string_view s, const Index& index);
 };
 
 // This class can be used as the `ValueGetter` argument of Expression
