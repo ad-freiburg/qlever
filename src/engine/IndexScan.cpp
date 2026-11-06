@@ -1252,7 +1252,7 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const {
-  auto constant = bind.getConstant();
+  auto constant = bind._expression.getConstantValue();
   if (!constant.has_value()) {
     return std::nullopt;
   }
