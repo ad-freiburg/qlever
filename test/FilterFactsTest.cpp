@@ -85,8 +85,9 @@ TEST(FilterFactsCanonicalizer, Distance) {
                                              constraint(Comparison::LT, 400)));
 }
 
-// Test that only the columns of `VALUES` without `UNDEF` and the `BIND`s whose
-// target is equivalent to their expression are definitions.
+// Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
+// constants and the `BIND`s whose target is equivalent to their expression are
+// definitions.
 TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   using ::testing::Key;
   using ::testing::UnorderedElementsAre;
@@ -94,14 +95,18 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
       "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(STR(?x) AS ?u) "
       "BIND(?gb AS ?y) ?b <p> ?gb . "
       "BIND(RAND() AS ?z) BIND(NOW() AS ?n) BIND(?ga AS ?w) ?w <q> ?o . "
-      "VALUES (?r ?s) { (1 UNDEF) } }");
+      "VALUES (?r ?s) { (1 UNDEF) } BIND(500 AS ?c) ?c <q> ?o2 }");
   auto defs = collectDefinitions(query._rootGraphPattern._graphPatterns);
 
   // `?x` is only used by a later `BIND`, `?u` uses `?x`, which may be unbound,
   // `?y` is bound before `?gb`, `?z` and `?n` are not deterministic, and `?w`
   // is bound again by a later triple.
   EXPECT_THAT(defs.expressions_, UnorderedElementsAre(Key(V{"?x"})));
-  EXPECT_THAT(defs.constants_, UnorderedElementsAre(Key(V{"?r"})));
+
+  // The target of a `BIND` of a constant has this value, even if a later
+  // triple binds it again.
+  EXPECT_THAT(defs.constants_,
+              UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
 }
 
 // Test that every other expression stays `Opaque`.

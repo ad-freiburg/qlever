@@ -97,9 +97,15 @@ Definitions collectDefinitions(
         defs.constants_.emplace(variables[i], std::move(column));
       }
     } else if (const auto* bind = std::get_if<parsedQuery::Bind>(&operation)) {
-      // The target is not always bound (the expression may be undefined).
-      const auto* expression = bind->_expression.getPimpl();
-      if (isSubstitutable(*expression, alwaysBound)) {
+      // The target of a constant is always bound to it, like a `VALUES`
+      // clause with a single row. The target of any other expression is not
+      // always bound (the expression may be undefined).
+      if (auto constant = bind->_expression.getConstantValue()) {
+        alwaysBound.insert(bind->_target);
+        defs.constants_.emplace(bind->_target,
+                                std::vector{std::move(constant).value()});
+      } else if (const auto* expression = bind->_expression.getPimpl();
+                 isSubstitutable(*expression, alwaysBound)) {
         defs.expressions_.emplace(bind->_target, expression);
       }
     }

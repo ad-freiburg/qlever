@@ -37,10 +37,11 @@ namespace filterFacts {
 // its `VALUES` and `BIND` clauses (but not from nested groups).
 struct Definitions {
   // The values of a variable from a `VALUES` clause of the group without
-  // `UNDEF` in the column of the variable. Every result row of the group binds
-  // the variable to one of these values.
+  // `UNDEF` in the column of the variable, or the value of a `BIND` of a
+  // constant (see `SparqlExpressionPimpl::getConstantValue`). Every result row
+  // of the group binds the variable to one of these values.
   ad_utility::HashMap<Variable, std::vector<TripleComponent>> constants_;
-  // The expressions of the `BIND(e AS ?v)` clauses of the group that are
+  // The expressions of the other `BIND(e AS ?v)` clauses of the group that are
   // equivalent to their target `?v`: `e` is deterministic, its variables are
   // always bound before the `BIND`, and no later pattern of the group may bind
   // `?v`. The pointers point into the group, which must outlive this struct.
