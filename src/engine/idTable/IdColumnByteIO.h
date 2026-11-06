@@ -42,15 +42,15 @@ using WritableChunks = ql::span<const ql::span<std::byte>>;
 // A column of whole `Id`s: one chunk, the `Id`s in memory.
 CPP_template(typename UseBytes)(
     requires ql::concepts::invocable<UseBytes, ReadOnlyChunks>)
-auto encode(ql::span<const Id> column, UseBytes useBytes) {
-  std::array chunks{ql::as_bytes(column)};
+auto encode(ql::span<const Id> source, UseBytes useBytes) {
+  std::array chunks{ql::as_bytes(source)};
   return useBytes(ReadOnlyChunks{chunks});
 }
 
 CPP_template(typename FillBytes)(
     requires ql::concepts::invocable<FillBytes, WritableChunks>)
-void decode(ql::span<Id> column, FillBytes fillBytes) {
-  std::array chunks{ql::as_writable_bytes(column)};
+void decode(ql::span<Id> target, FillBytes fillBytes) {
+  std::array chunks{ql::as_writable_bytes(target)};
   fillBytes(WritableChunks{chunks});
 }
 
@@ -58,19 +58,19 @@ void decode(ql::span<Id> column, FillBytes fillBytes) {
 // then their datatypes.
 CPP_template(typename UseBytes)(
     requires ql::concepts::invocable<UseBytes, ReadOnlyChunks>)
-auto encode(columnBasedIdTable::splitLayout::ConstIdColumnRef column,
+auto encode(columnBasedIdTable::splitLayout::ConstIdColumnRef source,
             UseBytes useBytes) {
-  std::array chunks{ql::as_bytes(column.rawPayloads()),
-                    ql::as_bytes(column.rawDatatypes())};
+  std::array chunks{ql::as_bytes(source.rawPayloads()),
+                    ql::as_bytes(source.rawDatatypes())};
   return useBytes(ReadOnlyChunks{chunks});
 }
 
 CPP_template(typename FillBytes)(
     requires ql::concepts::invocable<FillBytes, WritableChunks>)
-void decode(columnBasedIdTable::splitLayout::IdColumnRef column,
+void decode(columnBasedIdTable::splitLayout::IdColumnRef target,
             FillBytes fillBytes) {
-  std::array chunks{ql::as_writable_bytes(column.rawPayloads()),
-                    ql::as_writable_bytes(column.rawDatatypes())};
+  std::array chunks{ql::as_writable_bytes(target.rawPayloads()),
+                    ql::as_writable_bytes(target.rawDatatypes())};
   fillBytes(WritableChunks{chunks});
 }
 }  // namespace ad_utility::idColumnByteIO
