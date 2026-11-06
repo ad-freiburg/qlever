@@ -10,17 +10,11 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_SPLITLAYOUTID_H
 #define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_SPLITLAYOUTID_H
 
-#include <array>
-#include <cstddef>
-#include <cstdint>
 #include <limits>
-#include <type_traits>
 
 #include "backports/three_way_comparison.h"
 #include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
-#include "global/Datatype.h"
 #include "global/IdBase.h"
-#include "util/BitUtils.h"
 #include "util/NBitInteger.h"
 
 namespace columnBasedIdTable::splitLayout {
@@ -68,65 +62,44 @@ class SplitLayoutId
       std::numeric_limits<double>::denorm_min();
 
  private:
-  // The actual data: a full 64-bit word of payload and a single byte for the
-  // datatype. Together with the explicitly stored `padding_` an `Id` occupies
-  // 16 bytes.
-  PayloadType payload_;
-  DatatypeType datatype_;
+  // The actual data: a full 64-bit word of payload, a single byte for the
+  // datatype and the zeroed padding, together 16 bytes.
+  T bits_;
 
-  // The `datatype_` has exactly `numDatatypeBits` bits, so every value of
+  // The datatype byte has exactly `numDatatypeBits` bits, so every value of
   // `DatatypeType` fits into the datatype bits (see `fromBits`).
   static_assert(numDatatypeBits == 8 * sizeof(DatatypeType));
-
-  // The number of bytes of the two data members above, and the number of bytes
-  // that fill an `Id` up to a multiple of the alignment of the payload.
-  static constexpr size_t numSemanticallyUsedBytes =
-      sizeof(PayloadType) + sizeof(DatatypeType);
-  static constexpr size_t numPaddingBytes =
-      ad_utility::alignUp(numSemanticallyUsedBytes, alignof(PayloadType)) -
-      numSemanticallyUsedBytes;
-
-  // Explicit padding bytes. They are always set to zero by all factory
-  // functions, s.t. all valid `SplitLayoutId`s have a deterministic byte
-  // representation (e.g. for hashing raw bytes or writing them to disk).
-  // Note: Default-constructed `Id`s are deliberately uninitialized (see
-  // the default constructor below).
-  std::array<uint8_t, numPaddingBytes> padding_;
 
  public:
   // Default construction of an uninitialized id.
   SplitLayoutId() = default;
 
   // Get the underlying bit representation, e.g. for compression etc.
-  [[nodiscard]] constexpr SplitLayoutIdBitRepresentation getBits()
-      const noexcept {
-    return {datatype_, payload_};
-  }
+  [[nodiscard]] constexpr T getBits() const noexcept { return bits_; }
 
   // Get the datatype bits.
   [[nodiscard]] constexpr DatatypeType getDatatypeBits() const noexcept {
-    return datatype_;
+    return bits_.datatype_;
   }
 
   // Get the payload bits (without the datatype byte).
   [[nodiscard]] constexpr PayloadType getPayloadBits() const noexcept {
-    return payload_;
+    return bits_.payload_;
   }
 
   // Construct from the underlying bit representation. `bits` must have been
   // obtained by a call to `getBits()` on a valid `SplitLayoutId`.
   static constexpr SplitLayoutId fromBits(T bits) noexcept {
-    return {bits.payload_, bits.datatype_};
+    return SplitLayoutId{bits};
   }
 
   // Combine datatype and payload bits (inverse of `getDatatypeBits` and
   // `getPayloadBits`). As for the legacy `ValueId`, the `datatype` only has to
   // fit into the datatype bits, which every `DatatypeType` does (see the
-  // `static_assert` at `datatype_`). It is not checked that the datatype
-  // exists.
+  // `static_assert` at `bits_`). It is not checked that the datatype exists.
   static constexpr SplitLayoutId fromBits(const DatatypeType datatype,
                                           const PayloadType payload) noexcept {
-    return {payload, datatype};
+    return SplitLayoutId{T{datatype, payload}};
   }
 
   // Return the smallest and largest possible `SplitLayoutId` wrt the underlying
@@ -134,22 +107,18 @@ class SplitLayoutId
   // not a valid `Datatype`. Such IDs must only be used as sentinel values
   // for comparisons, never as actual values.
   constexpr static SplitLayoutId min() noexcept {
-    return {std::numeric_limits<PayloadType>::min(), DatatypeType{0}};
+    return fromBits(DatatypeType{0}, std::numeric_limits<PayloadType>::min());
   }
 
   constexpr static SplitLayoutId max() noexcept {
-    return {std::numeric_limits<PayloadType>::max(), DatatypeType{0xFF}};
+    return fromBits(DatatypeType{0xFF},
+                    std::numeric_limits<PayloadType>::max());
   }
 
-  // Return the smallest `Id` that is greater than this one. The overflow of the
-  // payload carries into the datatype byte, analogously to the increment of
-  // the single integer in the packed 64-bit representation of the legacy
-  // `ValueId`.
+  // Return the smallest `Id` that is greater than this one (see
+  // `SplitLayoutIdBitRepresentation::incremented`).
   [[nodiscard]] constexpr SplitLayoutId incremented() const {
-    if (payload_ == std::numeric_limits<PayloadType>::max()) {
-      return {0, static_cast<DatatypeType>(datatype_ + 1)};
-    }
-    return {payload_ + 1, datatype_};
+    return SplitLayoutId{bits_.incremented()};
   }
 
   // Enable the serialization of `SplitLayoutId` in the
@@ -163,32 +132,22 @@ class SplitLayoutId
   friend void allowTrivialSerialization(SplitLayoutId, U);
 
  private:
-  // The datatype-major bitwise comparison: first compare the datatype byte,
-  // then the payload bits as unsigned integers. This is only correct if
+  // The datatype-major bitwise comparison of the bits. This is only correct if
   // neither of the involved IDs has the `LocalVocabIndex` datatype (see
   // `compareThreeWay` in `IdBase`).
   [[nodiscard]] constexpr ql::strong_ordering compareBitwiseImpl(
       const SplitLayoutId& other) const {
-    const auto typeComparison = ql::compareThreeWay(datatype_, other.datatype_);
-    return typeComparison != 0 ? typeComparison
-                               : ql::compareThreeWay(payload_, other.payload_);
+    return bits_.compareThreeWay(other.bits_);
   }
 
-  // Private constructors from the payload bits and the datatype (byte). They
-  // are used in the implementation of the static factory methods `fromBits()`
-  // etc. Note: The explicit `padding_` bytes are always initialized to zero,
-  // s.t. all valid `SplitLayoutId`s have a deterministic byte representation.
-  constexpr SplitLayoutId(PayloadType payload, DatatypeType datatype)
-      : payload_{payload}, datatype_{datatype}, padding_{} {
-    // There is no padding left that the compiler adds implicitly (and leaves
-    // uninitialized). If this fails, `numPaddingBytes` is wrong, e.g. because
-    // it is zero (an `std::array` of size 0 is not empty).
-    static_assert(sizeof(SplitLayoutId) ==
-                  numSemanticallyUsedBytes + numPaddingBytes);
+  // Private constructor from the bit representation, which is used in the
+  // implementation of the static factory methods `fromBits()` etc. The bit
+  // representation always has zeroed padding bytes, s.t. all valid
+  // `SplitLayoutId`s have a deterministic byte representation.
+  constexpr explicit SplitLayoutId(T bits) : bits_{bits} {
+    // A `SplitLayoutId` consists of its bits only, without additional bytes.
+    static_assert(sizeof(SplitLayoutId) == sizeof(T));
   }
-
-  constexpr SplitLayoutId(PayloadType payload, Datatype datatype)
-      : SplitLayoutId{payload, static_cast<DatatypeType>(datatype)} {}
 };
 
 static_assert(SplitLayoutId::checkDerived());
