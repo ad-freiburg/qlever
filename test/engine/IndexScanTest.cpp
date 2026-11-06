@@ -495,11 +495,9 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
   auto expected = makeIdTableFromVector({{x, o1, p}, {x, o2, p}});
   auto& op = *tree.value()->getRootOperation();
   EXPECT_EQ(op.computeResultOnlyForTesting().idTableView(), expected);
-  IdTable lazyResult{3, ad_utility::makeUnlimitedAllocator<Id>()};
-  for (auto& pair : op.computeResultOnlyForTesting(true).idTables()) {
-    lazyResult.insertAtEnd(pair.idTable_);
-  }
-  EXPECT_EQ(lazyResult, expected);
+  EXPECT_EQ(
+      aggregateTables(op.computeResultOnlyForTesting(true).idTables(), 3).first,
+      expected);
 
   // A constant that is not a fixed component (`<q>`), is not in the
   // vocabulary (`<notInVocab>`), or an expression that is not a constant is
