@@ -1227,12 +1227,13 @@ TEST(JoinTest, costEstimateOfJoinWithIndexScan) {
     EXPECT_EQ(scanInfo.costEstimate_, scanCost);
     EXPECT_EQ(info.getOperationCostEstimate(),
               join.getSizeEstimate() + sorted.getSizeEstimate() + scanRead);
-    // NOTE: The `scanTree` is reused, so a detail from a previous call may
-    // remain if the cost is not overwritten (see
-    // `Operation::createRuntimeInfoFromEstimates`).
+    // The standalone cost is shown only if it differs (the `scanTree` is
+    // reused, so a stale detail of a previous call must be gone).
     if (isOverwritten) {
       EXPECT_EQ(scanInfo.details_.at("standalone-cost-estimate"),
                 scanTree->getCostEstimate());
+    } else {
+      EXPECT_FALSE(scanInfo.details_.contains("standalone-cost-estimate"));
     }
   };
 

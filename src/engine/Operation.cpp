@@ -649,15 +649,14 @@ void Operation::createRuntimeInfoFromEstimates(
     auto childInfo = child->getRootOperation()->getRuntimeInfoPointer();
     // Show the cost that this operation charges for the child, so that the
     // operation costs in the runtime information add up to the total cost.
-    // NOTE: Only the runtime information of the root is created anew for each
-    // computation, that of the children is updated in place. So if the same
-    // operations are computed again (as in some tests) and the cost of a child
-    // is no longer overwritten, the "standalone-cost-estimate" detail from the
-    // previous computation remains.
+    // NOTE: The runtime information of a child is updated in place, so the
+    // detail of a previous computation is erased if it no longer applies.
     if (chargedCost != childInfo->costEstimate_) {
       childInfo->addDetail("standalone-cost-estimate",
                            childInfo->costEstimate_);
       childInfo->costEstimate_ = chargedCost;
+    } else {
+      childInfo->eraseDetail("standalone-cost-estimate");
     }
     _runtimeInfo->children_.push_back(std::move(childInfo));
   }
