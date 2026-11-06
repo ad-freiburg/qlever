@@ -665,7 +665,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAddsHasWordTriples) {
 }
 
 // Test that a literal inserted by an update can be found via `ql:has-word`.
-TEST(DeltaTriples, hasWordTriplesForUpdatedLiterals) {
+TEST_F(DeltaTriplesTest, hasWordTriplesForUpdatedLiterals) {
   // An index with `ql:has-word` triples (an own one, because the updates
   // modify its delta triples).
   ad_utility::testing::TestIndexConfig config{"<x> <label> \"alpha beta\""};
