@@ -20,8 +20,13 @@
 #include <vector>
 
 #include "index/chunkwisePermutationWriter/Options.h"
-#include "util/AsyncResourcePool.h"
 #include "util/NoCopyNoMove.h"
+
+// NOTE: `AsyncResourcePool.h` needs a newer Boost than the C++17 build of
+// `libqlever` has, and the dispatcher only exists in the C++20 mode anyway.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "util/AsyncResourcePool.h"
+#endif
 
 namespace chunkwisePermutationWriter {
 
