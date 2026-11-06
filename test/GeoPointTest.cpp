@@ -119,7 +119,7 @@ TEST(GeoPoint, bitRepresentation) {
   // the longitude bits (the even positions), or only the latitude bits (the
   // odd positions). The upper 4 bits are never set (they hold the datatype of
   // an `Id`).
-  constexpr T allBits = (T{1} << 60) - 1;
+  constexpr T allBits = ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits);
   constexpr T lngBits = 0x0555555555555555ULL;
   EXPECT_EQ(GeoPoint(90, 180).toBitRepresentation(), allBits);
   EXPECT_EQ(GeoPoint(-90, -180).toBitRepresentation(), 0u);
