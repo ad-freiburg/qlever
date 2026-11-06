@@ -15,6 +15,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
@@ -95,7 +96,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
-                     Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
+                     ConstantColumns constantColumns, Graphs graphsToFilter,
+                     ScanSpecAndBlocks scanSpecAndBlocks,
                      bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
                      bool sizeEstimateIsExact, size_t sizeEstimate)
     : Operation(qec),
@@ -112,6 +114,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
       sizeEstimateIsExact_{sizeEstimateIsExact},
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)),
+      constantColumns_(std::move(constantColumns)),
       varsToKeep_{std::move(varsToKeep)} {
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
@@ -148,6 +151,10 @@ string IndexScan::getCacheKeyImpl() const {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
   }
+  if (!constantColumns_.empty()) {
+    os << " Constant Columns: ";
+    os << absl::StrJoin(constantColumns_ | ql::views::keys, " ");
+  }
 
   os << " ";
   graphsToFilter_.format(os, &toRdfLiteral);
@@ -177,8 +184,11 @@ string IndexScan::getDescriptor() const {
       triple | ql::views::filter([&isNotStripped](const TripleComponent& tc) {
         return !tc.isVariable() || isNotStripped(tc.getVariable());
       }) | ql::views::transform(&TripleComponent::toString),
-      // All non-stripped additional variables.
-      additionalVariables_ | ql::views::filter(isNotStripped) |
+      // All non-stripped additional variables and the variables of the
+      // constant columns.
+      ::ranges::views::concat(additionalVariables_,
+                              constantColumns_ | ql::views::values) |
+          ql::views::filter(isNotStripped) |
           ql::views::transform(
               [](const auto& var) -> decltype(auto) { return var.name(); }));
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
@@ -190,7 +200,7 @@ size_t IndexScan::getResultWidth() const {
   if (varsToKeep_.has_value()) {
     return varsToKeep_.value().size();
   }
-  return numVariables_ + additionalVariables_.size();
+  return numVariables_ + additionalVariables_.size() + constantColumns_.size();
 }
 
 // _____________________________________________________________________________
@@ -318,8 +328,8 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   auto isContained = [&](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
-  auto addCol = [&isContained, &variableToColumnMap,
-                 nextColIdx = ColumnIndex{0},
+  ColumnIndex nextColIdx = 0;
+  auto addCol = [&isContained, &variableToColumnMap, &nextColIdx,
                  permutationColIdx = ColumnIndex{0},
                  this](const Variable& var) mutable {
     if (isContained(var)) {
@@ -336,6 +346,14 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
     }
   }
   ql::ranges::for_each(additionalVariables_, addCol);
+
+  // The constant columns come last and are always defined.
+  for (const auto& var : constantColumns_ | ql::views::values) {
+    if (isContained(var)) {
+      variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
+      ++nextColIdx;
+    }
+  }
   return variableToColumnMap;
 }
 
@@ -348,8 +366,8 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   auto copy = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
-      graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_, false,
-      size_t{0});
+      constantColumns_, graphsToFilter_, std::move(scanSpecAndBlocks), true,
+      varsToKeep_, false, size_t{0});
 
   // Compute the size estimate for the prefiltered `scanSpecAndBlocks`.
   //
@@ -555,6 +573,10 @@ void IndexScan::determineMultiplicities() {
   auto view = permutation().materializedView();
   multiplicity_ = view != nullptr ? computeMultiplicitiesForView(*view)
                                   : computeMultiplicitiesForIndex();
+
+  // Each constant column contains the same value in every row.
+  multiplicity_.resize(multiplicity_.size() + constantColumns_.size(),
+                       std::max(1.0f, static_cast<float>(sizeEstimate_)));
 
   if (varsToKeep_.has_value()) {
     std::vector<float> actualMultiplicites;
@@ -1074,8 +1096,9 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
-      graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      varsToKeep_, sizeEstimateIsExact_, sizeEstimate_);
+      constantColumns_, graphsToFilter_, scanSpecAndBlocks_,
+      scanSpecAndBlocksIsPrefiltered_, varsToKeep_, sizeEstimateIsExact_,
+      sizeEstimate_);
 }
 
 // _____________________________________________________________________________
@@ -1098,17 +1121,31 @@ IndexScan::makeTreeWithStrippedColumns(
     }
   }
 
+  // Drop the constant columns that are not needed (instead of filling them).
+  ConstantColumns newConstantColumns;
+  ql::ranges::copy_if(
+      constantColumns_, std::back_inserter(newConstantColumns),
+      [&newVariables](const auto& positionAndVariable) {
+        return newVariables.contains(positionAndVariable.second);
+      });
+
   return ad_utility::makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
-      graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)}, sizeEstimateIsExact_, sizeEstimate_);
+      std::move(newConstantColumns), graphsToFilter_, scanSpecAndBlocks_,
+      scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
+      sizeEstimateIsExact_, sizeEstimate_);
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // Currently only materialized views can provide precomputed `BIND`s, and
+  // A `BIND` of a fixed component of the scan triple is a constant column.
+  if (auto result = makeTreeWithConstantBindColumn(bind)) {
+    return result;
+  }
+
+  // Otherwise, only materialized views can provide precomputed `BIND`s, and
   // only if query rewriting using materialized views is allowed.
   auto view = permutation().materializedView();
   if (!view || _executionContext->disableMaterializedViewRewriting()) {
@@ -1208,9 +1245,76 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   return ad_utility::makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       newPredicate, newObject, std::move(newAdditionalColumns),
-      std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,
-      scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
+      std::move(newAdditionalVariables), constantColumns_, graphsToFilter_,
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
+      VarsToKeep{std::move(newVariables)}, sizeEstimateIsExact_, sizeEstimate_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const {
+  using namespace sparqlExpression;
+
+  // Get the constant of the `bind`, return `std::nullopt` if its expression is
+  // not a constant IRI, literal, or defined `Id`.
+  const auto* expression = bind._expression.getPimpl();
+  std::optional<TripleComponent> constant;
+  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
+    constant = TripleComponent{iri->value()};
+  } else if (const auto* literal =
+                 dynamic_cast<const StringLiteralExpression*>(expression)) {
+    constant = TripleComponent{literal->value()};
+  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
+             id != nullptr && !id->value().isUndefined()) {
+    constant = TripleComponent{id->value()};
+  }
+  if (!constant.has_value()) {
+    return std::nullopt;
+  }
+
+  // Find a fixed component of the scan triple with the same `Id`. A constant
+  // that is not in the vocabulary is not supported (its `Id` would have to be
+  // kept alive by a `LocalVocab`).
+  auto constantId = toValueId(constant.value(), getIndex());
+  if (!constantId.has_value() ||
+      constantId.value().getDatatype() == Datatype::LocalVocabIndex) {
+    return std::nullopt;
+  }
+  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
+  std::array fixedIds{scanSpec.col0Id(), scanSpec.col1Id(), scanSpec.col2Id()};
+  auto fixedIdsEnd = fixedIds.begin() + (3 - numVariables_);
+  auto it = ql::ranges::find(fixedIds.begin(), fixedIdsEnd, constantId);
+  if (it == fixedIdsEnd) {
+    return std::nullopt;
+  }
+
+  // Add the constant column, and its variable to the variables to keep.
+  auto newConstantColumns = constantColumns_;
+  newConstantColumns.emplace_back(std::distance(fixedIds.begin(), it),
+                                  bind._target);
+  auto newVariables = varsToKeep_;
+  if (newVariables.has_value()) {
+    newVariables.value().insert(bind._target);
+  }
+  return ad_utility::makeExecutionTree<IndexScan>(
+      _executionContext, permutation_, locatedTriplesSharedState_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
+      std::move(newConstantColumns), graphsToFilter_, scanSpecAndBlocks_,
+      scanSpecAndBlocksIsPrefiltered_, std::move(newVariables),
       sizeEstimateIsExact_, sizeEstimate_);
+}
+
+// _____________________________________________________________________________
+std::vector<Id> IndexScan::getConstantColumnIds() const {
+  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
+  std::array fixedIds{scanSpec.col0Id(), scanSpec.col1Id(), scanSpec.col2Id()};
+  std::vector<Id> result;
+  for (ColumnIndex position : constantColumns_ | ql::views::keys) {
+    Id id = fixedIds.at(position).value();
+    AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::LocalVocabIndex);
+    result.push_back(id);
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -1227,7 +1331,8 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
       ++idx;
     }
   }
-  for (const auto& var : additionalVariables_) {
+  for (const auto& var : ::ranges::views::concat(
+           additionalVariables_, constantColumns_ | ql::views::values)) {
     if (v.contains(var)) {
       result.push_back(idx);
     }
