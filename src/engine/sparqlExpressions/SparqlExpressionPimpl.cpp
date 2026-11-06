@@ -74,6 +74,21 @@ bool SparqlExpressionPimpl::isDeterministic() const {
   return _pimpl->isDeterministic();
 }
 
+// ___________________________________________________________________________
+std::optional<TripleComponent> SparqlExpressionPimpl::getConstantValue() const {
+  const auto* expression = _pimpl.get();
+  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
+    return TripleComponent{iri->value()};
+  } else if (const auto* literal =
+                 dynamic_cast<const StringLiteralExpression*>(expression)) {
+    return TripleComponent{literal->value()};
+  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
+             id != nullptr && !id->value().isUndefined()) {
+    return TripleComponent{id->value()};
+  }
+  return std::nullopt;
+}
+
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();

@@ -29,10 +29,7 @@ using namespace qlever::binary_export;
 namespace {
 // The `Id` with which the exporter refers to the `i`-th transmitted string of
 // a batch, see `StringMapping`.
-Id transmitted(size_t i) {
-  return Id::makeFromLocalVocabIndex(
-      reinterpret_cast<LocalVocabIndex>(i << Id::numDatatypeBits));
-}
+Id transmitted(size_t i) { return Id::fromBits(Datatype::LocalVocabIndex, i); }
 
 // Add `word` to the `localVocab` and return its `Id`.
 Id localVocabId(LocalVocab& localVocab, std::string word,
