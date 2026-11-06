@@ -86,14 +86,14 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   // allocator as the difference to the current limit. Registering triggers
   // the action once, which is a no-op because the difference is zero.
   //
-  // NOTE: The action holds a copy of the allocator, which shares the limit
-  // with `allocator_` and keeps it alive, so the action never dangles, also
-  // not after this instance is destroyed.
+  // NOTE: The action holds an owning copy of the allocator, which shares the
+  // limit with `allocator_` and keeps it alive, so the action never dangles,
+  // also not after this instance is destroyed.
   auto memoryLimit = config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES);
   auto runtimeParameters = globalRuntimeParameters.wlock();
   runtimeParameters->memoryForQueries_.set(memoryLimit);
   runtimeParameters->memoryForQueries_.setOnUpdateAction(
-      [allocator = allocator_,
+      [allocator = owningAllocator_,
        currentLimit = memoryLimit](ad_utility::MemorySize newLimit) mutable {
         if (newLimit >= currentLimit) {
           allocator.increaseMemoryLimit(newLimit - currentLimit);
@@ -107,7 +107,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                Allocator<Id> allocator, qlever::Executor executor)
-    : allocator_{std::move(allocator)},
+    : owningAllocator_{std::move(allocator)},
+      allocator_{owningAllocator_.nonOwningCopy()},
       executor_{std::move(executor)},
       indexAndViews_{std::allocate_shared<IndexAndViews>(
           allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
