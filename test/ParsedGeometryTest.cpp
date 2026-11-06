@@ -101,14 +101,13 @@ void expectEqualBatches(const sj::WriteBatch& a, const sj::WriteBatch& b) {
   expectEqualCands(a.refs, b.refs);
 }
 
-// The literals of the tests, one for each of the five geometry types of
-// `libspatialjoin` (a point, a tiny line with two points, a line with more
-// points, a tiny polygon with fewer than ten points, a polygon with more), and
-// a multipolygon. The tiny ones lie in a single box of the box ids, which
-// makes them "simple".
+// The literals of the tests, one for each of the geometry types of
+// `libspatialjoin` that a parsed geometry can have (a point, a line, a tiny
+// polygon with fewer than ten points, a polygon with more), and a
+// multipolygon. The tiny polygon lies in a single box of the box ids, which
+// makes it "simple".
 const std::vector<std::pair<std::string, sj::GeomType>> testLiterals{
     {lit("POINT(7.8 48.0)"), sj::POINT},
-    {lit("LINESTRING(7.804 48.0008, 7.80402 48.00082)"), sj::SIMPLE_LINE},
     {lit("LINESTRING(7.8 48.0, 7.9 48.1, 7.8 48.2)"), sj::LINE},
     {lit("POLYGON((7.804 48.0008, 7.80402 48.0008, 7.80402 48.00082, "
          "7.804 48.00083, 7.804 48.0008))"),
@@ -156,15 +155,20 @@ TEST(ParsedGeometryTest, parts) {
   sj::Sweeper sweeper{sweeperConfig(), ".", "ParsedGeometryTest"};
 
   // A single geometry has one part with sub id 0.
-  auto polygon = ParsedGeometry::fromWktLiteral(testLiterals[4].first, sweeper);
+  auto polygon = ParsedGeometry::fromWktLiteral(testLiterals[3].first, sweeper);
   ASSERT_EQ(polygon.value().parts().size(), 1);
   EXPECT_EQ(polygon.value().parts()[0].subid_, 0);
 
   // A multipolygon with two polygons has two parts with sub ids 1 and 2.
-  auto multi = ParsedGeometry::fromWktLiteral(testLiterals[5].first, sweeper);
+  auto multi = ParsedGeometry::fromWktLiteral(testLiterals[4].first, sweeper);
   ASSERT_EQ(multi.value().parts().size(), 2);
   EXPECT_EQ(multi.value().parts()[0].subid_, 1);
   EXPECT_EQ(multi.value().parts()[1].subid_, 2);
+
+  // A line with two points has no parsed geometry.
+  EXPECT_FALSE(ParsedGeometry::fromWktLiteral(
+                   lit("LINESTRING(7.804 48.0008, 7.80402 48.00082)"), sweeper)
+                   .has_value());
 
   // A literal that is not a valid WKT geometry has no parsed geometry.
   EXPECT_FALSE(ParsedGeometry::fromWktLiteral("\"foo\"", sweeper).has_value());
@@ -177,7 +181,7 @@ TEST(ParsedGeometryTest, parts) {
 // representation.
 TEST(ParsedGeometryTest, toBytesAndFromBytes) {
   sj::Sweeper sweeper{sweeperConfig(), ".", "ParsedGeometryTest"};
-  auto parsed = ParsedGeometry::fromWktLiteral(testLiterals[5].first, sweeper);
+  auto parsed = ParsedGeometry::fromWktLiteral(testLiterals[4].first, sweeper);
   auto restored = ParsedGeometry::fromBytes(parsed.value().toBytes());
 
   // The restored geometry yields the same batch as the original.
