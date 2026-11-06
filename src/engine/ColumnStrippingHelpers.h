@@ -68,6 +68,13 @@ class VarsRequiredFromSubtree {
     for (const auto* var : expression.containedVariables()) {
       add(*var);
     }
+    // The column of each `EXISTS` was added to the subtree by
+    // `ExistsJoin::addExistsJoinsToSubtree`. It has to survive the stripping,
+    // otherwise the constructor of the new operation adds a second
+    // `ExistsJoin`.
+    for (const auto& var : expression.getExistsVariables()) {
+      add(var);
+    }
     return AddVarsResult::Success;
   }
 
