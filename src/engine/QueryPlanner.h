@@ -564,6 +564,17 @@ class QueryPlanner {
       const SubtreePlan& plan,
       const std::vector<ColumnIndex>& orderedOnColumns) const;
 
+  // Keep only the cheapest plan of each entry of `candidatesByKey` (the plans
+  // with the same pruning key) and return them.
+  SubtreePlanVec keepCheapestPerKey(
+      ad_utility::HashMap<std::string, SubtreePlanVec> candidatesByKey) const;
+
+  // Keep only the cheapest plan per pruning key (see `getPruningKey`) in
+  // `row`. The rows of the dynamic programming have this property by
+  // construction (see `merge`), the rows for the query-level modifiers
+  // (`GROUP BY`, `DISTINCT`, `ORDER BY`, ...) only after this function.
+  void pruneByPruningKey(SubtreePlanVec& row) const;
+
   // Configure the behavior of the `applyFiltersIfPossible` function below.
   enum class FilterMode {
     // Only apply matching filters, that is filters are only added to plans that

@@ -4722,3 +4722,26 @@ TEST(QueryPlanner, prefilterSeedScansOnce) {
                     .has_value());
   }
 }
+
+// Test that the rows for the query-level modifiers (`DISTINCT`, `GROUP BY`,
+// `ORDER BY`) keep only one plan per pruning key. Without a modifier, the
+// last row has one plan per sort order of the result. With a modifier, all
+// these plans end in the same operation and become indistinguishable, and a
+// subquery or group must not hand such duplicates to the outer planning,
+// where every pair of plans of two children is tried.
+TEST(QueryPlanner, queryLevelRowsArePrunedByKey) {
+  auto numPlans = [](const std::string& query) {
+    ParsedQuery pq = parseQuery(query);
+    return makeQueryPlanner().createExecutionTrees(pq, true).size();
+  };
+  std::string triples = "WHERE { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }";
+
+  // Several plans without a modifier, one per sort order.
+  EXPECT_GT(numPlans("SELECT ?x ?z " + triples), 1u);
+
+  // One plan with a modifier.
+  EXPECT_EQ(numPlans("SELECT DISTINCT ?x ?z " + triples), 1u);
+  EXPECT_EQ(numPlans("SELECT ?x (COUNT(?z) AS ?c) " + triples + " GROUP BY ?x"),
+            1u);
+  EXPECT_EQ(numPlans("SELECT ?x ?z " + triples + " ORDER BY ?z"), 1u);
+}
