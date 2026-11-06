@@ -2386,7 +2386,9 @@ TransitivePathSide rightVar() {
 }
 
 // Bind the given side of `path` to a table with 1000 rows, the values of which
-// are in the first column. The second column `?other` is a payload column.
+// are in the first column. The second column `?other` is a payload column. A
+// bound path is estimated like a join of the bound table with the complete
+// hull, so its size estimate contains `JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR`.
 std::shared_ptr<TransitivePathBase> bindToThousandRows(
     const TransitivePathBase& path, bool isLeft) {
   auto variable = (isLeft ? path.getLeft() : path.getRight()).value_;
