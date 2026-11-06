@@ -60,8 +60,12 @@ class AsyncIdTablePusher {
   using Block = IdTableStatic<NumStaticCols>;
   // Receive a complete block. It is called on the strand of this class, so the
   // calls never overlap, but a call delays all the pushes that wait for the
-  // next block, so it should be cheap or hand its work off.
-  using Sink = absl::AnyInvocable<void(Block)>;
+  // next block, so it should be cheap or hand its work off. It may return an
+  // empty block (e.g. a block that it is done with, cleared, but with its
+  // memory still allocated), which then becomes the next block, so that its
+  // memory is reused instead of allocating (and faulting in) a new block. A
+  // sink that returns `void` is also accepted, see the constructor.
+  using Sink = absl::AnyInvocable<std::optional<Block>(Block)>;
   // The type-erased completion handler of `asyncPushBlock`, see there.
   using Handler = absl::AnyInvocable<void(std::exception_ptr)>;
   // The type in which `asyncPushBlock` takes the table to push. A view can be
@@ -137,14 +141,15 @@ class AsyncIdTablePusher {
   // `blocksize` rows with `numColumns` columns (which are allocated via the
   // `allocator`) to the `sink`. The execution context behind the `executor`
   // has to outlive this object, which holds a strand on the `executor`.
+  template <typename SinkFunction>
   AsyncIdTablePusher(ql::any_io_executor executor, size_t numColumns,
-                     size_t blocksize, Allocator allocator, Sink sink)
+                     size_t blocksize, Allocator allocator, SinkFunction sink)
       : executor_{std::move(executor)},
         strand_{boost::asio::make_strand(executor_)},
         numColumns_{numColumns},
         blocksize_{blocksize},
         allocator_{std::move(allocator)},
-        sink_{std::move(sink)},
+        sink_{wrapSink(std::move(sink))},
         block_{numColumns_, allocator_} {
     AD_CONTRACT_CHECK(blocksize_ > 0);
   }
@@ -321,6 +326,21 @@ class AsyncIdTablePusher {
     });
   }
 
+  // Turn a `sink` that returns `void` into a `Sink` (see there) that never
+  // hands back a block; a `sink` that already is a `Sink` is returned as is.
+  template <typename SinkFunction>
+  static Sink wrapSink(SinkFunction sink) {
+    if constexpr (std::is_void_v<std::invoke_result_t<SinkFunction&, Block>>) {
+      return [sink = std::move(sink)](
+                 Block block) mutable -> std::optional<Block> {
+        sink(std::move(block));
+        return std::nullopt;
+      };
+    } else {
+      return Sink{std::move(sink)};
+    }
+  }
+
   // Reserve the memory of a complete block for `block_` if it is empty, so
   // that growing it up to `blocksize_` rows never reallocates. Must be called
   // on the strand.
@@ -398,7 +418,14 @@ class AsyncIdTablePusher {
     Block complete{numColumns_, allocator_};
     std::swap(complete, block_);
     numRowsReserved_ = 0;
-    recordException([this, &complete]() { sink_(std::move(complete)); });
+    std::optional<Block> recycled;
+    recordException([this, &complete, &recycled]() {
+      recycled = sink_(std::move(complete));
+    });
+    if (recycled.has_value() && recycled->numColumns() == numColumns_) {
+      recycled->clear();
+      block_ = std::move(recycled).value();
+    }
     auto waiting = std::move(waitingForNextBlock_);
     waitingForNextBlock_.clear();
     for (auto& operation : waiting) {
