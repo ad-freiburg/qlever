@@ -77,6 +77,9 @@ class CompressedRelationWriter {
   // The small relations that will be stored in the same block.
   SmallRelationsBlockBuilder smallRelations_{IdTable{numColumns_, allocator_},
                                              rowsPerBlock_};
+  // The ZSTD compression level of the blocks, see the runtime parameter
+  // `permutation-compression-level`, which is read once at construction.
+  int compressionLevel_;
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
@@ -131,6 +134,7 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
+        compressionLevel_{getCompressionLevel()},
         executor_{std::move(executor)},
         numBlocksInFlight_{getNumBlocksInFlight()},
         blockWriteQueue_{makeBlockWriteQueue(executor_, numBlocksInFlight_)} {
@@ -464,6 +468,9 @@ class CompressedRelationWriter {
   friend class chunkwisePermutationWriter::ChunkwisePermutationWriter;
   friend class chunkwisePermutationWriter::ChunkWriter;
   friend struct chunkwisePermutationWriter::ChunkWriterContext;
+
+  // Return the compression level of the blocks, see `compressionLevel_`.
+  static int getCompressionLevel();
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);
