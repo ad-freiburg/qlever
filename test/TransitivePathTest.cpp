@@ -2402,7 +2402,8 @@ std::shared_ptr<TransitivePathBase> bindToThousandRows(
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the size and multiplicity estimates of a path with two unbound sides,
+// for one step, two steps, the complete hull and the empty path.
 TEST(TransitivePathEstimates, unbound) {
   auto oneStep = makePathForEstimates(leftVar(), rightVar(), 1, 1);
   EXPECT_NEAR(oneStep->getSizeEstimate(), numEdges, 1);
@@ -2436,7 +2437,7 @@ TEST(TransitivePathEstimates, unbound) {
       1);
 }
 
-// _____________________________________________________________________________
+// Test the estimates when one or both sides are fixed values.
 TEST(TransitivePathEstimates, fixedSides) {
   TransitivePathSide leftFixed{std::nullopt, 0, V(0), 0};
   TransitivePathSide rightFixed{std::nullopt, 1, V(3), 1};
@@ -2457,7 +2458,8 @@ TEST(TransitivePathEstimates, fixedSides) {
   EXPECT_NEAR(fromRight->getSizeEstimate(), rightMultiplicity, 1);
 }
 
-// _____________________________________________________________________________
+// Test that the estimates of a bound path depend on the traversal direction
+// and match the size estimate of a join for a single step.
 TEST(TransitivePathEstimates, boundSideIsDirectionAware) {
   // A node has fewer successors than predecessors, so binding the left side
   // must be cheaper than binding the right side, see #3258.
@@ -2474,7 +2476,8 @@ TEST(TransitivePathEstimates, boundSideIsDirectionAware) {
               joinCorrection() * 1000 * rightMultiplicity, 1);
 }
 
-// _____________________________________________________________________________
+// Test the multiplicities of the start, target and payload columns of a bound
+// path, with and without the empty path.
 TEST(TransitivePathEstimates, multiplicitiesOfBoundPath) {
   auto oneStep = makePathForEstimates(leftVar(), rightVar(), 1, 1);
   auto bound = bindToThousandRows(*oneStep, true);
