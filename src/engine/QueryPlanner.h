@@ -167,6 +167,14 @@ class QueryPlanner {
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;
+    // The filters whose rectangle the result of this plan is already
+    // restricted to (by the block prefilter of a scan or a
+    // `GeoRectangleRowFilter`, see `applyGeoRectanglePrefilters`), although
+    // the filter itself is not applied yet. Such a plan computes a subset of
+    // the rows of the same plan without the restriction, so the two must not
+    // be compared by cost before the filter is applied to both; see
+    // `getPruningKey`.
+    uint64_t idsOfPartiallyAppliedFilters_ = 0;
     bool containsFilterSubstitute_ = false;
     bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
@@ -359,22 +367,31 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
-  // For each filter substitute that is a `SpatialJoin` with a fixed geometry
-  // on one side (a one-row `VALUES` created by the rewriting of the filter,
-  // or a variable bound by a `BIND` of a constant expression), prefilter the
-  // seeds of the triples that bind the geometry variable of the other side
-  // with the padded rectangle of that geometry: the scan that is sorted by
-  // the variable gets its blocks pruned, every scan that binds the variable
-  // gets a row filter with the same size estimate, and the spatial join is
-  // told the selectivity within the remaining rows (see
-  // `SpatialJoin::setGeometrySideSelectivity`). Replacement plans (from
-  // materialized views) get the prefilter forwarded to their scans. This is
-  // done once, before the dynamic programming, so that it costs one
+  // Prefilter the seeds of the triples that bind a geometry variable of a
+  // spatial join (a filter substitute) with a rectangle that is known for
+  // that variable at planning time: the scan that is sorted by the variable
+  // gets its blocks pruned, every scan that binds the variable gets a row
+  // filter with the same size estimate (both as alternatives to the
+  // unprefiltered scans, the dynamic programming decides by cost), and
+  // replacement plans (from materialized views) get the prefilter forwarded
+  // to their scans. A
+  // rectangle is known for the fixed side of a spatial join (a one-row
+  // `VALUES` created by the rewriting of the filter, or a variable bound by a
+  // `BIND` of a constant expression), and for a geometry variable that is
+  // bound by a small part of the query that is cheap to evaluate (which is
+  // then evaluated here, see the runtime parameters
+  // `geo-prefilter-planning-max-rows` and `geo-prefilter-planning-max-cost`),
+  // and it carries over to the other side of that join and from there along
+  // further spatial joins (see the implementation for the rules). A spatial
+  // join between a fixed side and a prefiltered side is told the selectivity
+  // within the remaining rows (see `SpatialJoin::setGeometrySideSelectivity`).
+  // This is done once, before the dynamic programming, so that it costs one
   // prefilter evaluation per permutation of the triple and not one per
-  // candidate plan; the DP then decides by cost where the spatial join goes.
-  void applyConstantGeometryPrefilters(
-      SubtreePlanVec& seeds, FiltersAndOptionalSubstitutes& filters,
-      SubtreePlanMatrix& replacementPlans) const;
+  // candidate plan; the DP then decides by cost where the spatial joins go.
+  void applyGeoRectanglePrefilters(SubtreePlanVec& seeds,
+                                   FiltersAndOptionalSubstitutes& filters,
+                                   SubtreePlanMatrix& replacementPlans,
+                                   const TripleGraph& tg) const;
 
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
@@ -847,6 +864,7 @@ class QueryPlanner {
       bool useGreedyPlanning);
   FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
               findApplicableReplacementPlansGreedyOverlap);
+  FRIEND_TEST(GeoRectanglePrefilter, pruningKeyOfPartiallyAppliedFilter);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples

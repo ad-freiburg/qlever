@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "global/Id.h"
 
 namespace ad_utility {
@@ -28,7 +29,8 @@ struct GeoRectangle {
   double minLat_;
   double maxLng_;
   double maxLat_;
-  bool operator==(const GeoRectangle&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoRectangle, minLng_, minLat_,
+                                              maxLng_, maxLat_)
 };
 
 // Grow `rectangle` on all sides by at least `distanceMeters` (measured on the
@@ -38,6 +40,11 @@ struct GeoRectangle {
 // longitude range degrades to [-180, 180].
 GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
                              double distanceMeters);
+
+// The intersection of two rectangles, or `std::nullopt` if they do not
+// intersect.
+std::optional<GeoRectangle> intersectGeoRectangles(const GeoRectangle& a,
+                                                   const GeoRectangle& b);
 
 // The estimated fraction of the rows that the block prefilter
 // `GeoRectangleExpression` keeps for `rectangle` which actually lie inside
