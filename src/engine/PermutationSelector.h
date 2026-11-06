@@ -13,6 +13,10 @@
 
 namespace qlever {
 
+// Return true if `tripleComponent` is an IRI with an internal prefix, see
+// `getPermutationForTriple` below.
+bool isInternalComponent(const TripleComponent& tripleComponent);
+
 // Return a shared pointer to the correct permutation in `index` based on the
 // `permutation` enum and the values in `triple`. In particular return the
 // associated internal permutation if the passed `triple` contains an internal
