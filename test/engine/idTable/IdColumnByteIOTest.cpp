@@ -93,11 +93,11 @@ TYPED_TEST(IdColumnByteIOTest, roundTrip) {
   for (const auto& ids : {std::vector<Id>{}, sampleIds()}) {
     const auto source = Column::make(ids);
     auto compressed = encode(Column::constView(source), [](const auto& chunks) {
-      return ZstdWrapper::compress(chunks);
+      return ZstdWrapper::compressChunks(chunks);
     });
     auto target = Column::makeWithSize(ids.size());
     decode(Column::view(target), [&compressed](const auto& buffers) {
-      ZstdWrapper::decompressToBuffers(compressed, buffers);
+      ZstdWrapper::decompressChunks(compressed, buffers);
     });
     for (size_t i = 0; i < ids.size(); ++i) {
       EXPECT_EQ(static_cast<Id>(target[i]).getBits(), ids[i].getBits()) << i;

@@ -161,7 +161,8 @@ class CompressedBlockFile {
     if (!compressionLevel_.has_value()) {
       return {uncompressedSize, uncompressedSize, appendChunks(chunks)};
     }
-    auto compressed = ZstdWrapper::compress(chunks, compressionLevel_.value());
+    auto compressed =
+        ZstdWrapper::compressChunks(chunks, compressionLevel_.value());
     return {compressed.size(), uncompressedSize,
             appendBytes(compressed.data(), compressed.size())};
   }
@@ -174,7 +175,7 @@ class CompressedBlockFile {
       auto compressed =
           ql::make_unique_for_overwrite<char[]>(metadata.compressedSize_);
       readBytes(metadata, compressed.get());
-      ZstdWrapper::decompressToBuffers(
+      ZstdWrapper::decompressChunks(
           {compressed.get(), metadata.compressedSize_}, targets);
       return;
     }

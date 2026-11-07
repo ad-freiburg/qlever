@@ -34,9 +34,9 @@ class ZstdWrapper {
   }
 
   // Compress each of the `chunks` as a ZSTD frame of its own and return the
-  // frames one after the other, so the chunks are not copied into one buffer
-  // first. For a single chunk, this is the same as `compress` above.
-  static std::vector<char> compress(
+  // concatenation of the compressed frames. For a single chunk, this is the
+  // same as `compress` above.
+  static std::vector<char> compressChunks(
       const ql::span<const ql::span<const std::byte>> chunks,
       const int compressionLevel = 3) {
     size_t bound = 0;
@@ -54,11 +54,10 @@ class ZstdWrapper {
     return result;
   }
 
-  // Decompress the frames that `compress` above has written for several chunks
-  // into the `targets`, one frame per target, which have to be filled
-  // completely.
-  static void decompressToBuffers(ql::span<const char> compressed,
-                                  ql::span<const ql::span<std::byte>> targets) {
+  // Decompress the frames that `compressChunks` above has written into the
+  // `targets`, one frame per target, which have to be filled completely.
+  static void decompressChunks(ql::span<const char> compressed,
+                               ql::span<const ql::span<std::byte>> targets) {
     for (auto target : targets) {
       // A block for which no bytes were ever written (for example a block of
       // the permutations that only exists in the metadata) is empty, like for

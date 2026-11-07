@@ -37,14 +37,14 @@ TEST(CompressionTest, DecompressToBuffer) {
   ASSERT_EQ(4ul * sizeof(int), numBytesDecompressed);
 }
 
-// Test that `compress` writes each chunk as a frame of its own, and that
-// `decompressToBuffers` reads each frame back into its own buffer, also when
+// Test that `compressChunks` writes each chunk as a frame of its own, and that
+// `decompressChunks` reads each frame back into its own buffer, also when
 // all the chunks are empty.
 TEST(CompressionTest, compressAndDecompressSeveralChunks) {
   std::vector<std::byte> payloads(800, std::byte{7});
   std::vector<std::byte> datatypes(100, std::byte{3});
   std::array<ql::span<const std::byte>, 2> chunks{payloads, datatypes};
-  auto compressed = ZstdWrapper::compress(chunks);
+  auto compressed = ZstdWrapper::compressChunks(chunks);
   // Two frames, one after the other.
   auto firstFrameSize =
       ZSTD_findFrameCompressedSize(compressed.data(), compressed.size());
@@ -59,31 +59,31 @@ TEST(CompressionTest, compressAndDecompressSeveralChunks) {
   std::vector<std::byte> payloadsResult(800);
   std::vector<std::byte> datatypesResult(100);
   std::array<ql::span<std::byte>, 2> buffers{payloadsResult, datatypesResult};
-  ZstdWrapper::decompressToBuffers(compressed, buffers);
+  ZstdWrapper::decompressChunks(compressed, buffers);
   EXPECT_EQ(payloadsResult, payloads);
   EXPECT_EQ(datatypesResult, datatypes);
 
   // Empty chunks, as for an empty column.
   std::array<ql::span<const std::byte>, 2> emptyChunks{};
   std::array<ql::span<std::byte>, 2> emptyBuffers{};
-  ZstdWrapper::decompressToBuffers(ZstdWrapper::compress(emptyChunks),
-                                   emptyBuffers);
+  ZstdWrapper::decompressChunks(ZstdWrapper::compressChunks(emptyChunks),
+                                emptyBuffers);
 }
 
 // Test that a single chunk is a plain ZSTD frame, so that the permutations of
 // existing indexes, which were written with the plain `compress`, can be read
-// with `decompressToBuffers`, and the other way round.
+// with `decompressChunks`, and the other way round.
 TEST(CompressionTest, singleChunkIsPlainFrame) {
   std::vector<std::byte> ids(800, std::byte{7});
   std::vector<std::byte> result(ids.size());
   std::array<ql::span<std::byte>, 1> buffers{result};
 
   auto oldFormat = ZstdWrapper::compress(ids.data(), ids.size());
-  ZstdWrapper::decompressToBuffers(oldFormat, buffers);
+  ZstdWrapper::decompressChunks(oldFormat, buffers);
   EXPECT_EQ(result, ids);
 
   std::array<ql::span<const std::byte>, 1> chunks{ids};
-  auto newFormat = ZstdWrapper::compress(chunks);
+  auto newFormat = ZstdWrapper::compressChunks(chunks);
   EXPECT_EQ(newFormat, oldFormat);
 }
 
@@ -95,7 +95,7 @@ TEST(CompressionTest, framesMustMatchTheBuffers) {
   std::vector<std::byte> payloads(800, std::byte{7});
   std::vector<std::byte> datatypes(100, std::byte{3});
   std::array<ql::span<const std::byte>, 2> chunks{payloads, datatypes};
-  auto twoFrames = ZstdWrapper::compress(chunks);
+  auto twoFrames = ZstdWrapper::compressChunks(chunks);
   auto oneFrame = ZstdWrapper::compress(payloads.data(), payloads.size());
 
   std::vector<std::byte> payloadsResult(800);
@@ -103,10 +103,10 @@ TEST(CompressionTest, framesMustMatchTheBuffers) {
   std::array<ql::span<std::byte>, 2> splitBuffers{payloadsResult,
                                                   datatypesResult};
   std::array<ql::span<std::byte>, 1> singleBuffer{payloadsResult};
-  EXPECT_ANY_THROW(ZstdWrapper::decompressToBuffers(oneFrame, splitBuffers));
-  EXPECT_ANY_THROW(ZstdWrapper::decompressToBuffers(twoFrames, singleBuffer));
+  EXPECT_ANY_THROW(ZstdWrapper::decompressChunks(oneFrame, splitBuffers));
+  EXPECT_ANY_THROW(ZstdWrapper::decompressChunks(twoFrames, singleBuffer));
   twoFrames.pop_back();
-  EXPECT_ANY_THROW(ZstdWrapper::decompressToBuffers(twoFrames, splitBuffers));
+  EXPECT_ANY_THROW(ZstdWrapper::decompressChunks(twoFrames, splitBuffers));
 }
 
 // Test the blocks for which no bytes were ever written (blocks of the
@@ -114,11 +114,11 @@ TEST(CompressionTest, framesMustMatchTheBuffers) {
 // columns, but a column that is not empty is an error and not left unwritten.
 TEST(CompressionTest, noBytesAreAnEmptyColumn) {
   std::array<ql::span<std::byte>, 2> emptyBuffers{};
-  ZstdWrapper::decompressToBuffers({}, emptyBuffers);
+  ZstdWrapper::decompressChunks({}, emptyBuffers);
 
   std::vector<std::byte> payloads(8);
   std::array<ql::span<std::byte>, 2> buffers{payloads, ql::span<std::byte>{}};
-  EXPECT_ANY_THROW(ZstdWrapper::decompressToBuffers({}, buffers));
+  EXPECT_ANY_THROW(ZstdWrapper::decompressChunks({}, buffers));
 }
 
 // _____________________________________________________________________________

@@ -804,7 +804,7 @@ void CompressedRelationReader::decompressColumn(
     Iterator iterator) {
   ad_utility::idColumnByteIO::decode(IdColumnRef{iterator, numRowsToRead},
                                      [&compressedBlock](const auto& buffers) {
-                                       ZstdWrapper::decompressToBuffers(
+                                       ZstdWrapper::decompressChunks(
                                            compressedBlock, buffers);
                                      });
 }
