@@ -1377,7 +1377,8 @@ std::shared_ptr<QueryExecutionTree> makeOptionalJoinThatIsResortedOnLimit(
       qec, std::move(left), std::move(right));
   // Without a limit the left input is the larger one, so the sort order is
   // preserved.
-  EXPECT_TRUE(result->getRootOperation()->isSortedBy({0}));
+  EXPECT_TRUE(
+      result->getRootOperation()->isSortedBy(std::vector<ColumnIndex>{0}));
   return result;
 }
 }  // namespace
@@ -1436,8 +1437,8 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
   // `OptionalJoin` smaller than its right input.
   optionalJoin.applyLimitOffset({3}, false);
 
-  EXPECT_TRUE(
-      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+  EXPECT_TRUE(optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy(
+      std::vector<ColumnIndex>{0}));
 
   qec->getQueryTreeCache().clearAll();
   // Required because the children apply their `LIMIT` externally, which updates
@@ -1491,8 +1492,8 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
   // `OptionalJoin` smaller than its right input.
   optionalJoin.applyLimitOffset({3}, false);
 
-  EXPECT_TRUE(
-      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+  EXPECT_TRUE(optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy(
+      std::vector<ColumnIndex>{0}));
 
   qec->getQueryTreeCache().clearAll();
   // Required because the children apply their `LIMIT` externally, which updates

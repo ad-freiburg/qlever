@@ -99,14 +99,14 @@ class CartesianProductJoin : public Operation {
   // (because the children have disjoint columns). A child without any such
   // column must have at most one row.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
   // Push a `DISTINCT` over `distinctIndices` down into the children. Because
   // the children have disjoint sets of columns, making each child distinct on
   // its slice of `distinctIndices` and then forming the Cartesian product
   // yields a result that is already distinct wrt `distinctIndices`.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
  protected:
   // Don't promise any sorting of the result.
@@ -130,7 +130,7 @@ class CartesianProductJoin : public Operation {
   // For each child, compute the subset of `distinctIndices` that falls into
   // that child's columns, translated into the child's local column indices.
   std::vector<std::vector<ColumnIndex>> perChildDistinctIndices(
-      const std::vector<ColumnIndex>& distinctIndices) const;
+      ql::span<const ColumnIndex> distinctIndices) const;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip

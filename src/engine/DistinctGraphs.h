@@ -79,7 +79,7 @@ class DistinctGraphs : public Operation {
 
   // Each graph ID appears once, so the result is distinct iff column 0 is kept.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override {
+      ql::span<const ColumnIndex> distinctIndices) const override {
     return ad_utility::contains(distinctIndices, ColumnIndex{0});
   }
 

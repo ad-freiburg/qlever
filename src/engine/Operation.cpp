@@ -876,7 +876,7 @@ void Operation::getExternalValues(
 }
 
 // _____________________________________________________________________________
-bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
+bool Operation::isSortedBy(ql::span<const ColumnIndex> sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
     return false;
@@ -891,14 +891,14 @@ bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
 }
 
 // _____________________________________________________________________________
 bool Operation::isDistinctBy(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   const auto& limit = getLimitOffset()._limit;
   if (limit.has_value() && limit.value() <= 1) {
     return true;
@@ -908,13 +908,13 @@ bool Operation::isDistinctBy(
 
 // _____________________________________________________________________________
 bool Operation::isDistinctByImpl(
-    [[maybe_unused]] const std::vector<ColumnIndex>& distinctIndices) const {
+    [[maybe_unused]] ql::span<const ColumnIndex> distinctIndices) const {
   return false;
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
   return std::nullopt;
 }
