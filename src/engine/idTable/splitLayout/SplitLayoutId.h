@@ -113,7 +113,7 @@ class SplitLayoutId
   }
 
   constexpr static SplitLayoutId max() noexcept {
-    return fromBits(DatatypeType{0xFF},
+    return fromBits(std::numeric_limits<DatatypeType>::max(),
                     std::numeric_limits<PayloadType>::max());
   }
 
