@@ -83,17 +83,18 @@ inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
 template <typename T>
 inline auto withSourceCrsNear = liftOptionalMatcher<WithSourceCrs<T>>(
     [](WithSourceCrs<T> expected) -> Matcher<WithSourceCrs<T>> {
-      if constexpr (std::is_same_v<T, Centroid>) {
-        return AllOf(
-            Field(&WithSourceCrs<T>::info_, centroidNear(expected.info_)),
-            Field(&WithSourceCrs<T>::crs_, Eq(expected.crs_)));
-      } else if constexpr (std::is_same_v<T, BoundingBox>) {
-        return AllOf(
-            Field(&WithSourceCrs<T>::info_, boundingBoxNear(expected.info_)),
-            Field(&WithSourceCrs<T>::crs_, Eq(expected.crs_)));
-      } else {
-        static_assert(ad_utility::alwaysFalse<T>);
-      }
+      Matcher<std::optional<T>> infoMatcher =
+          [&]() -> Matcher<std::optional<T>> {
+        if constexpr (std::is_same_v<T, Centroid>) {
+          return centroidNear(expected.info_);
+        } else if constexpr (std::is_same_v<T, BoundingBox>) {
+          return boundingBoxNear(expected.info_);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      }();
+      return AllOf(Field(&WithSourceCrs<T>::info_, infoMatcher),
+                   Field(&WithSourceCrs<T>::crs_, Eq(expected.crs_)));
     });
 
 // ____________________________________________________________________________
@@ -143,14 +144,13 @@ inline void checkRequestedInfoForInstance(
 
   // Test requests for `Centroid` and `BoundingBox` wrapped with `SourceCrsType`
   // using WithSourceCrs`.
+  ASSERT_TRUE(gi.getSourceCrsType().has_value());
   EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<Centroid>>(),
-              withSourceCrsNear<Centroid>(
-                  ad_utility::detail::getWithSourceCrs<Centroid>(
-                      gi.getCentroid(), gi.getSourceCrsType())));
+              withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+                  gi.getCentroid(), gi.getSourceCrsType().value()}));
   EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<BoundingBox>>(),
-              withSourceCrsNear<BoundingBox>(
-                  ad_utility::detail::getWithSourceCrs<BoundingBox>(
-                      gi.getBoundingBox(), gi.getSourceCrsType())));
+              withSourceCrsNear<BoundingBox>(WithSourceCrs<BoundingBox>{
+                  gi.getBoundingBox(), gi.getSourceCrsType().value()}));
 }
 
 // ____________________________________________________________________________

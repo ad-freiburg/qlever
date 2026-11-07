@@ -376,7 +376,8 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
     return getSerializationType();
   } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
     return detail::getWithSourceCrs(
-        getRequestedInfo<decltype(RequestedInfo::info_)>(), getSourceCrsType());
+        getRequestedInfo<typename RequestedInfo::InfoType>(),
+        getSourceCrsType());
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -430,9 +431,8 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return GeometryInfo::getSerializationType(wkt);
   } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
-    return detail::getWithSourceCrs(
-        getRequestedInfo<decltype(RequestedInfo::info_)>(wkt),
-        getSourceCrsType(wkt));
+    return detail::getWithSourceCrsFromWkt<typename RequestedInfo::InfoType>(
+        wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }

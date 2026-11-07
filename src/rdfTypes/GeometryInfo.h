@@ -191,11 +191,13 @@ struct MetricArea {
 enum class SerializationType : uint16_t { WKT };
 
 // A `Centroid` or `BoundingBox` together with the `SourceCrsType` of the
-// geometry it was computed from. This is needed by functions that return a
-// geometry in the CRS of their input, such as `geof:centroid` or
-// `geof:envelope`.
+// geometry it was computed from. The `info_` is stored in `CRS84` regardless of
+// `crs_`. This is needed by functions that return a geometry in the CRS of
+// their input, such as `geof:centroid` or `geof:envelope`.
 template <typename Info>
 struct WithSourceCrs {
+  using InfoType = Info;
+
   Info info_;
   SourceCrsType crs_;
 };

@@ -652,6 +652,14 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   }
 
   // Test `getWithSourceCrs`.
+  EXPECT_THAT(
+      getWithSourceCrs<Centroid>(centroidExp1, SourceCrsType{CRSType::CRS84}),
+      withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+          centroidExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_THAT(
+      getWithSourceCrs<BoundingBox>(bbExp1, SourceCrsType{CRSType::CRS84}),
+      withSourceCrsNear<BoundingBox>(
+          WithSourceCrs<BoundingBox>{bbExp1, SourceCrsType{CRSType::CRS84}}));
   // No CRS type given.
   EXPECT_FALSE(getWithSourceCrs<Centroid>(centroidExp1, std::nullopt));
   EXPECT_FALSE(getWithSourceCrs<BoundingBox>(bbExp1, std::nullopt));
@@ -660,6 +668,16 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
       getWithSourceCrs<Centroid>(std::nullopt, SourceCrsType{CRSType::CRS84}));
   EXPECT_FALSE(getWithSourceCrs<BoundingBox>(std::nullopt,
                                              SourceCrsType{CRSType::CRS84}));
+
+  // Test `getWithSourceCrsFromWkt`
+  EXPECT_THAT(getWithSourceCrsFromWkt<Centroid>(litPoint),
+              withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+                  centroidExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_THAT(getWithSourceCrsFromWkt<BoundingBox>(litPoint),
+              withSourceCrsNear<BoundingBox>(WithSourceCrs<BoundingBox>{
+                  bbExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_FALSE(getWithSourceCrsFromWkt<Centroid>(litInvalidType));
+  EXPECT_FALSE(getWithSourceCrsFromWkt<BoundingBox>(litInvalidCrsIri));
 }
 
 // ____________________________________________________________________________
