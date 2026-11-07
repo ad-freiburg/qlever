@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -66,6 +67,18 @@ struct SplitColumn {
   static splitLayout::IdColumnRef view(Owner& owner) { return owner.asView(); }
 };
 
+// Expect that `actual` and `expected` are the same chunks: the same memory with
+// the same sizes.
+template <typename Actual, typename Expected>
+void expectSameChunks(const Actual& actual, const Expected& expected) {
+  ASSERT_EQ(actual.size(), expected.size());
+  for (size_t i = 0; i < actual.size(); ++i) {
+    EXPECT_EQ(static_cast<const void*>(actual[i].data()),
+              static_cast<const void*>(expected[i].data()));
+    EXPECT_EQ(actual[i].size(), expected[i].size());
+  }
+}
+
 template <typename Column>
 class IdColumnByteIOTest : public ::testing::Test {};
 using Columns = ::testing::Types<SpanColumn, SplitColumn>;
@@ -74,7 +87,7 @@ TYPED_TEST_SUITE(IdColumnByteIOTest, Columns);
 
 // Test that `decode` restores the `Id`s that `encode` was called with, when the
 // chunks go through `ZstdWrapper` like in all the callers, also for an empty
-// column.
+// column. This also tests that `encode` returns the result of `useBytes`.
 TYPED_TEST(IdColumnByteIOTest, roundTrip) {
   using Column = TypeParam;
   for (const auto& ids : {std::vector<Id>{}, sampleIds()}) {
@@ -92,36 +105,47 @@ TYPED_TEST(IdColumnByteIOTest, roundTrip) {
   }
 }
 
+// Test that `encode` and `decode` pass exactly the chunks of `chunksOf` to the
+// callback, read-only for `encode` and writable for `decode`.
+TYPED_TEST(IdColumnByteIOTest, encodeAndDecodePassTheChunksOfTheColumn) {
+  using Column = TypeParam;
+  auto column = Column::make(sampleIds());
+  encode(Column::constView(column), [&column](ReadOnlyChunks chunks) {
+    expectSameChunks(chunks, chunksOf(Column::constView(column)));
+  });
+  decode(Column::view(column), [&column](WritableChunks chunks) {
+    expectSameChunks(chunks, chunksOf(Column::view(column)));
+  });
+}
+
 // Test that a `ql::span<Id>` is a single chunk that points to the `Id`s in
 // memory, so it is not copied and its bytes on disk are exactly the `Id`s.
-TEST(IdColumnByteIO, spanColumnIsOneChunkWithoutCopy) {
+TEST(IdColumnByteIO, chunksOfSpanColumn) {
   auto ids = sampleIds();
-  auto check = [&ids](const auto& chunks) {
-    ASSERT_EQ(chunks.size(), 1u);
-    EXPECT_EQ(static_cast<const void*>(chunks[0].data()), ids.data());
-    EXPECT_EQ(chunks[0].size(), ids.size() * sizeof(Id));
-  };
-  encode(ql::span<const Id>{ids}, check);
-  decode(ql::span<Id>{ids}, check);
+  auto readOnly = chunksOf(ql::span<const Id>{ids});
+  auto writable = chunksOf(ql::span<Id>{ids});
+  static_assert(std::tuple_size_v<decltype(readOnly)> == 1);
+  EXPECT_EQ(static_cast<const void*>(readOnly[0].data()), ids.data());
+  EXPECT_EQ(readOnly[0].size(), ids.size() * sizeof(Id));
+  expectSameChunks(writable, readOnly);
 }
 
 // Test that a column of the split layout is two chunks that point to the
 // payloads and then to the datatypes of the column, so it is not copied and
 // its bytes on disk are the payloads followed by the datatypes.
-TEST(IdColumnByteIO, splitColumnIsPayloadsThenDatatypesWithoutCopy) {
+TEST(IdColumnByteIO, chunksOfSplitColumn) {
   auto column = SplitColumn::make(sampleIds());
   auto view = SplitColumn::view(column);
-  auto check = [&view](const auto& chunks) {
-    ASSERT_EQ(chunks.size(), 2u);
-    EXPECT_EQ(static_cast<const void*>(chunks[0].data()),
-              view.rawPayloads().data());
-    EXPECT_EQ(chunks[0].size(), view.size() * sizeof(Id::PayloadType));
-    EXPECT_EQ(static_cast<const void*>(chunks[1].data()),
-              view.rawDatatypes().data());
-    EXPECT_EQ(chunks[1].size(), view.size() * sizeof(Id::DatatypeType));
-  };
-  encode(SplitColumn::constView(column), check);
-  decode(view, check);
+  auto readOnly = chunksOf(SplitColumn::constView(column));
+  auto writable = chunksOf(view);
+  static_assert(std::tuple_size_v<decltype(readOnly)> == 2);
+  EXPECT_EQ(static_cast<const void*>(readOnly[0].data()),
+            view.rawPayloads().data());
+  EXPECT_EQ(readOnly[0].size(), view.size() * sizeof(Id::PayloadType));
+  EXPECT_EQ(static_cast<const void*>(readOnly[1].data()),
+            view.rawDatatypes().data());
+  EXPECT_EQ(readOnly[1].size(), view.size() * sizeof(Id::DatatypeType));
+  expectSameChunks(writable, readOnly);
 }
 
 // Test that a column of an `IdTable` has `BYTES_PER_ID_COLUMN_ENTRY` bytes per
@@ -133,7 +157,7 @@ TEST(IdColumnByteIO, idTableColumnsHaveBytesPerIdColumnEntry) {
     table.push_back({id});
   }
   size_t numBytes = 0;
-  encode(std::as_const(table).getColumn(0), [&numBytes](const auto& chunks) {
+  encode(std::as_const(table).getColumn(0), [&numBytes](ReadOnlyChunks chunks) {
     for (auto chunk : chunks) {
       numBytes += chunk.size();
     }

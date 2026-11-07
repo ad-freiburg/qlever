@@ -25,43 +25,41 @@
 // `CompressedExternalIdTable.h` and `CompressedIdTableBlocks.h`.
 namespace ad_utility::idColumnByteIO {
 
-// The chunks of a column, one per contiguous array in memory.
+// The bytes of a column as views into its memory, one span per contiguous
+// array (see `chunksOf`), so that they can be compressed without a copy.
 using ReadOnlyChunks = ql::span<const ql::span<const std::byte>>;
 using WritableChunks = ql::span<const ql::span<std::byte>>;
 
-// A column of whole `Id`s: one chunk, the `Id`s in memory.
-CPP_template(typename UseBytes)(
+// A column of whole `Id`s is a single array, so its bytes are the `Id`s exactly
+// as they are in memory.
+inline auto chunksOf(ql::span<const Id> column) {
+  return std::array{ql::as_bytes(column)};
+}
+inline auto chunksOf(ql::span<Id> column) {
+  return std::array{ql::as_writable_bytes(column)};
+}
+
+// A column of the split layout keeps the payloads and the datatypes in two
+// arrays, so its bytes are all the payloads followed by all the datatypes.
+inline auto chunksOf(columnBasedIdTable::splitLayout::ConstIdColumnRef column) {
+  return std::array{ql::as_bytes(column.rawPayloads()),
+                    ql::as_bytes(column.rawDatatypes())};
+}
+inline auto chunksOf(columnBasedIdTable::splitLayout::IdColumnRef column) {
+  return std::array{ql::as_writable_bytes(column.rawPayloads()),
+                    ql::as_writable_bytes(column.rawDatatypes())};
+}
+
+CPP_template(typename Column, typename UseBytes)(
     requires ql::concepts::invocable<UseBytes, ReadOnlyChunks>)
-auto encode(ql::span<const Id> source, UseBytes useBytes) {
-  std::array chunks{ql::as_bytes(source)};
-  return useBytes(ReadOnlyChunks{chunks});
+auto encode(const Column& source, UseBytes useBytes) {
+  return useBytes(ReadOnlyChunks{chunksOf(source)});
 }
 
-CPP_template(typename FillBytes)(
+CPP_template(typename Column, typename FillBytes)(
     requires ql::concepts::invocable<FillBytes, WritableChunks>)
-void decode(ql::span<Id> target, FillBytes fillBytes) {
-  std::array chunks{ql::as_writable_bytes(target)};
-  fillBytes(WritableChunks{chunks});
-}
-
-// A column of the split layout: two chunks, the payloads of all the `Id`s and
-// then their datatypes.
-CPP_template(typename UseBytes)(
-    requires ql::concepts::invocable<UseBytes, ReadOnlyChunks>)
-auto encode(columnBasedIdTable::splitLayout::ConstIdColumnRef source,
-            UseBytes useBytes) {
-  std::array chunks{ql::as_bytes(source.rawPayloads()),
-                    ql::as_bytes(source.rawDatatypes())};
-  return useBytes(ReadOnlyChunks{chunks});
-}
-
-CPP_template(typename FillBytes)(
-    requires ql::concepts::invocable<FillBytes, WritableChunks>)
-void decode(columnBasedIdTable::splitLayout::IdColumnRef target,
-            FillBytes fillBytes) {
-  std::array chunks{ql::as_writable_bytes(target.rawPayloads()),
-                    ql::as_writable_bytes(target.rawDatatypes())};
-  fillBytes(WritableChunks{chunks});
+void decode(const Column& target, FillBytes fillBytes) {
+  fillBytes(WritableChunks{chunksOf(target)});
 }
 }  // namespace ad_utility::idColumnByteIO
 
