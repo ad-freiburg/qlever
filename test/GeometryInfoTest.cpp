@@ -245,7 +245,7 @@ TEST(GeometryInfoTest, BasicTests) {
                  {{1, 1}, {2, 2}},
                  {1.5, 1.5},
                  {2},
-                 SourceCrsType{2},
+                 SourceCrsType{util::geo::CRSType::WGS84},
                  MetricLength{900},
                  MetricArea{5}};
   ASSERT_EQ(g.getWktType().type(), 5);
@@ -650,6 +650,34 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
                                    CRSType::UNSUPPORTED, CRSType::UNSUPPORTED}))
         << lit;
   }
+
+  // Test `getWithSourceCrs`.
+  EXPECT_THAT(
+      getWithSourceCrs<Centroid>(centroidExp1, SourceCrsType{CRSType::CRS84}),
+      withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+          centroidExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_THAT(
+      getWithSourceCrs<BoundingBox>(bbExp1, SourceCrsType{CRSType::CRS84}),
+      withSourceCrsNear<BoundingBox>(
+          WithSourceCrs<BoundingBox>{bbExp1, SourceCrsType{CRSType::CRS84}}));
+  // No CRS type given.
+  EXPECT_FALSE(getWithSourceCrs<Centroid>(centroidExp1, std::nullopt));
+  EXPECT_FALSE(getWithSourceCrs<BoundingBox>(bbExp1, std::nullopt));
+  // No `Centroid`/`BoundingBox` given.
+  EXPECT_FALSE(
+      getWithSourceCrs<Centroid>(std::nullopt, SourceCrsType{CRSType::CRS84}));
+  EXPECT_FALSE(getWithSourceCrs<BoundingBox>(std::nullopt,
+                                             SourceCrsType{CRSType::CRS84}));
+
+  // Test `getWithSourceCrsFromWkt`
+  EXPECT_THAT(getWithSourceCrsFromWkt<Centroid>(litPoint),
+              withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+                  centroidExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_THAT(getWithSourceCrsFromWkt<BoundingBox>(litPoint),
+              withSourceCrsNear<BoundingBox>(WithSourceCrs<BoundingBox>{
+                  bbExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_FALSE(getWithSourceCrsFromWkt<Centroid>(litInvalidType));
+  EXPECT_FALSE(getWithSourceCrsFromWkt<BoundingBox>(litInvalidCrsIri));
 }
 
 // ____________________________________________________________________________

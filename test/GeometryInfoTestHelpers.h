@@ -80,6 +80,24 @@ inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
 #define EXPECT_METRICAREA_NEAR(a, b) EXPECT_THAT(a, metricAreaNear(b))
 
 // ____________________________________________________________________________
+template <typename T>
+inline auto withSourceCrsNear = liftOptionalMatcher<WithSourceCrs<T>>(
+    [](WithSourceCrs<T> expected) -> Matcher<WithSourceCrs<T>> {
+      Matcher<std::optional<T>> infoMatcher =
+          [&]() -> Matcher<std::optional<T>> {
+        if constexpr (std::is_same_v<T, Centroid>) {
+          return centroidNear(expected.info_);
+        } else if constexpr (std::is_same_v<T, BoundingBox>) {
+          return boundingBoxNear(expected.info_);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      }();
+      return AllOf(Field(&WithSourceCrs<T>::info_, infoMatcher),
+                   Field(&WithSourceCrs<T>::crs_, Eq(expected.crs_)));
+    });
+
+// ____________________________________________________________________________
 inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
     [](GeometryInfo expected) -> Matcher<GeometryInfo> {
       return AllOf(
@@ -123,6 +141,16 @@ inline void checkRequestedInfoForInstance(
   EXPECT_EQ(gi.getSerializationType(), SerializationType::WKT);
   EXPECT_EQ(gi.getSerializationType(),
             gi.getRequestedInfo<SerializationType>());
+
+  // Test requests for `Centroid` and `BoundingBox` wrapped with `SourceCrsType`
+  // using WithSourceCrs`.
+  ASSERT_TRUE(gi.getSourceCrsType().has_value());
+  EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<Centroid>>(),
+              withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+                  gi.getCentroid(), gi.getSourceCrsType().value()}));
+  EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<BoundingBox>>(),
+              withSourceCrsNear<BoundingBox>(WithSourceCrs<BoundingBox>{
+                  gi.getBoundingBox(), gi.getSourceCrsType().value()}));
 }
 
 // ____________________________________________________________________________
@@ -149,6 +177,19 @@ inline void checkRequestedInfoForWktLiteral(
             GeometryInfo::getRequestedInfo<SourceCrsType>(wkt));
   EXPECT_EQ(gi.getSerializationType(),
             GeometryInfo::getRequestedInfo<SerializationType>(wkt));
+
+  // Test requests for `Centroid` and `BoundingBox` wrapped with `SourceCrsType`
+  // using WithSourceCrs`.
+  EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<Centroid>>(wkt),
+              withSourceCrsNear<Centroid>(
+                  ad_utility::detail::getWithSourceCrs<Centroid>(
+                      GeometryInfo::getCentroid(wkt),
+                      GeometryInfo::getSourceCrsType(wkt))));
+  EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<BoundingBox>>(wkt),
+              withSourceCrsNear<BoundingBox>(
+                  ad_utility::detail::getWithSourceCrs<BoundingBox>(
+                      GeometryInfo::getBoundingBox(wkt),
+                      GeometryInfo::getSourceCrsType(wkt))));
 }
 
 // ____________________________________________________________________________
