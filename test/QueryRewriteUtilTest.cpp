@@ -4,6 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
+
 #include "./QueryRewriteUtilTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
@@ -71,10 +74,15 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   auto expr4 = leSprql(std::move(dExpr4), D(10));
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr4), dExp4, 10);
 
-  // "<" relation is unsupported
+  // "<" relation: the maximum distance is the largest `double` below the
+  // constant.
   auto [dExpr5, dExp5] = makeMetricDist();
   auto expr5 = ltSprql(std::move(dExpr5), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr5), std::nullopt, 10);
+  auto filter5 = getGeoDistanceFilter(*expr5);
+  checkGeoDistanceFilter(filter5, dExp5, 10);
+  EXPECT_LT(filter5.value().second, 10.0);
+  EXPECT_EQ(filter5.value().second,
+            std::nextafter(10.0, -std::numeric_limits<double>::infinity()));
 
   // Non-numeric comparison is unsupported
   auto [dExpr6, dExp6] = makeMetricDist();
