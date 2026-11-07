@@ -80,6 +80,37 @@ Union makeUnionForDecidingColumns(QueryExecutionContext* qec,
                                 Vars{Var{"?a"}, Var{"?c"}, Var{"?d"}}),
                std::move(targetOrder)};
 }
+
+using SortedUnionRange = std::vector<Result::IdTableVocabPair>;
+
+// Create a `SortedUnionRange` that consists of a single block with the given
+// `table`.
+SortedUnionRange makeSortedUnionRange(IdTable table) {
+  SortedUnionRange range;
+  range.emplace_back(std::move(table), LocalVocab{});
+  return range;
+}
+
+// Create a `SortedUnionImpl` that merges the single-column inputs `left` and
+// `right`, which both have to be sorted.
+auto makeSortedUnion(SortedUnionRange left, SortedUnionRange right,
+                     bool requestLaziness,
+                     const ad_utility::AllocatorWithLimit<Id>& allocator,
+                     ad_utility::SharedCancellationHandle handle) {
+  // `SortedUnionImpl` copies the column origins and the target order, so they
+  // don't have to outlive it.
+  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
+  std::vector<ColumnIndex> targetOrder{0};
+  return sortedUnion::SortedUnionImpl{
+      sortedUnion::IterationData{nullptr, std::move(left), {0}},
+      sortedUnion::IterationData{nullptr, std::move(right), {0}},
+      requestLaziness,
+      columnOrigins,
+      allocator,
+      ql::span<const ColumnIndex>{targetOrder},
+      [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
+      std::move(handle)};
+}
 }  // namespace
 
 // A simple test for computing a union.
@@ -1104,20 +1135,9 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
 
 // Test that `SortedUnionImpl` requires a cancellation handle.
 TEST(Union, sortedUnionImplRequiresCancellationHandle) {
-  auto* qec = ad_utility::testing::getQec();
-  using Range = std::vector<Result::IdTableVocabPair>;
-  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
-  std::vector<ColumnIndex> targetOrder{0};
-  auto makeUnion = [&](ad_utility::SharedCancellationHandle handle) {
-    sortedUnion::SortedUnionImpl sortedUnion{
-        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
-        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
-        false,
-        columnOrigins,
-        qec->getAllocator(),
-        ql::span<const ColumnIndex>{targetOrder},
-        [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
-        std::move(handle)};
+  auto makeUnion = [](ad_utility::SharedCancellationHandle handle) {
+    makeSortedUnion({}, {}, false, ad_utility::testing::makeAllocator(),
+                    std::move(handle));
   };
   EXPECT_NO_THROW(
       makeUnion(std::make_shared<ad_utility::CancellationHandle<>>()));
@@ -1126,11 +1146,26 @@ TEST(Union, sortedUnionImplRequiresCancellationHandle) {
       ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
+// Test that a lazy `SortedUnionImpl` doesn't reserve memory for a full chunk
+// up front, which would fail with a tight memory limit and many concurrent
+// unions, even if the inputs are tiny (see issue #3898).
+TEST(Union, lazySortedUnionImplDoesNotReserveFullChunk) {
+  // A full chunk of a single column would need 8 MB.
+  auto allocator =
+      ad_utility::testing::makeAllocator(ad_utility::MemorySize::megabytes(1));
+  auto sortedUnion = makeSortedUnion(
+      makeSortedUnionRange(makeIdTableFromVector({{1}, {3}})),
+      makeSortedUnionRange(makeIdTableFromVector({{2}})), true, allocator,
+      std::make_shared<ad_utility::CancellationHandle<>>());
+  EXPECT_EQ(
+      aggregateTables(Result::LazyResult{std::move(sortedUnion)}, 1).first,
+      makeIdTableFromVector({{1}, {2}, {3}}));
+}
+
 // Test that the non-lazy merge of a sorted union checks for cancellation
 // after every `Union::chunkSize` merged rows.
 TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
   auto* qec = ad_utility::testing::getQec();
-  using Range = std::vector<Result::IdTableVocabPair>;
   // The inputs interleave, so the merge loop (and not the final append of the
   // remaining rows) produces more than `Union::chunkSize` rows.
   size_t numRows = Union::chunkSize / 2 + 1;
@@ -1140,22 +1175,12 @@ TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
     for (size_t i = 0; i < numRows; ++i) {
       table(i, 0) = V(2 * i + offset);
     }
-    Range range;
-    range.emplace_back(std::move(table), LocalVocab{});
-    return sortedUnion::IterationData<Range>{nullptr, std::move(range), {0}};
+    return makeSortedUnionRange(std::move(table));
   };
-  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
-  std::vector<ColumnIndex> targetOrder{0};
-  auto makeUnion = [&](ad_utility::SharedCancellationHandle handle) {
-    return sortedUnion::SortedUnionImpl{
-        makeInput(0),
-        makeInput(1),
-        false,
-        columnOrigins,
-        qec->getAllocator(),
-        ql::span<const ColumnIndex>{targetOrder},
-        [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
-        std::move(handle)};
+  auto makeUnion = [qec,
+                    &makeInput](ad_utility::SharedCancellationHandle handle) {
+    return makeSortedUnion(makeInput(0), makeInput(1), false,
+                           qec->getAllocator(), std::move(handle));
   };
 
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
