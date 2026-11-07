@@ -1363,8 +1363,8 @@ TEST_F(DeltaTriplesTest, vacuum) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, remapId) {
   auto I = &Id::makeFromInt;
-  auto V = &makeVocabId;
-  auto B = &makeBlankNodeId;
+  auto V = &makeVocabId<>;
+  auto B = &makeBlankNodeId<>;
   const IndexImpl& index = testQec->getIndex().getImpl();
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
   LocalVocab localVocab;

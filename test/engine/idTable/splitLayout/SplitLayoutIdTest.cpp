@@ -10,10 +10,6 @@
 // Tests that only make sense for the `SplitLayoutId`, which stores a full
 // 64-bit payload next to a datatype byte. The tests for both layouts are in
 // `IdBaseTest.cpp`.
-//
-// NOTE: This test is only built if `USE_SPLIT_LAYOUT` is set (see
-// `CMakeLists.txt`), because then `Id` is the `SplitLayoutId`, which the test
-// utilities (e.g. `makeRandomIds`) create.
 
 #include <absl/base/casts.h>
 #include <gtest/gtest.h>
@@ -32,7 +28,6 @@
 #include "util/Serializer/Serializer.h"
 
 namespace columnBasedIdTable::splitLayout {
-static_assert(std::is_same_v<Id, SplitLayoutId>);
 
 namespace {
 // The bit representation of an `Id` with the given datatype and payload.
@@ -68,7 +63,7 @@ TEST(SplitLayoutId, layout) {
   static_assert(SplitLayoutId::min().getBits() ==
                 makeBits(Datatype::Undefined, 0));
 
-  for (auto id : makeRandomIds()) {
+  for (auto id : makeRandomIds<SplitLayoutId>()) {
     EXPECT_EQ(id.getBits(), makeBits(id.getDatatype(), id.getPayloadBits()));
   }
   // `fromBits` accepts every bit representation, also the one of `max()`,
@@ -77,8 +72,8 @@ TEST(SplitLayoutId, layout) {
   EXPECT_EQ(SplitLayoutId::fromBits(maxBits).getBits(), maxBits);
   // The highest bit of the payload is a regular bit of an index: it makes the
   // `Id` larger and does not change the datatype.
-  EXPECT_LT(makeVocabId((uint64_t{1} << 63) - 1),
-            makeVocabId(uint64_t{1} << 63));
+  EXPECT_LT(makeVocabId<SplitLayoutId>((uint64_t{1} << 63) - 1),
+            makeVocabId<SplitLayoutId>(uint64_t{1} << 63));
 }
 
 // Test that a `double` is stored without any loss of precision: the payload is
@@ -120,9 +115,9 @@ TEST(SplitLayoutId, byteRepresentation) {
                          SplitLayoutId::fromBits(makeBits(Datatype::Int, 5))));
   EXPECT_TRUE(bytesEqual(SplitLayoutId::makeFromInt(5).incremented(),
                          SplitLayoutId::makeFromInt(6)));
-  EXPECT_TRUE(
-      bytesEqual(makeVocabId(SplitLayoutId::maxIndex).incremented(),
-                 SplitLayoutId::fromBits(Datatype::LocalVocabIndex, 0)));
+  EXPECT_TRUE(bytesEqual(
+      makeVocabId<SplitLayoutId>(SplitLayoutId::maxIndex).incremented(),
+      SplitLayoutId::fromBits(Datatype::LocalVocabIndex, 0)));
   // Different `Id`s have different bytes, in particular if only the datatype
   // or only the payload differs.
   EXPECT_FALSE(bytesEqual(SplitLayoutId::makeFromInt(0),
@@ -131,7 +126,7 @@ TEST(SplitLayoutId, byteRepresentation) {
       bytesEqual(SplitLayoutId::makeFromInt(0), SplitLayoutId::makeFromInt(1)));
 
   // The serialization copies these 16 bytes.
-  for (auto id : makeRandomIds()) {
+  for (auto id : makeRandomIds<SplitLayoutId>()) {
     EXPECT_TRUE(bytesEqual(id, SplitLayoutId::fromBits(id.getBits())));
     ad_utility::serialization::ByteBufferWriteSerializer writer;
     writer << id;

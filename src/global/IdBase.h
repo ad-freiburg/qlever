@@ -28,6 +28,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/Datatype.h"
 #include "global/IndexTypes.h"
+#include "index/IdBitRepresentation.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"
 #include "util/DateYearDuration.h"
@@ -445,18 +446,24 @@ class IdBase {
     // Exactly one of the types is `LocalVocabIndex`. If the other one is a type
     // that a position in the vocabularies can have, then compare that position,
     // else fall through to the comparison of the bits, see the note above.
-    // NOTE: GCC 11 issues a false positive warning here, so we try to avoid it
-    // by being over-explicit about the branches here.
-    if (isDatatypeOfPositionInVocab(type) && otherType == LocalVocabIndex) {
-      return comparePositionInVocabToLocalVocab(
-          LocalVocabEntry::IdProxy::make(derived().getBits()),
-          other.getLocalVocabIndex());
-    }
-    if (type == LocalVocabIndex && isDatatypeOfPositionInVocab(otherType)) {
-      auto inverseOrder = comparePositionInVocabToLocalVocab(
-          LocalVocabEntry::IdProxy::make(other.getBits()),
-          getLocalVocabIndex());
-      return ql::compareThreeWay(0, inverseOrder);
+    // NOTE: A `LocalVocabEntry` stores its position as the bits of the `Id` of
+    // the current build (see `LocalVocabEntry::IdProxy`). The `Id` of the other
+    // layout (`SplitLayoutId` in the legacy build, `ValueId` with
+    // `USE_SPLIT_LAYOUT`) is only used in tests, and is ordered by the bits.
+    if constexpr (std::is_same_v<T, IdBitRepresentation>) {
+      // NOTE: GCC 11 issues a false positive warning here, so we try to avoid
+      // it by being over-explicit about the branches here.
+      if (isDatatypeOfPositionInVocab(type) && otherType == LocalVocabIndex) {
+        return comparePositionInVocabToLocalVocab(
+            LocalVocabEntry::IdProxy::make(derived().getBits()),
+            other.getLocalVocabIndex());
+      }
+      if (type == LocalVocabIndex && isDatatypeOfPositionInVocab(otherType)) {
+        auto inverseOrder = comparePositionInVocabToLocalVocab(
+            LocalVocabEntry::IdProxy::make(other.getBits()),
+            getLocalVocabIndex());
+        return ql::compareThreeWay(0, inverseOrder);
+      }
     }
 
     // One of the types is `LocalVocabIndex`, and the other one is a non-string

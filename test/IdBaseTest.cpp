@@ -8,12 +8,11 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Tests for everything that `IdBase` implements, for the `Id` of the current
-// build: the legacy `ValueId`, or the `SplitLayoutId` if `USE_SPLIT_LAYOUT` is
-// set. Where the two layouts differ
-// (the number of payload bits), the expectations are derived from the
-// constants of the `Id`. The tests that only make sense for one of the layouts
-// are in `FoldedValueIdTest.cpp` and
+// Tests for everything that `IdBase` implements, for both layouts of an `Id`
+// (the legacy `ValueId` and the `SplitLayoutId`), independent of the layout of
+// the current build. Where the two layouts differ (the number of payload bits),
+// the expectations are derived from the constants of the `Id`. The tests that
+// only make sense for one of the layouts are in `FoldedValueIdTest.cpp` and
 // `engine/idTable/splitLayout/SplitLayoutIdTest.cpp`.
 
 #include <absl/hash/hash_testing.h>
@@ -29,6 +28,8 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/algorithm.h"
+#include "engine/idTable/splitLayout/SplitLayoutId.h"
+#include "global/FoldedValueId.h"
 #include "global/Id.h"
 #include "index/LocalVocabEntry.h"
 #include "util/BitUtils.h"
@@ -45,27 +46,46 @@ using ad_utility::testing::localVocabEntryFromStringRepresentation;
 namespace {
 // The number of lowest bits of a `double` that do not fit into the payload: 4
 // for the legacy `ValueId`, 0 for the `SplitLayoutId`.
-constexpr int numStrippedBits = 64 - static_cast<int>(Id::numDataBits);
+template <typename IdType>
+constexpr int numStrippedBits = 64 - static_cast<int>(IdType::numDataBits);
 
 // A payload with all bits set: the largest index and the integer -1.
+template <typename IdType>
 constexpr uint64_t payloadMask =
-    ad_utility::bitMaskForLowerBits(Id::numDataBits);
+    ad_utility::bitMaskForLowerBits(IdType::numDataBits);
 
 // The number of values that the datatype bits can hold.
-constexpr uint64_t numDatatypeValues = uint64_t{1} << Id::numDatatypeBits;
+template <typename IdType>
+constexpr uint64_t numDatatypeValues = uint64_t{1} << IdType::numDatatypeBits;
 
-uint64_t getBlankNodeIndex(Id id) { return id.getBlankNodeIndex().get(); }
-uint64_t getEncodedVal(Id id) { return id.getEncodedVal(); }
-Id makeEncodedId(uint64_t value) { return Id::makeFromEncodedVal(value); }
+template <typename IdType>
+uint64_t getBlankNodeIndex(IdType id) {
+  return id.getBlankNodeIndex().get();
+}
+template <typename IdType>
+uint64_t getEncodedVal(IdType id) {
+  return id.getEncodedVal();
+}
+template <typename IdType>
+IdType makeEncodedId(uint64_t value) {
+  return IdType::makeFromEncodedVal(value);
+}
 
+template <typename IdType>
 struct IdBaseTest : public ::testing::Test {
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
+// Both layouts of an `Id`, independent of the layout of the current build.
+using IdTypes =
+    ::testing::Types<foldedValueId::ValueId,
+                     columnBasedIdTable::splitLayout::SplitLayoutId>;
+TYPED_TEST_SUITE(IdBaseTest, IdTypes);
 }  // namespace
 
 // Test that a `double` keeps all but the lowest `numStrippedBits` bits of its
 // mantissa, and that subnormal numbers that are too small are rounded to zero.
-TEST_F(IdBaseTest, makeFromDouble) {
+TYPED_TEST(IdBaseTest, makeFromDouble) {
+  using Id = TypeParam;
   auto testRepresentableDouble = [](double d) {
     auto id = Id::makeFromDouble(d);
     ASSERT_EQ(id.getDatatype(), Datatype::Double);
@@ -74,7 +94,7 @@ TEST_F(IdBaseTest, makeFromDouble) {
     if (id.getDouble() != d) {
       // The `if` is needed for the case of += infinity.
       ASSERT_NEAR(id.getDouble(), d,
-                  std::abs(d / (uint64_t{1} << (52 - numStrippedBits))));
+                  std::abs(d / (uint64_t{1} << (52 - numStrippedBits<Id>))));
     }
   };
 
@@ -85,9 +105,9 @@ TEST_F(IdBaseTest, makeFromDouble) {
     ASSERT_EQ(id.getDouble(), 0.0);
   };
   for (size_t i = 0; i < numElements; ++i) {
-    testRepresentableDouble(positiveRepresentableDoubleGenerator());
-    testRepresentableDouble(negativeRepresentableDoubleGenerator());
-    auto nonRepresentable = nonRepresentableDoubleGenerator();
+    testRepresentableDouble(positiveRepresentableDoubleGenerator<Id>());
+    testRepresentableDouble(negativeRepresentableDoubleGenerator<Id>());
+    auto nonRepresentable = nonRepresentableDoubleGenerator<Id>();
     // The random number generator includes the edge cases which would make the
     // tests fail.
     if (nonRepresentable != Id::minPositiveDouble &&
@@ -116,7 +136,7 @@ TEST_F(IdBaseTest, makeFromDouble) {
   // is still a `double` other than zero.
   auto testSmallestNumber = [](double d) {
     ASSERT_EQ(Id::makeFromDouble(d).getDouble(), d);
-    ASSERT_EQ(d / 2 != 0.0, numStrippedBits > 0);
+    ASSERT_EQ(d / 2 != 0.0, numStrippedBits<Id> > 0);
     ASSERT_EQ(Id::makeFromDouble(d / 2).getDouble(), 0.0);
   };
   testSmallestNumber(Id::minPositiveDouble);
@@ -124,14 +144,15 @@ TEST_F(IdBaseTest, makeFromDouble) {
 }
 
 // Test that the integers of the `IntegerType` of the `Id` are stored exactly.
-TEST_F(IdBaseTest, makeFromInt) {
+TYPED_TEST(IdBaseTest, makeFromInt) {
+  using Id = TypeParam;
   auto testInt = [](int64_t value) {
     auto id = Id::makeFromInt(value);
     ASSERT_EQ(id.getDatatype(), Datatype::Int);
     ASSERT_EQ(id.getInt(), value);
   };
   for (size_t i = 0; i < numElements; ++i) {
-    testInt(nonOverflowingNBitGenerator());
+    testInt(nonOverflowingNBitGenerator<Id>());
   }
   for (int64_t value : {Id::IntegerType::min(), int64_t{-1}, int64_t{0},
                         int64_t{1}, Id::IntegerType::max()}) {
@@ -140,7 +161,8 @@ TEST_F(IdBaseTest, makeFromInt) {
 }
 
 // _____________________________________________________________________________
-TEST_F(IdBaseTest, makeFromBool) {
+TYPED_TEST(IdBaseTest, makeFromBool) {
+  using Id = TypeParam;
   EXPECT_TRUE(Id::makeBoolFromZeroOrOne(true).getBool());
   EXPECT_TRUE(Id::makeFromBool(true).getBool());
   EXPECT_FALSE(Id::makeBoolFromZeroOrOne(false).getBool());
@@ -156,7 +178,8 @@ TEST_F(IdBaseTest, makeFromBool) {
 // unchanged, and that a larger value is rejected (there is none for the
 // `SplitLayoutId`, whose `maxIndex` is the largest `uint64_t`). The
 // `LocalVocabIndex` is a pointer and has no `maxIndex`.
-TEST_F(IdBaseTest, Indices) {
+TYPED_TEST(IdBaseTest, Indices) {
+  using Id = TypeParam;
   auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
     auto testSingle = [&](auto value) {
       auto id = makeId(value);
@@ -164,7 +187,7 @@ TEST_F(IdBaseTest, Indices) {
       ASSERT_EQ(std::invoke(getFromId, id), value);
     };
     for (size_t idx = 0; idx < numElements; ++idx) {
-      testSingle(indexGenerator());
+      testSingle(indexGenerator<Id>());
     }
     testSingle(0);
     testSingle(Id::maxIndex);
@@ -172,7 +195,7 @@ TEST_F(IdBaseTest, Indices) {
     if (type != Datatype::LocalVocabIndex &&
         Id::maxIndex < std::numeric_limits<uint64_t>::max()) {
       for (size_t idx = 0; idx < numElements; ++idx) {
-        auto value = invalidIndexGenerator();
+        auto value = invalidIndexGenerator<Id>();
         if (value == Id::maxIndex) {
           continue;
         }
@@ -182,32 +205,37 @@ TEST_F(IdBaseTest, Indices) {
     }
   };
 
-  testRandomIds(&makeTextRecordId, &getTextRecordIndex,
+  testRandomIds(&makeTextRecordId<Id>, &getTextRecordIndex<Id>,
                 Datatype::TextRecordIndex);
-  testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
+  testRandomIds(&makeVocabId<Id>, &getVocabIndex<Id>, Datatype::VocabIndex);
   auto localVocabWordToInt = [](const auto& input) {
     return std::strtoull(getLocalVocabIndex(input).c_str(), nullptr, 10);
   };
-  testRandomIds(&makeLocalVocabId, localVocabWordToInt,
+  testRandomIds(&makeLocalVocabId<Id>, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
-  testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
-  testRandomIds(&makeSecondaryVocabId, &getSecondaryVocabIndex,
+  testRandomIds(&makeWordVocabId<Id>, &getWordVocabIndex<Id>,
+                Datatype::WordVocabIndex);
+  testRandomIds(&makeSecondaryVocabId<Id>, &getSecondaryVocabIndex<Id>,
                 Datatype::SecondaryVocabIndex);
-  testRandomIds(&makeBlankNodeId, &getBlankNodeIndex, Datatype::BlankNodeIndex);
-  testRandomIds(&makeEncodedId, &getEncodedVal, Datatype::EncodedVal);
+  testRandomIds(&makeBlankNodeId<Id>, &getBlankNodeIndex<Id>,
+                Datatype::BlankNodeIndex);
+  testRandomIds(&makeEncodedId<Id>, &getEncodedVal<Id>, Datatype::EncodedVal);
 }
 
 // Test `makeUndefined` and `getUndefined`.
-TEST_F(IdBaseTest, Undefined) {
+TYPED_TEST(IdBaseTest, Undefined) {
+  using Id = TypeParam;
   auto id = Id::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
 
   // `getUndefined()` returns the single value of `UndefinedType`. Its main
   // purpose is the generic code in `visit`, which has to dispatch on the
   // datatype, so we also test it via that path.
-  static_assert(std::is_same_v<decltype(id.getUndefined()), Id::UndefinedType>);
+  static_assert(
+      std::is_same_v<decltype(id.getUndefined()), typename Id::UndefinedType>);
   auto isUndefinedType = [](const auto& value) {
-    return std::is_same_v<std::decay_t<decltype(value)>, Id::UndefinedType>;
+    return std::is_same_v<std::decay_t<decltype(value)>,
+                          typename Id::UndefinedType>;
   };
   EXPECT_TRUE(isUndefinedType(id.getUndefined()));
   EXPECT_TRUE(id.visit(isUndefinedType));
@@ -217,17 +245,18 @@ TEST_F(IdBaseTest, Undefined) {
 // Test `getDatatypeBits` and `getPayloadBits`, the two parts of the bits of an
 // `Id`, together with `fromBits(datatype, payload)` and `fromBits(bits)`, which
 // put them together again.
-TEST_F(IdBaseTest, datatypeBitsAndPayloadBits) {
+TYPED_TEST(IdBaseTest, datatypeBitsAndPayloadBits) {
+  using Id = TypeParam;
   auto checkParts = [](Id id) {
     EXPECT_EQ(id.getDatatypeBits(), static_cast<uint8_t>(id.getDatatype()));
-    EXPECT_LE(id.getPayloadBits(), payloadMask);
+    EXPECT_LE(id.getPayloadBits(), payloadMask<Id>);
     auto rebuilt = Id::fromBits(id.getDatatypeBits(), id.getPayloadBits());
     EXPECT_EQ(rebuilt.getBits(), id.getBits());
     EXPECT_EQ(Id::fromBits(id.getDatatype(), id.getPayloadBits()).getBits(),
               id.getBits());
     EXPECT_EQ(Id::fromBits(id.getBits()).getBits(), id.getBits());
   };
-  for (auto id : makeRandomIds()) {
+  for (auto id : makeRandomIds<Id>()) {
     checkParts(id);
   }
 
@@ -244,19 +273,20 @@ TEST_F(IdBaseTest, datatypeBitsAndPayloadBits) {
   expectParts(Id::makeFromBool(true), Datatype::Bool, 1);
   expectParts(Id::makeFromInt(0), Datatype::Int, 0);
   expectParts(Id::makeFromInt(42), Datatype::Int, 42);
-  expectParts(makeVocabId(42), Datatype::VocabIndex, 42);
+  expectParts(makeVocabId<Id>(42), Datatype::VocabIndex, 42);
   // The largest index fills the whole payload, but does not touch the datatype
   // bits.
-  expectParts(makeVocabId(Id::maxIndex), Datatype::VocabIndex, Id::maxIndex);
+  expectParts(makeVocabId<Id>(Id::maxIndex), Datatype::VocabIndex,
+              Id::maxIndex);
   // A negative integer has all payload bits set, and its sign must not leak
   // into the datatype bits.
-  expectParts(Id::makeFromInt(-1), Datatype::Int, payloadMask);
+  expectParts(Id::makeFromInt(-1), Datatype::Int, payloadMask<Id>);
 
   // Every value of the datatype bits can be combined with every payload, and
   // the two parts do not influence each other.
-  for (uint64_t datatype = 0; datatype < numDatatypeValues; ++datatype) {
+  for (uint64_t datatype = 0; datatype < numDatatypeValues<Id>; ++datatype) {
     for (uint64_t payload :
-         {uint64_t{0}, uint64_t{1}, uint64_t{123456789}, payloadMask}) {
+         {uint64_t{0}, uint64_t{1}, uint64_t{123456789}, payloadMask<Id>}) {
       auto id = Id::fromBits(static_cast<uint8_t>(datatype), payload);
       EXPECT_EQ(uint64_t{id.getDatatypeBits()}, datatype);
       EXPECT_EQ(id.getPayloadBits(), payload);
@@ -271,8 +301,9 @@ TEST_F(IdBaseTest, datatypeBitsAndPayloadBits) {
 
 // Test that sorted `Id`s are ordered by their datatype, except for the string
 // types, whose `Id`s are ordered by their words.
-TEST_F(IdBaseTest, OrderingDifferentDatatypes) {
-  auto ids = makeRandomIds();
+TYPED_TEST(IdBaseTest, OrderingDifferentDatatypes) {
+  using Id = TypeParam;
+  auto ids = makeRandomIds<Id>();
   std::sort(ids.begin(), ids.end());
 
   auto compareByDatatypeAndIndexTypes = [](Id a, Id b) {
@@ -289,10 +320,11 @@ TEST_F(IdBaseTest, OrderingDifferentDatatypes) {
 }
 
 // Test that the `Id`s of an index type are ordered like their indices.
-TEST_F(IdBaseTest, IndexOrdering) {
+TYPED_TEST(IdBaseTest, IndexOrdering) {
+  using Id = TypeParam;
   auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
     std::vector<Id> ids;
-    addIdsFromGenerator(indexGenerator, makeIdFromIndex, ids);
+    addIdsFromGenerator(indexGenerator<Id>, makeIdFromIndex, ids);
     std::vector<std::invoke_result_t<decltype(getIndexFromId), Id>> indices;
     for (auto id : ids) {
       indices.push_back(std::invoke(getIndexFromId, id));
@@ -306,20 +338,21 @@ TEST_F(IdBaseTest, IndexOrdering) {
     }
   };
 
-  testOrder(&makeVocabId, &getVocabIndex);
-  testOrder(&makeLocalVocabId, &getLocalVocabIndex);
-  testOrder(&makeWordVocabId, &getWordVocabIndex);
-  testOrder(&makeSecondaryVocabId, &getSecondaryVocabIndex);
-  testOrder(&makeTextRecordId, &getTextRecordIndex);
-  testOrder(&makeBlankNodeId, &getBlankNodeIndex);
-  testOrder(&makeEncodedId, &getEncodedVal);
+  testOrder(&makeVocabId<Id>, &getVocabIndex<Id>);
+  testOrder(&makeLocalVocabId<Id>, &getLocalVocabIndex<Id>);
+  testOrder(&makeWordVocabId<Id>, &getWordVocabIndex<Id>);
+  testOrder(&makeSecondaryVocabId<Id>, &getSecondaryVocabIndex<Id>);
+  testOrder(&makeTextRecordId<Id>, &getTextRecordIndex<Id>);
+  testOrder(&makeBlankNodeId<Id>, &getBlankNodeIndex<Id>);
+  testOrder(&makeEncodedId<Id>, &getEncodedVal<Id>);
 }
 
 // Test that the `Id`s of `double`s are ordered like their bit patterns: first
 // the positive `double`s in ascending order (followed by the NaNs), and then
 // the negative ones in descending order.
-TEST_F(IdBaseTest, DoubleOrdering) {
-  auto ids = makeRandomDoubleIds();
+TYPED_TEST(IdBaseTest, DoubleOrdering) {
+  using Id = TypeParam;
+  auto ids = makeRandomDoubleIds<Id>();
   std::vector<double> doubles;
   doubles.reserve(ids.size());
   for (auto id : ids) {
@@ -376,9 +409,10 @@ TEST_F(IdBaseTest, DoubleOrdering) {
 // Test that the `Id`s of integers are ordered like their bit patterns: first
 // the non-negative integers and then the negative ones, both in ascending
 // order.
-TEST_F(IdBaseTest, SignedIntegerOrdering) {
+TYPED_TEST(IdBaseTest, SignedIntegerOrdering) {
+  using Id = TypeParam;
   std::vector<Id> ids;
-  addIdsFromGenerator(nonOverflowingNBitGenerator, &Id::makeFromInt, ids);
+  addIdsFromGenerator(nonOverflowingNBitGenerator<Id>, &Id::makeFromInt, ids);
   std::vector<int64_t> integers;
   integers.reserve(ids.size());
   for (auto id : ids) {
@@ -401,8 +435,9 @@ TEST_F(IdBaseTest, SignedIntegerOrdering) {
 }
 
 // Test that an `Id` is the same `Id` again after the serialization.
-TEST_F(IdBaseTest, Serialization) {
-  for (auto id : makeRandomIds()) {
+TYPED_TEST(IdBaseTest, Serialization) {
+  using Id = TypeParam;
+  for (auto id : makeRandomIds<Id>()) {
     ad_utility::serialization::ByteBufferWriteSerializer writer;
     writer << id;
     ad_utility::serialization::ByteBufferReadSerializer reader{
@@ -417,9 +452,10 @@ TEST_F(IdBaseTest, Serialization) {
 // Test that a `HashSet` of `Id`s contains each `Id` exactly once, and that the
 // hash is consistent with `operator==`, also for an `Id` of type
 // `LocalVocabIndex`, which is hashed by its word.
-TEST_F(IdBaseTest, Hashing) {
+TYPED_TEST(IdBaseTest, Hashing) {
+  using Id = TypeParam;
   {
-    auto ids = makeRandomIds();
+    auto ids = makeRandomIds<Id>();
     ad_utility::HashSet<Id> idSet(ids.begin(), ids.end());
     std::vector<Id> idsFromSet(idSet.begin(), idSet.end());
 
@@ -431,7 +467,7 @@ TEST_F(IdBaseTest, Hashing) {
   {
     using namespace ad_utility::triple_component;
     using namespace ad_utility::testing;
-    const Index& index = qec_->getIndex();
+    const Index& index = this->qec_->getIndex();
     auto mkId = makeGetId(index);
     LocalVocab lv1;
     LocalVocab lv2;
@@ -454,8 +490,8 @@ TEST_F(IdBaseTest, Hashing) {
     // payload, so their hashes must take the datatype into account.
     EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly(
         {LVID(lve1, lv1), LVID(lve2, lv2), LVID(lve3, lv1), LVID(lve4, lv1),
-         mkId("<x>"), Id::makeFromInt(0), Id::makeFromInt(42),
-         Id::makeFromDouble(0), Id::makeFromDouble(1.56),
+         makeVocabId<Id>(getVocabIndex(mkId("<x>"))), Id::makeFromInt(0),
+         Id::makeFromInt(42), Id::makeFromDouble(0), Id::makeFromDouble(1.56),
          Id::makeFromDouble(1e-10), Id::makeFromDouble(1e+100),
          Id::makeFromBool(true), Id::makeFromBool(false),
          Id::makeUndefined()}));
@@ -464,7 +500,8 @@ TEST_F(IdBaseTest, Hashing) {
 
 // Test the human-readable representation of an `Id` (see `operator<<`), for
 // all datatypes.
-TEST_F(IdBaseTest, toDebugString) {
+TYPED_TEST(IdBaseTest, toDebugString) {
+  using Id = TypeParam;
   auto test = [](Id id, std::string_view expected) {
     std::stringstream stream;
     stream << id;
@@ -481,22 +518,22 @@ TEST_F(IdBaseTest, toDebugString) {
   test(Id::makeFromBool(true), "B:true");
   test(Id::makeBoolFromZeroOrOne(false), "B:false");
   test(Id::makeBoolFromZeroOrOne(true), "B:true");
-  test(makeVocabId(15), "V:15");
+  test(makeVocabId<Id>(15), "V:15");
   auto str = LocalVocabEntry::literalWithoutQuotes(
-      "SomeValue", qec_->getLocalVocabContext());
+      "SomeValue", this->qec_->getLocalVocabContext());
   test(Id::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
-  test(makeTextRecordId(37), "T:37");
-  test(makeWordVocabId(42), "W:42");
-  test(makeBlankNodeId(27), "B:27");
+  test(makeTextRecordId<Id>(37), "T:37");
+  test(makeWordVocabId<Id>(42), "W:42");
+  test(makeBlankNodeId<Id>(27), "B:27");
   test(Id::makeFromEncodedVal(12), "E:12");
-  test(makeSecondaryVocabId(13), "S:13");
+  test(makeSecondaryVocabId<Id>(13), "S:13");
   test(Id::makeFromDate(
            DateYearOrDuration{123456, DateYearOrDuration::Type::Year}),
        "D:123456");
   test(Id::makeFromGeoPoint(GeoPoint{50.0, 50.0}),
        "G:POINT(50.000000 50.000000)");
   // The payload is printed as an unsigned number, also if it uses all bits.
-  test(makeVocabId(Id::maxIndex), "V:" + std::to_string(Id::maxIndex));
+  test(makeVocabId<Id>(Id::maxIndex), "V:" + std::to_string(Id::maxIndex));
   // The largest `Id` has a datatype that does not exist, which neither the
   // representation nor `visit` accept.
   ASSERT_ANY_THROW(test(Id::max(), "blim"));
@@ -504,13 +541,15 @@ TEST_F(IdBaseTest, toDebugString) {
 }
 
 // _____________________________________________________________________________
-TEST_F(IdBaseTest, TriviallyCopyable) {
+TYPED_TEST(IdBaseTest, TriviallyCopyable) {
+  using Id = TypeParam;
   static_assert(std::is_trivially_copyable_v<Id>);
 }
 
 // Test that `incremented` returns the smallest `Id` that is greater than the
 // original one, with the overflow of the payload carrying into the datatype.
-TEST_F(IdBaseTest, incremented) {
+TYPED_TEST(IdBaseTest, incremented) {
+  using Id = TypeParam;
   // The `Id` after UNDEF has the datatype `Undefined` too, but it is not UNDEF
   // (its payload is 1). The join algorithms use it as the end of the range of
   // the UNDEF values, see `findSmallerUndefRanges...`.
@@ -524,7 +563,7 @@ TEST_F(IdBaseTest, incremented) {
       static_cast<Datatype>(static_cast<size_t>(Datatype::VocabIndex) + 1);
   // NOTE: The next datatype is `LocalVocabIndex`, and an `Id` of this type with
   // the payload 0 is no valid pointer, so the bits are compared.
-  EXPECT_EQ(makeVocabId(Id::maxIndex).incremented().getBits(),
+  EXPECT_EQ(makeVocabId<Id>(Id::maxIndex).incremented().getBits(),
             Id::fromBits(nextDatatype, 0).getBits());
   // The integer -1 has all payload bits set, so the increment is the first `Id`
   // of the next datatype `Double`, which is the `Id` of the double 0.0.
@@ -534,9 +573,9 @@ TEST_F(IdBaseTest, incremented) {
   // the payload, so no other `Id` lies between the two.
   for (const Id id :
        {Id::makeUndefined(), Id::makeFromBool(true), Id::makeFromInt(-42),
-        Id::makeFromDouble(1.5), makeVocabId(5), makeTextRecordId(3),
-        makeWordVocabId(4), makeBlankNodeId(7), makeSecondaryVocabId(9),
-        Id::makeFromEncodedVal(11)}) {
+        Id::makeFromDouble(1.5), makeVocabId<Id>(5), makeTextRecordId<Id>(3),
+        makeWordVocabId<Id>(4), makeBlankNodeId<Id>(7),
+        makeSecondaryVocabId<Id>(9), Id::makeFromEncodedVal(11)}) {
     SCOPED_TRACE(id);
     const auto next = id.incremented();
     EXPECT_EQ(next, Id::fromBits(id.getDatatype(), id.getPayloadBits() + 1));
@@ -555,60 +594,64 @@ TEST_F(IdBaseTest, incremented) {
 // `util/Exception.h`.
 // NOTE: The functions that are only `QL_CONSTEXPR` (`constexpr` in C++20 mode
 // only) are excluded in C++17 mode, see the notes in `global/IdBase.h`.
-namespace constexprId {
-static_assert(Id::makeUndefined().getDatatype() == Datatype::Undefined);
-static_assert(Id::makeFromBool(true).getBool());
-static_assert(!Id::makeBoolFromZeroOrOne(false).getBool());
-static_assert(Id::makeFromInt(42).getDatatype() == Datatype::Int);
-static_assert(Id::makeFromVocabIndex(VocabIndex::make(17)).getVocabIndex() ==
-              VocabIndex::make(17));
-static_assert(Id::makeFromEncodedVal(17).getEncodedVal() == 17);
-static_assert(Id::makeFromTextRecordIndex(TextRecordIndex::make(17))
-                  .getTextRecordIndex() == TextRecordIndex::make(17));
-static_assert(Id::makeFromWordVocabIndex(WordVocabIndex::make(17))
-                  .getWordVocabIndex() == WordVocabIndex::make(17));
-static_assert(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
-                  .getBlankNodeIndex() == BlankNodeIndex::make(17));
-static_assert(Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(17))
-                  .getSecondaryVocabIndex() == SecondaryVocabIndex::make(17));
-static_assert(Id::makeFromBool(true).getBoolLiteral() == "true");
-static_assert(Id::makeBoolFromZeroOrOne(true).getBoolLiteral() == "1");
-static_assert(Id::makeFromVocabIndex(VocabIndex::make(17))
-                  .incremented()
-                  .getVocabIndex() == VocabIndex::make(18));
-static_assert(Id::makeFromInt(5).getPayloadBits() == 5);
-static_assert(Id::makeFromInt(5).getDatatypeBits() ==
-              static_cast<uint8_t>(Datatype::Int));
-// The overloads of `fromBits` and the lambda `fromBitsL`.
-static_assert(Id::fromBits(Id::makeFromInt(5).getBits()).getBits() ==
-              Id::makeFromInt(5).getBits());
-static_assert(Id::fromBits(static_cast<uint8_t>(Datatype::Int), 5).getBits() ==
-              Id::makeFromInt(5).getBits());
-static_assert(Id::fromBits(Datatype::Int, 5).getBits() ==
-              Id::makeFromInt(5).getBits());
-static_assert(Id::fromBitsL(Id::makeFromInt(5).getBits()).getBits() ==
-              Id::makeFromInt(5).getBits());
+template <typename Id>
+struct ConstexprChecks {
+  static_assert(Id::makeUndefined().getDatatype() == Datatype::Undefined);
+  static_assert(Id::makeFromBool(true).getBool());
+  static_assert(!Id::makeBoolFromZeroOrOne(false).getBool());
+  static_assert(Id::makeFromInt(42).getDatatype() == Datatype::Int);
+  static_assert(Id::makeFromVocabIndex(VocabIndex::make(17)).getVocabIndex() ==
+                VocabIndex::make(17));
+  static_assert(Id::makeFromEncodedVal(17).getEncodedVal() == 17);
+  static_assert(Id::makeFromTextRecordIndex(TextRecordIndex::make(17))
+                    .getTextRecordIndex() == TextRecordIndex::make(17));
+  static_assert(Id::makeFromWordVocabIndex(WordVocabIndex::make(17))
+                    .getWordVocabIndex() == WordVocabIndex::make(17));
+  static_assert(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+                    .getBlankNodeIndex() == BlankNodeIndex::make(17));
+  static_assert(Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(17))
+                    .getSecondaryVocabIndex() == SecondaryVocabIndex::make(17));
+  static_assert(Id::makeFromBool(true).getBoolLiteral() == "true");
+  static_assert(Id::makeBoolFromZeroOrOne(true).getBoolLiteral() == "1");
+  static_assert(Id::makeFromVocabIndex(VocabIndex::make(17))
+                    .incremented()
+                    .getVocabIndex() == VocabIndex::make(18));
+  static_assert(Id::makeFromInt(5).getPayloadBits() == 5);
+  static_assert(Id::makeFromInt(5).getDatatypeBits() ==
+                static_cast<uint8_t>(Datatype::Int));
+  // The overloads of `fromBits` and the lambda `fromBitsL`.
+  static_assert(Id::fromBits(Id::makeFromInt(5).getBits()).getBits() ==
+                Id::makeFromInt(5).getBits());
+  static_assert(Id::fromBits(static_cast<uint8_t>(Datatype::Int), 5)
+                    .getBits() == Id::makeFromInt(5).getBits());
+  static_assert(Id::fromBits(Datatype::Int, 5).getBits() ==
+                Id::makeFromInt(5).getBits());
+  static_assert(Id::fromBitsL(Id::makeFromInt(5).getBits()).getBits() ==
+                Id::makeFromInt(5).getBits());
 #ifndef QLEVER_CPP_17
-// `getInt` performs a signed left shift for the legacy `ValueId`, which is only
-// a constant expression since C++20.
-static_assert(Id::makeFromInt(-42).getInt() == -42);
-static_assert(Id::fromBits(Id::makeFromInt(42).getBits()).getInt() == 42);
-static_assert(Id::makeUndefined().isTrivial());
-static_assert(Id::makeUndefined().isUndefined());
-static_assert(!Id::makeFromBool(true).isUndefined());
-static_assert(Id::makeFromDouble(0.5).getDouble() == 0.5);
-// The `compareWithoutLocalVocab` contains two `AD_EXPENSIVE_CHECK`s.
-static_assert(
-    Id::makeFromBool(true).compareWithoutLocalVocab(Id::makeUndefined()) > 0);
-static_assert(
-    Id::makeUndefined().compareWithoutLocalVocab(Id::makeUndefined()) == 0);
+  // `getInt` performs a signed left shift for the legacy `ValueId`, which is
+  // only a constant expression since C++20.
+  static_assert(Id::makeFromInt(-42).getInt() == -42);
+  static_assert(Id::fromBits(Id::makeFromInt(42).getBits()).getInt() == 42);
+  static_assert(Id::makeUndefined().isTrivial());
+  static_assert(Id::makeUndefined().isUndefined());
+  static_assert(!Id::makeFromBool(true).isUndefined());
+  static_assert(Id::makeFromDouble(0.5).getDouble() == 0.5);
+  // The `compareWithoutLocalVocab` contains two `AD_EXPENSIVE_CHECK`s.
+  static_assert(
+      Id::makeFromBool(true).compareWithoutLocalVocab(Id::makeUndefined()) > 0);
+  static_assert(
+      Id::makeUndefined().compareWithoutLocalVocab(Id::makeUndefined()) == 0);
 #endif
-}  // namespace constexprId
+};
+template struct ConstexprChecks<foldedValueId::ValueId>;
+template struct ConstexprChecks<columnBasedIdTable::splitLayout::SplitLayoutId>;
 
 // Note: the `isTrivial` functionality is also tested using `static_assert`s
 // across the codebase, hence we don't test it exhaustively here, but only
 // please the coverage tool.
-TEST(IdBase, isTrivial) {
+TYPED_TEST(IdBaseTest, isTrivial) {
+  using Id = TypeParam;
   EXPECT_TRUE(Id::makeUndefined().isTrivial());
   EXPECT_TRUE(Id::makeFromBool(true).isTrivial());
   EXPECT_TRUE(Id::makeFromInt(42).isTrivial());
@@ -626,7 +669,8 @@ TEST(IdBase, isTrivial) {
 
 // Test that the `Id`s of all datatypes except `LocalVocabIndex` can be compared
 // bitwise.
-TEST(IdBase, canBeComparedBitwise) {
+TYPED_TEST(IdBaseTest, canBeComparedBitwise) {
+  using Id = TypeParam;
   EXPECT_TRUE(Id::makeUndefined().canBeComparedBitwise());
   EXPECT_TRUE(Id::makeFromBool(true).canBeComparedBitwise());
   EXPECT_TRUE(Id::makeFromInt(1337).canBeComparedBitwise());
@@ -650,8 +694,9 @@ TEST(IdBase, canBeComparedBitwise) {
 // `compareThreeWay` for `Id`s of all datatypes except `LocalVocabIndex`, and
 // that it rejects an `Id` of type `LocalVocabIndex` if the expensive checks are
 // enabled.
-TEST_F(IdBaseTest, compareWithoutLocalVocab) {
-  auto ids = makeRandomIds();
+TYPED_TEST(IdBaseTest, compareWithoutLocalVocab) {
+  using Id = TypeParam;
+  auto ids = makeRandomIds<Id>();
   ql::erase_if(
       ids, [](Id id) { return id.getDatatype() == Datatype::LocalVocabIndex; });
   ad_utility::SlowRandomIntGenerator<size_t> indexOfId(0, ids.size() - 1);
@@ -663,17 +708,20 @@ TEST_F(IdBaseTest, compareWithoutLocalVocab) {
   }
   EXPECT_TRUE(Id::makeFromInt(-1).compareWithoutLocalVocab(
                   Id::makeFromDouble(0.0)) < 0);
-  EXPECT_TRUE(makeVocabId(3).compareWithoutLocalVocab(makeVocabId(3)) == 0);
+  EXPECT_TRUE(makeVocabId<Id>(3).compareWithoutLocalVocab(makeVocabId<Id>(3)) ==
+              0);
 
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
-    auto localVocabId = makeLocalVocabId(3);
-    EXPECT_ANY_THROW(localVocabId.compareWithoutLocalVocab(makeVocabId(3)));
-    EXPECT_ANY_THROW(makeVocabId(3).compareWithoutLocalVocab(localVocabId));
+    auto localVocabId = makeLocalVocabId<Id>(3);
+    EXPECT_ANY_THROW(localVocabId.compareWithoutLocalVocab(makeVocabId<Id>(3)));
+    EXPECT_ANY_THROW(makeVocabId<Id>(3).compareWithoutLocalVocab(localVocabId));
   }
 }
 
 // Test all the branches of `compareThreeWay` in which an `Id` of type
-// `LocalVocabIndex` is compared to an `Id` of another datatype.
+// `LocalVocabIndex` is compared to an `Id` of another datatype. This is only
+// tested for the `Id` of the current build, because a `LocalVocabEntry` stores
+// its position as an `Id` of that layout, see the test below for the other one.
 TEST(IdBase, compareThreeWayWithLocalVocabIndex) {
   using namespace ad_utility::testing;
   // Use a fresh index (and not the shared one of `getQec`), because the
@@ -753,17 +801,37 @@ TEST(IdBase, compareThreeWayWithLocalVocabIndex) {
   // of `intId` and `dateId` above.
 }
 
+// Test that the `Id` of the other layout (see `compareThreeWay`) orders a
+// `LocalVocabIndex` by the bits: after every `VocabIndex`, also the one of the
+// same word, and before every `SecondaryVocabIndex`.
+TEST(IdBase, compareThreeWayWithLocalVocabIndexOfOtherLayout) {
+  using OtherId =
+      std::conditional_t<std::is_same_v<Id, foldedValueId::ValueId>,
+                         columnBasedIdTable::splitLayout::SplitLayoutId,
+                         foldedValueId::ValueId>;
+  const Index& index = ad_utility::testing::getQec()->getIndex();
+  LocalVocabEntry entry =
+      iriLocalVocabEntry("<x>", index.getLocalVocabContext());
+  auto localVocabId = OtherId::makeFromLocalVocabIndex(&entry);
+  auto vocabIdOfSameWord = makeVocabId<OtherId>(
+      getVocabIndex(ad_utility::testing::makeGetId(index)("<x>")));
+  EXPECT_LT(vocabIdOfSameWord, localVocabId);
+  EXPECT_LT(makeVocabId<OtherId>(OtherId::maxIndex), localVocabId);
+  EXPECT_LT(localVocabId, makeSecondaryVocabId<OtherId>(0));
+}
+
 // Test that the forwarding lambdas `Id::isUndefinedL`, `Id::isDefinedL`,
 // `Id::getBitsL` and `Id::getDatatypeL` behave like the member functions they
 // forward to, both for an `Id` and for a proxy type that is not an `Id` but
 // provides the same member functions.
-TEST(IdBase, forwardingLambdas) {
+TYPED_TEST(IdBaseTest, forwardingLambdas) {
+  using Id = TypeParam;
   // A proxy type with the member functions, like the elements of a column view
   // that does not store `Id`s.
   struct Proxy {
     Id id_;
     bool isUndefined() const { return id_.isUndefined(); }
-    Id::T getBits() const { return id_.getBits(); }
+    typename Id::T getBits() const { return id_.getBits(); }
     Datatype getDatatype() const { return id_.getDatatype(); }
   };
 
@@ -796,7 +864,8 @@ TEST(IdBase, forwardingLambdas) {
 // Test that the lambda `Id::fromBitsL` forwards to the `fromBits` overload that
 // takes all bits at once. In contrast to `fromBits`, which is overloaded, it
 // can be passed to generic algorithms.
-TEST(IdBase, fromBitsL) {
+TYPED_TEST(IdBaseTest, fromBitsL) {
+  using Id = TypeParam;
   std::vector<Id> ids{Id::makeUndefined(),
                       Id::makeFromBool(true),
                       Id::makeFromInt(42),
@@ -814,7 +883,7 @@ TEST(IdBase, fromBitsL) {
   }
 
   // The lambda works as the transformation of a generic algorithm.
-  std::vector<Id::T> bits;
+  std::vector<typename Id::T> bits;
   ql::ranges::transform(ids, std::back_inserter(bits), Id::getBitsL);
   std::vector<Id> rebuilt(bits.size());
   ql::ranges::transform(bits, rebuilt.begin(), Id::fromBitsL);

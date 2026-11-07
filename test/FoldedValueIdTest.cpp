@@ -20,7 +20,7 @@ namespace foldedValueId {
 TEST(FoldedValueId, bitsArePackedIntoOneWord) {
   static_assert(ValueId::numDatatypeBits == 4);
   static_assert(ValueId::numDataBits == 60);
-  for (auto id : makeRandomIds()) {
+  for (auto id : makeRandomIds<ValueId>()) {
     EXPECT_EQ(id.getBits(),
               (uint64_t{id.getDatatypeBits()} << ValueId::numDataBits) |
                   id.getPayloadBits());
@@ -34,8 +34,8 @@ TEST(FoldedValueId, bitsArePackedIntoOneWord) {
   // `incremented` is the increment of this single word, so the overflow of the
   // payload carries into the datatype bits.
   for (auto id : {ValueId::makeUndefined(), ValueId::makeFromInt(-42),
-                  ValueId::makeFromDouble(1.5), makeVocabId(5),
-                  makeVocabId(ValueId::maxIndex)}) {
+                  ValueId::makeFromDouble(1.5), makeVocabId<ValueId>(5),
+                  makeVocabId<ValueId>(ValueId::maxIndex)}) {
     EXPECT_EQ(id.incremented().getBits(), id.getBits() + 1);
   }
 }
@@ -53,14 +53,14 @@ TEST(FoldedValueId, makeFromIntOverflows) {
       ASSERT_NE(id.getInt(), value);
     }
   };
-  testOverflow(overflowingNBitGenerator);
-  testOverflow(underflowingNBitGenerator);
+  testOverflow(overflowingNBitGenerator<ValueId>);
+  testOverflow(underflowingNBitGenerator<ValueId>);
 }
 
 // Test that an index above `maxIndex` (60 bits) is rejected with an
 // `IndexTooLargeException`.
 TEST(FoldedValueId, indexTooLarge) {
-  EXPECT_THROW(makeVocabId(ValueId::maxIndex + 1),
+  EXPECT_THROW(makeVocabId<ValueId>(ValueId::maxIndex + 1),
                ValueId::IndexTooLargeException);
 }
 
