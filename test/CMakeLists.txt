@@ -417,7 +417,16 @@ addLinkAndDiscoverTest(DurationTest qlever_util)
 
 addLinkAndDiscoverTest(TripleComponentTest)
 
-addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
+# The tests of `IdBase` for the `Id` of the current build (the legacy `ValueId`
+# or the `SplitLayoutId`).
+addLinkAndDiscoverTest(IdBaseTest qlever_util)
+
+# The tests that only make sense for the legacy `ValueId`, which does not
+# compile together with the `SplitLayoutId` (see
+# `engine/idTable/splitLayout/SplitLayoutIdTest.cpp`).
+if (NOT USE_SPLIT_LAYOUT)
+    addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
+endif ()
 
 addLinkAndDiscoverTest(TieTest qlever_util)
 
