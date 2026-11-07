@@ -19,20 +19,10 @@
 #include "global/Id.h"
 
 // Helper functions to encode and decode a column of an `IdTable`, for both
-// layouts of an `Id` (the folded `ValueId`, see `global/FoldedValueId.h`, and
-// the `SplitLayoutId`, see `engine/idTable/splitLayout/SplitLayoutId.h`). They
-// are mostly used to compress the columns for storing them on disk, see
-// `CompressedRelationWriter.cpp` and `CompressedRelationReader.cpp` (the
-// permutations), `CompressedExternalIdTable.h` (the external sorter) and
-// `CompressedIdTableBlocks.h` (the parallel merge). A column has
-// `BYTES_PER_ID_COLUMN_ENTRY` bytes per `Id`.
-//
-// The bytes of a column consist of one chunk per contiguous array in memory,
-// so they are never copied. `encode` calls `useBytes` with the chunks (see
-// `ReadOnlyChunks`) and returns its result. `decode` calls `fillBytes` with
-// buffers of the same sizes (see `Chunks`), which it has to fill completely.
-// The callers compress each chunk as a ZSTD frame of its own, see
-// `ZstdWrapper::compress` and `ZstdWrapper::decompressToBuffers`.
+// layouts of an `Id` (see `global/FoldedValueId.h` and
+// `engine/idTable/splitLayout/SplitLayoutId.h`). They are mostly used to
+// compress the columns for storing them on disk, see `CompressedRelation*.cpp`,
+// `CompressedExternalIdTable.h` and `CompressedIdTableBlocks.h`.
 namespace ad_utility::idColumnByteIO {
 
 // The chunks of a column, one per contiguous array in memory.
