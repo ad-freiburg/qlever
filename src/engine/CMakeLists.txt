@@ -1,4 +1,5 @@
 add_subdirectory(sparqlExpressions)
+add_subdirectory(filterFacts)
 add_library(engine
         QueryExecutionTree.cpp Operation.cpp Result.cpp
         IndexScan.cpp Join.cpp JoinImpl.cpp Sort.cpp
