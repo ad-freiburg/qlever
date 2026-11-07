@@ -200,6 +200,7 @@ TEST(CompressedBlockFile, blocksOfSeveralChunks) {
     }
     threads.clear();
 
+    // Each block comes back unchanged into buffers of the sizes of its chunks.
     for (auto [t, i] : cartesian_product(integerRange(numThreads),
                                          integerRange(numBlocksPerThread))) {
       std::vector<std::byte> payloads(400 + i);

@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -50,12 +50,16 @@ inline auto chunksOf(columnBasedIdTable::splitLayout::IdColumnRef column) {
                     ql::as_writable_bytes(column.rawDatatypes())};
 }
 
+// Call `useBytes` with the bytes of the `source` column as read-only chunks
+// (see `chunksOf`) and return its result, for example the compressed bytes.
 CPP_template(typename Column, typename UseBytes)(
     requires ql::concepts::invocable<UseBytes, ReadOnlyChunks>)
 auto encode(const Column& source, UseBytes useBytes) {
   return useBytes(ReadOnlyChunks{chunksOf(source)});
 }
 
+// Call `fillBytes` with the bytes of the `target` column as writable chunks
+// (see `chunksOf`), which it has to fill completely.
 CPP_template(typename Column, typename FillBytes)(
     requires ql::concepts::invocable<FillBytes, WritableChunks>)
 void decode(const Column& target, FillBytes fillBytes) {

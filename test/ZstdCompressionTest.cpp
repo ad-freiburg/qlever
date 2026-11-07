@@ -56,6 +56,7 @@ TEST(CompressionTest, compressAndDecompressSeveralChunks) {
                                        compressed.size() - firstFrameSize),
       datatypes.size());
 
+  // Each frame is decompressed into its own buffer.
   std::vector<std::byte> payloadsResult(800);
   std::vector<std::byte> datatypesResult(100);
   std::array<ql::span<std::byte>, 2> buffers{payloadsResult, datatypesResult};
