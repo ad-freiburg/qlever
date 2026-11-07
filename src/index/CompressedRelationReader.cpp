@@ -791,8 +791,7 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
   DecompressedBlock decompressedBlock{compressedBlock.size(), allocator_};
   decompressedBlock.resize(numRowsToRead);
   for (size_t i = 0; i < compressedBlock.size(); ++i) {
-    auto col = decompressedBlock.getColumn(i);
-    decompressColumn(compressedBlock[i], numRowsToRead, col.data());
+    decompressColumn(compressedBlock[i], decompressedBlock.getColumn(i));
   }
   return decompressedBlock;
 }
@@ -826,15 +825,12 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 }
 
 // ____________________________________________________________________________
-template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
-    const std::vector<char>& compressedBlock, size_t numRowsToRead,
-    Iterator iterator) {
-  ad_utility::idColumnByteIO::decode(IdColumnRef{iterator, numRowsToRead},
-                                     [&compressedBlock](const auto& buffers) {
-                                       ZstdWrapper::decompressChunks(
-                                           compressedBlock, buffers);
-                                     });
+    const std::vector<char>& compressedBlock, IdColumnRef column) {
+  ad_utility::idColumnByteIO::decode(
+      column, [&compressedBlock](const auto& buffers) {
+        ZstdWrapper::decompressChunks(compressedBlock, buffers);
+      });
 }
 
 // ____________________________________________________________________________
