@@ -459,15 +459,14 @@ void Operation::storeToNamedResultCache(const Result& result) {
 
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
-  auto valueForNamedResultCache = NamedResultCache::Value{
-      std::make_shared<const IdTable>(
-          result.cloneIdTable(cancellationChecker())),
-      getExternallyVisibleVariableColumns(),
-      // TODO<vrbommireddy>: Make `NamedResultCache::Value::resultSortedOn_` a
-      // `qlm::vector<ColumnIndex>` and remove this conversion.
-      std::vector<ColumnIndex>{result.sortedBy().begin(),
-                               result.sortedBy().end()},
-      result.localVocab().clone(), getCacheKey(), geoIndex()};
+  auto valueForNamedResultCache =
+      NamedResultCache::Value{std::make_shared<const IdTable>(
+                                  result.cloneIdTable(cancellationChecker())),
+                              getExternallyVisibleVariableColumns(),
+                              result.sortedBy(),
+                              result.localVocab().clone(),
+                              getCacheKey(),
+                              geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
 

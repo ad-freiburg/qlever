@@ -29,7 +29,7 @@
 class Sort : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
-  std::vector<ColumnIndex> sortColumnIndices_;
+  qlm::vector<ColumnIndex> sortColumnIndices_;
   // If `true`, this `Sort` was created from an explicit `INTERNAL SORT BY`
   // clause. In that case we deliberately do not propagate a `LIMIT`/`OFFSET`
   // to the subtree, because the user explicitly asked for the complete sorted
@@ -38,15 +38,14 @@ class Sort : public Operation {
 
  public:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       std::vector<ColumnIndex> sortColumnIndices, bool explicitSort = false);
+       ql::span<const ColumnIndex> sortColumnIndices,
+       bool explicitSort = false);
 
  public:
   virtual std::string getDescriptor() const override;
 
   virtual qlm::vector<ColumnIndex> resultSortedOn() const override {
-    // TODO<vrbommireddy>: Make `sortColumnIndices_` a
-    // `qlm::vector<ColumnIndex>` and remove this conversion.
-    return {sortColumnIndices_.begin(), sortColumnIndices_.end(), allocator()};
+    return sortColumnIndices_;
   }
 
  private:

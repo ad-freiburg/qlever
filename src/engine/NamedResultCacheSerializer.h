@@ -14,6 +14,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheFormatVersion.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
@@ -131,7 +132,8 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
   serializeDeterministically(serializer, varToColMap);
 
   // Deserialize `resultSortedOn`.
-  std::vector<ColumnIndex> resultSortedOn;
+  qlm::vector<ColumnIndex> resultSortedOn{
+      arg.allocatorForSerialization_.value()};
   serializer >> resultSortedOn;
 
   // Deserialize `cacheKey`.
@@ -209,7 +211,7 @@ void NamedResultCache::readFromSerializer(Serializer& serializer,
     serializer >> key;
 
     // Deserialize the value.
-    Value value;
+    Value value{{}, {}, qlm::vector<ColumnIndex>{allocator}, {}, {}, {}};
     value.allocatorForSerialization_ = allocator;
     value.contextForSerialization_ = &context;
     namedResultCacheSerializer::readValue(serializer, value, readFormatVersion);
@@ -240,7 +242,7 @@ CPP_template(typename Serializer, typename Columns)(
     requires ad_utility::serialization::WriteSerializer<Serializer>)
 void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
                 const Columns& columns,
-                const std::vector<ColumnIndex>& resultSortedOn,
+                ql::span<const ColumnIndex> resultSortedOn,
                 bool writeLocalVocabWords, uint16_t entriesVersion) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {

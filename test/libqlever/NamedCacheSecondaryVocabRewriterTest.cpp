@@ -28,6 +28,7 @@
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace qlever::namedCacheSecondaryVocab;
 using ad_utility::testing::iriLocalVocabEntry;
@@ -276,8 +277,8 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   auto value = std::make_shared<const Value>(Value{
       std::make_shared<const IdTable>(makeIdTableFromVector({{m}, {a}, {y}})),
       VariableToColumnMap{{Variable{"?x"}, makeAlwaysDefinedColumn(0)}},
-      std::vector<ColumnIndex>{}, std::move(localVocab), "handmade",
-      std::nullopt});
+      qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+      std::move(localVocab), "handmade", std::nullopt});
 
   // The secondary vocabulary that is passed in has to be an extension of the
   // one of the index (see the precondition in
@@ -323,7 +324,8 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
     return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
                      {{1, 7, 5, 3}, {2, 6, 5, 4}}, ad_utility::testing::IntId)),
                  map,
-                 std::move(sortedOn),
+                 qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(),
+                                          ad_utility::testing::makeAllocator()},
                  LocalVocab{},
                  "handmade",
                  std::nullopt};
@@ -377,7 +379,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
     return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
                      {{1, 2}, {3, 4}}, ad_utility::testing::IntId)),
                  std::move(map),
-                 {},
+                 qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
                  LocalVocab{},
                  "handmade",
                  std::nullopt};
@@ -415,7 +417,8 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
             makeIdTableFromVector(table, ad_utility::testing::IntId)),
         VariableToColumnMap{{Variable{"?b"}, makeAlwaysDefinedColumn(0)},
                             {Variable{"?a"}, makeAlwaysDefinedColumn(2)}},
-        std::move(sortedOn),
+        qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(),
+                                 ad_utility::testing::makeAllocator()},
         LocalVocab{},
         "handmade",
         std::nullopt};
@@ -456,7 +459,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
   noColumns.resize(1);
   Value zeroColumns{std::make_shared<const IdTable>(std::move(noColumns)),
                     VariableToColumnMap{},
-                    {},
+                    qlm::vector<ColumnIndex>{allocator},
                     LocalVocab{},
                     "handmade",
                     std::nullopt};

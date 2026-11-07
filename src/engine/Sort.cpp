@@ -35,10 +35,11 @@ size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           std::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
+           ql::span<const ColumnIndex> sortColumnIndices, bool explicitSort)
     : Operation{qec},
       subtree_{std::move(subtree)},
-      sortColumnIndices_{std::move(sortColumnIndices)},
+      sortColumnIndices_{sortColumnIndices.begin(), sortColumnIndices.end(),
+                         allocator()},
       explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
@@ -264,10 +265,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
          "different sort order. This indicates a flaw during query planning."
       << std::endl;
-  return ad_utility::makeExecutionTree<Sort>(
-      _executionContext, subtree_,
-      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()),
-      explicitSort_);
+  return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
+                                             sortColumns, explicitSort_);
 }
 
 // _____________________________________________________________________________

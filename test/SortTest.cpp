@@ -102,7 +102,7 @@ TEST(Sort, sortNumTasksInFlight) {
   for (uint32_t numTasks : {0, 1, 2, 3, 8}) {
     IdTable input = shuffled.clone();
     IdTableUtils::sort(
-        input, {0},
+        input, std::vector<ColumnIndex>{0},
         SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks});
     EXPECT_EQ(input, expected) << "numTasks = " << numTasks;
   }
@@ -293,7 +293,7 @@ TEST(Sort, inMemorySortIsCancellable) {
   for (uint32_t numTasks : {1, 8}) {
     IdTable input = table.clone();
     EXPECT_THROW(IdTableUtils::sort(
-                     input, {0},
+                     input, std::vector<ColumnIndex>{0},
                      SortConfig{ad_utility::testing::multiThreadExecutor(),
                                 numTasks, handle}),
                  ad_utility::CancellationException)
@@ -373,7 +373,7 @@ TEST(Sort, externalSortLazyInput) {
           ad_utility::MemorySize::kilobytes(100));
 
   // Create the `Sort` operation and get the result.
-  Sort externalSort{qec, subtree, {0, 1, 2}};
+  Sort externalSort{qec, subtree, std::vector<ColumnIndex>{0, 1, 2}};
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
@@ -421,7 +421,7 @@ TEST(Sort, externalSortMaterializedInput) {
       LocalVocab{}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
-  Sort externalSort{qec, subtree, {0, 1, 2}};
+  Sort externalSort{qec, subtree, std::vector<ColumnIndex>{0, 1, 2}};
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
@@ -517,7 +517,7 @@ TEST(Sort, inMemorySortMaterializedInput) {
       LocalVocab{}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
-  Sort inMemorySort{qec, subtree, {0, 1, 2}};
+  Sort inMemorySort{qec, subtree, std::vector<ColumnIndex>{0, 1, 2}};
   auto result = inMemorySort.getResult();
 
   // Verify the result is sorted correctly.
@@ -540,7 +540,7 @@ TEST(Sort, limitOffsetIsPropagated) {
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars);
 
-  Sort sort{qec, subtree, {0}};
+  Sort sort{qec, subtree, std::vector<ColumnIndex>{0}};
   sort.applyLimitOffset({2, 1}, false);
 
   EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),

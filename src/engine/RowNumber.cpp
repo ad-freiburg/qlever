@@ -23,12 +23,12 @@
 RowNumber::RowNumber(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      Variable rowNumberVariable, int64_t offset,
-                     std::vector<ColumnIndex> sortedOn)
+                     ql::span<const ColumnIndex> sortedOn)
     : Operation{qec},
       child_{std::move(child)},
       rowNumberVariable_{std::move(rowNumberVariable)},
       offset_{offset},
-      sortedOn_{std::move(sortedOn)} {
+      sortedOn_{sortedOn.begin(), sortedOn.end(), allocator()} {
   // Negative row numbers would break the sorting by the row number column,
   // because `Id`s of integers are compared by their bits.
   AD_CONTRACT_CHECK(offset_ >= 0);
@@ -112,14 +112,11 @@ std::optional<std::shared_ptr<QueryExecutionTree>> RowNumber::makeSortedTree(
     return std::nullopt;
   }
   return ad_utility::makeExecutionTree<RowNumber>(
-      getExecutionContext(), child_, rowNumberVariable_, offset_,
-      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()));
+      getExecutionContext(), child_, rowNumberVariable_, offset_, sortColumns);
 }
 
 // _____________________________________________________________________________
-qlm::vector<ColumnIndex> RowNumber::resultSortedOn() const {
-  return {sortedOn_.begin(), sortedOn_.end(), allocator()};
-}
+qlm::vector<ColumnIndex> RowNumber::resultSortedOn() const { return sortedOn_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap RowNumber::computeVariableToColumnMap() const {

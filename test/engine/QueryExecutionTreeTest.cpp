@@ -127,7 +127,7 @@ TEST(QueryExecutionTree, createDistinctTreeFallbackAddsDistinct) {
   auto tree = QueryExecutionTree::createDistinctTree(values, SC{0, 1});
   auto distinct = std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
   ASSERT_TRUE(distinct);
-  EXPECT_EQ(distinct->getDistinctColumns(), (SC{0, 1}));
+  EXPECT_THAT(distinct->getDistinctColumns(), ::testing::ElementsAre(0, 1));
 }
 
 // _____________________________________________________________________________

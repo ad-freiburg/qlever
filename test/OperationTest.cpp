@@ -650,7 +650,7 @@ TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
             ad_utility::makeExecutionTree<ValuesForTesting>(
                 qec, makeIdTableFromVector({{1}}),
                 std::vector<std::optional<Variable>>{Variable{"?x"}}),
-            {0}};
+            std::vector<ColumnIndex>{0}};
   // The child of the `Sort` was optimized out, but its own child is only
   // computed afterwards.
   auto& childRti = sort.getChildren().at(0)->getRootOperation()->runtimeInfo();

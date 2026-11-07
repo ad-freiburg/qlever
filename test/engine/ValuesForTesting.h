@@ -51,7 +51,8 @@ class ValuesForTesting : public Operation {
         handlesLimit_{handlesLimit},
         sizeEstimate_{table.numRows()},
         costEstimate_{table.numRows()},
-        resultSortedColumns_{std::move(sortedColumns)},
+        resultSortedColumns_{sortedColumns.begin(), sortedColumns.end(),
+                             allocator()},
         multiplicity_{multiplicity},
         forceFullyMaterialized_{forceFullyMaterialized} {
     AD_CONTRACT_CHECK(variables_.size() == table.numColumns());
@@ -77,7 +78,8 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{0},
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
-        resultSortedColumns_{std::move(sortedColumns)},
+        resultSortedColumns_{sortedColumns.begin(), sortedColumns.end(),
+                             allocator()},
         multiplicity_{std::nullopt} {
     AD_CONTRACT_CHECK(
         ql::ranges::all_of(this->tables(), [this](const IdTable& table) {
@@ -188,10 +190,7 @@ class ValuesForTesting : public Operation {
   }
 
   qlm::vector<ColumnIndex> resultSortedOn() const override {
-    // TODO<vrbommireddy>: Make `resultSortedColumns_` a
-    // `qlm::vector<ColumnIndex>` and remove this conversion.
-    return {resultSortedColumns_.begin(), resultSortedColumns_.end(),
-            allocator()};
+    return resultSortedColumns_;
   }
 
   size_t getCostEstimate() override { return costEstimate_; }
@@ -261,7 +260,7 @@ class ValuesForTesting : public Operation {
     return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 
-  std::vector<ColumnIndex> resultSortedColumns_;
+  qlm::vector<ColumnIndex> resultSortedColumns_;
   std::optional<float> multiplicity_;
   bool forceFullyMaterialized_ = false;
 };

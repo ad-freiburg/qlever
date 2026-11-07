@@ -322,8 +322,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet),
-      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()),
+      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
       explicitSort);
 }
 
@@ -400,8 +399,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   }
 
   return ad_utility::makeExecutionTree<Distinct>(
-      rootOperation->getExecutionContext(), std::move(qet),
-      std::vector<ColumnIndex>(distinctIndices.begin(), distinctIndices.end()));
+      rootOperation->getExecutionContext(), std::move(qet), distinctIndices);
 }
 
 // _____________________________________________________________________________

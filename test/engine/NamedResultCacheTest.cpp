@@ -5,11 +5,13 @@
 #include <gmock/gmock.h>
 
 #include "../QueryPlannerTestHelpers.h"
+#include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
+#include "util/ContainersWithAllocator.h"
 
 using ad_utility::testing::iriLocalVocabEntry;
 
@@ -48,7 +50,7 @@ TEST(NamedResultCache, basicWorkflow) {
     return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
-        {1, 0},
+        qlm::vector<ColumnIndex>{{1, 0}, ad_utility::testing::makeAllocator()},
         localVocab.clone(),
         "cache key",
         std::nullopt};

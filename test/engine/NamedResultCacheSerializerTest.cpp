@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "../QueryPlannerTestHelpers.h"
+#include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
@@ -18,6 +19,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
@@ -44,7 +46,8 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-    NamedResultCache::Value result;
+    NamedResultCache::Value result{{}, {}, qlm::vector<ColumnIndex>{allocator},
+                                   {}, {}, {}};
     result.allocatorForSerialization_ = std::move(allocator);
     result.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> result;
@@ -63,20 +66,22 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     VariableToColumnMap varColMap;
     varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
     varColMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
-    return NamedResultCache::Value{std::make_shared<const IdTable>(
-                                       makeIdTableFromVector({{1, 2}, {3, 4}})),
-                                   std::move(varColMap),
-                                   {0},
-                                   LocalVocab{},
-                                   std::move(cacheKey),
-                                   std::nullopt};
+    return NamedResultCache::Value{
+        std::make_shared<const IdTable>(
+            makeIdTableFromVector({{1, 2}, {3, 4}})),
+        std::move(varColMap),
+        qlm::vector<ColumnIndex>{{0}, ad_utility::testing::makeAllocator()},
+        LocalVocab{},
+        std::move(cacheKey),
+        std::nullopt};
   }
 
   // Read a `Value` from the given serialized `data`.
   NamedResultCache::Value deserializeValue(std::vector<char> data) const {
     ByteBufferReadSerializer readSerializer{std::move(data)};
-    NamedResultCache::Value value;
-    value.allocatorForSerialization_ = ad_utility::makeUnlimitedAllocator<Id>();
+    NamedResultCache::Value value{{}, {}, qlm::vector<ColumnIndex>{alloc_},
+                                  {}, {}, {}};
+    value.allocatorForSerialization_ = alloc_;
     value.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> value;
     return value;
@@ -101,7 +106,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
-  std::vector<ColumnIndex> sortedOn = {0, 1};
+  qlm::vector<ColumnIndex> sortedOn{{0, 1},
+                                    ad_utility::testing::makeAllocator()};
 
   std::string cacheKey = "test-cache-key";
 
@@ -154,19 +160,21 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
-  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
-                                varColMap,
-                                {0, 1},
-                                LocalVocab{},
-                                "test-cache-key",
-                                std::nullopt};
+  NamedResultCache::Value value{
+      std::make_shared<const IdTable>(table.clone()),
+      varColMap,
+      qlm::vector<ColumnIndex>{{0, 1}, ad_utility::testing::makeAllocator()},
+      LocalVocab{},
+      "test-cache-key",
+      std::nullopt};
 
   AlignedByteBufferWriteSerializer writeSerializer;
   writeSerializer << value;
   AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
 
-  NamedResultCache::Value deserializedValue;
+  NamedResultCache::Value deserializedValue{
+      {}, {}, qlm::vector<ColumnIndex>{alloc_}, {}, {}, {}};
   deserializedValue.allocatorForSerialization_ = alloc_;
   deserializedValue.contextForSerialization_ =
       &qec_->getIndex().getLocalVocabContext();
@@ -208,21 +216,19 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   vocab2.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
-  cache.store("query-1", NamedResultCache::Value{
-                             std::make_shared<const IdTable>(table1.clone()),
-                             varColMap1,
-                             {0},
-                             std::move(vocab1),
-                             "key1",
-                             std::nullopt});
+  cache.store(
+      "query-1",
+      NamedResultCache::Value{
+          std::make_shared<const IdTable>(table1.clone()), varColMap1,
+          qlm::vector<ColumnIndex>{{0}, ad_utility::testing::makeAllocator()},
+          std::move(vocab1), "key1", std::nullopt});
 
-  cache.store("query-2", NamedResultCache::Value{
-                             std::make_shared<const IdTable>(table2.clone()),
-                             varColMap2,
-                             {1, 0},
-                             std::move(vocab2),
-                             "key2",
-                             std::nullopt});
+  cache.store("query-2",
+              NamedResultCache::Value{
+                  std::make_shared<const IdTable>(table2.clone()), varColMap2,
+                  qlm::vector<ColumnIndex>{
+                      {1, 0}, ad_utility::testing::makeAllocator()},
+                  std::move(vocab2), "key2", std::nullopt});
 
   EXPECT_EQ(cache.numEntries(), 2);
 
@@ -492,7 +498,7 @@ TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
         std::make_shared<const IdTable>(
             makeIdTableFromVector({{0, 1, 2, 3}, {4, 5, 6, 7}})),
         std::move(varColMap),
-        {0, 1},
+        qlm::vector<ColumnIndex>{{0, 1}, ad_utility::testing::makeAllocator()},
         LocalVocab{},
         "cache-key",
         std::nullopt};
@@ -540,12 +546,13 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
       "<http://example.org/test>", qec_->getLocalVocabContext()));
   ASSERT_EQ(localVocab.size(), 1);
 
-  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
-                                std::move(varColMap),
-                                {0, 1},
-                                std::move(localVocab),
-                                "test-cache-key",
-                                std::nullopt};
+  NamedResultCache::Value value{
+      std::make_shared<const IdTable>(table.clone()),
+      std::move(varColMap),
+      qlm::vector<ColumnIndex>{{0, 1}, ad_utility::testing::makeAllocator()},
+      std::move(localVocab),
+      "test-cache-key",
+      std::nullopt};
 
   // The replaced columns have the same shape as the table of the `value`, but
   // different `Id`s. The sort order is shortened, because the replacement

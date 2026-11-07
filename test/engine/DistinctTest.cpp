@@ -46,8 +46,9 @@ TEST(Distinct, CacheKey) {
       ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
       std::vector<ColumnIndex>{0, 1});
   Distinct d2(ad_utility::testing::getQec(),
-              ad_utility::makeExecutionTree<NeutralElementOperation>(qec), {0});
-  Distinct d3(ad_utility::testing::getQec(), d, {0});
+              ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+              std::vector<ColumnIndex>{0});
+  Distinct d3(ad_utility::testing::getQec(), d, std::vector<ColumnIndex>{0});
 
   EXPECT_NE(d->getCacheKey(), d2.getCacheKey());
   EXPECT_NE(d->getCacheKey(), d3.getCacheKey());
@@ -143,7 +144,7 @@ TEST(Distinct, nonLazy) {
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
       false, std::vector<ColumnIndex>{1, 2}, LocalVocab{}, std::nullopt, true);
 
-  Distinct distinct{qec, std::move(values), {1, 2}};
+  Distinct distinct{qec, std::move(values), std::vector<ColumnIndex>{1, 2}};
 
   {
     auto result =
@@ -179,7 +180,7 @@ TEST(Distinct, nonLazyWithLazyInputs) {
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
       false, std::vector<ColumnIndex>{1, 2});
 
-  Distinct distinct{qec, std::move(values), {1, 2}};
+  Distinct distinct{qec, std::move(values), std::vector<ColumnIndex>{1, 2}};
 
   auto result = distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
   ASSERT_TRUE(result->isFullyMaterialized());
@@ -209,7 +210,7 @@ TEST(Distinct, lazyWithLazyInputs) {
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
       false, std::vector<ColumnIndex>{1, 2});
 
-  Distinct distinct{qec, std::move(values), {1, 2}};
+  Distinct distinct{qec, std::move(values), std::vector<ColumnIndex>{1, 2}};
 
   auto result = distinct.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isFullyMaterialized());
