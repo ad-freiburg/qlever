@@ -248,12 +248,13 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return cloneWithNewChildren({_subtree->clone()});
+  return cloneWithNewChildren(qlm::vector<std::shared_ptr<QueryExecutionTree>>{
+      {_subtree->clone()}, allocator()});
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Bind>(_executionContext, std::move(children.at(0)),
                                 _bind);
 }
@@ -266,5 +267,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
   if (_bind._expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
-  return pushDownBindToAnyChild(bind, {_subtree});
+  return pushDownBindToAnyChild(
+      bind, qlm::vector<std::shared_ptr<QueryExecutionTree>>{{_subtree},
+                                                             allocator()});
 }

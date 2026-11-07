@@ -101,12 +101,15 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // The `BIND` can only be pushed into the left child, as only its columns are
   // part of the result.
-  return pushDownBindToChild(bind, {_left, _right}, 0);
+  return pushDownBindToChild(bind,
+                             qlm::vector<std::shared_ptr<QueryExecutionTree>>{
+                                 {_left, _right}, allocator()},
+                             0);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Minus::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Minus>(_executionContext, std::move(children.at(0)),
                                  std::move(children.at(1)));
 }

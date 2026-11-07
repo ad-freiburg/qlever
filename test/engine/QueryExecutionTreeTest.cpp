@@ -168,7 +168,7 @@ TEST(QueryExecutionTree, createDistinctTreeKeepsHiddenVariablesHidden) {
   auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{5}, {6}}), Vars{Var{"?b"}});
   auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
-      qec, CartesianProductJoin::Children{left, right});
+      qec, CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
   cartesian->getRootOperation()->setSelectedVariablesForSubquery({a});
 
   auto tree = QueryExecutionTree::createDistinctTree(

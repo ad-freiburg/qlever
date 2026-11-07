@@ -144,9 +144,10 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeStartingPoint(
     // matched in.
     tree = ad_utility::makeExecutionTree<CartesianProductJoin>(
         qec,
-        std::vector<std::shared_ptr<QueryExecutionTree>>{
-            std::move(tree), DistinctGraphs::makeAllGraphs(
-                                 qec, graphVariable.value(), activeGraphs)});
+        CartesianProductJoin::Children{
+            {std::move(tree), DistinctGraphs::makeAllGraphs(
+                                  qec, graphVariable.value(), activeGraphs)},
+            qec->getAllocator()});
   }
   return tree;
 }

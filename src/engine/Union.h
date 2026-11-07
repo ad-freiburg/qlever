@@ -184,7 +184,7 @@ class Union : public Operation {
 
   // ___________________________________________________________________________
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // ___________________________________________________________________________
   std::optional<std::shared_ptr<QueryExecutionTree>>
