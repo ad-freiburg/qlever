@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/Iterators.h"
@@ -23,9 +24,6 @@
 #include "util/ParsedUri.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
-
-/// Several classes that can be used as the `ValueGetter` template
-/// argument in the SparqlExpression templates in `SparqlExpression.h`
 
 namespace sparqlExpression::detail {
 
@@ -402,23 +400,36 @@ struct IriValueGetter : Mixin<IriValueGetter> {
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
-struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
+// `EnumValueGetter` is a templated `ValueGetter` that returns an enum using the
+// `iriToValue` function.
+CPP_template(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
+  using Value = decltype(undefined);
   // Set the size of this cache to at least the number of supported units.
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
-  using Value = UnitOfMeasurement;
-  using Mixin<UnitOfMeasurementValueGetter>::operator();
-  UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
-  UnitOfMeasurement operator()(const LiteralOrIri& s,
-                               const EvaluationContext*) const;
+  mutable ad_utility::util::LRUCache<ValueId, Value> cache_{16};
+  using Mixin<EnumValueGetter<iriToValue, undefined>>::operator();
+  Value operator()(ValueId id, const EvaluationContext*) const;
+  Value operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 
   // The actual implementation for a given `LiteralOrIri` which is guaranteed
   // not to use the `EvaluationContext`. This method can be used to convert
-  // `LiteralOrIri` objects holding a unit of measurement, even when no
+  // `LiteralOrIri` objects holding an Enum `Value`, even when no
   // `EvaluationContext` is available. Currently used for `geof:distance` filter
   // substitution during query planning.
-  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+  static Value litOrIriToValue(const LiteralOrIri& s);
 };
+
+using UnitOfMeasurementValueGetter =
+    EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                    UnitOfMeasurement::UNKNOWN>;
+
+// As `util` is not included in this file, we use this constant instead of
+// `util::geo::CRSType::UNSUPPORTED`.
+constexpr inline util::geo::CRSType crsTypeUnsupported{0};
+using CRSTypeValueGetter =
+    EnumValueGetter<&ad_utility::detail::iriToCrsType, crsTypeUnsupported>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.

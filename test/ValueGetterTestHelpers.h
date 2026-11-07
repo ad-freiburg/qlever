@@ -162,6 +162,7 @@ inline const std::vector<std::string> secondaryVocabWords{
     "\"someSecondaryType\"^^<someType>",
     "\"withSecondaryLang\"@en",
     "<http://qudt.org/vocab/unit/M>",
+    "<http://www.opengis.net/def/crs/EPSG/0/4326>",
     "<https://example.com/secondary>"};
 
 // Names for the words of `secondaryVocabWords`, to be used with the helpers
@@ -172,7 +173,8 @@ inline const std::string secondaryPlainLiteral = secondaryVocabWords.at(2);
 inline const std::string secondaryTypedLiteral = secondaryVocabWords.at(3);
 inline const std::string secondaryLangLiteral = secondaryVocabWords.at(4);
 inline const std::string secondaryUnitIri = secondaryVocabWords.at(5);
-inline const std::string secondaryIri = secondaryVocabWords.at(6);
+inline const std::string secondaryCrsIri = secondaryVocabWords.at(6);
+inline const std::string secondaryIri = secondaryVocabWords.at(7);
 
 // The words of the vocabulary of the index of `AllDatatypesTestContext`, one
 // per kind of literal and IRI that the value getters distinguish. They are
@@ -259,9 +261,11 @@ inline void checkLiteralContentAndDatatypeFromSecondaryVocabId(
 
 }  // namespace valueGetterTestHelpers
 
-namespace unitVGTestHelpers {
+namespace enumVGTestHelpers {
 
+using namespace ad_utility;
 using namespace valueGetterTestHelpers;
+using Loc = source_location;
 
 // Test turtle for
 const std::string unitTtl = R"(
@@ -278,49 +282,90 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         "1.5"^^<http://example.com>, 
         "x".
   )";
+const std::string crsTtl = R"(
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+<x> <y> "http://www.opengis.net/def/crs/OGC/1.3/CRS84"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/4326"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/3857"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/unsupported"^^xsd:anyURI, 
+        <http://www.opengis.net/def/crs/OGC/1.3/CRS84>, 
+        <http://www.opengis.net/def/crs/EPSG/0/4326>, 
+        <http://www.opengis.net/def/crs/EPSG/0/3857>,
+        <http://www.opengis.net/def/crs/EPSG/0/unsupported>,
+        "1.5"^^<http://example.com>, 
+        "x".
+  )";
 
-// Apply `getter` to `id` in the given context and check the result.
-inline void checkUnitValueGetterForId(
-    TestContextWithGivenTTl& testContext, Id id,
-    UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  ASSERT_EQ(getter(id, &testContext.context), expectedResult);
+// Returns the appropriate test context depending on the enum type.
+template <typename EnumT>
+inline TestContextWithGivenTTl getContext() {
+  if constexpr (std::is_same_v<EnumT, UnitOfMeasurement>) {
+    return TestContextWithGivenTTl{unitTtl};
+  } else if constexpr (std::is_same_v<EnumT, ::util::geo::CRSType>) {
+    return TestContextWithGivenTTl{crsTtl};
+  } else {
+    static_assert(ad_utility::alwaysFalse<EnumT>);
+  }
 }
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input
-inline void checkUnitValueGetterFromId(
-    const std::string& fullLiteralOrIri, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
-  checkUnitValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
+// Apply `getter` to `id` in the given context and check the result.
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterForId(
+    TestContextWithGivenTTl& testContext, Id id,
+    decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  EXPECT_EQ(getter(id, &testContext.context), expectedResult);
+}
+
+// Helper to test EnumValueGetter using ValueId input
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromId(
+    const std::string& fullLiteralOrIri, decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
+  checkEnumValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
                             expectedResult, getter);
 };
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input where the
+// Helper to test EnumValueGetter using ValueId input where the
 // ValueId represents an encoded value
-inline void checkUnitValueGetterFromIdEncodedValue(
-    ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
-  checkUnitValueGetterForId(testContext, id, UnitOfMeasurement::UNKNOWN,
-                            getter);
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromIdEncodedValue(
+    ValueId id,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
+  checkEnumValueGetterForId(testContext, id, undefined, getter);
 }
 
-// Helper to test `UnitOfMeasurementValueGetter` on the given word of a
-// secondary vocabulary, see `checkUnitValueGetterFromId` above. The word has to
+// Helper to test `EnumValueGetter` on the given word of a
+// secondary vocabulary, see `checkEnumValueGetterFromId` above. The word has to
 // be one of `secondaryVocabWords`.
-inline void checkUnitValueGetterFromSecondaryVocabId(
-    const std::string& word, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromSecondaryVocabId(
+    const std::string& word, decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
   AllDatatypesTestContext testContext;
-  checkUnitValueGetterForId(testContext, testContext.secondaryVocabId(word),
+  checkEnumValueGetterForId(testContext, testContext.secondaryVocabId(word),
                             expectedResult, getter);
 }
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input
-inline void checkUnitValueGetterFromLiteralOrIri(
-    const std::string& unitIriWithoutBrackets, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
+// Helper to test EnumValueGetter using ValueId input
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromLiteralOrIri(
+    const std::string& unitIriWithoutBrackets,
+    decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
 
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Iri = ad_utility::triple_component::Iri;
@@ -328,8 +373,7 @@ inline void checkUnitValueGetterFromLiteralOrIri(
   auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
                     bool expectSuccess) {
     auto actualResult = getter(litOrIri, &testContext.context);
-    ASSERT_EQ(actualResult,
-              expectSuccess ? expectedResult : UnitOfMeasurement::UNKNOWN);
+    EXPECT_EQ(actualResult, expectSuccess ? expectedResult : undefined);
   };
 
   // Test xsd:anyURI literal method
@@ -351,7 +395,7 @@ inline void checkUnitValueGetterFromLiteralOrIri(
          true);
 };
 
-}  // namespace unitVGTestHelpers
+}  // namespace enumVGTestHelpers
 
 namespace geoInfoVGTestHelpers {
 
