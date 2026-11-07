@@ -5,6 +5,8 @@
 #ifndef QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H
 #define QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H
 
+#include <absl/base/no_destructor.h>
+
 #include "global/Id.h"
 #include "util/Allocator.h"
 #include "util/AllocatorWithLimit.h"
@@ -12,9 +14,19 @@
 
 namespace ad_utility::testing {
 // Create a backend-agnostic allocator with the specified memory limit. If no
-// argument is specified, the allocator is unlimited.
+// argument is specified, the allocator is unlimited. Unlimited allocators are
+// non-owning copies of a single global allocator, so that copying them costs
+// no atomic operation.
 inline ad_utility::AllocatorWithLimit<Id> makeAllocator(
     MemorySize memorySize = MemorySize::max()) {
+  if (memorySize == MemorySize::max()) {
+    // The owner is intentionally never destroyed, because non-owning copies
+    // might be stored in objects with static storage duration that are
+    // destroyed later.
+    static const absl::NoDestructor<ad_utility::AllocatorWithLimit<Id>> owner{
+        qlever::makeAllocatorWithLimit<Id>(memorySize)};
+    return owner->nonOwningCopy();
+  }
   return qlever::makeAllocatorWithLimit<Id>(memorySize);
 }
 }  // namespace ad_utility::testing

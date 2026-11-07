@@ -1,9 +1,14 @@
-// Copyright 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "engine/StringMapping.h"
+#include "engine/binaryExport/StringMapping.h"
 
 #include <utility>
 
@@ -66,11 +71,9 @@ Id StringMapping::remapId(Id id) {
     AD_CORRECTNESS_CHECK(strings_.size() == stringMapping_.size());
   }
 
-  // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
-  // are all zero and then performs a right shift. We have to shift the
-  // `distinctIndex` left by the same amount to counter this effect.
-  return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
-      distinctIndex << Id::numDatatypeBits));
+  // The `distinctIndex` is not a pointer, so it is stored directly as the
+  // payload, without `Id::makeFromLocalVocabIndex`.
+  return Id::fromBits(Datatype::LocalVocabIndex, distinctIndex);
 }
 
 }  // namespace qlever::binary_export

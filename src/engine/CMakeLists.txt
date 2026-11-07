@@ -2,7 +2,7 @@ add_subdirectory(sparqlExpressions)
 add_library(engine
         QueryExecutionTree.cpp Operation.cpp Result.cpp
         IndexScan.cpp Join.cpp JoinImpl.cpp Sort.cpp
-        Distinct.cpp OrderBy.cpp Filter.cpp
+        Distinct.cpp OrderBy.cpp OrderByOnSortedNumericInput.cpp NumericRun.cpp Filter.cpp
         QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
@@ -15,13 +15,14 @@ add_library(engine
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp Load.cpp StripColumns.cpp RowNumber.cpp NamedResultCache.cpp EmptyPath.cpp
-        ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
+        ExplicitIdTableOperation.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
         ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp
         MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp ExternalValues.cpp
-        DistinctGraphs.cpp BinaryExport.cpp)
+        DistinctGraphs.cpp)
 add_subdirectory(spatialJoinAlgorithms)
+add_subdirectory(binaryExport)
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers

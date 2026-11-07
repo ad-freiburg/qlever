@@ -21,6 +21,7 @@
 #include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
+#include "util/Views.h"
 
 using namespace std::chrono_literals;
 
@@ -462,8 +463,8 @@ void Operation::storeToNamedResultCache(const Result& result) {
       std::make_shared<const IdTable>(
           result.cloneIdTable(cancellationChecker())),
       getExternallyVisibleVariableColumns(),
-      // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
-      // migrated to `qlm::vector` throughout the Operation hierarchy.
+      // TODO<vrbommireddy>: Make `NamedResultCache::Value::resultSortedOn_` a
+      // `qlm::vector<ColumnIndex>` and remove this conversion.
       std::vector<ColumnIndex>{result.sortedBy().begin(),
                                result.sortedBy().end()},
       result.localVocab().clone(), getCacheKey(), geoIndex()};
@@ -620,6 +621,15 @@ void Operation::applyLimitOffsetToChild(
   child->applyLimitOffset(limitOffset, true);
 }
 
+// _____________________________________________________________________________
+std::vector<size_t> Operation::getCostEstimatesChargedForChildren() {
+  // Not piped as a temporary: libc++ would then wrap it in an `owning_view`,
+  // which requires the (deleted) default constructor of the allocator.
+  auto children = getChildren();
+  return ::ranges::to_vector(
+      children | ql::views::transform(&QueryExecutionTree::getCostEstimate));
+}
+
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
     std::shared_ptr<const RuntimeInformation> root) {
@@ -629,11 +639,26 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->numCols_ = numCols;
   _runtimeInfo->descriptor_ = getDescriptor();
 
-  for (const auto& child : getChildren()) {
+  auto chargedCosts = getCostEstimatesChargedForChildren();
+  auto children = getChildren();
+  AD_CORRECTNESS_CHECK(chargedCosts.size() == children.size());
+  for (const auto& [child, chargedCost] :
+       ::ranges::views::zip(children, chargedCosts)) {
     AD_CONTRACT_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates(root);
-    _runtimeInfo->children_.push_back(
-        child->getRootOperation()->getRuntimeInfoPointer());
+    auto childInfo = child->getRootOperation()->getRuntimeInfoPointer();
+    // Show the cost that this operation charges for the child, so that the
+    // operation costs in the runtime information add up to the total cost.
+    // NOTE: The runtime information of a child is updated in place, so the
+    // detail of a previous computation is erased if it no longer applies.
+    if (chargedCost != childInfo->costEstimate_) {
+      childInfo->addDetail("standalone-cost-estimate",
+                           childInfo->costEstimate_);
+      childInfo->costEstimate_ = chargedCost;
+    } else {
+      childInfo->eraseDetail("standalone-cost-estimate");
+    }
+    _runtimeInfo->children_.push_back(std::move(childInfo));
   }
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
@@ -733,7 +758,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
 }
 
 // ___________________________________________________________________________
-const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
+const qlm::vector<ColumnIndex>& Operation::getResultSortedOn() const {
   // TODO<joka921> refactor this without a mutex (for details see the
   // `getVariableColumns` method for details.
   std::lock_guard l{_resultSortedColumnsMutex};
@@ -851,7 +876,7 @@ void Operation::getExternalValues(
 }
 
 // _____________________________________________________________________________
-bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
+bool Operation::isSortedBy(ql::span<const ColumnIndex> sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
     return false;
@@ -866,14 +891,14 @@ bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
 }
 
 // _____________________________________________________________________________
 bool Operation::isDistinctBy(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   const auto& limit = getLimitOffset()._limit;
   if (limit.has_value() && limit.value() <= 1) {
     return true;
@@ -883,13 +908,13 @@ bool Operation::isDistinctBy(
 
 // _____________________________________________________________________________
 bool Operation::isDistinctByImpl(
-    [[maybe_unused]] const std::vector<ColumnIndex>& distinctIndices) const {
+    [[maybe_unused]] ql::span<const ColumnIndex> distinctIndices) const {
   return false;
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
   return std::nullopt;
 }
