@@ -8,10 +8,10 @@
 #include <ranges>
 #include <vector>
 
-#include "../util/IdTableHelpers.h"
-#include "../util/IndexTestHelpers.h"
-#include "../util/LocalVocabEntryTestHelpers.h"
-#include "engine/StringMapping.h"
+#include "../../util/IdTableHelpers.h"
+#include "../../util/IndexTestHelpers.h"
+#include "../../util/LocalVocabEntryTestHelpers.h"
+#include "engine/binaryExport/StringMapping.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
@@ -35,8 +35,7 @@ QueryExecutionContext* getQecWithTextIndex() {
 TEST(StringMapping, remapId) {
   auto* qec = getQecWithTextIndex();
   auto toMappedId = [](size_t count) {
-    return Id::makeFromLocalVocabIndex(
-        reinterpret_cast<LocalVocabIndex>(count << ValueId::numDatatypeBits));
+    return Id::fromBits(Datatype::LocalVocabIndex, count);
   };
 
   auto binaryEq = [](Id a, Id b,

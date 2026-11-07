@@ -1,6 +1,6 @@
-// Copyright 2023 - 2025 The QLever Authors, in particular:
+// Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2023 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
 // 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
@@ -20,7 +20,11 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
+#include "engine/QueryPlanner.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
@@ -506,6 +510,247 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                   {a, iri("@de@<other>"), lit("\"def\"@de")},
                   {a, iri("@es@<other>"), lit("\"def\"@es")},
                   {iri("<other>"), iri("@es@<a>"), lit("\"def\"@es")}}));
+}
+
+// Test that for an index with `ql:has-word` triples, inserting a triple with a
+// literal object also inserts the `ql:has-word` triples of that literal.
+TEST_F(DeltaTriplesTest, insertTriplesAddsHasWordTriples) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // A matcher for the inserted and deleted internal triples of a
+  // `DeltaTriples`, each given by four `TripleComponent`s (the fourth is the
+  // graph, or the term frequency for a `ql:has-word` triple).
+  using Quads = std::vector<std::array<TripleComponent, 4>>;
+  auto internalTriplesAre =
+      [](const IndexImpl& index, LocalVocab& localVocab, Quads inserted,
+         Quads deleted) -> testing::Matcher<const DeltaTriples&> {
+    auto toIdTriples = [&index, &localVocab](Quads& quads) {
+      std::vector<IdTriple<0>> result;
+      for (auto& quad : quads) {
+        std::array<Id, 4> ids;
+        ql::ranges::transform(quad, ids.begin(), [&](TripleComponent& c) {
+          return toValueId(std::move(c), index, localVocab);
+        });
+        result.emplace_back(ids);
+      }
+      return result;
+    };
+    using TriplesInternal = DeltaTriples::TriplesSets<true>;
+    return AD_FIELD(
+        DeltaTriples, triplesSetsInternal_,
+        testing::AllOf(
+            AD_FIELD(TriplesInternal, triplesInserted_,
+                     testing::UnorderedElementsAreArray(toIdTriples(inserted))),
+            AD_FIELD(
+                TriplesInternal, triplesDeleted_,
+                testing::UnorderedElementsAreArray(toIdTriples(deleted)))));
+  };
+
+  // An index with `ql:has-word` triples. Its data has no words, so that the
+  // predicate `ql:has-word` is not in its vocabulary.
+  ad_utility::testing::TestIndexConfig config{"<x> <label> 42"};
+  config.addHasWordTriples = true;
+  const IndexImpl& index =
+      ad_utility::testing::getQec(config)->getIndex().getImpl();
+  DeltaTriples deltaTriples(index);
+  auto& localVocab = deltaTriples.localVocab();
+  auto a = iri("<a>");
+  auto hasWord = iri(HAS_WORD_PREDICATE);
+  auto graph = iri(DEFAULT_GRAPH_IRI);
+  auto en =
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("en")};
+  // The triples to insert and delete, sorted (as `insertTriples` and
+  // `deleteTriples` require).
+  auto triples = makeIdTriples(
+      index, localVocab,
+      {"<a> <b> \"Hello World hello\"", "<a> <c> \"Hello World hello\"",
+       "<a> <b> \"abc\"@en", "<a> <b> 1", "<a> <b> <abc>"});
+  ql::ranges::sort(triples);
+
+  // Inserting the triples adds one `ql:has-word` triple per distinct normalized
+  // word of each literal object, with the term frequency in the graph column.
+  // The literal that is the object of two triples gets its `ql:has-word`
+  // triples only once, the literal with a language tag gets them in addition
+  // to the language filter triples, and non-literal objects get nothing.
+  deltaTriples.insertTriples(cancellationHandle, triples);
+  Quads hasWordAndLangtagTriples{
+      {lit("\"Hello World hello\""), hasWord, lit("\"hello\""),
+       TripleComponent{2}},
+      {lit("\"Hello World hello\""), hasWord, lit("\"world\""),
+       TripleComponent{1}},
+      {lit("\"abc\"@en"), hasWord, lit("\"abc\""), TripleComponent{1}},
+      {lit("\"abc\"@en"), iri(LANGUAGE_PREDICATE), en, graph}};
+  std::array<TripleComponent, 4> langPredicateTriple{a, iri("@en@<b>"),
+                                                     lit("\"abc\"@en"), graph};
+  Quads allInternalTriples = hasWordAndLangtagTriples;
+  allInternalTriples.push_back(langPredicateTriple);
+  EXPECT_THAT(deltaTriples,
+              internalTriplesAre(index, localVocab, allInternalTriples, {}));
+
+  // Deleting the triples again deletes only the triple with the
+  // language-tagged predicate. The `ql:has-word` and `ql:langtag` triples
+  // stay, because the literal might still be the object of other triples.
+  deltaTriples.deleteTriples(cancellationHandle, triples);
+  EXPECT_THAT(deltaTriples,
+              internalTriplesAre(index, localVocab, hasWordAndLangtagTriples,
+                                 {langPredicateTriple}));
+
+  // For an index without `ql:has-word` triples, inserting a literal without a
+  // language tag adds no internal triples.
+  const IndexImpl& indexWithoutHasWord = testQec->getIndex().getImpl();
+  DeltaTriples deltaTriplesWithoutHasWord(indexWithoutHasWord);
+  auto& localVocabWithoutHasWord = deltaTriplesWithoutHasWord.localVocab();
+  deltaTriplesWithoutHasWord.insertTriples(
+      cancellationHandle,
+      makeIdTriples(indexWithoutHasWord, localVocabWithoutHasWord,
+                    {"<a> <b> \"Hello World hello\""}));
+  EXPECT_THAT(deltaTriplesWithoutHasWord,
+              internalTriplesAre(indexWithoutHasWord, localVocabWithoutHasWord,
+                                 {}, {}));
+
+  // For an index with the normalization `lowercase-no-accents`, the words of an
+  // inserted literal are normalized without accents, as in the index builder.
+  ad_utility::testing::TestIndexConfig configNoAccents{"<x> <label> 43"};
+  configNoAccents.addHasWordTriples = true;
+  configNoAccents.hasWordNormalization =
+      ad_utility::HasWordNormalization::LowercaseNoAccents;
+  const IndexImpl& indexNoAccents =
+      ad_utility::testing::getQec(configNoAccents)->getIndex().getImpl();
+  DeltaTriples deltaTriplesNoAccents(indexNoAccents);
+  auto& localVocabNoAccents = deltaTriplesNoAccents.localVocab();
+  deltaTriplesNoAccents.insertTriples(
+      cancellationHandle,
+      makeIdTriples(indexNoAccents, localVocabNoAccents, {"<a> <b> \"Café\""}));
+  EXPECT_THAT(deltaTriplesNoAccents,
+              internalTriplesAre(indexNoAccents, localVocabNoAccents,
+                                 {{lit("\"Café\""), hasWord, lit("\"cafe\""),
+                                   TripleComponent{1}}},
+                                 {}));
+
+  // For an index with `ql:has-word` triples restricted to the predicate
+  // `<label>`, only the literals that are inserted as the object of a triple
+  // with that predicate get `ql:has-word` triples, also if the same literal is
+  // inserted with another predicate before (`<b>` and `<label>` are both in the
+  // vocabulary of the index, so the triple with `<b>` comes first).
+  ad_utility::testing::TestIndexConfig configRestricted{
+      "<x> <b> 44 . <x> <label> 44"};
+  configRestricted.addHasWordTriples = true;
+  configRestricted.hasWordRestrictPredicates = {"<label>"};
+  const IndexImpl& indexRestricted =
+      ad_utility::testing::getQec(configRestricted)->getIndex().getImpl();
+  DeltaTriples deltaTriplesRestricted(indexRestricted);
+  auto& localVocabRestricted = deltaTriplesRestricted.localVocab();
+  auto triplesRestricted = makeIdTriples(
+      indexRestricted, localVocabRestricted,
+      {"<a> <b> \"abc\"", "<a> <label> \"abc\"", "<a> <b> \"def\""});
+  ql::ranges::sort(triplesRestricted);
+  deltaTriplesRestricted.insertTriples(cancellationHandle, triplesRestricted);
+  Quads restrictedHasWordTriples{
+      {lit("\"abc\""), hasWord, lit("\"abc\""), TripleComponent{1}}};
+  EXPECT_THAT(deltaTriplesRestricted,
+              internalTriplesAre(indexRestricted, localVocabRestricted,
+                                 restrictedHasWordTriples, {}));
+
+  // A triple whose predicate is not an IRI (an update can bind a variable in
+  // the predicate position to any value) adds no internal triples.
+  auto tripleWithIntPredicate = makeIdTriples(
+      indexRestricted, localVocabRestricted, {"<a> <b> \"ghi\"@en"});
+  tripleWithIntPredicate.at(0).ids().at(1) = Id::makeFromInt(42);
+  deltaTriplesRestricted.insertTriples(cancellationHandle,
+                                       tripleWithIntPredicate);
+  EXPECT_THAT(deltaTriplesRestricted,
+              internalTriplesAre(indexRestricted, localVocabRestricted,
+                                 restrictedHasWordTriples, {}));
+}
+
+// Test that a literal inserted by an update can be found via `ql:has-word`.
+TEST_F(DeltaTriplesTest, hasWordTriplesForUpdatedLiterals) {
+  // An index with `ql:has-word` triples (an own one, because the updates
+  // modify its delta triples).
+  ad_utility::testing::TestIndexConfig config{"<x> <label> \"alpha beta\""};
+  config.addHasWordTriples = true;
+  auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+      "hasWordTriplesForUpdatedLiterals", std::move(config)));
+  QueryResultCache cache;
+  NamedResultCache namedResultCache;
+  QueryExecutionContext qec{index,
+                            &cache,
+                            ad_utility::testing::makeAllocator(),
+                            &namedResultCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            ad_utility::testing::singleThreadExecutor()};
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // Run `query` on the current delta triples and return the rows of its result
+  // as TSV lines (without the header).
+  auto runQuery = [&](const std::string& query) {
+    cache.clearAll();
+    qec.setLocatedTriplesForEvaluation(
+        index->deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+    auto parsedQuery = ad_utility::testing::parseQuery(query);
+    QueryPlanner planner{&qec, cancellationHandle};
+    auto tree = planner.createExecutionTree(parsedQuery);
+    ad_utility::Timer timer{ad_utility::Timer::Started};
+    std::string result;
+    for (const auto& block : ExportQueryExecutionTrees::computeResult(
+             parsedQuery, *tree, ad_utility::MediaType::tsv, timer,
+             cancellationHandle)) {
+      result += block;
+    }
+    std::vector<std::string> rows = absl::StrSplit(result, '\n');
+    AD_CORRECTNESS_CHECK(rows.size() >= 2 && rows.back().empty());
+    rows.erase(rows.begin());
+    rows.pop_back();
+    return rows;
+  };
+
+  // Run the `update` via the `DeltaTriplesManager` of the index.
+  auto runUpdate = [&](const std::string& update) {
+    ad_utility::BlankNodeManager blankNodeManager;
+    auto parsedUpdates = SparqlParser::parseUpdate(&blankNodeManager,
+                                                   encodedIriManager(), update);
+    index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+      qec.setLocatedTriplesForEvaluation(
+          deltaTriples.getLocatedTriplesSharedStateReference());
+      for (auto& parsedUpdate : parsedUpdates) {
+        deltaTriples.updateAugmentedMetadata();
+        QueryPlanner planner{&qec, cancellationHandle};
+        auto tree = planner.createExecutionTree(parsedUpdate);
+        ExecuteUpdate::executeUpdate(*index, parsedUpdate, *tree, deltaTriples,
+                                     cancellationHandle);
+      }
+    });
+  };
+  std::string entitiesWithGamma =
+      "SELECT ?s ?l WHERE { ?s <label> ?l . ?l ql:has-word \"gamma\" }";
+  std::string literalsWithGamma =
+      "SELECT ?l WHERE { ?l ql:has-word \"gamma\" }";
+
+  // The literal from the index is found, the word of the update not yet.
+  EXPECT_THAT(runQuery("SELECT ?s ?l WHERE { ?s <label> ?l . ?l ql:has-word "
+                       "\"alpha\" }"),
+              testing::ElementsAre("<x>\t\"alpha beta\""));
+  EXPECT_THAT(runQuery(entitiesWithGamma), testing::IsEmpty());
+
+  // After the update, the inserted literal is found via each of its words,
+  // regardless of the case in the literal.
+  runUpdate("INSERT DATA { <y> <label> \"Gamma Delta\" }");
+  EXPECT_THAT(runQuery(entitiesWithGamma),
+              testing::ElementsAre("<y>\t\"Gamma Delta\""));
+  EXPECT_THAT(runQuery("SELECT ?s ?l WHERE { ?s <label> ?l . ?l ql:has-word "
+                       "\"delta\" }"),
+              testing::ElementsAre("<y>\t\"Gamma Delta\""));
+  EXPECT_THAT(runQuery(literalsWithGamma),
+              testing::ElementsAre("\"Gamma Delta\""));
+
+  // After deleting the triple again, the join with the regular triple finds
+  // nothing. The `ql:has-word` triple of the literal itself stays.
+  runUpdate("DELETE DATA { <y> <label> \"Gamma Delta\" }");
+  EXPECT_THAT(runQuery(entitiesWithGamma), testing::IsEmpty());
+  EXPECT_THAT(runQuery(literalsWithGamma),
+              testing::ElementsAre("\"Gamma Delta\""));
 }
 
 // Test the rewriting of local vocab entries and blank nodes.
