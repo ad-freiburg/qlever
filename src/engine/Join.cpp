@@ -42,7 +42,7 @@ string Join::getDescriptor() const { return impl_->getDescriptor(); }
 size_t Join::getResultWidth() const { return impl_->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Join::resultSortedOn() const {
+qlm::vector<ColumnIndex> Join::resultSortedOn() const {
   return impl_->resultSortedOn();
 }
 

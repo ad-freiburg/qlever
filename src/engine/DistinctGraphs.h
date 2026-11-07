@@ -87,8 +87,8 @@ class DistinctGraphs : public Operation {
 
  protected:
   // No column is sorted in result.
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return {};
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 
  private:

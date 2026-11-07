@@ -194,8 +194,8 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
-  std::vector<ColumnIndex> result;
+qlm::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
+  qlm::vector<ColumnIndex> result{allocator()};
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);
   }
@@ -208,7 +208,7 @@ std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+qlm::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   auto result = variableAndGraphColumns();
 
   if (varsToKeep_.has_value()) {

@@ -1382,6 +1382,29 @@ std::shared_ptr<QueryExecutionTree> makeOptionalJoinThatIsResortedOnLimit(
 }
 }  // namespace
 
+// Test that an `OptionalJoin` that drops its join columns is not sorted by any
+// column, while one that keeps them is sorted by the join column.
+TEST(OptionalJoin, resultSortedOnDependsOnKeepJoinColumns) {
+  // Two inputs that share the variable `?a` in their first column and are
+  // sorted by it.
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = ad_utility::testing::getQec();
+  auto makeInput = [&](const Variable& otherVariable) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{0, 1}, {1, 2}}),
+        Vars{Variable{"?a"}, otherVariable}, false,
+        std::vector<ColumnIndex>{0});
+  };
+  auto left = makeInput(Variable{"?b"});
+  auto right = makeInput(Variable{"?c"});
+
+  // The join on `?a` is sorted by `?a` only if the join column is kept.
+  OptionalJoin keepJoinColumns{qec, left, right};
+  EXPECT_THAT(keepJoinColumns.resultSortedOn(), ::testing::ElementsAre(0));
+  OptionalJoin dropJoinColumns{qec, left, right, false};
+  EXPECT_THAT(dropJoinColumns.resultSortedOn(), ::testing::IsEmpty());
+}
+
 // _____________________________________________________________________________
 // Pushing a `LIMIT` into the left input can change the algorithm and with it
 // the sort order of an `OptionalJoin` inside that input, see the caution note
@@ -1487,9 +1510,11 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
 // Test that `IndexNestedLoopJoin` requires a cancellation handle.
 TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
   auto makeResult = []() {
-    return std::make_shared<const Result>(makeIdTableFromVector({{1}}),
-                                          std::vector<ColumnIndex>{0},
-                                          LocalVocab{});
+    return std::make_shared<const Result>(
+        makeIdTableFromVector({{1}}),
+        qlm::vector<ColumnIndex>(
+            {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
+        LocalVocab{});
   };
   auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
     joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
@@ -1507,9 +1532,11 @@ TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
 // instead of finishing the loop.
 TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
   auto makeResult = []() {
-    return std::make_shared<const Result>(makeIdTableFromVector({{1}, {2}}),
-                                          std::vector<ColumnIndex>{0},
-                                          LocalVocab{});
+    return std::make_shared<const Result>(
+        makeIdTableFromVector({{1}, {2}}),
+        qlm::vector<ColumnIndex>(
+            {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
+        LocalVocab{});
   };
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   handle->cancel(ad_utility::CancellationState::MANUAL);

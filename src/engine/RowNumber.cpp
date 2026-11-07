@@ -116,7 +116,9 @@ std::optional<std::shared_ptr<QueryExecutionTree>> RowNumber::makeSortedTree(
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> RowNumber::resultSortedOn() const { return sortedOn_; }
+qlm::vector<ColumnIndex> RowNumber::resultSortedOn() const {
+  return {sortedOn_.begin(), sortedOn_.end(), allocator()};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap RowNumber::computeVariableToColumnMap() const {
