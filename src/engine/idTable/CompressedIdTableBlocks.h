@@ -60,9 +60,11 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
   for (const auto& column : table.getColumns()) {
-    metadata.columns_.push_back(idColumnByteIO::encode(
-        column.subspan(beginRow, endRow - beginRow),
-        [&file](const auto& chunks) { return file.appendBlock(chunks); }));
+    metadata.columns_.push_back(
+        idColumnByteIO::encode(column.subspan(beginRow, endRow - beginRow),
+                               [&file](const auto& chunks) {
+                                 return file.appendBlockFromChunks(chunks);
+                               }));
   }
   return metadata;
 }
@@ -84,7 +86,7 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
     AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
     idColumnByteIO::decode(
         column, [&file, &columnMetadata = columnMetadata](const auto& buffers) {
-          file.readBlock(columnMetadata, buffers);
+          file.readBlockIntoChunks(columnMetadata, buffers);
         });
   }
   return block;

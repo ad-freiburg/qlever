@@ -194,7 +194,7 @@ TEST(CompressedBlockFile, blocksOfSeveralChunks) {
           auto payloads = payloadsOf(t, i);
           auto datatypes = datatypesOf(t, i);
           std::array<ql::span<const std::byte>, 2> chunks{payloads, datatypes};
-          metadata.at(t).at(i) = file.appendBlock(chunks);
+          metadata.at(t).at(i) = file.appendBlockFromChunks(chunks);
         }
       });
     }
@@ -205,10 +205,17 @@ TEST(CompressedBlockFile, blocksOfSeveralChunks) {
       std::vector<std::byte> payloads(400 + i);
       std::vector<std::byte> datatypes(50 + t);
       std::array<ql::span<std::byte>, 2> buffers{payloads, datatypes};
-      file.readBlock(metadata.at(t).at(i), buffers);
+      file.readBlockIntoChunks(metadata.at(t).at(i), buffers);
       EXPECT_EQ(payloads, payloadsOf(t, i)) << t << " " << i;
       EXPECT_EQ(datatypes, datatypesOf(t, i)) << t << " " << i;
     }
+
+    // Buffers that don't have the sizes of the chunks are rejected.
+    std::vector<std::byte> tooSmall(400 - 1);
+    std::vector<std::byte> datatypes(50);
+    std::array<ql::span<std::byte>, 2> wrongBuffers{tooSmall, datatypes};
+    EXPECT_ANY_THROW(
+        file.readBlockIntoChunks(metadata.at(0).at(0), wrongBuffers));
   }
 }
 
