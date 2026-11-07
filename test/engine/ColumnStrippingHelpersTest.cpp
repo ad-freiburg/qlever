@@ -10,12 +10,17 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../util/ColumnStrippingTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ColumnStrippingHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 using namespace columnStrippingHelpers;
 using ::testing::ElementsAre;
@@ -52,6 +57,45 @@ TEST(ColumnStrippingHelpers, VarsRequiredFromSubtree) {
   helper.add(V{"?b"});
   helper.add(V{"?d"});
   EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}));
+}
+
+// Test that `addVarsFromExpression` collects the variables of an expression
+// (also the result variable of an `EXISTS` expression) and that it adds nothing
+// and returns `NeedAllVarsFromSubtree` for an expression that reads all columns
+// (`COUNT(DISTINCT *)`).
+TEST(ColumnStrippingHelpers, addVarsFromExpression) {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  using ad_utility::testing::iri;
+  std::set<V> vars{V{"?a"}};
+  VarsRequiredFromSubtree helper{&vars};
+
+  auto expression =
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(V{"?b"});
+  EXPECT_EQ(helper.addVarsFromExpression(expression), AddVarsResult::Success);
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
+
+  sparqlExpression::SparqlExpressionPimpl countDistinctStar{
+      std::shared_ptr<sparqlExpression::SparqlExpression>{
+          sparqlExpression::makeCountStarExpression(true)},
+      "COUNT(DISTINCT *)"};
+  EXPECT_EQ(helper.addVarsFromExpression(countDistinctStar),
+            AddVarsResult::NeedAllVarsFromSubtree);
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
+
+  using ::column_stripping_test_helpers::makeExistsExpression;
+  auto [exists1, existsVar1] = makeExistsExpression("<p>");
+  auto [exists2, existsVar2] = makeExistsExpression("<q>");
+  ASSERT_NE(existsVar1, existsVar2);
+
+  EXPECT_EQ(helper.addVarsFromExpression(exists1), AddVarsResult::Success);
+  EXPECT_THAT(helper.get(), ::testing::Contains(existsVar1));
+  EXPECT_THAT(helper.get(), ::testing::Not(::testing::Contains(existsVar2)));
+  EXPECT_THAT(helper.get(), ::testing::IsSupersetOf({V{"?a"}, V{"?b"}}));
+
+  EXPECT_EQ(helper.addVarsFromExpression(exists2), AddVarsResult::Success);
+  EXPECT_THAT(helper.get(), ::testing::IsSupersetOf(
+                                {V{"?a"}, V{"?b"}, existsVar1, existsVar2}));
 }
 
 // Test that `allVariablesAreRequired` is true iff the requested variables are a

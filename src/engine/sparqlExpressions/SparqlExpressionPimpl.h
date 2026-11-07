@@ -152,6 +152,9 @@ class SparqlExpressionPimpl {
   std::vector<const SparqlExpression*> getExistsExpressions() const;
   std::vector<SparqlExpression*> getExistsExpressions();
 
+  // Return the result variables of all `EXISTS` expressions in this expression.
+  std::vector<Variable> getExistsVariables() const;
+
  private:
   // TODO<joka921> Why can't this be a unique_ptr.
   std::shared_ptr<SparqlExpression> _pimpl;

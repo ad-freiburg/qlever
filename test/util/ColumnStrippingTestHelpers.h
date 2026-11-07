@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 
 namespace column_stripping_test_helpers {
 
@@ -56,6 +57,29 @@ auto isStrippedColumns(std::vector<Variable> expectedVariables,
   return ::testing::AllOf(hasRootOperation<Operation>(),
                           hasVariables(std::move(expectedVariables)),
                           hasExpectedResult(std::move(resultMatcher)));
+}
+
+// Create the expression `EXISTS { ?a <predicate> ?x }`, which is correlated
+// with the variable `?a`. Return the expression and the variable that the
+// `ExistsJoin` writes the result of the `EXISTS` to.
+inline std::pair<sparqlExpression::SparqlExpressionPimpl, Variable>
+makeExistsExpression(const std::string& predicate) {
+  ParsedQuery query;
+  query._rootGraphPattern._graphPatterns.push_back(
+      parsedQuery::BasicGraphPattern{
+          {SparqlTriple{TripleComponent{Variable{"?a"}},
+             ad_utility::triple_component::Iri::fromIriref(predicate),
+             TripleComponent{Variable{"?x"}}}}});
+  // Select the visible variables via `*`, exactly as the parser does.
+  query.selectClause().setAsterisk();
+  query.selectClause().addVisibleVariable(Variable{"?a"});
+  auto exists =
+      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query));
+  Variable existsVar = exists->variable();
+  return {sparqlExpression::SparqlExpressionPimpl{
+              std::move(exists),
+              absl::StrCat("EXISTS { ?a ", predicate, " ?x }")},
+          existsVar};
 }
 }  // namespace column_stripping_test_helpers
 

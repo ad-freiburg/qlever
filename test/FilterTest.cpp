@@ -7,12 +7,14 @@
 #include "./PrefilterExpressionTestHelpers.h"
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
+#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/ColumnStrippingTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -20,6 +22,7 @@
 
 using ::testing::ElementsAre;
 using ::testing::Eq;
+using V = Variable;
 
 namespace {
 // Shorthand for makeFromBool
@@ -326,4 +329,92 @@ TEST(Filter, isDeterministic) {
   Filter nonDetFilter{
       qec, makeTree(), {std::make_unique<RandomExpression>(), "RAND()"}};
   EXPECT_FALSE(nonDetFilter.isDeterministic());
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables the `Filter` filters on and adds a
+// `StripColumns` for the filtered variables that the parent did not request.
+TEST(Filter, makeTreeWithStrippedColumns) {
+  using namespace makeSparqlExpression;
+  using namespace ad_utility::testing;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+
+  auto I = ad_utility::testing::IntId;
+
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{I(6), I(1), I(3), I(6)},
+                             {I(2), I(2), I(3), I(5)},
+                             {I(3), I(6), I(5), I(4)},
+                             {I(1), I(6), I(5), I(1)}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+
+  Filter filterWithoutStripping{
+      qec, values, {ltSprql(Variable{"?b"}, I(3)), "?b < 3"}};
+
+  EXPECT_EQ(filterWithoutStripping.getResult(false)->idTableView(),
+            makeIdTableFromVector(
+                {{I(6), I(1), I(3), I(6)}, {I(2), I(2), I(3), I(5)}}));
+
+  auto strip = [&](std::set<V> requestedVariables) {
+    Filter filter(qec, values, {ltSprql(Variable{"?b"}, I(3)), "?b < 3"});
+    auto tree = filter.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `Filter` on `?b < 3`, only `?b` requested: the result has only `?b`.
+  {
+    auto tree = strip({V{"?b"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Filter>(
+                    {V{"?b"}}, matchesIdTableFromVector({{I(1)}, {I(2)}})));
+  }
+
+  // `Filter` on `?b < 3`, `?a`, `?b` and `?d` requested: `?c` is stripped
+  // and the columns are renumbered.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?d"}});
+    auto filter = std::dynamic_pointer_cast<Filter>(tree->getRootOperation());
+    ASSERT_TRUE(filter);
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{I(6), I(1), I(6)}, {I(2), I(2), I(5)}}));
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // `Filter` on `?b < 3`, only `?c` requested: the `Filter` keeps `?b` and
+  // `?c`, a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({V{"?c"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?c"}}, matchesIdTableFromVector({{I(3)}, {I(3)}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Filter>(
+                    {V{"?b"}, V{"?c"}},
+                    matchesIdTableFromVector({{I(1), I(3)}, {I(2), I(3)}})));
+  }
+
+  // `Filter` on `?b < 3`, all variables requested: nothing is stripped.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Filter>(
+                    {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
+                    matchesIdTableFromVector(
+                        {{I(6), I(1), I(3), I(6)}, {I(2), I(2), I(3), I(5)}})));
+  }
 }
