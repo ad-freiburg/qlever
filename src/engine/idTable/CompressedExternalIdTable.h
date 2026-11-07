@@ -244,7 +244,6 @@ class CompressedExternalIdTableWriter {
     auto compressed = idColumnByteIO::encode(
         column.subspan(lower, upper - lower),
         [](const auto& chunks) { return ZstdWrapper::compressChunks(chunks); });
-
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
     file_.rlock()->write(compressed.data(), compressed.size(), offset);

@@ -37,8 +37,8 @@ class ZstdWrapper {
   // concatenation of the compressed frames. For a single chunk, this is the
   // same as `compress` above.
   static std::vector<char> compressChunks(
-      const ql::span<const ql::span<const std::byte>> chunks,
-      const int compressionLevel = 3) {
+      ql::span<const ql::span<const std::byte>> chunks,
+      int compressionLevel = 3) {
     size_t bound = 0;
     for (auto chunk : chunks) {
       bound += ZSTD_compressBound(chunk.size());
