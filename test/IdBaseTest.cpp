@@ -891,3 +891,7 @@ TYPED_TEST(IdBaseTest, fromBitsL) {
   ql::ranges::transform(bits, rebuilt.begin(), Id::fromBitsL);
   EXPECT_EQ(rebuilt, ids);
 }
+
+// `checkDerived` is only evaluated in a `static_assert` after the definition of
+// each `Id`, so call it once at runtime too, for the coverage tool.
+TYPED_TEST(IdBaseTest, checkDerived) { EXPECT_TRUE(TypeParam::checkDerived()); }
