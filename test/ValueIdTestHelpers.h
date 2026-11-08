@@ -144,7 +144,13 @@ template <typename IdType = ValueId>
 std::vector<IdType> makeRandomIds() {
   std::vector<IdType> ids = makeRandomDoubleIds<IdType>();
   addIdsFromGenerator(indexGenerator<IdType>, &makeVocabId<IdType>, ids);
-  addIdsFromGenerator(indexGenerator<IdType>, &makeLocalVocabId<IdType>, ids);
+  // Only the `Id` of the current build can compare a `LocalVocabIndex` with an
+  // `Id` of another datatype (see `IdBase::compareThreeWay`). For the other
+  // layout, `LocalVocabEntry::IdProxy` would have to be a template too, which
+  // is too intrusive for now.
+  if constexpr (std::is_same_v<IdType, ValueId>) {
+    addIdsFromGenerator(indexGenerator<IdType>, &makeLocalVocabId<IdType>, ids);
+  }
   addIdsFromGenerator(indexGenerator<IdType>, &makeTextRecordId<IdType>, ids);
   addIdsFromGenerator(indexGenerator<IdType>, &makeWordVocabId<IdType>, ids);
   addIdsFromGenerator(indexGenerator<IdType>, &makeBlankNodeId<IdType>, ids);

@@ -464,7 +464,9 @@ TYPED_TEST(IdBaseTest, Hashing) {
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
     ASSERT_EQ(ids, idsFromSet);
   }
-  {
+  // Only the `Id` of the current build can compare a `LocalVocabIndex` with an
+  // `Id` of another datatype, see `makeRandomIds`.
+  if constexpr (std::is_same_v<Id, ::Id>) {
     using namespace ad_utility::triple_component;
     using namespace ad_utility::testing;
     const Index& index = this->qec_->getIndex();
@@ -490,8 +492,8 @@ TYPED_TEST(IdBaseTest, Hashing) {
     // payload, so their hashes must take the datatype into account.
     EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly(
         {LVID(lve1, lv1), LVID(lve2, lv2), LVID(lve3, lv1), LVID(lve4, lv1),
-         makeVocabId<Id>(getVocabIndex(mkId("<x>"))), Id::makeFromInt(0),
-         Id::makeFromInt(42), Id::makeFromDouble(0), Id::makeFromDouble(1.56),
+         mkId("<x>"), Id::makeFromInt(0), Id::makeFromInt(42),
+         Id::makeFromDouble(0), Id::makeFromDouble(1.56),
          Id::makeFromDouble(1e-10), Id::makeFromDouble(1e+100),
          Id::makeFromBool(true), Id::makeFromBool(false),
          Id::makeUndefined()}));
@@ -801,23 +803,23 @@ TEST(IdBase, compareThreeWayWithLocalVocabIndex) {
   // of `intId` and `dateId` above.
 }
 
-// Test that the `Id` of the other layout (see `compareThreeWay`) orders a
-// `LocalVocabIndex` by the bits: after every `VocabIndex`, also the one of the
-// same word, and before every `SecondaryVocabIndex`.
+// Test that the `Id` of the other layout fails to compare a `LocalVocabIndex`
+// with an `Id` of another datatype (see `IdBase::compareThreeWay`).
 TEST(IdBase, compareThreeWayWithLocalVocabIndexOfOtherLayout) {
   using OtherId =
       std::conditional_t<std::is_same_v<Id, foldedValueId::ValueId>,
                          columnBasedIdTable::splitLayout::SplitLayoutId,
                          foldedValueId::ValueId>;
-  const Index& index = ad_utility::testing::getQec()->getIndex();
-  LocalVocabEntry entry =
-      iriLocalVocabEntry("<x>", index.getLocalVocabContext());
+  LocalVocabEntry entry = iriLocalVocabEntry(
+      "<x>", ad_utility::testing::getQec()->getLocalVocabContext());
   auto localVocabId = OtherId::makeFromLocalVocabIndex(&entry);
-  auto vocabIdOfSameWord = makeVocabId<OtherId>(
-      getVocabIndex(ad_utility::testing::makeGetId(index)("<x>")));
-  EXPECT_LT(vocabIdOfSameWord, localVocabId);
-  EXPECT_LT(makeVocabId<OtherId>(OtherId::maxIndex), localVocabId);
-  EXPECT_LT(localVocabId, makeSecondaryVocabId<OtherId>(0));
+  auto matcher = ::testing::HasSubstr("Only the `Id` of the current build");
+  AD_EXPECT_THROW_WITH_MESSAGE((void)(makeVocabId<OtherId>(3) < localVocabId),
+                               matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)(localVocabId < makeSecondaryVocabId<OtherId>(3)), matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE((void)(OtherId::makeFromInt(42) < localVocabId),
+                               matcher);
 }
 
 // Test that the forwarding lambdas `Id::isUndefinedL`, `Id::isDefinedL`,
