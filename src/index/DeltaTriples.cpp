@@ -1,6 +1,6 @@
-// Copyright 2023 - 2025 The QLever Authors, in particular:
+// Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2023 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
 // 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
@@ -233,45 +233,106 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
                                                         bool insertion) {
   // NOTE: If this logic is ever changed, you need to also change the code
   // in `IndexBuilderTypes.h`, the function `mapTripleToIds` specifically,
-  // which adds the same extra triples for language tags to the internal triples
-  // on the initial index build.
+  // which adds the same extra triples for language tags and `ql:has-word` to
+  // the internal triples on the initial index build.
   Triples internalTriples;
-  // Initialize on first use.
+
+  // Initialize the predicate ids on first use (`ql:has-word` only if the index
+  // has `ql:has-word` triples).
   if (languagePredicate_.isUndefined()) {
     languagePredicate_ = toValueId(
         TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)},
         index_, localVocab_);
   }
+  if (index_.addHasWordTriples() && hasWordPredicate_.isUndefined()) {
+    hasWordPredicate_ = toValueId(
+        TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)},
+        index_, localVocab_);
+  }
+
+  // The objects for which the `ql:langtag` and the `ql:has-word` triples have
+  // already been added (separately, because the latter depend on the
+  // predicate, see below).
   ad_utility::HashSet<Id> addedObjects;
+  ad_utility::HashSet<Id> addedHasWordObjects;
   for (const auto& triple : triples) {
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
     auto optionalLiteralOrIri =
         ql::exportIds::idToLiteralOrIri(index_, objectId, localVocab_, true);
     if (!optionalLiteralOrIri.has_value() ||
-        !optionalLiteralOrIri.value().isLiteral() ||
-        !optionalLiteralOrIri.value().hasLanguageTag()) {
+        !optionalLiteralOrIri.value().isLiteral()) {
       continue;
     }
-    const auto& predicate =
-        predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
-          auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
-              index_, Id::fromBits(bits), localVocab_, true);
-          AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
-          AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
-          return std::move(optionalPredicate.value().getIri());
-        });
-    auto langtag = optionalLiteralOrIri.value().getLanguageTag();
-    auto specialPredicate = predicate.withLanguageTag(langtag);
+    const auto& literal = optionalLiteralOrIri.value().getLiteral();
+
+    // Return the predicate of the triple as an IRI, or `std::nullopt` if it is
+    // not an IRI (an update can bind a variable in the predicate position to
+    // any value). Cached, because there are typically few distinct predicates.
+    auto getPredicate =
+        [this,
+         &ids]() -> const std::optional<ad_utility::triple_component::Iri>& {
+      return predicateCache_.getOrCompute(
+          ids.at(1).getBits(),
+          [this](
+              Id::T bits) -> std::optional<ad_utility::triple_component::Iri> {
+            auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
+                index_, Id::fromBits(bits), localVocab_, true);
+            if (!optionalPredicate.has_value() ||
+                !optionalPredicate.value().isIri()) {
+              return std::nullopt;
+            }
+            return std::move(optionalPredicate.value().getIri());
+          });
+    };
+
+    // The `ql:has-word` triples and the `ql:langtag` triple of a literal do not
+    // depend on the subject of the triple in which the literal occurs. Because
+    // we don't track the exact counts of existing objects, we just
+    // conservatively add these internal triples once per object on insertion,
+    // and never remove them.
+    //
+    // NOTE 1: This is inefficient, but harmless for queries that join these
+    // internal triples with a regular index scan. A query that uses only the
+    // `ql:has-word` triples (like `?l ql:has-word "word"`) also returns a
+    // literal that no longer occurs in any triple.
+    //
+    // NOTE 2: As in the index builder, the `ql:has-word` triples are only added
+    // if the predicate is one of the `--has-word-restrict-predicates` (or none
+    // are set). A predicate that is not an IRI is never one of them.
+    if (insertion && index_.addHasWordTriples() &&
+        index_.hasWordTriplesForPredicate([&getPredicate]() {
+          const auto& predicate = getPredicate();
+          return predicate.has_value() ? predicate->toStringRepresentation()
+                                       : std::string{};
+        }) &&
+        addedHasWordObjects.insert(objectId).second) {
+      addHasWordTriples(objectId, literal, internalTriples);
+    }
+
+    // The language filter triples are only added for a literal with a language
+    // tag and a predicate that is an IRI.
+    if (!literal.hasLanguageTag()) {
+      continue;
+    }
+    const auto& predicate = getPredicate();
+    if (!predicate.has_value()) {
+      continue;
+    }
+
+    // Extra triple `<subject> @language@<predicate> "object"@language`.
+    auto langtag = literal.getLanguageTag();
+    auto specialPredicate = predicate->withLanguageTag(langtag);
     Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
                              index_, localVocab_);
-    // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, objectId, ids.at(3)}});
-    // If we have already added the triple for this object with its langtag we
-    // can't add it a second time.
-    if (addedObjects.contains(objectId)) {
+
+    // Extra triple `"object"@language ql:langtag <@language>` (once per object
+    // and only on insertion, see above).
+    if (!insertion || !addedObjects.insert(objectId).second) {
       continue;
     }
     Id langtagId =
@@ -281,22 +342,33 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
                   ad_utility::triple_component::Iri::fromLangtag(tag)},
               index_, localVocab_);
         });
-
-    // Because we don't track the exact counts of existing objects, we just
-    // conservatively add these internal triples on insertion, and never remove
-    // them. This is inefficient, but never wrong because queries that use these
-    // internal triples will always join these internal triples with a regular
-    // index scan.
-    if (insertion) {
-      // Extra triple `"object"@language ql:langtag <@language>`.
-      internalTriples.push_back(IdTriple<0>{
-          std::array{objectId, languagePredicate_, langtagId, ids.at(3)}});
-      addedObjects.emplace(objectId);
-    }
+    internalTriples.push_back(IdTriple<0>{
+        std::array{objectId, languagePredicate_, langtagId, ids.at(3)}});
   }
+
   // Because of the special predicates, we need to re-sort the triples.
   ql::ranges::sort(internalTriples);
   return internalTriples;
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::addHasWordTriples(
+    Id literalId, const ad_utility::triple_component::Literal& literal,
+    Triples& internalTriples) {
+  // Add the triple `<literal> ql:has-word "word"` for each distinct word (with
+  // the same normalization as in the index builder).
+  for (const auto& [word, termFrequency] :
+       index_.computeHasWordFrequencies(literal.getContent())) {
+    Id wordId = wordCache_.getOrCompute(word, [this](const std::string& key) {
+      return toValueId(
+          TripleComponent{
+              ad_utility::triple_component::Literal::literalWithoutQuotes(key)},
+          index_, localVocab_);
+    });
+    internalTriples.push_back(IdTriple<0>{
+        std::array{literalId, hasWordPredicate_, wordId,
+                   Id::makeFromInt(static_cast<int64_t>(termFrequency))}});
+  }
 }
 
 // ____________________________________________________________________________
@@ -458,9 +530,9 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   tracer.endTrace("rewriteLocalVocabEntries");
-  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
-  AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
-                     triples.end());
+  // Check that `triples` is sorted and without duplicates.
+  AD_EXPENSIVE_CHECK(ql::ranges::adjacent_find(
+                         triples, std::greater_equal<>{}) == triples.end());
   tracer.beginTrace("removeExistingTriples");
   ql::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);

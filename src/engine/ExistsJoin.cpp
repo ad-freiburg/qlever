@@ -75,7 +75,7 @@ size_t ExistsJoin::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   if (rightIndexNestedLoopJoinIsPossible()) {
     return left_->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }

@@ -34,7 +34,7 @@ enum class MediaType {
   nquads,
   octetStream,
   // QLever's binary format for the efficient transfer of results between two
-  // QLever instances, see `engine/BinaryExport.h`.
+  // QLever instances, see `engine/binaryExport/BinaryExport.h`.
   binaryQleverExport
 };
 
@@ -44,7 +44,17 @@ enum class MediaType {
 // (and otherwise fall back to a different format like JSON). Increase it
 // whenever the format changes, in particular when the bit representation of an
 // `Id` changes.
+//
+// NOTE: Version 1 transfers the `Id`s of the legacy layout and version 1337 the
+// ones of the split layout, so two instances with different layouts never agree
+// on the format. The 1337 is deliberately far from the regular versions (which
+// evolve independently of the layout) for as long as the split layout is
+// experimental.
+#ifdef QLEVER_USE_SPLIT_LAYOUT
+inline constexpr uint16_t binaryQleverExportVersion = 1337;
+#else
 inline constexpr uint16_t binaryQleverExportVersion = 1;
+#endif
 
 struct MediaTypeWithQuality {
   struct Wildcard {};  // Represents the total wildcard */*

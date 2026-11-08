@@ -429,6 +429,19 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& block, size_t numColumns,
       const LocatedTriplesPerBlock& locatedTriples);
 
+  // Return true iff all triples of the `block` match the `scanSpec` (iff its
+  // first and last triple do).
+  static bool isBlockCompletelyInScan(const ScanSpecification& scanSpec,
+                                      const CompressedBlockMetadata& block);
+
+  // Return a lower bound on the rows that a scan with the `scanSpec` yields
+  // for the `block`: its rows minus the deleted delta triples, or zero if the
+  // block is not completely in the scan or may lose rows to the graph filter
+  // or duplicate removal (see `FilterDuplicatesAndGraphs`).
+  static size_t getNumRowsLowerBound(
+      const ScanSpecification& scanSpec, const CompressedBlockMetadata& block,
+      const LocatedTriplesPerBlock& locatedTriples);
+
   // Return true iff the complete contents of the given block, restricted to
   // its first `numColumns` columns, are already known from its metadata alone,
   // including the number of triples. In addition to
@@ -520,13 +533,11 @@ class CompressedRelationReader {
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
 
-  // Helper function used by `decompressBlock` and
-  // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
-  // store the result at the `iterator`. For the `numRowsToRead` argument, see
-  // the documentation of `decompressBlock`.
-  template <typename Iterator>
+  // Helper function for `decompressBlock`. Decompress the `compressedColumn`
+  // into the `column`, whose size is the number of rows to read (see the
+  // documentation of `decompressBlock`).
   static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
+                               IdColumnRef column);
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that

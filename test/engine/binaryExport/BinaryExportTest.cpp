@@ -14,13 +14,13 @@
 
 #include <vector>
 
-#include "../util/GTestHelpers.h"
-#include "../util/IdTableHelpers.h"
-#include "../util/IndexTestHelpers.h"
-#include "../util/LocalVocabEntryTestHelpers.h"
-#include "ValuesForTesting.h"
-#include "engine/BinaryExport.h"
+#include "../../util/GTestHelpers.h"
+#include "../../util/IdTableHelpers.h"
+#include "../../util/IndexTestHelpers.h"
+#include "../../util/LocalVocabEntryTestHelpers.h"
+#include "../ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/binaryExport/BinaryExport.h"
 #include "global/Id.h"
 #include "parser/SelectClause.h"
 
@@ -29,10 +29,7 @@ using namespace qlever::binary_export;
 namespace {
 // The `Id` with which the exporter refers to the `i`-th transmitted string of
 // a batch, see `StringMapping`.
-Id transmitted(size_t i) {
-  return Id::makeFromLocalVocabIndex(
-      reinterpret_cast<LocalVocabIndex>(i << Id::numDatatypeBits));
-}
+Id transmitted(size_t i) { return Id::fromBits(Datatype::LocalVocabIndex, i); }
 
 // Add `word` to the `localVocab` and return its `Id`.
 Id localVocabId(LocalVocab& localVocab, std::string word,
