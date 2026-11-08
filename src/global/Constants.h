@@ -37,6 +37,10 @@ constexpr inline size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
 
 constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
+// The size estimate of a join is multiplied by this factor to account for the
+// typical overestimation of the result size.
+constexpr inline double JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR = 0.7;
+
 constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
 // Batching parameters for `VocabularyOnDisk::scanAll`, which reads the whole

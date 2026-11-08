@@ -23,6 +23,7 @@
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -383,7 +384,8 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
   // If a precomputedResult is set, it will be returned by `getResult`
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
   auto result = std::make_shared<const Result>(
-      idTable.clone(), std::vector<ColumnIndex>{0}, LocalVocab{});
+      idTable.clone(), qlm::vector<ColumnIndex>{{0}, makeAllocator()},
+      LocalVocab{});
   operation.precomputedResultBecauseSiblingOfService() =
       std::make_optional(result);
   EXPECT_EQ(operation.getResult(), result);

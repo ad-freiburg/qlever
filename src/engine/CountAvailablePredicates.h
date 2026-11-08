@@ -49,7 +49,7 @@ class CountAvailablePredicates : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
