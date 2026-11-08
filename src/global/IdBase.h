@@ -58,7 +58,7 @@ namespace qlever {
 //   `getPayloadBits()` and the static `fromBits(T)` and
 //   `fromBits(DatatypeType, PayloadType)`. This class adds
 //   `fromBits(Datatype, PayloadType)`, so the `Derived` class needs
-//   `using IdBase::fromBits;`, otherwise its own `fromBits` hide it.
+//   `using IdBase::fromBits;`, otherwise its own `fromBits` overloads hide it.
 // - The order of the bits: `compareBitwiseImpl`, `min()`, `max()` and
 //   `incremented()`.
 template <typename Derived, typename BitRepresentationT, typename PayloadTypeT,

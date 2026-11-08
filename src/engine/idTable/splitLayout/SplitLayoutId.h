@@ -128,8 +128,9 @@ class SplitLayoutId
   // (including the zeroed padding). This is much faster than serializing the
   // datatype and payload separately, especially for large contiguous arrays of
   // IDs.
-  // TODO<pas-kes>: Is this wasteful to persist, with 7 unused bytes
-  // Will be fixed with an custom serializeFunction later on.
+  //
+  // TODO<pas-kes> This also persists the 7 padding bytes, which a custom
+  // serialization function will avoid.
   template <typename U>
   friend void allowTrivialSerialization(SplitLayoutId, U);
 
@@ -144,7 +145,7 @@ class SplitLayoutId
 
   // Private constructor from the bit representation, which is used in the
   // implementation of the static factory methods `fromBits()` etc. The bit
-  // representation always has zeroed padding bytes, s.t. all valid
+  // representation always has zeroed padding bytes, so that all valid
   // `SplitLayoutId`s have a deterministic byte representation.
   constexpr explicit SplitLayoutId(T bits) : bits_{bits} {
     // A `SplitLayoutId` consists of its bits only, without additional bytes.

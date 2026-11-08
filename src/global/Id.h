@@ -12,9 +12,9 @@
 #include "index/IdBitRepresentation.h"
 
 // The implementation of `Id`. Every file that needs `Id` or `ValueId` includes
-// this header, not the implementation header. The CMake option
-// `USE_SPLIT_LAYOUT` chooses between the legacy `ValueId` and the
-// `SplitLayoutId`.
+// this header, not the implementation header. The CMake variable
+// `USE_SPLIT_LAYOUT` (not an `option()` yet, see `CMakeLists.txt`) chooses
+// between the legacy `ValueId` and the `SplitLayoutId`.
 #ifdef QLEVER_USE_SPLIT_LAYOUT
 #include "engine/idTable/splitLayout/SplitLayoutId.h"
 using Id = columnBasedIdTable::splitLayout::SplitLayoutId;

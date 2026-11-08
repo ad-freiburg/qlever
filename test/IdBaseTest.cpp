@@ -160,7 +160,8 @@ TYPED_TEST(IdBaseTest, makeFromInt) {
   }
 }
 
-// _____________________________________________________________________________
+// Test `makeFromBool` and `makeBoolFromZeroOrOne` with `getBool` and
+// `getBoolLiteral`.
 TYPED_TEST(IdBaseTest, makeFromBool) {
   using Id = TypeParam;
   EXPECT_TRUE(Id::makeBoolFromZeroOrOne(true).getBool());
@@ -542,7 +543,7 @@ TYPED_TEST(IdBaseTest, toDebugString) {
   ASSERT_ANY_THROW(Id::max().visit([](const auto&) {}));
 }
 
-// _____________________________________________________________________________
+// Test that an `Id` is trivially copyable.
 TYPED_TEST(IdBaseTest, TriviallyCopyable) {
   using Id = TypeParam;
   static_assert(std::is_trivially_copyable_v<Id>);
@@ -892,6 +893,7 @@ TYPED_TEST(IdBaseTest, fromBitsL) {
   EXPECT_EQ(rebuilt, ids);
 }
 
-// `checkDerived` is only evaluated in a `static_assert` after the definition of
-// each `Id`, so call it once at runtime too, for the coverage tool.
+// Test that `checkDerived` passes for each `Id` class. It is otherwise only
+// evaluated in a `static_assert` after the definition of the class, which the
+// coverage tool does not count as a call.
 TYPED_TEST(IdBaseTest, checkDerived) { EXPECT_TRUE(TypeParam::checkDerived()); }
