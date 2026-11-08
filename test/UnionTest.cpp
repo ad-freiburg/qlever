@@ -832,7 +832,7 @@ TEST(Union, createSortedVariantWorksProperly) {
 
 // _____________________________________________________________________________
 TEST(Union, checkChunkSizeSplitsProperly) {
-#ifdef QLEVER_USE_ID_SPLIT_LAYOUT
+#ifdef QLEVER_USE_SPLIT_LAYOUT
   // TODO<pas-kes> Enable this test again when the columns of an `IdTable` store
   // the payloads and datatypes separately. With 16 bytes per `Id`, the input
   // tables exceed the memory limit of `getQec()`.
