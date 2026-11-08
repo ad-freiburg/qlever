@@ -239,8 +239,14 @@ class HttpServer {
       acceptor_.set_option(option);
       // Bind to the server address.
       acceptor_.bind(endpoint);
+      // Start listening right away, s.t. errors are reported synchronously
+      // to the caller (and not silently swallowed inside the `listener`
+      // coroutine). Incoming connections are queued by the operating system
+      // until the `listener` coroutine starts accepting them in `run()`.
+      acceptor_.listen(boost::asio::socket_base::max_listen_connections);
     } catch (const boost::system::system_error& b) {
-      logBeastError(b.code(), "Opening or binding the socket failed");
+      logBeastError(b.code(),
+                    "Opening, binding, or listening on the socket failed");
       throw;
     }
   }
@@ -545,12 +551,6 @@ class HttpServer {
   // The loop which accepts TCP connections and delegates their handling
   // to the session() coroutine below.
   boost::asio::awaitable<void> listener() {
-    try {
-      acceptor_.listen(boost::asio::socket_base::max_listen_connections);
-    } catch (const boost::system::system_error& b) {
-      logBeastError(b.code(), "Listening on the socket failed");
-      co_return;
-    }
     serverIsReady_ = true;
 
     // While the `acceptor_` is open, accept connections and handle each

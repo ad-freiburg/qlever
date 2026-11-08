@@ -67,8 +67,11 @@ class TestHttpServer {
   // Get port on which this server is running.
   auto getPort() const { return server_->getPort(); }
 
-  // Run the server in its own thread. Wait for 100ms until the server is up and
-  // throw `std::runtime_error` if it's not (it should be up immediately).
+  // Run the server in its own thread. Wait until the server is up (which
+  // typically takes well below a millisecond) and throw `std::runtime_error` if
+  // it is not up after `timeout`. The timeout is deliberately generous, because
+  // on heavily loaded machines (e.g. CI runners which run many tests in
+  // parallel) it can take a while until the server thread gets scheduled.
   //
   // NOTE 1: It is important to *copy* the `httpServer` shared pointer into the
   // thread. That way, no matter which thread completes first (this thread or
@@ -77,25 +80,38 @@ class TestHttpServer {
   //
   // NOTE 2: Catch all exceptions in the server thread so that if an exception
   // is thrown, the whole process does not simply terminate.
-  void runInOwnThread() {
+  void runInOwnThread(std::chrono::milliseconds timeout = 10s) {
     auto runnerTask =
         std::packaged_task<void()>{[server = server_]() { server->run(); }};
     auto runnerFuture = runnerTask.get_future();
     serverThread_ =
         std::make_unique<ad_utility::JThread>(std::move(runnerTask));
-    auto waitTimeUntilServerIsUp = 100ms;
-    auto status = runnerFuture.wait_for(waitTimeUntilServerIsUp);
-    if (status == std::future_status::ready) {
-      // Propagate exception
-      runnerFuture.get();
-    }
-    if (!server_->serverIsReady()) {
-      // Detach the server thread (the `run()` above never returns), so that we
-      // can exit this test.
-      serverThread_->detach();
-      throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
-                                            waitTimeUntilServerIsUp.count(),
-                                            "ms, this should not happen"));
+    auto start = std::chrono::steady_clock::now();
+    auto deadline = start + timeout;
+    while (!server_->serverIsReady()) {
+      // `HttpServer::run()` never returns unless something went wrong, so a
+      // ready future means that the server crashed. Propagate the exception,
+      // or report the unexpected return.
+      if (runnerFuture.wait_for(1ms) == std::future_status::ready) {
+        runnerFuture.get();
+        throw std::runtime_error(
+            "`HttpServer::run()` returned before the server was up");
+      }
+      if (std::chrono::steady_clock::now() >= deadline) {
+        // Detach the server thread (the `run()` above never returns), so that
+        // we can exit this test.
+        serverThread_->detach();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start);
+        throw std::runtime_error(absl::StrCat(
+            "The `HttpServer` in this test was not up after ", elapsed.count(),
+            "ms (the timeout was ", timeout.count(),
+            "ms), although it is usually up in well below a millisecond. "
+            "The socket was successfully opened and is listening, but the "
+            "server's `io_context` did not start the accept loop in time. "
+            "This typically means that the machine was heavily overloaded "
+            "and is most likely unrelated to the code under test"));
+      }
     }
   }
 
