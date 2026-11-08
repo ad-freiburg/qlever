@@ -326,10 +326,7 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
       right_->getSizeEstimate() *
       (static_cast<double>(nofDistinctInResult) / nofDistinctRight);
 
-  double corrFactor = _executionContext
-                          ? _executionContext->getCostFactor(
-                                "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR")
-                          : 1.0;
+  constexpr double corrFactor = JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR;
 
   double jcMultiplicityInResult = left_->getMultiplicity(leftJoinCol_) *
                                   right_->getMultiplicity(rightJoinCol_);
