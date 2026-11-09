@@ -103,11 +103,7 @@ struct LiveCounted {
 
 // Return the sorted run of the `LiveCounted` elements `first ... last - 1`.
 std::vector<LiveCounted> makeLiveCounted(size_t first, size_t last) {
-  std::vector<LiveCounted> result;
-  for (size_t i = first; i < last; ++i) {
-    result.emplace_back(i);
-  }
-  return result;
+  return ::ranges::to<std::vector<LiveCounted>>(ql::views::iota(first, last));
 }
 
 // An input policy that derives from `SizeInput` (that is, from
@@ -289,11 +285,7 @@ SizeVec splitPointsUpTo(size_t numSplitPoints) {
 // yet.
 std::vector<CountingString> makeCountingStrings(
     const std::vector<std::string>& values) {
-  std::vector<CountingString> result;
-  for (const auto& value : values) {
-    result.emplace_back(value);
-  }
-  return result;
+  return ::ranges::to<std::vector<CountingString>>(values);
 }
 
 // Create the `MergeState` that the `detail::ChunkMerger`s of a merge share (see

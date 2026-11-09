@@ -125,13 +125,11 @@ template <typename Range, typename F>
 auto transform(Range&& input, F unaryOp) {
   using Output = std::decay_t<decltype(std::invoke(
       unaryOp, *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
-  std::vector<Output> out;
-  out.reserve(input.size());
-  ql::ranges::transform(
-      ad_utility::makeForwardingIterator<Range>(input.begin()),
-      ad_utility::makeForwardingIterator<Range>(input.end()),
-      std::back_inserter(out), unaryOp);
-  return out;
+  return ::ranges::to<std::vector<Output>>(
+      ql::ranges::subrange(
+          ad_utility::makeForwardingIterator<Range>(input.begin()),
+          ad_utility::makeForwardingIterator<Range>(input.end())) |
+      ql::views::transform(std::move(unaryOp)));
 }
 /*
 @brief Takes two vectors, pairs up their content at the same index positions
@@ -144,14 +142,8 @@ std::vector<std::pair<T1, T2>> zipVectors(const std::vector<T1>& vectorA,
   // Both vectors must have the same length.
   AD_CONTRACT_CHECK(vectorA.size() == vectorB.size());
 
-  std::vector<std::pair<T1, T2>> vectorsPairedUp{};
-  vectorsPairedUp.reserve(vectorA.size());
-
-  ql::ranges::transform(
-      vectorA, vectorB, std::back_inserter(vectorsPairedUp),
-      [](const auto& a, const auto& b) { return std::make_pair(a, b); });
-
-  return vectorsPairedUp;
+  return ::ranges::to<std::vector<std::pair<T1, T2>>>(
+      ::ranges::views::zip(vectorA, vectorB));
 }
 
 /**

@@ -317,7 +317,14 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG b040066dee96a859059dd73397bdef99a5a0073b # branch fork-for-qlever
+        # TODO<joka921> !!! DO NOT MERGE AS IS !!! This commit is on the branch
+        # `ranges-to-assignability` of joka921/range-v3 PR #14
+        # (https://github.com/joka921/range-v3/pull/14), which is not yet merged
+        # into `fork-for-qlever`. That PR makes `ranges::to` work for elements
+        # that are not assignable or only explicitly convertible, which several
+        # call sites in this PR rely on. Once it is merged, replace this by the
+        # resulting commit on the `fork-for-qlever` branch.
+        GIT_TAG 58a3f7b4489db4ee0d5ac024cd73705cbd3da226 # branch ranges-to-assignability (PR #14)
         SYSTEM
         EXCLUDE_FROM_ALL
 )
