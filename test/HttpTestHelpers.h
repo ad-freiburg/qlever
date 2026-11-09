@@ -108,11 +108,10 @@ class TestHttpServer {
         throw std::runtime_error(absl::StrCat(
             "The `HttpServer` in this test was not up after ", elapsed.count(),
             "ms (the timeout was ", timeout.count(),
-            "ms), although it is usually up in well below a millisecond. "
-            "The socket was successfully opened and is listening, but the "
-            "server's `io_context` did not start the accept loop in time. "
-            "This typically means that the machine was heavily overloaded "
-            "and is most likely unrelated to the code under test"));
+            "ms), although it is usually up in well below a millisecond. The "
+            "socket is open and listening, so this most likely means that the "
+            "machine was heavily overloaded, and not a problem in the code "
+            "under test"));
       }
     }
   }
