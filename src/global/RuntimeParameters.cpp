@@ -86,10 +86,7 @@ RuntimeParameters::RuntimeParameters() {
       const ad_utility::ParameterBase* parameter = &this->[:member:];
       static constexpr std::string_view name = std::meta::identifier_of(member);
       AD_CORRECTNESS_CHECK(
-          ql::ranges::any_of(runtimeMap_,
-                             [parameter](const auto& nameAndParameter) {
-                               return nameAndParameter.second == parameter;
-                             }),
+          ad_utility::contains(runtimeMap_ | ql::views::values, parameter),
           "The runtime parameter `", name,
           "` was not registered via `add()` in the constructor of "
           "`RuntimeParameters`");
