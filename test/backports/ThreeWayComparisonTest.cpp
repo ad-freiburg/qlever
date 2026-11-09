@@ -425,7 +425,7 @@ TEST(ThreeWayComparisonTest, TypeTraits) {
 }
 #endif
 
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
 namespace reflectionCheck {
 struct Base {
   int b_;

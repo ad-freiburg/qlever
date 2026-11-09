@@ -423,9 +423,9 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
 //    operators), and these conditions are checked at compile time in the body
 //    of `membersAsTie()`. That body is part of every operator, so for a class
 //    template the check happens when one of the operators is used.
-#if defined(QLEVER_CPP_17) || defined(QL_HAS_REFLECTION)
+#if defined(QLEVER_CPP_17) || defined(QLEVER_HAS_REFLECTION)
 
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
 namespace ql::reflection {
 // Return the names of the non-static data members of the class `T` (including
 // the private ones) in declaration order, separated by `", "`.
@@ -478,6 +478,9 @@ consteval std::string_view checkComparedMembers(
   auto bases = std::meta::bases_of(^^T, ctx);
   std::vector<std::meta::info> expectedBases{^^Bases...};
   bool basesMatch = bases.size() == expectedBases.size();
+  // The `BASE` that is passed to the macro may be a type alias (which is
+  // required if its name contains a comma, see above). `std::meta::dealias`
+  // strips such aliases, such that the base is compared as the actual type.
   for (size_t i = 0; basesMatch && i < bases.size(); ++i) {
     basesMatch = std::meta::is_same_type(std::meta::type_of(bases[i]),
                                          std::meta::dealias(expectedBases[i]));
@@ -544,7 +547,7 @@ consteval std::string_view checkComparedMembers(
 // The set of operators for each `KIND`. With reflection (C++26), `operator==`
 // and `operator<=>` suffice, because the others are rewritten in terms of them.
 // clang-format off
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
 #define QL_IMPL_TIE_OPERATORS_EQUALITY(SCOPE, CONSTEXPR_SPEC, T) \
   QL_IMPL_TIE_OPERATOR_##SCOPE(CONSTEXPR_SPEC, T, bool, ==)
 #define QL_IMPL_TIE_OPERATORS_THREEWAY(SCOPE, CONSTEXPR_SPEC, T) \
