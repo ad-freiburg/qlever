@@ -289,37 +289,25 @@ inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
   return WithSourceCrs<T>{info.value(), crs.value()};
 }
 
-// Type tag to disguingish between `Centroid` and `BoundingBox`. Used for the
-// `computeInfo` functions below.
-template <typename T>
-struct CentroidOrBBox {};
-
-// Helper for `getRequestedInfo()` that computes `Centroid` from a parsed wkt
-// geometry.
-inline std::optional<Centroid> computeInfo(CentroidOrBBox<Centroid>,
-                                           const ParsedWkt& wkt) {
-  return centroidAsGeoPoint(wkt);
-}
-
-// Helper for `getRequestedInfo()` that computes `BoundingBox` from a parsed wkt
-// geometry.
-inline std::optional<BoundingBox> computeInfo(CentroidOrBBox<BoundingBox>,
-                                              const ParsedWkt& wkt) {
-  return boundingBoxAsGeoPoints(wkt);
-}
-
 // Helper for `getRequestedInfo()` that constructs the result `WithSourceCrs<T>`
 // with T = `Centroid` or `BoundingBox` from a wkt string.
 template <typename T>
 inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
     std::string_view wkt) {
   auto parseResult = detail::parseWkt(wkt);
-  if (!parseResult.parsedWkt_.has_value()) {
+  if (!parseResult.parsedWkt_.has_value() ||
+      parseResult.sourceCrs_ == CRSType::UNSUPPORTED) {
     return std::nullopt;
   }
-  return getWithSourceCrs(
-      computeInfo(CentroidOrBBox<T>{}, parseResult.parsedWkt_.value()),
-      SourceCrsType{parseResult.sourceCrs_});
+  std::optional<T> info;
+  if constexpr (std::is_same_v<T, Centroid>) {
+    info = centroidAsGeoPoint(parseResult.parsedWkt_.value());
+  } else if constexpr (std::is_same_v<T, BoundingBox>) {
+    info = boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>);
+  }
+  return getWithSourceCrs(info, SourceCrsType{parseResult.sourceCrs_});
 }
 
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
