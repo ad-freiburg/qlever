@@ -146,8 +146,8 @@ Result RowNumber::computeResult(bool requestLaziness) {
   std::iota(permutation.begin() + 1, permutation.end(), 0);
   auto addRowNumbers = [permutation = std::move(permutation),
                         nextRowNumber = offset_](IdTable& idTable) mutable {
-    if (static_cast<int64_t>(idTable.numRows()) >
-        Id::maxInt - nextRowNumber + 1) {
+    if (static_cast<int64_t>(idTable.numRows()) - 1 >
+        Id::maxInt - nextRowNumber) {
       throw std::runtime_error(absl::StrCat(
           "The row numbers of a row number SERVICE exceed the maximum integer "
           "value ",
