@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/operation/Operation.h"
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
 #include "util/AllocateShared.h"

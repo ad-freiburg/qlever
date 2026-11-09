@@ -10,7 +10,7 @@
 #include "parser/MagicServiceQuery.h"
 // TODO<joka921> is this the right header where the pathSearchConfiguration
 // should live, or do we need a forward declaration here?
-#include "engine/PathSearch.h"
+#include "engine/operation/PathSearch.h"
 
 class SparqlTriple;
 

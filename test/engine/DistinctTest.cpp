@@ -7,9 +7,9 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/Distinct.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/StripColumns.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/StripColumns.h"
 
 using ad_utility::testing::makeAllocator;
 using V = Variable;

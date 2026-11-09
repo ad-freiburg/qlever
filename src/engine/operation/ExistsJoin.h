@@ -1,0 +1,143 @@
+// Copyright 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
+#ifndef QLEVER_SRC_ENGINE_EXISTSJOIN_H
+#define QLEVER_SRC_ENGINE_EXISTSJOIN_H
+
+#include "engine/QueryExecutionTree.h"
+#include "engine/operation/Operation.h"
+#include "util/ContainersWithAllocator.h"
+
+// The implementation of an "EXISTS join", which we use to realize the semantics
+// of the SPARQL `EXISTS` function. The join takes two subtrees as input, and
+// returns the left subtree with an additional boolean column that is `true` iff
+// at least one matching row is contained in the right subtree.
+class ExistsJoin : public Operation {
+ private:
+  // The left and right child.
+  std::shared_ptr<QueryExecutionTree> left_;
+  std::shared_ptr<QueryExecutionTree> right_;
+  std::vector<std::array<ColumnIndex, 2>> joinColumns_;
+
+  // The variable of the added (Boolean) result column.
+  Variable existsVariable_;
+
+ public:
+  // Constructor. The `existsVariable` (the variable for the added column) must
+  // not yet be bound in `left`.
+  ExistsJoin(QueryExecutionContext* qec,
+             std::shared_ptr<QueryExecutionTree> left,
+             std::shared_ptr<QueryExecutionTree> right,
+             Variable existsVariable);
+
+  // Extract all `ExistsExpression`s from the given `expression`. For each
+  // `ExistsExpression`, add an `ExistsJoin`. The left side of the first
+  // `ExistsJoin` is the input `subtree`. The left side of subsequent
+  // `ExistsJoin`s is the previous `ExistsJoin`. The right side of each
+  // `ExistsJoin` is the argument of the respective `ExistsExpression`. When
+  // there are no `ExistsExpression`s, return the input `subtree` unchanged.
+  //
+  // The returned subtree will contain one additional column for each
+  // `ExistsExpression`, which contains the result of the respective
+  // `ExistsJoin`. The `ExistsExpression` just reads the values of this column.
+  // The main work is done by the `ExistsJoin`.
+  //
+  // This function should be called in the constructor of each `Operation`,
+  // where an `EXISTS` expression can occur. For example, in the constructor of
+  // `BIND` and `FILTER`.
+  static std::shared_ptr<QueryExecutionTree> addExistsJoinsToSubtree(
+      const sparqlExpression::SparqlExpressionPimpl& expression,
+      std::shared_ptr<QueryExecutionTree> subtree, QueryExecutionContext* qec,
+      const ad_utility::SharedCancellationHandle& cancellationHandle);
+
+  // All following functions are inherited from `Operation`, see there for
+  // comments.
+ protected:
+  std::string getCacheKeyImpl() const override;
+
+ public:
+  std::string getDescriptor() const override;
+
+  size_t getResultWidth() const override;
+
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
+
+  bool knownEmptyResult() override { return left_->knownEmptyResult(); }
+
+  float getMultiplicity(size_t col) override;
+
+ private:
+  uint64_t getSizeEstimateBeforeLimit() override;
+
+ public:
+  size_t getCostEstimate() override;
+
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{left_.get(), right_.get()}, allocator()};
+  }
+
+ public:
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
+ private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  // Return true if the size estimate for the right side is smaller or equal
+  // than the estimate of the left side, a sort on the left can be skipped and
+  // all join columns are statically guaranteed to not contain undef values.
+  bool rightIndexNestedLoopJoinIsPossible() const;
+
+  // Specialized algorithm that performs a join when the left side is fully
+  // materialized and sorted, and the right side is unsorted. Only returns a
+  // result when the size estimate for the left side is smaller or equal than
+  // the estimate of the right side and a sort on the right can be skipped.
+  std::optional<Result> tryLeftIndexNestedLoopJoinIfSuitable();
+
+  // Specialized algorithm that performs a join when the right side is fully
+  // materialized and sorted, and the left side is unsorted. Only returns a
+  // result when `rightIndexNestedLoopJoinIsPossible()` returns true, in this
+  // case the result is also unsorted.
+  std::optional<Result> tryRightIndexNestedLoopJoinIfSuitable(
+      bool requestLaziness);
+
+  // Nested loop join optimization than can apply when a memory intensive sort
+  // can be avoided this way. This currently only works when we can statically
+  // guarantee that no undef values are found in the join columns. The
+  // implementation first tries `tryRightIndexNestedLoopJoinIfSuitable` and then
+  // `tryLeftIndexNestedLoopJoinIfSuitable`.
+  std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
+
+  Result computeResult(bool requestLaziness) override;
+
+  VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Lazy implementation for lazy exists joins.
+  Result lazyExistsJoin(std::shared_ptr<const Result> left,
+                        std::shared_ptr<const Result> right,
+                        bool requestLaziness);
+
+  // Only the left child's columns appear in the result, so we need special
+  // treatment of the `EXISTS` operation for `BIND` push down.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
+  // Helper function to modify the `IdTable` such that it gains a column
+  // signaling if the values exist on the right or not.
+  CPP_template(typename Range)(
+      requires ql::ranges::input_range<Range> &&
+      ql::ranges::sized_range<Range> &&
+      ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
+  void addExistsColumn(IdTable& idTable, Range&& range) const;
+
+  FRIEND_TEST(ExistsJoin,
+              addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
+};
+
+#endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

@@ -12,8 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include "engine/ExplicitIdTableOperation.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "index/LocalVocab.h"
 #include "util/Cache.h"
 #include "util/Serializer/Serializer.h"

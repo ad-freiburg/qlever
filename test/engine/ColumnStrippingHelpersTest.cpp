@@ -13,9 +13,9 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/ColumnStrippingHelpers.h"
-#include "engine/Distinct.h"
-#include "engine/StripColumns.h"
+#include "engine/operation/ColumnStrippingHelpers.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/StripColumns.h"
 
 using namespace columnStrippingHelpers;
 using ::testing::ElementsAre;

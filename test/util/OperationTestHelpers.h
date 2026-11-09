@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "./GTestHelpers.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/Operation.h"
 #include "util/ContainersWithAllocator.h"
 
 using namespace std::chrono_literals;

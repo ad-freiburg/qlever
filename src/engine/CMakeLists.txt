@@ -1,26 +1,19 @@
 add_subdirectory(sparqlExpressions)
 add_library(engine
-        QueryExecutionTree.cpp Operation.cpp Result.cpp
-        IndexScan.cpp Join.cpp JoinImpl.cpp Sort.cpp
-        Distinct.cpp OrderBy.cpp OrderByOnSortedNumericInput.cpp NumericRun.cpp Filter.cpp
-        QueryPlanner.cpp QueryRewriteUtils.cpp
-        OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
-        Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
-        TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
-        Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
+        QueryExecutionTree.cpp Result.cpp
+        OrderByOnSortedNumericInput.cpp NumericRun.cpp
+        QueryPlanner.cpp QueryRewriteUtils.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
-        CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
-        TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
-        CountConnectedSubgraphs.cpp PathSearch.cpp ExecuteUpdate.cpp
-        Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
-        QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp Load.cpp StripColumns.cpp RowNumber.cpp NamedResultCache.cpp EmptyPath.cpp
-        ExplicitIdTableOperation.cpp MaterializedViews.cpp
+        LazyGroupBy.cpp GroupByHashMapOptimization.cpp
+        CountConnectedSubgraphs.cpp ExecuteUpdate.cpp
+        GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
+        QueryExecutionContext.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
+        NamedResultCache.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
         ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp
-        MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp ExternalValues.cpp
-        DistinctGraphs.cpp)
+        MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp)
+add_subdirectory(operation)
 add_subdirectory(spatialJoinAlgorithms)
 add_subdirectory(binaryExport)
 

@@ -11,8 +11,8 @@
 
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
-#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/operation/SpatialJoin.h"
 #include "global/Constants.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"

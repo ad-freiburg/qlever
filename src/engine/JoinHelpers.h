@@ -14,12 +14,12 @@
 #include <vector>
 
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/IndexScan.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
-#include "engine/Sort.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Operation.h"
+#include "engine/operation/Sort.h"
 #include "index/CompressedRelationReader.h"
 #include "index/Permutation.h"
 #include "util/Exception.h"

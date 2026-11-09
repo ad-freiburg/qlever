@@ -10,12 +10,12 @@
 #include <regex>
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/Join.h"
-#include "engine/Service.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Service.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -672,8 +672,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  // See the comment in `src/engine/Service.cpp` regarding the support of the
-  // deprecated `typed-literal` type.
+  // See the comment in `src/engine/operation/Service.cpp` regarding the support
+  // of the deprecated `typed-literal` type.
   EXPECT_EQ(
       bTTC({{"type", "typed-literal"},
             {"value", "Hallo Welt"},

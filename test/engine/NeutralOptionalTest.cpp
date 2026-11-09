@@ -9,8 +9,8 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/NeutralOptional.h"
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getChildren) {

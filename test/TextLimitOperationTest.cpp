@@ -6,10 +6,10 @@
 #include <gtest/gtest.h>
 
 #include "./util/IdTableHelpers.h"
-#include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/TextLimit.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/TextLimit.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
