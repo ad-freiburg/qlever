@@ -36,8 +36,7 @@ QueryExecutionContext* getQecWithTextIndex() {
 TEST(StringMapping, remapId) {
   auto* qec = getQecWithTextIndex();
   auto toMappedId = [](size_t count) {
-    return Id::makeFromLocalVocabIndex(
-        reinterpret_cast<LocalVocabIndex>(count << ValueId::numDatatypeBits));
+    return Id::fromBits(Datatype::LocalVocabIndex, count);
   };
 
   auto binaryEq = [](Id a, Id b,

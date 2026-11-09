@@ -175,8 +175,10 @@ uint64_t TextLimit::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextLimit::resultSortedOn() const {
-  return entityColumns_;
+qlm::vector<ColumnIndex> TextLimit::resultSortedOn() const {
+  // TODO<vrbommireddy>: Make `entityColumns_` a `qlm::vector<ColumnIndex>` and
+  // remove this conversion.
+  return {entityColumns_.begin(), entityColumns_.end(), allocator()};
 }
 
 // _____________________________________________________________________________

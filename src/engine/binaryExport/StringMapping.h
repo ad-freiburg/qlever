@@ -72,19 +72,12 @@ class StringMapping {
 
   // The `Id` with which `remapId` refers to the string with the given `index`
   // of its batch, and the inverse of this function, which the importer uses
-  // (see `TransmittedStrings`).
-  //
-  // NOTE: `Id::makeFromLocalVocabIndex` assumes that the last
-  // `numDatatypeBits` bits are all zero and then performs a right shift, which
-  // the left shift counters (and `Id::getLocalVocabIndex` vice versa).
+  // (see `TransmittedStrings`). The `index` is not a pointer, so it is stored
+  // directly as the payload, without `Id::makeFromLocalVocabIndex`.
   static Id makeTransmittedId(size_t index) {
-    return Id::makeFromLocalVocabIndex(
-        reinterpret_cast<::LocalVocabIndex>(index << Id::numDatatypeBits));
+    return Id::fromBits(Datatype::LocalVocabIndex, index);
   }
-  static size_t getTransmittedIndex(Id id) {
-    return reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
-           Id::numDatatypeBits;
-  }
+  static size_t getTransmittedIndex(Id id) { return id.getPayloadBits(); }
 };
 
 // The counterpart of `StringMapping` on the importing side: the local IDs of
