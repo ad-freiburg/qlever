@@ -40,4 +40,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(IdColumnBenchmark engine testUtil)
 
+    addAndLinkBenchmark(TieVsArrayBenchmark engine testUtil)
+
+    addAndLinkBenchmark(AllocatorWithLimitBenchmark memorySize)
+
 endif()

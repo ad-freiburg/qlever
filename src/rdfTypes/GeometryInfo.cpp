@@ -1,6 +1,12 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "rdfTypes/GeometryInfo.h"
 
@@ -38,24 +44,28 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(serializationType_) + sizeof(metricLength_) +
                     sizeof(metricArea_));
-  // The WktType only has 8 different values and we have 4 unused bits for the
-  // ValueId datatype of the centroid (it is always a point). Therefore we fold
-  // the attributes together. On OSM planet this will save approx. 1 GiB in
-  // index size.
+  // The WKT type has only 8 different values, and the bit representation of a
+  // `GeoPoint` leaves its upper `GeoPoint::numTypeBits` bits free (they hold
+  // the datatype when the point is stored as an `Id`). Therefore we fold the
+  // two attributes together, which saves about 1 GB of index size on OSM
+  // planet.
   AD_CORRECTNESS_CHECK(
-      wktType <= 7 && wktType < (1 << ValueId::numDatatypeBits) - 1,
+      wktType <= 7 && wktType < (1 << GeoPoint::numTypeBits) - 1,
       "WKT Type out of range");
   AD_CORRECTNESS_CHECK(wktType > 0, "WKT Type indicates invalid geometry");
-  uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
+  uint64_t typeBits = static_cast<uint64_t>(wktType) << GeoPoint::numDataBits;
   uint64_t centroidBits = centroid.centroid().toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
-  AD_CORRECTNESS_CHECK(sourceCrs.type() <= util::geo::CRSType::WEB_MERCATOR,
-                       "CRS Type out of range");
-  AD_CORRECTNESS_CHECK(sourceCrs.type() != util::geo::CRSType::UNSUPPORTED,
-                       "CRS Type indicates invalid/unsupported geometry");
+  AD_CORRECTNESS_CHECK(
+      sourceCrs.type() <=
+          static_cast<uint16_t>(util::geo::CRSType::WEB_MERCATOR),
+      "CRS Type out of range");
+  AD_CORRECTNESS_CHECK(
+      sourceCrs != SourceCrsType{util::geo::CRSType::UNSUPPORTED},
+      "CRS Type indicates invalid/unsupported geometry");
 
   AD_CORRECTNESS_CHECK(
       boundingBox.lowerLeft().getLat() <= boundingBox.upperRight().getLat() &&
@@ -107,6 +117,10 @@ GeometryType::GeometryType(uint8_t type) : type_{type} {}
 
 // ____________________________________________________________________________
 SourceCrsType::SourceCrsType(uint16_t type) : type_{type} {}
+
+// ____________________________________________________________________________
+SourceCrsType::SourceCrsType(util::geo::CRSType type)
+    : type_{static_cast<uint16_t>(type)} {}
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(double length) : length_{length} {
@@ -179,7 +193,7 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
 GeometryType GeometryInfo::getWktType() const {
   return GeometryType{
       static_cast<uint8_t>((geometryTypeAndCentroid_ & bitMaskGeometryType) >>
-                           ValueId::numDataBits)};
+                           GeoPoint::numDataBits)};
 }
 
 // ____________________________________________________________________________

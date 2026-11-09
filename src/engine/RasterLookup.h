@@ -37,7 +37,7 @@ class RasterLookup : public Operation {
   bool knownEmptyResult() override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;

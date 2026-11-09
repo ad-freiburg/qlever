@@ -44,7 +44,7 @@ class Union : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override;
 
@@ -77,7 +77,7 @@ class Union : public Operation {
   // sorted properly then it is way cheaper to sort the other child and then
   // merge the two sorted results.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const override;
+      ql::span<const ColumnIndex> sortColumns) const override;
 
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {
@@ -114,12 +114,34 @@ class Union : public Operation {
   }
 
  private:
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
   // The columns that the subtree with index `subtreeIndex` has to be sorted on,
   // such that merging the two subtrees yields a result that is sorted according
   // to `targetOrder_`. Only meaningful if `targetOrder_` is not empty.
   std::vector<ColumnIndex> sortOrderForSubtree(size_t subtreeIndex) const;
+
+  // Return true iff the result column `column` is missing in one of the
+  // children and can never be UNDEF in the other child. Such a column decides
+  // the comparison of a row of the left child with a row of the right child,
+  // because it is UNDEF for all rows of the one child and UNDEF is smaller
+  // than every other `Id`.
+  bool isDecidingColumn(ColumnIndex column) const;
+
+  // Return true iff the concatenation of the (sorted) children is already
+  // sorted according to `targetOrder_`, so that the merge is not needed. This
+  // is the case if `targetOrder_` is empty, or if the first sort column is
+  // missing in the left child and a deciding column (see `isDecidingColumn`).
+  bool isSortedByConcatenation() const;
+
+  // Return the prefix of `targetOrder_` that the merge of the two children has
+  // to compare, namely up to and including the first deciding column (see
+  // `isDecidingColumn`). The columns after it never matter.
+  ql::span<const ColumnIndex> comparatorOrder() const;
+
+  FRIEND_TEST(Union, isDecidingColumnAndComparatorOrder);
+  FRIEND_TEST(Union, isSortedByConcatenation);
 
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 

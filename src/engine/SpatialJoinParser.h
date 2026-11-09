@@ -45,6 +45,12 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
             const Index& index);
 
+  // Stop the worker threads. The destructor of `WKTParserBase` does this as
+  // well, but only after the members of this class are destroyed, and the
+  // threads use them until they stop. This matters if the parsing ends
+  // without `done()`, for example because the query was cancelled.
+  ~WKTParser();
+
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
   // in the input table `id` and whether the geometry should be assigned to the
@@ -59,6 +65,8 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // is, not skipped) geometries respectively.
   size_t getPrefilterCounter();
   size_t getParseCounter();
+  // The number of parsed geometries that were skipped as invalid WKT is given
+  // by `getNumInvalid` of the base class.
 
  protected:
   void processQueue(size_t t) override;

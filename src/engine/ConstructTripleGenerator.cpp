@@ -53,9 +53,9 @@ struct BatchEvalContext {
 // dropped as they are instantiated (see `instantiateBatch`'s
 // `DeduplicationParams`).
 CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
-    std::vector<EvaluatedTriple> computeBatch(
-        const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
-        const BatchEvalContext& context, size_t tableRowOffset) {
+std::vector<EvaluatedTriple> computeBatch(
+    const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
+    const BatchEvalContext& context, size_t tableRowOffset) {
   context.cancellationHandle_.get()->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 

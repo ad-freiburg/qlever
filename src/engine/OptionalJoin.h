@@ -46,7 +46,8 @@ class OptionalJoin : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   // We propagate part of the `LimitOffsetClause` to the child operation to
@@ -61,7 +62,7 @@ class OptionalJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 

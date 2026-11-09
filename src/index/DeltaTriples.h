@@ -1,6 +1,6 @@
-// Copyright 2023 - 2025 The QLever Authors, in particular:
+// Copyright 2023 - 2026 The QLever Authors, in particular:
 //
-// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2023 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
 // 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
@@ -47,7 +47,8 @@ struct LocatedTriplesState {
   std::optional<LocalVocab::LifetimeExtender> localVocabLifetimeExtender_;
   // A unique index for this snapshot. If one version has been modified later
   // than another, then the version that has been modified last has a higher
-  // index. The index is used in the query cache.
+  // index. The index is used in the query cache and continues across index
+  // rebuilds (see `DeltaTriples::addFromSnapshotDiff`).
   size_t index_;
   // Counts of the external triples. Only set when this is a deep copy, not for
   // references.
@@ -91,6 +92,7 @@ using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 // the discussion at the end of this file.
 class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
+  FRIEND_TEST(DeltaTriplesTest, insertTriplesAddsHasWordTriples);
   FRIEND_TEST(DeltaTriplesTest, clear);
   FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
   FRIEND_TEST(DeltaTriplesTest, storeAndRestoreData);
@@ -137,10 +139,22 @@ class DeltaTriples {
 
   // Cache commonly used predicates and their IRI representation between calls
   // of `makeInternalTriples`. For example in wikidata `wdt:P31`, or `wdt:P279`
-  // are frequently used, so we try to avoid an expensive lookup from disk.
+  // are frequently used, so we try to avoid an expensive lookup from disk. A
+  // predicate that is not an IRI is cached as `std::nullopt`.
   static constexpr size_t predicateCacheSize_ = 1000;
-  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
+  ad_utility::util::LRUCache<Id::T,
+                             std::optional<ad_utility::triple_component::Iri>>
       predicateCache_{predicateCacheSize_};
+
+  // Store the id of the `ql:has-word` predicate to avoid repeated disk lookups.
+  // It is initialized on first use, and only if the index has `ql:has-word`
+  // triples (see the option `--add-has-word-triples`).
+  Id hasWordPredicate_ = Id::makeUndefined();
+
+  // Store commonly used words of the `ql:has-word` triples to avoid repeated
+  // disk lookups.
+  static constexpr size_t wordCacheSize_ = 10000;
+  ad_utility::util::LRUCache<std::string, Id> wordCache_{wordCacheSize_};
 
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
@@ -220,15 +234,26 @@ class DeltaTriples {
     return static_cast<int64_t>(triplesSetsInternal_.triplesDeleted_.size());
   }
 
-  // From the triples that are explicitly being added to the index, compute a
-  // bunch of triples to be inserted into the internal permutation to make
-  // things like efficient language filters work. This currently performs a
-  // lookup from disk to check the language tag, but in the future this may be
-  // implemented more efficiently. If `insertion` is false, this indicates that
-  // the triples are meant for deletion. In that case no triples are returned
-  // that may be unsafe to delete. In particular this refers to triples of the
-  // form `<object> ql:langtag <@language>`.
+  // Return the internal triples that the given `triples` give rise to (for the
+  // language filters and for `ql:has-word`; the index builder adds the same
+  // triples in `mapTripleToIds`, see `IndexBuilderTypes.h`).
+  //
+  // NOTE 1: If `insertion` is false, the triples are meant for deletion, and
+  // only the internal triples that are safe to delete are returned. The
+  // triples `<object> ql:langtag <@language>` and `<object> ql:has-word "word"`
+  // are never deleted, because the object might still occur in other triples.
+  //
+  // NOTE 2: This currently looks up each object on disk to check whether it is
+  // a literal, but in the future this may be implemented more efficiently.
   Triples makeInternalTriples(const Triples& triples, bool insertion);
+
+  // Append to `internalTriples` one triple `<literal> ql:has-word "word"` for
+  // each distinct word of the `literal` with the id `literalId`. As in the
+  // index builder, the graph column of these triples holds the number of
+  // occurrences of the word in the literal.
+  void addHasWordTriples(Id literalId,
+                         const ad_utility::triple_component::Literal& literal,
+                         Triples& internalTriples);
 
   // Insert triples. By default the located triples are consolidated
   // immediately; pass `Consolidate::No` when batching several inserts/deletes
@@ -323,6 +348,8 @@ class DeltaTriples {
   // Compute the diff between `oldState` (the snapshot used to start the index
   // rebuild) and `newState` (the current snapshot), remap the IDs using
   // `idMapping`, and add the resulting triples to this `DeltaTriples` instance.
+  // Afterwards, the index of the located triples is larger than that of
+  // `newState`.
   void addFromSnapshotDiff(
       const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
       const qlever::indexRebuilder::IndexRebuildMapping& idMapping,

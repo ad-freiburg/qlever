@@ -61,7 +61,7 @@ class ExistsJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return left_->knownEmptyResult(); }
 
@@ -131,11 +131,10 @@ class ExistsJoin : public Operation {
   // Helper function to modify the `IdTable` such that it gains a column
   // signaling if the values exist on the right or not.
   CPP_template(typename Range)(
-      requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
-          ql::concepts::convertible_to<
-              ql::ranges::range_value_t<Range>,
-              bool>) void addExistsColumn(IdTable& idTable,
-                                          Range&& range) const;
+      requires ql::ranges::input_range<Range> &&
+      ql::ranges::sized_range<Range> &&
+      ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
+  void addExistsColumn(IdTable& idTable, Range&& range) const;
 
   FRIEND_TEST(ExistsJoin,
               addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);

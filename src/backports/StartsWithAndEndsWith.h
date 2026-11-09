@@ -24,14 +24,9 @@ namespace ql {
 // Overload 1: Does a `string_view` start with a `string_view`.
 CPP_template(typename CharT, typename Traits, typename Other)(
     requires ql::concepts::convertible_to<
-        const Other&,
-        std::basic_string_view<
-            CharT, Traits>>) constexpr bool starts_with(const std::
-                                                            basic_string_view<
-                                                                CharT, Traits>&
-                                                                sv,
-                                                        const Other&
-                                                            prefixIn) noexcept {
+        const Other&, std::basic_string_view<CharT, Traits>>)
+constexpr bool starts_with(const std::basic_string_view<CharT, Traits>& sv,
+                           const Other& prefixIn) noexcept {
   std::basic_string_view<CharT, Traits> prefix(prefixIn);
   return sv.size() >= prefix.size() &&
          Traits::compare(sv.data(), prefix.data(), prefix.size()) == 0;
@@ -39,11 +34,9 @@ CPP_template(typename CharT, typename Traits, typename Other)(
 
 // Overload 2: Does a `string_view` start with a `char`.
 CPP_template(typename CharT, typename Traits, typename Other)(
-    requires ql::concepts::convertible_to<
-        const Other&,
-        CharT>) constexpr bool starts_with(std::basic_string_view<CharT, Traits>
-                                               sv,
-                                           const Other& prefixIn) noexcept {
+    requires ql::concepts::convertible_to<const Other&, CharT>)
+constexpr bool starts_with(std::basic_string_view<CharT, Traits> sv,
+                           const Other& prefixIn) noexcept {
   CharT prefix(prefixIn);
   return !sv.empty() && Traits::eq(sv.front(), prefix);
 }
@@ -52,27 +45,20 @@ CPP_template(typename CharT, typename Traits, typename Other)(
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Other)(
     requires ql::concepts::convertible_to<
-        const Other&,
-        std::basic_string_view<
-            CharT, Traits>>) constexpr bool starts_with(const std::
-                                                            basic_string<
-                                                                CharT, Traits,
-                                                                Allocator>& str,
-                                                        const Other&
-                                                            prefix) noexcept {
+        const Other&, std::basic_string_view<CharT, Traits>>)
+constexpr bool starts_with(
+    const std::basic_string<CharT, Traits, Allocator>& str,
+    const Other& prefix) noexcept {
   return starts_with(std::basic_string_view<CharT, Traits>(str), prefix);
 }
 
 // Overload 3: Does a `string` start with a `char`.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Other)(
-    requires ql::concepts::convertible_to<
-        const Other&,
-        CharT>) constexpr bool starts_with(const std::basic_string<CharT,
-                                                                   Traits,
-                                                                   Allocator>&
-                                               str,
-                                           const Other& prefix) noexcept {
+    requires ql::concepts::convertible_to<const Other&, CharT>)
+constexpr bool starts_with(
+    const std::basic_string<CharT, Traits, Allocator>& str,
+    const Other& prefix) noexcept {
   return starts_with(std::basic_string_view<CharT, Traits>(str), prefix);
 }
 
@@ -83,14 +69,9 @@ CPP_template(typename CharT, typename Traits, typename Allocator,
 // Overload 1: Does a `string_view` end with a `string_view`.
 CPP_template(typename CharT, typename Traits, typename Other)(
     requires ql::concepts::convertible_to<
-        const Other&,
-        std::basic_string_view<
-            CharT, Traits>>) constexpr bool ends_with(const std::
-                                                          basic_string_view<
-                                                              CharT, Traits>&
-                                                              sv,
-                                                      const Other&
-                                                          suffixIn) noexcept {
+        const Other&, std::basic_string_view<CharT, Traits>>)
+constexpr bool ends_with(const std::basic_string_view<CharT, Traits>& sv,
+                         const Other& suffixIn) noexcept {
   std::basic_string_view<CharT, Traits> suffix(suffixIn);
   return sv.size() >= suffix.size() &&
          Traits::compare(sv.data() + (sv.size() - suffix.size()), suffix.data(),
@@ -99,11 +80,9 @@ CPP_template(typename CharT, typename Traits, typename Other)(
 
 // Overload 2: Does a `string_view` end with a `char`.
 CPP_template(typename CharT, typename Traits, typename Other)(
-    requires ql::concepts::convertible_to<
-        const Other&,
-        CharT>) constexpr bool ends_with(std::basic_string_view<CharT, Traits>
-                                             sv,
-                                         const Other& suffixIn) noexcept {
+    requires ql::concepts::convertible_to<const Other&, CharT>)
+constexpr bool ends_with(std::basic_string_view<CharT, Traits> sv,
+                         const Other& suffixIn) noexcept {
   CharT suffix(suffixIn);
   return !sv.empty() && Traits::eq(sv.back(), suffix);
 }
@@ -112,25 +91,18 @@ CPP_template(typename CharT, typename Traits, typename Other)(
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Other)(
     requires ql::concepts::convertible_to<
-        const Other&,
-        std::basic_string_view<
-            CharT,
-            Traits>>) constexpr bool ends_with(const std::
-                                                   basic_string<CharT, Traits,
-                                                                Allocator>& str,
-                                               const Other& suffix) noexcept {
+        const Other&, std::basic_string_view<CharT, Traits>>)
+constexpr bool ends_with(const std::basic_string<CharT, Traits, Allocator>& str,
+                         const Other& suffix) noexcept {
   return ends_with(std::basic_string_view<CharT, Traits>(str), suffix);
 }
 
 // Overload 4: Does a `string` end with a `char`.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Other)(
-    requires ql::concepts::convertible_to<
-        const Other&,
-        CharT>) constexpr bool ends_with(const std::basic_string<CharT, Traits,
-                                                                 Allocator>&
-                                             str,
-                                         const Other& suffix) noexcept {
+    requires ql::concepts::convertible_to<const Other&, CharT>)
+constexpr bool ends_with(const std::basic_string<CharT, Traits, Allocator>& str,
+                         const Other& suffix) noexcept {
   return ends_with(std::basic_string_view<CharT, Traits>(str), suffix);
 }
 

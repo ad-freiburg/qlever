@@ -56,8 +56,8 @@ using LazyInputView =
 // permutation to each table.
 CPP_template(typename Input, size_t numJoinColumns = 1)(
     requires SameAsAny<Input, Result::Generator, Result::LazyResult>)
-    LazyInputView<numJoinColumns> convertGenerator(
-        Input gen, OptionalPermutation permutation = {}) {
+LazyInputView<numJoinColumns> convertGenerator(
+    Input gen, OptionalPermutation permutation = {}) {
   auto transformer = [permutation = std::move(permutation)](auto& element) {
     auto& [table, localVocab] = element;
     applyPermutation(table, permutation);
@@ -177,7 +177,7 @@ Result::LazyResult
 // IdTableVocabPair. An optional permutation can be applied to the result.
 template <typename Action>
 inline Result createResultFromAction(bool requestLaziness, Action&& action,
-                                     std::vector<ColumnIndex> resultSortedOn,
+                                     qlm::vector<ColumnIndex> resultSortedOn,
                                      OptionalPermutation permutation) {
   if (requestLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::forward<Action>(action),
@@ -199,7 +199,7 @@ inline auto getRowAdderForJoin(
     AddCombinedRowToIdTable::BlockwiseCallback yieldTable) {
   return AddCombinedRowToIdTable{numJoinColumns,
                                  IdTable{op.getResultWidth(), op.allocator()},
-                                 op.getCancellationHandle(),
+                                 op.cancellationHandle(),
                                  keepJoinColumns,
                                  CHUNK_SIZE,
                                  std::move(yieldTable)};

@@ -252,9 +252,17 @@ void Visitor::checkWktInValues(const std::vector<GraphPatternOperation>& ops,
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
     const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
-    const antlr4::ParserRuleContext* ctx) {
+    bool distinct, const antlr4::ParserRuleContext* ctx) {
   std::string_view functionName = iri.getContent();
   std::string_view prefixName;
+
+  // Only a custom aggregate may have `DISTINCT` before its argument list
+  // (SPARQL 1.1 grammar note 15), and `ql:stdev` is currently the only one.
+  if (distinct && functionName != absl::StrCat(QL_PREFIX.second, "stdev")) {
+    reportNotSupported(ctx,
+                       "DISTINCT for the argument list of an IRI function "
+                       "that is not an aggregate is");
+  }
   // Helper lambda that checks if `functionName` starts with the given prefix.
   // If yes, remove the prefix from `functionName` and set
   // `prefixName` to the short name of the prefix; see `global/Constants.h`.
@@ -277,11 +285,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
-      reportError(ctx,
-                  absl::StrCat("Function ", prefixName, functionName, " takes ",
-                               numArgs < 5 ? wordForNumArgs[numArgs]
-                                           : std::to_string(numArgs),
-                               numArgs == 1 ? " argument" : " arguments"));
+      reportError(ctx, absl::StrCat("Function ", prefixName, ":", functionName,
+                                    " takes ",
+                                    numArgs < 5 ? wordForNumArgs[numArgs]
+                                                : std::to_string(numArgs),
+                                    numArgs == 1 ? " argument" : " arguments"));
     }
   };
 
@@ -324,6 +332,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"centroid", &makeCentroidExpression},
       {"envelope", &makeEnvelopeExpression},
       {"geometryType", &makeGeometryTypeExpression},
+      {"getSRID", &makeCrsTypeExpression},
       {"minX", &makeBoundingCoordinateExpression<MIN_X>},
       {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
       {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
@@ -414,6 +423,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(&makePrefixMatchExpression);
     } else if (functionName == "simplifyGeometry") {
       return createBinary(&makeSimplifyGeometryExpression);
+    } else if (functionName == "stdev") {
+      // Alias for the non-standard `STDEV` aggregate.
+      return createUnary([distinct](Ptr child) -> Ptr {
+        return std::make_unique<StdevExpression>(distinct, std::move(child));
+      });
     }
   }
 
@@ -551,11 +565,11 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
       if (auto encodedId = encodedIriManager_->encode(iriString)) {
         return TripleComponent{*encodedId};
       }
-      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           iriString);
     } else {
       static_assert(ad_utility::isSimilar<T, Literal>);
-      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           item.toSparql());
     }
   };
@@ -1368,8 +1382,8 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 // _____________________________________________________________________________
 CPP_variadic_template_def(typename T, typename... Args)(
     requires std::is_constructible_v<T, Args...>)
-    parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
-        Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
+parsedQuery::GraphPatternOperation Visitor::visitMagicServiceQuery(
+    Parser::ServiceGraphPatternContext* ctx, Args&&... args) {
   T target{AD_FWD(args)...};
   auto parseGraphPattern =
       [&target](const parsedQuery::GraphPatternOperation& op) {
@@ -1434,6 +1448,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == ROW_NUMBER_IRI) {
+    return visitMagicServiceQuery<parsedQuery::RowNumberQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
              ql::starts_with(serviceIri.toStringRepresentation(),
                              EXTERNAL_VALUES_IRI_PREFIX)) {
@@ -1455,6 +1471,12 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // separately (with duplicates removed) because we need them in `Service.cpp`
   // when computing the result for this operation.
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  // Remember that we are inside a remote `SERVICE` while parsing the body (an
+  // `INCLUDE` is rejected there), and restore the previous state afterwards.
+  bool wasInsideRemoteService = std::exchange(isInsideRemoteService_, true);
+  absl::Cleanup restoreIsInsideRemoteService{[this, wasInsideRemoteService]() {
+    isInsideRemoteService_ = wasInsideRemoteService;
+  }};
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
   // Note: The `visit` call in the line above has filled the `visibleVariables_`
   // member with all the variables visible inside the graph pattern.
@@ -1806,17 +1828,16 @@ ParsedQuery::GraphPattern Visitor::visitSoleInclude(
     Parser::IncludeClauseContext* includeCtx,
     Parser::GroupGraphPatternContext* ctx) {
   const auto name = includeCtx->NAMED_SUBQUERY_NAME()->getText();
-  // The body of a `SERVICE` is sent to the remote endpoint as the original
-  // query text, where the definition of the named subquery does not exist.
-  for (auto* parent = ctx->parent; parent != nullptr; parent = parent->parent) {
-    if (dynamic_cast<Parser::ServiceGraphPatternContext*>(parent) != nullptr) {
-      reportError(
-          includeCtx,
-          absl::StrCat("`INCLUDE ", name,
-                       "` is not supported inside SERVICE, because the body "
-                       "of a SERVICE is evaluated by the remote endpoint, "
-                       "which does not know the named subquery"));
-    }
+  // The body of a remote `SERVICE` is sent to the remote endpoint as the
+  // original query text, where the definition of the named subquery does not
+  // exist. (The body of a magic `SERVICE` is evaluated by QLever itself.)
+  if (isInsideRemoteService_) {
+    reportError(includeCtx,
+                absl::StrCat("`INCLUDE ", name,
+                             "` is not supported inside SERVICE, because the "
+                             "body of a SERVICE is evaluated by the remote "
+                             "endpoint, which does not know the named "
+                             "subquery"));
   }
   // The group must be the body of a subquery. The `visit` call reports the
   // error for a misplaced `INCLUDE` and does not return.
@@ -1969,7 +1990,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+    return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
         visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     return std::visit(
@@ -2083,7 +2104,8 @@ ExpressionPtr Visitor::visit(Parser::ConstraintContext* ctx) {
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::FunctionCallContext* ctx) {
-  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);
+  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()),
+                                ctx->argList()->DISTINCT() != nullptr, ctx);
 }
 
 // ____________________________________________________________________________________
@@ -2093,14 +2115,8 @@ std::vector<Visitor::ExpressionPtr> Visitor::visit(
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
   }
-  // The grammar allows an optional DISTINCT before the argument list (the
-  // whole list, not the individual arguments), but we currently don't support
-  // it.
-  if (ctx->DISTINCT()) {
-    reportNotSupported(
-        ctx, "DISTINCT for the argument lists of an IRI functions is ");
-  }
-  // Visit the expression of each argument.
+  // Visit the expression of each argument. An optional `DISTINCT` before the
+  // argument list is handled by `processIriFunctionCall`.
   return visitVector(ctx->expression());
 }
 
@@ -3271,6 +3287,13 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
 
     return makePtr(ti<GroupConcatExpression>, std::move(separator));
   } else if (functionName == "stdev") {
+    // Warn once per query, also when `STDEV` occurs several times.
+    static constexpr std::string_view deprecationWarning =
+        "The non-standard STDEV aggregate is deprecated. Use the "
+        "standard-conforming ql:stdev instead.";
+    if (!ad_utility::contains(parsedQuery_.warnings(), deprecationWarning)) {
+      parsedQuery_.addWarning(std::string{deprecationWarning});
+    }
     return makePtr(ti<StdevExpression>);
   } else {
     AD_CORRECTNESS_CHECK(functionName == "sample");
@@ -3285,7 +3308,8 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
     return std::make_unique<sparqlExpression::IriExpression>(visit(ctx->iri()));
   }
   // Case 2: Function call, where the function name is an IRI.
-  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);
+  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()),
+                                ctx->argList()->DISTINCT() != nullptr, ctx);
 }
 
 // ____________________________________________________________________________________

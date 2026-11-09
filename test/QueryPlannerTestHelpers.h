@@ -13,6 +13,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -83,8 +84,7 @@ QetMatcher RootOperation(M matcher) {
 CPP_template(typename... ChildArgs)(
     requires(...&& ql::concepts::same_as<QetMatcher,
                                          ChildArgs>))  //
-    inline Matcher<const ::Operation&> children(
-        const ChildArgs&... childMatchers) {
+inline Matcher<const ::Operation&> children(const ChildArgs&... childMatchers) {
   return Property("getChildren", &Operation::getChildren,
                   ElementsAre(Pointee(childMatchers)...));
 }
@@ -95,8 +95,8 @@ CPP_template(typename... ChildArgs)(
 template <typename OperationType>
 struct MatchTypeAndUnorderedChildrenImpl {
   CPP_template(typename... ChildArgs)(
-      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
-  operator()(const ChildArgs&... childMatchers) const {
+      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>))
+  auto operator()(const ChildArgs&... childMatchers) const {
     return RootOperation<OperationType>(
         AllOf(Property("getChildren", &Operation::getChildren,
                        UnorderedElementsAre(Pointee(childMatchers)...))));
@@ -112,8 +112,8 @@ auto MatchTypeAndUnorderedChildren =
 template <typename OperationType>
 struct MatchTypeAndOrderedChildrenImpl {
   CPP_template(typename... ChildArgs)(
-      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>)) auto
-  operator()(const ChildArgs&... childMatchers) const {
+      requires(...&& ql::concepts::same_as<QetMatcher, ChildArgs>))
+  auto operator()(const ChildArgs&... childMatchers) const {
     return RootOperation<OperationType>(AllOf(children(childMatchers...)));
   }
 };
@@ -667,13 +667,9 @@ void expectWithGivenBudget(std::string query, MatcherT matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
                            source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto budgetBackup =
-      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
-  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
-      queryPlanningBudget);
-  auto cleanup = absl::Cleanup{[budgetBackup]() {
-    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(budgetBackup);
-  }};
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+          queryPlanningBudget);
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
   // Note: we cannot use `value_or` here, because it eagerly evaluates `getQec`

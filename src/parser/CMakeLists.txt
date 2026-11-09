@@ -49,6 +49,7 @@ add_library(sparqlParser
         MaterializedViewQuery.cpp
         GraphPatternAnalysis.cpp
         ExternalValuesQuery.cpp
+        RowNumberQuery.cpp
         RasterQuery.cpp
         VariableCounter.cpp
 )

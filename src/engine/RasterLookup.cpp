@@ -208,7 +208,7 @@ float RasterLookup::getMultiplicity(size_t col) {
 bool RasterLookup::knownEmptyResult() { return subtree_->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> RasterLookup::resultSortedOn() const {
+qlm::vector<ColumnIndex> RasterLookup::resultSortedOn() const {
   // The pixels of each input row are appended right after each other and the
   // input rows keep their order, so the sorting of the child is kept.
   // `computeResult` must keep this order, also if it ever runs in parallel.

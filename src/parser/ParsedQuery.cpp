@@ -524,7 +524,7 @@ bool ParsedQuery::GraphPattern::isDeterministic() const {
     } else if constexpr (ad_utility::SimilarToAny<
                              T, PathQuery, SpatialQuery, TextSearchQuery,
                              NamedCachedResult, MaterializedViewQuery,
-                             RasterQuery>) {
+                             RowNumberQuery, RasterQuery>) {
       return isMagicServiceQueryDeterministic(op);
     } else if constexpr (std::is_same_v<T, Service>) {
       // Mirror `Service::isDeterministicImpl()`.
@@ -560,10 +560,10 @@ void ParsedQuery::checkVariableIsVisible(
     std::string_view otherPossibleLocationDescription) {
   if (!ad_utility::contains(getVisibleVariables(), variable) &&
       !additionalVisibleVariables.contains(variable)) {
-    addWarningOrThrow(absl::StrCat("Variable ", variable.name(),
-                                   " was used by " + locationDescription,
-                                   ", but is not defined in the query body",
-                                   otherPossibleLocationDescription, "."));
+    addUnboundVariableWarningOrThrow(absl::StrCat(
+        "Variable ", variable.name(), " was used by " + locationDescription,
+        ", but is not defined in the query body",
+        otherPossibleLocationDescription, "."));
   }
 }
 
@@ -755,7 +755,7 @@ void ParsedQuery::addOrderByClause(
       // `GROUP BY`, the variables in the `ORDER BY` must be either grouped,
       // the result of an alias in the `SELECT` clause, or bound by the
       // trailing `VALUES`.
-      addWarningOrThrow(absl::StrCat(
+      addUnboundVariableWarningOrThrow(absl::StrCat(
           "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "
           "created as an alias in the SELECT clause.",
@@ -848,7 +848,7 @@ void ParsedQuery::moveAliasesAfterPostQueryValues(
 }
 
 // _____________________________________________________________________________
-void ParsedQuery::addWarningOrThrow(std::string warning) {
+void ParsedQuery::addUnboundVariableWarningOrThrow(std::string warning) {
   if (getRuntimeParameter<&RuntimeParameters::throwOnUnboundVariables_>()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {

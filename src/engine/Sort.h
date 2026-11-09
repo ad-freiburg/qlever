@@ -43,8 +43,10 @@ class Sort : public Operation {
  public:
   virtual std::string getDescriptor() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override {
-    return sortColumnIndices_;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override {
+    // TODO<vrbommireddy>: Make `sortColumnIndices_` a
+    // `qlm::vector<ColumnIndex>` and remove this conversion.
+    return {sortColumnIndices_.begin(), sortColumnIndices_.end(), allocator()};
   }
 
  private:
@@ -52,7 +54,8 @@ class Sort : public Operation {
     return subtree_->getSizeEstimate();
   }
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   virtual float getMultiplicity(size_t col) override {
@@ -97,11 +100,11 @@ class Sort : public Operation {
 
  public:
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const override;
+      ql::span<const ColumnIndex> sortColumns) const override;
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const std::set<Variable>& variables) const override;
+      const std::set<Variable>& requestedVariables) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
