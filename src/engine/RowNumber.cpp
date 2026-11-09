@@ -103,20 +103,23 @@ std::unique_ptr<Operation> RowNumber::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> RowNumber::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   // Any order that starts with the row number column is already satisfied
   // (the row numbers are unique and ascending, so there are no ties to be
   // broken by the remaining columns, regardless of the order of the child).
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
-  if (sortColumns.at(0) != 0) {
+  if (sortColumns[0] != 0) {
     return std::nullopt;
   }
   return ad_utility::makeExecutionTree<RowNumber>(
-      getExecutionContext(), child_, rowNumberVariable_, offset_, sortColumns);
+      getExecutionContext(), child_, rowNumberVariable_, offset_,
+      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()));
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> RowNumber::resultSortedOn() const { return sortedOn_; }
+qlm::vector<ColumnIndex> RowNumber::resultSortedOn() const {
+  return {sortedOn_.begin(), sortedOn_.end(), allocator()};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap RowNumber::computeVariableToColumnMap() const {

@@ -289,45 +289,7 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
   }
 }
 
-namespace {
-// Return the constant to which `bind` binds its target variable, or
-// `std::nullopt` if its expression is not a constant IRI, literal or defined
-// `Id` (an undefined `Id` is created for an unknown function in the syntax test
-// mode).
-std::optional<TripleComponent> getConstantOfBind(const p::Bind& bind) {
-  using namespace sparqlExpression;
-  const auto* expression = bind._expression.getPimpl();
-  if (const auto* iri = dynamic_cast<const IriExpression*>(expression)) {
-    return TripleComponent{iri->value()};
-  } else if (const auto* literal =
-                 dynamic_cast<const StringLiteralExpression*>(expression)) {
-    return TripleComponent{literal->value()};
-  } else if (const auto* id = dynamic_cast<const IdExpression*>(expression);
-             id != nullptr && !id->value().isUndefined()) {
-    return TripleComponent{id->value()};
-  }
-  return std::nullopt;
-}
-
-// How the `QueryPlanner` evaluates a triple of a basic graph pattern: a plain
-// index scan or a special operation for a special predicate.
-//
-// NOTE: Each special predicate must have its own kind, on which
-// `createTripleGraph` and `seedWithScansAndText` dispatch (the latter with a
-// `switch` without `default`, so a kind without a handler is a compiler
-// warning). Do not special-case a predicate of kind `IndexScan` elsewhere: only
-// in triples of this kind, variables may be replaced by constants (see
-// `GraphPatternPlanner::substituteConstants`).
-enum class TripleKind {
-  IndexScan,
-  TextWord,
-  TextEntity,
-  SpatialJoin,
-  MaterializedView,
-  HasPredicate
-};
-
-// Return the `TripleKind` of a triple with the predicate `iri`.
+// _____________________________________________________________________________
 TripleKind getTripleKind(std::string_view iri) {
   if (iri == CONTAINS_WORD_PREDICATE) {
     return TripleKind::TextWord;
@@ -346,8 +308,7 @@ TripleKind getTripleKind(std::string_view iri) {
   return TripleKind::IndexScan;
 }
 
-// Return the `TripleKind` of `triple`, the predicate of which must be an IRI or
-// a variable (property paths are transformed before planning).
+// _____________________________________________________________________________
 TripleKind getTripleKind(const SparqlTriple& triple) {
   auto predicate = triple.getSimplePredicate();
   if (!predicate.has_value()) {
@@ -356,7 +317,6 @@ TripleKind getTripleKind(const SparqlTriple& triple) {
   }
   return getTripleKind(predicate.value());
 }
-}  // namespace
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
@@ -376,8 +336,12 @@ void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::addConstants(const p::Bind& bind) {
-  auto constant = getConstantOfBind(bind);
-  if (constant.has_value() && !qlever::isInternalComponent(constant.value())) {
+  // A `BIND` of an undefined `Id` (for example, of an unknown function in the
+  // syntax test mode) does not bind its variable to a constant.
+  auto constant = bind._expression.getConstantValue();
+  if (constant.has_value() &&
+      !(constant->isId() && constant->getId().isUndefined()) &&
+      !qlever::isInternalComponent(constant.value())) {
     constants_.emplace(bind._target, std::move(constant.value()));
   }
 }
@@ -1510,7 +1474,7 @@ QueryPlanner::JoinColumns QueryPlanner::getJoinColumns(const SubtreePlan& a,
 // _____________________________________________________________________________
 std::string QueryPlanner::getPruningKey(
     const SubtreePlan& plan,
-    const std::vector<ColumnIndex>& orderedOnColumns) const {
+    const qlm::vector<ColumnIndex>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();

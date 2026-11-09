@@ -5,7 +5,11 @@
 #ifndef QLEVER_SRC_ENGINE_INDEXSCAN_H
 #define QLEVER_SRC_ENGINE_INDEXSCAN_H
 
+#include <absl/functional/function_ref.h>
+
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "engine/Operation.h"
 #include "index/CompressedRelationReader.h"
@@ -20,6 +24,7 @@ class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
+  using ConstantColumns = std::vector<std::pair<ColumnIndex, Variable>>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
@@ -43,6 +48,17 @@ class IndexScan final : public Operation {
   // that they are bound to.
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
+
+  // Fixed components of the scan triple that are also part of the result, each
+  // as a column with the constant value of the component that is bound to a
+  // variable (see `makeTreeWithBindColumn`). The `ColumnIndex` is the position
+  // of the component in the permuted triple.
+  //
+  // NOTE: These columns come after the additional columns. A column that is not
+  // needed is removed instead of stripped (see `makeTreeWithStrippedColumns`).
+  // The `Id` of the component is never a `LocalVocabIndex` (which the result
+  // would have to keep alive).
+  ConstantColumns constantColumns_;
 
   // If set, then only the specified variables will be part of the result.
   // Can be used to strip some columns that are not needed by the remainder
@@ -74,7 +90,8 @@ class IndexScan final : public Operation {
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
-            std::vector<Variable> additionalVariables, Graphs graphsToFilter,
+            std::vector<Variable> additionalVariables,
+            ConstantColumns constantColumns, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
             bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
             bool sizeEstimateIsExact, size_t sizeEstimate);
@@ -93,11 +110,49 @@ class IndexScan final : public Operation {
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
   }
+  const ConstantColumns& constantColumns() const { return constantColumns_; }
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
+
+  // The metadata of the blocks of this scan, as passed to the block selector
+  // of `makeCopyWithSelectedBlocks` below. For each block: the first and the
+  // last value of the first sorted variable in the block, the number of rows
+  // of the block that are guaranteed to be in the result of the scan (see
+  // `CompressedRelationReader::getNumRowsLowerBound`), and whether the block
+  // is completely inside the scanned relation. A block at the border of the
+  // relation also holds triples of other relations, so its `first_` or `last_`
+  // may belong to another relation and its rows only partially to this scan.
+  // `firstIdOfScan_` and `lastIdOfScan_` are the values of the sorted variable
+  // in the first and the last row of the scan result.
+  struct BlockOfSortedVariable {
+    Id first_;
+    Id last_;
+    size_t numRowsLowerBound_;
+    bool completelyInsideScan_;
+  };
+  struct BlocksOfSortedVariable {
+    Id firstIdOfScan_;
+    Id lastIdOfScan_;
+    std::vector<BlockOfSortedVariable> blocks_;
+  };
+  // Given the metadata of all blocks of this scan in scan order, return the
+  // indices of the blocks to keep (sorted, unique), or `std::nullopt` to keep
+  // all blocks. Not stored beyond the call.
+  using BlockSelector = absl::FunctionRef<std::optional<std::vector<size_t>>(
+      const BlocksOfSortedVariable&)>;
+
+  // Return a copy of this scan that only reads the blocks chosen by
+  // `selectBlocks`, or `std::nullopt` if no restriction was made. No
+  // restriction is possible if the scan has no variable, or has a
+  // `LIMIT`/`OFFSET` of its own (which is applied while scanning and does not
+  // combine with a block restriction), or if the scan result is empty. The
+  // caller is responsible for the correctness of the selection, i.e. that the
+  // rows it needs are contained in the kept blocks.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeCopyWithSelectedBlocks(
+      BlockSelector selectBlocks) const;
 
   // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
   // none of the prefilters in `prefilterVariablePairs` applies, return
@@ -202,7 +257,7 @@ class IndexScan final : public Operation {
   // never known to be distinct, because they are not deduplicated. See the
   // implementation for details.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
   // Full index scans will never be able to fit in the cache on datasets the
   // size of wikidata, so we don't even need to try and waste performance.
@@ -295,6 +350,16 @@ class IndexScan final : public Operation {
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
+  // Return the result of
+  // `getSortedVariableAndMetadataColumnIndexForPrefiltering` if the blocks of
+  // this scan can be restricted (by prefiltering or by
+  // `makeCopyWithSelectedBlocks`), else `std::nullopt`. They cannot be
+  // restricted if the scan has a `LIMIT`/`OFFSET` of its own (which is applied
+  // while scanning all blocks, see `getLazyScan`), if there are no blocks, or
+  // if the scan has no variable to restrict by.
+  std::optional<std::pair<Variable, ColumnIndex>>
+  getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted() const;
+
   // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
   // `Permutation` class.
   ScanSpecAndBlocks getScanSpecAndBlocks() const;
@@ -310,7 +375,7 @@ class IndexScan final : public Operation {
   // hold the variables of the scan triple and the graph, in this order. These
   // are exactly the columns by which the full result is sorted. The combination
   // of the values in these columns is unique for each row of the full result.
-  std::vector<ColumnIndex> variableAndGraphColumns() const;
+  qlm::vector<ColumnIndex> variableAndGraphColumns() const;
 
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
   // returns a subset of this actual columns, return the subset of columns that
@@ -325,6 +390,16 @@ class IndexScan final : public Operation {
   std::vector<float> computeMultiplicitiesForView(
       const MaterializedView& view) const;
 
+  // Return the `Id` of the fixed component of each of the `constantColumns_`.
+  std::vector<Id> getConstantColumnIds() const;
+
+  // Implementation of `makeTreeWithBindColumn` for a `bind` of a constant that
+  // equals a fixed component of the scan triple: Return a copy of this scan
+  // with an additional constant column for the target of the `bind`. If the
+  // `bind` is not of this form, return `std::nullopt`.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const;
+
   // Return a lambda that takes an `idTable` that has the result without any
   // columns stripped, and applies the column subset that leads to the correct
   // stripping of the columns. This function can also be used if no columns are
@@ -334,11 +409,18 @@ class IndexScan final : public Operation {
   // practice the effect would be limited, because the reader has to read all
   // columns in many cases anyway (e.g. because of UPDATEs or GRAPH duplicate
   // filtering etc.)
+  //
+  // The lambda also appends the `constantColumns_` to the `idTable`.
   auto makeApplyColumnSubset() const {
     bool hasSubset = varsToKeep_.has_value();
     auto cols =
         hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
-    return [cols = std::move(cols)](auto&& table) {
+    return [cols = std::move(cols),
+            constantIds = getConstantColumnIds()](auto&& table) {
+      for (Id id : constantIds) {
+        table.addEmptyColumn();
+        ql::ranges::fill(table.getColumn(table.numColumns() - 1), id);
+      }
       if (cols.has_value()) {
         table.setColumnSubset(cols.value());
       }

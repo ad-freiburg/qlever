@@ -51,7 +51,9 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Values::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {

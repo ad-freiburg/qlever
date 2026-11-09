@@ -22,6 +22,7 @@
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
@@ -459,6 +460,112 @@ TEST(IndexScan, additionalColumn) {
   auto exp = makeIdTableFromVector(
       {{getId("<x>"), getId("<z>"), I(0), I(Pattern::NoPattern)}});
   EXPECT_THAT(res.idTableView(), ::testing::ElementsAreArray(exp));
+}
+
+// Test that a `BIND` of a constant that equals a fixed component of the scan
+// triple is pushed into the `IndexScan` as a constant column.
+TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
+  // A scan `?s <p> ?o` with two rows, and `BIND`s of constants to `?c`.
+  auto qec = getQec("<x> <p> <o1>, <o2>. <y> <q> <o1>.");
+  auto getId = makeGetId(qec->getIndex());
+  auto [x, p, o1, o2] =
+      std::tuple{getId("<x>"), getId("<p>"), getId("<o1>"), getId("<o2>")};
+  using V = Variable;
+  IndexScan scan{qec, Permutation::PSO,
+                 SparqlTripleSimple{V{"?s"}, iri("<p>"), V{"?o"}}};
+  auto bind = [](std::shared_ptr<sparqlExpression::SparqlExpression> expr) {
+    return parsedQuery::Bind{
+        sparqlExpression::SparqlExpressionPimpl{std::move(expr), "constant"},
+        V{"?c"}};
+  };
+  auto bindIri = [&bind](std::string_view s) {
+    return bind(std::make_shared<sparqlExpression::IriExpression>(iri(s)));
+  };
+
+  // `BIND(<p> AS ?c)` adds an always defined column with `<p>` in each row,
+  // also when the result is computed lazily.
+  auto tree = scan.makeTreeWithBindColumn(bindIri("<p>"));
+  ASSERT_TRUE(tree.has_value());
+  auto col = makeAlwaysDefinedColumn;
+  EXPECT_THAT(tree.value()->getVariableColumns(),
+              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
+                  {V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}}));
+  EXPECT_THAT(tree.value()->getCacheKey(),
+              ::testing::ContainsRegex("Constant Columns: 0"));
+  auto expected = makeIdTableFromVector({{x, o1, p}, {x, o2, p}});
+  auto& op = *tree.value()->getRootOperation();
+  EXPECT_EQ(op.computeResultOnlyForTesting().idTableView(), expected);
+  EXPECT_EQ(
+      aggregateTables(op.computeResultOnlyForTesting(true).idTables(), 3).first,
+      expected);
+
+  // A constant that is not a fixed component (`<q>`), is not in the
+  // vocabulary (`<notInVocab>`), or an expression that is not a constant is
+  // not pushed down.
+  EXPECT_FALSE(scan.makeTreeWithBindColumn(bindIri("<q>")).has_value());
+  EXPECT_FALSE(
+      scan.makeTreeWithBindColumn(bindIri("<notInVocab>")).has_value());
+  EXPECT_FALSE(scan.makeTreeWithBindColumn(
+      bind(std::make_shared<sparqlExpression::VariableExpression>(V{"?s"}))));
+
+  // Stripping a constant column removes it from the scan, keeping it yields
+  // the column after the remaining variables.
+  const auto& scanWithConstant =
+      dynamic_cast<const IndexScan&>(*tree.value()->getRootOperation());
+  auto withoutConstant =
+      scanWithConstant.makeTreeWithStrippedColumns({V{"?s"}});
+  ASSERT_TRUE(withoutConstant.has_value());
+  EXPECT_TRUE(dynamic_cast<const IndexScan&>(
+                  *withoutConstant.value()->getRootOperation())
+                  .constantColumns()
+                  .empty());
+  auto withConstant =
+      scanWithConstant.makeTreeWithStrippedColumns({V{"?s"}, V{"?c"}});
+  ASSERT_TRUE(withConstant.has_value());
+  EXPECT_EQ(withConstant.value()
+                ->getRootOperation()
+                ->computeResultOnlyForTesting()
+                .idTableView(),
+            makeIdTableFromVector({{x, p}, {x, p}}));
+}
+
+// Test the cases in which `makeCopyWithSelectedBlocks` does not restrict the
+// scan. Only in the last case is the selector called (and declines).
+TEST(IndexScan, makeCopyWithSelectedBlocksWithoutRestriction) {
+  // A relation `<p>` with four numeric objects in one block, and a selector
+  // that counts its calls and never restricts.
+  TestIndexConfig config{"<a> <p> 1 . <b> <p> 2 . <c> <p> 4 . <d> <p> 5 ."};
+  config.rowsPerBlock = 4;
+  auto* qec = getQec(std::move(config));
+  size_t numCalls = 0;
+  auto selector = [&numCalls](const IndexScan::BlocksOfSortedVariable&)
+      -> std::optional<std::vector<size_t>> {
+    ++numCalls;
+    return std::nullopt;
+  };
+  auto makeCopy = [qec, &selector](const SparqlTripleSimple& triple,
+                                   const LimitOffsetClause& limitOffset = {}) {
+    IndexScan scan{qec, Permutation::POS, triple};
+    scan.applyLimitOffset(limitOffset, true);
+    return scan.makeCopyWithSelectedBlocks(selector);
+  };
+
+  // The scan has a `LIMIT` of its own.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}},
+                        LimitOffsetClause{._limit = 1})
+                   .has_value());
+  // No blocks, because `<a>` is not a predicate.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<a>"), Var{"?x"}}).has_value());
+  // No variable.
+  EXPECT_FALSE(makeCopy({iri("<a>"), iri("<p>"), Tc{int64_t{1}}}).has_value());
+  // An empty result, although the block of `<p>` covers the value `3`.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Tc{int64_t{3}}}).has_value());
+  EXPECT_EQ(numCalls, 0);
+
+  // A scan with a variable and a non-empty result calls the selector, which
+  // declines.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}}).has_value());
+  EXPECT_EQ(numCalls, 1);
 }
 
 // Test that the graphs by which an `IndexScan` is to be filtered is correctly
