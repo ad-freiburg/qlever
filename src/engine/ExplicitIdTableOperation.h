@@ -71,7 +71,7 @@ class ExplicitIdTableOperation : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
   std::unique_ptr<Operation> cloneImpl() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
 

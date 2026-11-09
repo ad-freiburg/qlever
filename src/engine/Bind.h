@@ -57,7 +57,7 @@ class Bind : public Operation {
   bool knownEmptyResult() override;
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   Result computeResult(bool requestLaziness) override;

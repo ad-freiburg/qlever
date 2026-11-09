@@ -345,8 +345,7 @@ TEST(Union, sortedMerge) {
       qec, makeIdTableFromVector({{4, 1}, {8, 2}}), Vars{Var{"?c"}, Var{"?a"}},
       false, std::vector<ColumnIndex>{1, 0});
   Union unionOperation{qec, std::move(leftT), std::move(rightT), {0, 1, 2}};
-  EXPECT_EQ(unionOperation.resultSortedOn(),
-            (std::vector<ColumnIndex>{0, 1, 2}));
+  EXPECT_THAT(unionOperation.resultSortedOn(), ::testing::ElementsAre(0, 1, 2));
   {
     qec->getQueryTreeCache().clearAll();
     auto result =
@@ -789,17 +788,18 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree = unionOperation.makeSortedTree({0, 1, 2, 3});
+    auto tree =
+        unionOperation.makeSortedTree(std::vector<ColumnIndex>{0, 1, 2, 3});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
-    EXPECT_EQ(variant->getResultSortedOn(),
-              (std::vector<ColumnIndex>{0, 1, 2, 3}));
-    EXPECT_EQ(
+    EXPECT_THAT(variant->getResultSortedOn(),
+                ::testing::ElementsAre(0, 1, 2, 3));
+    EXPECT_THAT(
         variant->getChildren().at(0)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1, 2}));
-    EXPECT_EQ(
+        ::testing::ElementsAre(0, 1, 2));
+    EXPECT_THAT(
         variant->getChildren().at(1)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1}));
+        ::testing::ElementsAre(0, 1));
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, U, U, 4}, {1, 2, 4, U}, {2, U, U, 8}});
@@ -807,17 +807,18 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree = unionOperation.makeSortedTree({0, 3, 1, 2});
+    auto tree =
+        unionOperation.makeSortedTree(std::vector<ColumnIndex>{0, 3, 1, 2});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
-    EXPECT_EQ(variant->getResultSortedOn(),
-              (std::vector<ColumnIndex>{0, 3, 1, 2}));
-    EXPECT_EQ(
+    EXPECT_THAT(variant->getResultSortedOn(),
+                ::testing::ElementsAre(0, 3, 1, 2));
+    EXPECT_THAT(
         variant->getChildren().at(0)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1, 2}));
-    EXPECT_EQ(
+        ::testing::ElementsAre(0, 1, 2));
+    EXPECT_THAT(
         variant->getChildren().at(1)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1}));
+        ::testing::ElementsAre(0, 1));
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
@@ -1019,14 +1020,15 @@ TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
   // The result of the union has to be sorted on `?a`, which is its column 0.
   Union unionOperation{qec, makeOptionalJoin(), std::move(other),
                        std::vector<ColumnIndex>{0}};
-  auto expectChildrenAreSorted =
-      [&unionOperation](ad_utility::source_location loc =
-                            AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(loc);
-        for (const auto* child : unionOperation.getChildren()) {
-          EXPECT_TRUE(child->getRootOperation()->isSortedBy({0}));
-        }
-      };
+  auto expectChildrenAreSorted = [&unionOperation](
+                                     ad_utility::source_location loc =
+                                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    for (const auto* child : unionOperation.getChildren()) {
+      EXPECT_TRUE(
+          child->getRootOperation()->isSortedBy(std::vector<ColumnIndex>{0}));
+    }
+  };
   // Both children are already sorted, so the constructor added no `Sort`.
   expectChildrenAreSorted();
 
