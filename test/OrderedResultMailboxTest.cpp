@@ -18,14 +18,10 @@
 
 #include "./util/GTestHelpers.h"
 #include "util/OrderedResultMailbox.h"
+#include "util/TransparentFunctors.h"
 
 using ad_utility::OrderedResultMailbox;
 using namespace std::chrono_literals;
-
-namespace {
-// A tick function that does nothing.
-auto noTick = []() {};
-}  // namespace
 
 // Test that results which are delivered in an arbitrary order are taken in
 // the order of the slots, and that the end is signalled by `std::nullopt`.
@@ -35,11 +31,11 @@ TEST(OrderedResultMailbox, deliverOutOfOrderTakeInOrder) {
   mailbox.deliver(2, "two");
   mailbox.deliver(0, "zero");
   mailbox.deliver(1, "one");
-  EXPECT_EQ(mailbox.takeNext(1ms, noTick), "zero");
-  EXPECT_EQ(mailbox.takeNext(1ms, noTick), "one");
-  EXPECT_EQ(mailbox.takeNext(1ms, noTick), "two");
-  EXPECT_EQ(mailbox.takeNext(1ms, noTick), std::nullopt);
-  EXPECT_EQ(mailbox.takeNext(1ms, noTick), std::nullopt);
+  EXPECT_EQ(mailbox.takeNext(1ms, ad_utility::noop), "zero");
+  EXPECT_EQ(mailbox.takeNext(1ms, ad_utility::noop), "one");
+  EXPECT_EQ(mailbox.takeNext(1ms, ad_utility::noop), "two");
+  EXPECT_EQ(mailbox.takeNext(1ms, ad_utility::noop), std::nullopt);
+  EXPECT_EQ(mailbox.takeNext(1ms, ad_utility::noop), std::nullopt);
   EXPECT_FALSE(mailbox.stopRequested());
   EXPECT_NO_THROW(mailbox.rethrowIfException());
 }
@@ -48,7 +44,7 @@ TEST(OrderedResultMailbox, deliverOutOfOrderTakeInOrder) {
 TEST(OrderedResultMailbox, noSlots) {
   OrderedResultMailbox<int> mailbox;
   mailbox.setNumSlots(0);
-  EXPECT_EQ(mailbox.takeNext(1h, noTick), std::nullopt);
+  EXPECT_EQ(mailbox.takeNext(1h, ad_utility::noop), std::nullopt);
 }
 
 // Test that `takeNext` waits for a result that is delivered by another thread,
@@ -81,9 +77,9 @@ TEST(OrderedResultMailbox, deliveryWakesUpTheConsumer) {
   }};
   // The long tick interval makes sure that the consumer is woken up by the
   // notification, not by the timeout.
-  EXPECT_EQ(mailbox.takeNext(1h, noTick), 0);
-  EXPECT_EQ(mailbox.takeNext(1h, noTick), 1);
-  EXPECT_EQ(mailbox.takeNext(1h, noTick), std::nullopt);
+  EXPECT_EQ(mailbox.takeNext(1h, ad_utility::noop), 0);
+  EXPECT_EQ(mailbox.takeNext(1h, ad_utility::noop), 1);
+  EXPECT_EQ(mailbox.takeNext(1h, ad_utility::noop), std::nullopt);
   deliverer.join();
 }
 
@@ -96,7 +92,7 @@ TEST(OrderedResultMailbox, deliverTwiceThrows) {
   EXPECT_ANY_THROW(mailbox.deliver(1, 4));
   EXPECT_ANY_THROW(mailbox.deliver(2, 4));
   mailbox.deliver(0, 5);
-  EXPECT_EQ(mailbox.takeNext(1ms, noTick), 5);
+  EXPECT_EQ(mailbox.takeNext(1ms, ad_utility::noop), 5);
   EXPECT_ANY_THROW(mailbox.deliver(0, 6));
 }
 
@@ -114,9 +110,9 @@ TEST(OrderedResultMailbox, storeExceptionStopsAndRethrows) {
   EXPECT_TRUE(mailbox.storeException(
       std::make_exception_ptr(std::runtime_error{"second"})));
   EXPECT_TRUE(mailbox.stopRequested());
-  AD_EXPECT_THROW_WITH_MESSAGE(mailbox.takeNext(1ms, noTick),
+  AD_EXPECT_THROW_WITH_MESSAGE(mailbox.takeNext(1ms, ad_utility::noop),
                                ::testing::StrEq("first"));
-  AD_EXPECT_THROW_WITH_MESSAGE(mailbox.takeNext(1ms, noTick),
+  AD_EXPECT_THROW_WITH_MESSAGE(mailbox.takeNext(1ms, ad_utility::noop),
                                ::testing::StrEq("first"));
   AD_EXPECT_THROW_WITH_MESSAGE(mailbox.rethrowIfException(),
                                ::testing::StrEq("first"));
@@ -134,7 +130,7 @@ TEST(OrderedResultMailbox, exceptionWakesUpTheConsumer) {
   }};
   // The long tick interval makes sure that the consumer is woken up by the
   // notification, not by the timeout.
-  AD_EXPECT_THROW_WITH_MESSAGE(mailbox.takeNext(1h, noTick),
+  AD_EXPECT_THROW_WITH_MESSAGE(mailbox.takeNext(1h, ad_utility::noop),
                                ::testing::StrEq("failed"));
   thrower.join();
 }
@@ -145,13 +141,13 @@ TEST(OrderedResultMailbox, stopMakesTakeThrow) {
   OrderedResultMailbox<int> mailbox;
   mailbox.setNumSlots(2);
   mailbox.deliver(0, 1);
-  EXPECT_EQ(mailbox.takeNext(1ms, noTick), 1);
+  EXPECT_EQ(mailbox.takeNext(1ms, ad_utility::noop), 1);
   mailbox.deliver(1, 2);
   mailbox.requestStop();
   EXPECT_TRUE(mailbox.stopRequested());
   EXPECT_NO_THROW(mailbox.rethrowIfException());
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      mailbox.takeNext(1ms, noTick),
+      mailbox.takeNext(1ms, ad_utility::noop),
       ::testing::HasSubstr("stopped before slot 1"),
       ad_utility::OrderedResultMailboxStopped);
 }
@@ -165,7 +161,7 @@ TEST(OrderedResultMailbox, stopWakesUpTheConsumer) {
     std::this_thread::sleep_for(5ms);
     mailbox.requestStop();
   }};
-  EXPECT_THROW(mailbox.takeNext(1h, noTick),
+  EXPECT_THROW(mailbox.takeNext(1h, ad_utility::noop),
                ad_utility::OrderedResultMailboxStopped);
   stopper.join();
 }

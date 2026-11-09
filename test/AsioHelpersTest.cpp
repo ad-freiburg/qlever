@@ -172,6 +172,39 @@ TEST(AsioHelpers, coSpawnWithPostedCompletion) {
   EXPECT_TRUE(handlerRanOnStrand);
 }
 
+// Test that the completion handler of `coSpawnWithPostedCompletion` is really
+// posted (and not dispatched, i.e. invoked inline): compared to a plain
+// `co_spawn` with the same coroutine and a handler on the same executor, it
+// takes exactly one more handler of the `io_context` until the completion
+// handler has run.
+TEST(AsioHelpers, coSpawnWithPostedCompletionReallyPosts) {
+  auto returnValue = []() -> net::awaitable<int> { co_return 42; };
+  // Return the number of handlers that the `io_context` runs until the
+  // completion handler has run, when the `spawn` function is used.
+  auto numStepsUntilHandlerRan = [&returnValue](auto spawn) {
+    net::io_context ctx;
+    bool handlerRan = false;
+    spawn(ctx.get_executor(), returnValue(),
+          [&handlerRan](std::exception_ptr, int) { handlerRan = true; });
+    size_t numSteps = 0;
+    while (!handlerRan) {
+      EXPECT_EQ(ctx.poll_one(), 1u);
+      ++numSteps;
+    }
+    return numSteps;
+  };
+  size_t numStepsPlain =
+      numStepsUntilHandlerRan([](auto executor, auto awaitable, auto handler) {
+        net::co_spawn(executor, std::move(awaitable), std::move(handler));
+      });
+  size_t numStepsPosted =
+      numStepsUntilHandlerRan([](auto executor, auto awaitable, auto handler) {
+        coSpawnWithPostedCompletion(executor, std::move(awaitable),
+                                    std::move(handler));
+      });
+  EXPECT_EQ(numStepsPosted, numStepsPlain + 1);
+}
+
 // _________________________________________________________________________
 ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesCheckCancellationHandle) {
   ad_utility::SharedCancellationHandle handle =

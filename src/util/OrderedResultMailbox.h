@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_UTIL_ORDEREDRESULTMAILBOX_H
 #define QLEVER_SRC_UTIL_ORDEREDRESULTMAILBOX_H
 
+#include <absl/functional/function_ref.h>
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -56,6 +58,18 @@ class OrderedResultMailboxStopped : public std::runtime_error {
 // until the next slot has been delivered. It must therefore not be called on
 // a thread of a pool that also has to run the tasks that deliver the results,
 // otherwise the pool may starve or even deadlock.
+//
+// NOTE: `ad_utility::data_structures::OrderedThreadSafeQueue` (see
+// `ThreadSafeQueue.h`) also hands values over in the order of their indices,
+// but with the opposite trade-off: there, `push(n, value)` blocks the producer
+// until the values for all the indices before `n` have been pushed, which
+// bounds the memory. This class is meant for producers that must never block,
+// typically coroutines on the same thread pool: if all the threads of the pool
+// were blocked in `push` for later indices, the task for the next index could
+// never run. Instead, the producers deliver immediately, and only the consumer
+// (on a dedicated thread) waits. In addition, `takeNext` wakes up regularly to
+// call `onTick`, a stop can be told apart from the regular end, and the
+// producers can query `stopRequested`.
 template <typename T>
 class OrderedResultMailbox : public NoCopyNoMove {
  private:
@@ -107,21 +121,25 @@ class OrderedResultMailbox : public NoCopyNoMove {
 
   // Wait until the next slot has been delivered, then return its result and
   // remove it from the mailbox. Return `std::nullopt` once all the slots have
-  // been taken. While waiting, call `onTick` (without holding the lock) every
-  // `tickInterval` (e.g. to report the progress of the tasks). If an
-  // exception has been stored before or while waiting, rethrow it. Otherwise,
-  // if a stop has been requested, throw an `OrderedResultMailboxStopped`. Both
-  // take precedence over a result that is already there and over the end.
-  template <typename OnTick>
+  // been taken. While waiting, call `onTick` (without holding the lock) after
+  // every wakeup (e.g. to report the progress of the tasks). The consumer
+  // wakes up at the latest every `tickInterval`, but possibly more often (on
+  // the delivery of the next slot, on a stop, or spuriously). If an exception
+  // has been stored before or while waiting, rethrow it. Otherwise, if a stop
+  // has been requested, throw an `OrderedResultMailboxStopped`. Both take
+  // precedence over a result that is already there and over the end.
   std::optional<T> takeNext(std::chrono::milliseconds tickInterval,
-                            OnTick&& onTick) {
+                            absl::FunctionRef<void()> onTick) {
     std::unique_lock lock{mutex_};
-    auto isReadyOrStopped = [this]() {
+    // The consumer can stop waiting if the next slot has been delivered, if
+    // all the slots have been taken, if an exception has been stored, or if a
+    // stop has been requested.
+    auto canStopWaiting = [this]() {
       return nextIndex_ == results_.size() ||
              results_[nextIndex_].has_value() || exception_ != nullptr ||
              wasStopRequested_.load();
     };
-    while (!isReadyOrStopped()) {
+    while (!canStopWaiting()) {
       waitingForIndex_ = nextIndex_;
       conditionVariable_.wait_for(lock, tickInterval);
       waitingForIndex_.reset();

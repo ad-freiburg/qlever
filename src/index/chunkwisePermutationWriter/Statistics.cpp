@@ -19,9 +19,7 @@ namespace chunkwisePermutationWriter {
 // _____________________________________________________________________________
 void Statistics::reportProgress() {
   numRowsForProgressBar_ = context_.numRowsProcessed_.load();
-  // NOTE: The counter may have advanced by several batches since the last
-  // report, hence the loop.
-  while (progressBar_.update()) {
+  if (progressBar_.update()) {
     AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
   }
 }
