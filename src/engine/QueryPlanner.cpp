@@ -335,8 +335,12 @@ void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::addConstants(const p::Bind& bind) {
+  // A `BIND` of an undefined `Id` (for example, of an unknown function in the
+  // syntax test mode) does not bind its variable to a constant.
   auto constant = bind._expression.getConstantValue();
-  if (constant.has_value() && !qlever::isInternalComponent(constant.value())) {
+  if (constant.has_value() &&
+      !(constant->isId() && constant->getId().isUndefined()) &&
+      !qlever::isInternalComponent(constant.value())) {
     constants_.emplace(bind._target, std::move(constant.value()));
   }
 }
