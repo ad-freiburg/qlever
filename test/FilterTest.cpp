@@ -143,8 +143,14 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
                                            {true}},
                                           asBool);
 
-  ValuesForTesting values{qec, std::move(idTable), {Variable{"?x"}}, false,
-                          {},  LocalVocab{},       std::nullopt,     true};
+  ValuesForTesting values{qec,
+                          std::move(idTable),
+                          {Variable{"?x"}},
+                          false,
+                          qlm::vector<ColumnIndex>{qec->getAllocator()},
+                          LocalVocab{},
+                          std::nullopt,
+                          true};
   QueryExecutionTree subTree{
       qec, std::make_shared<ValuesForTesting>(std::move(values))};
   Filter filter{

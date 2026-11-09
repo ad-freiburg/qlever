@@ -12,13 +12,13 @@
 // _____________________________________________________________________________
 ExplicitIdTableOperation::ExplicitIdTableOperation(
     QueryExecutionContext* ctx, IdTableOrView table,
-    VariableToColumnMap variables, ql::span<const ColumnIndex> sortedColumns,
+    VariableToColumnMap variables, qlm::vector<ColumnIndex> sortedColumns,
     LocalVocab localVocab, std::string cacheKey)
     : Operation(ctx),
       idTable_(std::move(table)),
       view_(viewOf(idTable_)),
       variables_(std::move(variables)),
-      sortedColumns_(sortedColumns.begin(), sortedColumns.end(), allocator()),
+      sortedColumns_(std::move(sortedColumns)),
       localVocab_(std::move(localVocab)),
       cacheKey_(std::move(cacheKey)) {
   // An explicit IdTable operation is never stored in the cache because it is

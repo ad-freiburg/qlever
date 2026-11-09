@@ -989,7 +989,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                                           {TC(iri("<z>")), TC(iri("<a>"))}}});
   auto sibling = std::make_shared<Sort>(
       testQec, std::make_shared<QueryExecutionTree>(testQec, siblingOperation),
-      std::vector<ColumnIndex>{});
+      ad_utility::testing::colIndices({}, testQec->getAllocator()));
 
   // Reset the computed results, to reuse the mock-operations.
   auto reset = [&]() {
@@ -1126,8 +1126,9 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
     if (limitForStripColumns.has_value()) {
       strip->applyLimitOffset(limitForStripColumns.value(), false);
     }
-    return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
-                                  std::vector<ColumnIndex>{0});
+    return std::make_shared<Sort>(
+        testQec, makeTree(std::move(strip)),
+        ad_utility::testing::colIndices({0}, testQec->getAllocator()));
   };
   // The `VALUES` clause that is expected when only `?x` is pushed down.
   const std::string valuesClauseX = "VALUES (?x) { (<x>) } ";
@@ -1193,11 +1194,13 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    auto innerSort = std::make_shared<Sort>(testQec, makeTree(service),
-                                            std::vector<ColumnIndex>{0});
+    auto innerSort = std::make_shared<Sort>(
+        testQec, makeTree(service),
+        ad_utility::testing::colIndices({0}, testQec->getAllocator()));
     innerSort->applyLimitOffset(LimitOffsetClause{1}, false);
-    auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
-                                            std::vector<ColumnIndex>{0});
+    auto outerSort = std::make_shared<Sort>(
+        testQec, makeTree(innerSort),
+        ad_utility::testing::colIndices({0}, testQec->getAllocator()));
     Service::precomputeSiblingResult(sibling, outerSort, true, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(

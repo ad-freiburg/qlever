@@ -2570,8 +2570,9 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         bindUnion->getRootOperation()->makeTreeWithBindColumn(bind));
     expectPush(unionOf(view(), sharesS()), std::nullopt);
     expectPush(unionOf(sharesSAndO(), view()), std::nullopt);
-    expectPush(makeExecutionTree<Union>(qec, view(), view(),
-                                        std::vector<ColumnIndex>{0}),
+    expectPush(makeExecutionTree<Union>(
+                   qec, view(), view(),
+                   qlm::vector<ColumnIndex>{{0}, qec->getAllocator()}),
                std::nullopt);
 
     // `NeutralOptional` refuses: for an empty child it fabricates an

@@ -178,8 +178,9 @@ TEST(OperationTest, limitPushdownClonesOnlySharedChildren) {
   };
 
   testPushdown([qec](auto children) {
-    return std::make_unique<Sort>(qec, std::move(children.at(0)),
-                                  std::vector<ColumnIndex>{0});
+    return std::make_unique<Sort>(
+        qec, std::move(children.at(0)),
+        ad_utility::testing::colIndices({0}, qec->getAllocator()));
   });
   testPushdown([qec](auto children) {
     using namespace sparqlExpression;
@@ -650,7 +651,7 @@ TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
             ad_utility::makeExecutionTree<ValuesForTesting>(
                 qec, makeIdTableFromVector({{1}}),
                 std::vector<std::optional<Variable>>{Variable{"?x"}}),
-            std::vector<ColumnIndex>{0}};
+            ad_utility::testing::colIndices({0}, qec->getAllocator())};
   // The child of the `Sort` was optimized out, but its own child is only
   // computed afterwards.
   auto& childRti = sort.getChildren().at(0)->getRootOperation()->runtimeInfo();
@@ -1229,7 +1230,8 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
 
   // Wrapping it in a Sort still yields non-deterministic.
   auto sortedTree = ad_utility::makeExecutionTree<Sort>(
-      qec, randBindTree, std::vector<ColumnIndex>{});
+      qec, randBindTree,
+      ad_utility::testing::colIndices({}, qec->getAllocator()));
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
 }
 

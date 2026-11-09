@@ -46,7 +46,7 @@ class ExplicitIdTableOperation : public Operation {
  public:
   ExplicitIdTableOperation(QueryExecutionContext* ctx, IdTableOrView table,
                            VariableToColumnMap variables,
-                           ql::span<const ColumnIndex> sortedColumns,
+                           qlm::vector<ColumnIndex> sortedColumns,
                            LocalVocab localVocab, std::string cacheKey);
 
   // Return a non-owning view of `table`, regardless of which alternative of

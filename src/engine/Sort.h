@@ -38,8 +38,7 @@ class Sort : public Operation {
 
  public:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       ql::span<const ColumnIndex> sortColumnIndices,
-       bool explicitSort = false);
+       qlm::vector<ColumnIndex> sortColumnIndices, bool explicitSort = false);
 
  public:
   virtual std::string getDescriptor() const override;

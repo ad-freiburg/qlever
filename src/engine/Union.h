@@ -34,7 +34,10 @@ class Union : public Operation {
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
         const std::shared_ptr<QueryExecutionTree>& t2,
-        ql::span<const ColumnIndex> targetOrder = {});
+        qlm::vector<ColumnIndex> targetOrder);
+  Union(QueryExecutionContext* qec,
+        const std::shared_ptr<QueryExecutionTree>& t1,
+        const std::shared_ptr<QueryExecutionTree>& t2);
 
  protected:
   virtual std::string getCacheKeyImpl() const override;

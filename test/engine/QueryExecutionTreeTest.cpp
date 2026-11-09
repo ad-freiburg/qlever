@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/Distinct.h"
@@ -271,7 +272,6 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
 TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
-  using SC = std::vector<ColumnIndex>;
   auto* qec = getQec();
   VariableToColumnMap expectedVariables{
       {Var{"?a"}, makeAlwaysDefinedColumn(0)}};
@@ -283,7 +283,8 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   };
   auto unionTree = ad_utility::makeExecutionTree<Union>(
       qec, makeValues(makeIdTableFromVector({{1, 2}})),
-      makeValues(makeIdTableFromVector({{0, 3}})), SC{1});
+      makeValues(makeIdTableFromVector({{0, 3}})),
+      colIndices({1}, qec->getAllocator()));
   unionTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
 
   auto sortedUnion = QueryExecutionTree::createSortedTree(unionTree, {0});
@@ -296,7 +297,8 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
 
   // The same holds for `Sort`.
   auto sortTree = ad_utility::makeExecutionTree<Sort>(
-      qec, makeValues(makeIdTableFromVector({{1, 0}, {0, 1}})), SC{1});
+      qec, makeValues(makeIdTableFromVector({{1, 0}, {0, 1}})),
+      colIndices({1}, qec->getAllocator()));
   sortTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
 
   auto sortedSort = QueryExecutionTree::createSortedTree(sortTree, {0});
@@ -348,8 +350,8 @@ TEST(QueryExecutionTree,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
 
-  auto sort = ad_utility::makeExecutionTree<Sort>(qec, indexScan,
-                                                  std::vector<ColumnIndex>{0});
+  auto sort = ad_utility::makeExecutionTree<Sort>(
+      qec, indexScan, colIndices({0}, qec->getAllocator()));
 
   sort->applyLimitOffset(limitOffset, false);
   EXPECT_TRUE(

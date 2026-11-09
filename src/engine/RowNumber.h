@@ -45,8 +45,11 @@ class RowNumber : public Operation {
   // number column followed by the sort columns of the child.
   RowNumber(QueryExecutionContext* qec,
             std::shared_ptr<QueryExecutionTree> child,
-            Variable rowNumberVariable, int64_t offset = 0,
-            ql::span<const ColumnIndex> sortedOn = {});
+            Variable rowNumberVariable, int64_t offset,
+            qlm::vector<ColumnIndex> sortedOn);
+  RowNumber(QueryExecutionContext* qec,
+            std::shared_ptr<QueryExecutionTree> child,
+            Variable rowNumberVariable, int64_t offset = 0);
 
   // Member functions inherited from `Operation` that have to be implemented by
   // each child class.

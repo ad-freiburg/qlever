@@ -322,7 +322,9 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
+      rootOperation->getExecutionContext(), std::move(qet),
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               rootOperation->allocator()},
       explicitSort);
 }
 
