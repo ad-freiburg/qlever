@@ -125,11 +125,11 @@ template <typename Range, typename F>
 auto transform(Range&& input, F unaryOp) {
   using Output = std::decay_t<decltype(std::invoke(
       unaryOp, *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
-  return ::ranges::to<std::vector<Output>>(
-      ql::ranges::subrange(
-          ad_utility::makeForwardingIterator<Range>(input.begin()),
-          ad_utility::makeForwardingIterator<Range>(input.end())) |
-      ql::views::transform(std::move(unaryOp)));
+  return ql::ranges::subrange(
+             ad_utility::makeForwardingIterator<Range>(input.begin()),
+             ad_utility::makeForwardingIterator<Range>(input.end())) |
+         ql::views::transform(std::move(unaryOp)) |
+         ::ranges::to<std::vector<Output>>();
 }
 /*
 @brief Takes two vectors, pairs up their content at the same index positions

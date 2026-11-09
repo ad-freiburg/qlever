@@ -35,9 +35,9 @@ using WrappedTraits = GenericCharTraits<WrappedChar>;
 // Build an array of `char_type` from a byte sequence for convenient testing.
 template <typename Traits>
 auto makeArray(std::initializer_list<int> bytes) {
-  return ::ranges::to<std::vector<typename Traits::char_type>>(
-      bytes |
-      ql::views::transform([](int b) { return Traits::to_char_type(b); }));
+  return bytes |
+         ql::views::transform([](int b) { return Traits::to_char_type(b); }) |
+         ::ranges::to<std::vector<typename Traits::char_type>>();
 }
 }  // namespace
 

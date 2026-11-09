@@ -96,10 +96,10 @@ IdTable makeIdTableFromVector(const VectorTable& content,
 // represents a block
 inline std::vector<IdTable> createLazyIdTables(
     const std::vector<VectorTable>& blocks) {
-  return ::ranges::to<std::vector>(
-      blocks | ql::views::transform([](const auto& block) {
-        return makeIdTableFromVector(block, ad_utility::testing::IntId);
-      }));
+  return blocks | ql::views::transform([](const auto& block) {
+           return makeIdTableFromVector(block, ad_utility::testing::IntId);
+         }) |
+         ::ranges::to<std::vector>();
 }
 
 // Similar to `makeIdTableFromVector` (see above), but returns a GMock

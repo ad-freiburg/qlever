@@ -61,11 +61,12 @@ class EmptyDirectory {
 
   // The names of all the files in this directory.
   std::vector<std::string> filenames() const {
-    return ::ranges::to<std::vector<std::string>>(
-        std::filesystem::directory_iterator{directory_} |
-        ql::views::transform([](const std::filesystem::directory_entry& entry) {
-          return entry.path().string();
-        }));
+    return std::filesystem::directory_iterator{directory_} |
+           ql::views::transform(
+               [](const std::filesystem::directory_entry& entry) {
+                 return entry.path().string();
+               }) |
+           ::ranges::to<std::vector<std::string>>();
   }
 };
 

@@ -506,8 +506,8 @@ struct MetricAreaVisitor {
     }
     // For a multipolygon with multiple members, we need to compute the union of
     // the polygons to determine their area.
-    return MetricAreaVisitor{}(
-        ::ranges::to_vector(polygons | ql::views::transform(makeS2Polygon)));
+    return MetricAreaVisitor{}(polygons | ql::views::transform(makeS2Polygon) |
+                               ::ranges::to_vector);
   }
 
   // Compute the area in square meters of a geometry collection

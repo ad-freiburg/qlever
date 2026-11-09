@@ -153,10 +153,10 @@ class IndexFormatConverterTest : public ::testing::Test {
         {}, std::make_shared<ad_utility::CancellationHandle<>>(),
         *locatedTriples, executor());
     AD_CORRECTNESS_CHECK(table.numColumns() == 3);
-    return ::ranges::to<std::vector<std::array<Id, 3>>>(
-        table | ql::views::transform([](const auto& row) {
-          return std::array{row[0], row[1], row[2]};
-        }));
+    return table | ql::views::transform([](const auto& row) {
+             return std::array{row[0], row[1], row[2]};
+           }) |
+           ::ranges::to<std::vector<std::array<Id, 3>>>();
   }
 };
 
@@ -271,8 +271,8 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
     return absl::StrJoin(components, " ");
   };
   auto spoTriples = scanAllTriples(index, Permutation::SPO, locatedTriples);
-  auto spoTriplesAsStrings = ::ranges::to<std::vector<std::string>>(
-      spoTriples | ql::views::transform(tripleToString));
+  auto spoTriplesAsStrings = spoTriples | ql::views::transform(tripleToString) |
+                             ::ranges::to<std::vector<std::string>>();
   EXPECT_THAT(spoTriplesAsStrings,
               ::testing::ElementsAreArray(expectedTriples()));
 
@@ -390,8 +390,9 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
   auto fileName = [](const fs::directory_entry& entry) {
     return entry.path().filename().string();
   };
-  auto filesBefore = ::ranges::to<std::vector<std::string>>(
-      ql::directoryRange(oldDirectory) | ql::views::transform(fileName));
+  auto filesBefore = ql::directoryRange(oldDirectory) |
+                     ql::views::transform(fileName) |
+                     ::ranges::to<std::vector<std::string>>();
 
   upgradeIndexInPlace(oldBasename_, executor());
 
@@ -416,8 +417,9 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
   auto retiredDirs = qlever::util::directoriesWithPrefix(
       oldDirectory, std::string{retiredDirPrefix});
   ASSERT_EQ(retiredDirs.size(), 1u);
-  auto retiredFiles = ::ranges::to<std::vector<std::string>>(
-      ql::directoryRange(retiredDirs.front()) | ql::views::transform(fileName));
+  auto retiredFiles = ql::directoryRange(retiredDirs.front()) |
+                      ql::views::transform(fileName) |
+                      ::ranges::to<std::vector<std::string>>();
   EXPECT_THAT(retiredFiles, ::testing::UnorderedElementsAreArray(filesBefore));
   EXPECT_TRUE(qlever::util::directoriesWithPrefix(oldDirectory,
                                                   std::string{stagingDirPrefix})

@@ -451,10 +451,10 @@ void Visitor::addVisibleVariable(Variable var) {
 template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
                                        List objectList) {
-  return ::ranges::to<PathObjectPairs>(
-      objectList.first | ql::views::transform([&predicate](auto& object) {
-        return PathObjectPairs::value_type{predicate, std::move(object)};
-      }));
+  return objectList.first | ql::views::transform([&predicate](auto& object) {
+           return PathObjectPairs::value_type{predicate, std::move(object)};
+         }) |
+         ::ranges::to<PathObjectPairs>();
 }
 
 // ___________________________________________________________________________
@@ -2412,13 +2412,13 @@ VarOrPath Visitor::visit(Parser::VerbPathOrSimpleContext* ctx) {
 ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
   auto objectAndTriplesVec = visitVector(ctx->objectPath());
   // First collect all the objects.
-  auto objects = ::ranges::to<std::vector<GraphTerm>>(
-      objectAndTriplesVec | ql::views::transform(ad_utility::first));
+  auto objects = objectAndTriplesVec | ql::views::transform(ad_utility::first) |
+                 ::ranges::to<std::vector<GraphTerm>>();
 
   // Collect all the triples. Node: `views::join` flattens the input.
-  auto triples = ::ranges::to<std::vector<TripleWithPropertyPath>>(
-      objectAndTriplesVec | ql::views::transform(ad_utility::second) |
-      ql::views::join);
+  auto triples = objectAndTriplesVec |
+                 ql::views::transform(ad_utility::second) | ql::views::join |
+                 ::ranges::to<std::vector<TripleWithPropertyPath>>();
   return {std::move(objects), std::move(triples)};
 }
 
@@ -2584,13 +2584,13 @@ SubjectOrObjectAndTriples Visitor::visit(
     Parser::BlankNodePropertyListContext* ctx) {
   GraphTerm term = newBlankNodeOrVariable();
   auto propertyList = visit(ctx->propertyListNotEmpty());
-  auto triples = ::ranges::to<Triples>(
-      propertyList.first |
-      ql::views::transform([&term](auto& predicateAndObject) {
-        auto& [predicate, object] = predicateAndObject;
-        return Triples::value_type{term, std::move(predicate),
-                                   std::move(object)};
-      }));
+  auto triples = propertyList.first |
+                 ql::views::transform([&term](auto& predicateAndObject) {
+                   auto& [predicate, object] = predicateAndObject;
+                   return Triples::value_type{term, std::move(predicate),
+                                              std::move(object)};
+                 }) |
+                 ::ranges::to<Triples>();
   ad_utility::appendVector(triples, std::move(propertyList.second));
   return {std::move(term), std::move(triples)};
 }

@@ -447,10 +447,11 @@ inline void checkSweeperTestResult(
 // expected bounding box after adding the geometries to `Sweeper`.
 inline util::geo::DBox makeAggregatedBoundingBox(
     const std::vector<std::string>& wktGeometries) {
-  auto wktWithoutDatatype = ::ranges::to<std::vector<std::string>>(
-      wktGeometries | ql::views::transform([](const auto& geom) {
-        return ad_utility::detail::removeDatatype(geom);
-      }));
+  auto wktWithoutDatatype = wktGeometries |
+                            ql::views::transform([](const auto& geom) {
+                              return ad_utility::detail::removeDatatype(geom);
+                            }) |
+                            ::ranges::to<std::vector<std::string>>();
   auto aggregatedWkt = absl::StrCat("\"GEOMETRYCOLLECTION(",
                                     absl::StrJoin(wktWithoutDatatype, ", "),
                                     ")\"^^<", GEO_WKT_LITERAL, ">");

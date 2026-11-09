@@ -115,9 +115,10 @@ VocabBatchLookupResult GeoVocabulary<V>::lookupBatch(
   if (!grid_.has_value()) {
     return literals_.lookupBatch(indices);
   }
-  auto positions = ::ranges::to<std::vector<size_t>>(
-      indices | ql::views::transform(
-                    [this](size_t index) { return positionFromIndex(index); }));
+  auto positions = indices | ql::views::transform([this](size_t index) {
+                     return positionFromIndex(index);
+                   }) |
+                   ::ranges::to<std::vector<size_t>>();
   return literals_.lookupBatch(positions);
 }
 

@@ -412,11 +412,11 @@ class TransitivePathImpl : public TransitivePathBase {
       std::optional<ColumnIndex> graphColumn) {
     uint8_t graphPadding = graphColumn.has_value() && joinColumn != graphColumn;
     AD_CORRECTNESS_CHECK(totalColumns > graphPadding);
-    return ::ranges::to<std::vector<ColumnIndex>>(
-        ql::views::iota(static_cast<size_t>(0), totalColumns) |
-        ql::views::filter([joinColumn, &graphColumn](size_t i) {
-          return i != joinColumn && i != graphColumn;
-        }));
+    return ql::views::iota(static_cast<size_t>(0), totalColumns) |
+           ql::views::filter([joinColumn, &graphColumn](size_t i) {
+             return i != joinColumn && i != graphColumn;
+           }) |
+           ::ranges::to<std::vector<ColumnIndex>>();
   }
 
   // Create a zipped view that returns `Id::makeUndefined()` for the graph

@@ -1075,9 +1075,10 @@ std::vector<std::string> runWithEventLog(Func runRequests) {
 
 // Parse each JSONL line of a query event log.
 std::vector<json> parseEventLog(const std::vector<std::string>& lines) {
-  return ::ranges::to<std::vector<json>>(
-      lines | ql::views::transform(
-                  [](const std::string& line) { return json::parse(line); }));
+  return lines | ql::views::transform([](const std::string& line) {
+           return json::parse(line);
+         }) |
+         ::ranges::to<std::vector<json>>();
 }
 }  // namespace
 

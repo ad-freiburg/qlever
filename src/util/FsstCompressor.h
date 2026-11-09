@@ -217,11 +217,12 @@ class FsstEncoder {
         output.resize(2 * output.size());
       }
       // Convert the result pointers to `string_views` for easier handling.
-      auto stringViews = ::ranges::to<std::vector<std::string_view>>(
+      auto stringViews =
           ql::views::iota(size_t{0}, strings.size()) |
           ql::views::transform([&outputPtrs, &outputLengths](size_t i) {
             return std::string_view(outputPtrs.at(i), outputLengths.at(i));
-          }));
+          }) |
+          ::ranges::to<std::vector<std::string_view>>();
       return BulkResult{std::move(outputPtr), std::move(stringViews),
                         FsstDecoder(fsst_decoder(encoder))};
     }

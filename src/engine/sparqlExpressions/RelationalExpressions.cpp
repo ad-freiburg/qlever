@@ -113,12 +113,13 @@ std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
   const auto resultRanges = getRanges(Comp);
 
   // Convert pairs of iterators to pairs of indexes.
-  auto intervals = ::ranges::to<ad_utility::SetOfIntervals::Vec>(
+  auto intervals =
       resultRanges | ql::views::transform([&column](const auto& range) {
         const auto& [rangeBegin, rangeEnd] = range;
         return std::pair<size_t, size_t>(rangeBegin - column.begin(),
                                          rangeEnd - column.begin());
-      }));
+      }) |
+      ::ranges::to<ad_utility::SetOfIntervals::Vec>();
   return ad_utility::SetOfIntervals{std::move(intervals), column.size()};
 }
 

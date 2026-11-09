@@ -252,11 +252,11 @@ class CompressedRelationWriter {
                      &CompressedBlockMetadataNoBlockIndex::firstTriple_);
 
     // Write the correct block indices
-    auto result = ::ranges::to<std::vector<CompressedBlockMetadata>>(
-        ad_utility::integerRange(blocks.size()) |
-        ql::views::transform([&blocks](size_t i) {
-          return CompressedBlockMetadata{std::move(blocks.at(i)), i};
-        }));
+    auto result = ad_utility::integerRange(blocks.size()) |
+                  ql::views::transform([&blocks](size_t i) {
+                    return CompressedBlockMetadata{std::move(blocks.at(i)), i};
+                  }) |
+                  ::ranges::to<std::vector<CompressedBlockMetadata>>();
 
     AD_CORRECTNESS_CHECK(
         CompressedBlockMetadata::checkInvariantsForSortedBlocks(result));

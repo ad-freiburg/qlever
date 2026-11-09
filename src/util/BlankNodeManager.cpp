@@ -102,8 +102,8 @@ auto BlankNodeManager::LocalBlankNodeManager::getOwnedBlockIndices() const
   auto resultFromSingleSet = [](const auto& set) {
     OwnedBlocksEntry res;
     res.uuid_ = set->uuid_;
-    res.blockIndices_ = ::ranges::to<std::vector>(
-        set->blocks_ | ql::views::transform(&Block::blockIdx_));
+    res.blockIndices_ = set->blocks_ | ql::views::transform(&Block::blockIdx_) |
+                        ::ranges::to<std::vector>();
     return res;
   };
 

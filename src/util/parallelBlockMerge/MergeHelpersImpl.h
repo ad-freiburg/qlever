@@ -127,17 +127,17 @@ CPP_template(typename Input)(requires InputConcept<Input>)
 std::vector<ElementAndWeight<
     typename Input::Element>> collectElementsAndWeights(const Input& input) {
   using Element = typename Input::Element;
-  return ::ranges::to_vector(
-      allBlocksInAllRuns(input) |
-      ::ranges::views::transform([&input](const auto& runAndBlock) {
-        auto [runIdx, blockIdx] = runAndBlock;
-        size_t numElements = input.numElementsInBlock(runIdx, blockIdx);
-        AD_CORRECTNESS_CHECK(numElements > 0);
-        size_t weight = blockWeight(input, runIdx, blockIdx);
-        AD_CORRECTNESS_CHECK(weight > 0);
-        return ElementAndWeight<Element>{input.lastElement(runIdx, blockIdx),
-                                         weight};
-      }));
+  return allBlocksInAllRuns(input) |
+         ::ranges::views::transform([&input](const auto& runAndBlock) {
+           auto [runIdx, blockIdx] = runAndBlock;
+           size_t numElements = input.numElementsInBlock(runIdx, blockIdx);
+           AD_CORRECTNESS_CHECK(numElements > 0);
+           size_t weight = blockWeight(input, runIdx, blockIdx);
+           AD_CORRECTNESS_CHECK(weight > 0);
+           return ElementAndWeight<Element>{input.lastElement(runIdx, blockIdx),
+                                            weight};
+         }) |
+         ::ranges::to_vector;
 }
 
 // Step 2: Sort the `elementsAndWeights` by their element, merge the entries of
@@ -191,9 +191,8 @@ std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
         ::ranges::accumulate(
             group | ::ranges::views::transform(ad_utility::second), size_t{0})};
   };
-  auto result = ::ranges::to_vector(
-      ::ranges::views::chunk_by(elementsAndWeights, isEquivalent) |
-      ::ranges::views::transform(mergeGroup));
+  auto result = ::ranges::views::chunk_by(elementsAndWeights, isEquivalent) |
+                ::ranges::views::transform(mergeGroup) | ::ranges::to_vector;
   auto weights = result | ql::views::transform(ad_utility::second);
   ::ranges::partial_sum(weights, ql::ranges::begin(weights));
   return result;

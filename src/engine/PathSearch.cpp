@@ -54,10 +54,10 @@ IdColumn BinSearchWrapper::getSources() const {
 
 // _____________________________________________________________________________
 std::vector<Id> BinSearchWrapper::getEdgeProperties(const Edge& edge) const {
-  return ::ranges::to<std::vector<Id>>(
-      edgeCols_ | ql::views::transform([this, &edge](auto edgeCol) {
-        return table_(edge.edgeRow_, edgeCol);
-      }));
+  return edgeCols_ | ql::views::transform([this, &edge](auto edgeCol) {
+           return table_(edge.edgeRow_, edgeCol);
+         }) |
+         ::ranges::to<std::vector<Id>>();
 }
 
 // _____________________________________________________________________________
@@ -241,11 +241,12 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
     auto subStartColumn = subtree_->getVariableColumn(config_.start_);
     auto subEndColumn = subtree_->getVariableColumn(config_.end_);
-    auto edgeColumns = ::ranges::to<std::vector<size_t>>(
+    auto edgeColumns =
         config_.edgeProperties_ |
         ql::views::transform([this](const auto& edgeProp) -> size_t {
           return subtree_->getVariableColumn(edgeProp);
-        }));
+        }) |
+        ::ranges::to<std::vector<size_t>>();
     BinSearchWrapper binSearch{dynSub, subStartColumn, subEndColumn,
                                std::move(edgeColumns)};
 

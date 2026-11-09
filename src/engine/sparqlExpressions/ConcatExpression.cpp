@@ -161,9 +161,9 @@ class ConcatExpression : public detail::VariadicExpression {
     auto visitLiteralVecResult =
         [&ctx,
          &moveLiteralToResult](LiteralVec& literalVec) -> ExpressionResult {
-      return ::ranges::to<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(
-          literalVec | ql::views::transform(moveLiteralToResult),
-          ctx->_allocator);
+      return literalVec | ql::views::transform(moveLiteralToResult) |
+             ::ranges::to<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(
+                 ctx->_allocator);
     };
     return std::visit(ad_utility::OverloadCallOperator{visitLiteralResult,
                                                        visitLiteralVecResult},

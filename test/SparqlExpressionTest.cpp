@@ -2978,11 +2978,12 @@ TEST(OrExpression, getLanguageFilterExpression) {
   {
     auto makeMultiLangFilter =
         [&](const std::vector<std::string_view>& languages, Variable variable) {
-          auto children = ::ranges::to<std::vector<SparqlExpression::Ptr>>(
+          auto children =
               languages |
               ql::views::transform([&lit](std::string_view language) {
                 return std::make_unique<StringLiteralExpression>(lit(language));
-              }));
+              }) |
+              ::ranges::to<std::vector<SparqlExpression::Ptr>>();
           auto le = makeLangExpression(
               std::make_unique<VariableExpression>(std::move(variable)));
           return std::make_unique<InExpression>(std::move(le),

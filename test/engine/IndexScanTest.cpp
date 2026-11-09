@@ -161,10 +161,10 @@ void testLazyScanForJoinWithColumn(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
-  auto column = ::ranges::to<std::vector<Id>>(
-      columnEntries | ql::views::transform([qec](const auto& entry) {
-        return toValueId(entry, qec->getIndex()).value();
-      }));
+  auto column = columnEntries | ql::views::transform([qec](const auto& entry) {
+                  return toValueId(entry, qec->getIndex()).value();
+                }) |
+                ::ranges::to<std::vector<Id>>();
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
   testLazyScan(std::move(lazyScan), scan, expectedRows);
@@ -179,10 +179,10 @@ void testLazyScanWithColumnThrows(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
-  auto column = ::ranges::to<std::vector<Id>>(
-      columnEntries | ql::views::transform([qec](const auto& entry) {
-        return toValueId(entry, qec->getIndex()).value();
-      }));
+  auto column = columnEntries | ql::views::transform([qec](const auto& entry) {
+                  return toValueId(entry, qec->getIndex()).value();
+                }) |
+                ::ranges::to<std::vector<Id>>();
 
   // We need this to suppress the warning about a [[nodiscard]] return value
   // being unused.
@@ -2136,8 +2136,8 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
     std::vector<std::pair<Variable, ColumnIndex>> columnOrigins =
         getVarsAndColumnIndices(varsToKeep, baseScanForPrefilter);
 
-    auto originalColumnIndices = ::ranges::to<std::vector<ColumnIndex>>(
-        columnOrigins | ql::views::values);
+    auto originalColumnIndices = columnOrigins | ql::views::values |
+                                 ::ranges::to<std::vector<ColumnIndex>>();
 
     IdTable expectedResult =
         fullResult.asColumnSubsetView(originalColumnIndices).clone();

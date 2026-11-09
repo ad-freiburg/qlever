@@ -102,9 +102,10 @@ std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
 // _____________________________________________________________________________
 SecondaryVocabulary SecondaryVocabulary::clone() const {
   SecondaryVocabulary result;
-  result.segments_ = ::ranges::to<std::vector<CompactVectorOfStrings<char>>>(
-      segments_ | ql::views::transform(
-                      [](const auto& segment) { return segment.clone(); }));
+  result.segments_ = segments_ | ql::views::transform([](const auto& segment) {
+                       return segment.clone();
+                     }) |
+                     ::ranges::to<std::vector<CompactVectorOfStrings<char>>>();
   result.segmentOffsets_ = segmentOffsets_.clone();
   result.sortedIndices_ = sortedIndices_.clone();
   return result;

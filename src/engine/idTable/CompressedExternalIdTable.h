@@ -259,10 +259,10 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   std::vector<InputRangeTypeErased<IdTableStatic<N>>> getAllGenerators() {
     file_.wlock()->flush();
-    return ::ranges::to<std::vector<InputRangeTypeErased<IdTableStatic<N>>>>(
-        ad_utility::integerRange(startOfSingleIdTables_.size()) |
-        ql::views::transform(
-            [this](size_t i) { return makeGeneratorForIdTable<N>(i); }));
+    return ad_utility::integerRange(startOfSingleIdTables_.size()) |
+           ql::views::transform(
+               [this](size_t i) { return makeGeneratorForIdTable<N>(i); }) |
+           ::ranges::to<std::vector<InputRangeTypeErased<IdTableStatic<N>>>>();
   }
 
   // The number of `IdTable`s (= presorted runs) that have been written.

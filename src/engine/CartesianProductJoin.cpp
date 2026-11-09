@@ -55,9 +55,8 @@ CartesianProductJoin::CartesianProductJoin(
 
 // ____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
-  return ::ranges::to<qlm::vector<QueryExecutionTree*>>(
-      children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }),
-      allocator());
+  return children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }) |
+         ::ranges::to<qlm::vector<QueryExecutionTree*>>(allocator());
 }
 
 // ____________________________________________________________________________
@@ -497,10 +496,11 @@ CartesianProductJoin::makeDistinctTree(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
-  return cloneWithNewChildren(::ranges::to<Children>(
-      children_ | ql::views::transform([](const auto& operation) {
-        return operation->clone();
-      })));
+  return cloneWithNewChildren(children_ |
+                              ql::views::transform([](const auto& operation) {
+                                return operation->clone();
+                              }) |
+                              ::ranges::to<Children>());
 }
 
 // _____________________________________________________________________________

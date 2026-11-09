@@ -685,9 +685,10 @@ TEST(MaterializedViewsGreedyPlanningTest,
     return p;
   };
   auto nodeIds = [](const QueryPlanner::SubtreePlanVec& plans) {
-    return ::ranges::to<std::vector<uint64_t>>(
-        plans | ql::views::transform(
-                    [](const auto& p) { return p._idsOfIncludedNodes; }));
+    return plans | ql::views::transform([](const auto& p) {
+             return p._idsOfIncludedNodes;
+           }) |
+           ::ranges::to<std::vector<uint64_t>>();
   };
   // Plans are given by the triples they cover: A = {1,2,3}, B = {3,4},
   // C = {4,5}. Larger plans are in later groups.

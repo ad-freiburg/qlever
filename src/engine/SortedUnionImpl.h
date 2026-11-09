@@ -154,10 +154,11 @@ struct SortedUnionImpl
     if (requestLaziness) {
       resultTable_.reserve(Union::chunkSize);
     }
-    targetOrder_ = ::ranges::to<std::vector<std::array<size_t, 2>>>(
-        comparatorView | ql::views::transform([this](const auto& col) {
-          return columnOrigins_.at(col);
-        }));
+    targetOrder_ = comparatorView |
+                   ql::views::transform([this](const auto& col) {
+                     return columnOrigins_.at(col);
+                   }) |
+                   ::ranges::to<std::vector<std::array<size_t, 2>>>();
   }
 
   // Always inline makes a huge difference on large datasets.

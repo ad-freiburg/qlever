@@ -116,16 +116,16 @@ struct StringValues {
   // Zero-padded, so that the lexicographic order is the numeric order, and long
   // enough to not fit into the small string buffer.
   static Container fromKeys(const std::vector<Key>& keys) {
-    return ::ranges::to<Container>(keys | ql::views::transform([](Key key) {
-                                     return absl::StrFormat(
-                                         "value_%010d_with_padding", key);
-                                   }));
+    return keys | ql::views::transform([](Key key) {
+             return absl::StrFormat("value_%010d_with_padding", key);
+           }) |
+           ::ranges::to<Container>();
   }
   static std::vector<Key> toKeys(const Container& values) {
-    return ::ranges::to<std::vector<Key>>(
-        values | ql::views::transform([](const auto& value) -> Key {
-          return std::stoull(value.substr(6, 10));
-        }));
+    return values | ql::views::transform([](const auto& value) -> Key {
+             return std::stoull(value.substr(6, 10));
+           }) |
+           ::ranges::to<std::vector<Key>>();
   }
   static auto range(Container& values) { return ql::span<std::string>{values}; }
 };

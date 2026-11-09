@@ -108,10 +108,10 @@ size_t MultiColumnJoin::getResultWidth() const {
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
   // The result is sorted on all join columns from the left subtree.
-  return ::ranges::to<qlm::vector<ColumnIndex>>(
-      _joinColumns | ql::views::transform(
-                         [](const auto& a) -> ColumnIndex { return a[0]; }),
-      allocator());
+  return _joinColumns | ql::views::transform([](const auto& a) -> ColumnIndex {
+           return a[0];
+         }) |
+         ::ranges::to<qlm::vector<ColumnIndex>>(allocator());
 }
 
 // _____________________________________________________________________________

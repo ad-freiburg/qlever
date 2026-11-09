@@ -120,10 +120,10 @@ class CopyOnWriteChunkedVector {
   // metadata). There is no single span over all elements, and copying them into
   // one vector would cost what the chunking saves.
   std::vector<ql::span<const T>> chunkSpans() const {
-    return ::ranges::to<std::vector<ql::span<const T>>>(
-        chunks_ | ql::views::transform([](const auto& chunk) {
-          return ql::span<const T>(chunk->data(), chunk->size());
-        }));
+    return chunks_ | ql::views::transform([](const auto& chunk) {
+             return ql::span<const T>(chunk->data(), chunk->size());
+           }) |
+           ::ranges::to<std::vector<ql::span<const T>>>();
   }
 };
 

@@ -293,10 +293,10 @@ class Result : public ad_utility::NoCopy {
       requires ql::ranges::forward_range<R> &&
       ql::concepts::convertible_to<ql::ranges::range_value_t<R>, const Result&>)
   static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
-    auto vocabs = ::ranges::to<std::vector<const LocalVocab*>>(
-        subResults | ql::views::transform([](const Result& table) {
-          return &table.localVocab();
-        }));
+    auto vocabs = subResults | ql::views::transform([](const Result& table) {
+                    return &table.localVocab();
+                  }) |
+                  ::ranges::to<std::vector<const LocalVocab*>>();
     return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
   }
 

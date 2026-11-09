@@ -305,7 +305,7 @@ class LocatedTriplesPerBlock {
                                   const LocatedTriplesPerBlock& ltpb) {
     // Get the block indices in sorted order.
     auto blockIndices =
-        ::ranges::to<std::vector<size_t>>(ltpb.map_ | ql::views::keys);
+        ltpb.map_ | ql::views::keys | ::ranges::to<std::vector<size_t>>();
     ql::ranges::sort(blockIndices);
     for (auto blockIndex : blockIndices) {
       os << "LTs in Block #" << blockIndex << ": " << *ltpb.map_.at(blockIndex)

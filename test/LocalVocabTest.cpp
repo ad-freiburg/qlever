@@ -291,8 +291,9 @@ TEST(LocalVocab, propagation) {
         return LocalVocabEntry::literalWithoutQuotes(word, localVocabContext);
       }
     };
-    auto expectedWords = ::ranges::to<TestWords>(
-        expectedWordsAsStrings | ql::views::transform(toLitOrIri));
+    auto expectedWords = expectedWordsAsStrings |
+                         ql::views::transform(toLitOrIri) |
+                         ::ranges::to<TestWords>();
     std::shared_ptr<const Result> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;

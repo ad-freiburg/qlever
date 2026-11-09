@@ -609,10 +609,11 @@ void IndexScan::determineMultiplicities() {
                                   : computeMultiplicitiesForIndex();
 
   if (varsToKeep_.has_value()) {
-    multiplicity_ = ::ranges::to<std::vector<float>>(
-        getSubsetForStrippedColumns() |
-        ql::views::transform(
-            [this](size_t column) { return multiplicity_.at(column); }));
+    multiplicity_ = getSubsetForStrippedColumns() |
+                    ql::views::transform([this](size_t column) {
+                      return multiplicity_.at(column);
+                    }) |
+                    ::ranges::to<std::vector<float>>();
   }
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }

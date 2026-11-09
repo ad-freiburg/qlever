@@ -231,10 +231,11 @@ Result Service::computeResultImpl(bool requestLaziness) {
   // Prepare the expected Variables as keys for the JSON-bindings. We can't wait
   // for the variables sent in the response as they're maybe not read before
   // the bindings.
-  auto expVariableKeys = ::ranges::to<std::vector<std::string>>(
-      parsedServiceClause_.visibleVariables_ |
-      ql::views::transform(
-          [](const Variable& v) { return v.name().substr(1); }));
+  auto expVariableKeys = parsedServiceClause_.visibleVariables_ |
+                         ql::views::transform([](const Variable& v) {
+                           return v.name().substr(1);
+                         }) |
+                         ::ranges::to<std::vector<std::string>>();
 
   auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
                                                 {"results", "bindings"});

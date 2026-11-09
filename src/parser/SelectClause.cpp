@@ -77,9 +77,9 @@ void SelectClause::setSelected(std::vector<Variable> variables) {
 // ____________________________________________________________________________
 [[nodiscard]] std::vector<std::string>
 SelectClause::getSelectedVariablesAsStrings() const {
-  return ::ranges::to<std::vector<std::string>>(
-      getSelectedVariables() |
-      ql::views::transform([](const Variable& var) { return var.name(); }));
+  return getSelectedVariables() |
+         ql::views::transform([](const Variable& var) { return var.name(); }) |
+         ::ranges::to<std::vector<std::string>>();
 }
 
 // ____________________________________________________________________

@@ -517,15 +517,16 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getColumnIndex = [](const auto& varAndColInfo) -> ColumnIndex {
     return varAndColInfo.second.columnIndex_;
   };
-  auto leftSelectedCols = ::ranges::to<qlm::vector<ColumnIndex>>(
+  auto leftSelectedCols =
       copySortedByColumnIndex(childLeft_->getVariableColumns()) |
-          ql::views::transform(getColumnIndex),
-      allocator());
+      ql::views::transform(getColumnIndex) |
+      ::ranges::to<qlm::vector<ColumnIndex>>(allocator());
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  auto rightSelectedCols = ::ranges::to<qlm::vector<ColumnIndex>>(
-      varsAndColInfo | ql::views::transform(getColumnIndex), allocator());
+  auto rightSelectedCols = varsAndColInfo |
+                           ql::views::transform(getColumnIndex) |
+                           ::ranges::to<qlm::vector<ColumnIndex>>(allocator());
 
   // Size of output table
   size_t numColumns = getResultWidth();

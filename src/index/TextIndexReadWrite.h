@@ -227,11 +227,12 @@ std::vector<To> readFreqComprList(size_t nofElements, off_t from,
   std::vector<From> codebook;
   detail::readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
                                   frequencyEncodedVector, codebook);
-  auto result = ::ranges::to<std::vector<To>>(
+  auto result =
       frequencyEncodedVector |
       ql::views::transform([&transformer, &codebook](const auto& encoded) {
         return transformer(codebook.at(encoded));
-      }));
+      }) |
+      ::ranges::to<std::vector<To>>();
   AD_LOG_DEBUG << "Done reading frequency-encoded list. Size: " << result.size()
                << "\n";
   return result;

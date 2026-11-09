@@ -65,10 +65,10 @@ MaterializedViewWriter::MaterializedViewWriter(
 
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
-  columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
-                                                     ql::views::keys);
-  columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
-      columnNamesAndPermutation | ql::views::values);
+  columnNames_ = columnNamesAndPermutation | ql::views::keys |
+                 ::ranges::to<std::vector<Variable>>();
+  columnPermutation_ = columnNamesAndPermutation | ql::views::values |
+                       ::ranges::to<std::vector<ColumnIndex>>();
   numAddEmptyColumns_ = numAddEmptyColumns;
 
   throwIfOrderByInconsistentWithViewOrder();
@@ -173,14 +173,15 @@ MaterializedViewWriter::getIdTableColumnNamesAndPermutation() const {
   const size_t numCols = targetVarsAndCols.size();
 
   // Column information for the columns selected by the user's query.
-  auto existingCols = ::ranges::to<std::vector<ColumnNameAndIndex>>(
+  auto existingCols =
       targetVarsAndCols | ql::views::transform([](const auto& opt) {
         AD_CONTRACT_CHECK(
             opt.has_value(),
             "Please ensure that all variables in your SELECT are bound.");
         return ColumnNameAndIndex{opt.value().variable_,
                                   opt.value().columnIndex_};
-      }));
+      }) |
+      ::ranges::to<std::vector<ColumnNameAndIndex>>();
 
   // Add dummy columns such that the view has at least four columns in total.
   uint8_t numAddEmptyCols = 0;

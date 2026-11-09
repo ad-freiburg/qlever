@@ -272,11 +272,11 @@ auto testEmptyVocabulary(F createVocabulary) {
 // or type-erased `VocabularyScanRange`) range types from `scanAll`.
 template <typename Range>
 std::vector<std::string> scanAllToVector(Range&& range) {
-  return ::ranges::to<std::vector<std::string>>(
-      AD_FWD(range) |
-      ql::views::transform([](const IndexAndWord& indexAndWord) {
-        return std::string{indexAndWord.word_};
-      }));
+  return AD_FWD(range) |
+         ql::views::transform([](const IndexAndWord& indexAndWord) {
+           return std::string{indexAndWord.word_};
+         }) |
+         ::ranges::to<std::vector<std::string>>();
 }
 
 // Collect all `{index, word}` pairs that the given `scanAll` result yields into
@@ -284,11 +284,12 @@ std::vector<std::string> scanAllToVector(Range&& range) {
 template <typename Range>
 std::vector<std::pair<uint64_t, std::string>> scanAllToIndexAndWordVector(
     Range&& range) {
-  return ::ranges::to<std::vector<std::pair<uint64_t, std::string>>>(
-      AD_FWD(range) |
-      ql::views::transform([](const IndexAndWord& indexAndWord) {
-        return std::pair{indexAndWord.index_, std::string{indexAndWord.word_}};
-      }));
+  return AD_FWD(range) |
+         ql::views::transform([](const IndexAndWord& indexAndWord) {
+           return std::pair{indexAndWord.index_,
+                            std::string{indexAndWord.word_}};
+         }) |
+         ::ranges::to<std::vector<std::pair<uint64_t, std::string>>>();
 }
 
 // The default set of words written by `writeWordsAndFinish`.
@@ -423,10 +424,11 @@ void assertStreamedLookupMatchesVocabularyAtIndices(
 // and the given `suffixes` consists of (see `FileSuffixes`).
 inline std::vector<std::string> vocabularyFilenames(
     const std::string& filename, const FileSuffixes& suffixes) {
-  return ::ranges::to<std::vector<std::string>>(
-      suffixes | ql::views::transform([&filename](const std::string& suffix) {
-        return absl::StrCat(filename, suffix);
-      }));
+  return suffixes |
+         ql::views::transform([&filename](const std::string& suffix) {
+           return absl::StrCat(filename, suffix);
+         }) |
+         ::ranges::to<std::vector<std::string>>();
 }
 
 // Same as above, for a vocabulary of the given (statically known) type.

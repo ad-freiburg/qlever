@@ -128,10 +128,10 @@ void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&,
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> OptionalJoin::leftJoinColumns() const {
-  return ::ranges::to<std::vector<ColumnIndex>>(
-      _joinColumns | ql::views::transform([](const auto& cols) -> ColumnIndex {
-        return cols[0];
-      }));
+  return _joinColumns |
+         ql::views::transform(
+             [](const auto& cols) -> ColumnIndex { return cols[0]; }) |
+         ::ranges::to<std::vector<ColumnIndex>>();
 }
 
 // _____________________________________________________________________________

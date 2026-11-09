@@ -149,6 +149,6 @@ void RuntimeParameters::setFromAssignment(const std::string& assignment) {
 // _____________________________________________________________________________
 std::vector<std::string> RuntimeParameters::getKeys() const {
   static std::vector<std::string> keys =
-      ::ranges::to<std::vector>(runtimeMap_ | ql::views::keys);
+      runtimeMap_ | ql::views::keys | ::ranges::to<std::vector>();
   return keys;
 }

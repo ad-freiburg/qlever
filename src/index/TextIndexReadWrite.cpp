@@ -114,10 +114,10 @@ ContextListMetaData writePostings(ad_utility::File& out,
         }));
     scoreEncoder.writeToFile(out, currentOffset);
   } else {
-    auto scores = ::ranges::to<std::vector<float>>(
-        postings | ql::views::transform([](const auto& posting) {
-          return std::get<2>(posting);
-        }));
+    auto scores = postings | ql::views::transform([](const auto& posting) {
+                    return std::get<2>(posting);
+                  }) |
+                  ::ranges::to<std::vector<float>>();
     compressAndWrite<float>(scores, out, currentOffset);
   }
 
@@ -208,9 +208,10 @@ void FrequencyEncode<T>::initialize(View&& view) {
   }
 
   // Finally encode the vector
-  encodedVector_ = ::ranges::to<std::vector<size_t>>(
-      view | ql::views::transform(
-                 [this](const auto& value) { return codeMap_[value]; }));
+  encodedVector_ = view | ql::views::transform([this](const auto& value) {
+                     return codeMap_[value];
+                   }) |
+                   ::ranges::to<std::vector<size_t>>();
 }
 
 // ____________________________________________________________________________

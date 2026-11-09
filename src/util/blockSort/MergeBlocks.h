@@ -250,11 +250,11 @@ template <typename State>
 net::awaitable<void> mergeSortedHalves(State& state, size_t posIndex1,
                                        size_t posIndex2, size_t posIndex3) {
   auto positions = [&state](size_t begin, size_t end, bool side) {
-    return ::ranges::to<std::vector<bsd::block_pos>>(
-        ql::views::iota(begin, end) |
-        ql::views::transform([&state, side](size_t i) {
-          return bsd::block_pos(state.index_[i].pos(), side);
-        }));
+    return ql::views::iota(begin, end) |
+           ql::views::transform([&state, side](size_t i) {
+             return bsd::block_pos(state.index_[i].pos(), side);
+           }) |
+           ::ranges::to<std::vector<bsd::block_pos>>();
   };
   auto positions1 = positions(posIndex1, posIndex2, true);
   auto positions2 = positions(posIndex2, posIndex3, false);

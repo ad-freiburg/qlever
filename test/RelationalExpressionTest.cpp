@@ -112,8 +112,8 @@ auto liftToValueId = [](const auto& t) {
 template <typename T>
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<T>& vec) {
-  return ::ranges::to<VectorWithMemoryLimit<ValueId>>(
-      vec | ql::views::transform(liftToValueId), makeAllocator());
+  return vec | ql::views::transform(liftToValueId) |
+         ::ranges::to<VectorWithMemoryLimit<ValueId>>(makeAllocator());
 }
 
 auto expectTrue = [](const ExpressionResult& result,
@@ -704,8 +704,8 @@ void testWithExplicitResult(T1 leftValue, T2 rightValue,
                             std::vector<bool> expectedAsBool,
                             source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
-  auto expected = ::ranges::to<std::vector<Id>>(
-      expectedAsBool | ql::views::transform(Id::makeFromBool));
+  auto expected = expectedAsBool | ql::views::transform(Id::makeFromBool) |
+                  ::ranges::to<std::vector<Id>>();
 
   testWithExplicitIdResult<Comp>(std::move(leftValue), std::move(rightValue),
                                  expected);

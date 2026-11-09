@@ -263,10 +263,11 @@ Distinct::makeTreeWithStrippedColumns(
   // the stripped subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree.get());
-  auto newKeepIndices = ::ranges::to<std::vector<ColumnIndex>>(
-      keepVars | ql::views::transform([&subtree](const Variable* var) {
-        return subtree->getVariableColumn(*var);
-      }));
+  auto newKeepIndices = keepVars |
+                        ql::views::transform([&subtree](const Variable* var) {
+                          return subtree->getVariableColumn(*var);
+                        }) |
+                        ::ranges::to<std::vector<ColumnIndex>>();
 
   // The new `Distinct` also exports the compared variables that the parent did
   // not request, the helper adds a `StripColumns` operation for them.

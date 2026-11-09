@@ -61,20 +61,20 @@ using Row = std::vector<int64_t>;
 // value of a column depends on its index, so that a permutation of the columns
 // would be noticed.
 Row makeRow(int64_t value, size_t numColumns) {
-  return ::ranges::to<Row>(ql::views::iota(size_t{0}, numColumns) |
-                           ql::views::transform([value](size_t columnIdx) {
-                             return value +
-                                    static_cast<int64_t>(columnIdx) * 1000;
-                           }));
+  return ql::views::iota(size_t{0}, numColumns) |
+         ql::views::transform([value](size_t columnIdx) {
+           return value + static_cast<int64_t>(columnIdx) * 1000;
+         }) |
+         ::ranges::to<Row>();
 }
 
 // The rows that are identified by `values`, with `numColumns` columns each.
 std::vector<Row> makeRows(size_t numColumns,
                           const std::vector<int64_t>& values) {
-  return ::ranges::to<std::vector<Row>>(
-      values | ql::views::transform([numColumns](int64_t value) {
-        return makeRow(value, numColumns);
-      }));
+  return values | ql::views::transform([numColumns](int64_t value) {
+           return makeRow(value, numColumns);
+         }) |
+         ::ranges::to<std::vector<Row>>();
 }
 
 // Create a block with `numColumns` columns that holds the rows which are
@@ -520,9 +520,10 @@ TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
   EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(0)), 0u);
   GetOutcomes gets;
   runAndPoll(ioContext, [&] { get(storage, 0, gets, true); });
-  auto expected = ::ranges::to<std::vector<std::vector<Row>>>(
+  auto expected =
       allValues |
-      ql::views::transform([](int64_t value) { return makeRows(2, {value}); }));
+      ql::views::transform([](int64_t value) { return makeRows(2, {value}); }) |
+      ::ranges::to<std::vector<std::vector<Row>>>();
   EXPECT_THAT(gets.blocks_, ::testing::ElementsAreArray(expected));
   EXPECT_TRUE(gets.sawSentinel_);
 }

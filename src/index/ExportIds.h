@@ -282,10 +282,10 @@ void resolveVocabIndexIds(
   // NOTE: The batch is deliberately not sorted by vocabulary position: the
   // io_uring backend reorders the reads anyway, and only the synchronous
   // fallback could profit from sequential file access.
-  auto rawIndices = ::ranges::to_vector(
-      positions | ql::views::transform([&ids](size_t i) {
-        return static_cast<size_t>(ids[i].getVocabIndex().get());
-      }));
+  auto rawIndices = positions | ql::views::transform([&ids](size_t i) {
+                      return static_cast<size_t>(ids[i].getVocabIndex().get());
+                    }) |
+                    ::ranges::to_vector;
   auto vocabStrings = index.getImpl().getVocab().lookupBatch(rawIndices);
 
   // `vocabStrings` is in the same order as `positions`, so zip scatters each

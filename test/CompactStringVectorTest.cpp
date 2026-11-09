@@ -458,8 +458,9 @@ TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
   for (const auto& [reference, element] : ::ranges::views::zip(
            ql::ranges::ref_view{original}, ql::ranges::ref_view{copy2})) {
     ASSERT_EQ(reference.size(), element.size());
-    auto modifiedReference = ::ranges::to<typename CompactVector::vector_type>(
-        reference | ql::views::transform(mappingFunction));
+    auto modifiedReference =
+        reference | ql::views::transform(mappingFunction) |
+        ::ranges::to<typename CompactVector::vector_type>();
     EXPECT_THAT(modifiedReference, ::testing::ElementsAreArray(element));
   }
 }

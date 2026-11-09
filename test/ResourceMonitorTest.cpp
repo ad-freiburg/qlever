@@ -350,10 +350,11 @@ TEST(ResourceMonitor, RotateLogIfHeaderOutdatedMovesAFileOfAnOlderFormat) {
   // The old log left its place, and the archive is now the only file. Its name
   // carries the rotation time, so the test cannot predict it.
   EXPECT_FALSE(fs::exists(path));
-  auto rotatedResourceLogs = ::ranges::to<std::vector<fs::path>>(
+  auto rotatedResourceLogs =
       ql::directoryRange(directory) |
       ql::views::transform(
-          [](const fs::directory_entry& entry) { return entry.path(); }));
+          [](const fs::directory_entry& entry) { return entry.path(); }) |
+      ::ranges::to<std::vector<fs::path>>();
   ASSERT_EQ(rotatedResourceLogs.size(), 1u);
   const fs::path rotated = rotatedResourceLogs.front();
   EXPECT_THAT(ql::pathFilename(rotated).string(),

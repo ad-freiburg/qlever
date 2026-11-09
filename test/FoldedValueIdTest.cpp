@@ -340,9 +340,10 @@ TEST_F(ValueIdTest, IndexOrdering) {
   auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
     std::vector<ValueId> ids;
     addIdsFromGenerator(indexGenerator, makeIdFromIndex, ids);
-    auto indices = ::ranges::to<
-        std::vector<std::invoke_result_t<decltype(getIndexFromId), ValueId>>>(
-        ids | ql::views::transform(getIndexFromId));
+    auto indices =
+        ids | ql::views::transform(getIndexFromId) |
+        ::ranges::to<std::vector<
+            std::invoke_result_t<decltype(getIndexFromId), ValueId>>>();
 
     std::sort(ids.begin(), ids.end());
     std::sort(indices.begin(), indices.end());
@@ -361,8 +362,8 @@ TEST_F(ValueIdTest, IndexOrdering) {
 
 TEST_F(ValueIdTest, DoubleOrdering) {
   auto ids = makeRandomDoubleIds();
-  auto doubles = ::ranges::to<std::vector<double>>(
-      ids | ql::views::transform(&ValueId::getDouble));
+  auto doubles = ids | ql::views::transform(&ValueId::getDouble) |
+                 ::ranges::to<std::vector<double>>();
   std::sort(ids.begin(), ids.end());
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
@@ -414,8 +415,8 @@ TEST_F(ValueIdTest, DoubleOrdering) {
 TEST_F(ValueIdTest, SignedIntegerOrdering) {
   std::vector<ValueId> ids;
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  auto integers = ::ranges::to<std::vector<int64_t>>(
-      ids | ql::views::transform(&ValueId::getInt));
+  auto integers = ids | ql::views::transform(&ValueId::getInt) |
+                  ::ranges::to<std::vector<int64_t>>();
 
   std::sort(ids.begin(), ids.end());
   std::sort(integers.begin(), integers.end());
@@ -813,8 +814,8 @@ TEST(ValueId, fromBitsL) {
   }
 
   // The lambda works as the transformation of a generic algorithm.
-  auto bits = ::ranges::to<std::vector<ValueId::T>>(
-      ids | ql::views::transform(ValueId::getBitsL));
+  auto bits = ids | ql::views::transform(ValueId::getBitsL) |
+              ::ranges::to<std::vector<ValueId::T>>();
   std::vector<ValueId> rebuilt(bits.size());
   ql::ranges::transform(bits, rebuilt.begin(), ValueId::fromBitsL);
   EXPECT_EQ(rebuilt, ids);

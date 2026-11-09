@@ -38,9 +38,9 @@ std::vector<int> elements(const Vec& vec) {
 
 // Return the sizes of the chunks of `vec`.
 std::vector<size_t> chunkSizes(const Vec& vec) {
-  return ::ranges::to<std::vector<size_t>>(
-      vec.chunkSpans() |
-      ql::views::transform([](auto chunk) { return chunk.size(); }));
+  return vec.chunkSpans() |
+         ql::views::transform([](auto chunk) { return chunk.size(); }) |
+         ::ranges::to<std::vector<size_t>>();
 }
 }  // namespace
 

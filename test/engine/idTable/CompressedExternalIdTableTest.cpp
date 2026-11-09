@@ -100,8 +100,8 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
     ASSERT_EQ(generators.size(), tables.size());
 
     using namespace ::testing;
-    auto result = ::ranges::to<std::vector<CopyableIdTable<0>>>(
-        generators | ql::views::transform(idTableFromBlockGenerator));
+    auto result = generators | ql::views::transform(idTableFromBlockGenerator) |
+                  ::ranges::to<std::vector<CopyableIdTable<0>>>();
     EXPECT_THAT(result, ElementsAreArray(tables));
   };
   // With one `Id` per block, the first and second IdTable are split up into

@@ -24,10 +24,10 @@ static const Id idOfHasPattern =
 
 // Convert a PSOSorter to a vector of triples for easier handling
 TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
-  return ::ranges::to<TripleVec>(
-      sorter.sortedView() | ql::views::transform([](const auto& triple) {
-        return static_cast<std::array<Id, 3>>(triple);
-      }));
+  return sorter.sortedView() | ql::views::transform([](const auto& triple) {
+           return static_cast<std::array<Id, 3>>(triple);
+         }) |
+         ::ranges::to<TripleVec>();
 }
 
 using ad_utility::source_location;

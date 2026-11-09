@@ -30,16 +30,16 @@ TEST(Views, BufferedAsyncView) {
   };
 
   uint64_t numElements = 1000;
-  const auto ints = ::ranges::to<std::vector<uint64_t>>(
-      ql::views::iota(uint64_t{0}, numElements) |
-      ql::views::transform(
-          [numElements](uint64_t i) { return numElements - i; }));
+  const auto ints = ql::views::iota(uint64_t{0}, numElements) |
+                    ql::views::transform(
+                        [numElements](uint64_t i) { return numElements - i; }) |
+                    ::ranges::to<std::vector<uint64_t>>();
 
-  const auto strings = ::ranges::to<std::vector<std::string>>(
-      ql::views::iota(uint64_t{0}, numElements) |
-      ql::views::transform([numElements](uint64_t i) {
-        return std::to_string(numElements - i);
-      }));
+  const auto strings = ql::views::iota(uint64_t{0}, numElements) |
+                       ql::views::transform([numElements](uint64_t i) {
+                         return std::to_string(numElements - i);
+                       }) |
+                       ::ranges::to<std::vector<std::string>>();
 
   testWithVector(ints);
   testWithVector(strings);

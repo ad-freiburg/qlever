@@ -823,10 +823,11 @@ std::pair<
 DeltaTriples::copyLocalVocab() const {
   AD_CORRECTNESS_CHECK(localVocab_.otherSets().empty(),
                        "This function only copies from the primary word set.");
-  std::vector<LocalVocabIndex> entries = ::ranges::to_vector(
+  std::vector<LocalVocabIndex> entries =
       localVocab_.primaryWordSet() |
       ql::views::transform(
-          [](const LocalVocabEntry& entry) { return &entry; }));
+          [](const LocalVocabEntry& entry) { return &entry; }) |
+      ::ranges::to_vector;
   return std::make_pair(std::move(entries),
                         localVocab_.getOwnedLocalBlankNodeBlocks());
 }

@@ -99,12 +99,12 @@ void consolidateAndCheck(const TestRows& rows,
   }
   // Exactly the large relations have metadata, in the order of the relations.
   auto toPairs = [](const std::vector<CompressedRelationMetadata>& metadata) {
-    return ::ranges::to<std::vector<std::pair<int64_t, size_t>>>(
-        metadata | ql::views::transform([](const auto& md) {
-          return std::pair{
-              static_cast<int64_t>(md.col0Id_.getVocabIndex().get()),
-              size_t{md.numRows_}};
-        }));
+    return metadata | ql::views::transform([](const auto& md) {
+             return std::pair{
+                 static_cast<int64_t>(md.col0Id_.getVocabIndex().get()),
+                 size_t{md.numRows_}};
+           }) |
+           ::ranges::to<std::vector<std::pair<int64_t, size_t>>>();
   };
   EXPECT_EQ(toPairs(metadata1), expectedMetadata);
   EXPECT_EQ(toPairs(metadata2), expectedMetadata);
