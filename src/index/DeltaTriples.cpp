@@ -26,7 +26,7 @@
 #include "index/LocatedTriples.h"
 #include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
-#include "util/Serializer/TripleSerializer.h"
+#include "util/serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
 template <bool isInternal>

@@ -9,7 +9,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "index/IdTableUtils.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;

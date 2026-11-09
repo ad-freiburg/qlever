@@ -16,8 +16,8 @@
 #include "engine/SpatialJoinCachedIndex.h"
 #include "index/LocalVocab.h"
 #include "util/Cache.h"
-#include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
+#include "util/serializer/Serializer.h"
 
 // Forward declarations
 class QueryExecutionContext;

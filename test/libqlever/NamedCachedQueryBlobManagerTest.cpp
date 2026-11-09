@@ -35,11 +35,11 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
 #include "util/File.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/json.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace qlever;
 using namespace testing;

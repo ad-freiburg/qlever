@@ -41,8 +41,8 @@
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;

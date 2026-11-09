@@ -7,7 +7,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 class VariableToColumnMapTest : public ::testing::TestWithParam<bool> {};
 

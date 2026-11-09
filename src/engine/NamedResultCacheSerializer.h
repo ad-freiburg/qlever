@@ -15,10 +15,10 @@
 #include "engine/NamedResultCacheFormatVersion.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
-#include "util/Serializer/TripleSerializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
+#include "util/serializer/TripleSerializer.h"
 
 namespace namedResultCacheSerializer::detail {
 // An arbitrary magic byte that is written at the very beginning of a

@@ -7,7 +7,7 @@
 
 #include <gmock/gmock.h>
 
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 using ad_utility::JoinColumnMapping;
 using namespace ::testing;

@@ -37,7 +37,7 @@
 #include "parser/TripleComponent.h"
 #include "util/CompactStringVector.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using ad_utility::testing::iriLocalVocabEntry;
 

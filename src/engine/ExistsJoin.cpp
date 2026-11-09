@@ -13,9 +13,9 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/VectorWithMemoryLimit.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 // _____________________________________________________________________________
 ExistsJoin::ExistsJoin(QueryExecutionContext* qec,

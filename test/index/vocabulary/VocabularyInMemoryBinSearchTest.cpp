@@ -9,7 +9,7 @@
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "util/Forward.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 namespace {
 using namespace vocabulary_test;

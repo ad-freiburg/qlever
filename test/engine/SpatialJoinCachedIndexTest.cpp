@@ -25,7 +25,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 namespace {
 
