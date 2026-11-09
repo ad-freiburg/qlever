@@ -66,7 +66,9 @@ std::unique_ptr<Operation> Load::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Load::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // _____________________________________________________________________________
 Result Load::computeResult(bool requestLaziness) {

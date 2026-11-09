@@ -203,7 +203,9 @@ bool PathSearch::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> PathSearch::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,

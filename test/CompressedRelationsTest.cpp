@@ -513,6 +513,16 @@ TEST(CompressedRelationWriter, SmallRelations) {
   testWithDifferentBlockSizes(inputs);
 }
 
+// Test that `PermutedTriple::getId` returns the `Id` of each column, and
+// throws for an index out of bounds.
+TEST(CompressedBlockMetadata, permutedTripleGetId) {
+  CompressedBlockMetadata::PermutedTriple triple{V(1), V(2), V(3), V(4)};
+  EXPECT_EQ(triple.getId(0), V(1));
+  EXPECT_EQ(triple.getId(1), V(2));
+  EXPECT_EQ(triple.getId(2), V(3));
+  EXPECT_ANY_THROW(triple.getId(3));
+}
+
 // Internal matchers for the following two tests.
 namespace {
 // A matcher for a `PermutedTriple`. The `int`s are converted to VocabIds.
