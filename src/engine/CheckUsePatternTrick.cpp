@@ -99,6 +99,8 @@ static bool isEvaluatedByRegularIndexScan(const SparqlTriple& triple) {
   if (!predicate.has_value()) {
     return false;
   }
+  // TODO<ullingerc> Replace the checks for the magic predicates by
+  // `getTripleKind(triple) == TripleKind::IndexScan` once #3864 is merged.
   auto isMagic = [&predicate](std::string_view prefix) {
     return ql::starts_with(predicate.value(), prefix);
   };
