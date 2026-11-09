@@ -64,6 +64,10 @@ consteval bool isRegularEnumWithSize() {
   for (auto enumerator : enumerators) {
     auto value = static_cast<std::underlying_type_t<E>>(
         std::meta::extract<E>(std::meta::constant_of(enumerator)));
+    // Note: `static_cast<std::size_t>(value) != i` would also always work (a
+    // negative `value` wraps around to a huge number that never equals `i`),
+    // but `std::cmp_not_equal` is cleaner, as it involves no conversions for
+    // signed underlying types.
     if (std::cmp_not_equal(value, i)) {
       return false;
     }
