@@ -16,12 +16,12 @@
 #include <sstream>
 #include <vector>
 
-#include "JoinWithIndexScanHelpers.h"
 #include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
+#include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/Join.h"
 #include "engine/operation/Service.h"
