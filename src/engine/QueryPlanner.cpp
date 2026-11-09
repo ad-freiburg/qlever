@@ -1465,19 +1465,24 @@ void QueryPlanner::applyFiltersIfPossible(
           newPlan.type = plan.type;
           newPlan.containsFilterSubstitute_ = true;
         }
-        // If we need to enforce substitution, replace `plan` with our first
-        // candidate, except in the `KeepUnfiltered` mode.
+        // In the `KeepUnfiltered` mode, keep `plan` and add the candidates,
+        // also if we need to enforce substitution.
         //
-        // NOTE: Without enforcement, `plan` is kept, because an incomplete
-        // `SpatialJoin` would not get a join partner if `plan` were removed.
-        // In the `KeepUnfiltered` mode, `plan` is kept also for an enforced
-        // substitute, so that `plan` can first be joined with other plans
-        // (for example, a scan of all geometries with a small set of
-        // entities before the `SpatialJoin` with a constant geometry). The
-        // final `SeedSubstitutesOnly` pass applies the substitute to every
+        // NOTE: This way, `plan` can first be joined with other plans (for
+        // example, a scan of all geometries with a small set of entities
+        // before the `SpatialJoin` with a constant geometry). The final
+        // `SeedSubstitutesOnly` pass applies an enforced substitute to every
         // plan that still lacks it.
-        if (!substPlans.empty() && filterAndSubst.forceSubstitution_ &&
-            mode != FilterMode::KeepUnfiltered) {
+        if constexpr (mode == FilterMode::KeepUnfiltered) {
+          ql::ranges::move(substPlans, std::back_inserter(addedPlans));
+          continue;
+        }
+
+        // If we need to enforce substitution, replace `plan` with our first
+        // candidate. This is not done in all cases, because an incomplete
+        // `SpatialJoin` would not get a join partner if `plan` would be
+        // removed.
+        if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
           plan = std::move(substPlans.front());
           substPlans.erase(substPlans.begin());
         }
