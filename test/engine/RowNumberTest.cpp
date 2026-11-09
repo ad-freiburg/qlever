@@ -93,7 +93,9 @@ TEST(RowNumber, cacheKey) {
 
   // A different order of the same result yields the same key.
   EXPECT_EQ(rowNumber.getCacheKey(),
-            rowNumber.makeSortedTree({0, 1}).value()->getCacheKey());
+            rowNumber.makeSortedTree(std::vector<ColumnIndex>{0, 1})
+                .value()
+                ->getCacheKey());
 }
 
 // Test that row numbers up to the maximum integer value are allowed, and that
@@ -116,7 +118,7 @@ TEST(RowNumber, makeSortedTree) {
   auto rowNumber = makeRowNumber(0);
 
   // The row numbers are unique, so they can be followed by any other column.
-  auto sorted = rowNumber.makeSortedTree({0, 1});
+  auto sorted = rowNumber.makeSortedTree(std::vector<ColumnIndex>{0, 1});
   ASSERT_TRUE(sorted.has_value());
   EXPECT_THAT(sorted.value()->getRootOperation()->getResultSortedOn(),
               ElementsAre(0, 1));
@@ -125,10 +127,12 @@ TEST(RowNumber, makeSortedTree) {
       matchesIdTableFromVector({{0, 1, 2}, {1, 3, 4}, {2, 5, 6}}, IntId));
 
   // An order that does not start with the row number column requires a `Sort`.
-  EXPECT_FALSE(rowNumber.makeSortedTree({1, 0}).has_value());
+  EXPECT_FALSE(
+      rowNumber.makeSortedTree(std::vector<ColumnIndex>{1, 0}).has_value());
 
   // Requesting an order that the result already has is a contract violation.
-  EXPECT_ANY_THROW(rowNumber.makeSortedTree({0, 2}));
+  EXPECT_ANY_THROW(rowNumber.makeSortedTree(std::vector<ColumnIndex>{0, 2}));
+  EXPECT_ANY_THROW(rowNumber.makeSortedTree({}));
 }
 
 // Test that a negative offset, sort columns that do not start with the row

@@ -17,6 +17,7 @@
 #include <absl/strings/charconv.h>
 
 #include <cstdint>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -182,10 +183,14 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     os << "JoinColLeft:" << childLeft_->getVariableColumn(config_.left_);
     os << "JoinColRight:" << childRight_->getVariableColumn(config_.right_);
 
-    // Task
+    // Task. The maximum distance is written with full precision, because a
+    // `FILTER` with `<` uses the largest `double` below the constant, which
+    // the default stream precision would print like the constant itself.
     auto maxDist = getMaxDist();
     if (maxDist.has_value()) {
-      os << "maxDist: " << maxDist.value() << "\n";
+      os << "maxDist: "
+         << std::setprecision(std::numeric_limits<double>::max_digits10)
+         << maxDist.value() << "\n";
     }
     auto maxResults = getMaxResults();
     if (maxResults.has_value()) {
@@ -436,12 +441,12 @@ bool SpatialJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
   // the baseline (with O(n^2) runtime) can have some sorted columns, but as
   // the "true" computeResult method will use bounding boxes, which can't
   // guarantee that a sorted column stays sorted, this will return no sorted
   // column in all cases.
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // ____________________________________________________________________________
