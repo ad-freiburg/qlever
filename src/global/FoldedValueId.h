@@ -449,7 +449,6 @@ class ValueId {
   // behavior is relying on the local vocab entry to be the only datatype that
   // is not bitwise comparable.
   constexpr static bool isOnlyLocalVocabNotBitwiseComparable =
-      isTypeBitwiseComparable_.size() == qlever::enumSize<Datatype> &&
       !isTypeBitwiseComparable_.at(
           static_cast<size_t>(Datatype::LocalVocabIndex));
 
