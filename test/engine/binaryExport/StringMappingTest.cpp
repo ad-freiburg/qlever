@@ -198,3 +198,16 @@ TEST(TransmittedStringRewriter, encodesIris) {
             index.encodedIriManager().encode("<http://example.org/42>"));
   EXPECT_TRUE(localVocab.empty());
 }
+
+// Test that a transmitted string that is not the representation of an IRI or
+// a literal is rejected, instead of failing an internal assertion.
+TEST(TransmittedStringRewriter, malformedStrings) {
+  const auto& index = ad_utility::testing::getQec()->getIndex();
+  for (std::string string : {"", "x", "<x", "\"", "\"abc", "abc\"", "@en"}) {
+    LocalVocab localVocab;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (TransmittedStringRewriter{std::vector<std::string>{string}, index,
+                                   localVocab}),
+        ::testing::HasSubstr("malformed string"));
+  }
+}

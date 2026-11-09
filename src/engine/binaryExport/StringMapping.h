@@ -105,7 +105,8 @@ class TransmittedStringRewriter {
 // encoded with a local pattern becomes an `EncodedVal`, a word of the
 // vocabularies of the `index` the corresponding `VocabIndex` or
 // `SecondaryVocabIndex`, and only the remaining words are added to the
-// `localVocab`.
+// `localVocab`. Throw if the string is not the representation of an IRI or a
+// literal.
 Id stringToLocalId(std::string representation, const Index& index,
                    LocalVocab& localVocab);
 }  // namespace qlever::binary_export

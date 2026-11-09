@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
@@ -101,6 +102,20 @@ Id TransmittedStringRewriter::operator()(Id id) const {
 // _____________________________________________________________________________
 Id stringToLocalId(std::string representation, const Index& index,
                    LocalVocab& localVocab) {
+  // The string was sent by another instance, so check its form before it is
+  // parsed as an internal representation (which would otherwise fail an
+  // internal assertion, or silently accept e.g. an IRI without the closing
+  // `>`).
+  bool isIri = (ql::starts_with(representation, '<') ||
+                ql::starts_with(representation, '@')) &&
+               ql::ends_with(representation, '>');
+  bool isLiteral =
+      ql::starts_with(representation, '"') && representation.rfind('"') > 0;
+  if (!isIri && !isLiteral) {
+    throw std::runtime_error{
+        "The result in QLever's binary export format contains a malformed "
+        "string"};
+  }
   TripleComponent tripleComponent{
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           std::move(representation))};
