@@ -22,6 +22,7 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Values.h"
+#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
@@ -320,15 +321,15 @@ std::string TransitivePathBase::getDescriptor() const {
 size_t TransitivePathBase::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
+qlm::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
   if (lhs_.isSortedOnInputCol()) {
-    return {0};
+    return {{0}, allocator()};
   }
   if (rhs_.isSortedOnInputCol()) {
-    return {1};
+    return {{1}, allocator()};
   }
 
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // _____________________________________________________________________________
@@ -402,8 +403,7 @@ TransitivePathBase::Estimates TransitivePathBase::computeEstimates() {
   // the estimates of the two query plans comparable.
   if (startSide.isBoundVariable() && startSide.isVariable() &&
       !boundVariableIsForEmptyPath_) {
-    size *= getExecutionContext()->getCostFactor(
-        "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR");
+    size *= JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR;
   }
   size = atLeastOne(size);
 
