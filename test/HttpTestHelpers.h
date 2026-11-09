@@ -53,14 +53,16 @@ class TestHttpServer {
   std::atomic<bool> hasBeenShutDown_ = false;
 
  public:
-  // Create server on localhost. Port 0 instructs the operating system to choose
-  // a free port of its choice. `lazyBodyChunkSize` controls the internal buffer
-  // size for lazy body streaming (ignored in eager mode).
+  // Create server on localhost. Port 0 (the default) instructs the operating
+  // system to choose a free port of its choice. `lazyBodyChunkSize` controls
+  // the internal buffer size for lazy body streaming (ignored in eager mode).
   explicit TestHttpServer(HttpHandler httpHandler,
-                          size_t lazyBodyChunkSize = 100u) {
+                          size_t lazyBodyChunkSize = 100u,
+                          unsigned short port = 0) {
     server_ = std::make_shared<
         HttpServer<readMode, HttpHandler, WebSocketHandlerType>>(
-        0, "0.0.0.0", 1, std::move(httpHandler), makeWebSocketSessionSupplier,
+        port, "0.0.0.0", 1, std::move(httpHandler),
+        makeWebSocketSessionSupplier,
         ad_utility::MemorySize::bytes(lazyBodyChunkSize));
   }
 
