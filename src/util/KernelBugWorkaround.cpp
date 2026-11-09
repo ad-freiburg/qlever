@@ -81,32 +81,29 @@ Status applyIfNeeded(std::string_view machine, std::string_view release,
   if (!mayHaveBug(machine, release)) {
     return Status::NotNeeded;
   }
-  std::string_view fix =
+  // The part of the warning that is the same for all outcomes.
+  std::string warning = absl::StrCat(
+      "The Linux kernel ", release,
+      " may have a bug that causes random stalls, crashes, and corrupt data "
+      "on arm64, unless it contains the fix "
       "https://github.com/torvalds/linux/commit/"
-      "478a1c3abebfc717db0d1281a9cdd7befafee542";
+      "478a1c3abebfc717db0d1281a9cdd7befafee542. ");
   if (disabledByUser) {
-    AD_LOG_WARN << "The Linux kernel " << release
-                << " may have a bug that causes random stalls, crashes, and "
-                   "corrupt data on arm64, unless it contains the fix "
-                << fix << ". The workaround is disabled via " << disableEnvVar
+    AD_LOG_WARN << warning << "The workaround is disabled via " << disableEnvVar
                 << std::endl;
     return Status::DisabledByUser;
   }
-  if (!mallctlFunction) {
-    AD_LOG_WARN << "The Linux kernel " << release
-                << " may have a bug that causes random stalls, crashes, and "
-                   "corrupt data on arm64, unless it contains the fix "
-                << fix
-                << ". QLever doesn't use `jemalloc`, so the workaround is not "
-                   "available. Please use a kernel with the fix"
-                << std::endl;
-    return Status::NoJemalloc;
-  }
-  // The default for arenas that are created later (in particular the arena
-  // for huge allocations, which otherwise returns memory immediately).
+  // Set the default for arenas that are created later (in particular the
+  // arena for huge allocations, which otherwise returns memory immediately).
   ssize_t decay = -1;
-  if (mallctlFunction("arenas.dirty_decay_ms", nullptr, nullptr, &decay,
+  if (!mallctlFunction ||
+      mallctlFunction("arenas.dirty_decay_ms", nullptr, nullptr, &decay,
                       sizeof(decay)) != 0) {
+    AD_LOG_WARN << warning
+                << "The workaround is not available, because QLever doesn't "
+                   "use `jemalloc` or its `jemalloc` doesn't support it. "
+                   "Please use a kernel with the fix"
+                << std::endl;
     return Status::NoJemalloc;
   }
   // The arenas that already exist. Indices of arenas that are not initialized
@@ -119,11 +116,8 @@ Status applyIfNeeded(std::string_view machine, std::string_view release,
       mallctlFunction(name.c_str(), nullptr, nullptr, &decay, sizeof(decay));
     }
   }
-  AD_LOG_WARN << "The Linux kernel " << release
-              << " may have a bug that causes random stalls, crashes, and "
-                 "corrupt data on arm64, unless it contains the fix "
-              << fix
-              << ". As a workaround, QLever doesn't return freed memory to the "
+  AD_LOG_WARN << warning
+              << "As a workaround, QLever doesn't return freed memory to the "
                  "operating system. On a kernel with the fix, you can disable "
                  "the workaround by setting the environment variable "
               << disableEnvVar << std::endl;
