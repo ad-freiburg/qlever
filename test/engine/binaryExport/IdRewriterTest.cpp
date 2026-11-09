@@ -9,9 +9,11 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
@@ -19,10 +21,14 @@
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
+#include "../../util/LocalVocabEntryTestHelpers.h"
+#include "engine/binaryExport/BinaryExport.h"
+#include "engine/binaryExport/BinaryFormat.h"
 #include "engine/binaryExport/BlankNodeRewriter.h"
 #include "engine/binaryExport/EncodedIriRewriter.h"
 #include "engine/binaryExport/IdRewriter.h"
 #include "engine/binaryExport/StringMapping.h"
+#include "index/ExportIds.h"
 
 using namespace qlever::binary_export;
 
@@ -64,6 +70,59 @@ auto withGeoPointEncoding(GeoPointEncodingEnum encoding, F f) {
       []() { GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder); }};
   GeoPoint::setEncoding(encoding);
   return f();
+}
+
+// A test index with the triples `turtle`, which encodes the IRIs with one of
+// the `prefixes` directly in the `Id`.
+QueryExecutionContext* qecWith(std::string turtle,
+                               std::vector<std::string> prefixes) {
+  ad_utility::testing::TestIndexConfig config{std::move(turtle)};
+  config.encodedPrefixesWithoutAngleBrackets = std::move(prefixes);
+  return ad_utility::testing::getQec(config);
+}
+
+// Read a trivially copyable value from `p` and advance `p`.
+template <typename T>
+T readFrom(const char*& p) {
+  T value;
+  std::memcpy(&value, p, sizeof(value));
+  p += sizeof(value);
+  return value;
+}
+
+// Split the bytes of an `ExportBatch` (the IDs, the `vocabMarker`, the
+// serialized strings) into the IDs and the strings.
+std::pair<std::vector<Id>, std::vector<std::string>> parseBatch(
+    std::string_view bytes, size_t numIds) {
+  const char* p = bytes.data();
+  std::vector<Id> ids;
+  for (size_t i = 0; i < numIds; ++i) {
+    ids.push_back(Id::fromBits(readFrom<Id::T>(p)));
+  }
+  EXPECT_EQ(readFrom<Id::T>(p), vocabMarker);
+  std::vector<std::string> strings;
+  size_t numStrings = readFrom<size_t>(p);
+  for (size_t i = 0; i < numStrings; ++i) {
+    size_t size = readFrom<size_t>(p);
+    strings.emplace_back(p, size);
+    p += size;
+  }
+  EXPECT_EQ(p, bytes.data() + bytes.size());
+  return {std::move(ids), std::move(strings)};
+}
+
+// The string representation and datatype of the `id` wrt the `index` and the
+// `localVocab`.
+std::string stringAndType(const Index& index, Id id,
+                          const LocalVocab& localVocab) {
+  auto result = ql::exportIds::idToStringAndType(index, id, localVocab);
+  if (!result.has_value()) {
+    return "UNDEF";
+  }
+  if (result->second == nullptr) {
+    return result->first;
+  }
+  return absl::StrCat(result->first, "^^", result->second);
 }
 }  // namespace
 
@@ -309,4 +368,122 @@ TEST(BlankNodeRewriter, rewrite) {
   rewriter.addBlankNodesTo(nextVocab);
   EXPECT_TRUE(nextVocab.isBlankNodeIndexContained(first.getBlankNodeIndex()));
   EXPECT_TRUE(nextVocab.isBlankNodeIndexContained(third.getBlankNodeIndex()));
+}
+
+// Test the round trip from the exporting index `A` to the importing index `B`
+// (different vocabularies and encoded prefixes): the IDs of a result of `A`
+// are exported by an `ExportBatch`, the bytes are parsed, and the `IdRewriter`
+// of `B` converts the IDs. Every ID then denotes the same value on `B` as on
+// `A`, and the IDs of `B` have the datatype that `B` uses for the value.
+TEST(IdRewriter, roundTripBetweenIndices) {
+  auto* qecA = qecWith(
+      "<a1> <p> \"lit\" . <shared> <p> \"shared lit\" . "
+      "<a1> <p> <http://both.org/7> . <a1> <p> <http://a.org/9> .",
+      {"http://a.org/", "http://both.org/"});
+  auto* qecB = qecWith(
+      "<b1> <p> \"other\" . <shared> <p> \"shared lit\" . "
+      "<b1> <p> <http://b.org/1> .",
+      {"http://both.org/", "http://b.org/"});
+  const Index& indexA = qecA->getIndex();
+  const Index& indexB = qecB->getIndex();
+  auto getIdA = ad_utility::testing::makeGetId(indexA);
+  auto getIdB = ad_utility::testing::makeGetId(indexB);
+  LocalVocab localVocabA;
+  auto localIdA = [&](std::string word) {
+    return Id::makeFromLocalVocabIndex(localVocabA.getIndexAndAddIfNotContained(
+        ad_utility::testing::localVocabEntryFromStringRepresentation(
+            std::move(word), qecA->getLocalVocabContext())));
+  };
+  auto blankNodeA = [&]() {
+    return Id::makeFromBlankNodeIndex(
+        localVocabA.getBlankNodeIndex(indexA.getBlankNodeManager()));
+  };
+  Id blankA1 = blankNodeA();
+  Id blankA2 = blankNodeA();
+
+  // The result of `A`, one ID per row, with every datatype that the exporter
+  // can send (the comments say how `B` represents the value).
+  std::vector<Id> idsA{
+      getIdA("<shared>"),            // `VocabIndex` of `B`
+      getIdA("\"shared lit\""),      // `VocabIndex` of `B`
+      getIdA("<a1>"),                // local vocab of `B`
+      localIdA("\"fresh\""),         // local vocab of `B`
+      localIdA("<http://b.org/5>"),  // `EncodedVal` (pattern only of `B`)
+      indexA.encodedIriManager()
+          .encode("<http://both.org/7>")
+          .value(),  // `EncodedVal` (pattern of both)
+      indexA.encodedIriManager()
+          .encode("<http://a.org/9>")
+          .value(),  // local vocab of `B` (pattern only of `A`)
+      blankA1,
+      blankA2,
+      blankA1,
+      Id::makeFromGeoPoint(GeoPoint{47.9, 7.8}),
+      Id::makeFromInt(-42),
+      Id::makeFromDouble(3.25),
+      Id::makeFromBool(true),
+      Id::makeFromDate(DateYearOrDuration{Date{2026, 11, 9}}),
+      Id::makeUndefined(),
+      getIdA("<shared>"),  // sent once, see `StringMapping`
+  };
+  IdTable tableA{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  for (Id id : idsA) {
+    tableA.push_back({id});
+  }
+
+  // Export the table as one batch and parse the bytes.
+  ExportBatch batch{indexA};
+  std::vector<ColumnIndex> columns{0};
+  for (size_t row = 0; row < tableA.size(); ++row) {
+    batch.addRow(tableA.asStaticView<0>(), row, columns);
+  }
+  auto [transmittedIds, strings] = parseBatch(batch.finish(), idsA.size());
+  ASSERT_EQ(transmittedIds.size(), idsA.size());
+  EXPECT_THAT(strings, ::testing::UnorderedElementsAre(
+                           "<shared>", "\"shared lit\"", "<a1>", "\"fresh\"",
+                           "<http://b.org/5>"));
+
+  // Import the batch on `B`.
+  IdRewriter rewriter{*qecB, indexA.encodedIriManager().patterns_,
+                      GeoPoint::encoding()};
+  IdTable tableB{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  for (Id id : transmittedIds) {
+    tableB.push_back({id});
+  }
+  rewriter.rewriteBatch(tableB, 0, std::move(strings));
+  LocalVocab localVocabB = rewriter.takeLocalVocab();
+
+  // Every value is the same on both sides, except for the blank nodes, which
+  // become local ones of `B` (consistently).
+  for (size_t row = 0; row < idsA.size(); ++row) {
+    Id idB = tableB(row, 0);
+    if (idsA[row].getDatatype() == Datatype::BlankNodeIndex) {
+      EXPECT_EQ(idB.getDatatype(), Datatype::BlankNodeIndex) << row;
+      EXPECT_TRUE(
+          localVocabB.isBlankNodeIndexContained(idB.getBlankNodeIndex()))
+          << row;
+      continue;
+    }
+    EXPECT_EQ(stringAndType(indexA, idsA[row], localVocabA),
+              stringAndType(indexB, idB, localVocabB))
+        << row;
+  }
+  EXPECT_EQ(tableB(7, 0), tableB(9, 0));
+  EXPECT_NE(tableB(7, 0), tableB(8, 0));
+
+  // The datatypes on `B`, see the comments at `idsA`.
+  EXPECT_EQ(tableB(0, 0).getBits(), getIdB("<shared>").getBits());
+  EXPECT_EQ(tableB(1, 0).getBits(), getIdB("\"shared lit\"").getBits());
+  EXPECT_EQ(tableB(16, 0).getBits(), getIdB("<shared>").getBits());
+  EXPECT_EQ(tableB(2, 0).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(tableB(3, 0).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(tableB(4, 0),
+            indexB.encodedIriManager().encode("<http://b.org/5>").value());
+  EXPECT_EQ(tableB(5, 0),
+            indexB.encodedIriManager().encode("<http://both.org/7>").value());
+  EXPECT_EQ(tableB(6, 0).getDatatype(), Datatype::LocalVocabIndex);
+  for (size_t row : {10, 11, 12, 13, 14, 15}) {
+    EXPECT_EQ(tableB(row, 0).getBits(), idsA[row].getBits()) << row;
+  }
+  EXPECT_EQ(localVocabB.size(), 3);
 }
