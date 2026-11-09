@@ -6,7 +6,6 @@
 #define QLEVER_RUNTIMEPARAMETERS_H
 
 #include <algorithm>
-#include <optional>
 
 #include "global/Constants.h"
 #include "util/Log.h"
@@ -75,22 +74,19 @@ struct RuntimeParameters {
   // occupying all the threads of the pool. The value must be at least `1`
   // (enforced by a parameter constraint).
   SizeT maxNumThreadsPerQuery_{6, "max-num-threads-per-query"};
-  // The maximum number of tasks that a runtime index rebuild (see
-  // `IndexRebuilder`) runs at the same time on the global thread pool. A value
-  // of 0 means "no limit".
+  // The number of threads of the thread pool that a runtime index rebuild
+  // (see `IndexRebuilder`) creates for itself. A value of 0 means as many
+  // threads as the global thread pool has.
   //
-  // NOTE 1: The limit applies to the rebuild as a whole and not to its
-  // individual scans and writers: the reading and decompressing of the blocks
-  // of the old permutations (also for the recomputation of the statistics) and
-  // the compressing and writing of the blocks of the new ones share it, so
-  // each of them may use as many threads as are currently free within it. Not
-  // covered are the threads that remap the triples of each permutation (they
-  // are not on the pool) and the sorting of the twin relations of large
-  // relations (see `PermutationWriter`), which uses the pool directly.
+  // NOTE 1: The reading and decompressing of the blocks of the old
+  // permutations (also for the recomputation of the statistics) and the
+  // compressing and writing of the blocks of the new ones all share this pool.
+  // Not covered are the threads that remap the triples of each permutation
+  // (see `rebuild-max-concurrent-permutation-pairs`).
   //
-  // NOTE 2: This is the analogue of `max-num-threads-per-query` for the
-  // rebuild. When the pool is idle, the rebuild uses this many of its threads,
-  // and when the pool is busy, it shares them with the queries.
+  // NOTE 2: The pool is separate from the global thread pool of the queries,
+  // so the tasks of a rebuild never queue up in front of those of the
+  // queries. The two pools only compete for the cores of the machine.
   SizeT rebuildIndexMaxNumThreads_{0, "rebuild-index-max-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
   // the internal PSO+POS) that a runtime index rebuild processes in
@@ -332,16 +328,6 @@ auto getRuntimeParameter() {
   // destroyed. This is achieved by directly returning a copy of the parameter
   // value (the function returns `auto`, see above).
   return std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
-}
-
-// Get the current value of the numeric runtime parameter specified by the
-// `ParameterPtr`, translated to an optional override: the value 0, which for
-// such parameters means "fall back to the corresponding general parameter",
-// becomes `std::nullopt`.
-template <auto ParameterPtr>
-std::optional<size_t> getRuntimeParameterAsOptional() {
-  size_t value = getRuntimeParameter<ParameterPtr>();
-  return value == 0 ? std::nullopt : std::optional<size_t>{value};
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H

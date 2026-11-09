@@ -55,6 +55,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 #include "util/SourceLocation.h"
 
 using ad_utility::testing::iriLocalVocabEntry;
@@ -608,11 +609,10 @@ TEST(IndexRebuilder, materializeToIndex) {
         std::pair{true, true}}) {
     // Also exercise the fully sequential processing of the permutation pairs
     // (`rebuild-max-concurrent-permutation-pairs = 1`) and the limits of the
-    // threads of the whole rebuild (`rebuild-index-max-num-threads`); the
-    // result must be the same as with the defaults (0 = no limit). In
-    // particular, a limit of 1 with all pairs in parallel lets all the scans
-    // and writers of the rebuild share a single thread, which must not
-    // deadlock.
+    // thread pool of the rebuild (`rebuild-index-max-num-threads`); the result
+    // must be the same as with the defaults. In particular, a pool of 1 thread
+    // with all pairs in parallel lets all the scans and writers of the rebuild
+    // share a single thread, which must not deadlock.
     for (auto [maxConcurrentPairs, maxNumThreads] :
          {std::pair<size_t, size_t>{0, 0}, std::pair<size_t, size_t>{1, 0},
           std::pair<size_t, size_t>{0, 1}, std::pair<size_t, size_t>{0, 2}}) {
@@ -665,8 +665,7 @@ TEST(IndexRebuilder, materializeToIndex) {
       auto sourceDate = index.getImpl().dateOfIndexBuild();
 
       qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                                 blankNodes, cancellationHandle, executor(),
-                                 logFile);
+                                 blankNodes, cancellationHandle, logFile);
       EXPECT_TRUE(ql::filesystem::exists(logFile));
 
       // Each phase writes its header (which says what is being processed,
@@ -776,9 +775,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
-  EXPECT_NO_THROW(qlever::materializeToIndex(
-      index.getImpl(), newIndexName, state, vocab, blankNodes,
-      cancellationHandle, executor(), logFile));
+  EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
+                                             state, vocab, blankNodes,
+                                             cancellationHandle, logFile));
 
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -838,7 +837,7 @@ TEST(IndexRebuilder, materializeToIndexKeepsGeoPointEncoding) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
   qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                             blankNodes, cancellationHandle, executor(),
+                             blankNodes, cancellationHandle,
                              newIndexName + ".log");
 
   // The rebuilt index is in the current format with the entry `lat-major`, and
@@ -874,10 +873,24 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  EXPECT_THROW(qlever::materializeToIndex(index.getImpl(), "nexIndex", state,
-                                          vocab, blankNodes, cancellationHandle,
-                                          executor(), ""),
-               ad_utility::Exception);
+  EXPECT_THROW(
+      qlever::materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
+                                 blankNodes, cancellationHandle, ""),
+      ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, getRebuildIndexNumThreads) {
+  using qlever::indexRebuilder::getRebuildIndexNumThreads;
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::rebuildIndexMaxNumThreads_>(0);
+    EXPECT_EQ(getRebuildIndexNumThreads(),
+              ad_utility::globalExecutorNumThreads());
+  }
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::rebuildIndexMaxNumThreads_>(3);
+  EXPECT_EQ(getRebuildIndexNumThreads(), 3);
 }
 
 namespace {

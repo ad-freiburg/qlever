@@ -11,7 +11,6 @@
 #define QLEVER_SRC_UTIL_CONCURRENCYLIMITEDEXECUTOR_H
 
 #include <cstddef>
-#include <optional>
 #include <utility>
 
 #include "backports/asio.h"
@@ -139,19 +138,6 @@ inline qlever::Executor makeConcurrencyLimitedExecutor(
   AD_CONTRACT_CHECK(maxConcurrency > 0);
   return executor;
 #endif
-}
-
-// Same as above, but a `maxConcurrency` of `std::nullopt` means "no limit", in
-// which case the `executor` is returned unchanged. This is the form in which
-// the runtime parameters that throttle the index rebuild are expressed (see
-// `getRuntimeParameterAsOptional`).
-inline qlever::Executor makeConcurrencyLimitedExecutor(
-    qlever::Executor executor, std::optional<size_t> maxConcurrency) {
-  if (!maxConcurrency.has_value()) {
-    return executor;
-  }
-  return makeConcurrencyLimitedExecutor(std::move(executor),
-                                        maxConcurrency.value());
 }
 
 }  // namespace ad_utility

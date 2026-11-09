@@ -118,6 +118,11 @@ class Server {
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
 
+  // A single thread that drives an index rebuild (see `rebuildIndex`), so that
+  // a rebuild never occupies one of the threads of `queryThreadPool_`. At most
+  // one rebuild runs at a time (see `rebuildInProgress_`).
+  boost::asio::static_thread_pool rebuildThreadPool_{1};
+
   // Indicates if an index rebuild is currently in progress so that we prevent
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
