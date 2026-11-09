@@ -65,8 +65,7 @@ void BoundaryConsolidator::addChunkResult(size_t chunkIndex,
   AD_CORRECTNESS_CHECK(chunk.firstRow_.has_value() &&
                        chunk.lastRow_.has_value());
   AD_CORRECTNESS_CHECK(
-      !lastRowOfPreviousChunk_.has_value() ||
-          lastRowOfPreviousChunk_.value() != chunk.firstRow_.value(),
+      lastRowOfPreviousChunk_ != chunk.firstRow_.value(),
       "Two consecutive chunks of the merge contain equal rows at their "
       "boundary");
   lastRowOfPreviousChunk_ = std::move(chunk.lastRow_);
@@ -219,44 +218,50 @@ void BoundaryConsolidator::writeLargeBoundaryRelation(
 // _____________________________________________________________________________
 CompressedRelationMetadata BoundaryConsolidator::writeTwinOfBoundaryRelation(
     Id col0Id, std::vector<BoundaryPart>& parts) {
-  const size_t numColumns = context_.numColumns();
-  const size_t outputBlocksize =
-      TWIN_SORTER_BLOCKSIZE_FACTOR * writer1().blocksize();
   // The runs of the large parts have been finished by their chunks (see
   // `BoundaryPart::twinRuns_`). The twin rows of the small parts are not in
   // any sorter yet, so they are sorted by a sorter of their own, whose runs
   // join the merge.
   //
-  // NOTE: This also holds if all the parts are small (but the relation as a
-  // whole is large). Those rows could be sorted in memory, but as there are
-  // only few boundary relations, the simplicity of a single code path is
-  // preferred.
+  // NOTE: This sorter is also created if there are no small parts (its input
+  // then simply has no runs), and also if all the parts are small (but the
+  // relation as a whole is large). Those cases could be handled with less
+  // overhead, but as there are only few boundary relations, the simplicity of
+  // a single code path is preferred.
   std::vector<ad_utility::CompressedIdTableRunsInput<0>> inputs;
-  std::unique_ptr<TwinSorter> sorterForSmallParts;
-  // All the twin sorters are created by `ChunkWriterContext::makeTwinSorter`,
-  // so any of them determines the size of the input blocks of the merge.
-  std::optional<ad_utility::MemorySize> inputBlockSizePerColumn;
+  auto sorterForSmallParts = context_.makeTwinSorter(
+      absl::StrCat(context_.twinSorterBasename_, ".twin-boundary-small-parts.",
+                   col0Id.getBits()));
   for (auto& part : parts) {
     if (part.isLarge()) {
       AD_CORRECTNESS_CHECK(part.twinRuns_.has_value());
       inputs.push_back(std::move(part.twinRuns_).value());
       part.twinRuns_.reset();
-      inputBlockSizePerColumn = part.twinSorter_->inputBlockSizePerColumn();
     } else {
-      if (sorterForSmallParts == nullptr) {
-        sorterForSmallParts = context_.makeTwinSorter(
-            absl::StrCat(context_.twinSorterBasename_,
-                         ".twin-boundary-small-parts.", col0Id.getBits()));
-      }
       auto twinRows = part.rowsBeforeWrittenBlocks_.asStaticView<0>();
       twinRows.swapColumns(c1Idx, c2Idx);
       sorterForSmallParts->pushBlock(twinRows);
     }
   }
-  if (sorterForSmallParts != nullptr) {
-    inputs.push_back(sorterForSmallParts->finishAndGetRunsInput<0>());
-    inputBlockSizePerColumn = sorterForSmallParts->inputBlockSizePerColumn();
-  }
+  inputs.push_back(sorterForSmallParts->finishAndGetRunsInput<0>());
+  // All the twin sorters are created by `ChunkWriterContext::makeTwinSorter`,
+  // so any of them determines the size of the input blocks of the merge.
+  auto merged = mergeTwinRuns(
+      std::move(inputs), sorterForSmallParts->inputBlockSizePerColumn(),
+      absl::StrCat(context_.twinSorterBasename_, ".twin-boundary-spill.",
+                   col0Id.getBits()));
+  // NOTE: The consolidation runs on a thread that is not a thread of the pool,
+  // so it may use the (blocking) bookkeeping and block write queue of
+  // `writer2`, which the chunks never touch (they only use the thread-safe
+  // `compressAndWriteBlockInCallingThread`).
+  return writer2().addCompleteLargeRelation(col0Id, std::move(merged));
+}
+
+// _____________________________________________________________________________
+ad_utility::InputRangeTypeErased<Block> BoundaryConsolidator::mergeTwinRuns(
+    std::vector<ad_utility::CompressedIdTableRunsInput<0>> inputs,
+    ad_utility::MemorySize inputBlockSizePerColumn,
+    const std::string& spillFilename) {
   // The runs of all the parts are merged together, with a parallel merge that
   // is configured for the memory of the consolidation (the sorters themselves
   // are configured for the small memory of a single chunk). This runs on the
@@ -266,31 +271,24 @@ CompressedRelationMetadata BoundaryConsolidator::writeTwinOfBoundaryRelation(
   using namespace ad_utility::compressedExternalIdTable;
   MergePhaseConfig config;
   config.numRuns_ = input.numRuns();
-  config.numColumns_ = numColumns;
+  config.numColumns_ = context_.numColumns();
   config.memoryLimit_ = boundaryTwinMergeMemory_;
-  config.inputBlockSizePerColumn_ = inputBlockSizePerColumn.value();
+  config.inputBlockSizePerColumn_ = inputBlockSizePerColumn;
   config.numBufferedOutputBlocks_ = 12;
   config.maxOutputBlockSize_ = ad_utility::MemorySize::gigabytes(1);
   config.parallelism_ = ad_utility::globalExecutorNumThreads();
-  config.outputBlockSizeOverride_ = outputBlocksize;
+  config.outputBlockSizeOverride_ =
+      TWIN_SORTER_BLOCKSIZE_FACTOR * writer1().blocksize();
   const auto parameters = computeMergePhaseParameters(config);
   auto mergeOptions = makeMergeOptions(config, parameters);
   auto storageFactory = makeMergePhaseBlockStorageFactory<0>(
-      executor_,
-      absl::StrCat(context_.twinSorterBasename_, ".twin-boundary-spill.",
-                   col0Id.getBits()),
-      ad_utility::makeUnlimitedAllocator<Id>(),
+      executor_, spillFilename, ad_utility::makeUnlimitedAllocator<Id>(),
       parameters.numBufferedBlocksPerChunk_);
-  auto merged = ad_utility::parallelBlockMerge::parallelBlockMergeToRange<true>(
-      executor_, std::move(input), ComparatorForConstCol0{},
-      std::move(storageFactory), std::move(mergeOptions),
-      std::make_shared<ad_utility::CancellationHandle<>>());
-  // NOTE: The consolidation runs on a thread that is not a thread of the pool,
-  // so it may use the (blocking) bookkeeping and block write queue of
-  // `writer2`, which the chunks never touch (they only use the thread-safe
-  // `compressAndWriteBlockInCallingThread`).
-  return writer2().addCompleteLargeRelation(
-      col0Id, ad_utility::InputRangeTypeErased<Block>{std::move(merged)});
+  return ad_utility::InputRangeTypeErased<Block>{
+      ad_utility::parallelBlockMerge::parallelBlockMergeToRange<true>(
+          executor_, std::move(input), ComparatorForConstCol0{},
+          std::move(storageFactory), std::move(mergeOptions),
+          std::make_shared<ad_utility::CancellationHandle<>>())};
 }
 
 }  // namespace chunkwisePermutationWriter

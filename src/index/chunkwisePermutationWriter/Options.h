@@ -30,13 +30,13 @@ using PermutationPairResult = CompressedRelationWriter::PermutationPairResult;
 // A callback that is invoked for every input block, from the thread of the
 // chunk that the block belongs to. It has to be thread-safe, because it is
 // invoked for several blocks at the same time, and it is invoked for the
-// blocks in an arbitrary order, see the IMPORTANT note at the top of
-// `ChunkwisePermutationWriter.h`. The callback may finish its work
-// asynchronously (for example by pushing the block to the next external sorter
-// via `asyncPushBlock`), which is why it is handed the `done` callback: it has
-// to be invoked exactly once (which its rvalue qualification enforces, so it is
-// invoked as `std::move(done)(exception)`), as soon as the callback is done
-// with the `block`, with the exception that occurred (or `nullptr`). The
+// blocks in an arbitrary order (so it can't be used for anything that needs
+// the blocks in order, like the pattern creation). The callback may finish its
+// work asynchronously (for example by pushing the block to the next external
+// sorter via `asyncPushBlock`), which is why it is handed the `done` callback:
+// it has to be invoked exactly once (which its rvalue qualification enforces,
+// so it is invoked as `std::move(done)(exception)`), as soon as the callback is
+// done with the `block`, with the exception that occurred (or `nullptr`). The
 // `block` is kept alive for as long as the callback holds on to its
 // `shared_ptr`. The number of blocks for which the callbacks are in flight at
 // the same time is bounded, see `Options::numCallbackBlocksInFlight_`.
@@ -64,7 +64,7 @@ struct Options {
   // one sorter per running chunk holds rows in memory at a time, because the
   // sorters of finished boundary parts only keep their runs on disk (see
   // `ChunkWriterContext::twinSorterMemoryPerChunk_`), and the results of
-  // finished chunks are small, see `ChunkwisePermutationWriter::chunkResults_`.
+  // finished chunks are small (see `BoundaryPart::twinRuns_`).
   ad_utility::MemorySize twinSorterMemoryPerChunk_ =
       ad_utility::MemorySize::megabytes(256);
   // The memory limit of the parallel merge that sorts the twin rows of a

@@ -32,9 +32,9 @@ namespace net = boost::asio;
 // it is fed the `ChunkResult`s in the order of the chunks, concatenates the
 // `BoundaryPart`s of the relations that cross the boundaries of the chunks,
 // writes them (and their twins), and emits the metadata of all the relations
-// in the order of the relations. It runs on a single thread, which must not
-// be a thread of the pool (it uses the blocking parts of the two writers and
-// a parallel merge on the `executor`).
+// in the order of the relations. It runs on a single thread, which must not be
+// a thread of the pool (it uses the blocking parts of the two writers and a
+// parallel merge on the `executor`).
 //
 // NOTE on thread safety: The consolidator has no writers of its own, it uses
 // the `writer1_` and `writer2_` of the `ChunkWriterContext`, which the chunks
@@ -93,18 +93,18 @@ class BoundaryConsolidator : public ad_utility::NoCopyNoMove {
 
   // Consolidate the `chunk`, which has to be the result of the chunk with the
   // given `chunkIndex`. The chunks have to be added in order, starting with
-  // index 0, which is checked. A chunk without any rows is skipped, in
-  // particular it doesn't complete the boundary relation that is currently
-  // open. Also check that the last row of the previous chunk and the first row
-  // of this chunk are not equal, because the merge never splits equal rows
-  // across chunks (which makes the removal of duplicates per chunk correct,
-  // see `Options::removeDuplicates_`).
+  // index 0, which is checked. A chunk without any rows (which is rare in
+  // practice) is skipped, in particular it doesn't complete the boundary
+  // relation that is currently open. Also check that the last row of the
+  // previous chunk and the first row of this chunk are not equal, because the
+  // merge never splits equal rows across chunks (which makes the removal of
+  // duplicates per chunk correct, see `Options::removeDuplicates_`).
   void addChunkResult(size_t chunkIndex, ChunkResult chunk);
 
   // Write the boundary relation that is still open (if any), pass the last
   // metadata on to the callbacks, finish the two writers, and return their
-  // blocks. Must be called exactly once, after the
-  // results of all the chunks have been added.
+  // blocks. Must be called exactly once, after the results of all the chunks
+  // have been added.
   PermutationPairResult finish();
 
   // The total number of rows of all the chunks that have been added so far.
@@ -140,6 +140,15 @@ class BoundaryConsolidator : public ad_utility::NoCopyNoMove {
   // metadata.
   CompressedRelationMetadata writeTwinOfBoundaryRelation(
       Id col0Id, std::vector<BoundaryPart>& parts);
+
+  // Merge the `inputs` (the runs of the twin rows of the parts of a boundary
+  // relation, whose blocks have the given `inputBlockSizePerColumn`) with a
+  // parallel merge, which may spill to files with the `spillFilename`, and
+  // return the merged blocks.
+  ad_utility::InputRangeTypeErased<Block> mergeTwinRuns(
+      std::vector<ad_utility::CompressedIdTableRunsInput<0>> inputs,
+      ad_utility::MemorySize inputBlockSizePerColumn,
+      const std::string& spillFilename);
 
   CompressedRelationWriter& writer1() { return context_.writer1_; }
   CompressedRelationWriter& writer2() { return context_.writer2_; }

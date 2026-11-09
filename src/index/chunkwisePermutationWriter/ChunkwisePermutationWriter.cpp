@@ -116,10 +116,13 @@ net::awaitable<bool> ChunkwisePermutationWriter::pushImpl(size_t chunkIndex,
     co_return false;
   }
   if (sharedBlock != nullptr) {
-    // NOTE: The `shared_from_this()` keeps this writer (and hence the
-    // dispatcher) alive until the last callback for the block is done.
-    if (!co_await callbackDispatcher_.asyncDispatch(std::move(sharedBlock),
-                                                    shared_from_this())) {
+    // NOTE: The aliasing `shared_ptr` keeps this writer (and hence the
+    // dispatcher and the `storeException` that it reports to) alive until the
+    // last callback for the block is done.
+    std::shared_ptr<ConcurrentCallbackDispatcher> dispatcher{
+        shared_from_this(), &callbackDispatcher_};
+    if (!co_await ConcurrentCallbackDispatcher::asyncDispatch(
+            std::move(dispatcher), std::move(sharedBlock))) {
       co_return false;
     }
   }
