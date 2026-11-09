@@ -404,11 +404,10 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
     auto& predicate = std::get<PropertyPath>(triplePtr->p_);
     AD_CORRECTNESS_CHECK(predicate.isIri());
-    std::vector<PropertyPath> predicates;
-    for (const std::string& langTag : langTags) {
-      predicates.push_back(
-          PropertyPath::fromIri(predicate.getIri().withLanguageTag(langTag)));
-    }
+    auto predicates = ::ranges::to<std::vector<PropertyPath>>(
+        langTags | ql::views::transform([&predicate](const std::string& tag) {
+          return PropertyPath::fromIri(predicate.getIri().withLanguageTag(tag));
+        }));
     predicate = predicates.size() == 1
                     ? std::move(predicates[0])
                     : PropertyPath::makeAlternative(std::move(predicates));

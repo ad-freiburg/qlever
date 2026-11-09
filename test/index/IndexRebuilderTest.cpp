@@ -1263,10 +1263,10 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
   // retired index (uniquified with a numeric suffix for rebuilds within the
   // same second, see `Qlever::makeIndexRebuildConfig`).
   auto previousDirNames = []() {
-    std::vector<std::string> result;
-    for (const auto& dir : dirsWithPrefix("previous.")) {
-      result.push_back(dir.filename().string());
-    }
+    auto result = ::ranges::to<std::vector<std::string>>(
+        dirsWithPrefix("previous.") | ql::views::transform([](const auto& dir) {
+          return dir.filename().string();
+        }));
     ql::ranges::sort(result);
     return result;
   };

@@ -508,10 +508,11 @@ TEST(EmptyPath, pathWithPinnedSubresultsEndToEnd) {
   const auto& table = result->idTableView();
   ColumnIndex s = qet->getVariableColumn(Variable{"?s"});
   ColumnIndex o = qet->getVariableColumn(Variable{"?o"});
-  std::vector<std::pair<Id, Id>> rows;
-  for (size_t i : ad_utility::integerRange(table.numRows())) {
-    rows.emplace_back(table(i, s), table(i, o));
-  }
+  auto rows = ::ranges::to<std::vector<std::pair<Id, Id>>>(
+      ad_utility::integerRange(table.numRows()) |
+      ql::views::transform([&table, s, o](size_t i) {
+        return std::pair{table(i, s), table(i, o)};
+      }));
   // `<a>` reaches itself via the empty path and `<b>` and `<z>` via `<p>`.
   EXPECT_THAT(rows, ::testing::UnorderedElementsAre(
                         ::testing::Pair(getId("<a>"), getId("<a>")),

@@ -197,11 +197,8 @@ void expectVocabulariesAreEqual(const Vocab1& vocab1, const Vocab2& vocab2) {
 // The `{index, word}` pairs that a vocabulary built from `wordsWithHoles` and
 // `indicesWithHoles` is expected to contain.
 std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
-  std::vector<std::pair<uint64_t, std::string>> result;
-  for (size_t i = 0; i < wordsWithHoles.size(); ++i) {
-    result.emplace_back(indicesWithHoles.at(i), wordsWithHoles.at(i));
-  }
-  return result;
+  return ::ranges::to<std::vector<std::pair<uint64_t, std::string>>>(
+      ::ranges::views::zip(indicesWithHoles, wordsWithHoles));
 }
 
 }  // namespace

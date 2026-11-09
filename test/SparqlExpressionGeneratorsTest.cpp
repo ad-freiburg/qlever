@@ -51,15 +51,13 @@ TEST(SparqlExpressionGenerators, resultGeneratorSetOfIntervals) {
   {
     ad_utility::SetOfIntervals s{{{1, 3}, {3, 3}, {3, 4}, {5, 6}}, 10};
     auto generator = sparqlExpression::detail::resultGenerator(s, 10);
-    std::vector<Id> res;
-    ql::ranges::copy(generator, std::back_inserter(res));
+    auto res = ::ranges::to<std::vector<Id>>(generator);
     EXPECT_THAT(res, ::testing::ElementsAre(f, t, t, t, f, t, f, f, f, f));
   }
   {
     ad_utility::SetOfIntervals s{{{0, 3}, {3, 3}, {3, 4}, {8, 10}}, 10};
     auto generator = sparqlExpression::detail::resultGenerator(s, 10);
-    std::vector<Id> res;
-    ql::ranges::copy(generator, std::back_inserter(res));
+    auto res = ::ranges::to<std::vector<Id>>(generator);
     EXPECT_THAT(res, ::testing::ElementsAre(t, t, t, t, f, f, f, f, t, t));
   }
   {

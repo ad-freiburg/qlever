@@ -249,16 +249,15 @@ std::vector<typename State::RangePos> findRuns(
 template <typename State>
 net::awaitable<void> mergeSortedHalves(State& state, size_t posIndex1,
                                        size_t posIndex2, size_t posIndex3) {
-  std::vector<bsd::block_pos> positions1;
-  std::vector<bsd::block_pos> positions2;
-  positions1.reserve(posIndex2 - posIndex1);
-  positions2.reserve(posIndex3 - posIndex2);
-  for (size_t i = posIndex1; i < posIndex2; ++i) {
-    positions1.emplace_back(state.index_[i].pos(), true);
-  }
-  for (size_t i = posIndex2; i < posIndex3; ++i) {
-    positions2.emplace_back(state.index_[i].pos(), false);
-  }
+  auto positions = [&state](size_t begin, size_t end, bool side) {
+    return ::ranges::to<std::vector<bsd::block_pos>>(
+        ql::views::iota(begin, end) |
+        ql::views::transform([&state, side](size_t i) {
+          return bsd::block_pos(state.index_[i].pos(), side);
+        }));
+  };
+  auto positions1 = positions(posIndex1, posIndex2, true);
+  auto positions2 = positions(posIndex2, posIndex3, false);
 
   // Only the last range of the index contains the tail, as its last entry, see
   // `mergeTail`.

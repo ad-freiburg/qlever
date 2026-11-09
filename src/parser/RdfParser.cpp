@@ -1284,8 +1284,8 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
   // The `remainder` of the last block is not part of the header, all the bytes
   // that were counted above are.
   numBytesInHeader_ -= remainder.size();
-  remainderFromInitialization_.reserve(remainder.size());
-  ql::ranges::copy(remainder, std::back_inserter(remainderFromInitialization_));
+  remainderFromInitialization_ =
+      ::ranges::to<qlever::parser::ByteBlock>(remainder);
   declarationParser_.reset();
   return false;
 }

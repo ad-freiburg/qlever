@@ -662,11 +662,11 @@ std::string IsDatatypeExpression<Datatype>::asString(
 static BlockMetadataRanges getRangesForDatatypes(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
     const bool isNegated, ql::span<const Datatype> datatypes) {
-  std::vector<ValueIdItPair> relevantRanges;
-  for (Datatype datatype : datatypes) {
-    relevantRanges.emplace_back(valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), datatype));
-  }
+  auto relevantRanges = ::ranges::to<std::vector<ValueIdItPair>>(
+      datatypes | ql::views::transform([&idRange](Datatype datatype) {
+        return valueIdComparators::getRangeForDatatype(idRange.begin(),
+                                                       idRange.end(), datatype);
+      }));
   // Sort and remove overlapping ranges.
   relevantRanges =
       valueIdComparators::detail::simplifyRanges(std::move(relevantRanges));

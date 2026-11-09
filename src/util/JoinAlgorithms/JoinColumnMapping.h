@@ -106,10 +106,9 @@ class JoinColumnMapping {
     // identity, because the original permutation preserves the order of the
     // non-join-columns.
     if (!keepJoinColumns) {
-      permutationResult_.clear();
-      ql::ranges::copy(ad_utility::integerRange(numColsLeft + numColsRight -
-                                                2 * joinColumns.size()),
-                       std::back_inserter(permutationResult_));
+      permutationResult_ =
+          ::ranges::to<std::vector<ColumnIndex>>(ad_utility::integerRange(
+              numColsLeft + numColsRight - 2 * joinColumns.size()));
     }
   }
 };

@@ -35,21 +35,20 @@ using Row = std::vector<int64_t>;
 // value of a column depends on its index, so that a permutation of the columns
 // would be noticed.
 Row makeRow(int64_t value, size_t numColumns) {
-  Row row;
-  for (size_t columnIdx : ql::views::iota(size_t{0}, numColumns)) {
-    row.push_back(value + static_cast<int64_t>(columnIdx) * 1000);
-  }
-  return row;
+  return ::ranges::to<Row>(ql::views::iota(size_t{0}, numColumns) |
+                           ql::views::transform([value](size_t columnIdx) {
+                             return value +
+                                    static_cast<int64_t>(columnIdx) * 1000;
+                           }));
 }
 
 // The rows that are identified by `values`, with `numColumns` columns each.
 std::vector<Row> makeRows(size_t numColumns,
                           const std::vector<int64_t>& values) {
-  std::vector<Row> rows;
-  for (int64_t value : values) {
-    rows.push_back(makeRow(value, numColumns));
-  }
-  return rows;
+  return ::ranges::to<std::vector<Row>>(
+      values | ql::views::transform([numColumns](int64_t value) {
+        return makeRow(value, numColumns);
+      }));
 }
 
 // Create a table with `numColumns` columns that holds the rows which are
@@ -109,11 +108,8 @@ std::pair<BlockMetadata, std::vector<Row>> roundTrip(CompressedBlockFile& file,
 // single compressed frame's worth of trivially compressible data, so that the
 // compressed and the uncompressed path really differ in size.
 std::vector<int64_t> manyValues() {
-  std::vector<int64_t> values;
-  for (size_t i : ql::views::iota(size_t{0}, size_t{5000})) {
-    values.push_back(static_cast<int64_t>(i));
-  }
-  return values;
+  return ::ranges::to<std::vector<int64_t>>(
+      ql::views::iota(int64_t{0}, int64_t{5000}));
 }
 
 }  // namespace

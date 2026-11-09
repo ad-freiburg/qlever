@@ -131,10 +131,10 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
     ql::ranges::sort(stringsCopy);
     auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES);
     compressor.buildCodebook(prefixes);
-    Strings compressedStrings;
-    for (const auto& string : strings) {
-      compressedStrings.push_back(compressor.compress(string));
-    }
+    auto compressedStrings = ::ranges::to<Strings>(
+        strings | ql::views::transform([&compressor](const auto& string) {
+          return compressor.compress(string);
+        }));
     return {true, std::move(compressedStrings), std::move(compressor)};
   }
 };

@@ -71,12 +71,8 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
 // for details).
 template <size_t NumStaticColumns>
 auto idTableFromRowGenerator = [](auto&& generator, size_t numColumns) {
-  CopyableIdTable<NumStaticColumns> result(
-      numColumns, ad_utility::testing::makeAllocator());
-  for (const auto& row : generator) {
-    result.push_back(row);
-  }
-  return result;
+  return ::ranges::to<CopyableIdTable<NumStaticColumns>>(
+      AD_FWD(generator), numColumns, ad_utility::testing::makeAllocator());
 };
 }  // namespace
 
@@ -104,9 +100,8 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
     ASSERT_EQ(generators.size(), tables.size());
 
     using namespace ::testing;
-    std::vector<CopyableIdTable<0>> result;
-    auto tr = ql::ranges::transform_view(generators, idTableFromBlockGenerator);
-    ql::ranges::copy(tr, std::back_inserter(result));
+    auto result = ::ranges::to<std::vector<CopyableIdTable<0>>>(
+        generators | ql::views::transform(idTableFromBlockGenerator));
     EXPECT_THAT(result, ElementsAreArray(tables));
   };
   // With one `Id` per block, the first and second IdTable are split up into
@@ -1130,10 +1125,8 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
   };
   IdTable input =
       createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
-  CopyableIdTable<0> expected{NUM_COLS, ad_utility::testing::makeAllocator()};
-  for (const auto& row : input) {
-    expected.push_back(row);
-  }
+  auto expected = ::ranges::to<CopyableIdTable<0>>(
+      input, NUM_COLS, ad_utility::testing::makeAllocator());
   ql::ranges::sort(expected, SortByOSP{});
 
   auto result = sortWithParallelism(input, 8, filename);

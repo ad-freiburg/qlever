@@ -451,12 +451,10 @@ void Visitor::addVisibleVariable(Variable var) {
 template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
                                        List objectList) {
-  PathObjectPairs tuples;
-  tuples.reserve(objectList.first.size());
-  for (auto& object : objectList.first) {
-    tuples.emplace_back(predicate, std::move(object));
-  }
-  return tuples;
+  return ::ranges::to<PathObjectPairs>(
+      objectList.first | ql::views::transform([&predicate](auto& object) {
+        return PathObjectPairs::value_type{predicate, std::move(object)};
+      }));
 }
 
 // ___________________________________________________________________________
@@ -2414,17 +2412,13 @@ VarOrPath Visitor::visit(Parser::VerbPathOrSimpleContext* ctx) {
 ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
   auto objectAndTriplesVec = visitVector(ctx->objectPath());
   // First collect all the objects.
-  std::vector<GraphTerm> objects;
-  ql::ranges::copy(
-      objectAndTriplesVec | ql::views::transform(ad_utility::first),
-      std::back_inserter(objects));
+  auto objects = ::ranges::to<std::vector<GraphTerm>>(
+      objectAndTriplesVec | ql::views::transform(ad_utility::first));
 
   // Collect all the triples. Node: `views::join` flattens the input.
-  std::vector<TripleWithPropertyPath> triples;
-  ql::ranges::copy(objectAndTriplesVec |
-                       ql::views::transform(ad_utility::second) |
-                       ql::views::join,
-                   std::back_inserter(triples));
+  auto triples = ::ranges::to<std::vector<TripleWithPropertyPath>>(
+      objectAndTriplesVec | ql::views::transform(ad_utility::second) |
+      ql::views::join);
   return {std::move(objects), std::move(triples)};
 }
 
@@ -2589,11 +2583,14 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::TriplesNodeContext* ctx) {
 SubjectOrObjectAndTriples Visitor::visit(
     Parser::BlankNodePropertyListContext* ctx) {
   GraphTerm term = newBlankNodeOrVariable();
-  Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
-  for (auto& [predicate, object] : propertyList.first) {
-    triples.push_back({term, std::move(predicate), std::move(object)});
-  }
+  auto triples = ::ranges::to<Triples>(
+      propertyList.first |
+      ql::views::transform([&term](auto& predicateAndObject) {
+        auto& [predicate, object] = predicateAndObject;
+        return Triples::value_type{term, std::move(predicate),
+                                   std::move(object)};
+      }));
   ad_utility::appendVector(triples, std::move(propertyList.second));
   return {std::move(term), std::move(triples)};
 }

@@ -51,11 +51,12 @@ struct DummyCompressionWrapper
 
   static std::tuple<int, std::vector<std::string>, DummyDecoder> compressAll(
       const std::vector<std::string>& strings) {
-    std::vector<std::string> result;
-    for (const auto& string : strings) {
-      result.push_back(compress(string));
-    }
-    return {0, std::move(result), DummyDecoder{}};
+    return {0,
+            ::ranges::to<std::vector<std::string>>(
+                strings | ql::views::transform([](const auto& string) {
+                  return compress(string);
+                })),
+            DummyDecoder{}};
   }
 };
 
@@ -320,11 +321,9 @@ std::vector<std::string> wordsWithHoles() {
 // The (non-contiguous) vocabulary indices for `wordsWithHoles`, such that every
 // third index is contained.
 std::vector<uint64_t> indicesWithHoles() {
-  std::vector<uint64_t> indices;
-  for (size_t i = 0; i < wordsWithHoles().size(); ++i) {
-    indices.push_back(3 * i + 1);
-  }
-  return indices;
+  return ::ranges::to<std::vector<uint64_t>>(
+      ql::views::iota(uint64_t{0}, uint64_t{wordsWithHoles().size()}) |
+      ql::views::transform([](uint64_t i) { return 3 * i + 1; }));
 }
 
 // Create a `CompressedVocabularyWithHoles` with the given `words` and
@@ -350,13 +349,8 @@ CompressedVocabularyWithHoles createVocabularyWithHoles(
 // The `{index, word}` pairs that a vocabulary built from `wordsWithHoles` and
 // `indicesWithHoles` is expected to contain.
 std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
-  std::vector<std::pair<uint64_t, std::string>> result;
-  auto words = wordsWithHoles();
-  auto indices = indicesWithHoles();
-  for (size_t i = 0; i < words.size(); ++i) {
-    result.emplace_back(indices.at(i), words.at(i));
-  }
-  return result;
+  return ::ranges::to<std::vector<std::pair<uint64_t, std::string>>>(
+      ::ranges::views::zip(indicesWithHoles(), wordsWithHoles()));
 }
 
 }  // namespace

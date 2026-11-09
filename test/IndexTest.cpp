@@ -2134,11 +2134,9 @@ TEST(IndexImpl, allIndexFilesAreListed) {
   }
 
   auto listedPaths = IndexImpl::allIndexFiles(base);
-  std::vector<std::string> listed;
-  listed.reserve(listedPaths.size());
-  for (const auto& path : listedPaths) {
-    listed.push_back(path.string());
-  }
+  auto listed = ::ranges::to<std::vector<std::string>>(
+      listedPaths |
+      ql::views::transform([](const auto& path) { return path.string(); }));
   ad_utility::HashSet<std::string> listedSet(listed.begin(), listed.end());
 
   // No phantom entries.

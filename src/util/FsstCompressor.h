@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -216,11 +217,11 @@ class FsstEncoder {
         output.resize(2 * output.size());
       }
       // Convert the result pointers to `string_views` for easier handling.
-      std::vector<std::string_view> stringViews;
-      stringViews.reserve(strings.size());
-      for (size_t i = 0; i < strings.size(); ++i) {
-        stringViews.emplace_back(outputPtrs.at(i), outputLengths.at(i));
-      }
+      auto stringViews = ::ranges::to<std::vector<std::string_view>>(
+          ql::views::iota(size_t{0}, strings.size()) |
+          ql::views::transform([&outputPtrs, &outputLengths](size_t i) {
+            return std::string_view(outputPtrs.at(i), outputLengths.at(i));
+          }));
       return BulkResult{std::move(outputPtr), std::move(stringViews),
                         FsstDecoder(fsst_decoder(encoder))};
     }

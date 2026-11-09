@@ -336,10 +336,8 @@ TEST(TaskQueueOnExecutor, aStrandRunsTheTasksInOrder) {
       queue.push([&result, i]() { result.push_back(i); });
     }
   }
-  std::vector<size_t> expected;
-  for (size_t i = 0; i < numTasks; ++i) {
-    expected.push_back(i);
-  }
+  auto expected =
+      ::ranges::to<std::vector<size_t>>(ql::views::iota(size_t{0}, numTasks));
   EXPECT_EQ(result, expected);
 }
 
@@ -370,10 +368,8 @@ TEST(TaskQueueOnExecutor, aBoundOfOneRunsTheTasksSequentiallyAndInOrder) {
       });
     }
   }
-  std::vector<size_t> expected;
-  for (size_t i = 0; i < numTasks; ++i) {
-    expected.push_back(i);
-  }
+  auto expected =
+      ::ranges::to<std::vector<size_t>>(ql::views::iota(size_t{0}, numTasks));
   EXPECT_EQ(result, expected);
   EXPECT_FALSE(sawConcurrentTasks);
 }

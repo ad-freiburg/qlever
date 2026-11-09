@@ -468,10 +468,8 @@ static constexpr auto GroupBy =
        const QetMatcher& childMatcher) -> QetMatcher {
   // TODO<joka921> Also test the aliases.
   auto aliasesToStrings = [](const std::vector<Alias>& aliases) {
-    std::vector<std::string> result;
-    ql::ranges::transform(aliases, std::back_inserter(result),
-                          &Alias::getDescriptor);
-    return result;
+    return ::ranges::to<std::vector<std::string>>(
+        aliases | ql::views::transform(&Alias::getDescriptor));
   };
 
   return RootOperation<::GroupBy>(

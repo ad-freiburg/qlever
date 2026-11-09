@@ -29,11 +29,7 @@ auto V = ad_utility::testing::VocabId;
 
 // Return the `col0` column of a table with the given `col0` IDs.
 std::vector<Id> col0Column(const std::vector<int64_t>& ids) {
-  std::vector<Id> result;
-  for (auto id : ids) {
-    result.push_back(V(id));
-  }
-  return result;
+  return ::ranges::to<std::vector<Id>>(ids | ql::views::transform(V));
 }
 }  // namespace
 
@@ -108,12 +104,11 @@ TEST(CompressedRelationHelpers, forEachSliceOfLargeBlock) {
 // boundaries of the input blocks in one block.
 TEST(CompressedRelationHelpers, TripleAlignedBlockBuffer) {
   auto toVector = [](const std::optional<IdTable>& block) {
-    std::vector<int64_t> result;
-    for (const auto& row : block.value()) {
-      result.push_back(row[2].getVocabIndex().get() * 10 +
-                       row[3].getVocabIndex().get());
-    }
-    return result;
+    return ::ranges::to<std::vector<int64_t>>(
+        block.value() | ql::views::transform([](const auto& row) -> int64_t {
+          return row[2].getVocabIndex().get() * 10 +
+                 row[3].getVocabIndex().get();
+        }));
   };
   // Encode a row by its third (`c`) and fourth (`g`) column only.
   auto block = [](std::vector<std::pair<int64_t, int64_t>> cAndG) {

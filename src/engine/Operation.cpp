@@ -672,12 +672,9 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->addDetail("offset", offset);
   }
 
-  std::vector<float> multiplicityEstimates;
-  multiplicityEstimates.reserve(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    multiplicityEstimates.push_back(getMultiplicity(i));
-  }
-  _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
+  _runtimeInfo->multiplicityEstimates_ = ::ranges::to<std::vector<float>>(
+      ad_utility::integerRange(numCols) |
+      ql::views::transform([this](size_t i) { return getMultiplicity(i); }));
 
   // Add the warnings that were added before the runtime information was
   // (re)created, e.g. during the query planning.
@@ -811,9 +808,8 @@ void Operation::keepHiddenVariablesHidden(
   if (!variableToColumnMap_ || !externallyVisibleVariableToColumnMap_) {
     return;
   }
-  std::vector<Variable> visibleVariables;
-  ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
-                   std::back_inserter(visibleVariables));
+  auto visibleVariables = ::ranges::to<std::vector<Variable>>(
+      getExternallyVisibleVariableColumns() | ql::views::keys);
   if (additionalVisibleVariable.has_value()) {
     visibleVariables.push_back(std::move(additionalVisibleVariable).value());
   }

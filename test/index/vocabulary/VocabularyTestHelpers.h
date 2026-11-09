@@ -137,10 +137,8 @@ void testUpperAndLowerBoundContiguousIDs(const Vocab& vocab,
                                          MakeSmaller makeWordSmaller,
                                          Comparator comparator,
                                          const Words& words) {
-  std::vector<uint64_t> ids;
-  for (size_t i = 0; i < words.size(); ++i) {
-    ids.push_back(i);
-  }
+  auto ids = ::ranges::to<std::vector<uint64_t>>(
+      ql::views::iota(uint64_t{0}, uint64_t{words.size()}));
 
   testUpperAndLowerBound(vocab, makeWordLarger, makeWordSmaller, comparator,
                          words, ids);
@@ -177,10 +175,8 @@ void testUpperAndLowerBoundWithStdLess(F createVocabulary) {
   const std::vector<std::string> words{"alpha", "beta",    "camma",
                                        "delta", "epsilon", "frikadelle"};
 
-  std::vector<uint64_t> ids;
-  for (size_t i = 0; i < words.size(); ++i) {
-    ids.push_back(i);
-  }
+  auto ids = ::ranges::to<std::vector<uint64_t>>(
+      ql::views::iota(uint64_t{0}, uint64_t{words.size()}));
 
   testUpperAndLowerBoundWithStdLessFromWordsAndIds(createVocabulary(words),
                                                    words, ids);
@@ -218,10 +214,8 @@ void testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
 template <typename F>
 void testUpperAndLowerBoundWithNumericComparator(F createVocabulary) {
   const std::vector<std::string> words{"4", "33", "222", "1111"};
-  std::vector<uint64_t> ids;
-  for (size_t i = 0; i < words.size(); ++i) {
-    ids.push_back(i);
-  }
+  auto ids = ::ranges::to<std::vector<uint64_t>>(
+      ql::views::iota(uint64_t{0}, uint64_t{words.size()}));
 
   testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
       createVocabulary(words), words, ids);
@@ -246,10 +240,8 @@ auto testAccessOperatorForUnorderedVocabulary(F createVocabulary) {
   // Not in any particularly order.
   const std::vector<std::string> words{"alpha", "delta", "ALPHA", "beta", "42",
                                        "31",    "0a",    "a0",    "al"};
-  std::vector<uint64_t> ids;
-  for (size_t i = 0; i < words.size(); ++i) {
-    ids.push_back(i);
-  }
+  auto ids = ::ranges::to<std::vector<uint64_t>>(
+      ql::views::iota(uint64_t{0}, uint64_t{words.size()}));
   testAccessOperatorFromWordsAndIds(createVocabulary(words), words, ids);
 }
 
@@ -280,11 +272,11 @@ auto testEmptyVocabulary(F createVocabulary) {
 // or type-erased `VocabularyScanRange`) range types from `scanAll`.
 template <typename Range>
 std::vector<std::string> scanAllToVector(Range&& range) {
-  std::vector<std::string> result;
-  for (const IndexAndWord& indexAndWord : range) {
-    result.emplace_back(indexAndWord.word_);
-  }
-  return result;
+  return ::ranges::to<std::vector<std::string>>(
+      AD_FWD(range) |
+      ql::views::transform([](const IndexAndWord& indexAndWord) {
+        return std::string{indexAndWord.word_};
+      }));
 }
 
 // Collect all `{index, word}` pairs that the given `scanAll` result yields into
@@ -292,11 +284,11 @@ std::vector<std::string> scanAllToVector(Range&& range) {
 template <typename Range>
 std::vector<std::pair<uint64_t, std::string>> scanAllToIndexAndWordVector(
     Range&& range) {
-  std::vector<std::pair<uint64_t, std::string>> result;
-  for (const IndexAndWord& indexAndWord : range) {
-    result.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
-  }
-  return result;
+  return ::ranges::to<std::vector<std::pair<uint64_t, std::string>>>(
+      AD_FWD(range) |
+      ql::views::transform([](const IndexAndWord& indexAndWord) {
+        return std::pair{indexAndWord.index_, std::string{indexAndWord.word_}};
+      }));
 }
 
 // The default set of words written by `writeWordsAndFinish`.
@@ -431,11 +423,10 @@ void assertStreamedLookupMatchesVocabularyAtIndices(
 // and the given `suffixes` consists of (see `FileSuffixes`).
 inline std::vector<std::string> vocabularyFilenames(
     const std::string& filename, const FileSuffixes& suffixes) {
-  std::vector<std::string> filenames;
-  for (const std::string& suffix : suffixes) {
-    filenames.push_back(absl::StrCat(filename, suffix));
-  }
-  return filenames;
+  return ::ranges::to<std::vector<std::string>>(
+      suffixes | ql::views::transform([&filename](const std::string& suffix) {
+        return absl::StrCat(filename, suffix);
+      }));
 }
 
 // Same as above, for a vocabulary of the given (statically known) type.

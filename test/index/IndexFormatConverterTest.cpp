@@ -153,11 +153,10 @@ class IndexFormatConverterTest : public ::testing::Test {
         {}, std::make_shared<ad_utility::CancellationHandle<>>(),
         *locatedTriples, executor());
     AD_CORRECTNESS_CHECK(table.numColumns() == 3);
-    std::vector<std::array<Id, 3>> triples;
-    for (const auto& row : table) {
-      triples.push_back({row[0], row[1], row[2]});
-    }
-    return triples;
+    return ::ranges::to<std::vector<std::array<Id, 3>>>(
+        table | ql::views::transform([](const auto& row) {
+          return std::array{row[0], row[1], row[2]};
+        }));
   }
 };
 
@@ -272,9 +271,8 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
     return absl::StrJoin(components, " ");
   };
   auto spoTriples = scanAllTriples(index, Permutation::SPO, locatedTriples);
-  std::vector<std::string> spoTriplesAsStrings;
-  ql::ranges::transform(spoTriples, std::back_inserter(spoTriplesAsStrings),
-                        tripleToString);
+  auto spoTriplesAsStrings = ::ranges::to<std::vector<std::string>>(
+      spoTriples | ql::views::transform(tripleToString));
   EXPECT_THAT(spoTriplesAsStrings,
               ::testing::ElementsAreArray(expectedTriples()));
 

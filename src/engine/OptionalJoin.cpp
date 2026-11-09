@@ -128,11 +128,10 @@ void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&,
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> OptionalJoin::leftJoinColumns() const {
-  std::vector<ColumnIndex> result;
-  result.reserve(_joinColumns.size());
-  ql::ranges::transform(_joinColumns, std::back_inserter(result),
-                        [](const auto& cols) { return cols[0]; });
-  return result;
+  return ::ranges::to<std::vector<ColumnIndex>>(
+      _joinColumns | ql::views::transform([](const auto& cols) -> ColumnIndex {
+        return cols[0];
+      }));
 }
 
 // _____________________________________________________________________________
@@ -500,10 +499,8 @@ void OptionalJoin::optionalJoin(
   // case.
   // TODO<joka921> We only have to do this if the sorting is required.
   if (numOutOfOrder > 0 && keepJoinColumns_) {
-    std::vector<ColumnIndex> cols;
-    for (size_t i = 0; i < joinColumns.size(); ++i) {
-      cols.push_back(i);
-    }
+    auto cols = ::ranges::to<std::vector<ColumnIndex>>(
+        ad_utility::integerRange(joinColumns.size()));
     checkCancellation();
     IdTableUtils::sort(*result, cols, sortConfig());
   }

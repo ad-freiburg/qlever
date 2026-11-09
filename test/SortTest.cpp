@@ -54,10 +54,8 @@ void testSort(IdTable input, const IdTable& expected,
   auto qec = ad_utility::testing::getQec();
 
   // Set up the vector of sort columns. Those will later be permuted.
-  std::vector<ColumnIndex> sortColumns;
-  for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
-    sortColumns.push_back(i);
-  }
+  auto sortColumns = ::ranges::to<std::vector<ColumnIndex>>(
+      ad_utility::integerRange(input.numColumns()));
 
   // This loop runs over all possible permutations of the sort columns.
   do {

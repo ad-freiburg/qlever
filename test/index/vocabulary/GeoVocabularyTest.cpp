@@ -467,10 +467,11 @@ TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, GeoCellGridIndices) {
             grid.indexFromCellAndPosition(grid.sentinelCell(), words.size()));
 
   // `scanAll` yields the indices.
-  std::vector<uint64_t> scannedIndices;
-  for (const auto& indexAndWord : geoVocab.scanAll()) {
-    scannedIndices.push_back(indexAndWord.index_);
-  }
+  auto scannedIndices = ::ranges::to<std::vector<uint64_t>>(
+      geoVocab.scanAll() |
+      ql::views::transform([](const IndexAndWord& indexAndWord) {
+        return indexAndWord.index_;
+      }));
   EXPECT_THAT(scannedIndices, ::testing::ElementsAreArray(expectedIndices));
 
   // Binary search returns the indices. The comparator orders WKT literals by

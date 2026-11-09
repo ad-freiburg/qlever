@@ -401,10 +401,10 @@ inline auto VariableOrderKeyVariant =
 inline auto VariableOrderKeys =
     [](const std::vector<std::pair<::Variable, bool>>& orderKeys)
     -> Matcher<const std::vector<::VariableOrderKey>&> {
-  std::vector<Matcher<const ::VariableOrderKey&>> matchers;
-  for (auto [key, desc] : orderKeys) {
-    matchers.push_back(VariableOrderKey(key, desc));
-  }
+  auto matchers = ::ranges::to<std::vector<Matcher<const ::VariableOrderKey&>>>(
+      orderKeys | ql::views::transform([](const auto& keyAndDesc) {
+        return VariableOrderKey(keyAndDesc.first, keyAndDesc.second);
+      }));
   return testing::ElementsAreArray(matchers);
 };
 

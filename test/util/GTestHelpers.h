@@ -335,9 +335,8 @@ CPP_template(typename T, typename ArrayType, typename MakeMatcher)(
 auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
-        std::vector<::testing::Matcher<T>> childMatchers;
-        ql::ranges::transform(expectedValues, std::back_inserter(childMatchers),
-                              makeMatcher);
+        auto childMatchers = ::ranges::to<std::vector<::testing::Matcher<T>>>(
+            expectedValues | ql::views::transform(makeMatcher));
         return ::testing::ElementsAreArray(childMatchers);
       };
 }

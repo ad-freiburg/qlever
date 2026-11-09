@@ -411,12 +411,11 @@ size_t GroupByImpl::getResultWidth() const {
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  qlm::vector<ColumnIndex> sortedOn{allocator()};
-  sortedOn.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    sortedOn.push_back(varCols[var].columnIndex_);
-  }
-  return sortedOn;
+  return ::ranges::to<qlm::vector<ColumnIndex>>(
+      _groupByVariables | ql::views::transform([&varCols](const auto& var) {
+        return varCols[var].columnIndex_;
+      }),
+      allocator());
 }
 
 // _____________________________________________________________________________
@@ -629,10 +628,10 @@ IdTable GroupByImpl::doGroupBy(const IdTableView<0>& inTable,
 
   // This stores the values of the group by numColumns for the current block. A
   // block ends when one of these values changes.
-  GroupBlock currentGroupBlock;
-  for (size_t col : groupByCols) {
-    currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
-  }
+  auto currentGroupBlock = ::ranges::to<GroupBlock>(
+      groupByCols | ql::views::transform([&input](size_t col) {
+        return std::pair<size_t, Id>(col, input(0, col));
+      }));
   size_t lastBlockStart =
       searchBlockBoundaries(processNextBlock, input, currentGroupBlock);
   processNextBlock(lastBlockStart, input.size());
@@ -724,11 +723,11 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     groupByColumns.push_back(it->second.columnIndex_);
   }
 
-  std::vector<size_t> groupByCols;
-  groupByCols.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
-  }
+  auto groupByCols = ::ranges::to<std::vector<size_t>>(
+      _groupByVariables |
+      ql::views::transform([&subtreeVarCols](const auto& var) -> size_t {
+        return subtreeVarCols.at(var).columnIndex_;
+      }));
 
   if (useHashMapOptimization) {
     // Helper lambda that calls `computeGroupByForHashMapOptimization` for the
@@ -1675,10 +1674,8 @@ template <size_t NUM_GROUP_COLUMNS>
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns(
     const SortConfig& sortConfig) const {
   // Get data in a row-wise manner.
-  std::vector<ArrayOrVector<Id>> sortedKeys;
-  for (const auto& val : map_) {
-    sortedKeys.push_back(val.first);
-  }
+  auto sortedKeys =
+      ::ranges::to<std::vector<ArrayOrVector<Id>>>(map_ | ql::views::keys);
 
   // Sort data.
   sortConfig.sort(sortedKeys, std::less<>{});

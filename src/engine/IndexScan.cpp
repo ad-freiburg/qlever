@@ -195,10 +195,8 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
-  qlm::vector<ColumnIndex> result{allocator()};
-  for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
-    result.push_back(i);
-  }
+  auto result = ::ranges::to<qlm::vector<ColumnIndex>>(
+      ad_utility::integerRange(ColumnIndex{numVariables_}), allocator());
   for (size_t i = 0; i < additionalColumns_.size(); ++i) {
     if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
       result.push_back(numVariables_ + i);
@@ -611,11 +609,10 @@ void IndexScan::determineMultiplicities() {
                                   : computeMultiplicitiesForIndex();
 
   if (varsToKeep_.has_value()) {
-    std::vector<float> actualMultiplicites;
-    for (size_t column : getSubsetForStrippedColumns()) {
-      actualMultiplicites.push_back(multiplicity_.at(column));
-    }
-    multiplicity_ = std::move(actualMultiplicites);
+    multiplicity_ = ::ranges::to<std::vector<float>>(
+        getSubsetForStrippedColumns() |
+        ql::views::transform(
+            [this](size_t column) { return multiplicity_.at(column); }));
   }
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }

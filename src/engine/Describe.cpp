@@ -57,9 +57,8 @@ std::string Describe::getCacheKeyImpl() const {
   // also determine which triples for these resources become part of the result.
   const auto& defaultGraphs = describe_.datasetClauses_.activeDefaultGraphs();
   if (defaultGraphs.has_value()) {
-    std::vector<std::string> graphIdVec;
-    ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
-                          &toRdfLiteral);
+    auto graphIdVec = ::ranges::to<std::vector<std::string>>(
+        defaultGraphs.value() | ql::views::transform(&toRdfLiteral));
     ql::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
                     "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));

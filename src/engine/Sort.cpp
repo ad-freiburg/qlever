@@ -296,10 +296,10 @@ Sort::makeTreeWithStrippedColumns(
   // of the stripped subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree.get());
-  std::vector<ColumnIndex> sortColumnIndices;
-  for (const auto& var : sortVars) {
-    sortColumnIndices.push_back(subtree->getVariableColumn(*var));
-  }
+  auto sortColumnIndices = ::ranges::to<std::vector<ColumnIndex>>(
+      sortVars | ql::views::transform([&subtree](const auto& var) {
+        return subtree->getVariableColumn(*var);
+      }));
 
   // The new `Sort` also exports the variables it sorts by that the parent did
   // not request. The helper adds a `StripColumns` operation for them.

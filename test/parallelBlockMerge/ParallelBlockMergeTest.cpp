@@ -198,11 +198,7 @@ std::vector<typename Input::value_type> mergeToVector(
 
 // Return the keys (that is, the first components) of the `pairs`.
 SizeVec getKeys(const std::vector<Pair>& pairs) {
-  SizeVec result;
-  for (const auto& pair : pairs) {
-    result.push_back(pair.first);
-  }
-  return result;
+  return ::ranges::to<SizeVec>(pairs | ql::views::keys);
 }
 
 // The number of runs and the number of elements per run of
@@ -286,11 +282,7 @@ std::vector<SizeVec> runsWithInterleavedElements() {
 // per element of the range `[0, numSplitPoints)` plus a single chunk that holds
 // everything that is greater.
 SizeVec splitPointsUpTo(size_t numSplitPoints) {
-  SizeVec result;
-  for (size_t i = 0; i < numSplitPoints; ++i) {
-    result.push_back(i);
-  }
-  return result;
+  return ::ranges::to<SizeVec>(ql::views::iota(size_t{0}, numSplitPoints));
 }
 
 // Return the `values` as `CountingString`s, all of which have not been copied

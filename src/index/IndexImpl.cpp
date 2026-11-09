@@ -2257,12 +2257,11 @@ void IndexImpl::setHasWordRestrictPredicates(
     const std::vector<std::string>& predicates) {
   // Validate the predicates (which throws for an invalid one, before anything
   // is changed).
-  std::vector<std::string> validated;
-  for (const std::string& predicate : predicates) {
-    validated.push_back(
-        ad_utility::triple_component::Iri::fromIrirefValidated(predicate)
-            .toStringRepresentation());
-  }
+  auto validated = ::ranges::to<std::vector<std::string>>(
+      predicates | ql::views::transform([](const std::string& predicate) {
+        return ad_utility::triple_component::Iri::fromIrirefValidated(predicate)
+            .toStringRepresentation();
+      }));
 
   // Sort them (for the binary search in `hasWordTriplesForPredicate`) and
   // remove duplicates (the stored predicates are checked to be strictly

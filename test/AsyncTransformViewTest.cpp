@@ -48,10 +48,9 @@ TEST(AsyncTransformView, resultsAreYieldedInOrder) {
     std::this_thread::sleep_for(std::chrono::microseconds{sleepMicros()});
     return std::to_string(2 * i);
   };
-  std::vector<std::string> expected;
-  for (int i : ql::views::iota(0, 200)) {
-    expected.push_back(std::to_string(2 * i));
-  }
+  auto expected = ::ranges::to<std::vector<std::string>>(
+      ql::views::iota(0, 200) |
+      ql::views::transform([](int i) { return std::to_string(2 * i); }));
   // Fewer, as many, and more elements in flight than there are threads, and
   // more elements in flight than there are elements.
   for (size_t maxNumElementsInFlight : {1, 2, 4, 7, 1000}) {
@@ -278,9 +277,7 @@ TEST(AsyncTransformView, globalExecutorAndTypeErasure) {
       std::make_unique<View>(ql::views::iota(0, 50), std::negate<>{}, 4,
                              ad_utility::globalExecutor())};
   auto moved = std::move(erased);
-  std::vector<int> expected;
-  for (int i : ql::views::iota(0, 50)) {
-    expected.push_back(-i);
-  }
+  auto expected = ::ranges::to<std::vector<int>>(
+      ql::views::iota(0, 50) | ql::views::transform(std::negate<>{}));
   EXPECT_THAT(::ranges::to_vector(moved), ElementsAreArray(expected));
 }

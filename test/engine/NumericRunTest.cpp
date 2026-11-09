@@ -93,11 +93,11 @@ TEST(NumericRun, runsInInternalOrderMatchTheBits) {
 TEST(NumericRun, getRunsInSemanticOrder) {
   // Compare as pairs, because `RunWithDirection` has no `operator==`.
   auto toPairs = [](const std::vector<RunWithDirection>& runs) {
-    std::vector<std::pair<NumericRun, bool>> result;
-    for (auto [run, reversed] : runs) {
-      result.emplace_back(run, reversed);
-    }
-    return result;
+    return ::ranges::to<std::vector<std::pair<NumericRun, bool>>>(
+        runs | ql::views::transform([](const RunWithDirection& r) {
+          auto [run, reversed] = r;
+          return std::pair{run, reversed};
+        }));
   };
   using P = std::pair<NumericRun, bool>;
 

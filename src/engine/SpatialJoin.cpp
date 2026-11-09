@@ -514,18 +514,18 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // taken into account. Also note that here `childLeft_` not `childLeft` is
   // used, because `leftSelectedCols` and `rightSelectedCols` are applied after
   // swapping tables back in case of a `WITHIN` join.
-  qlm::vector<ColumnIndex> leftSelectedCols{allocator()};
-  for (auto [var, colInfo] :
-       copySortedByColumnIndex(childLeft_->getVariableColumns())) {
-    leftSelectedCols.push_back(colInfo.columnIndex_);
-  }
+  auto getColumnIndex = [](const auto& varAndColInfo) -> ColumnIndex {
+    return varAndColInfo.second.columnIndex_;
+  };
+  auto leftSelectedCols = ::ranges::to<qlm::vector<ColumnIndex>>(
+      copySortedByColumnIndex(childLeft_->getVariableColumns()) |
+          ql::views::transform(getColumnIndex),
+      allocator());
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  qlm::vector<ColumnIndex> rightSelectedCols{allocator()};
-  for (const auto& [var, colInfo] : varsAndColInfo) {
-    rightSelectedCols.push_back(colInfo.columnIndex_);
-  }
+  auto rightSelectedCols = ::ranges::to<qlm::vector<ColumnIndex>>(
+      varsAndColInfo | ql::views::transform(getColumnIndex), allocator());
 
   // Size of output table
   size_t numColumns = getResultWidth();
