@@ -1111,10 +1111,10 @@ TEST(HttpProxy, connectTunnelWithUnexpectedTrailingBytes) {
                        HasSubstr("cannot forward into the TLS session")));
 }
 
-// The `HttpServer` constructor already binds *and* listens on the socket, so
-// a second server on a port that is already in use fails synchronously in its
-// constructor (and does not silently fail later inside `run()`). Note that the
-// first server need not even be running for this.
+// Test that a second server on a port that is already in use fails
+// synchronously in its constructor, which binds *and* listens on the socket.
+// The first server does not even have to be running for this (a second bind to
+// a socket that is bound but not yet listening would succeed).
 TEST(HttpServer, PortAlreadyInUseThrowsInConstructor) {
   auto handler = makeEchoHandler();
   using Server = TestHttpServer<decltype(handler)>;
