@@ -293,8 +293,11 @@ TEST(SparqlExpressionMemberFunctions, getConstantValue) {
                   .getConstantValue(),
               Optional(Eq(TripleComponent{Id::makeUndefined()})));
 
-  // A variable is not.
+  // A variable and a function of a constant are not.
   EXPECT_EQ(pimpl(std::make_shared<VariableExpression>(Variable{"?x"}))
+                .getConstantValue(),
+            std::nullopt);
+  EXPECT_EQ(pimpl(makeAbsExpression(std::make_unique<IdExpression>(id)))
                 .getConstantValue(),
             std::nullopt);
 }
