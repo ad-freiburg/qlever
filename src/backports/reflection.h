@@ -12,8 +12,8 @@
 
 // Detect support for C++26 static reflection (P2996) together with the
 // expansion statements (`template for`, P1306), and define the macro
-// `QL_HAS_REFLECTION` if both are available. QLever doesn't depend on
-// reflection, but uses it (guarded by `#ifdef QL_HAS_REFLECTION`) for
+// `QLEVER_HAS_REFLECTION` if both are available. QLever doesn't depend on
+// reflection, but uses it (guarded by `#ifdef QLEVER_HAS_REFLECTION`) for
 // additional compile-time checks of invariants that the C++17/C++20 code has to
 // state redundantly. Currently, only GCC 16 with `-std=c++26 -freflection`
 // supports reflection, which CMake passes automatically for that compiler (see
@@ -23,10 +23,10 @@
 
 #if defined(__cpp_impl_reflection) && defined(__cpp_lib_reflection) && \
     defined(__cpp_expansion_statements)
-#define QL_HAS_REFLECTION
+#define QLEVER_HAS_REFLECTION
 #endif
 
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
 #include <meta>
 #endif
 

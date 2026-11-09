@@ -61,7 +61,7 @@ TEST(EnumSize, allEnumValues) {
   EXPECT_EQ(qlever::allEnumValues<K>, (std::array{K::First, K::Second}));
 }
 
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
 // Test the check that `QLEVER_ENUM_SIZE` performs if reflection is supported.
 TEST(EnumSize, reflectionCheck) {
   using qlever::enumSizeDetail::isRegularEnumWithSize;

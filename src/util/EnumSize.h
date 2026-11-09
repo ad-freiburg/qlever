@@ -51,7 +51,7 @@ namespace enumSizeDetail {
 // they can't accidentally be confused with other functions.
 struct EnumSizeTag {};
 
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
 // Return true iff the enumerators of `E` (in declaration order) have the values
 // `0, 1, ..., N - 1`.
 template <typename E, std::size_t N>
@@ -91,7 +91,7 @@ inline constexpr std::array<E, enumSize<E>> allEnumValues = []() {
 
 }  // namespace qlever
 
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
 #define QL_IMPL_CHECK_ENUM_SIZE(E, N)                                    \
   static_assert(::qlever::enumSizeDetail::isRegularEnumWithSize<E, N>(), \
                 "The enum `" #E "` must have exactly " #N                \
@@ -111,7 +111,9 @@ inline constexpr std::array<E, enumSize<E>> allEnumValues = []() {
   QL_IMPL_CHECK_ENUM_SIZE(E, N)
 
 // State that the enum `E` (which has to be declared in the current namespace)
-// has the `N` values `0, 1, ..., N - 1`. See above for details.
+// has the `N` values `0, 1, ..., N - 1`. This makes `qlever::enumSize<E>`
+// (which is `N`) and `qlever::allEnumValues<E>` (an array of all the `N`
+// values) available. See above for details.
 #define QLEVER_ENUM_SIZE(E, N) QL_IMPL_ENUM_SIZE(, E, N)
 
 // The same as `QLEVER_ENUM_SIZE`, but for an enum `E` that is declared inside
