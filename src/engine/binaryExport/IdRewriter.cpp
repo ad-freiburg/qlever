@@ -30,6 +30,7 @@ IdRewriter::IdRewriter(const QueryExecutionContext& qec,
 // _____________________________________________________________________________
 void IdRewriter::rewriteBatch(IdTable& table, size_t firstRow,
                               std::vector<std::string> transmittedStrings) {
+  AD_CONTRACT_CHECK(firstRow <= table.size());
   TransmittedStringRewriter stringRewriter{std::move(transmittedStrings),
                                            qec_->getIndex(), localVocab_};
   for (auto column : table.getColumns()) {

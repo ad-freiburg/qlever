@@ -25,11 +25,11 @@ Id BlankNodeRewriter::operator()(Id id) {
 
 // _____________________________________________________________________________
 void BlankNodeRewriter::addBlankNodesTo(LocalVocab& localVocab) {
-  if (!mapping_.empty()) {
-    // NOTE: `mergeWith` marks the `blankNodes_` as copied, which only forbids
-    // adding words, but not blank nodes, to it.
-    localVocab.mergeWith(blankNodes_);
-  }
+  // NOTE: `mergeWith` marks a merged vocab as copied, which forbids adding
+  // words to it, but only if the vocab contains words. The `blankNodes_`
+  // contain none, so only their blank nodes are shared, and later batches can
+  // still add blank nodes to them.
+  localVocab.mergeWith(blankNodes_);
 }
 
 }  // namespace qlever::binary_export
