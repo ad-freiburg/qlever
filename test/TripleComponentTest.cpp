@@ -91,6 +91,8 @@ TEST(TripleComponent, setAndGetId) {
   ASSERT_EQ(tcConst.getId(), id);
 }
 
+// Test that a `TripleComponent` constructed from a `LiteralOrIri` holds the
+// contained `Iri` or `Literal`.
 TEST(TripleComponent, constructFromLiteralOrIri) {
   using ad_utility::triple_component::LiteralOrIri;
   TripleComponent iri{LiteralOrIri::fromStringRepresentation("<x>")};

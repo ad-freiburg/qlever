@@ -67,7 +67,10 @@ auto withGeoPointEncoding(GeoPointEncodingEnum encoding, F f) {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that `rewriteBatch` rewrites the rows from `firstRow` on: a transmitted
+// string becomes the ID of its word in the index or in the local vocab, a
+// trivial ID stays unchanged, and an index of a string that was not
+// transmitted throws.
 TEST(IdRewriter, rewriteBatch) {
   auto* qec = ad_utility::testing::getQec();
 
@@ -114,7 +117,9 @@ TEST(IdRewriter, rewriteBatch) {
                                ::testing::HasSubstr("not transmitted"));
 }
 
-// _____________________________________________________________________________
+// Test that several batches can share one local vocab, that a decoded IRI is
+// cached only until `takeLocalVocab`, and that each local vocab contains all
+// the blank nodes so far.
 TEST(IdRewriter, severalBatchesPerLocalVocab) {
   auto* qec = qecWithEncodedPrefixes();
   IdRewriter rewriter{
@@ -154,7 +159,9 @@ TEST(IdRewriter, severalBatchesPerLocalVocab) {
       nextVocab.isBlankNodeIndexContained(blankNode.getBlankNodeIndex()));
 }
 
-// _____________________________________________________________________________
+// Test that `rewriteBatch` dispatches on the datatype (trivial IDs,
+// transmitted strings, encoded IRIs, blank nodes and `GeoPoint`s), and that an
+// ID of another datatype throws.
 TEST(IdRewriter, dispatch) {
   using E = GeoPointEncodingEnum;
   auto* qec = qecWithEncodedPrefixes();
@@ -191,7 +198,8 @@ TEST(IdRewriter, dispatch) {
       ::testing::HasSubstr("unexpected datatype VocabIndex"));
 }
 
-// _____________________________________________________________________________
+// Test that `rewriteGeoPoint` converts a point between two encodings and
+// leaves it unchanged for the local encoding.
 TEST(IdRewriter, rewriteGeoPoint) {
   using E = GeoPointEncodingEnum;
   ASSERT_EQ(GeoPoint::encoding(), E::ZOrder);
@@ -208,7 +216,9 @@ TEST(IdRewriter, rewriteGeoPoint) {
   EXPECT_EQ(IdRewriter::rewriteGeoPoint(remote, E::LatMajor), local);
 }
 
-// _____________________________________________________________________________
+// Test that an encoded IRI with a pattern that exists locally only changes
+// its pattern index, that one with another pattern is decoded into the local
+// vocab (cached until `invalidateCache`), and that an unknown pattern throws.
 TEST(EncodedIriRewriter, rewrite) {
   const auto& index = qecWithEncodedPrefixes()->getIndex();
   const auto& manager = index.encodedIriManager();
@@ -255,7 +265,8 @@ TEST(EncodedIriRewriter, rewrite) {
       ::testing::HasSubstr("unknown pattern"));
 }
 
-// _____________________________________________________________________________
+// Test that `getPrefixMapping` maps each remote pattern to the index of the
+// equal local pattern, if there is one.
 TEST(EncodedIriRewriter, getPrefixMapping) {
   const auto& manager =
       qecWithEncodedPrefixes()->getIndex().encodedIriManager();
@@ -269,7 +280,9 @@ TEST(EncodedIriRewriter, getPrefixMapping) {
   EXPECT_TRUE(EncodedIriRewriter::getPrefixMapping(manager, {}).empty());
 }
 
-// _____________________________________________________________________________
+// Test that the same remote blank node is always mapped to the same local
+// one, and that `addBlankNodesTo` makes all the blank nodes so far (but no
+// words) part of a local vocab.
 TEST(BlankNodeRewriter, rewrite) {
   BlankNodeRewriter rewriter{
       ad_utility::testing::getQec()->getIndex().getBlankNodeManager()};
