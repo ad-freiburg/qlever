@@ -187,13 +187,15 @@ QueryPatternCache::makeJoinReplacementIndexScans(
 
   // Group the query triples by predicate and collect the views sharing a
   // predicate with the query. Sorted and deduplicated by name below, so
-  // that the sharing of the limits pool is deterministic.
+  // that the sharing of the limits pool is deterministic. Triples with
+  // additional scan columns (like the patterns for the pattern trick) are
+  // skipped, because a view scan cannot provide these columns.
   TriplesByPredicate triplesByPredicate;
   std::vector<std::pair<std::string_view, ViewPtr>> candidateViews;
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
     auto iri = triple.getSimplePredicate();
-    if (!iri.has_value()) {
+    if (!iri.has_value() || !triple.additionalScanColumns_.empty()) {
       continue;
     }
     auto views = ad_utility::findOptional(predicateInView_, iri.value());
