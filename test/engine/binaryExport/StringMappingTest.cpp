@@ -152,9 +152,9 @@ TEST(StringMapping, transmittedIds) {
   }
 }
 
-// Test that the `TransmittedStrings` resolve the IDs of a `StringMapping` to
-// the local IDs of their strings.
-TEST(TransmittedStrings, roundTrip) {
+// Test that the `TransmittedStringRewriter` resolves the IDs of a
+// `StringMapping` to the local IDs of their strings.
+TEST(TransmittedStringRewriter, roundTrip) {
   auto* qec = getQecWithTextIndex();
   const auto& index = qec->getIndex();
   StringMapping mapping{index};
@@ -169,31 +169,32 @@ TEST(TransmittedStrings, roundTrip) {
       mapping.remapId(Id::makeFromLocalVocabIndex(&testWord));
 
   LocalVocab localVocab;
-  TransmittedStrings strings{mapping.takeStrings(), index, localVocab};
+  TransmittedStringRewriter rewriter{mapping.takeStrings(), index, localVocab};
   // The word of the vocabulary becomes the same `VocabIndex` again (bitwise,
   // not only semantically), the other word is added to the `localVocab`.
-  EXPECT_EQ(strings(transmittedVocabId).getBits(), vocabId.getBits());
-  Id localTestWord = strings(transmittedTestWord);
+  EXPECT_EQ(rewriter(transmittedVocabId).getBits(), vocabId.getBits());
+  Id localTestWord = rewriter(transmittedTestWord);
   ASSERT_EQ(localTestWord.getDatatype(), Datatype::LocalVocabIndex);
   EXPECT_EQ(localTestWord.getLocalVocabIndex()->toStringRepresentation(),
             "\"abc\"");
   EXPECT_EQ(localVocab.size(), 1);
 
   // A string that is not part of the batch.
-  AD_EXPECT_THROW_WITH_MESSAGE(strings(StringMapping::makeTransmittedId(2)),
+  AD_EXPECT_THROW_WITH_MESSAGE(rewriter(StringMapping::makeTransmittedId(2)),
                                ::testing::HasSubstr("not transmitted"));
 }
 
 // Test that a transmitted IRI that can be encoded locally becomes an encoded
 // IRI.
-TEST(TransmittedStrings, encodesIris) {
+TEST(TransmittedStringRewriter, encodesIris) {
   ad_utility::testing::TestIndexConfig config;
   config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   const auto& index = ad_utility::testing::getQec(config)->getIndex();
 
   LocalVocab localVocab;
-  TransmittedStrings strings{{"<http://example.org/42>"}, index, localVocab};
-  EXPECT_EQ(strings(StringMapping::makeTransmittedId(0)),
+  TransmittedStringRewriter rewriter{
+      {"<http://example.org/42>"}, index, localVocab};
+  EXPECT_EQ(rewriter(StringMapping::makeTransmittedId(0)),
             index.encodedIriManager().encode("<http://example.org/42>"));
   EXPECT_TRUE(localVocab.empty());
 }

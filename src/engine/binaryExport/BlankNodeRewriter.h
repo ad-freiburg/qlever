@@ -25,6 +25,8 @@ namespace qlever::binary_export {
 // same remote blank node is always replaced by the same local one.
 class BlankNodeRewriter {
   ad_utility::BlankNodeManager* blankNodeManager_;
+  // TODO<joka921, RobinTF> The imported result might be huge, so this
+  // should respect the memory limit (e.g. via a memory-limited hash map).
   ad_utility::HashMap<Id::T, Id> mapping_;
   // The local blank nodes are allocated in this local vocab, which only
   // contains blank nodes (see `addBlankNodesTo`).

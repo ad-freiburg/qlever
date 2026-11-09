@@ -35,8 +35,9 @@ class EncodedIriRewriter {
   // For each remote pattern the index of the equal local pattern, if there is
   // one, see `getPrefixMapping`.
   std::vector<std::optional<uint8_t>> prefixMapping_;
-  // The IRIs that were decoded since the last call to `clearDecodedIris`.
-  ad_utility::HashMap<Id::T, Id> decodedIris_;
+  // A cache of the IRIs that were decoded since the last call to
+  // `invalidateCache`.
+  ad_utility::HashMap<Id::T, Id> decodedIriCache_;
 
  public:
   EncodedIriRewriter(const Index& index,
@@ -45,12 +46,13 @@ class EncodedIriRewriter {
   // If the pattern of the `id` also exists locally, only change the index of
   // the pattern. Otherwise decode the IRI and convert it to a local `Id` (see
   // `stringToLocalId`), which might add it to the `localVocab`. Each IRI is
-  // decoded at most once until the next call to `clearDecodedIris`.
+  // decoded at most once until the next call to `invalidateCache`.
   Id operator()(Id id, LocalVocab& localVocab);
 
-  // Forget the decoded IRIs, which is required when the `localVocab` that was
-  // passed to `operator()` is replaced, as their IDs might point into it.
-  void clearDecodedIris() { decodedIris_.clear(); }
+  // Clear the cache of decoded IRIs, which is required when the `localVocab`
+  // that was passed to `operator()` is replaced, as the cached IDs might point
+  // into it.
+  void invalidateCache() { decodedIriCache_.clear(); }
 
   // Get the mapping from the indices of the `remotePatterns` to the indices of
   // the equal patterns of the `localManager` (`std::nullopt` for a remote

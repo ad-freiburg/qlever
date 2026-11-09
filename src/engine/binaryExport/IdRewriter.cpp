@@ -30,24 +30,24 @@ IdRewriter::IdRewriter(const QueryExecutionContext& qec,
 // _____________________________________________________________________________
 void IdRewriter::rewriteBatch(IdTable& table, size_t firstRow,
                               std::vector<std::string> transmittedStrings) {
-  TransmittedStrings strings{std::move(transmittedStrings), qec_->getIndex(),
-                             localVocab_};
+  TransmittedStringRewriter stringRewriter{std::move(transmittedStrings),
+                                           qec_->getIndex(), localVocab_};
   for (auto column : table.getColumns()) {
     for (Id& id : column.subspan(firstRow)) {
-      id = rewrite(id, strings);
+      id = rewrite(id, stringRewriter);
     }
   }
 }
 
 // _____________________________________________________________________________
-Id IdRewriter::rewrite(Id id, const TransmittedStrings& transmittedStrings) {
+Id IdRewriter::rewrite(Id id, const TransmittedStringRewriter& stringRewriter) {
   switch (id.getDatatype()) {
     case Datatype::EncodedVal:
       return encodedIriRewriter_(id, localVocab_);
     case Datatype::BlankNodeIndex:
       return blankNodeRewriter_(id);
     case Datatype::LocalVocabIndex:
-      return transmittedStrings(id);
+      return stringRewriter(id);
     case Datatype::GeoPoint:
       return rewriteGeoPoint(id, remoteGeoPointEncoding_);
     default:
@@ -80,8 +80,8 @@ Id IdRewriter::rewriteGeoPoint(Id id, GeoPointEncodingEnum remoteEncoding) {
 // _____________________________________________________________________________
 LocalVocab IdRewriter::takeLocalVocab() {
   blankNodeRewriter_.addBlankNodesTo(localVocab_);
-  // The IDs of the decoded IRIs might point into the old local vocab.
-  encodedIriRewriter_.clearDecodedIris();
+  // The cached IDs of the decoded IRIs might point into the old local vocab.
+  encodedIriRewriter_.invalidateCache();
   return std::exchange(localVocab_, LocalVocab{});
 }
 

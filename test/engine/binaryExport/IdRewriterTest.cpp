@@ -239,9 +239,9 @@ TEST(EncodedIriRewriter, rewrite) {
   EXPECT_EQ(rewriter(remoteOther, localVocab).getBits(), rewritten.getBits());
   EXPECT_EQ(localVocab.size(), 1);
 
-  // After `clearDecodedIris`, the IRI is decoded again (into a new local
+  // After `invalidateCache`, the IRI is decoded again (into a new local
   // vocab).
-  rewriter.clearDecodedIris();
+  rewriter.invalidateCache();
   LocalVocab nextLocalVocab;
   Id rewrittenAgain = rewriter(remoteOther, nextLocalVocab);
   EXPECT_EQ(nextLocalVocab.size(), 1);

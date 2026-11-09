@@ -43,7 +43,7 @@ Id EncodedIriRewriter::operator()(Id id, LocalVocab& localVocab) {
         localPrefixIdx.value(), payload);
   }
   // Otherwise the decoded IRI might be encoded with a different local pattern.
-  auto [it, inserted] = decodedIris_.try_emplace(id.getBits(), Id{});
+  auto [it, inserted] = decodedIriCache_.try_emplace(id.getBits(), Id{});
   if (inserted) {
     it->second = stringToLocalId(
         encodedIri::decodeToIri(remotePatterns_[prefixIdx], payload), *index_,

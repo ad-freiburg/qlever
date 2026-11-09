@@ -31,9 +31,9 @@ namespace qlever::binary_export {
 // `BinaryExport.cpp`) to IDs of the local instance. This is the counterpart of
 // `toExportableId` on the importing side. All the IDs that depend on the
 // instance are converted by the respective helper: the strings by
-// `TransmittedStrings` (the counterpart of `StringMapping`), the encoded IRIs
-// (whose patterns might differ) by the `EncodedIriRewriter`, the blank nodes
-// by the `BlankNodeRewriter`, and the `GeoPoint`s (whose encoding might
+// `TransmittedStringRewriter` (the counterpart of `StringMapping`), the encoded
+// IRIs (whose patterns might differ) by the `EncodedIriRewriter`, the blank
+// nodes by the `BlankNodeRewriter`, and the `GeoPoint`s (whose encoding might
 // differ) by `rewriteGeoPoint`. The words that are not contained in the local
 // index are added to the local vocab (see `takeLocalVocab`).
 class IdRewriter {
@@ -67,8 +67,9 @@ class IdRewriter {
   static Id rewriteGeoPoint(Id id, GeoPointEncodingEnum remoteEncoding);
 
  private:
-  // Rewrite a single `Id` of a batch with the `transmittedStrings`.
-  Id rewrite(Id id, const TransmittedStrings& transmittedStrings);
+  // Rewrite a single `Id` of a batch, the strings of which are resolved by
+  // the `stringRewriter`.
+  Id rewrite(Id id, const TransmittedStringRewriter& stringRewriter);
 };
 
 }  // namespace qlever::binary_export

@@ -26,8 +26,8 @@ namespace qlever::binary_export {
 // non-trivial IDs (IDs that point to literals or IRIs that are not encoded
 // directly in the ID) for a batch of IDs. It assigns a unique index to each of
 // those IDs and resolves it to its string right away, so the size of a batch
-// is known. The counterpart on the importing side is `TransmittedStrings`
-// (see below).
+// is known. The counterpart on the importing side is
+// `TransmittedStringRewriter` (see below).
 class StringMapping {
   const Index* index_;
   // Only required for the signature of `idToLiteralOrIri`. A `LocalVocabIndex`
@@ -72,17 +72,18 @@ class StringMapping {
 
   // The `Id` with which `remapId` refers to the string with the given `index`
   // of its batch, and the inverse of this function, which the importer uses
-  // (see `TransmittedStrings`). The `index` is not a pointer, so it is stored
-  // directly as the payload, without `Id::makeFromLocalVocabIndex`.
+  // (see `TransmittedStringRewriter`). The `index` is not a pointer, so it is
+  // stored directly as the payload, without `Id::makeFromLocalVocabIndex`.
   static Id makeTransmittedId(size_t index) {
     return Id::fromBits(Datatype::LocalVocabIndex, index);
   }
   static size_t getTransmittedIndex(Id id) { return id.getPayloadBits(); }
 };
 
-// The counterpart of `StringMapping` on the importing side: the local IDs of
-// the strings of one batch (see `StringMapping::takeStrings`).
-class TransmittedStrings {
+// The counterpart of `StringMapping` on the importing side: rewrite the IDs
+// that refer to the strings of one batch (see `StringMapping::takeStrings`) to
+// the local IDs of these strings.
+class TransmittedStringRewriter {
   // The local `Id` of the string with index `i` is at position `i`.
   std::vector<Id> ids_;
 
@@ -90,8 +91,8 @@ class TransmittedStrings {
   // Convert each of the `strings` to a local `Id` once (see
   // `stringToLocalId`), the `localVocab` then contains the strings that are
   // not contained in the `index`.
-  TransmittedStrings(std::vector<std::string> strings, const Index& index,
-                     LocalVocab& localVocab);
+  TransmittedStringRewriter(std::vector<std::string> strings,
+                            const Index& index, LocalVocab& localVocab);
 
   // Return the local `Id` of the string that the `id` (as returned by
   // `StringMapping::remapId`) refers to. Throw if the batch doesn't contain

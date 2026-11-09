@@ -78,9 +78,9 @@ Id StringMapping::remapId(Id id) {
 }
 
 // _____________________________________________________________________________
-TransmittedStrings::TransmittedStrings(std::vector<std::string> strings,
-                                       const Index& index,
-                                       LocalVocab& localVocab) {
+TransmittedStringRewriter::TransmittedStringRewriter(
+    std::vector<std::string> strings, const Index& index,
+    LocalVocab& localVocab) {
   ids_.reserve(strings.size());
   for (auto& string : strings) {
     ids_.push_back(stringToLocalId(std::move(string), index, localVocab));
@@ -88,7 +88,7 @@ TransmittedStrings::TransmittedStrings(std::vector<std::string> strings,
 }
 
 // _____________________________________________________________________________
-Id TransmittedStrings::operator()(Id id) const {
+Id TransmittedStringRewriter::operator()(Id id) const {
   auto index = StringMapping::getTransmittedIndex(id);
   if (index >= ids_.size()) {
     throw std::runtime_error{
