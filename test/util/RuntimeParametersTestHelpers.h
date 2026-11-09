@@ -9,19 +9,29 @@
 
 #include "global/RuntimeParameters.h"
 
+// Return a cleanup that restores the current value of the runtime parameter
+// specified by the `ParameterPtr` when it is destroyed. Use this when the code
+// under test changes the parameter, for example the constructor of
+// `qlever::Qlever`, which sets `memory-for-queries` to its memory limit.
+template <auto ParameterPtr>
+[[nodiscard]] auto restoreRuntimeParameterOnScopeExit() {
+  auto originalValue =
+      std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+  return absl::Cleanup{[originalValue = std::move(originalValue)]() {
+    std::invoke(ParameterPtr, *globalRuntimeParameters.wlock())
+        .set(std::move(originalValue));
+  }};
+}
+
 // Set the runtime parameter specified by the `ParameterPtr` to the given
 // `Value` and return a cleanup that will restore the original value of the
 // parameter when it is destroyed.
 template <auto ParameterPtr, typename Value>
 [[nodiscard]] auto setRuntimeParameterForTest(Value&& value) {
-  auto originalValue =
-      std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+  auto cleanup = restoreRuntimeParameterOnScopeExit<ParameterPtr>();
   std::invoke(ParameterPtr, *globalRuntimeParameters.wlock())
       .set(AD_FWD(value));
-  return absl::Cleanup{[originalValue = std::move(originalValue)]() {
-    std::invoke(ParameterPtr, *globalRuntimeParameters.wlock())
-        .set(std::move(originalValue));
-  }};
+  return cleanup;
 }
 
 #endif  // QLEVER_TEST_UTIL_RUNTIMEPARAMETERSTESTHELPERS_H

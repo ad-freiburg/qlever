@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "engine/idTable/IdColumnByteIO.h"
 #include "global/RuntimeParameters.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/LocatedTriples.h"
@@ -89,17 +90,26 @@ auto CompressedRelationReader::FilterDuplicatesAndGraphs::isGraphAllowedLambda()
   return [this](Id graph) { return graphFilter_.isGraphAllowed(graph); };
 }
 
-// _____________________________________________________________________________
-bool CompressedRelationReader::FilterDuplicatesAndGraphs::
-    blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
-  if (graphFilter_.areAllGraphsAllowed()) {
+// Return true iff, by its metadata, the block may contain graphs that the
+// `graphFilter` does not allow.
+static bool blockMayContainDisallowedGraphs(
+    const ScanSpecification::GraphFilter& graphFilter,
+    const CompressedBlockMetadata& metadata) {
+  if (graphFilter.areAllGraphsAllowed()) {
     return false;
   }
   if (!metadata.graphInfo_.has_value()) {
     return true;
   }
-  const auto& graphInfo = metadata.graphInfo_.value();
-  return !ql::ranges::all_of(graphInfo, isGraphAllowedLambda());
+  return !ql::ranges::all_of(
+      metadata.graphInfo_.value(),
+      [&graphFilter](Id graph) { return graphFilter.isGraphAllowed(graph); });
+}
+
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::
+    blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
+  return blockMayContainDisallowedGraphs(graphFilter_, metadata);
 }
 
 // _____________________________________________________________________________
@@ -449,8 +459,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     } else {
       // If the first and last triple of the block match, then we know that
       // the whole block belongs to the result.
-      bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
-                        isTripleInSpecification(scanSpec, block.lastTriple_);
+      bool isComplete = isBlockCompletelyInScan(scanSpec, block);
       size_t divisor =
           isComplete
               ? 1
@@ -615,6 +624,26 @@ bool CompressedRelationReader::columnValuesAreKnownFromMetadata(
 }
 
 // ____________________________________________________________________________
+bool CompressedRelationReader::isBlockCompletelyInScan(
+    const ScanSpecification& scanSpec, const CompressedBlockMetadata& block) {
+  return isTripleInSpecification(scanSpec, block.firstTriple_) &&
+         isTripleInSpecification(scanSpec, block.lastTriple_);
+}
+
+// ____________________________________________________________________________
+size_t CompressedRelationReader::getNumRowsLowerBound(
+    const ScanSpecification& scanSpec, const CompressedBlockMetadata& block,
+    const LocatedTriplesPerBlock& locatedTriples) {
+  if (!isBlockCompletelyInScan(scanSpec, block) ||
+      block.containsDuplicatesWithDifferentGraphs_ ||
+      blockMayContainDisallowedGraphs(scanSpec.graphFilter(), block)) {
+    return 0;
+  }
+  size_t numDeleted = locatedTriples.numTriples(block.blockIndex_).numDeleted_;
+  return block.numRows_ - std::min(block.numRows_, numDeleted);
+}
+
+// ____________________________________________________________________________
 bool CompressedRelationReader::contentsAreKnownFromMetadata(
     const CompressedBlockMetadata& block, size_t numColumns,
     const LocatedTriplesPerBlock& locatedTriples) {
@@ -762,8 +791,7 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
   DecompressedBlock decompressedBlock{compressedBlock.size(), allocator_};
   decompressedBlock.resize(numRowsToRead);
   for (size_t i = 0; i < compressedBlock.size(); ++i) {
-    auto col = decompressedBlock.getColumn(i);
-    decompressColumn(compressedBlock[i], numRowsToRead, col.data());
+    decompressColumn(compressedBlock[i], decompressedBlock.getColumn(i));
   }
   return decompressedBlock;
 }
@@ -797,16 +825,12 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 }
 
 // ____________________________________________________________________________
-template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
-    const std::vector<char>& compressedBlock, size_t numRowsToRead,
-    Iterator iterator) {
-  auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
-      compressedBlock.data(), compressedBlock.size(), iterator,
-      numRowsToRead * sizeof(*iterator));
-  static_assert(BYTES_PER_ID_COLUMN_ENTRY == sizeof(*iterator));
-  AD_CORRECTNESS_CHECK(numRowsToRead * BYTES_PER_ID_COLUMN_ENTRY ==
-                       numBytesActuallyRead);
+    const std::vector<char>& compressedBlock, IdColumnRef column) {
+  ad_utility::idColumnByteIO::decode(
+      column, [&compressedBlock](const auto& buffers) {
+        ZstdWrapper::decompressChunks(compressedBlock, buffers);
+      });
 }
 
 // ____________________________________________________________________________

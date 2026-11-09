@@ -17,6 +17,7 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/ValuesForTesting.h"
+#include "global/Constants.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -2384,14 +2385,10 @@ TransitivePathSide rightVar() {
   return {std::nullopt, 1, Variable{"?target"}, 1};
 }
 
-// A bound transitive path is estimated like a join of the bound side with the
-// complete hull, so its size estimate contains the correction factor of joins.
-double joinCorrection() {
-  return getQec()->getCostFactor("JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR");
-}
-
 // Bind the given side of `path` to a table with 1000 rows, the values of which
-// are in the first column. The second column `?other` is a payload column.
+// are in the first column. The second column `?other` is a payload column. A
+// bound path is estimated like a join of the bound table with the complete
+// hull, so its size estimate contains `JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR`.
 std::shared_ptr<TransitivePathBase> bindToThousandRows(
     const TransitivePathBase& path, bool isLeft) {
   auto variable = (isLeft ? path.getLeft() : path.getRight()).value_;
@@ -2471,9 +2468,11 @@ TEST(TransitivePathEstimates, boundSideIsDirectionAware) {
 
   auto oneStep = makePathForEstimates(leftVar(), rightVar(), 1, 1);
   EXPECT_NEAR(bindToThousandRows(*oneStep, true)->getSizeEstimate(),
-              joinCorrection() * 1000 * leftMultiplicity, 1);
+              JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR * 1000 * leftMultiplicity,
+              1);
   EXPECT_NEAR(bindToThousandRows(*oneStep, false)->getSizeEstimate(),
-              joinCorrection() * 1000 * rightMultiplicity, 1);
+              JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR * 1000 * rightMultiplicity,
+              1);
 }
 
 // Test the multiplicities of the start, target and payload columns of a bound
@@ -2483,11 +2482,12 @@ TEST(TransitivePathEstimates, multiplicitiesOfBoundPath) {
   auto bound = bindToThousandRows(*oneStep, true);
   // Each of the 1000 rows is repeated for each of its `leftMultiplicity`
   // successors.
-  double size = joinCorrection() * 1000 * leftMultiplicity;
+  double size = JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR * 1000 * leftMultiplicity;
   ASSERT_NEAR(bound->getSizeEstimate(), size, 1);
   // The start values are the values of the first column of the bound table,
   // the multiplicity of which is `leftMultiplicity`.
-  double rowsPerStartRow = joinCorrection() * leftMultiplicity;
+  double rowsPerStartRow =
+      JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR * leftMultiplicity;
   EXPECT_NEAR(bound->getMultiplicity(0), leftMultiplicity * rowsPerStartRow,
               0.1);
   // The 1000 reached nodes overlap a little ("balls into bins").
@@ -2505,6 +2505,6 @@ TEST(TransitivePathEstimates, multiplicitiesOfBoundPath) {
   // With the empty path, each row is additionally matched with itself.
   auto withEmptyPath = bindToThousandRows(
       *makePathForEstimates(leftVar(), rightVar(), 0, 1), true);
-  EXPECT_NEAR(withEmptyPath->getSizeEstimate(), size + joinCorrection() * 1000,
-              1);
+  EXPECT_NEAR(withEmptyPath->getSizeEstimate(),
+              size + JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR * 1000, 1);
 }
