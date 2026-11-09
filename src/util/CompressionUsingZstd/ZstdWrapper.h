@@ -10,6 +10,7 @@
 #include <zstd.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -30,6 +31,49 @@ class ZstdWrapper {
         result.data(), result.size(), src, numBytes, compressionLevel));
     result.resize(compressedSize);
     return result;
+  }
+
+  // Compress each of the `chunks` as a ZSTD frame of its own and return the
+  // concatenation of the compressed frames. For a single chunk, this is the
+  // same as `compress` above.
+  static std::vector<char> compressChunks(
+      ql::span<const ql::span<const std::byte>> chunks,
+      int compressionLevel = 3) {
+    size_t bound = 0;
+    for (auto chunk : chunks) {
+      bound += ZSTD_compressBound(chunk.size());
+    }
+    std::vector<char> result(bound);
+    size_t size = 0;
+    for (auto chunk : chunks) {
+      size += checkError(ZSTD_compress(result.data() + size,
+                                       result.size() - size, chunk.data(),
+                                       chunk.size(), compressionLevel));
+    }
+    result.resize(size);
+    return result;
+  }
+
+  // Decompress the frames that `compressChunks` above has written into the
+  // `targets`, one frame per target, which have to be filled completely.
+  static void decompressChunks(ql::span<const char> compressed,
+                               ql::span<const ql::span<std::byte>> targets) {
+    for (auto target : targets) {
+      // A block for which no bytes were ever written (for example a block of
+      // the permutations that only exists in the metadata) is empty, like for
+      // `ZSTD_decompress`.
+      if (compressed.empty()) {
+        AD_CORRECTNESS_CHECK(target.empty());
+        continue;
+      }
+      const size_t frameSize = checkError(
+          ZSTD_findFrameCompressedSize(compressed.data(), compressed.size()));
+      auto numBytes = decompressToBuffer(compressed.data(), frameSize,
+                                         target.data(), target.size());
+      AD_CORRECTNESS_CHECK(numBytes == target.size());
+      compressed = compressed.subspan(frameSize);
+    }
+    AD_CORRECTNESS_CHECK(compressed.empty());
   }
 
   // The error that is reported by the non-throwing functions below. The
