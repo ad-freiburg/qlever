@@ -47,8 +47,8 @@ Id StringMapping::remapId(Id id) {
              isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
              datatype == EncodedVal;
     };
-    for (size_t i = 0; i <= static_cast<size_t>(MaxValue); ++i) {
-      if (!checkType(static_cast<Datatype>(i))) {
+    for (Datatype datatype : qlever::allEnumValues<Datatype>) {
+      if (!checkType(datatype)) {
         return false;
       }
     }

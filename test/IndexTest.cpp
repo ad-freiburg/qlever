@@ -1004,7 +1004,8 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(),
                                ::testing::ContainsRegex("if all 6"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      index.numDistinctCol0(static_cast<Permutation::Enum>(42)),
+      index.numDistinctCol0(
+          static_cast<Permutation::Enum>(qlever::enumSize<Permutation::Enum>)),
       ::testing::ContainsRegex("should be unreachable"));
 
   const IndexImpl& indexNoPatterns =

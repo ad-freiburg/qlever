@@ -35,6 +35,7 @@ enum class SpatialJoinTypeEnum {
   WITHIN_DIST,
   DE9IM
 };
+QLEVER_ENUM_SIZE(SpatialJoinTypeEnum, 10);
 }  // namespace detail
 
 // Wrapper around `detail::SpatialJoinTypeEnum` that provides conversion to
@@ -50,7 +51,8 @@ class SpatialJoinType
  public:
   using Enum = detail::SpatialJoinTypeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 10>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::INTERSECTS, "intersects"},
                      {Enum::CONTAINS, "contains"},
                      {Enum::COVERS, "covers"},

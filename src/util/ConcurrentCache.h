@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "backports/keywords.h"
+#include "util/EnumSize.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
@@ -40,6 +41,7 @@ enum struct CacheStatus {
   computed,
   notInCacheAndNotComputed
 };
+QLEVER_ENUM_SIZE(CacheStatus, 4);
 
 // Convert a `CacheStatus` to a human-readable string. We mostly use it for
 // JSON exports, so we use a hyphenated format.
