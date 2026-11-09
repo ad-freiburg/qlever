@@ -63,7 +63,7 @@ MallctlFunction makeMallctlMock(std::vector<MallctlCall>& calls,
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test which kernels may have the bug.
 TEST(KernelBugWorkaround, mayHaveBug) {
   // Affected arm64 kernels.
   EXPECT_TRUE(mayHaveBug("aarch64", "7.0.0-1017-azure"));
@@ -96,7 +96,8 @@ TEST(KernelBugWorkaround, mayHaveBug) {
   EXPECT_FALSE(mayHaveBug("aarch64", "custom-kernel"));
 }
 
-// _____________________________________________________________________________
+// Test the outcomes that don't call `mallctl`, and the overload without
+// arguments.
 TEST(KernelBugWorkaround, applyIfNeeded) {
   // Neither of these calls `mallctl`.
   std::vector<MallctlCall> calls;
