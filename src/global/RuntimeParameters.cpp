@@ -75,8 +75,8 @@ RuntimeParameters::RuntimeParameters() {
   add(constructDeduplication_);
 
 #ifdef QLEVER_HAS_REFLECTION
-  // Check that all the parameters above were added. Without reflection, a
-  // missing `add` is only detected by `RuntimeParametersTest`, if at all.
+  // Check that all the parameters above were added. Without reflection, this
+  // is only checked by the hand-written list in `RuntimeParametersTest`.
   static constexpr auto members =
       std::define_static_array(std::meta::nonstatic_data_members_of(
           ^^RuntimeParameters, std::meta::access_context::unchecked()));
