@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/three_way_comparison.h"
 #include "util/KernelBugWorkaround.h"
 
 #ifdef __linux__
@@ -32,9 +33,7 @@ namespace {
 struct MallctlCall {
   std::string name_;
   std::optional<ssize_t> writtenValue_;
-  bool operator==(const MallctlCall& other) const {
-    return name_ == other.name_ && writtenValue_ == other.writtenValue_;
-  }
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(MallctlCall, name_, writtenValue_)
 };
 
 // Return a mock of `mallctl` that appends each call to `calls`. The mock fails
