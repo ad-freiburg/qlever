@@ -2016,6 +2016,44 @@ TEST(QueryPlanner, FilterWithoutForcedSubstituteInSingleSeedComponent) {
       h::Filter("geof:sfIntersects(?b, ?a)", scan("?a", "<p>", "?b")), qec);
 }
 
+// Test that an enforced filter substitute with a fixed side is applied after
+// a join that makes its other side small, and not to the seed directly.
+TEST(QueryPlanner, ForcedSubstituteAfterSelectiveJoin) {
+  auto scan = h::IndexScanFromStrings;
+  using enum SpatialJoinType::Enum;
+
+  // Many geometries `<p>` and a single entity `<x1>` with `<q> <o>`.
+  std::string kb = "<x1> <q> <o> .\n";
+  for (size_t i = 1; i <= 100; ++i) {
+    absl::StrAppend(
+        &kb, "<x", i, "> <p> \"POINT(", i, " ", i,
+        ")\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n");
+  }
+  auto* qec = ad_utility::testing::getQec(kb);
+  Var internalVar{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+  auto valuesPoint = h::ValuesClause(
+      absl::StrCat("VALUES (", internalVar.name(),
+                   ") { (G:", GeoPoint{1, 1}.toStringRepresentation(), ") }"));
+
+  // The `SpatialJoin` with the constant point is above the join of the
+  // geometries with the single entity (the greedy planner still applies it to
+  // the scan of the geometries).
+  h::expectDynamicProgramming(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <q> <o> ."
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, \"POINT(1 1)\"^^"
+      "<http://www.opengis.net/ont/geosparql#wktLiteral>)) }",
+      h::spatialJoinFilterSubstitute(
+          -1, -1, Var{"?b"}, internalVar, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, INTERSECTS, std::nullopt,
+          h::Join(scan("?a", "<q>", "<o>"), scan("?a", "<p>", "?b")),
+          valuesPoint),
+      qec);
+}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
   auto scan = h::IndexScanFromStrings;
