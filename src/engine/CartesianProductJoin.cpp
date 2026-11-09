@@ -482,7 +482,7 @@ CartesianProductJoin::makeDistinctTree(
   // product, reducing the sizes of the children before the product (which can
   // be huge) is formed.
   //
-  // Note: A child without any `distinctIndices` column is made distinct on the
+  // NOTE: A child without any `distinctIndices` column is made distinct on the
   // empty set of columns, which reduces it to (at most) a single row. This is
   // correct, because such a child does not contribute to `distinctIndices` and
   // only multiplies the number of rows in the Cartesian product.
@@ -493,7 +493,7 @@ CartesianProductJoin::makeDistinctTree(
         const auto& [child, childIndices] = childAndIndices;
         return QueryExecutionTree::createDistinctTree(child, childIndices);
       });
-  // TODO<joka921>: Use ::ranges::to<Children>(allocator()) once supported.
+  // TODO<joka921>: Use `::ranges::to<Children>(allocator())` once supported.
   Children newChildren{allocator()};
   newChildren.reserve(children_.size());
   ql::ranges::copy(distinctChildren, std::back_inserter(newChildren));
