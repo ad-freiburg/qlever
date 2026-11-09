@@ -59,17 +59,19 @@ class OrderedResultMailboxStopped : public std::runtime_error {
 // a thread of a pool that also has to run the tasks that deliver the results,
 // otherwise the pool may starve or even deadlock.
 //
-// NOTE: `ad_utility::data_structures::OrderedThreadSafeQueue` (see
+// NOTE 1: `ad_utility::data_structures::OrderedThreadSafeQueue` (see
 // `ThreadSafeQueue.h`) also hands values over in the order of their indices,
 // but with the opposite trade-off: there, `push(n, value)` blocks the producer
 // until the values for all the indices before `n` have been pushed, which
 // bounds the memory. This class is meant for producers that must never block,
-// typically coroutines on the same thread pool: if all the threads of the pool
+// typically coroutines on the same thread pool. If all the threads of the pool
 // were blocked in `push` for later indices, the task for the next index could
-// never run. Instead, the producers deliver immediately, and only the consumer
-// (on a dedicated thread) waits. In addition, `takeNext` wakes up regularly to
-// call `onTick`, a stop can be told apart from the regular end, and the
-// producers can query `stopRequested`.
+// never run. Here, the producers deliver immediately, and only the consumer
+// (on a dedicated thread) waits.
+//
+// NOTE 2: In addition, `takeNext` wakes up regularly to call `onTick`, a stop
+// can be told apart from the regular end, and the producers can query
+// `stopRequested`.
 template <typename T>
 class OrderedResultMailbox : public NoCopyNoMove {
  private:
