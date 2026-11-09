@@ -141,13 +141,22 @@ Result RowNumber::computeResult(bool requestLaziness) {
   // an `IdTable` and move it to the front. The next row number persists between
   // the calls (for the blocks of a lazy result). Throw if a row number exceeds
   // the range of integer `Id`s (it would wrap around and break the sort order).
+  //
+  // NOTE: The next row number is unsigned, because it is incremented once more
+  // after the last row number, which may be `Id::maxInt` (the largest `int64_t`
+  // with the split layout, where the increment would overflow).
   std::vector<ColumnIndex> permutation(getResultWidth());
   permutation[0] = permutation.size() - 1;
   std::iota(permutation.begin() + 1, permutation.end(), 0);
   auto addRowNumbers = [permutation = std::move(permutation),
-                        nextRowNumber = offset_](IdTable& idTable) mutable {
-    if (static_cast<int64_t>(idTable.numRows()) - 1 >
-        Id::maxInt - nextRowNumber) {
+                        nextRowNumber = static_cast<uint64_t>(offset_)](
+                           IdTable& idTable) mutable {
+    // The first condition only holds for an `<offset>` beyond the range of
+    // integer `Id`s (after a block the next row number is at most
+    // `maxInt + 1`).
+    static constexpr auto maxInt = static_cast<uint64_t>(Id::maxInt);
+    if (nextRowNumber > maxInt + 1 ||
+        idTable.numRows() > maxInt + 1 - nextRowNumber) {
       throw std::runtime_error(absl::StrCat(
           "The row numbers of a row number SERVICE exceed the maximum integer "
           "value ",
@@ -155,8 +164,9 @@ Result RowNumber::computeResult(bool requestLaziness) {
     }
     idTable.addEmptyColumn();
     ql::ranges::generate(
-        idTable.getColumn(idTable.numColumns() - 1),
-        [&nextRowNumber]() { return Id::makeFromInt(nextRowNumber++); });
+        idTable.getColumn(idTable.numColumns() - 1), [&nextRowNumber]() {
+          return Id::makeFromInt(static_cast<int64_t>(nextRowNumber++));
+        });
     idTable.setColumnSubset(permutation);
   };
 
