@@ -74,7 +74,7 @@ RuntimeParameters::RuntimeParameters() {
   add(logLevel_);
   add(constructDeduplication_);
 
-#ifdef QL_HAS_REFLECTION
+#ifdef QLEVER_HAS_REFLECTION
   // Check that all the parameters above were added. Without reflection, a
   // missing `add` is only detected by `RuntimeParametersTest`, if at all.
   static constexpr auto members =
