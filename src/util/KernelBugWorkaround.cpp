@@ -140,7 +140,7 @@ Status applyIfNeeded() {
   if (uname(&name) != 0) {
     return Status::NotNeeded;
   }
-  bool disabledByUser = std::getenv(std::string{disableEnvVar}.c_str());
+  bool disabledByUser = std::getenv(disableEnvVar);
   return applyIfNeeded(name.machine, name.release, disabledByUser,
                        getMallctl());
 #endif

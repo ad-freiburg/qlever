@@ -27,7 +27,7 @@ namespace ad_utility::kernelBugWorkaround {
 
 // The environment variable that disables the workaround (if set to any value).
 // Only set it on a kernel that contains the fix.
-inline constexpr std::string_view disableEnvVar =
+inline constexpr const char* disableEnvVar =
     "QLEVER_DISABLE_KERNEL_BUG_WORKAROUND";
 
 // Return true if the kernel with the given `machine` (as from `uname -m`) and
