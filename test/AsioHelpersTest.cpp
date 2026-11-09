@@ -114,6 +114,65 @@ TEST(AsioHelpers, runFunctionOnExecutorStrands) {
 }
 
 // _________________________________________________________________________
+TEST(AsioHelpers, coSpawnWithPostedCompletion) {
+  net::io_context ctx;
+  auto workGuard = makeWorkGuard(ctx);
+  auto returnValue = []() -> net::awaitable<int> { co_return 42; };
+  auto throwing = []() -> net::awaitable<int> {
+    throw std::runtime_error{"blim"};
+    co_return 0;
+  };
+  auto returnVoid = [](bool& flag) -> net::awaitable<void> {
+    flag = true;
+    co_return;
+  };
+
+  // The result is passed to the handler.
+  std::optional<int> result;
+  std::exception_ptr exception;
+  coSpawnWithPostedCompletion(ctx.get_executor(), returnValue(),
+                              [&](std::exception_ptr e, int value) {
+                                exception = std::move(e);
+                                result = value;
+                              });
+  ctx.poll();
+  EXPECT_EQ(result, 42);
+  EXPECT_EQ(exception, nullptr);
+
+  // An exception is passed to the handler, together with a default-constructed
+  // value.
+  result.reset();
+  coSpawnWithPostedCompletion(ctx.get_executor(), throwing(),
+                              [&](std::exception_ptr e, int value) {
+                                exception = std::move(e);
+                                result = value;
+                              });
+  ctx.poll();
+  EXPECT_EQ(result, 0);
+  EXPECT_THROW(std::rethrow_exception(exception), std::runtime_error);
+
+  // A coroutine without a result, with a future as the completion token.
+  bool flag = false;
+  auto future = coSpawnWithPostedCompletion(ctx.get_executor(),
+                                            returnVoid(flag), net::use_future);
+  ctx.poll();
+  future.get();
+  EXPECT_TRUE(flag);
+
+  // The handler is posted to its associated executor, not to the executor of
+  // the coroutine.
+  auto strand = net::make_strand(ctx);
+  bool handlerRanOnStrand = false;
+  coSpawnWithPostedCompletion(
+      ctx.get_executor(), returnValue(),
+      net::bind_executor(strand, [&](std::exception_ptr, int) {
+        handlerRanOnStrand = strand.running_in_this_thread();
+      }));
+  ctx.poll();
+  EXPECT_TRUE(handlerRanOnStrand);
+}
+
+// _________________________________________________________________________
 ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesCheckCancellationHandle) {
   ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();
