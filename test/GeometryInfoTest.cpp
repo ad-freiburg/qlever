@@ -486,9 +486,7 @@ TEST(GeometryInfoTest, FromGeoPoint) {
 TEST(GeometryInfoTest, RequestedInfoInstance) {
   for (auto lit : getAllTestLiterals()) {
     auto gi = GeometryInfo::fromWktLiteral(lit);
-    ASSERT_TRUE(gi.has_value());
-    EXPECT_EQ(gi->getSerializationType(), SerializationType::WKT);
-    EXPECT_THAT(gi.value(), requestedInfoMatches<GeometryInfo>(gi.value()));
+    EXPECT_THAT(gi, requestedInfoOfInstanceMatches(gi));
   }
 }
 
@@ -496,9 +494,8 @@ TEST(GeometryInfoTest, RequestedInfoInstance) {
 // the full `GeometryInfo` of the literal.
 TEST(GeometryInfoTest, RequestedInfoLiteral) {
   for (auto lit : getAllTestLiterals()) {
-    auto gi = GeometryInfo::fromWktLiteral(lit);
-    ASSERT_TRUE(gi.has_value());
-    EXPECT_THAT(lit, requestedInfoMatches<std::string_view>(gi.value()));
+    EXPECT_THAT(lit,
+                requestedInfoOfWktMatches(GeometryInfo::fromWktLiteral(lit)));
   }
 }
 

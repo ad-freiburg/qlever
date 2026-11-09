@@ -141,6 +141,24 @@ Matcher<Input> requestedInfoMatches(const GeometryInfo& expected) {
           Optional(expected.getSerializationType())));
 }
 
+// ____________________________________________________________________________
+inline auto requestedInfoOfInstanceMatches =
+    liftOptionalMatcher<GeometryInfo>(requestedInfoMatches<GeometryInfo>);
+
+// Return a matcher for a WKT literal for which `getRequestedInfo` returns the
+// respective part of `expected` for each type of requested info.
+//
+// NOTE: If `expected` is `std::nullopt`, only check that the requested
+// `GeometryInfo` is `std::nullopt` as well (other parts like the geometry type
+// may still be valid, see `isInvalidWktLiteral`).
+inline Matcher<std::string_view> requestedInfoOfWktMatches(
+    std::optional<GeometryInfo> expected) {
+  if (!expected.has_value()) {
+    return requestedInfoIs<GeometryInfo, std::string_view>(Eq(std::nullopt));
+  }
+  return requestedInfoMatches<std::string_view>(expected.value());
+}
+
 // Return a matcher for a WKT literal for which neither a `GeometryInfo` nor a
 // centroid or bounding box can be computed. The geometry type and the number
 // of geometries can be computed iff `expectValidGeometryType` and
