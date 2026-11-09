@@ -251,29 +251,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   auto checkCancellationLambda = cancellationChecker();
 
   const size_t numOutOfOrder = [&]() {
-    // Without UNDEF values, use the galloping join if one input is much
-    // smaller than the other (like `Join` does for a single join column). The
-    // first argument to `gallopingJoin` is always the smaller input.
-    if (isCheap && right.size() / left.size() > GALLOP_THRESHOLD) {
-      ad_utility::gallopingJoin(leftJoinColumns, rightJoinColumns,
-                                ql::ranges::lexicographical_compare, addRow,
-                                ad_utility::noop, checkCancellationLambda);
-      return size_t{0};
-    } else if (isCheap && left.size() / right.size() > GALLOP_THRESHOLD) {
-      auto addRowSwapped = [&addRow](const auto& itRight, const auto& itLeft) {
-        addRow(itLeft, itRight);
-      };
-      ad_utility::gallopingJoin(rightJoinColumns, leftJoinColumns,
-                                ql::ranges::lexicographical_compare,
-                                addRowSwapped, ad_utility::noop,
-                                checkCancellationLambda);
-      return size_t{0};
-    } else if (isCheap) {
-      return ad_utility::zipperJoinWithUndef(
-          leftJoinColumns, rightJoinColumns,
-          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
-          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
-    } else {
+    if (!isCheap) {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
           ql::ranges::lexicographical_compare, addRow,
@@ -281,6 +259,28 @@ void MultiColumnJoin::computeMultiColumnJoin(
           ad_utility::findSmallerUndefRanges, ad_utility::noop,
           checkCancellationLambda);
     }
+    // Without UNDEF values, use the galloping join if one input is much
+    // smaller than the other (like `Join` does for a single join column). The
+    // first argument to `gallopingJoin` is always the smaller input.
+    if (right.size() / left.size() > GALLOP_THRESHOLD) {
+      ad_utility::gallopingJoin(leftJoinColumns, rightJoinColumns,
+                                ql::ranges::lexicographical_compare, addRow,
+                                ad_utility::noop, checkCancellationLambda);
+    } else if (left.size() / right.size() > GALLOP_THRESHOLD) {
+      auto addRowSwapped = [&addRow](const auto& itRight, const auto& itLeft) {
+        addRow(itLeft, itRight);
+      };
+      ad_utility::gallopingJoin(rightJoinColumns, leftJoinColumns,
+                                ql::ranges::lexicographical_compare,
+                                addRowSwapped, ad_utility::noop,
+                                checkCancellationLambda);
+    } else {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
+    }
+    return size_t{0};
   }();
   *result = std::move(rowAdder).resultTable();
   // If there were UNDEF values in the input, the result might be out of
