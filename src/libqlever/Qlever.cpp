@@ -32,6 +32,7 @@
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
+#include "util/FairShareExecutor.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/GlobalExecutor.h"
@@ -72,7 +73,7 @@ readCompressedBlobFile(const std::string& filename) {
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
-               qlever::Executor executor)
+               qlever::Executor executor, size_t executorNumThreads)
     : Qlever(config, skipLoading,
              qlever::makeAllocatorWithLimit<Id>(
                  config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES),
@@ -80,7 +81,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                                    numMemoryToAllocate);
                  }),
-             std::move(executor)) {
+             std::move(executor), executorNumThreads) {
   // Mirror the configured memory limit in the runtime parameter
   // `memory-for-queries`, and apply later changes of the parameter to the
   // allocator as the difference to the current limit. Registering triggers
@@ -106,10 +107,12 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
-               Allocator<Id> allocator, qlever::Executor executor)
+               Allocator<Id> allocator, qlever::Executor executor,
+               size_t executorNumThreads)
     : owningAllocator_{std::move(allocator)},
       allocator_{owningAllocator_.nonOwningCopy()},
-      executor_{std::move(executor)},
+      executor_{ad_utility::makeFairShareExecutor(std::move(executor),
+                                                  executorNumThreads)},
       indexAndViews_{std::allocate_shared<IndexAndViews>(
           allocator_, Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
@@ -126,6 +129,22 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
+
+  // Split the threads of the `executor_` between the background work (e.g. an
+  // index rebuild) and the queries according to the runtime parameter
+  // `rebuild-index-thread-share-percent`. The action holds a copy of the
+  // executor, which keeps the scheduler alive, so it never dangles.
+  // TODO<#3861> Also clear this action in the destructor of `Qlever`, so that
+  // the parameter no longer refers to the scheduler of a destroyed instance.
+  globalRuntimeParameters.wlock()
+      ->rebuildIndexThreadSharePercent_.setOnUpdateAction(
+          [executor = executor_](double percent) {
+            double share = percent / 100.0;
+            ad_utility::setFairShare(
+                executor, ad_utility::FairShareClass::Background, share);
+            ad_utility::setFairShare(
+                executor, ad_utility::FairShareClass::Queries, 1.0 - share);
+          });
 
   // The memory limit of a caller-provided allocator is unknown, so only the
   // other constructor binds the runtime parameter `memory-for-queries` to the

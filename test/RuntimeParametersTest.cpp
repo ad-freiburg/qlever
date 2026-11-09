@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -111,6 +112,27 @@ TEST(RuntimeParameters, sortNumTasksInFlightIsStrictlyPositive) {
   EXPECT_EQ(params.sortNumTasksInFlight_.get(), 1u);
 }
 
+// Test the default of `rebuild-index-thread-share-percent`, that fractional
+// values are accepted, and that values outside of (0, 100) are rejected.
+TEST(RuntimeParameters, rebuildIndexThreadSharePercentIsAPercentage) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.rebuildIndexThreadSharePercent_.get(), 25.0);
+  EXPECT_EQ(params.rebuildIndexThreadSharePercent_.toString(), "25");
+  EXPECT_NO_THROW(
+      params.setFromAssignment("rebuild-index-thread-share-percent=12.5"));
+  EXPECT_EQ(params.rebuildIndexThreadSharePercent_.get(), 12.5);
+  EXPECT_EQ(params.rebuildIndexThreadSharePercent_.toString(), "12.5");
+  for (std::string_view value : {"0", "100", "-1", "nan"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        params.setFromAssignment(
+            absl::StrCat("rebuild-index-thread-share-percent=", value)),
+        AllOf(HasSubstr("rebuild-index-thread-share-percent"),
+              HasSubstr("strictly between 0 and 100")),
+        std::runtime_error);
+  }
+  EXPECT_EQ(params.rebuildIndexThreadSharePercent_.get(), 12.5);
+}
+
 // Test that `getKeys` and `toMap` (the building blocks of
 // `--set-runtime-parameter help`) are consistent with each other.
 TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
@@ -156,6 +178,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.lazyIndexScanNumBlocksInFlight_);
   check(params.maxNumThreadsPerQuery_);
   check(params.rebuildIndexMaxNumThreads_);
+  check(params.rebuildIndexThreadSharePercent_);
   check(params.rebuildMaxConcurrentPermutationPairs_);
   check(params.lazyIndexScanMaxSizeMaterialization_);
   check(params.useBinsearchTransitivePath_);

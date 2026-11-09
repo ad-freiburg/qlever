@@ -44,6 +44,7 @@
 #include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/FairShareExecutor.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -461,8 +462,12 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // All the work of the rebuild on the `executor` (the scans of the old
   // permutations and the writers of the new ones) shares a single limit, see
   // the runtime parameter `rebuild-index-max-num-threads`.
-  executor = ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
+  //
+  // Under contention, the rebuild shares the threads of the `Background` class
+  // with the other background work, see the runtime parameter
+  // `rebuild-index-thread-share-percent` and `FairShareExecutor.h`.
+  executor = ad_utility::makeFairShareClientExecutor(
+      executor, ad_utility::FairShareClass::Background,
       getRuntimeParameterAsOptional<
           &RuntimeParameters::rebuildIndexMaxNumThreads_>());
 

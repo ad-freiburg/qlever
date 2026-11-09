@@ -23,6 +23,7 @@ struct RuntimeParameters {
       ad_utility::detail::parameterShortNames::DurationParameter<DurationTp>;
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
+  using Double = ad_utility::detail::parameterShortNames::Double;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
   using String = ad_utility::detail::parameterShortNames::String;
   using SpaceSeparatedStrings =
@@ -92,6 +93,15 @@ struct RuntimeParameters {
   // rebuild. When the pool is idle, the rebuild uses this many of its threads,
   // and when the pool is busy, it shares them with the queries.
   SizeT rebuildIndexMaxNumThreads_{0, "rebuild-index-max-num-threads"};
+  // The share (in percent) of the threads of the executor of the `Qlever`
+  // instance that a runtime index rebuild (together with all other background
+  // work on that executor's default client) gets when queries compete for the
+  // threads. The queries get the rest. When there is no competition, the
+  // rebuild may use all the threads (subject to
+  // `rebuild-index-max-num-threads`). Must be strictly between 0 and 100,
+  // fractions like `12.5` are allowed.
+  Double rebuildIndexThreadSharePercent_{25.0,
+                                         "rebuild-index-thread-share-percent"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
   // the internal PSO+POS) that a runtime index rebuild processes in
   // parallel. Each pair costs several CPU cores, several GB/s of memory
