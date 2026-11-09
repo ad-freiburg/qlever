@@ -16,6 +16,8 @@
 #include <exception>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -24,23 +26,49 @@
 
 namespace ad_utility {
 
+// The exception that `OrderedResultMailbox::takeNext` throws if a stop was
+// requested (without an exception being stored) before all the slots were
+// taken.
+class OrderedResultMailboxStopped : public std::runtime_error {
+ public:
+  explicit OrderedResultMailboxStopped(size_t nextIndex)
+      : std::runtime_error{"The tasks were stopped before slot " +
+                           std::to_string(nextIndex) +
+                           " of the `OrderedResultMailbox` was taken"} {}
+};
+
 // The hand-off of the results of a fixed number of concurrent tasks (the
 // "slots") to a single consumer that takes them in the order of the slots,
 // together with the error and stop state that the tasks and the consumer
 // share. The tasks `deliver` their results in an arbitrary order, from
-// arbitrary threads, and the consumer `take`s them one by one, waiting for
+// arbitrary threads, and the consumer `takeNext`s them one by one, waiting for
 // each of them. Any party may `storeException` (only the first exception is
-// kept) or `requestStop`, after which the consumer stops waiting: `take` then
-// rethrows the stored exception (if any) or fails.
+// kept) or `requestStop`, after which the consumer stops waiting: `takeNext`
+// then rethrows the stored exception (if any) or throws an
+// `OrderedResultMailboxStopped`.
+//
+// MEMORY: `deliver` never blocks, so there is no backpressure, and a result
+// stays in the mailbox until the consumer has taken all the slots before it.
+// In the worst case (the slots are delivered in reverse order), all the
+// results are held in memory at the same time.
+//
+// BLOCKING: `takeNext` blocks its thread (on a `std::condition_variable`)
+// until the next slot has been delivered. It must therefore not be called on
+// a thread of a pool that also has to run the tasks that deliver the results,
+// otherwise the pool may starve or even deadlock.
 template <typename T>
 class OrderedResultMailbox : public NoCopyNoMove {
  private:
   mutable std::mutex mutex_;
   std::condition_variable conditionVariable_;
-  // The results that the consumer has not taken yet. A slot that is done may
-  // still hold no result, see `deliver`.
+  // The results that the consumer has not taken yet. A slot holds a value iff
+  // it has been delivered and not taken yet.
   std::vector<std::optional<T>> results_;
-  std::vector<bool> isDone_;
+  // The index of the slot that `takeNext` returns next.
+  size_t nextIndex_ = 0;
+  // The index of the slot that the consumer is currently waiting for (if
+  // any), so that `deliver` only wakes it up for that slot.
+  std::optional<size_t> waitingForIndex_;
   std::exception_ptr exception_;
   std::atomic<bool> wasStopRequested_{false};
 
@@ -54,39 +82,49 @@ class OrderedResultMailbox : public NoCopyNoMove {
     std::lock_guard lock{mutex_};
     results_.clear();
     results_.resize(numSlots);
-    isDone_.assign(numSlots, false);
+    nextIndex_ = 0;
   }
 
-  // Mark the slot with the given `index` as done, with the given `result`. A
-  // task that has failed or was stopped delivers `std::nullopt`, so that the
-  // consumer doesn't wait for it forever (it then sees the exception or the
-  // stop, see `take`).
-  void deliver(size_t index, std::optional<T> result) {
+  // Deliver the `result` of the slot with the given `index`. Each slot has to
+  // be delivered exactly once. A task that has failed or was stopped doesn't
+  // deliver anything, it calls `storeException` or `requestStop` instead,
+  // which also wakes up the consumer.
+  void deliver(size_t index, T result) {
+    bool consumerIsWaitingForIndex = false;
     {
       std::lock_guard lock{mutex_};
-      AD_CONTRACT_CHECK(!isDone_.at(index),
-                        "A result was delivered twice to the same slot");
-      results_.at(index) = std::move(result);
-      isDone_.at(index) = true;
+      AD_CONTRACT_CHECK(index < results_.size(), "Slot ", index,
+                        " is out of range");
+      AD_CONTRACT_CHECK(index >= nextIndex_ && !results_[index].has_value(),
+                        "A result was delivered twice to slot ", index);
+      results_[index] = std::move(result);
+      consumerIsWaitingForIndex = waitingForIndex_ == index;
     }
-    conditionVariable_.notify_all();
+    if (consumerIsWaitingForIndex) {
+      conditionVariable_.notify_one();
+    }
   }
 
-  // Wait until the slot with the given `index` is done, then return its result
-  // and remove it from the mailbox. While waiting, call `onTick` (without
-  // holding the lock) every `tickInterval` (e.g. to report the progress of
-  // the tasks). If an exception has been stored before or while waiting,
-  // rethrow it. Throw if a stop has been requested before the slot was done.
+  // Wait until the next slot has been delivered, then return its result and
+  // remove it from the mailbox. Return `std::nullopt` once all the slots have
+  // been taken. While waiting, call `onTick` (without holding the lock) every
+  // `tickInterval` (e.g. to report the progress of the tasks). If an
+  // exception has been stored before or while waiting, rethrow it. Otherwise,
+  // if a stop has been requested, throw an `OrderedResultMailboxStopped`. Both
+  // take precedence over a result that is already there and over the end.
   template <typename OnTick>
-  T take(size_t index, std::chrono::milliseconds tickInterval,
-         OnTick&& onTick) {
+  std::optional<T> takeNext(std::chrono::milliseconds tickInterval,
+                            OnTick&& onTick) {
     std::unique_lock lock{mutex_};
-    auto isDoneOrStopped = [this, index]() {
-      return isDone_.at(index) || exception_ != nullptr ||
+    auto isReadyOrStopped = [this]() {
+      return nextIndex_ == results_.size() ||
+             results_[nextIndex_].has_value() || exception_ != nullptr ||
              wasStopRequested_.load();
     };
-    while (!isDoneOrStopped()) {
+    while (!isReadyOrStopped()) {
+      waitingForIndex_ = nextIndex_;
       conditionVariable_.wait_for(lock, tickInterval);
+      waitingForIndex_.reset();
       lock.unlock();
       onTick();
       lock.lock();
@@ -94,13 +132,17 @@ class OrderedResultMailbox : public NoCopyNoMove {
     if (exception_ != nullptr) {
       std::rethrow_exception(exception_);
     }
-    AD_CORRECTNESS_CHECK(isDone_.at(index) && !wasStopRequested_.load(),
-                         "The tasks were stopped before slot ", index,
-                         " was done");
-    auto result = std::move(results_.at(index));
-    results_.at(index).reset();
-    AD_CORRECTNESS_CHECK(result.has_value());
-    return std::move(result).value();
+    if (wasStopRequested_.load()) {
+      throw OrderedResultMailboxStopped{nextIndex_};
+    }
+    if (nextIndex_ == results_.size()) {
+      return std::nullopt;
+    }
+    auto& slot = results_[nextIndex_];
+    std::optional<T> result = std::move(slot);
+    slot.reset();
+    ++nextIndex_;
+    return result;
   }
 
   // Store the `exception` (if it is not `nullptr` and is the first one), and
@@ -123,7 +165,7 @@ class OrderedResultMailbox : public NoCopyNoMove {
   void requestStop() {
     {
       // NOTE: The lock makes sure that a consumer that has just checked the
-      // predicate in `take` doesn't miss the notification below.
+      // predicate in `takeNext` doesn't miss the notification below.
       std::lock_guard lock{mutex_};
       wasStopRequested_.store(true);
     }

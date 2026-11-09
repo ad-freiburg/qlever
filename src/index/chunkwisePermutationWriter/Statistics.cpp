@@ -12,6 +12,7 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #include "util/Log.h"
+#include "util/ParseableDuration.h"
 
 namespace chunkwisePermutationWriter {
 
@@ -35,15 +36,17 @@ void Statistics::logSummary() {
   }
   numRowsForProgressBar_ = context_.numRowsProcessed_.load();
   AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
+  // Format the time measured by a `timer` for the log.
+  auto toDuration = [](const auto& timer) {
+    return ad_utility::ParseableDuration<std::chrono::milliseconds>{
+        timer.msecs()};
+  };
   AD_LOG_TIMING << "Total time of the chunks of the permutation writer "
-                << ad_utility::Timer::toSeconds(chunkTimer_.msecs()) << "s"
-                << std::endl;
+                << toDuration(chunkTimer_) << std::endl;
   AD_LOG_TIMING << "Time the consolidation spent waiting for the chunks "
-                << ad_utility::Timer::toSeconds(consolidationWaitTimer_.msecs())
-                << "s" << std::endl;
+                << toDuration(consolidationWaitTimer_) << std::endl;
   AD_LOG_TIMING << "Time the consolidation spent working "
-                << ad_utility::Timer::toSeconds(consolidationWorkTimer_.msecs())
-                << "s" << std::endl;
+                << toDuration(consolidationWorkTimer_) << std::endl;
 }
 
 }  // namespace chunkwisePermutationWriter
