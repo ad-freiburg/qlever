@@ -689,7 +689,7 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
   if (config_.payloadVariables_.isAll()) {
-    return pushDownBindToChild(bind, children, 1);
+    return pushDownBindToChild(bind, std::move(children), 1);
   }
   // Only the payload variables of the right child are kept, so the target has
   // to become one of them. `pushDownBindToChild` rebuilds the `SpatialJoin`
@@ -705,7 +705,7 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   config.payloadVariables_.addVariable(bind._target);
   return SpatialJoin{_executionContext, std::move(config), childLeft_,
                      childRight_, substitutesFilterOp_}
-      .pushDownBindToChild(bind, children, 1);
+      .pushDownBindToChild(bind, std::move(children), 1);
 }
 
 // _____________________________________________________________________________
