@@ -199,9 +199,10 @@ class HttpServer {
   std::atomic<int> numActiveSessions_ = 0;
 
  public:
-  /// Construct from the `queryRegistry`, port and ip address, on which this
-  /// server will listen, as well as the HttpHandler. This constructor only
-  /// initializes several member functions
+  /// Construct from the port and ip address on which this server will listen,
+  /// as well as the `HttpHandler`. The constructor opens the socket, binds it
+  /// and starts listening, so that an error with the address or port is thrown
+  /// right here. Connections are only accepted once `run()` is called.
   ///
   // `lazyBodyChunkSize` is only used in `BodyReadMode::Lazy` mode: the body is
   // read in chunks of `lazyBodyChunkSize` bytes; each chunk is filled
@@ -251,11 +252,8 @@ class HttpServer {
     }
   }
 
-  /// Run the server using the specified number of threads. Note that this
-  /// function never returns, unless the Server crashes. The second argument
-  /// limits the number of connections/sessions that may be handled concurrently
-  /// (this is not equal to the number of threads due to the asynchronous
-  /// implementation of this Server).
+  /// Run the server using the number of threads given to the constructor.
+  /// Note that this function never returns, unless the server crashes.
   void run() {
     // Create the `acceptLoop` coroutine.
     auto acceptLoopCoro = acceptLoop();
