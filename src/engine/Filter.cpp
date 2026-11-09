@@ -267,8 +267,7 @@ bool Filter::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Filter::cloneImpl() const {
-  return cloneWithNewChildren(qlm::vector<std::shared_ptr<QueryExecutionTree>>{
-      {_subtree->clone()}, allocator()});
+  return cloneWithNewChildren({{_subtree->clone()}, allocator()});
 }
 
 // _____________________________________________________________________________
@@ -286,7 +285,5 @@ Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   if (_expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
-  return pushDownBindToAnyChild(
-      bind, qlm::vector<std::shared_ptr<QueryExecutionTree>>{{_subtree},
-                                                             allocator()});
+  return pushDownBindToAnyChild(bind, {{_subtree}, allocator()});
 }

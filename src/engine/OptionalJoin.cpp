@@ -721,10 +721,7 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // instead of evaluating the `BIND` expression on the unbound input. This
   // silently changes the result for any expression that isn't `UNDEF` itself
   // on `UNDEF` input, e.g. `COALESCE`.
-  return pushDownBindToChild(bind,
-                             qlm::vector<std::shared_ptr<QueryExecutionTree>>{
-                                 {_left, _right}, allocator()},
-                             0);
+  return pushDownBindToChild(bind, {{_left, _right}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________

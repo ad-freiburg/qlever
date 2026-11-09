@@ -88,10 +88,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // The `BIND` can only be pushed into the left child, as only its columns are
   // part of the result.
-  return pushDownBindToChild(bind,
-                             qlm::vector<std::shared_ptr<QueryExecutionTree>>{
-                                 {left_, right_}, allocator()},
-                             0);
+  return pushDownBindToChild(bind, {{left_, right_}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________

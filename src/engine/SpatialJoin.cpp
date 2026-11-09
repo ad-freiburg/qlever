@@ -643,10 +643,9 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
-  return cloneWithNewChildren(qlm::vector<std::shared_ptr<QueryExecutionTree>>{
-      {childLeft_ ? childLeft_->clone() : nullptr,
-       childRight_ ? childRight_->clone() : nullptr},
-      allocator()});
+  return cloneWithNewChildren({{childLeft_ ? childLeft_->clone() : nullptr,
+                                childRight_ ? childRight_->clone() : nullptr},
+                               allocator()});
 }
 
 // _____________________________________________________________________________

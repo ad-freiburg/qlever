@@ -311,9 +311,7 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, qlm::vector<std::shared_ptr<QueryExecutionTree>>{{_left, _right},
-                                                             allocator()});
+  return pushDownBindToAnyChild(bind, {{_left, _right}, allocator()});
 }
 
 // _____________________________________________________________________________

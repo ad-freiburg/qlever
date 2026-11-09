@@ -856,9 +856,7 @@ JoinImpl::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, qlm::vector<std::shared_ptr<QueryExecutionTree>>{{left_, right_},
-                                                             allocator()});
+  return pushDownBindToAnyChild(bind, {{left_, right_}, allocator()});
 }
 
 // _____________________________________________________________________________

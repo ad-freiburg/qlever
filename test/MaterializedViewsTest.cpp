@@ -2215,8 +2215,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto plan = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     AD_EXPECT_THROW_WITH_MESSAGE(
         plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren(
-            qlm::vector<std::shared_ptr<QueryExecutionTree>>{
-                plan.queryExecutionContext().getAllocator()}),
+            {{}, plan.queryExecutionContext().getAllocator()}),
         ::testing::HasSubstr("`cloneWithNewChildren` is not implemented"));
   }
 

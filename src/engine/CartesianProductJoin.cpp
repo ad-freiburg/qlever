@@ -10,6 +10,8 @@
 
 #include "engine/CartesianProductJoin.h"
 
+#include <iterator>
+
 #include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
@@ -484,13 +486,17 @@ CartesianProductJoin::makeDistinctTree(
   // empty set of columns, which reduces it to (at most) a single row. This is
   // correct, because such a child does not contribute to `distinctIndices` and
   // only multiplies the number of rows in the Cartesian product.
-  auto perChildIndices = perChildDistinctIndices(distinctIndices);
+  auto distinctChildren =
+      ::ranges::views::zip(children_,
+                           perChildDistinctIndices(distinctIndices)) |
+      ql::views::transform([](const auto& childAndIndices) {
+        const auto& [child, childIndices] = childAndIndices;
+        return QueryExecutionTree::createDistinctTree(child, childIndices);
+      });
+  // TODO<joka921>: Use ::ranges::to<Children>(allocator()) once supported.
   Children newChildren{allocator()};
   newChildren.reserve(children_.size());
-  for (size_t i = 0; i < children_.size(); ++i) {
-    newChildren.push_back(QueryExecutionTree::createDistinctTree(
-        children_[i], perChildIndices[i]));
-  }
+  ql::ranges::copy(distinctChildren, std::back_inserter(newChildren));
   return ad_utility::makeExecutionTree<CartesianProductJoin>(
       _executionContext, std::move(newChildren));
 }

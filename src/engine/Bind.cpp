@@ -248,8 +248,7 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return cloneWithNewChildren(qlm::vector<std::shared_ptr<QueryExecutionTree>>{
-      {_subtree->clone()}, allocator()});
+  return cloneWithNewChildren({{_subtree->clone()}, allocator()});
 }
 
 // _____________________________________________________________________________
@@ -267,7 +266,5 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
   if (_bind._expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
-  return pushDownBindToAnyChild(
-      bind, qlm::vector<std::shared_ptr<QueryExecutionTree>>{{_subtree},
-                                                             allocator()});
+  return pushDownBindToAnyChild(bind, {{_subtree}, allocator()});
 }
