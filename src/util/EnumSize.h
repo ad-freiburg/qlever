@@ -40,10 +40,10 @@
 // compile time that the enum is regular and has exactly `N` enumerators, such
 // that the stated size can never get out of sync with the enum.
 //
-// Implementation note: The macros define a function `qleverEnumSize` that is
-// found via argument-dependent lookup (for a nested enum it is a hidden friend
-// of the enclosing class), so unlike an explicit specialization of a variable
-// template they can be used inside any namespace and inside classes.
+// NOTE: The macros define a function `qleverEnumSize` that is found via
+// argument-dependent lookup (for a nested enum it is a hidden friend of the
+// enclosing class). Unlike an explicit specialization of a variable template,
+// this works inside any namespace and inside classes.
 
 namespace qlever {
 
@@ -65,10 +65,12 @@ consteval bool isRegularEnumWithSize() {
   for (auto enumerator : enumerators) {
     auto value = static_cast<std::underlying_type_t<E>>(
         std::meta::extract<E>(std::meta::constant_of(enumerator)));
-    // Note: `static_cast<std::size_t>(value) != i` would also always work (a
-    // negative `value` wraps around to a huge number that never equals `i`),
-    // but `std::cmp_not_equal` is cleaner, as it involves no conversions for
-    // signed underlying types.
+    // The enumerator has to have the value `i`.
+    //
+    // NOTE: `std::cmp_not_equal` compares without conversions, so a negative
+    // `value` (signed underlying type) never matches `i`. A plain
+    // `static_cast<std::size_t>(value) != i` would also work, since a negative
+    // value wraps around to a number that never equals `i`.
     if (std::cmp_not_equal(value, i)) {
       return false;
     }

@@ -34,7 +34,7 @@ namespace ad_utility {
 //
 // Derived classes must provide:
 // - `static constexpr std::array<std::pair<Enum, std::string_view>,
-// qlever::enumSize<Enum>> descriptions_`;
+//   qlever::enumSize<Enum>> descriptions_`;
 //   Note: `descriptions[i][0] == Enum{i}` must always hold. this is technically
 //   redundant, but improves the safety, as we can detect invalid usages.
 //   The size of the enum has to be stated via `QLEVER_ENUM_SIZE` (see
