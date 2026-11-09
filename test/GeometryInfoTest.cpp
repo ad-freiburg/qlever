@@ -481,17 +481,24 @@ TEST(GeometryInfoTest, FromGeoPoint) {
   EXPECT_GEOMETRYINFO(g2, exp2);
 }
 
-// ____________________________________________________________________________
+// Test that `getRequestedInfo` on a `GeometryInfo` instance returns the values
+// of the respective getters.
 TEST(GeometryInfoTest, RequestedInfoInstance) {
   for (auto lit : getAllTestLiterals()) {
-    checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit));
+    auto gi = GeometryInfo::fromWktLiteral(lit);
+    ASSERT_TRUE(gi.has_value());
+    EXPECT_EQ(gi->getSerializationType(), SerializationType::WKT);
+    EXPECT_THAT(gi.value(), requestedInfoMatches<GeometryInfo>(gi.value()));
   }
 }
 
-// ____________________________________________________________________________
+// Test that `getRequestedInfo` on a WKT literal returns the respective parts of
+// the full `GeometryInfo` of the literal.
 TEST(GeometryInfoTest, RequestedInfoLiteral) {
   for (auto lit : getAllTestLiterals()) {
-    checkRequestedInfoForWktLiteral(lit);
+    auto gi = GeometryInfo::fromWktLiteral(lit);
+    ASSERT_TRUE(gi.has_value());
+    EXPECT_THAT(lit, requestedInfoMatches<std::string_view>(gi.value()));
   }
 }
 
@@ -662,40 +669,46 @@ TEST(GeometryInfoTest, MetricLength) {
       ::testing::HasSubstr("Metric length must be positive"));
 }
 
-// ____________________________________________________________________________
+// Test the metric area of polygons.
 TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
   using namespace ad_utility::detail;
   using Poly = Polygon<CoordType>;
 
-  testMetricArea<Poly>(litSmallRealWorldPolygon1, areaSmallRealWorldPolygon1);
-  testMetricArea<Poly>(litSmallRealWorldPolygon2, areaSmallRealWorldPolygon2);
-  testMetricArea<Poly>(litSmallRealWorldPolygonWithHole,
-                       areaSmallRealWorldPolygonWithHole);
+  EXPECT_THAT(litSmallRealWorldPolygon1,
+              metricAreaOfWktNear<Poly>(areaSmallRealWorldPolygon1));
+  EXPECT_THAT(litSmallRealWorldPolygon2,
+              metricAreaOfWktNear<Poly>(areaSmallRealWorldPolygon2));
+  EXPECT_THAT(litSmallRealWorldPolygonWithHole,
+              metricAreaOfWktNear<Poly>(areaSmallRealWorldPolygonWithHole));
 }
 
-// ____________________________________________________________________________
+// Test the metric area of multipolygons.
 TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
   using namespace ad_utility::detail;
   using MultiP = MultiPolygon<CoordType>;
 
-  testMetricArea<MultiP>(litRealWorldMultiPolygonFullyContained,
-                         areaRealWorldMultiPolygonFullyContained);
-  testMetricArea<MultiP>(litRealWorldMultiPolygonNonIntersecting,
-                         areaRealWorldMultiPolygonNonIntersecting);
-  testMetricArea<MultiP>(litRealWorldMultiPolygonIntersecting,
-                         areaRealWorldMultiPolygonIntersecting);
-  testMetricArea<MultiP>(litRealWorldMultiPolygonHoleIntersection,
-                         areaRealWorldMultiPolygonHoleIntersection);
+  EXPECT_THAT(
+      litRealWorldMultiPolygonFullyContained,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonFullyContained));
+  EXPECT_THAT(
+      litRealWorldMultiPolygonNonIntersecting,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonNonIntersecting));
+  EXPECT_THAT(
+      litRealWorldMultiPolygonIntersecting,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonIntersecting));
+  EXPECT_THAT(
+      litRealWorldMultiPolygonHoleIntersection,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonHoleIntersection));
 
   // Edge case: empty multipolygon
   EXPECT_EQ(computeMetricArea(MultiP{}), 0);
 
   // Edge case: multipolygon with only one member
-  testMetricArea<MultiP>(litSmallRealWorldPolygon2AsMulti,
-                         areaSmallRealWorldPolygon2);
+  EXPECT_THAT(litSmallRealWorldPolygon2AsMulti,
+              metricAreaOfWktNear<MultiP>(areaSmallRealWorldPolygon2));
 }
 
-// ____________________________________________________________________________
+// Test the metric area of geometry collections.
 TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
   using namespace ad_utility::detail;
   using Coll = Collection<CoordType>;
@@ -707,33 +720,35 @@ TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
       removeDatatype(litSmallRealWorldPolygon2), ")");
   const double expectedCollection1 =
       areaSmallRealWorldPolygon1 + areaSmallRealWorldPolygon2;
-  testMetricArea<Coll>(addDatatype(collection1), expectedCollection1, 2);
+  EXPECT_THAT(addDatatype(collection1),
+              metricAreaOfWktNear<Coll>(expectedCollection1, 2));
 
   // Collection with only one member (polygon)
   auto collection2 = absl::StrCat(
       "GEOMETRYCOLLECTION(", removeDatatype(litSmallRealWorldPolygon1), ")");
-  testMetricArea<Coll>(addDatatype(collection2), areaSmallRealWorldPolygon1, 1);
+  EXPECT_THAT(addDatatype(collection2),
+              metricAreaOfWktNear<Coll>(areaSmallRealWorldPolygon1, 1));
 
   // Collection with only one member (non-polygon)
   auto collection3 =
       absl::StrCat("GEOMETRYCOLLECTION(", removeDatatype(litLineString), ")");
-  testMetricArea<Coll>(addDatatype(collection3), 0, 0);
+  EXPECT_THAT(addDatatype(collection3), metricAreaOfWktNear<Coll>(0, 0));
 
   // Collection containing a multipolygon and a point to be ignored
   auto collection4 =
       absl::StrCat("GEOMETRYCOLLECTION(",
                    removeDatatype(litRealWorldMultiPolygonIntersecting),
                    ", POINT(1.0 2.0))");
-  testMetricArea<Coll>(addDatatype(collection4),
-                       areaRealWorldMultiPolygonIntersecting,
-                       numRealWorldMultiPolygonIntersecting);
+  EXPECT_THAT(addDatatype(collection4),
+              metricAreaOfWktNear<Coll>(areaRealWorldMultiPolygonIntersecting,
+                                        numRealWorldMultiPolygonIntersecting));
 
   // Collection containing a nested collection and a further point
   auto collection5 =
       absl::StrCat("GEOMETRYCOLLECTION(POINT(3 4),", collection4, ")");
-  testMetricArea<Coll>(addDatatype(collection5),
-                       areaRealWorldMultiPolygonIntersecting,
-                       numRealWorldMultiPolygonIntersecting);
+  EXPECT_THAT(addDatatype(collection5),
+              metricAreaOfWktNear<Coll>(areaRealWorldMultiPolygonIntersecting,
+                                        numRealWorldMultiPolygonIntersecting));
 
   // The same case of a nested collection but the collection is not flattened
   // during parsing
@@ -754,16 +769,18 @@ TEST(GeometryInfoTest, MetricArea) {
       MetricArea{-1}, ::testing::HasSubstr("Metric area must be positive"));
 }
 
-// ____________________________________________________________________________
+// Test that no geometry information except for the geometry type can be
+// computed for invalid literals.
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
-  checkInvalidLiteral(litInvalidType);
-  checkInvalidLiteral(litInvalidBrackets, true);
-  checkInvalidLiteral(litInvalidNumCoords, true);
+  EXPECT_THAT(litInvalidType, isInvalidWktLiteral());
+  EXPECT_THAT(litInvalidBrackets, isInvalidWktLiteral(true));
+  EXPECT_THAT(litInvalidNumCoords, isInvalidWktLiteral(true));
 }
 
-// ____________________________________________________________________________
+// Test that a literal with coordinates out of range is invalid, but its
+// geometry type and number of geometries can be computed.
 TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
-  checkInvalidLiteral(litCoordOutOfRange, true, true);
+  EXPECT_THAT(litCoordOutOfRange, isInvalidWktLiteral(true, true));
   EXPECT_EQ(GeometryInfo::getWktType(litCoordOutOfRange).value(),
             std::optional<GeometryType>{GeometryType{2}});
   EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange),
@@ -772,13 +789,14 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
             NumGeometries{1});
 }
 
-// _____________________________________________________________________________
+// Test that projecting a bounding box to web mercator and back yields the
+// original bounding box.
 TEST(GeometryInfoTest, WebMercProjection) {
   util::geo::DBox b1{{1, 2}, {3, 4}};
   auto b1WebMerc = boxToWebMerc(b1);
   auto result1 =
       ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
-  checkUtilBoundingBox(result1, b1);
+  EXPECT_THAT(result1, utilBoxNear(b1));
 }
 
 // _____________________________________________________________________________
@@ -798,20 +816,19 @@ TEST(GeometryInfoTest, NumGeometries) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that the `AnyGeometryMember` enum corresponds to the geometry type
+// identifiers used by `libspatialjoin`.
 TEST(GeometryInfoTest, AnyGeometryMember) {
-  // Test that the enum we define corresponds to the geometry type identifiers
-  // used by `libspatialjoin`.
   using namespace util::geo;
   using enum AnyGeometryMember;
 
-  checkAnyGeometryMemberEnum({DPoint{}}, POINT);
-  checkAnyGeometryMemberEnum({DLine{}}, LINE);
-  checkAnyGeometryMemberEnum({DPolygon{}}, POLYGON);
-  checkAnyGeometryMemberEnum({DMultiLine{}}, MULTILINE);
-  checkAnyGeometryMemberEnum({DMultiPolygon{}}, MULTIPOLYGON);
-  checkAnyGeometryMemberEnum({DMultiPoint{}}, MULTIPOINT);
-  checkAnyGeometryMemberEnum({DCollection{}}, COLLECTION);
+  EXPECT_THAT(DAnyGeometry{DPoint{}}, anyGeometryMemberIs(POINT));
+  EXPECT_THAT(DAnyGeometry{DLine{}}, anyGeometryMemberIs(LINE));
+  EXPECT_THAT(DAnyGeometry{DPolygon{}}, anyGeometryMemberIs(POLYGON));
+  EXPECT_THAT(DAnyGeometry{DMultiLine{}}, anyGeometryMemberIs(MULTILINE));
+  EXPECT_THAT(DAnyGeometry{DMultiPolygon{}}, anyGeometryMemberIs(MULTIPOLYGON));
+  EXPECT_THAT(DAnyGeometry{DMultiPoint{}}, anyGeometryMemberIs(MULTIPOINT));
+  EXPECT_THAT(DAnyGeometry{DCollection{}}, anyGeometryMemberIs(COLLECTION));
 }
 
 // _____________________________________________________________________________

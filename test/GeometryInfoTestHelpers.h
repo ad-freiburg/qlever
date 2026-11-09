@@ -101,85 +101,77 @@ inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
     });
 #define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 
-// ____________________________________________________________________________
-inline void checkRequestedInfoForInstance(
-    std::optional<GeometryInfo> optGeoInfo,
-    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  ASSERT_TRUE(optGeoInfo.has_value());
-  auto gi = optGeoInfo.value();
-  auto l = generateLocationTrace(sourceLocation);
-
-  EXPECT_GEOMETRYINFO(gi, gi.getRequestedInfo<GeometryInfo>());
-  EXPECT_BOUNDINGBOX_NEAR(gi.getBoundingBox(),
-                          gi.getRequestedInfo<BoundingBox>());
-  EXPECT_CENTROID_NEAR(gi.getCentroid(), gi.getRequestedInfo<Centroid>());
-  EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
-            gi.getRequestedInfo<GeometryType>());
-  EXPECT_EQ(gi.getNumGeometries(), gi.getRequestedInfo<NumGeometries>());
-  EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
-                           gi.getRequestedInfo<MetricLength>());
-  EXPECT_METRICAREA_NEAR(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
-  EXPECT_EQ(gi.getSourceCrsType(), gi.getRequestedInfo<SourceCrsType>());
-  EXPECT_EQ(gi.getSerializationType(), SerializationType::WKT);
-  EXPECT_EQ(gi.getSerializationType(),
-            gi.getRequestedInfo<SerializationType>());
+// Return a matcher that applies `matcher` to the result of
+// `getRequestedInfo<T>` for a `GeometryInfo` instance or a WKT literal (type
+// `Input`).
+template <typename T, typename Input, typename M>
+auto requestedInfoIs(M matcher) {
+  return ResultOf(
+      "`getRequestedInfo`",
+      [](const Input& input) {
+        if constexpr (std::is_same_v<Input, GeometryInfo>) {
+          return input.template getRequestedInfo<T>();
+        } else {
+          return GeometryInfo::getRequestedInfo<T>(input);
+        }
+      },
+      matcher);
 }
 
-// ____________________________________________________________________________
-inline void checkRequestedInfoForWktLiteral(
-    const std::string_view& wkt, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  auto optGeoInfo = GeometryInfo::fromWktLiteral(wkt);
-  ASSERT_TRUE(optGeoInfo.has_value());
-  auto gi = optGeoInfo.value();
-  EXPECT_GEOMETRYINFO(gi, GeometryInfo::getRequestedInfo<GeometryInfo>(wkt));
-  EXPECT_BOUNDINGBOX_NEAR(gi.getBoundingBox(),
-                          GeometryInfo::getRequestedInfo<BoundingBox>(wkt));
-  EXPECT_CENTROID_NEAR(gi.getCentroid(),
-                       GeometryInfo::getRequestedInfo<Centroid>(wkt));
-  EXPECT_EQ(std::optional<GeometryType>{gi.getWktType()},
-            GeometryInfo::getRequestedInfo<GeometryType>(wkt));
-  EXPECT_EQ(gi.getNumGeometries(),
-            GeometryInfo::getRequestedInfo<NumGeometries>(wkt));
-  EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
-                           GeometryInfo::getRequestedInfo<MetricLength>(wkt));
-  EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
-                         GeometryInfo::getRequestedInfo<MetricArea>(wkt));
-  EXPECT_EQ(gi.getSourceCrsType(),
-            GeometryInfo::getRequestedInfo<SourceCrsType>(wkt));
-  EXPECT_EQ(gi.getSerializationType(),
-            GeometryInfo::getRequestedInfo<SerializationType>(wkt));
+// Return a matcher for a `GeometryInfo` instance or a WKT literal (type
+// `Input`) for which `getRequestedInfo` returns the respective part of
+// `expected` for each type of requested info.
+template <typename Input>
+Matcher<Input> requestedInfoMatches(const GeometryInfo& expected) {
+  return AllOf(
+      requestedInfoIs<GeometryInfo, Input>(geoInfoMatcher(expected)),
+      requestedInfoIs<BoundingBox, Input>(
+          boundingBoxNear(expected.getBoundingBox())),
+      requestedInfoIs<Centroid, Input>(centroidNear(expected.getCentroid())),
+      requestedInfoIs<GeometryType, Input>(Optional(expected.getWktType())),
+      requestedInfoIs<NumGeometries, Input>(
+          Optional(expected.getNumGeometries())),
+      requestedInfoIs<MetricLength, Input>(
+          metricLengthNear(expected.getMetricLength())),
+      requestedInfoIs<MetricArea, Input>(
+          metricAreaNear(expected.getMetricArea())),
+      requestedInfoIs<SourceCrsType, Input>(
+          Optional(expected.getSourceCrsType())),
+      requestedInfoIs<SerializationType, Input>(
+          Optional(expected.getSerializationType())));
 }
 
-// ____________________________________________________________________________
-inline void checkInvalidLiteral(std::string_view wkt,
-                                bool expectValidGeometryType = false,
-                                bool expectNumGeom = false,
-                                Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-
-  EXPECT_FALSE(GeometryInfo::fromWktLiteral(wkt).has_value());
-  EXPECT_EQ(GeometryInfo::getWktType(wkt).has_value(), expectValidGeometryType);
-  EXPECT_FALSE(GeometryInfo::getCentroid(wkt).has_value());
-  EXPECT_FALSE(GeometryInfo::getBoundingBox(wkt).has_value());
-
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<GeometryInfo>(wkt).has_value());
-  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(wkt).has_value(),
-            expectValidGeometryType);
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
-  EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
-  EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(wkt).has_value(),
-            expectNumGeom);
-}
-
-// ____________________________________________________________________________
-inline void checkUtilBoundingBox(util::geo::DBox a, util::geo::DBox b,
-                                 Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  ASSERT_NEAR(a.getLowerLeft().getX(), b.getLowerLeft().getX(), 0.001);
-  ASSERT_NEAR(a.getLowerLeft().getY(), b.getLowerLeft().getY(), 0.001);
-  ASSERT_NEAR(a.getUpperRight().getX(), b.getUpperRight().getX(), 0.001);
-  ASSERT_NEAR(a.getUpperRight().getY(), b.getUpperRight().getY(), 0.001);
+// Return a matcher for a WKT literal for which neither a `GeometryInfo` nor a
+// centroid or bounding box can be computed. The geometry type and the number
+// of geometries can be computed iff `expectValidGeometryType` and
+// `expectNumGeom` are set, respectively.
+inline Matcher<std::string_view> isInvalidWktLiteral(
+    bool expectValidGeometryType = false, bool expectNumGeom = false) {
+  using GI = GeometryInfo;
+  using SV = std::string_view;
+  auto hasValue = [](bool expected) {
+    return ResultOf(
+        "`has_value()`", [](const auto& opt) { return opt.has_value(); },
+        expected);
+  };
+  return AllOf(
+      ResultOf(
+          "`fromWktLiteral`", [](SV wkt) { return GI::fromWktLiteral(wkt); },
+          Eq(std::nullopt)),
+      ResultOf(
+          "`getWktType`", [](SV wkt) { return GI::getWktType(wkt); },
+          hasValue(expectValidGeometryType)),
+      ResultOf(
+          "`getCentroid`", [](SV wkt) { return GI::getCentroid(wkt); },
+          Eq(std::nullopt)),
+      ResultOf(
+          "`getBoundingBox`", [](SV wkt) { return GI::getBoundingBox(wkt); },
+          Eq(std::nullopt)),
+      requestedInfoIs<GeometryInfo, SV>(Eq(std::nullopt)),
+      requestedInfoIs<GeometryType, SV>(hasValue(expectValidGeometryType)),
+      requestedInfoIs<Centroid, SV>(Eq(std::nullopt)),
+      requestedInfoIs<BoundingBox, SV>(Eq(std::nullopt)),
+      requestedInfoIs<NumGeometries, SV>(hasValue(expectNumGeom)));
 }
 
 // Helpers to convert points and bounding boxes from double lat/lng to web
@@ -203,13 +195,12 @@ inline MetricLength getLengthForTesting(std::string_view quotedWktLiteral) {
   return len.value();
 }
 
-// ____________________________________________________________________________
-inline void checkAnyGeometryMemberEnum(
-    DAnyGeometry geom, AnyGeometryMember enumVal,
-    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
-  EXPECT_EQ(geom.getType(), static_cast<uint8_t>(enumVal));
-}
+// Return a matcher for a `DAnyGeometry` that holds a geometry of type
+// `expected`.
+inline auto anyGeometryMemberIs =
+    [](AnyGeometryMember expected) -> Matcher<DAnyGeometry> {
+  return Property(&DAnyGeometry::getType, Eq(static_cast<uint8_t>(expected)));
+};
 
 // ____________________________________________________________________________
 template <typename T>
@@ -233,23 +224,36 @@ inline T getGeometryOfTypeOrThrow(
       parseRes.parsedWkt_.value());
 }
 
-// ____________________________________________________________________________
+// Return a matcher for a WKT literal of geometry type `T` whose metric area is
+// within one percent of `expectedArea`, both when computed on the parsed
+// geometry directly and via `ParsedWkt`. For a collection, additionally check
+// that it contains `expectedNumPolygons` polygons.
 template <typename T>
-inline void testMetricArea(const std::string_view wkt, double expectedArea,
-                           size_t expectedNumPolygons = 0,
-                           Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+Matcher<std::string_view> metricAreaOfWktNear(double expectedArea,
+                                              size_t expectedNumPolygons = 0) {
   using namespace ad_utility::detail;
-  auto l = generateLocationTrace(sourceLocation);
-  const auto parsed = getGeometryOfTypeOrThrow<T>(wkt);
-
-  // One percent deviation from expected area is ok
-  const double allowedError = 0.01 * expectedArea;
-
+  auto areaNear = DoubleNear(expectedArea, 0.01 * expectedArea);
+  Matcher<T> parsedMatcher = AllOf(
+      ResultOf(
+          "metric area",
+          [](const T& parsed) { return computeMetricArea(parsed); }, areaNear),
+      ResultOf(
+          "metric area via `ParsedWkt`",
+          [](const T& parsed) { return computeMetricArea(ParsedWkt{parsed}); },
+          areaNear));
   if constexpr (std::is_same_v<T, Collection<CoordType>>) {
-    EXPECT_EQ(collectionToS2Polygons(parsed).size(), expectedNumPolygons);
+    parsedMatcher =
+        AllOf(parsedMatcher, ResultOf(
+                                 "number of polygons",
+                                 [](const T& parsed) {
+                                   return collectionToS2Polygons(parsed).size();
+                                 },
+                                 expectedNumPolygons));
   }
-  EXPECT_NEAR(computeMetricArea(parsed), expectedArea, allowedError);
-  EXPECT_NEAR(computeMetricArea(ParsedWkt{parsed}), expectedArea, allowedError);
+  return ResultOf(
+      "parsed geometry",
+      [](std::string_view wkt) { return getGeometryOfTypeOrThrow<T>(wkt); },
+      parsedMatcher);
 }
 
 // ____________________________________________________________________________
@@ -287,6 +291,20 @@ inline auto utilPointNear = [](DPoint expected) -> Matcher<DPoint> {
                         DoubleNear(expected.getX(), allowedCoordinateError)),
                Property(&DPoint::getY,
                         DoubleNear(expected.getY(), allowedCoordinateError)));
+};
+
+// Return a matcher for a `DBox` whose corners are near those of `expected`.
+//
+// NOTE: `Property` cannot be used because the getters of `DBox` are
+// overloaded.
+inline auto utilBoxNear = [](DBox expected) -> Matcher<DBox> {
+  return AllOf(
+      ResultOf(
+          "lower left", [](const DBox& box) { return box.getLowerLeft(); },
+          utilPointNear(expected.getLowerLeft())),
+      ResultOf(
+          "upper right", [](const DBox& box) { return box.getUpperRight(); },
+          utilPointNear(expected.getUpperRight())));
 };
 
 // ____________________________________________________________________________
