@@ -367,26 +367,9 @@ std::optional<TripleComponent> evaluateConstantExpression(
   }
   AD_FAIL();
 }
+}  // namespace
 
-// How the `QueryPlanner` evaluates a triple of a basic graph pattern: a plain
-// index scan or a special operation for a special predicate.
-//
-// NOTE: Each special predicate must have its own kind, on which
-// `createTripleGraph` and `seedWithScansAndText` dispatch (the latter with a
-// `switch` without `default`, so a kind without a handler is a compiler
-// warning). Do not special-case a predicate of kind `IndexScan` elsewhere: only
-// in triples of this kind, variables may be replaced by constants (see
-// `GraphPatternPlanner::substituteConstants`).
-enum class TripleKind {
-  IndexScan,
-  TextWord,
-  TextEntity,
-  SpatialJoin,
-  MaterializedView,
-  HasPredicate
-};
-
-// Return the `TripleKind` of a triple with the predicate `iri`.
+// _____________________________________________________________________________
 TripleKind getTripleKind(std::string_view iri) {
   if (iri == CONTAINS_WORD_PREDICATE) {
     return TripleKind::TextWord;
@@ -405,8 +388,7 @@ TripleKind getTripleKind(std::string_view iri) {
   return TripleKind::IndexScan;
 }
 
-// Return the `TripleKind` of `triple`, the predicate of which must be an IRI or
-// a variable (property paths are transformed before planning).
+// _____________________________________________________________________________
 TripleKind getTripleKind(const SparqlTriple& triple) {
   auto predicate = triple.getSimplePredicate();
   if (!predicate.has_value()) {
@@ -415,7 +397,6 @@ TripleKind getTripleKind(const SparqlTriple& triple) {
   }
   return getTripleKind(predicate.value());
 }
-}  // namespace
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
