@@ -38,14 +38,14 @@ namespace {
 constexpr ctll::fixed_string releaseRegex =
     R"((\d+)\.(\d+)(?:\.(\d+))?(?:-rc(\d+))?.*)";
 
-// Return the `mallctl` function of `jemalloc`, or a null pointer if QLever
+// Return the `mallctl` function of `jemalloc`, or an empty function if QLever
 // doesn't use `jemalloc` or doesn't run on Linux.
-auto getMallctl() {
-  using Mallctl = int (*)(const char*, void*, size_t*, void*, size_t);
+MallctlFunction getMallctl() {
 #ifdef __linux__
-  return static_cast<Mallctl>(mallctl);
+  // A null function pointer yields an empty `AnyInvocable`.
+  return &mallctl;
 #else
-  return static_cast<Mallctl>(nullptr);
+  return {};
 #endif
 }
 
@@ -77,7 +77,7 @@ bool mayHaveBug(std::string_view machine, std::string_view release) {
 
 // _____________________________________________________________________________
 Status applyIfNeeded(std::string_view machine, std::string_view release,
-                     bool disabledByUser) {
+                     bool disabledByUser, MallctlFunction mallctlFunction) {
   if (!mayHaveBug(machine, release)) {
     return Status::NotNeeded;
   }
@@ -92,8 +92,7 @@ Status applyIfNeeded(std::string_view machine, std::string_view release,
                 << std::endl;
     return Status::DisabledByUser;
   }
-  auto mallctlFunction = getMallctl();
-  if (mallctlFunction == nullptr) {
+  if (!mallctlFunction) {
     AD_LOG_WARN << "The Linux kernel " << release
                 << " may have a bug that causes random stalls, crashes, and "
                    "corrupt data on arm64, unless it contains the fix "
@@ -142,7 +141,8 @@ Status applyIfNeeded() {
     return Status::NotNeeded;
   }
   bool disabledByUser = std::getenv(std::string{disableEnvVar}.c_str());
-  return applyIfNeeded(name.machine, name.release, disabledByUser);
+  return applyIfNeeded(name.machine, name.release, disabledByUser,
+                       getMallctl());
 #endif
 }
 

@@ -10,6 +10,9 @@
 #ifndef QLEVER_SRC_UTIL_KERNELBUGWORKAROUND_H
 #define QLEVER_SRC_UTIL_KERNELBUGWORKAROUND_H
 
+#include <absl/functional/any_invocable.h>
+
+#include <cstddef>
 #include <string_view>
 
 // A workaround for a bug of the Linux kernels 7.0 and 7.1 (up to 7.1.8) on
@@ -34,6 +37,11 @@ inline constexpr std::string_view disableEnvVar =
 // before the fix.
 bool mayHaveBug(std::string_view machine, std::string_view release);
 
+// The signature of the control interface `mallctl` of `jemalloc`. An empty
+// `MallctlFunction` means that QLever doesn't use `jemalloc`.
+using MallctlFunction = absl::AnyInvocable<int(
+    const char* name, void* oldp, size_t* oldlenp, void* newp, size_t newlen)>;
+
 // The outcome of `applyIfNeeded`.
 enum class Status { NotNeeded, DisabledByUser, NoJemalloc, Applied };
 
@@ -45,12 +53,12 @@ enum class Status { NotNeeded, DisabledByUser, NoJemalloc, Applied };
 // nothing and return `Status::NotNeeded`.
 Status applyIfNeeded();
 
-// The same, but with the `machine` and `release` of the kernel and the
-// presence of the environment variable `disableEnvVar` given explicitly (for
-// testing). On other operating systems than Linux, the workaround is never
-// available, so return `Status::NoJemalloc` instead of `Status::Applied`.
+// The same, but with the `machine` and `release` of the kernel, the presence
+// of the environment variable `disableEnvVar`, and the `mallctl` function of
+// `jemalloc` given explicitly (for testing). If `mallctlFunction` is empty,
+// return `Status::NoJemalloc` instead of `Status::Applied`.
 Status applyIfNeeded(std::string_view machine, std::string_view release,
-                     bool disabledByUser);
+                     bool disabledByUser, MallctlFunction mallctlFunction);
 
 }  // namespace ad_utility::kernelBugWorkaround
 
