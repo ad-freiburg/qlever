@@ -269,7 +269,7 @@ TEST(SparqlExpressionMemberFunctions, isDeterministic) {
 }
 
 // Test that `getConstantValue` returns the value of a constant IRI, literal,
-// or defined `Id`, and `std::nullopt` for any other expression.
+// or `Id`, and `std::nullopt` for any other expression.
 TEST(SparqlExpressionMemberFunctions, getConstantValue) {
   using ::testing::Eq;
   using ::testing::Optional;
@@ -277,7 +277,7 @@ TEST(SparqlExpressionMemberFunctions, getConstantValue) {
     return SparqlExpressionPimpl{std::move(expression), "constant"};
   };
 
-  // An IRI, a literal, and a defined `Id` are constants.
+  // An IRI, a literal, and an `Id` (also an undefined one) are constants.
   auto literal =
       ad_utility::triple_component::Literal::fromStringRepresentation("\"a\"");
   auto id = Id::makeFromInt(42);
@@ -289,11 +289,11 @@ TEST(SparqlExpressionMemberFunctions, getConstantValue) {
               Optional(Eq(TripleComponent{literal})));
   EXPECT_THAT(pimpl(std::make_shared<IdExpression>(id)).getConstantValue(),
               Optional(Eq(TripleComponent{id})));
+  EXPECT_THAT(pimpl(std::make_shared<IdExpression>(Id::makeUndefined()))
+                  .getConstantValue(),
+              Optional(Eq(TripleComponent{Id::makeUndefined()})));
 
-  // An undefined `Id` and a variable are not.
-  EXPECT_EQ(pimpl(std::make_shared<IdExpression>(Id::makeUndefined()))
-                .getConstantValue(),
-            std::nullopt);
+  // A variable is not.
   EXPECT_EQ(pimpl(std::make_shared<VariableExpression>(Variable{"?x"}))
                 .getConstantValue(),
             std::nullopt);
