@@ -331,7 +331,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
     bool allVarsNeeded =
         ql::ranges::any_of(_aliases, [&usedVariables](const auto& alias) {
           return usedVariables.addVarsFromExpression(alias._expression) ==
-              AddVarsResult::NeedAllVarsFromSubtree;
+                 AddVarsResult::NeedAllVarsFromSubtree;
         });
     if (!allVarsNeeded) {
       subtree = usedVariables.stripSubtree(std::move(subtree));
