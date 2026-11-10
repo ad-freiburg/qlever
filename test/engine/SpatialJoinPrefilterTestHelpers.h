@@ -292,9 +292,10 @@ inline void runParsingAndSweeper(
 
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
-        numGeomInvalidLeft, numThreadsLeft] =
+        numGeomInvalidLeft, numThreadsLeft, storedRowsLeft] =
       sjAlgo.parse({prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
-                   storeLeft, eventsLeft.addCb(storeIdLeft), 1, std::nullopt);
+                   {storeLeft, storeIdLeft, std::nullopt, eventsLeft}, 1,
+                   std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `storeRight.setFilterBox(box);` here.
 
@@ -307,10 +308,11 @@ inline void runParsingAndSweeper(
     prefilterBox = sj::padBox(paddedBoxLeft, paddedBoxLeft, sweeperCfg);
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
-        numGeomInvalidRight, numThreadsRight] =
+        numGeomInvalidRight, numThreadsRight, storedRowsRight] =
       sjAlgo.parse(
           {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
-          storeRight, eventsRight.addCb(storeIdRight), 1, prefilterBox);
+          {storeRight, storeIdRight, std::nullopt, eventsRight}, 1,
+          prefilterBox);
 
   storeLeft.flush();
   storeRight.flush();

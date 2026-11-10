@@ -284,11 +284,43 @@ class Vocabulary {
     }
   }
 
+  // Let the writers of the geo vocabulary (if there is one) build its
+  // `sj::GeometryStore`, see `GeoVocabulary::setBuildGeometryStore`.
+  void setBuildGeometryStore(bool buildGeometryStore) {
+    if constexpr (MaybeProvidesGeometryInfo<UnderlyingVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().setBuildGeometryStore(
+          buildGeometryStore);
+    }
+  }
+
   // The geo cell grid of the geo vocabulary, or `std::nullopt` if there is
   // none.
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
     if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
       return vocabulary_.getUnderlyingVocabulary().getGeoCellGrid();
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  // The prefix of the files of the `sj::GeometryStore` of the geo vocabulary,
+  // or `std::nullopt` if there is none (see
+  // `GeoVocabulary::getGeometryStorePrefix`).
+  std::optional<std::string> getGeometryStorePrefix() const {
+    if constexpr (MaybeProvidesGeometryInfo<UnderlyingVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getGeometryStorePrefix();
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  // The position of the word with the given index in the geo vocabulary, or
+  // `std::nullopt` if it is not in the geo vocabulary. This is the position
+  // in its `GeoVocabulary::geometryStoreGid`.
+  std::optional<uint64_t> getGeoVocabularyPosition(IndexType idx) const {
+    if constexpr (MaybeProvidesGeometryInfo<UnderlyingVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getGeoVocabularyPosition(
+          idx.get());
     } else {
       return std::nullopt;
     }

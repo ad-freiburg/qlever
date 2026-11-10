@@ -10,7 +10,6 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
-#include <absl/strings/numbers.h>
 #include <spatialjoin/GeometryStore.h>
 #include <spatialjoin/WKTParse.h>
 
@@ -19,6 +18,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
@@ -94,6 +94,17 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   }
   geoInfoVersion_ = versionOfFile;
 
+  // The files of the geometry store exist iff the vocabulary was written by a
+  // version of QLever that writes them (possibly empty, see
+  // `setBuildGeometryStore`).
+  auto prefix = getGeometryStorePrefix(filename);
+  geometryStorePrefix_ = std::nullopt;
+  if (ql::ranges::all_of(geometryStoreTypes, [&prefix](std::string_view type) {
+        return ql::filesystem::exists(absl::StrCat(prefix, type));
+      })) {
+    geometryStorePrefix_ = std::move(prefix);
+  }
+
   endIndex_ = computeEndIndex();
 }
 
@@ -153,21 +164,10 @@ void GeoVocabulary<V>::addToGeometryStore(sj::GeometryStore& store,
 
 // ____________________________________________________________________________
 template <typename V>
-std::optional<uint64_t> GeoVocabulary<V>::positionOfGeometryStoreGid(
-    std::string_view gid) {
-  uint64_t position;
-  if (!ql::starts_with(gid, "v") ||
-      !absl::SimpleAtoi(gid.substr(1), &position)) {
-    return std::nullopt;
-  }
-  return position;
-}
-
-// ____________________________________________________________________________
-template <typename V>
 void GeoVocabulary<V>::close() {
   literals_.close();
   geoInfoFile_.close();
+  geometryStorePrefix_ = std::nullopt;
   endIndex_ = 0;
 }
 

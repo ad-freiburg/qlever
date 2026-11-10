@@ -148,6 +148,11 @@ struct IndexBuilderConfig : CommonConfig {
   ad_utility::GeoPointEncoding geoPointEncoding_{
       ad_utility::GeoPointEncoding::ZOrder};
 
+  // If set to true, the WKT literals are parsed into a persistent geometry
+  // store at index build, such that spatial joins do not have to parse them
+  // again (only with a geo split vocabulary, see `GeoVocabulary`).
+  bool buildGeometryStore_ = false;
+
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;

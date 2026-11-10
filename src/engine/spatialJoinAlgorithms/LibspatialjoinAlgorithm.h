@@ -17,6 +17,7 @@
 
 #include <string>
 
+#include "engine/SpatialJoinParser.h"
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "index/Index.h"
 #include "util/MemorySize/MemorySize.h"
@@ -43,11 +44,13 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   Result run() override;
 
   // This helper functions parses WKT geometries from the given `column` in
-  // `idTable` and adds them to `store`, calling `metaCb` for each of them
-  // (usually the `addCb` of the `sj::SweepEventList` of one side of the spatial
-  // join). The parsing is multithreaded, using up to `numThreads` threads. If a
-  // `prefilterBox` is given, geometries not intersecting this box will neither
-  // be parsed nor added to `store`. The function returns the aggregated
+  // `idTable` into the `store_` of the `target` and adds them to its `events_`
+  // (the `sj::SweepEventList` of one side of the spatial join). A geometry from
+  // the persisted store of the index (if the `target` has a
+  // `persistedStoreId_`) is added to the `events_` without parsing, once for
+  // all of its rows. The parsing is multithreaded, using up to `numThreads`
+  // threads. If a `prefilterBox` is given, geometries not intersecting this
+  // box will neither be parsed nor added. The function returns the aggregated
   // bounding box of all added geometries, which may be used as a prefilter at
   // next call and the number of geometries added. This function is only
   // `public` for testing purposes and should otherwise not be used outside of
@@ -69,9 +72,22 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
     // Actual number of threads used (might be lower than result of
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;
+    // The rows whose geometry is from the persisted store, see
+    // `WKTParser::takeStoredRows`.
+    std::vector<ad_utility::detail::parallel_wkt_parser::StoredGeometryRow>
+        storedRows_;
   };
-  ParseMetadata parse(ParseInput input, sj::GeometryStore& store,
-                      const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
+  struct ParseTarget {
+    // The temporary store for the parsed geometries and its ID in the
+    // `sj::GeometryCache`.
+    sj::GeometryStore& store_;
+    uint8_t storeId_;
+    // The ID of the persisted store of the index in the `sj::GeometryCache`,
+    // or `std::nullopt` if it is not used.
+    std::optional<uint8_t> persistedStoreId_;
+    sj::SweepEventList& events_;
+  };
+  ParseMetadata parse(ParseInput input, ParseTarget target, size_t numThreads,
                       std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Prepare a libspatialjoin `SpatialJoinCfg`. The result doesn't have any of

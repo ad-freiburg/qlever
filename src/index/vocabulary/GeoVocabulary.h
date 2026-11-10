@@ -11,6 +11,9 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H
 
+#include <absl/strings/numbers.h>
+#include <absl/strings/str_cat.h>
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -22,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
@@ -39,6 +43,29 @@ namespace sj {
 class GeometryStore;
 struct WriteBatch;
 }  // namespace sj
+
+// The `gid` of the word at the given position of a `GeoVocabulary` in its
+// `sj::GeometryStore` (see below), which `libspatialjoin` reports for the
+// results of a spatial join.
+//
+// NOTE: The prefix `v` distinguishes these `gid`s from those of geometries
+// that a spatial join parses itself (for example literals from a
+// `LocalVocab`), which are plain numbers.
+inline std::string geometryStoreGid(uint64_t position) {
+  return absl::StrCat("v", position);
+}
+
+// The position of the word with the given `gid` (see `geometryStoreGid`), or
+// `std::nullopt` if the `gid` is not of this form.
+inline std::optional<uint64_t> positionOfGeometryStoreGid(
+    std::string_view gid) {
+  uint64_t position;
+  if (!ql::starts_with(gid, "v") ||
+      !absl::SimpleAtoi(gid.substr(1), &position)) {
+    return std::nullopt;
+  }
+  return position;
+}
 
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
 // regular vocabulary classes it does not only store the strings. Instead it
@@ -93,6 +120,9 @@ class GeoVocabulary {
 
   // Whether the writers parse the geometries into the `sj::GeometryStore`.
   bool buildGeometryStore_ = false;
+
+  // See `getGeometryStorePrefix()`, set when the vocabulary is opened.
+  std::optional<std::string> geometryStorePrefix_;
 
   // See `endIndex`, computed once when the vocabulary is opened.
   uint64_t endIndex_ = 0;
@@ -194,20 +224,21 @@ class GeoVocabulary {
     return absl::StrCat(filename, geometryStoreInfix);
   }
 
-  // The `gid` of the word at the given position in the `sj::GeometryStore`,
-  // which `libspatialjoin` reports for the results of a spatial join.
-  //
-  // NOTE: The prefix `v` distinguishes these `gid`s from those of geometries
-  // that a spatial join parses itself (for example literals from a
-  // `LocalVocab`), which are plain numbers.
-  static std::string geometryStoreGid(uint64_t position) {
-    return absl::StrCat("v", position);
+  // The prefix of the files of the `sj::GeometryStore` of the opened
+  // vocabulary (see `getGeometryStorePrefix(filename)`), or `std::nullopt` if
+  // the vocabulary was written before these files existed. If the files exist,
+  // a geometry is in the store iff its `GeometryInfo` has a
+  // `getGeometryStoreId`.
+  const std::optional<std::string>& getGeometryStorePrefix() const {
+    return geometryStorePrefix_;
   }
 
-  // The position of the word with the given `gid` (see `geometryStoreGid`),
-  // or `std::nullopt` if the `gid` is not of this form.
-  static std::optional<uint64_t> positionOfGeometryStoreGid(
-      std::string_view gid);
+  // The position of the word with the given index (the same as
+  // `positionFromIndex`, under the name of the other vocabularies that may
+  // contain a `GeoVocabulary`).
+  std::optional<uint64_t> getGeoVocabularyPosition(uint64_t index) const {
+    return positionFromIndex(index);
+  }
 
   // Set the grid. Must be called before `open` (when loading a vocabulary
   // that was built with this grid) or before `makeDiskWriterPtr` (when

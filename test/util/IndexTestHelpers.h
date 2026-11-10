@@ -160,6 +160,9 @@ struct TestIndexConfig {
   // should therefore not use the cached `getQec`, and restore the encoding.
   ad_utility::GeoPointEncoding geoPointEncoding =
       ad_utility::GeoPointEncoding::ZOrder;
+  // Build the geometry store of the geo vocabulary (see
+  // `GeoVocabulary::setBuildGeometryStore`).
+  bool buildGeometryStore = false;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -179,7 +182,7 @@ struct TestIndexConfig {
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
         c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
         c.numThreads, c.parseInParallel, c.additionalSettings,
-        c.geoPointEncoding.value());
+        c.geoPointEncoding.value(), c.buildGeometryStore);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -188,7 +191,8 @@ struct TestIndexConfig {
       bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
       addHasWordTriples, hasWordRestrictPredicates, secondaryVocabWords,
-      numThreads, parseInParallel, additionalSettings, geoPointEncoding)
+      numThreads, parseInParallel, additionalSettings, geoPointEncoding,
+      buildGeometryStore)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

@@ -11,6 +11,7 @@
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
+#include <absl/strings/numbers.h>
 #include <spatialjoin/BoxIds.h>
 #include <spatialjoin/GeometryCache.h>
 #include <spatialjoin/Sweeper.h>
@@ -21,11 +22,31 @@
 #include "backports/filesystem.h"
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
+
+using ad_utility::detail::parallel_wkt_parser::StoredGeometryRow;
+
+namespace {
+// The key of a geometry in the results of `libspatialjoin`: the row for a
+// geometry that was parsed for this query, or the position in the geo
+// vocabulary, marked by the `persistedKeyBit`, for a geometry from the
+// persisted store of the index (see `StoredGeometryRow`).
+constexpr uint64_t persistedKeyBit = uint64_t{1} << 63;
+uint64_t resultKey(const char* gid, size_t size) {
+  std::string_view gidView{gid, size};
+  if (auto position = positionOfGeometryStoreGid(gidView)) {
+    return position.value() | persistedKeyBit;
+  }
+  uint64_t row = 0;
+  AD_CORRECTNESS_CHECK(absl::SimpleAtoi(gidView, &row));
+  return row;
+}
+}  // namespace
 
 // ____________________________________________________________________________
 double LibspatialjoinAlgorithm::maxAreaPrefilterBox() {
@@ -171,8 +192,7 @@ sj::SpatialJoinCfg LibspatialjoinAlgorithm::sweeperConfig(
 
 // ____________________________________________________________________________
 LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
-    ParseInput input, sj::GeometryStore& store,
-    const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
+    ParseInput input, ParseTarget target, size_t numThreads,
     std::optional<util::geo::I32Box> prefilterBox) const {
   const auto [idTable, column, boundingBoxes] = input;
 
@@ -207,8 +227,9 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   // Initialize the parser.
   ad_utility::detail::parallel_wkt_parser::WKTParser parser(
-      &store, metaCb, numThreads, usePrefiltering, prefilterLatLngBox,
-      qec_->getIndex());
+      &target.store_, target.events_.addCb(target.storeId_), numThreads,
+      usePrefiltering, prefilterLatLngBox, qec_->getIndex(),
+      target.persistedStoreId_.has_value());
 
   // Iterate over all rows in `idTable` and add the geometries from `column`
   // to the parallel WKT parser.
@@ -226,10 +247,21 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
   // the geometries parsed so far.
   parser.done();
 
+  // Add each geometry from the persisted store to the events once, also if it
+  // occurs in several rows (which are sorted by the position of the geometry).
+  auto storedRows = parser.takeStoredRows();
+  for (size_t i = 0; i < storedRows.size(); ++i) {
+    if (i == 0 || storedRows[i].position_ != storedRows[i - 1].position_) {
+      target.events_.add(storedRows[i].geometryStoreId_,
+                         storedRows[i].boundingBox_,
+                         target.persistedStoreId_.value());
+    }
+  }
+
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
   return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped,
-          parser.getNumInvalid(), numThreads};
+          parser.getNumInvalid(),  numThreads,     std::move(storedRows)};
 }
 
 // ____________________________________________________________________________
@@ -283,25 +315,27 @@ Result LibspatialjoinAlgorithm::run() {
   }
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     sweeperCfg.writeRelCb = [&results, &resultDists](
-                                size_t t, const char* a, size_t, const char* b,
-                                size_t, const char* pred, size_t) {
-      results[t].push_back({std::atoi(a), std::atoi(b)});
+                                size_t t, const char* a, size_t aSize,
+                                const char* b, size_t bSize, const char* pred,
+                                size_t) {
+      results[t].push_back({resultKey(a, aSize), resultKey(b, bSize)});
       resultDists[t].push_back(atof(pred));
     };
   } else if (joinTypeVal == SpatialJoinType::DE9IM) {
     // `libspatialjoin` only invokes this callback for pairs that already
     // matched `sweeperCfg.de9imFilter`.
-    sweeperCfg.writeRelCb = [&results](size_t t, const char* a, size_t,
-                                       const char* b, size_t, const char*,
+    sweeperCfg.writeRelCb = [&results](size_t t, const char* a, size_t aSize,
+                                       const char* b, size_t bSize, const char*,
                                        size_t) {
-      results[t].push_back({std::atoi(a), std::atoi(b)});
+      results[t].push_back({resultKey(a, aSize), resultKey(b, bSize)});
     };
   } else {
-    sweeperCfg.writeRelCb = [&results, joinTypeVal](
-                                size_t t, const char* a, size_t, const char* b,
-                                size_t, const char* pred, size_t) {
+    sweeperCfg.writeRelCb = [&results, joinTypeVal](size_t t, const char* a,
+                                                    size_t aSize, const char* b,
+                                                    size_t bSize,
+                                                    const char* pred, size_t) {
       if (pred[0] == static_cast<char>(joinTypeVal.value())) {
-        results[t].push_back({std::atoi(a), std::atoi(b)});
+        results[t].push_back({resultKey(a, aSize), resultKey(b, bSize)});
       }
     };
   }
@@ -325,6 +359,29 @@ Result LibspatialjoinAlgorithm::run() {
       sj::SweepEventList{sweeperCfg, sweeperTmpPath, sweeperPrefix}};
   sj::GeometryCache cache(sweeperCfg);
   std::array storeIds{cache.addStore(&stores[0]), cache.addStore(&stores[1])};
+
+  // The geometries from the persisted store of the index (see `GeoVocabulary`)
+  // are not parsed again. The store is opened for this query only, because
+  // its read streams must not be shared by concurrent sweeps, and once per
+  // side for the same reason as above (the same geometry may be on both
+  // sides).
+  std::array<std::unique_ptr<sj::GeometryStore>, 2> persistedStores;
+  std::array<std::optional<uint8_t>, 2> persistedStoreIds;
+  if (auto prefix = qec_->getIndex().getVocab().getGeometryStorePrefix()) {
+    for (size_t side = 0; side < 2; ++side) {
+      persistedStores[side] =
+          std::make_unique<sj::GeometryStore>(sweeperCfg, "", prefix.value());
+      persistedStoreIds[side] = cache.addStore(persistedStores[side].get());
+    }
+  }
+  auto parseTarget = [&](bool side) {
+    return ParseTarget{stores[side], storeIds[side], persistedStoreIds[side],
+                       events[side]};
+  };
+
+  // The rows of each side whose geometry is from the persisted store, see
+  // `resultKey`.
+  std::array<std::vector<StoredGeometryRow>, 2> storedRows;
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
@@ -337,10 +394,10 @@ Result LibspatialjoinAlgorithm::run() {
     auto& eventsSmall = events[smallerIsRight];
     auto& eventsLarge = events[!smallerIsRight];
     auto& storeLarge = stores[!smallerIsRight];
-    auto [boxSmall, countSmall, droppedSmall, invalidSmall, threadsSmall] =
-        parse(smaller, stores[smallerIsRight],
-              eventsSmall.addCb(storeIds[smallerIsRight]), NUM_THREADS,
-              std::nullopt);
+    auto [boxSmall, countSmall, droppedSmall, invalidSmall, threadsSmall,
+          storedSmall] =
+        parse(smaller, parseTarget(smallerIsRight), NUM_THREADS, std::nullopt);
+    storedRows[smallerIsRight] = std::move(storedSmall);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-smaller-side", threadsSmall);
@@ -362,9 +419,10 @@ Result LibspatialjoinAlgorithm::run() {
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
-    auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge] =
-        parse(larger, storeLarge, eventsLarge.addCb(storeIds[!smallerIsRight]),
-              NUM_THREADS, prefilterBoxLarge);
+    auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge,
+          storedLarge] = parse(larger, parseTarget(!smallerIsRight),
+                               NUM_THREADS, prefilterBoxLarge);
+    storedRows[!smallerIsRight] = std::move(storedLarge);
     auto numValidGeomsLarge = eventsLarge.numObjects();
     auto numValidGeomsTotal = numValidGeomsSmall + numValidGeomsLarge;
 
@@ -378,6 +436,9 @@ Result LibspatialjoinAlgorithm::run() {
         "num-geoms-dropped-by-prefilter", droppedLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
                                                   invalidSmall + invalidLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-rows-from-geometry-store",
+        storedRows[0].size() + storedRows[1].size());
     addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
                           smallerIsRight ? invalidSmall : invalidLarge);
 
@@ -422,6 +483,21 @@ Result LibspatialjoinAlgorithm::run() {
                                                 tSweep.msecs().count());
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
+  // Call `f` for each row of the given side with the given `resultKey`: the
+  // row itself, or all the rows of a geometry from the persisted store.
+  auto forEachRow = [&storedRows](bool side, uint64_t key, const auto& f) {
+    if ((key & persistedKeyBit) == 0) {
+      f(key);
+      return;
+    }
+    uint64_t position = key & ~persistedKeyBit;
+    auto [begin, end] = ql::ranges::equal_range(storedRows[side], position, {},
+                                                &StoredGeometryRow::position_);
+    for (auto it = begin; it != end; ++it) {
+      f(it->row_);
+    }
+  };
+
   // Collect the results and add them to the result table. For `WITHIN_DIST`,
   // also add the distance for each pair of objects in the result (which
   // `libspatialjoin` reports in meters).
@@ -429,14 +505,18 @@ Result LibspatialjoinAlgorithm::run() {
     for (size_t i = 0; i < results[t].size(); i++) {
       throwIfCancelled();
 
-      const auto& res = results[t][i];
+      const auto& [keyLeft, keyRight] = results[t][i];
       double dist = 0;
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         dist = resultDists[t][i];
       }
-      addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
-                          res.second, kilometersToDistanceId(dist / 1000),
-                          swapBack);
+      forEachRow(false, keyLeft, [&](size_t rowLeft) {
+        forEachRow(true, keyRight, [&](size_t rowRight) {
+          addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                              rowRight, kilometersToDistanceId(dist / 1000),
+                              swapBack);
+        });
+      });
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
