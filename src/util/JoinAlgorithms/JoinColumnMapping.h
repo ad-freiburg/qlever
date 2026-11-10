@@ -69,8 +69,8 @@ class JoinColumnMapping {
     return permutationResult_;
   }
 
-  // Construct the mapping from the `joinColumn` (given as pairs of
-  // (leftColIndex, rightColIndex)`), and the total number of columns in the
+  // Construct the mapping from the `joinColumns` (given as pairs of
+  // `(leftColIndex, rightColIndex)`), and the total number of columns in the
   // left and right input respectively.
   JoinColumnMapping(ql::span<const std::array<ColumnIndex, 2>> joinColumns,
                     size_t numColsLeft, size_t numColsRight,

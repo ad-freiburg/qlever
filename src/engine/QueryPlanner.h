@@ -219,7 +219,7 @@ class QueryPlanner {
     // Storage for all the `Node`s that a graph contains.
     qlm::vector<std::shared_ptr<Node>> nodes_;
 
-    // Default constructor
+    // Construct an empty graph whose nodes are allocated via the `allocator`.
     explicit QueryGraph(qlever::Allocator<std::shared_ptr<Node>> allocator)
         : nodes_{allocator} {}
 
