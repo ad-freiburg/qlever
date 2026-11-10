@@ -30,12 +30,12 @@ TEST(Views, BufferedAsyncView) {
   };
 
   uint64_t numElements = 1000;
-  const auto ints = ql::views::iota(uint64_t{0}, numElements) |
+  const auto ints = ad_utility::integerRange(numElements) |
                     ql::views::transform(
                         [numElements](uint64_t i) { return numElements - i; }) |
                     ::ranges::to_vector;
 
-  const auto strings = ql::views::iota(uint64_t{0}, numElements) |
+  const auto strings = ad_utility::integerRange(numElements) |
                        ql::views::transform([numElements](uint64_t i) {
                          return std::to_string(numElements - i);
                        }) |
