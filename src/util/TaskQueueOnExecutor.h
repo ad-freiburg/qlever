@@ -127,14 +127,21 @@ class TaskQueueOnExecutor {
   // `maxNumTasksInFlight()` tasks are in flight. May be called concurrently
   // from several threads, but not after a call to `finish()`.
   //
-  // NOTE: If the execution of the task throws, then `std::terminate` will be
+  // NOTE 1: If the execution of the task throws, then `std::terminate` will be
   // called (this matches the behavior of `TaskQueue`, where an exception
   // escapes the worker thread). Use `submit` below if the exception should
   // instead be propagated to the pushing thread. The *scheduling* of the task
   // also terminates if it throws, see below.
+  //
+  // NOTE 2: The task (and thus everything it has captured) is destroyed before
+  // its slot is released. Once `finish()` (or the destructor) has returned, no
+  // thread of the executor therefore still touches anything that a task pushed
+  // via `push` or `submit` has captured, so the captures may refer to objects
+  // that are destroyed right after the queue. For `pushAsync` see there.
   void push(Task task) {
     pushAsync([task = std::move(task)](Done done) mutable {
       task();
+      task = Task{};
       std::invoke(std::move(done));
     });
   }
@@ -153,6 +160,13 @@ class TaskQueueOnExecutor {
   // (including those that have returned but not called `done` yet) are in
   // flight at any time. Everything else (the termination if the task throws or
   // cannot be scheduled) is as for `push`.
+  //
+  // NOTE: In contrast to `push`, the captures of the task are not destroyed
+  // before its slot is released, but only after the task has returned. A task
+  // that calls `done` itself therefore releases its slot while its captures
+  // still exist. Callers that need the guarantee of `push` have to release the
+  // captures themselves before `done` is called, see for example the `block`
+  // in the task of `AsyncBlockWriterPerSubVocabulary::push`.
   //
   // IMPORTANT: A task that never calls `done` keeps its slot forever, so
   // `finish()` and the destructor then never return.

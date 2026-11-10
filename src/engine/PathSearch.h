@@ -227,7 +227,7 @@ class PathSearch : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   void bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
                       size_t inputCol);
