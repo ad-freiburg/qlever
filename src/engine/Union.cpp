@@ -152,7 +152,11 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-std::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
+qlm::vector<ColumnIndex> Union::resultSortedOn() const {
+  // TODO<vrbommireddy>: Make `targetOrder_` a `qlm::vector<ColumnIndex>` and
+  // remove this conversion.
+  return {targetOrder_.begin(), targetOrder_.end(), allocator()};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -501,10 +505,11 @@ void Union::onLimitOffsetChanged(const LimitOffsetClause&,
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return ad_utility::makeExecutionTree<Union>(
-      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
+      _executionContext, _subtrees.at(0), _subtrees.at(1),
+      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()));
 }
 
 // _____________________________________________________________________________

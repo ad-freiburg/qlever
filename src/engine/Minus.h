@@ -35,7 +35,7 @@ class Minus : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
