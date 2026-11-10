@@ -93,12 +93,9 @@ class SparqlExpressionPimpl {
   // on every invocation. Delegates to `SparqlExpression::isDeterministic()`.
   [[nodiscard]] bool isDeterministic() const;
 
-  // Return the value of this expression if it does not depend on the data,
-  // else `std::nullopt`.
-  //
-  // NOTE: Currently, only a constant IRI, literal, or defined `Id` is
-  // recognized (an undefined `Id` is created for an unknown function in the
-  // syntax test mode).
+  // Return the value of this expression if it is a simple constant (an IRI, a
+  // literal, or an `Id`), else `std::nullopt`. Delegates to
+  // `SparqlExpression::getConstantValue()`.
   [[nodiscard]] std::optional<TripleComponent> getConstantValue() const;
 
   // Return true if we statically (without evaluating the expression) can
