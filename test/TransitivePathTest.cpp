@@ -961,25 +961,36 @@ TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsStartCol) {
   std::string index =
       "<g1> <p> <b> <g1> ."
       "<g1> <p> <c> <g2> .";
+
+  // Need to have the graphs as IRI for the empty path checks to run correctly.
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput = index;
+  // Explicitly state the n-quad (triple + graph col) format.
+  config.indexType = qlever::Filetype::NQuad;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  Id g1 = getId("<g1>");
+  Id g2 = getId("<g2>");
+
   auto sub = makeIdTableFromVector({
-      {10, 2, 10},
-      {10, 3, 20},
+      {g1, 2, g1},
+      {g1, 3, g2},
   });
   TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?o"}, 1);
-  auto expected = makeIdTableFromVector({{10, 2, 10}});
 
   auto opTable = makeIdTableFromVector({
-      {10, 2},
-      {10, 3},
+      {g1, 2},
+      {g1, 3},
   });
+  auto expected = makeIdTableFromVector({{g1, 2, g1}});
 
   runTestWithForcedSideTableScenarios(
       [&](auto tableVariant, bool forceFullyMaterialized) {
         auto T = makePathBoundOnBothSides(
             sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
             std::move(tableVariant), 0, 1, {Variable{"?g"}, Variable{"?o"}},
-            left, right, 1, std::numeric_limits<size_t>::max(),
+            left, right, 0, std::numeric_limits<size_t>::max(),
             forceFullyMaterialized, Variable{"?g"}, index);
 
         auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
@@ -990,32 +1001,49 @@ TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsStartCol) {
 
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, bothBoundToVarGraphBoundAsTargetCol) {
+  std::string index =
+      "<a>  <p> <g1> <g1> ."
+      "<g2> <q> <z> <g1> . "
+      "<a> <q> <z> <g2> .";
+
+  // Need to have the graphs as IRI for the empty path checks to run correctly.
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput = index;
+  // Explicitly state the n-quad (triple + graph col) format.
+  config.indexType = qlever::Filetype::NQuad;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  Id g1 = getId("<g1>");
+  Id g2 = getId("<g2>");
+
   auto sub = makeIdTableFromVector({
-      {1, 10, 10},
+      {1, g1, g1},
   });
 
   auto opTable = makeIdTableFromVector({
-      {1, 10},
-      {1, 20},
+      {1, g1},
+      {1, g2},
   });
 
-  auto expected = makeIdTableFromVector({{1, 10, 10}});
+  auto expected = makeIdTableFromVector({{1, g1, g1}});
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?x"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
 
-  runTestWithForcedSideTableScenarios(
-      [&](auto tableVariant, bool forceFullyMaterialized) {
-        auto T = makePathBoundOnBothSides(
-            sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
-            std::move(tableVariant), 0, 1, {Variable{"?x"}, Variable{"?g"}},
-            left, right, 1, std::numeric_limits<size_t>::max(),
-            forceFullyMaterialized, Variable{"?g"});
+  for (const auto& minDist : {0, 1}) {
+    runTestWithForcedSideTableScenarios(
+        [&](auto tableVariant, bool forceFullyMaterialized) {
+          auto T = makePathBoundOnBothSides(
+              sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
+              std::move(tableVariant), 0, 1, {Variable{"?x"}, Variable{"?g"}},
+              left, right, minDist, std::numeric_limits<size_t>::max(),
+              forceFullyMaterialized, Variable{"?g"}, index);
 
-        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-        assertResultMatchesIdTable(resultTable, expected);
-      },
-      std::move(opTable));
+          auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+          assertResultMatchesIdTable(resultTable, expected);
+        },
+        opTable.clone());
+  }
 }
 
 // _____________________________________________________________________________
