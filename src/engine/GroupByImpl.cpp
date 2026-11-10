@@ -321,22 +321,24 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
   // used in any of the aggregate aliases. Note that a `COUNT(DISTINCT *)`
   // implicitly uses all the visible columns without mentioning any variable
   // explicitly, so in that case no column may be stripped.
-  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>() &&
-      !ql::ranges::any_of(
-          _aliases,
-          &sparqlExpression::SparqlExpressionPimpl::readsAllVisibleColumns,
-          &Alias::_expression)) {
+  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
     using AddVarsResult =
-      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+        columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
     std::set<Variable> groupByVariables{_groupByVariables.begin(),
-                                     _groupByVariables.end()};
+                                        _groupByVariables.end()};
     columnStrippingHelpers::VarsRequiredFromSubtree usedVariables(
-      &groupByVariables);
+        &groupByVariables);
+    bool allVarsNeeded = false;
     for (const auto& alias : _aliases) {
-        auto result = usedVariables.addVarsFromExpression(alias._expression);
-        AD_CORRECTNESS_CHECK(result == AddVarsResult::Success);
+      auto result = usedVariables.addVarsFromExpression(alias._expression);
+      if (result == AddVarsResult::NeedAllVarsFromSubtree) {
+        allVarsNeeded = true;
+        break;
+      }
     }
-    subtree = usedVariables.stripSubtree(std::move(subtree));
+    if (!allVarsNeeded) {
+      subtree = usedVariables.stripSubtree(std::move(subtree));
+    }
   }
 
   // Sort `groupByVariables` to ensure that the cache key is order invariant.
