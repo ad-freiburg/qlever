@@ -470,11 +470,11 @@ template <typename T, typename... Bases>
 consteval std::string_view checkComparedMembers(
     std::string_view listedMembers) {
   constexpr auto ctx = std::meta::access_context::unchecked();
-  std::string_view className = std::meta::display_string_of(^^T);
-  auto error = [className](std::string_view message) {
+  const std::string className{std::meta::display_string_of(^^T)};
+  auto error = [&className](std::string_view message) {
     return std::string_view{std::define_static_string(
         "The comparison macro (see `backports/three_way_comparison.h`) of `" +
-        std::string{className} + "` is invalid: " + message)};
+        className + "` is invalid: " + message)};
   };
   auto bases = std::meta::bases_of(^^T, ctx);
   std::array<std::meta::info, sizeof...(Bases)> expectedBases{^^Bases...};
