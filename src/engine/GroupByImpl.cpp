@@ -328,14 +328,11 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
                                         _groupByVariables.end()};
     columnStrippingHelpers::VarsRequiredFromSubtree usedVariables(
         &groupByVariables);
-    bool allVarsNeeded = false;
-    for (const auto& alias : _aliases) {
-      auto result = usedVariables.addVarsFromExpression(alias._expression);
-      if (result == AddVarsResult::NeedAllVarsFromSubtree) {
-        allVarsNeeded = true;
-        break;
-      }
-    }
+    bool allVarsNeeded =
+        ql::ranges::any_of(_aliases, [&usedVariables](const auto& alias) {
+          return usedVariables.addVarsFromExpression(alias._expression) ==
+              AddVarsResult::NeedAllVarsFromSubtree;
+        });
     if (!allVarsNeeded) {
       subtree = usedVariables.stripSubtree(std::move(subtree));
     }
