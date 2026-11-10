@@ -22,6 +22,7 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Values.h"
+#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
@@ -402,8 +403,7 @@ TransitivePathBase::Estimates TransitivePathBase::computeEstimates() {
   // the estimates of the two query plans comparable.
   if (startSide.isBoundVariable() && startSide.isVariable() &&
       !boundVariableIsForEmptyPath_) {
-    size *= getExecutionContext()->getCostFactor(
-        "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR");
+    size *= JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR;
   }
   size = atLeastOne(size);
 
