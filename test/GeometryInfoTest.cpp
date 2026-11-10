@@ -669,7 +669,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_FALSE(getWithSourceCrs<BoundingBox>(std::nullopt,
                                              SourceCrsType{CRSType::CRS84}));
 
-  // Test `getWithSourceCrsFromWkt`
+  // Test `getWithSourceCrsFromWkt`.
   EXPECT_THAT(getWithSourceCrsFromWkt<Centroid>(litPoint),
               withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
                   centroidExp1, SourceCrsType{CRSType::CRS84}}));

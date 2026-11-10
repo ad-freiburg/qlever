@@ -142,8 +142,8 @@ inline void checkRequestedInfoForInstance(
   EXPECT_EQ(gi.getSerializationType(),
             gi.getRequestedInfo<SerializationType>());
 
-  // Test requests for `Centroid` and `BoundingBox` wrapped with `SourceCrsType`
-  // using WithSourceCrs`.
+  // Test requests for the `Centroid` and the `BoundingBox` together with the
+  // `SourceCrsType` (wrapped in `WithSourceCrs`).
   ASSERT_TRUE(gi.getSourceCrsType().has_value());
   EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<Centroid>>(),
               withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
@@ -178,8 +178,8 @@ inline void checkRequestedInfoForWktLiteral(
   EXPECT_EQ(gi.getSerializationType(),
             GeometryInfo::getRequestedInfo<SerializationType>(wkt));
 
-  // Test requests for `Centroid` and `BoundingBox` wrapped with `SourceCrsType`
-  // using WithSourceCrs`.
+  // Test requests for the `Centroid` and the `BoundingBox` together with the
+  // `SourceCrsType` (wrapped in `WithSourceCrs`).
   EXPECT_THAT(gi.getRequestedInfo<WithSourceCrs<Centroid>>(wkt),
               withSourceCrsNear<Centroid>(
                   ad_utility::detail::getWithSourceCrs<Centroid>(
