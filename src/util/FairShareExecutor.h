@@ -73,6 +73,7 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
   struct Client;
 
  private:
+  // The scheduling state of one `FairShareClass`.
   struct ClassState {
     // The share of this class (any positive number, relative to the shares of
     // the other classes).
@@ -100,15 +101,20 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
   };
 
  public:
+  // A source of tasks (e.g. a single query), see `makeClient`.
   struct Client {
     FairShareClass class_;
     // The maximal number of tasks that may run at the same time.
     size_t maxConcurrency_ = std::numeric_limits<size_t>::max();
     // The members below are only accessed while the `state_` of the scheduler
     // is locked.
+    // The tasks that wait to be run.
     std::deque<Task> queue_;
+    // The number of tasks that currently run.
     size_t numRunning_ = 0;
+    // The CPU time (in seconds) that the tasks of this client received.
     double virtualTime_ = 0;
+    // True if the client is in the `activeClients_` of its class.
     bool isActive_ = false;
 
     // Return true if the client may start another task.

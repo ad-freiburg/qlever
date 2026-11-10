@@ -25,7 +25,8 @@
 namespace ad_utility {
 
 namespace {
-// The outcome of `runAndDestroy`.
+// The outcome of `runAndDestroy`: the run time of the task, and the exception
+// that it threw (or `nullptr`).
 struct TaskOutcome {
   double seconds_;
   std::exception_ptr exception_;
