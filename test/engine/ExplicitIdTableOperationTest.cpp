@@ -152,14 +152,12 @@ TEST_P(ExplicitIdTableOperationTest, KnownEmptyResult) {
   {
     auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());
     ExplicitIdTableOperation op(qec_, wrapTable(emptyTable), testVariables_,
-                                colIndices({}, qec_->getAllocator()),
-                                LocalVocab{}, "empty");
+                                colIndices({}), LocalVocab{}, "empty");
     EXPECT_TRUE(op.knownEmptyResult());
   }
   {
     ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
-                                colIndices({}, qec_->getAllocator()),
-                                LocalVocab{}, "empty");
+                                colIndices({}), LocalVocab{}, "empty");
     EXPECT_FALSE(op.knownEmptyResult());
   }
 }
@@ -255,7 +253,7 @@ TEST_P(ExplicitIdTableOperationTest, CloneImpl) {
 }
 
 TEST_P(ExplicitIdTableOperationTest, ConstructionWithSortedColumns) {
-  auto sortedCols = colIndices({1, 0}, qec_->getAllocator());
+  auto sortedCols = colIndices({1, 0});
   ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
                               sortedCols, LocalVocab{}, testCacheKey_);
 
@@ -267,9 +265,9 @@ TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
   // Test with single row
   auto singleRowTable = createTestIdTable(1, 3);
   auto singleRowVars = createTestVariableMap(3);
-  ExplicitIdTableOperation singleRowOp(
-      qec_, wrapTable(singleRowTable), singleRowVars,
-      colIndices({}, qec_->getAllocator()), {}, testCacheKey_);
+  ExplicitIdTableOperation singleRowOp(qec_, wrapTable(singleRowTable),
+                                       singleRowVars, colIndices({}), {},
+                                       testCacheKey_);
 
   EXPECT_EQ(singleRowOp.sizeEstimate(), 1u);
   EXPECT_EQ(singleRowOp.getResultWidth(), 3u);
@@ -279,8 +277,7 @@ TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
   auto largeTable = createTestIdTable(100, 1);
   auto largeTableVars = createTestVariableMap(1);
   ExplicitIdTableOperation largeOp(qec_, wrapTable(largeTable), largeTableVars,
-                                   colIndices({}, qec_->getAllocator()), {},
-                                   testCacheKey_);
+                                   colIndices({}), {}, testCacheKey_);
 
   EXPECT_EQ(largeOp.sizeEstimate(), 100u);
   EXPECT_EQ(largeOp.getResultWidth(), 1u);
@@ -294,8 +291,7 @@ TEST_P(ExplicitIdTableOperationTest, VariableToColumnMapping) {
   customVars[Variable("?predicate")] = makeAlwaysDefinedColumn(1);
 
   ExplicitIdTableOperation op(qec_, wrapTable(testTable_), customVars,
-                              colIndices({}, qec_->getAllocator()), {},
-                              testCacheKey_);
+                              colIndices({}), {}, testCacheKey_);
 
   auto computedVars = op.computeVariableToColumnMap();
   EXPECT_EQ(computedVars.size(), 2u);

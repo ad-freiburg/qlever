@@ -283,8 +283,7 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   };
   auto unionTree = ad_utility::makeExecutionTree<Union>(
       qec, makeValues(makeIdTableFromVector({{1, 2}})),
-      makeValues(makeIdTableFromVector({{0, 3}})),
-      colIndices({1}, qec->getAllocator()));
+      makeValues(makeIdTableFromVector({{0, 3}})), colIndices({1}));
   unionTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
 
   auto sortedUnion = QueryExecutionTree::createSortedTree(unionTree, {0});
@@ -298,7 +297,7 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   // The same holds for `Sort`.
   auto sortTree = ad_utility::makeExecutionTree<Sort>(
       qec, makeValues(makeIdTableFromVector({{1, 0}, {0, 1}})),
-      colIndices({1}, qec->getAllocator()));
+      colIndices({1}));
   sortTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
 
   auto sortedSort = QueryExecutionTree::createSortedTree(sortTree, {0});
@@ -350,8 +349,8 @@ TEST(QueryExecutionTree,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
 
-  auto sort = ad_utility::makeExecutionTree<Sort>(
-      qec, indexScan, colIndices({0}, qec->getAllocator()));
+  auto sort =
+      ad_utility::makeExecutionTree<Sort>(qec, indexScan, colIndices({0}));
 
   sort->applyLimitOffset(limitOffset, false);
   EXPECT_TRUE(

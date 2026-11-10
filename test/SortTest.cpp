@@ -376,7 +376,7 @@ TEST(Sort, externalSortLazyInput) {
           ad_utility::MemorySize::kilobytes(100));
 
   // Create the `Sort` operation and get the result.
-  Sort externalSort{qec, subtree, colIndices({0, 1, 2}, qec->getAllocator())};
+  Sort externalSort{qec, subtree, colIndices({0, 1, 2})};
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
@@ -424,7 +424,7 @@ TEST(Sort, externalSortMaterializedInput) {
       LocalVocab{}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
-  Sort externalSort{qec, subtree, colIndices({0, 1, 2}, qec->getAllocator())};
+  Sort externalSort{qec, subtree, colIndices({0, 1, 2})};
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
@@ -520,7 +520,7 @@ TEST(Sort, inMemorySortMaterializedInput) {
       LocalVocab{}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
-  Sort inMemorySort{qec, subtree, colIndices({0, 1, 2}, qec->getAllocator())};
+  Sort inMemorySort{qec, subtree, colIndices({0, 1, 2})};
   auto result = inMemorySort.getResult();
 
   // Verify the result is sorted correctly.
@@ -543,7 +543,7 @@ TEST(Sort, limitOffsetIsPropagated) {
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars);
 
-  Sort sort{qec, subtree, colIndices({0}, qec->getAllocator())};
+  Sort sort{qec, subtree, colIndices({0})};
   sort.applyLimitOffset({2, 1}, false);
 
   EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),

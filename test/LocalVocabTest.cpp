@@ -385,7 +385,7 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(orderBy, localVocab1);
 
   // SORT operation (the third operation is the sort column).
-  Sort sort(testQec, qet(values1), colIndices({0}, testQec->getAllocator()));
+  Sort sort(testQec, qet(values1), colIndices({0}));
   checkLocalVocab(sort, localVocab1);
 
   // DISTINCT operation (the third argument are the indices of the input columns
