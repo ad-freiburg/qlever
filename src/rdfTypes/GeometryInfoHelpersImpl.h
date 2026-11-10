@@ -277,9 +277,10 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
           geoPointToUtilPoint(boundingBox.upperRight())};
 }
 
-// Helper for `getRequestedInfo()` that constructs the result `WithSourceCrs<T>`
-// with T = `Centroid` or `BoundingBox`. This is supposed to be used with
-// `getCentroid/BoundingBox` and `getSourceCrsType` as inputs.
+// Combine `info` (a `Centroid` or `BoundingBox`) and `crs` into a
+// `WithSourceCrs<T>`. Empty iff one of them is empty, in particular for a
+// `GeometryInfo` read from an index that predates the stored source CRS (see
+// `GeometryInfo::getSourceCrsType`).
 template <typename T>
 inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
     std::optional<T> info, std::optional<SourceCrsType> crs) {
@@ -289,8 +290,9 @@ inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
   return WithSourceCrs<T>{info.value(), crs.value()};
 }
 
-// Helper for `getRequestedInfo()` that constructs the result `WithSourceCrs<T>`
-// with T = `Centroid` or `BoundingBox` from a wkt string.
+// Parse the WKT literal `wkt` and compute its `T` (a `Centroid` or
+// `BoundingBox`) together with its source CRS. Empty iff the literal cannot be
+// parsed or has an unsupported CRS.
 template <typename T>
 inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
     std::string_view wkt) {
