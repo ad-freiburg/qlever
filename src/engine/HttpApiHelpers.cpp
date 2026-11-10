@@ -163,7 +163,7 @@ bool considerSendParameter(ad_utility::MediaType mediaType) {
   using enum ad_utility::MediaType;
   return mediaType == qleverJson ||
          (getRuntimeParameter<
-              &RuntimeParameters::sparqlResultsJsonWithTime_>() &&
+              &RuntimeParameters::sparqlResultsJsonWithMeta_>() &&
           mediaType == sparqlJson);
 }
 }  // namespace detail

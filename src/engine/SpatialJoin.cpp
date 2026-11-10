@@ -17,6 +17,7 @@
 #include <absl/strings/charconv.h>
 
 #include <cstdint>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -34,6 +35,7 @@
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
@@ -181,10 +183,14 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     os << "JoinColLeft:" << childLeft_->getVariableColumn(config_.left_);
     os << "JoinColRight:" << childRight_->getVariableColumn(config_.right_);
 
-    // Task
+    // Task. The maximum distance is written with full precision, because a
+    // `FILTER` with `<` uses the largest `double` below the constant, which
+    // the default stream precision would print like the constant itself.
     auto maxDist = getMaxDist();
     if (maxDist.has_value()) {
-      os << "maxDist: " << maxDist.value() << "\n";
+      os << "maxDist: "
+         << std::setprecision(std::numeric_limits<double>::max_digits10)
+         << maxDist.value() << "\n";
     }
     auto maxResults = getMaxResults();
     if (maxResults.has_value()) {
@@ -435,12 +441,12 @@ bool SpatialJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
   // the baseline (with O(n^2) runtime) can have some sorted columns, but as
   // the "true" computeResult method will use bounding boxes, which can't
   // guarantee that a sorted column stays sorted, this will return no sorted
   // column in all cases.
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // ____________________________________________________________________________
@@ -665,6 +671,10 @@ std::unique_ptr<Operation> SpatialJoin::cloneWithNewChildren(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  if (auto result = makeTreeWithDistanceVariable(bind)) {
+    return result;
+  }
+
   // The left child keeps all its columns.
   if (childLeft_ != nullptr) {
     if (auto result = pushDownBindToChild(bind, {childLeft_, childRight_}, 0)) {
@@ -692,6 +702,41 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   return SpatialJoin{_executionContext, std::move(config), childLeft_,
                      childRight_, substitutesFilterOp_}
       .pushDownBindToChild(bind, {childLeft_, childRight_}, 1);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const {
+  // Only `libspatialjoin` with `WITHIN_DIST` computes the exact distances.
+  if (!isConstructed() || config_.distanceVariable_.has_value() ||
+      getAlgorithm() != SpatialJoinAlgorithm::LIBSPATIALJOIN ||
+      getJoinType() != SpatialJoinType::WITHIN_DIST) {
+    return std::nullopt;
+  }
+
+  // The `BIND` expression must be the distance between the two join variables
+  // (in any order) in a unit of length.
+  auto call = sparqlExpression::getGeoDistanceExpressionParameters(
+      *bind._expression.getPimpl());
+  if (!call.has_value() || !call->left_.isVariable() ||
+      !call->right_.isVariable() ||
+      !ad_utility::detail::isLengthUnit(call->unit_)) {
+    return std::nullopt;
+  }
+  const auto& left = call->left_.getVariable();
+  const auto& right = call->right_.getVariable();
+  if (!(left == config_.left_ && right == config_.right_) &&
+      !(left == config_.right_ && right == config_.left_)) {
+    return std::nullopt;
+  }
+
+  auto config = config_;
+  config.distanceVariable_ = bind._target;
+  config.distanceUnit_ = call->unit_;
+  return _executionContext->makeShared<QueryExecutionTree>(
+      _executionContext, std::make_unique<SpatialJoin>(
+                             _executionContext, std::move(config), childLeft_,
+                             childRight_, substitutesFilterOp_));
 }
 
 // _____________________________________________________________________________
