@@ -2036,21 +2036,35 @@ TEST(QueryPlanner, ForcedSubstituteAfterSelectiveJoin) {
       absl::StrCat("VALUES (", internalVar.name(),
                    ") { (G:", GeoPoint{1, 1}.toStringRepresentation(), ") }"));
 
-  // The `SpatialJoin` with the constant point is above the join of the
-  // geometries with the single entity (the greedy planner still applies it to
-  // the scan of the geometries).
-  h::expectDynamicProgramming(
+  std::string query =
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
       "?a <q> <o> ."
       "?a <p> ?b ."
       "FILTER(geof:sfIntersects(?b, \"POINT(1 1)\"^^"
-      "<http://www.opengis.net/ont/geosparql#wktLiteral>)) }",
+      "<http://www.opengis.net/ont/geosparql#wktLiteral>)) }";
+
+  // The `SpatialJoin` with the constant point is above the join of the
+  // geometries with the single entity.
+  h::expectDynamicProgramming(
+      query,
       h::spatialJoinFilterSubstitute(
           -1, -1, Var{"?b"}, internalVar, std::nullopt, PayloadVariables::all(),
           SpatialJoinAlgorithm::LIBSPATIALJOIN, INTERSECTS, std::nullopt,
           h::Join(scan("?a", "<q>", "<o>"), scan("?a", "<p>", "?b")),
           valuesPoint),
+      qec);
+
+  // The greedy planner still applies the `SpatialJoin` to the scan of the
+  // geometries and joins the single entity afterwards.
+  h::expectGreedy(
+      query,
+      h::Join(
+          scan("?a", "<q>", "<o>"),
+          h::Sort(h::spatialJoinFilterSubstitute(
+              -1, -1, Var{"?b"}, internalVar, std::nullopt,
+              PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+              INTERSECTS, std::nullopt, scan("?a", "<p>", "?b"), valuesPoint))),
       qec);
 }
 
