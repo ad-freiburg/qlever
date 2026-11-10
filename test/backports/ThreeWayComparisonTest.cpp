@@ -451,6 +451,14 @@ struct Template {
   T t_;
   int u_;
 };
+// A base class that is passed to the check via a type alias, as is required
+// for the `..._DERIVED` macros if the name of the base class contains a comma.
+using TemplateBase = Template<int>;
+struct DerivedFromAlias : TemplateBase {
+  int v_;
+};
+// A class that only indirectly derives from `Base`.
+struct IndirectlyDerived : Derived {};
 }  // namespace reflectionCheck
 
 // Test the compile-time check of the DEFAULTED comparison macros, which is only
@@ -465,6 +473,9 @@ TEST(ThreeWayComparisonTest, ReflectionCheckOfComparedMembers) {
   static_assert(checkComparedMembers<Template<int>>("t_, u_").empty());
   static_assert(checkComparedMembers<OtherBase>("").empty());
   static_assert(checkComparedMembers<Derived, Base>("c_").empty());
+  static_assert(
+      checkComparedMembers<DerivedFromAlias, TemplateBase>("v_").empty());
+  static_assert(checkComparedMembers<IndirectlyDerived, Derived>("").empty());
 
   // Missing members, wrong order, or members that don't exist.
   using ::testing::HasSubstr;
@@ -488,6 +499,15 @@ TEST(ThreeWayComparisonTest, ReflectionCheckOfComparedMembers) {
   EXPECT_THAT((checkComparedMembers<Derived, OtherBase>("c_")),
               HasSubstr("base classes"));
   EXPECT_THAT((checkComparedMembers<DerivedFromTwo, Base>("")),
+              HasSubstr("base classes"));
+  // A base class is passed, but the class has none.
+  EXPECT_THAT((checkComparedMembers<TwoMembers, Base>("a_, b_")),
+              HasSubstr("base classes"));
+  // Only the direct base classes count.
+  EXPECT_THAT((checkComparedMembers<IndirectlyDerived, Base>("")),
+              HasSubstr("base classes"));
+  // The base class is passed via an alias, but is the wrong one.
+  EXPECT_THAT((checkComparedMembers<Derived, TemplateBase>("c_")),
               HasSubstr("base classes"));
 }
 #endif

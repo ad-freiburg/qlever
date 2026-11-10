@@ -109,12 +109,13 @@
 
 #include <absl/types/compare.h>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
-#include <vector>
 
 #include "backports/reflection.h"
 
@@ -469,22 +470,25 @@ template <typename T, typename... Bases>
 consteval std::string_view checkComparedMembers(
     std::string_view listedMembers) {
   constexpr auto ctx = std::meta::access_context::unchecked();
-  std::string className{std::meta::display_string_of(^^T)};
-  auto error = [&className](std::string_view message) {
+  std::string_view className = std::meta::display_string_of(^^T);
+  auto error = [className](std::string_view message) {
     return std::string_view{std::define_static_string(
         "The comparison macro (see `backports/three_way_comparison.h`) of `" +
-        className + "` is invalid: " + std::string{message})};
+        std::string{className} + "` is invalid: " + message)};
   };
   auto bases = std::meta::bases_of(^^T, ctx);
-  std::vector<std::meta::info> expectedBases{^^Bases...};
-  bool basesMatch = bases.size() == expectedBases.size();
+  std::array<std::meta::info, sizeof...(Bases)> expectedBases{^^Bases...};
   // The `BASE` that is passed to the macro may be a type alias (which is
   // required if its name contains a comma, see above). `std::meta::dealias`
   // strips such aliases, such that the base is compared as the actual type.
-  for (size_t i = 0; basesMatch && i < bases.size(); ++i) {
-    basesMatch = std::meta::is_same_type(std::meta::type_of(bases[i]),
-                                         std::meta::dealias(expectedBases[i]));
-  }
+  // NOTE: This uses `std::ranges` instead of `ql::ranges`, because this code
+  // only exists in C++26 mode, and `backports/algorithm.h` is too heavy for
+  // this widely included header.
+  bool basesMatch = std::ranges::equal(
+      bases, expectedBases, [](std::meta::info base, std::meta::info expected) {
+        return std::meta::is_same_type(std::meta::type_of(base),
+                                       std::meta::dealias(expected));
+      });
   if (!basesMatch) {
     return error(
         "The base classes of the class have to be exactly the base class that "
