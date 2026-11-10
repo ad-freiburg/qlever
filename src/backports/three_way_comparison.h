@@ -109,15 +109,18 @@
 
 #include <absl/types/compare.h>
 
-#include <algorithm>
-#include <array>
 #include <cmath>
-#include <string>
-#include <string_view>
 #include <tuple>
 #include <type_traits>
 
 #include "backports/reflection.h"
+
+#ifdef QLEVER_HAS_REFLECTION
+#include <algorithm>
+#include <array>
+#include <string>
+#include <string_view>
+#endif
 
 namespace ql {
 using absl::partial_ordering;
