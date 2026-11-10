@@ -12,7 +12,7 @@
 #ifndef QLEVER_SRC_ENGINE_LIBSPATIALJOINALGORITHM_H
 #define QLEVER_SRC_ENGINE_LIBSPATIALJOINALGORITHM_H
 
-#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/GeometryStore.h>
 #include <util/geo/Geo.h>
 
 #include <string>
@@ -43,15 +43,15 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   Result run() override;
 
   // This helper functions parses WKT geometries from the given `column` in
-  // `idTable` and adds them to `sweeper` (which will be used to perform the
-  // spatial join). The Boolean `leftOrRightSide` specifies whether these
-  // geometries are from the left or right side of the spatial join. The parsing
-  // is multithreaded, using up to `numThreads` threads. If a `prefilterBox` is
-  // given, geometries not intersecting this box will neither be parsed nor
-  // added to `sweeper`. The function returns the aggregated bounding box of all
-  // added geometries, which may be used as a prefilter at next call and the
-  // number of geometries added. This function is only `public` for testing
-  // purposes and should otherwise not be used outside of this class.
+  // `idTable` and adds them to `store`, calling `metaCb` for each of them
+  // (usually the `addCb` of the `sj::SweepEventList` of one side of the spatial
+  // join). The parsing is multithreaded, using up to `numThreads` threads. If a
+  // `prefilterBox` is given, geometries not intersecting this box will neither
+  // be parsed nor added to `store`. The function returns the aggregated
+  // bounding box of all added geometries, which may be used as a prefilter at
+  // next call and the number of geometries added. This function is only
+  // `public` for testing purposes and should otherwise not be used outside of
+  // this class.
   struct ParseInput {
     const IdTableView<0>* idTable_;
     ColumnIndex geomsCol_;
@@ -70,17 +70,17 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;
   };
-  ParseMetadata parse(bool leftOrRightSide, ParseInput input,
-                      sj::Sweeper& sweeper, size_t numThreads,
+  ParseMetadata parse(ParseInput input, sj::GeometryStore& store,
+                      const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
                       std::optional<util::geo::I32Box> prefilterBox) const;
 
-  // Prepare a libspatialjoin `SweeperCfg`. The result doesn't have any of its
-  // callbacks set yet. Before feeding the configuration to a `Sweeper` you
+  // Prepare a libspatialjoin `SpatialJoinCfg`. The result doesn't have any of
+  // its callbacks set yet. Before feeding the configuration to a `Sweeper` you
   // usually want to set `writeRelCb` and `sweepCancellationCb`. Also
   // `withinDist` should be set if a proximity search is intended. This
   // function is only `public` for testing purposes and should otherwise not
   // be used outside of this class.
-  static sj::SweeperCfg sweeperConfig(
+  static sj::SpatialJoinCfg sweeperConfig(
       size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
 
   // Check the bounding box (only if available from a `GeoVocabulary`) of a
@@ -98,8 +98,8 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
       const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
 
  private:
-  // Directory and filename prefix for the temporary files written by the
-  // `libspatialjoin` sweeper during `run()`.
+  // Directory and filename prefix for the temporary files written by
+  // `libspatialjoin` during `run()`.
   struct SweeperTempPath {
     std::string dir_;
     std::string prefix_;

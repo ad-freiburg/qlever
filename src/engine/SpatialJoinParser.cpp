@@ -12,13 +12,15 @@
 namespace ad_utility::detail::parallel_wkt_parser {
 
 // _____________________________________________________________________________
-WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
-                     bool usePrefiltering,
+WKTParser::WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
+                     size_t numThreads, bool usePrefiltering,
                      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
                      const Index& index)
-    : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
+    : sj::WKTParserBase<SpatialJoinParseJob>(store, std::move(metaCb),
+                                             numThreads),
       _numSkipped(numThreads),
       _numParsed(numThreads),
+      _bboxes(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
       _index(index) {
@@ -56,10 +58,28 @@ size_t WKTParser::getParseCounter() {
 }
 
 // _____________________________________________________________________________
+::util::geo::I32Box WKTParser::getBoundingBox() const {
+  ::util::geo::I32Box box;
+  for (const auto& threadBox : _bboxes) {
+    box = ::util::geo::extendBox(threadBox, box);
+  }
+  return box;
+}
+
+// _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
   std::vector<SpatialJoinParseJob> batch;
   size_t prefilterCounter = 0;
   size_t parseCounter = 0;
+
+  // Extend the bounding box of this thread by each geometry added to the store
+  // and forward it to `_metaCb`.
+  auto metaCb = [this](size_t t, const std::string& gid,
+                       const sj::PreparedGeomMeta& meta) {
+    _bboxes[t] = ::util::geo::extendBox(meta.bbox, _bboxes[t]);
+    _metaCb(t, gid, meta);
+  };
+
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
     for (auto& job : batch) {
@@ -81,8 +101,7 @@ void WKTParser::processQueue(size_t t) {
         // string. Invalid WKT (according to the strict parsing mode) is
         // skipped, so it never matches (see GeoSPARQL 1.1, Section 10.9.1).
         job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
-                         job.side, true);
+        parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w, true);
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
@@ -101,9 +120,7 @@ void WKTParser::processQueue(size_t t) {
         ::util::geo::I32Point addPoint{
             static_cast<int32_t>(mercPoint.getX() * PREC),
             static_cast<int32_t>(mercPoint.getY() * PREC)};
-        _bboxes[t] = ::util::geo::extendBox(
-            _sweeper->add(addPoint, std::to_string(job.line), job.side, w),
-            _bboxes[t]);
+        _store->add(addPoint, std::to_string(job.line), w);
         parseCounter++;
       } else if (dt == Datatype::LocalVocabIndex) {
         // `LocalVocabEntry` has to be parsed in any case: we have no
@@ -113,13 +130,13 @@ void WKTParser::processQueue(size_t t) {
         if (literalOrIri.isLiteral()) {
           job.wkt = literalOrIri.getLiteral().getContent();
           parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
-                           job.side, true);
+                           true);
           parseCounter++;
         }
       }
     }
 
-    _sweeper->addBatch(w);
+    _store->addBatch(w, t, metaCb);
   }
 
   _numSkipped[t] = prefilterCounter;
@@ -127,9 +144,9 @@ void WKTParser::processQueue(size_t t) {
 }
 
 // _____________________________________________________________________________
-void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex,
                                   std::optional<BoundingBox> boundingBox) {
-  _curBatch.push_back({valueId, rowIndex, side, "", std::move(boundingBox)});
+  _curBatch.push_back({valueId, rowIndex, "", std::move(boundingBox)});
 
   if (_curBatch.size() >= WKT_PARSER_BATCH_SIZE) {
     _jobs.add(std::move(_curBatch));
