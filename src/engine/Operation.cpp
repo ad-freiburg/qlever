@@ -772,14 +772,13 @@ const qlm::vector<ColumnIndex>& Operation::getResultSortedOn() const {
 
 void Operation::signalQueryUpdate(
     RuntimeInformation::SendPriority sendPriority) const {
-  if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
+  if (_executionContext->areWebsocketUpdatesEnabled()) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo, sendPriority);
   }
 }
 
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
-  AD_CORRECTNESS_CHECK(_executionContext);
   if (_executionContext->disableCaching()) {
     // Cache key computation is costly, so we can save it when caching is
     // disabled.
