@@ -1480,8 +1480,7 @@ void QueryPlanner::applyFiltersIfPossible(
 
         // If we need to enforce substitution, replace `plan` with our first
         // candidate. This is not done in all cases, because an incomplete
-        // `SpatialJoin` would not get a join partner if `plan` would be
-        // removed.
+        // `SpatialJoin` would not get a join partner if `plan` were removed.
         if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
           plan = std::move(substPlans.front());
           substPlans.erase(substPlans.begin());
@@ -1660,9 +1659,11 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   }
   auto& result = dpTab.back();
   // Apply enforced filter substitutes (currently `SpatialJoin` with a
-  // fixed-value side). Both a connected component with a single seed and a
-  // full-cover replacement plan land in the final row without passing through
-  // a DP round that may apply substitutes, so they are handled here.
+  // fixed-value side) to every final plan that still lacks them. These are
+  // the plans that kept the unfiltered side in the `KeepUnfiltered` rounds
+  // above, as well as a connected component with a single seed and a
+  // full-cover replacement plan, which land in the final row without passing
+  // through a DP round at all.
   applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
