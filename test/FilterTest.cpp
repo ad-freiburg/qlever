@@ -18,6 +18,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+using ad_utility::testing::colIndices;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 
@@ -147,7 +148,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
                           std::move(idTable),
                           {Variable{"?x"}},
                           false,
-                          qlm::vector<ColumnIndex>{qec->getAllocator()},
+                          colIndices({}),
                           LocalVocab{},
                           std::nullopt,
                           true};

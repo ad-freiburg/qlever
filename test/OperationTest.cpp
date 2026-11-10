@@ -33,7 +33,6 @@
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 using namespace ad_utility::testing;
-using ad_utility::testing::colIndices;
 using namespace ::testing;
 using ad_utility::CacheStatus;
 using ad_utility::CancellationException;

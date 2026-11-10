@@ -45,7 +45,6 @@
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 using namespace ad_utility::testing;
-using ad_utility::testing::colIndices;
 using ::testing::Eq;
 using ::testing::Optional;
 using V = Variable;
