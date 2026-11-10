@@ -243,9 +243,8 @@ TEST(CRSTypeValueGetter, OperatorWithId) {
       CRSType::UNSUPPORTED, unitValueGetter);
 
   checkEnumValueGetterFromId("\"x\"", CRSType::UNSUPPORTED, unitValueGetter);
-  checkEnumValueGetterFromId<&ad_utility::detail::iriToCrsType,
-                             CRSType::UNSUPPORTED>(
-      "\"1.5\"^^<http://example.com>", CRSType::UNSUPPORTED, unitValueGetter);
+  checkEnumValueGetterFromId("\"1.5\"^^<http://example.com>",
+                             CRSType::UNSUPPORTED, unitValueGetter);
 
   // A word of a secondary vocabulary is resolved just like a word of the
   // vocabulary of the main index.
@@ -262,7 +261,6 @@ TEST(CRSTypeValueGetter, OperatorWithId) {
 // Test that the `CRSTypeValueGetter` skips encoded values.
 TEST(CRSTypeValueGetter, OperatorWithIdSkipEncodedValue) {
   sparqlExpression::detail::CRSTypeValueGetter getter;
-  using CRSType = ::util::geo::CRSType;
   checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromBool(true), getter);
   checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromBool(false), getter);
   checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromInt(-50), getter);

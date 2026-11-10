@@ -16,7 +16,6 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
-#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/Iterators.h"
@@ -407,7 +406,8 @@ CPP_template(auto iriToValue, auto undefined)(
         decltype(iriToValue), decltype(undefined), std::string_view>)
 struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
   using Value = decltype(undefined);
-  // Set the size of this cache to at least the number of supported units.
+  // Set the size of this cache to at least the maximum number of values of any
+  // supported enum (`Value`).
   mutable ad_utility::util::LRUCache<ValueId, Value> cache_{16};
   using Mixin<EnumValueGetter<iriToValue, undefined>>::operator();
   Value operator()(ValueId id, const EvaluationContext*) const;
@@ -427,9 +427,10 @@ using UnitOfMeasurementValueGetter =
 
 // As `util` is not included in this file, we use this constant instead of
 // `util::geo::CRSType::UNSUPPORTED`.
-constexpr inline util::geo::CRSType crsTypeUnsupported{0};
+constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
 using CRSTypeValueGetter =
-    EnumValueGetter<&ad_utility::detail::iriToCrsType, crsTypeUnsupported>;
+    EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
+                    crsTypeUnsupported>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.

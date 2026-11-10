@@ -129,6 +129,8 @@ struct SourceCrsType {
 
   // Returns the representing IRI.
   std::optional<std::string_view> asIri() const;
+  // Convert a CRS IRI string to CRS type.
+  static ::util::geo::CRSType iriToCrsType(std::string_view uri);
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
 };

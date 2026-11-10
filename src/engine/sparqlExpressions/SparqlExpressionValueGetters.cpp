@@ -477,7 +477,7 @@ decltype(undefined)
 namespace sparqlExpression::detail {
 template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
                                 UnitOfMeasurement::UNKNOWN>;
-template struct EnumValueGetter<&ad_utility::detail::iriToCrsType,
+template struct EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
                                 ::util::geo::CRSType::UNSUPPORTED>;
 }  // namespace sparqlExpression::detail
 

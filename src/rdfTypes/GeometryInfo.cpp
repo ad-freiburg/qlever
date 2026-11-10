@@ -213,6 +213,16 @@ std::optional<std::string_view> SourceCrsType::asIri() const {
   return detail::crsTypeToIri(type_);
 }
 
+// _____________________________________________________________________________
+::util::geo::CRSType SourceCrsType::iriToCrsType(std::string_view uri) {
+  using namespace ad_utility::detail;
+  auto it = ql::ranges::find(CRS_TYPE_IRI, uri);
+  if (it == CRS_TYPE_IRI.end()) {
+    return ::util::geo::CRSType::UNSUPPORTED;
+  }
+  return static_cast<::util::geo::CRSType>(it - CRS_TYPE_IRI.begin());
+}
+
 // ____________________________________________________________________________
 Centroid GeometryInfo::getCentroid() const {
   return Centroid{GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &

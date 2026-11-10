@@ -114,16 +114,6 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b) {
   return computeMetricDistance(a, b);
 }
-
-// _____________________________________________________________________________
-::util::geo::CRSType iriToCrsType(const std::string_view& uri) {
-  auto it = ql::ranges::find(CRS_TYPE_IRI, uri);
-  if (it == CRS_TYPE_IRI.end()) {
-    return ::util::geo::CRSType::UNSUPPORTED;
-  }
-  return static_cast<::util::geo::CRSType>(it - CRS_TYPE_IRI.begin());
-}
-
 }  // namespace detail
 
 }  // namespace ad_utility

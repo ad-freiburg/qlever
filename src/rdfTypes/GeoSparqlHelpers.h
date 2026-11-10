@@ -91,10 +91,6 @@ const auto wktLiteralIri =
 // Calculate geographic distance between geometries in meters using `pb_util`.
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b);
-
-// Convert a CRS IRI string to CRS type.
-::util::geo::CRSType iriToCrsType(const std::string_view& uri);
-
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
