@@ -10,7 +10,6 @@
 #ifndef QLEVER_SRC_UTIL_VIEWS_ASYNCTRANSFORMVIEW_H
 #define QLEVER_SRC_UTIL_VIEWS_ASYNCTRANSFORMVIEW_H
 
-#include <atomic>
 #include <boost/asio/post.hpp>
 #include <deque>
 #include <functional>
@@ -23,6 +22,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/asio.h"
+#include "backports/atomic_flag.h"
 #include "util/Exception.h"
 #include "util/Iterators.h"
 #include "util/NoCopyNoMove.h"
@@ -110,7 +110,7 @@ class AsyncTransformView
   struct Slot {
     // Set by whoever claims the slot first: a runner or the consumer (to
     // transform the element), or the destructor of the view (to drop it).
-    std::atomic_flag claimed_;
+    ql::atomic_flag claimed_;
     // Transforms the element with the transformation that is passed to it.
     std::packaged_task<Result(const Transformation&)> task_;
 
@@ -121,11 +121,7 @@ class AsyncTransformView
             // element is moved into a temporary that is freed right after the
             // transformation.
             return std::invoke(transformation, Element(std::move(element)));
-          }} {
-      // Before C++20, a default-constructed `std::atomic_flag` is in an
-      // unspecified state.
-      claimed_.clear();
-    }
+          }} {}
 
     // Claim the slot. Return `false` if it was already claimed.
     bool tryClaim() { return !claimed_.test_and_set(); }
@@ -224,10 +220,17 @@ class AsyncTransformView
       return future_.get();
     }
 
-    // Drop the element if no runner has started on it yet, otherwise wait for
-    // its transformation to finish.
-    void dropOrWait() {
-      if (!slot_->tryClaim()) {
+    // Drop the element if no runner has started on it yet. The future of a
+    // dropped element is reset, because it would never become ready.
+    void drop() {
+      if (slot_->tryClaim()) {
+        future_ = {};
+      }
+    }
+
+    // Wait for the transformation of the element, unless it was dropped.
+    void waitUnlessDropped() {
+      if (future_.valid()) {
         future_.wait();
       }
     }
@@ -256,10 +259,15 @@ class AsyncTransformView
             maxNumElementsInFlight, maxNumRunners)} {}
 
   // Elements that no runner has started yet are dropped, and the running ones
-  // are waited for (they use resources of the caller).
+  // are waited for (they use resources of the caller). All the elements are
+  // dropped before the first wait, so that no runner starts another element
+  // while the destructor waits.
   ~AsyncTransformView() {
     for (auto& pending : pending_) {
-      pending.dropOrWait();
+      pending.drop();
+    }
+    for (auto& pending : pending_) {
+      pending.waitUnlessDropped();
     }
   }
 
@@ -270,6 +278,8 @@ class AsyncTransformView
     if (pending_.empty()) {
       return std::nullopt;
     }
+    // NOTE: The entry is popped before `get()` is called, so that an exception
+    // that `get()` rethrows doesn't leave an invalid future behind.
     auto pending = std::move(pending_.front());
     pending_.pop_front();
     return pending.get(shared_->transformation_);
