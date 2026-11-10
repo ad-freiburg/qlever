@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 
 #include <atomic>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
@@ -161,12 +162,20 @@ TEST(FairShareExecutor, makeFairShareExecutor) {
   ASSERT_NE(query.target<FairShareExecutor>(), nullptr);
   EXPECT_EQ(query.target<FairShareExecutor>()->scheduler(),
             executor.target<FairShareExecutor>()->scheduler());
-  EXPECT_FALSE(query == executor);
+  // Executors of different clients of the same scheduler are not equal.
+  EXPECT_FALSE(*query.target<FairShareExecutor>() ==
+               *executor.target<FairShareExecutor>());
 
   // Two calls create independent schedulers.
   auto other = makeFairShareExecutor(pool.get_executor(), 3);
   EXPECT_NE(other.target<FairShareExecutor>()->scheduler(),
             executor.target<FairShareExecutor>()->scheduler());
+
+  // Copies are equal, executors of different schedulers are not.
+  FairShareExecutor copy = *executor.target<FairShareExecutor>();
+  EXPECT_TRUE(copy == *executor.target<FairShareExecutor>());
+  EXPECT_FALSE(*other.target<FairShareExecutor>() ==
+               *executor.target<FairShareExecutor>());
 
   EXPECT_ANY_THROW(makeFairShareExecutor(pool.get_executor(), 0));
   EXPECT_ANY_THROW(makeFairShareExecutor(qlever::Executor{}, 2));
@@ -184,5 +193,100 @@ TEST(FairShareExecutor, fallbackForOtherExecutors) {
   auto unlimited = makeFairShareClientExecutor(
       pool.get_executor(), FairShareClass::Queries, std::nullopt);
   EXPECT_TRUE(unlimited == qlever::Executor{pool.get_executor()});
+  pool.join();
+}
+
+// A client that is at its limit (with queued tasks) and a class all of whose
+// clients are at their limits are skipped in favor of a client that may run.
+TEST(FairShareExecutor, clientsAtTheirLimitAreSkipped) {
+  boost::asio::thread_pool pool{3};
+  auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 3);
+  auto makeExecutor = [&scheduler](FairShareClass fairShareClass,
+                                   size_t maxConcurrency) {
+    return qlever::Executor{FairShareExecutor{
+        scheduler, scheduler->makeClient(fairShareClass, maxConcurrency)}};
+  };
+  auto limitedBackground = makeExecutor(FairShareClass::Background, 1);
+  auto limitedQuery = makeExecutor(FairShareClass::Queries, 1);
+  auto otherBackground = makeExecutor(FairShareClass::Background, 1);
+
+  // Start a task of each limited client, which blocks until it is released.
+  std::promise<void> release;
+  std::shared_future<void> released = release.get_future().share();
+  auto startBlockingTask = [&released](const qlever::Executor& executor) {
+    std::promise<void> started;
+    auto hasStarted = started.get_future();
+    auto done = boost::asio::post(
+        executor, boost::asio::use_future(
+                      [&released, started = std::move(started)]() mutable {
+                        started.set_value();
+                        released.wait();
+                      }));
+    hasStarted.wait();
+    return done;
+  };
+  auto blockedBackground = startBlockingTask(limitedBackground);
+  auto blockedQuery = startBlockingTask(limitedQuery);
+
+  // The second tasks of the limited clients have to wait, but the task of the
+  // other client runs (on the free third slot).
+  auto noop = []() {};
+  auto queuedBackground =
+      boost::asio::post(limitedBackground, boost::asio::use_future(noop));
+  auto queuedQuery =
+      boost::asio::post(limitedQuery, boost::asio::use_future(noop));
+  boost::asio::post(otherBackground, boost::asio::use_future(noop)).get();
+  EXPECT_EQ(queuedBackground.wait_for(0s), std::future_status::timeout);
+  EXPECT_EQ(queuedQuery.wait_for(0s), std::future_status::timeout);
+
+  // After the release, all the remaining tasks run.
+  release.set_value();
+  for (auto* future :
+       {&blockedBackground, &blockedQuery, &queuedBackground, &queuedQuery}) {
+    future->get();
+  }
+  pool.join();
+}
+
+// A task that throws gives the slot of its worker back, so that the next task
+// runs, and the exception propagates out of the underlying executor.
+TEST(FairShareExecutor, throwingTaskReleasesItsSlot) {
+  boost::asio::io_context ctx;
+  auto executor = makeFairShareExecutor(ctx.get_executor(), 1);
+  bool secondHasRun = false;
+  boost::asio::post(executor, []() { throw std::runtime_error{"expected"}; });
+  boost::asio::post(executor, [&secondHasRun]() { secondHasRun = true; });
+  EXPECT_THROW(ctx.run(), std::runtime_error);
+  EXPECT_FALSE(secondHasRun);
+  ctx.run();
+  EXPECT_TRUE(secondHasRun);
+}
+
+// `setFairShare` sets the share on the scheduler of a `FairShareExecutor`, and
+// does nothing for other executors.
+TEST(FairShareExecutor, setFairShare) {
+  boost::asio::thread_pool pool{1};
+  auto fair = makeFairShareExecutor(pool.get_executor(), 1);
+  EXPECT_NO_THROW(setFairShare(fair, FairShareClass::Queries, 0.5));
+  // The share is checked by the scheduler, so the call reached it.
+  EXPECT_ANY_THROW(setFairShare(fair, FairShareClass::Queries, 0.0));
+  EXPECT_NO_THROW(setFairShare(qlever::Executor{pool.get_executor()},
+                               FairShareClass::Queries, 0.0));
+  pool.join();
+}
+
+// Invalid arguments are rejected.
+TEST(FairShareExecutor, invalidArguments) {
+  boost::asio::thread_pool pool{1};
+  EXPECT_ANY_THROW(FairScheduler(ql::any_io_executor{}, 1));
+  EXPECT_ANY_THROW(FairScheduler(pool.get_executor(), 0));
+  auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 1);
+  EXPECT_ANY_THROW(scheduler->makeClient(FairShareClass::Queries, 0));
+  EXPECT_ANY_THROW(scheduler->setShare(FairShareClass::Queries, 0.0));
+  auto client = scheduler->makeClient(FairShareClass::Queries);
+  EXPECT_ANY_THROW(FairShareExecutor(nullptr, client));
+  EXPECT_ANY_THROW(FairShareExecutor(scheduler, nullptr));
+  EXPECT_ANY_THROW(makeFairShareClientExecutor(
+      FairShareExecutor{scheduler, client}, FairShareClass::Queries, 0));
   pool.join();
 }
