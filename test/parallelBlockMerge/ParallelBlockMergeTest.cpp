@@ -194,7 +194,7 @@ std::vector<typename Input::value_type> mergeToVector(
 
 // Return the keys (that is, the first components) of the `pairs`.
 SizeVec getKeys(const std::vector<Pair>& pairs) {
-  return pairs | ql::views::keys | ::ranges::to<SizeVec>();
+  return pairs | ql::views::keys | ::ranges::to_vector;
 }
 
 // The number of runs and the number of elements per run of

@@ -9,10 +9,12 @@
 #define QLEVER_SRC_UTIL_CONTAINERSWITHALLOCATOR_H
 
 #include <deque>
+#include <iterator>
 #include <list>
 #include <map>
 #include <memory>
 #include <set>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -47,8 +49,24 @@ std::shared_ptr<T> makeShared(const Allocator<T>& allocator, Args&&... args) {
   return std::allocate_shared<T>(allocator, std::forward<Args>(args)...);
 }
 
+// A `std::vector` with a `qlever::Allocator`. This is a class (not an alias) so
+// that it can have deduction guides, which allow for example
+// `... | ::ranges::to<qlm::vector>(allocator)` without spelling out the
+// element type.
 template <typename T>
-using vector = std::vector<T, Allocator<T>>;
+class vector : public std::vector<T, Allocator<T>> {
+ public:
+  using Base = std::vector<T, Allocator<T>>;
+  using Base::Base;
+};
+
+// Deduce the element type from an iterator pair and an allocator (which may be
+// an allocator for a different element type that is convertible to the
+// allocator of the deduced element type).
+template <typename It, typename A,
+          typename V = typename std::iterator_traits<It>::value_type,
+          typename = std::enable_if_t<std::is_convertible_v<A, Allocator<V>>>>
+vector(It, It, A) -> vector<V>;
 
 template <typename T>
 using deque = std::deque<T, Allocator<T>>;

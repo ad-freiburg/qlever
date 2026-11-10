@@ -1812,7 +1812,7 @@ TEST(SparqlExpression, isSomethingFunctionsOnSortedInput) {
   ctx._endIndex = ids.size();
   testContext.varToColMap.clear();
   testContext.varToColMap[var] = makePossiblyUndefinedColumn(0);
-  ctx._columnsByWhichResultIsSorted = {0};
+  ctx._columnsByWhichResultIsSorted.assign({0});
 
   auto evaluate = [&](auto makeExpression) {
     return makeExpression(std::make_unique<VariableExpression>(var))

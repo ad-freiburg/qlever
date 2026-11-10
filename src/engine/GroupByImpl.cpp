@@ -414,7 +414,7 @@ qlm::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   return _groupByVariables | ql::views::transform([&varCols](const auto& var) {
            return varCols[var].columnIndex_;
          }) |
-         ::ranges::to<qlm::vector<ColumnIndex>>(allocator());
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // _____________________________________________________________________________

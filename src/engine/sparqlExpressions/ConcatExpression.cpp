@@ -162,8 +162,7 @@ class ConcatExpression : public detail::VariadicExpression {
         [&ctx,
          &moveLiteralToResult](LiteralVec& literalVec) -> ExpressionResult {
       return literalVec | ql::views::transform(moveLiteralToResult) |
-             ::ranges::to<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(
-                 ctx->_allocator);
+             ::ranges::to<VectorWithMemoryLimit>(ctx->_allocator);
     };
     return std::visit(ad_utility::OverloadCallOperator{visitLiteralResult,
                                                        visitLiteralVecResult},

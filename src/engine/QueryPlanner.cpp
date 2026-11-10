@@ -1850,7 +1850,7 @@ QueryPlanner::wrapFiltersWithoutSubstitutes(
   return filters | ql::views::transform([](const auto& filter) {
            return FilterAndOptionalSubstitute{filter, std::nullopt};
          }) |
-         ::ranges::to<FiltersAndOptionalSubstitutes>();
+         ::ranges::to_vector;
 }
 
 // _____________________________________________________________________________

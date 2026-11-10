@@ -99,7 +99,7 @@ void serializeDeterministically(S& serializer, T&& map) {
     serializer << map.size();
     auto sortedEntries =
         map | ql::views::transform([](const auto& entry) { return &entry; }) |
-        ::ranges::to<std::vector<const VariableToColumnMap::value_type*>>();
+        ::ranges::to_vector;
     ql::ranges::sort(sortedEntries, {},
                      [](const auto* entry) -> const std::string& {
                        return entry->first.name();

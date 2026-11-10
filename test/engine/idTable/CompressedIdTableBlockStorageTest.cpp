@@ -75,7 +75,7 @@ std::vector<Row> makeRows(size_t numColumns,
   return values | ql::views::transform([numColumns](int64_t value) {
            return makeRow(value, numColumns);
          }) |
-         ::ranges::to<std::vector<Row>>();
+         ::ranges::to_vector;
 }
 
 // Create a block with `numColumns` columns that holds the rows which are

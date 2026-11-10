@@ -320,6 +320,8 @@ addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
+addLinkAndDiscoverTest(ContainersWithAllocatorTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
 addLinkAndDiscoverTestNoLibs(AllocateSharedTest)

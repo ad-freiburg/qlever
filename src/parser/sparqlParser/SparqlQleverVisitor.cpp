@@ -454,7 +454,7 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
   return objectList.first | ql::views::transform([&predicate](auto& object) {
            return PathObjectPairs::value_type{predicate, std::move(object)};
          }) |
-         ::ranges::to<PathObjectPairs>();
+         ::ranges::to_vector;
 }
 
 // ___________________________________________________________________________

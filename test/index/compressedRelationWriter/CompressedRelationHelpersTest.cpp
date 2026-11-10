@@ -29,7 +29,7 @@ auto V = ad_utility::testing::VocabId;
 
 // Return the `col0` column of a table with the given `col0` IDs.
 std::vector<Id> col0Column(const std::vector<int64_t>& ids) {
-  return ids | ql::views::transform(V) | ::ranges::to<std::vector<Id>>();
+  return ids | ql::views::transform(V) | ::ranges::to_vector;
 }
 }  // namespace
 

@@ -123,7 +123,7 @@ class CopyOnWriteChunkedVector {
     return chunks_ | ql::views::transform([](const auto& chunk) {
              return ql::span<const T>(chunk->data(), chunk->size());
            }) |
-           ::ranges::to<std::vector<ql::span<const T>>>();
+           ::ranges::to_vector;
   }
 };
 

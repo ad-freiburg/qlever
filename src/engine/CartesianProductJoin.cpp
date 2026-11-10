@@ -56,7 +56,7 @@ CartesianProductJoin::CartesianProductJoin(
 // ____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
   return children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }) |
-         ::ranges::to<qlm::vector<QueryExecutionTree*>>(allocator());
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // ____________________________________________________________________________
@@ -488,7 +488,7 @@ CartesianProductJoin::makeDistinctTree(
         const auto& [child, childIndices] = childAndIndices;
         return QueryExecutionTree::createDistinctTree(child, childIndices);
       }) |
-      ::ranges::to<Children>();
+      ::ranges::to_vector;
   return ad_utility::makeExecutionTree<CartesianProductJoin>(
       _executionContext, std::move(newChildren));
 }

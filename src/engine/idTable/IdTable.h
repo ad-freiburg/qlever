@@ -946,7 +946,7 @@ class IdTable {
       return ad_utility::integerRange(self.numColumns()) |
              ql::views::transform(
                  [&self](size_t i) { return self.getColumn(i); }) |
-             ::ranges::to<std::vector<Column>>();
+             ::ranges::to_vector;
     } else {
       std::array<Column, NumColumns> columns;
       for (size_t i = 0; i < self.numColumns(); ++i) {

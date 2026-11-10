@@ -675,7 +675,7 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->multiplicityEstimates_ =
       ad_utility::integerRange(numCols) |
       ql::views::transform([this](size_t i) { return getMultiplicity(i); }) |
-      ::ranges::to<std::vector<float>>();
+      ::ranges::to_vector;
 
   // Add the warnings that were added before the runtime information was
   // (re)created, e.g. during the query planning.

@@ -363,8 +363,8 @@ TEST_F(ValueIdTest, IndexOrdering) {
 
 TEST_F(ValueIdTest, DoubleOrdering) {
   auto ids = makeRandomDoubleIds();
-  auto doubles = ids | ql::views::transform(&ValueId::getDouble) |
-                 ::ranges::to<std::vector<double>>();
+  auto doubles =
+      ids | ql::views::transform(&ValueId::getDouble) | ::ranges::to_vector;
   std::sort(ids.begin(), ids.end());
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
@@ -416,8 +416,8 @@ TEST_F(ValueIdTest, DoubleOrdering) {
 TEST_F(ValueIdTest, SignedIntegerOrdering) {
   std::vector<ValueId> ids;
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  auto integers = ids | ql::views::transform(&ValueId::getInt) |
-                  ::ranges::to<std::vector<int64_t>>();
+  auto integers =
+      ids | ql::views::transform(&ValueId::getInt) | ::ranges::to_vector;
 
   std::sort(ids.begin(), ids.end());
   std::sort(integers.begin(), integers.end());
