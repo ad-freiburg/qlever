@@ -161,14 +161,17 @@ TEST(VocabularyFileSuffixes, allVocabularyTypesForIndexBuilding) {
   // The geo split vocabulary consists of the (on-disk compressed) main
   // vocabulary, plus a `GeoVocabulary` under the `.geometry` prefix (which is
   // another on-disk compressed vocabulary plus the file with the geometry
-  // information).
+  // information and the files of the geometry store).
   testFileSuffixes(
       Enum::OnDiskCompressedGeoSplit,
       {".words.internal", ".words.internal.ids", ".words.external",
        ".words.external.offsets", ".codebooks", ".geometry.words.internal",
        ".geometry.words.internal.ids", ".geometry.words.external",
        ".geometry.words.external.offsets", ".geometry.codebooks",
-       ".geometry.geoinfo"});
+       ".geometry.geoinfo", ".geometry.geostore.points",
+       ".geometry.geostore.areas", ".geometry.geostore.simpleareas",
+       ".geometry.geostore.lines", ".geometry.geostore.simplelines",
+       ".geometry.geostore.multis"});
 
   // All the vocabulary types that can be used for index building are covered
   // by the checks above.

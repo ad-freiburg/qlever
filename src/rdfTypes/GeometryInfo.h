@@ -219,6 +219,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
+// 7: Append the 64-bit field `geometryStoreId_`, see below.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -246,14 +247,14 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
 //   and remove the handling of the dropped versions from `fromSerialized` and
 //   `GEOMETRY_INFO_SIZE_PER_VERSION`.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 7;
 constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 5;
 
 // The size of the binary representation of `GeometryInfo` for each loadable
 // version, starting at `MIN_LOADABLE_GEOMETRY_INFO_VERSION`.
 inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION -
                                         MIN_LOADABLE_GEOMETRY_INFO_VERSION + 1>
-    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48};
+    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48, 56};
 
 // Return true iff a `GeometryInfo` of the given `version` can be read.
 constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
@@ -289,10 +290,10 @@ class GeometryInfo {
   SerializationType serializationType_ = SerializationType::WKT;
   MetricLength metricLength_;
   MetricArea metricArea_;
-
-  // TODO<ullingerc>: Implement the behavior for the following two
-  // attributes
-  //   int64_t parsedGeometryOffset_ = -1;
+  // The ID of the parsed geometry in the `sj::GeometryStore` of the
+  // `GeoVocabulary` plus one, such that zero means "not stored" (see
+  // `getGeometryStoreId`).
+  uint64_t geometryStoreId_ = 0;
 
   static constexpr uint64_t bitMaskGeometryType =
       bitMaskForHigherBits(GeoPoint::numTypeBits);
@@ -382,6 +383,15 @@ class GeometryInfo {
 
   // Get the serialization format of the literal.
   SerializationType getSerializationType() const;
+
+  // Get the ID of the parsed geometry in the `sj::GeometryStore` of the
+  // `GeoVocabulary`. Empty iff the geometry is not stored there (for example
+  // because the index predates the store).
+  std::optional<uint64_t> getGeometryStoreId() const;
+
+  // Set the ID of the parsed geometry in the `sj::GeometryStore`, see
+  // `getGeometryStoreId`.
+  void setGeometryStoreId(uint64_t id);
 
   // Return the serialization format of an arbitrary WKT literal, which is
   // always `WKT`.

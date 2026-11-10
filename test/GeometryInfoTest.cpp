@@ -852,11 +852,13 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(SerializationType) == 2);
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
+  using GeometryStoreId = uint64_t;
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
                     sizeof(SourceCrsType) + sizeof(SerializationType) +
-                    sizeof(MetricLength) + sizeof(MetricArea));
+                    sizeof(MetricLength) + sizeof(MetricArea) +
+                    sizeof(GeometryStoreId));
 }
 
 // Test that `fromSerialized` rejects a version outside the loadable range and a

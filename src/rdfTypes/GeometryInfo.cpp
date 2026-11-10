@@ -43,7 +43,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(serializationType_) + sizeof(metricLength_) +
-                    sizeof(metricArea_));
+                    sizeof(metricArea_) + sizeof(geometryStoreId_));
   // The WKT type has only 8 different values, and the bit representation of a
   // `GeoPoint` leaves its upper `GeoPoint::numTypeBits` bits free (they hold
   // the datatype when the point is stored as an `Id`). Therefore we fold the
@@ -343,6 +343,20 @@ std::optional<NumGeometries> GeometryInfo::getNumGeometries(
 // ____________________________________________________________________________
 SerializationType GeometryInfo::getSerializationType() const {
   return serializationType_;
+}
+
+// ____________________________________________________________________________
+std::optional<uint64_t> GeometryInfo::getGeometryStoreId() const {
+  if (geometryStoreId_ == 0) {
+    return std::nullopt;
+  }
+  return geometryStoreId_ - 1;
+}
+
+// ____________________________________________________________________________
+void GeometryInfo::setGeometryStoreId(uint64_t id) {
+  AD_CONTRACT_CHECK(id < std::numeric_limits<uint64_t>::max());
+  geometryStoreId_ = id + 1;
 }
 
 // ____________________________________________________________________________
