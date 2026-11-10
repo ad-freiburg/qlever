@@ -26,6 +26,7 @@ RowNumber::RowNumber(QueryExecutionContext* qec,
     : RowNumber{qec, std::move(child), std::move(rowNumberVariable), offset,
                 qlm::vector<ColumnIndex>{qec->getAllocator()}} {}
 
+// _____________________________________________________________________________
 RowNumber::RowNumber(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      Variable rowNumberVariable, int64_t offset,

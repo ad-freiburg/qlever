@@ -210,7 +210,8 @@ void NamedResultCache::readFromSerializer(Serializer& serializer,
     Key key;
     serializer >> key;
 
-    // Deserialize the value.
+    // Deserialize the value (a `Value` has no default constructor, because
+    // its `resultSortedOn_` needs an allocator).
     Value value{{}, {}, qlm::vector<ColumnIndex>{allocator}, {}, {}, {}};
     value.allocatorForSerialization_ = allocator;
     value.contextForSerialization_ = &context;

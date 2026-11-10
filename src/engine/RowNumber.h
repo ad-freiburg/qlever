@@ -47,6 +47,8 @@ class RowNumber : public Operation {
             std::shared_ptr<QueryExecutionTree> child,
             Variable rowNumberVariable, int64_t offset,
             qlm::vector<ColumnIndex> sortedOn);
+
+  // Construct with an empty `sortedOn`, see above.
   RowNumber(QueryExecutionContext* qec,
             std::shared_ptr<QueryExecutionTree> child,
             Variable rowNumberVariable, int64_t offset = 0);

@@ -35,6 +35,8 @@ class Union : public Operation {
         const std::shared_ptr<QueryExecutionTree>& t1,
         const std::shared_ptr<QueryExecutionTree>& t2,
         qlm::vector<ColumnIndex> targetOrder);
+
+  // Construct with an empty `targetOrder`, i.e., the result is not sorted.
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
         const std::shared_ptr<QueryExecutionTree>& t2);

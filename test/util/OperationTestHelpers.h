@@ -18,6 +18,9 @@
 using namespace std::chrono_literals;
 
 namespace ad_utility::testing {
+// Create a `qlm::vector<ColumnIndex>` with the given `columns`, for the sort
+// and distinct columns of an operation. The allocator is unimportant in the
+// tests, so it defaults to the unlimited test allocator.
 inline constexpr auto colIndices =
     [](std::initializer_list<ColumnIndex> columns,
        const qlever::Allocator<ColumnIndex>& allocator = makeAllocator()) {
