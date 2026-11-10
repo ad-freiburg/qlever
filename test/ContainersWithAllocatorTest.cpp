@@ -26,6 +26,13 @@ TEST(ContainersWithAllocator, vectorIsAStdVector) {
   qlm::vector<int> v({1, 2, 3}, qlever::makeUnlimitedAllocator<int>());
   v.push_back(4);
   EXPECT_THAT(v, ::testing::ElementsAre(1, 2, 3, 4));
+
+  // Assigning an initializer list works and keeps the allocator.
+  auto alloc = qlever::makeAllocatorWithLimit<int>(1_MB);
+  qlm::vector<int> w{alloc};
+  w = {5, 6};
+  EXPECT_THAT(w, ::testing::ElementsAre(5, 6));
+  EXPECT_EQ(w.get_allocator(), alloc);
 }
 
 // Test that `::ranges::to<qlm::vector>` deduces the element type, also when

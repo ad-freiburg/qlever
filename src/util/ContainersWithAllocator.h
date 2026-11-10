@@ -82,6 +82,11 @@ inline constexpr bool isConstructibleWithAllocator =
 // that it can have deduction guides, which allow for example
 // `... | ::ranges::to<qlm::vector>(allocator)` without spelling out the
 // element type.
+//
+// NOTE: The assignment operators of the base class are explicitly inherited,
+// because the implicitly declared assignment operators of this class would
+// otherwise hide them (in particular `v = {1, 2, 3}`, which keeps the
+// allocator of `v`).
 template <typename T>
 class vector : public std::vector<T, Allocator<T>> {
  public:
@@ -105,6 +110,8 @@ class vector : public std::vector<T, Allocator<T>> {
   // above, because a braced list has no type that could be deduced.
   vector(std::initializer_list<T> init, const Allocator<T>& alloc)
       : Base(init, alloc) {}
+
+  using Base::operator=;
 };
 
 // Deduce the element type from an iterator pair and an allocator (which may be

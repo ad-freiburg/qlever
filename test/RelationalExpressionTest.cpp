@@ -945,7 +945,7 @@ TEST(RelationalExpression, EncodedValsWithSortedVariable) {
   Variable var{"?encoded"};
   ctx.varToColMap.clear();
   ctx.varToColMap[var] = makeAlwaysDefinedColumn(0);
-  ctx.context._columnsByWhichResultIsSorted.assign({0});
+  ctx.context._columnsByWhichResultIsSorted = {0};
 
   using ad_utility::SetOfIntervals;
   EXPECT_THAT(makeExpression<EQ>(var, E(2)).evaluate(&ctx.context),
