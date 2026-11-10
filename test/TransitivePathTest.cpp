@@ -3044,7 +3044,8 @@ std::shared_ptr<TransitivePathBase> bindToThousandRows(
   auto tree =
       makeTreeWithSizeEstimate(path.getExecutionContext(), 1000,
                                {variable.getVariable(), Variable{"?other"}});
-  return isLeft ? path.bindLeftSide(tree, 0) : path.bindRightSide(tree, 0);
+  return isLeft ? path.bindSides(tree, 0)
+                : path.bindSides(tree, std::nullopt, 0);
 }
 }  // namespace
 

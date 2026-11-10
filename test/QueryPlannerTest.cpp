@@ -971,7 +971,6 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
-
 TEST(QueryPlanner, TransitivePathBindBoth) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
