@@ -11,6 +11,7 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
+#include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/StripColumns.h"
@@ -418,6 +419,37 @@ TEST(Bind, makeTreeWithStrippedColumns) {
                                               {3, 6, 5, 4, 3},
                                               {1, 6, 5, 1, 1}})));
   }
+}
+
+// Test that `makeTreeWithStrippedColumns` keeps the column of the `ExistsJoin`
+// that the constructor added for an `EXISTS` in the bound expression, so that
+// the stripped `Bind` does not add a second `ExistsJoin`.
+TEST(Bind, makeTreeWithStrippedColumnsKeepsExistsJoin) {
+  using ::column_stripping_test_helpers::countOperations;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::column_stripping_test_helpers::makeExistsExpression;
+  auto B = ad_utility::testing::BoolId;
+  auto I = ad_utility::testing::IntId;
+
+  // A subtree with `?a` and `?b` and a `Bind` of `EXISTS { ?a <is-a> ?x }`
+  // (which holds for `<x>` but not for `<z>`) to `?e`.
+  auto qec = ad_utility::testing::getQec();
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<x>"), 2}, {getId("<z>"), 4}}, I),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}});
+  Bind bind{qec, values, {makeExistsExpression("<is-a>").first, V{"?e"}}};
+
+  // `?b` and `?e` requested: the tree still has one `ExistsJoin`, and `?e` is
+  // true exactly for the row of `<x>`.
+  auto tree = bind.makeTreeWithStrippedColumns({V{"?b"}, V{"?e"}}).value();
+  EXPECT_EQ(countOperations<ExistsJoin>(*tree), 1u);
+  EXPECT_EQ(countOperations<Bind>(*tree), 1u);
+  EXPECT_THAT(
+      tree.get(),
+      isStrippedColumns<StripColumns>(
+          {V{"?b"}, V{"?e"}},
+          matchesIdTableFromVector({{I(2), B(true)}, {I(4), B(false)}})));
 }
 
 // Test that IRIs that are computed by an expression and that match a pattern of

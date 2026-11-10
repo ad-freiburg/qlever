@@ -3783,33 +3783,26 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
 
-    auto countExistsJoins = [](const auto& self, Operation& op) -> size_t {
-      size_t count = dynamic_cast<ExistsJoin*>(&op) != nullptr ? 1 : 0;
-      for (auto* child : op.getChildren()) {
-        count += self(self, *child->getRootOperation());
-      }
-      return count;
-    };
-
     // `EXISTS { ?a <predicate> ?x }`, correlated only with the grouped `?a`.
+    using ::column_stripping_test_helpers::countOperations;
     using ::column_stripping_test_helpers::makeExistsExpression;
     auto [existsPimpl, existsVar] = makeExistsExpression("<predicate>");
     Alias existsAlias(std::move(existsPimpl), Variable{"?target"});
 
-    // `GroupBy` `?a` with an `EXISTS` espression should result in one added
+    // `GroupBy` `?a` with an `EXISTS` expression should result in one added
     // `ExistsJoin` operation as a child of `GroupBy`. The columns delivered by
     // `ExistsJoin` are `?a` and `existsVar`, `?b`, `?c` and `?d` are stripped.
     GroupBy groupBy(qec, {V{"?a"}}, {existsAlias}, values);
-    ASSERT_EQ(groupBy.computeVariableToColumnMap().size(), 2);
+    ASSERT_EQ(groupBy.computeVariableToColumnMap().size(), 2u);
     ASSERT_EQ(groupBy.getChildren().size(), 1u);
     ASSERT_FALSE(groupBy.getChildren().at(0)->containsVariable(V{"?b"}));
     ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(existsVar));
     ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(V{"?a"}));
-    ASSERT_EQ(countExistsJoins(countExistsJoins, groupBy), 1u);
+    ASSERT_EQ(countOperations<ExistsJoin>(groupBy), 1u);
 
     // There should only be one `ExistsJoin` in the tree after cloning.
     auto clone = groupBy.clone();
-    EXPECT_EQ(countExistsJoins(countExistsJoins, *clone), 1u);
+    EXPECT_EQ(countOperations<ExistsJoin>(*clone), 1u);
 
     // There should only be one `ExistsJoin` in the tree after stripping (with
     // and without the `StripColumns` on top).
@@ -3817,9 +3810,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
          {std::set<V>{V{"?a"}, V{"?target"}}, std::set<V>{V{"?target"}}}) {
       auto tree = groupBy.makeTreeWithStrippedColumns(requested);
       ASSERT_TRUE(tree.has_value() && tree.value() != nullptr);
-      EXPECT_EQ(
-          countExistsJoins(countExistsJoins, *tree.value()->getRootOperation()),
-          1u);
+      EXPECT_EQ(countOperations<ExistsJoin>(*tree.value()), 1u);
     }
   }
 }

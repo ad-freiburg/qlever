@@ -10,6 +10,7 @@
 #ifndef QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H
 #define QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "backports/algorithm.h"
@@ -57,6 +58,23 @@ auto isStrippedColumns(std::vector<Variable> expectedVariables,
   return ::testing::AllOf(hasRootOperation<Operation>(),
                           hasVariables(std::move(expectedVariables)),
                           hasExpectedResult(std::move(resultMatcher)));
+}
+
+// Return the number of operations of type `OperationType` in the tree with the
+// root operation `root` (`root` included).
+template <typename OperationType>
+size_t countOperations(const Operation& root) {
+  size_t count = dynamic_cast<const OperationType*>(&root) != nullptr ? 1 : 0;
+  for (const auto* child : root.getChildren()) {
+    count += countOperations<OperationType>(*child->getRootOperation());
+  }
+  return count;
+}
+
+// Overload for a `QueryExecutionTree`.
+template <typename OperationType>
+size_t countOperations(const QueryExecutionTree& tree) {
+  return countOperations<OperationType>(*tree.getRootOperation());
 }
 
 // Create the expression `EXISTS { ?a <predicate> ?x }`, which is correlated

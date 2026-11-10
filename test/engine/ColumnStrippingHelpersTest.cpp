@@ -66,7 +66,7 @@ TEST(ColumnStrippingHelpers, VarsRequiredFromSubtree) {
 TEST(ColumnStrippingHelpers, addVarsFromExpression) {
   using AddVarsResult =
       columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
-  using ad_utility::testing::iri;
+  using column_stripping_test_helpers::makeExistsExpression;
   std::set<V> vars{V{"?a"}};
   VarsRequiredFromSubtree helper{&vars};
 
@@ -83,16 +83,22 @@ TEST(ColumnStrippingHelpers, addVarsFromExpression) {
             AddVarsResult::NeedAllVarsFromSubtree);
   EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
 
-  using ::column_stripping_test_helpers::makeExistsExpression;
+  // `EXISTS`: the result variable of each `EXISTS` (the column that the
+  // `ExistsJoin` adds to the subtree) must be required from the subtree, so
+  // that it survives the stripping.
   auto [exists1, existsVar1] = makeExistsExpression("<p>");
   auto [exists2, existsVar2] = makeExistsExpression("<q>");
   ASSERT_NE(existsVar1, existsVar2);
 
+  // One `EXISTS`: its result variable is added, the other one is not. We use
+  // `Contains` because the selected variables of the `EXISTS` body (`?a`) may
+  // also be added.
   EXPECT_EQ(helper.addVarsFromExpression(exists1), AddVarsResult::Success);
   EXPECT_THAT(helper.get(), ::testing::Contains(existsVar1));
   EXPECT_THAT(helper.get(), ::testing::Not(::testing::Contains(existsVar2)));
   EXPECT_THAT(helper.get(), ::testing::IsSupersetOf({V{"?a"}, V{"?b"}}));
 
+  // A second `EXISTS`: both result variables are required.
   EXPECT_EQ(helper.addVarsFromExpression(exists2), AddVarsResult::Success);
   EXPECT_THAT(helper.get(), ::testing::IsSupersetOf(
                                 {V{"?a"}, V{"?b"}, existsVar1, existsVar2}));

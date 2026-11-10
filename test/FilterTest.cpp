@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "./PrefilterExpressionTestHelpers.h"
+#include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/StripColumns.h"
@@ -417,4 +418,32 @@ TEST(Filter, makeTreeWithStrippedColumns) {
                     matchesIdTableFromVector(
                         {{I(6), I(1), I(3), I(6)}, {I(2), I(2), I(3), I(5)}})));
   }
+}
+
+// Test that `makeTreeWithStrippedColumns` keeps the column of the `ExistsJoin`
+// that the constructor added for an `EXISTS` in the filter expression, so that
+// the stripped `Filter` does not add a second `ExistsJoin`.
+TEST(Filter, makeTreeWithStrippedColumnsKeepsExistsJoin) {
+  using ::column_stripping_test_helpers::countOperations;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::column_stripping_test_helpers::makeExistsExpression;
+  auto I = ad_utility::testing::IntId;
+
+  // A subtree with `?a` and `?b` and a `Filter` with the expression
+  // `EXISTS { ?a <is-a> ?x }`, which holds for `<x>` but not for `<z>`.
+  auto qec = ad_utility::testing::getQec();
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<x>"), 2}, {getId("<z>"), 4}}, I),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}});
+  Filter filter{qec, values, makeExistsExpression("<is-a>").first};
+  EXPECT_EQ(countOperations<ExistsJoin>(*filter.getSubtree()), 1u);
+
+  // Only `?b` requested: the tree still has one `ExistsJoin`, and the `Filter`
+  // keeps the row of `<x>`.
+  auto tree = filter.makeTreeWithStrippedColumns({V{"?b"}}).value();
+  EXPECT_EQ(countOperations<ExistsJoin>(*tree), 1u);
+  EXPECT_EQ(countOperations<Filter>(*tree), 1u);
+  EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(
+                              {V{"?b"}}, matchesIdTableFromVector({{I(2)}})));
 }
