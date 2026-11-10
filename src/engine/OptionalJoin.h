@@ -9,6 +9,7 @@
 #include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "util/ContainersWithAllocator.h"
 
 // Forward declaration
@@ -39,10 +40,22 @@ class OptionalJoin : public Operation {
   bool keepJoinColumns_ = true;
 
  public:
+  // The outermost FILTERs of an OPTIONAL group that use variables from the
+  // left side. By the SPARQL standard (section 18.2.2.6 and the definition of
+  // `LeftJoin` in section 18.5) they are not a filter on the right side, but
+  // the condition of the left join: a pair of a left and a right row is only
+  // part of the result if all expressions are true for the merged row. A left
+  // row for which no such pair exists is kept once, with UNDEF on the right.
+  using JoinCondition = std::vector<sparqlExpression::SparqlExpressionPimpl>;
+
+ private:
+  JoinCondition condition_;
+
+ public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
                std::shared_ptr<QueryExecutionTree> t2,
-               bool keepJoinColumns = true);
+               bool keepJoinColumns = true, JoinCondition condition = {});
 
  private:
   std::string getCacheKeyImpl() const override;
@@ -92,6 +105,26 @@ class OptionalJoin : public Operation {
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
+  // Apply the `condition_` to the `result` of the join without condition.
+  // `result` still has the internal column order of `AddCombinedRowToIdTable`
+  // (join columns first). `leftRowOfResultRow[i]` is the index of the row in
+  // `leftPermuted` from which row `i` of `result` was created, see
+  // `AddCombinedRowToIdTable::trackLeftRowIndices`. Return true iff the
+  // result is no longer sorted by the join columns afterwards.
+  bool applyCondition(IdTable& result,
+                      const std::vector<uint64_t>& leftRowOfResultRow,
+                      const IdTableView<0>& leftPermuted) const;
+
+  // Like `applyCondition`, but sort the result by the join columns if the
+  // order was changed.
+  void applyConditionAndRestoreOrder(
+      IdTable& result, const std::vector<uint64_t>& leftRowOfResultRow,
+      const IdTableView<0>& leftPermuted) const;
+
+  // The variable to column map for the internal column order of the result
+  // during the join, which is used to evaluate the condition.
+  VariableToColumnMap getInternalVariableColumns() const;
+
   // Joins two results on a single join column lazily, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
   Result lazyOptionalJoin(std::shared_ptr<const Result> left,
@@ -111,7 +144,11 @@ class OptionalJoin : public Operation {
                                    bool requestLaziness);
 
  private:
-  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+  [[nodiscard]] bool isDeterministicImpl() const override {
+    return ql::ranges::all_of(condition_, [](const auto& expression) {
+      return expression.isDeterministic();
+    });
+  }
 
   std::unique_ptr<Operation> cloneImpl() const override;
 

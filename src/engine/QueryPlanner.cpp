@@ -2341,7 +2341,12 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   SubtreePlanVec candidates{allocator()};
 
   if (jcs.empty()) {
-    // The candidates are not connected
+    // The candidates are not connected. Only an OPTIONAL with a condition is
+    // still joined, as an `OptionalJoin` without join columns.
+    if (b.type == SubtreePlan::OPTIONAL && !b.optionalJoinCondition_.empty()) {
+      return singlePlanVec(makeSubtreePlan<OptionalJoin>(
+          _qec, a._qet, b._qet, true, b.optionalJoinCondition_));
+    }
     return candidates;
   }
 
@@ -2380,7 +2385,9 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return singlePlanVec(makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet));
+    // with the condition from `extractOptionalJoinCondition`.
+    return singlePlanVec(makeSubtreePlan<OptionalJoin>(
+        _qec, a._qet, b._qet, true, b.optionalJoinCondition_));
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -3092,6 +3099,45 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
 }
 
 // _____________________________________________________________________________
+std::vector<sparqlExpression::SparqlExpressionPimpl>
+QueryPlanner::GraphPatternPlanner::extractOptionalJoinCondition(
+    ParsedQuery::GraphPattern& group) const {
+  std::vector<sparqlExpression::SparqlExpressionPimpl> condition;
+  // The variables that are bound on the left side of the left join. If there
+  // are none (e.g. the OPTIONAL is the first pattern of its group), every
+  // FILTER only depends on the group itself.
+  auto previousVariables = getVariablesOfPreviousPatterns();
+  if (previousVariables.empty()) {
+    return condition;
+  }
+  // Split the FILTERs into the condition and the ones that stay in the group,
+  // keeping their order.
+  std::vector<SparqlFilter> remainingFilters;
+  for (auto& filter : group._filters) {
+    const auto& expression = filter.expression_;
+    // TODO: An `EXISTS` inside the condition would have to be evaluated for
+    // each joined row, which is not supported yet. Such FILTERs keep the
+    // previous behavior.
+    bool hasExists = !expression.getExistsExpressions().empty();
+    // TODO: This also holds for a FILTER that only uses a join variable from
+    // the outside. It could stay in the group (and be applied early) if the
+    // join variable is always bound on the right side.
+    bool usesPreviousVariable =
+        ql::ranges::any_of(expression.containedVariables(),
+                           [&previousVariables](const Variable* var) {
+                             return previousVariables.contains(*var);
+                           });
+    if (!hasExists && usesPreviousVariable) {
+      condition.push_back(std::move(filter.expression_));
+    } else {
+      remainingFilters.push_back(std::move(filter));
+    }
+  }
+  group._filters = std::move(remainingFilters);
+  return condition;
+}
+
+// _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     SubtreePlanVec& candidates, const Variables& variables,
@@ -3137,8 +3183,14 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     return true;
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
-  // patterns behaves as if it is joined with the neutral element.
-  //
+  // patterns behaves as if it is joined with the neutral element. This does
+  // not hold if it has a condition (which uses variables of the previous
+  // patterns). Then it becomes an `OptionalJoin` without join columns, see
+  // `createJoinCandidates`.
+  AD_CORRECTNESS_CHECK(type == OPTIONAL);
+  if (!candidates[0].optionalJoinCondition_.empty()) {
+    return false;
+  }
   // NOTE: The filter and text limit IDs of the plans are deliberately not
   // copied. They originate from the inner scope of the OPTIONAL clause and have
   // already been dealt with completely, copying them was the cause of
@@ -3295,6 +3347,14 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       }
     }
 
+    // For an OPTIONAL, the FILTERs that are the condition of the left join
+    // are removed from the group before it is planned. This modifies the
+    // `ParsedQuery`, so the condition would be lost if the same group was
+    // planned a second time.
+    std::vector<sparqlExpression::SparqlExpressionPimpl> condition;
+    if constexpr (std::is_same_v<T, p::Optional>) {
+      condition = extractOptionalJoinCondition(arg._child);
+    }
     auto candidates = planner_.optimize(&arg._child);
 
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
@@ -3308,6 +3368,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
+        c.optionalJoinCondition_ = condition;
       }
     }
     visitGroupOptionalOrMinus(std::move(candidates));

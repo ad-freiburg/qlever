@@ -170,6 +170,10 @@ class QueryPlanner {
     bool containsFilterSubstitute_ = false;
     bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
+    // Only for plans of type OPTIONAL: The outermost FILTERs of the OPTIONAL
+    // group that use variables of the preceding patterns. They are the
+    // condition of the `OptionalJoin`, see `OptionalJoin::JoinCondition`.
+    std::vector<sparqlExpression::SparqlExpressionPimpl> optionalJoinCondition_;
 
     size_t getCostEstimate() const;
 
@@ -754,6 +758,15 @@ class QueryPlanner {
     // undefined in all rows of the result, which is fine, as only the absence
     // of shared variables leads to a special case.
     ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
+
+    // Remove the FILTERs from the group of an OPTIONAL that are the condition
+    // of the left join and return their expressions. These are the outermost
+    // FILTERs of the group that use a variable of the preceding patterns
+    // (SPARQL 1.1, section 18.2.2.6). All other FILTERs only depend on the
+    // group itself and stay in it, so that they can be applied early. FILTERs
+    // with `EXISTS` are currently also left in the group.
+    std::vector<sparqlExpression::SparqlExpressionPimpl>
+    extractOptionalJoinCondition(ParsedQuery::GraphPattern& group) const;
 
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
