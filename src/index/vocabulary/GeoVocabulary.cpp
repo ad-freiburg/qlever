@@ -10,6 +10,7 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <absl/strings/numbers.h>
 #include <spatialjoin/GeometryStore.h>
 #include <spatialjoin/WKTParse.h>
 
@@ -124,7 +125,7 @@ std::unique_ptr<sj::WriteBatch> GeoVocabulary<V>::parseGeometries(
   GeometryStoreParser parser{&store};
   for (size_t i = 0; i < words.size(); ++i) {
     if (records[i] != invalidGeoInfoBuffer) {
-      parser.parse(std::string{words[i]}, std::to_string(firstPosition + i),
+      parser.parse(std::string{words[i]}, geometryStoreGid(firstPosition + i),
                    *geometries);
     }
   }
@@ -135,17 +136,31 @@ std::unique_ptr<sj::WriteBatch> GeoVocabulary<V>::parseGeometries(
 template <typename V>
 void GeoVocabulary<V>::addToGeometryStore(sj::GeometryStore& store,
                                           ComputedBatch& batch) {
-  // `libspatialjoin` reports exactly one ID per `gid`, which is the position.
+  // `libspatialjoin` reports exactly one ID per `gid`.
   store.addBatch(*batch.geometries_, 0,
                  [&batch](size_t, const std::string& gid,
                           const sj::PreparedGeomMeta& meta) {
-                   auto& record = batch.records_.at(std::stoull(gid) -
+                   auto position = positionOfGeometryStoreGid(gid);
+                   AD_CORRECTNESS_CHECK(position.has_value());
+                   auto& record = batch.records_.at(position.value() -
                                                     batch.firstPosition_);
                    auto info = absl::bit_cast<GeometryInfo>(record);
                    AD_CORRECTNESS_CHECK(!info.getGeometryStoreId().has_value());
                    info.setGeometryStoreId(meta.id);
                    record = absl::bit_cast<GeometryInfoBuffer>(info);
                  });
+}
+
+// ____________________________________________________________________________
+template <typename V>
+std::optional<uint64_t> GeoVocabulary<V>::positionOfGeometryStoreGid(
+    std::string_view gid) {
+  uint64_t position;
+  if (!ql::starts_with(gid, "v") ||
+      !absl::SimpleAtoi(gid.substr(1), &position)) {
+    return std::nullopt;
+  }
+  return position;
 }
 
 // ____________________________________________________________________________

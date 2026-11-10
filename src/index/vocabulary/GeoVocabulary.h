@@ -62,8 +62,9 @@ struct WriteBatch;
 //
 // If enabled (see `setBuildGeometryStore`), both writers also parse every
 // valid WKT literal into a persistent `sj::GeometryStore` of `libspatialjoin`
-// (files with the `geometryStoreInfix`), under its position as the geometry ID
-// (`gid`), and store the ID of the parsed geometry in its `GeometryInfo` (see
+// (files with the `geometryStoreInfix`), under a geometry ID (`gid`) derived
+// from its position (see `geometryStoreGid`), and store the ID of the parsed
+// geometry in its `GeometryInfo` (see
 // `GeometryInfo::getGeometryStoreId`). A spatial join can then use the parsed
 // geometries without parsing the literals again.
 template <typename UnderlyingVocabulary>
@@ -150,7 +151,7 @@ class GeoVocabulary {
       const std::string& filename);
 
   // Parse the WKT literals `words` at the consecutive positions starting at
-  // `firstPosition` for the `store`, each under its position as the `gid`.
+  // `firstPosition` for the `store`, each under its `geometryStoreGid`.
   // Skip the invalid geometries, whose `records` are the
   // `invalidGeoInfoBuffer`, and all geometries if not `buildGeometryStore`.
   // This is the expensive part of the work for the `store`, so it is
@@ -192,6 +193,21 @@ class GeoVocabulary {
   static std::string getGeometryStorePrefix(std::string_view filename) {
     return absl::StrCat(filename, geometryStoreInfix);
   }
+
+  // The `gid` of the word at the given position in the `sj::GeometryStore`,
+  // which `libspatialjoin` reports for the results of a spatial join.
+  //
+  // NOTE: The prefix `v` distinguishes these `gid`s from those of geometries
+  // that a spatial join parses itself (for example literals from a
+  // `LocalVocab`), which are plain numbers.
+  static std::string geometryStoreGid(uint64_t position) {
+    return absl::StrCat("v", position);
+  }
+
+  // The position of the word with the given `gid` (see `geometryStoreGid`),
+  // or `std::nullopt` if the `gid` is not of this form.
+  static std::optional<uint64_t> positionOfGeometryStoreGid(
+      std::string_view gid);
 
   // Set the grid. Must be called before `open` (when loading a vocabulary
   // that was built with this grid) or before `makeDiskWriterPtr` (when

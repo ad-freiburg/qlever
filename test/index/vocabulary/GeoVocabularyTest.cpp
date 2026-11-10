@@ -594,8 +594,8 @@ TEST(GeoVocabularyTest, GeometryStore) {
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   auto position = [&literals](const std::string& literal) {
-    return std::to_string(ql::ranges::find(literals, literal) -
-                          literals.begin());
+    return AnyGeoVocab::geometryStoreGid(ql::ranges::find(literals, literal) -
+                                         literals.begin());
   };
 
   // Exactly the valid geometries are in the store.
@@ -607,8 +607,15 @@ TEST(GeoVocabularyTest, GeometryStore) {
     }
   }
 
+  // The `gid` of a position is translated back, other strings are not.
+  EXPECT_EQ(AnyGeoVocab::positionOfGeometryStoreGid(
+                AnyGeoVocab::geometryStoreGid(42)),
+            42u);
+  EXPECT_EQ(AnyGeoVocab::positionOfGeometryStoreGid("42"), std::nullopt);
+  EXPECT_EQ(AnyGeoVocab::positionOfGeometryStoreGid("vx"), std::nullopt);
+
   // A self join on the stored geometries reports the pairs of the first three
-  // geometries as intersecting, by their positions.
+  // geometries as intersecting, by the `gid`s of their positions.
   sj::SpatialJoinCfg cfg;
   cfg.numThreads = 1;
   cfg.numCacheBuckets = 1;
