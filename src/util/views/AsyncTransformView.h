@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_VIEWS_ASYNCTRANSFORMVIEW_H
 
 #include <boost/asio/post.hpp>
+#include <condition_variable>
 #include <deque>
 #include <functional>
 #include <future>
@@ -26,7 +27,6 @@
 #include "util/Exception.h"
 #include "util/Iterators.h"
 #include "util/NoCopyNoMove.h"
-#include "util/Synchronized.h"
 
 namespace ad_utility {
 
@@ -108,8 +108,7 @@ class AsyncTransformView
   // yielded. It is transformed exactly once: by a runner (see below) or, if no
   // runner has started on it when the consumer needs it, by the consumer.
   struct Slot {
-    // Set by whoever claims the slot first: a runner or the consumer (to
-    // transform the element), or the destructor of the view (to drop it).
+    // Set by whoever transforms the element: a runner or the consumer.
     ql::atomic_flag claimed_;
     // Transforms the element with the transformation that is passed to it.
     std::packaged_task<Result(const Transformation&)> task_;
@@ -123,12 +122,9 @@ class AsyncTransformView
             return std::invoke(transformation, Element(std::move(element)));
           }} {}
 
-    // Claim the slot. Return `false` if it was already claimed.
-    bool tryClaim() { return !claimed_.test_and_set(); }
-
     // Transform the element, unless the slot was already claimed.
     void runIfUnclaimed(const Transformation& transformation) {
-      if (tryClaim()) {
+      if (!claimed_.test_and_set()) {
         task_(transformation);
       }
     }
@@ -140,24 +136,33 @@ class AsyncTransformView
   // them, so the elements of this range are processed by few threads, each of
   // which works through consecutive elements (which keeps their data and the
   // state of the transformation in the caches of that thread's core), instead
-  // of being spread over all the threads of the `executor_`. A runner may
-  // outlive the view, but by then all the remaining slots are claimed.
+  // of being spread over all the threads of the `executor_`.
+  //
+  // NOTE: A runner that was posted but not yet started may outlive the view.
+  // The destructor of the view therefore empties the queue and waits until no
+  // runner holds a slot, so that nothing that refers to resources of the
+  // caller (elements, results, or the transformation) survives the view.
   struct Shared {
-    struct Queue {
-      std::deque<std::shared_ptr<Slot>> todo_;
-      size_t numRunners_ = 0;
-    };
-
-    const Transformation transformation_;
+    // Owned by the view. A runner only uses it while it holds a slot.
+    const Transformation& transformation_;
     ql::any_io_executor executor_;
     size_t maxNumRunners_;
     // One more runner is started per this many queued slots.
     size_t numSlotsPerRunner_;
-    Synchronized<Queue, std::mutex> queue_;
 
-    Shared(Transformation transformation, ql::any_io_executor executor,
+    std::mutex mutex_;
+    // Notified when a runner releases its slot.
+    std::condition_variable slotReleased_;
+    // The members below are guarded by `mutex_`.
+    std::deque<std::shared_ptr<Slot>> todo_;
+    size_t numRunners_ = 0;
+    // The number of runners that hold a slot (from popping it until releasing
+    // it).
+    size_t numBusyRunners_ = 0;
+
+    Shared(const Transformation& transformation, ql::any_io_executor executor,
            size_t maxNumElementsInFlight, size_t maxNumRunners)
-        : transformation_{std::move(transformation)},
+        : transformation_{transformation},
           executor_{std::move(executor)},
           maxNumRunners_{maxNumRunners} {
       AD_CONTRACT_CHECK(maxNumElementsInFlight > 0);
@@ -166,42 +171,65 @@ class AsyncTransformView
           std::max<size_t>(1, maxNumElementsInFlight / maxNumRunners);
     }
 
-    // Queue the `slot` and return the number of runners that the caller has to
-    // start (they are already counted in `numRunners_`).
-    size_t enqueue(std::shared_ptr<Slot> slot) {
-      return queue_.withWriteLock([this, &slot](Queue& queue) {
-        queue.todo_.push_back(std::move(slot));
-        size_t wanted = std::min(
-            maxNumRunners_,
-            (queue.todo_.size() + numSlotsPerRunner_ - 1) / numSlotsPerRunner_);
-        size_t numNewRunners = wanted - std::min(wanted, queue.numRunners_);
-        queue.numRunners_ += numNewRunners;
-        return numNewRunners;
-      });
+    // Queue the `slots` and return the number of runners that the caller has
+    // to start (they are already counted in `numRunners_`). The number of
+    // runners is computed once for all the `slots`, because a runner may pop
+    // a slot before the next one is queued.
+    template <typename Slots>
+    size_t enqueue(const Slots& slots) {
+      std::lock_guard lock{mutex_};
+      for (const std::shared_ptr<Slot>& slot : slots) {
+        todo_.push_back(slot);
+      }
+      size_t wanted =
+          std::min(maxNumRunners_, (todo_.size() + numSlotsPerRunner_ - 1) /
+                                       numSlotsPerRunner_);
+      size_t numNewRunners = wanted - std::min(wanted, numRunners_);
+      numRunners_ += numNewRunners;
+      return numNewRunners;
     }
 
-    // Pop the next queued slot. If there is none, retire the calling runner
-    // and return `nullptr`.
+    // Pop the next queued slot, which the calling runner then holds. If there
+    // is none, retire the calling runner and return `nullptr`.
     std::shared_ptr<Slot> popOrRetire() {
-      return queue_.withWriteLock([](Queue& queue) -> std::shared_ptr<Slot> {
-        if (queue.todo_.empty()) {
-          --queue.numRunners_;
-          return nullptr;
-        }
-        auto slot = std::move(queue.todo_.front());
-        queue.todo_.pop_front();
-        return slot;
-      });
+      std::lock_guard lock{mutex_};
+      if (todo_.empty()) {
+        --numRunners_;
+        return nullptr;
+      }
+      ++numBusyRunners_;
+      auto slot = std::move(todo_.front());
+      todo_.pop_front();
+      return slot;
     }
 
-    // The body of a runner.
-    void run() {
+    // Release the `slot` that the calling runner holds.
+    void release(std::shared_ptr<Slot> slot) noexcept {
+      slot.reset();
+      std::lock_guard lock{mutex_};
+      --numBusyRunners_;
+      slotReleased_.notify_all();
+    }
+
+    // The body of a runner. It must not throw, because the destructor of the
+    // view would then wait forever for the runner to release its slot. The
+    // transformation can't throw here, because the `task_` stores its
+    // exceptions in the future.
+    void run() noexcept {
       while (auto slot = popOrRetire()) {
         slot->runIfUnclaimed(transformation_);
+        release(std::move(slot));
       }
     }
+
+    // Remove all the queued slots and wait until no runner holds a slot.
+    void clearAndWaitUntilIdle() {
+      std::deque<std::shared_ptr<Slot>> todo;
+      std::unique_lock lock{mutex_};
+      std::swap(todo, todo_);
+      slotReleased_.wait(lock, [this]() { return numBusyRunners_ == 0; });
+    }
   };
-  std::shared_ptr<Shared> shared_;
 
   // A slot as seen by the consumer, together with the future of its result.
   struct Pending {
@@ -219,22 +247,10 @@ class AsyncTransformView
       slot_->runIfUnclaimed(transformation);
       return future_.get();
     }
-
-    // Drop the element if no runner has started on it yet. The future of a
-    // dropped element is reset, because it would never become ready.
-    void drop() {
-      if (slot_->tryClaim()) {
-        future_ = {};
-      }
-    }
-
-    // Wait for the transformation of the element, unless it was dropped.
-    void waitUnlessDropped() {
-      if (future_.valid()) {
-        future_.wait();
-      }
-    }
   };
+
+  [[no_unique_address]] Transformation transformation_;
+  std::shared_ptr<Shared> shared_;
   std::deque<Pending> pending_;
 
  public:
@@ -254,18 +270,14 @@ class AsyncTransformView
                      size_t maxNumRunners = defaultMaxNumRunners)
       : range_{std::move(range)},
         maxNumElementsInFlight_{maxNumElementsInFlight},
-        shared_{std::make_shared<Shared>(
-            std::move(transformation), std::move(executor),
-            maxNumElementsInFlight, maxNumRunners)} {}
+        transformation_{std::move(transformation)},
+        shared_{std::make_shared<Shared>(transformation_, std::move(executor),
+                                         maxNumElementsInFlight,
+                                         maxNumRunners)} {}
 
   // Elements that no runner has started yet are dropped, and the running ones
-  // are waited for (they use resources of the caller). All the elements are
-  // dropped before the first wait, so that no runner starts another element
-  // while the destructor waits.
-  ~AsyncTransformView() {
-    ql::ranges::for_each(pending_, &Pending::drop);
-    ql::ranges::for_each(pending_, &Pending::waitUnlessDropped);
-  }
+  // are waited for (they use resources of the caller).
+  ~AsyncTransformView() { shared_->clearAndWaitUntilIdle(); }
 
   // Return the result for the next element, or `std::nullopt` once all the
   // elements have been yielded.
@@ -278,7 +290,7 @@ class AsyncTransformView
     // that `get()` rethrows doesn't leave an invalid future behind.
     auto pending = std::move(pending_.front());
     pending_.pop_front();
-    return pending.get(shared_->transformation_);
+    return pending.get(transformation_);
   }
 
  private:
@@ -290,16 +302,18 @@ class AsyncTransformView
       it_ = ql::ranges::begin(range_);
     }
     auto& it = it_.value();
+    size_t numPendingBefore = pending_.size();
     while (pending_.size() < maxNumElementsInFlight_ &&
            it != ql::ranges::end(range_)) {
-      auto slot = std::make_shared<Slot>(std::move(*it));
+      pending_.emplace_back(std::make_shared<Slot>(std::move(*it)));
       ++it;
-      pending_.emplace_back(slot);
-      size_t numNewRunners = shared_->enqueue(std::move(slot));
-      for (size_t i = 0; i < numNewRunners; ++i) {
-        boost::asio::post(shared_->executor_,
-                          [shared = shared_]() { shared->run(); });
-      }
+    }
+    size_t numNewRunners =
+        shared_->enqueue(pending_ | ql::views::drop(numPendingBefore) |
+                         ql::views::transform(&Pending::slot_));
+    for (size_t i = 0; i < numNewRunners; ++i) {
+      boost::asio::post(shared_->executor_,
+                        [shared = shared_]() { shared->run(); });
     }
   }
 };

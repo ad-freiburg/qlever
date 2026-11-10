@@ -275,6 +275,51 @@ TEST(AsyncTransformView, destructionWithPendingElements) {
 }
 
 // _____________________________________________________________________________
+TEST(AsyncTransformView, nothingOutlivesTheView) {
+  // Every element, every result, and the transformation hold a copy of the
+  // `token`. Once the view is destroyed, none of them may be alive anymore,
+  // even if a runner is still alive (they may refer to resources of the
+  // caller, like an allocator).
+  auto token = std::make_shared<int>(42);
+  auto makeInput = [&token]() {
+    return integerRange(20u) |
+           ql::views::transform([token](size_t) { return token; });
+  };
+  auto transformation = [token](std::shared_ptr<int> element) {
+    std::this_thread::sleep_for(1ms);
+    return element;
+  };
+  // The copy in the `transformation` above.
+  const auto numCopiesOutsideTheView = token.use_count();
+  ASSERT_EQ(numCopiesOutsideTheView, 2);
+
+  // The `io_context` is only run after the view is destroyed, so the posted
+  // runner outlives the view.
+  {
+    boost::asio::io_context ctx;
+    {
+      AsyncTransformView view{makeInput(), transformation, 4,
+                              ctx.get_executor()};
+      EXPECT_EQ(*view.get().value(), 42);
+    }
+    EXPECT_EQ(token.use_count(), numCopiesOutsideTheView);
+    ctx.run();
+    EXPECT_EQ(token.use_count(), numCopiesOutsideTheView);
+  }
+
+  // The runners are busy when the view is destroyed.
+  boost::asio::thread_pool pool{4};
+  for ([[maybe_unused]] size_t i : integerRange(20u)) {
+    {
+      AsyncTransformView view{makeInput(), transformation, 8,
+                              pool.get_executor(), 3};
+      EXPECT_EQ(*view.get().value(), 42);
+    }
+    EXPECT_EQ(token.use_count(), numCopiesOutsideTheView);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(AsyncTransformView, consumerTransformsElementsThatNoRunnerStarted) {
   // The `io_context` is never run, so no runner ever starts. The consumer
   // transforms all the elements itself, in order.
