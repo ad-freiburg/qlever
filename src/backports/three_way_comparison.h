@@ -402,7 +402,6 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
 
 #endif
 
-// _____________________________________________________________________________
 // The implementation of the DEFAULTED comparison macros (including the variants
 // for derived classes). All of them are one-line wrappers around
 // `QL_IMPL_DEFAULTED_COMPARISON(KIND, SCOPE, CONSTEXPR_SPEC, T, BASE, ...)`,
@@ -481,6 +480,7 @@ consteval std::string_view checkComparedMembers(
   // The `BASE` that is passed to the macro may be a type alias (which is
   // required if its name contains a comma, see above). `std::meta::dealias`
   // strips such aliases, such that the base is compared as the actual type.
+  //
   // NOTE: This uses `std::ranges` instead of `ql::ranges`, because this code
   // only exists in C++26 mode, and `backports/algorithm.h` is too heavy for
   // this widely included header.
@@ -523,7 +523,10 @@ consteval std::string_view checkComparedMembers(
           .empty(),                                                           \
       ::ql::reflection::checkComparedMembers<T QL_IMPL_COMMA_AND_BASE(BASE)>( \
           #__VA_ARGS__));
-// In C++26 mode, the operators can always be `constexpr`.
+// In C++26 mode, the operators are always `constexpr`, like the defaulted
+// operators of C++20 mode, which are implicitly `constexpr` whenever the
+// members allow it (and since C++23 a `constexpr` function may be one that can
+// never be constant-evaluated).
 #define QL_IMPL_TIE_CONSTEXPR(CONSTEXPR_SPEC) constexpr
 #else
 #define QL_IMPL_CHECK_COMPARED_MEMBERS(T, BASE, ...)
