@@ -18,7 +18,7 @@ class MultiColumnJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  qlm::vector<std::array<ColumnIndex, 2>> _joinColumns;
+  qlm::vector<std::array<ColumnIndex, 2>> _joinColumns{allocator()};
 
   std::vector<float> _multiplicities;
   size_t _sizeEstimate;

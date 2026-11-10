@@ -20,7 +20,7 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _right;
 
   std::vector<float> _multiplicities;
-  qlm::vector<std::array<ColumnIndex, 2>> _matchedColumns;
+  qlm::vector<std::array<ColumnIndex, 2>> _matchedColumns{allocator()};
 
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
 

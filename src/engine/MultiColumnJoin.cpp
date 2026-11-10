@@ -19,7 +19,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
                                  std::shared_ptr<QueryExecutionTree> t2,
                                  bool allowSwappingChildrenOnlyForTesting)
-    : Operation{qec}, _joinColumns{allocator()} {
+    : Operation{qec} {
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (allowSwappingChildrenOnlyForTesting &&
       t1->getCacheKey() > t2->getCacheKey()) {

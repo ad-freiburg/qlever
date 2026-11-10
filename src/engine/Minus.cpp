@@ -22,7 +22,7 @@ using std::string;
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
              std::shared_ptr<QueryExecutionTree> right)
-    : Operation{qec}, _matchedColumns{allocator()} {
+    : Operation{qec} {
   std::tie(_left, _right, _matchedColumns) =
       QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(left),
                                                           std::move(right));
