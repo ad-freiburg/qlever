@@ -110,8 +110,8 @@ TEST(VectorWithMemoryLimit, memoryLimitIsEnforced) {
                ad_utility::detail::AllocationExceedsLimitException);
 }
 
-// `::ranges::to<VectorWithMemoryLimit>` deduces the element type, also when the
-// allocator is for a different element type.
+// Test that `::ranges::to<VectorWithMemoryLimit>` deduces the element type,
+// also when the allocator is for a different element type.
 TEST(VectorWithMemoryLimit, rangesToDeducesElementType) {
   auto v = ql::views::iota(int64_t{3}, int64_t{6}) |
            ::ranges::to<VectorWithMemoryLimit>(makeAllocator<char>(1_MB));

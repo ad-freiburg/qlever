@@ -19,7 +19,7 @@
 
 using namespace ad_utility::memory_literals;
 
-// `qlm::vector` is a `std::vector` with a `qlever::Allocator`.
+// Test that `qlm::vector` is a `std::vector` with a `qlever::Allocator`.
 TEST(ContainersWithAllocator, vectorIsAStdVector) {
   static_assert(std::is_base_of_v<std::vector<int, qlm::Allocator<int>>,
                                   qlm::vector<int>>);
@@ -28,8 +28,8 @@ TEST(ContainersWithAllocator, vectorIsAStdVector) {
   EXPECT_THAT(v, ::testing::ElementsAre(1, 2, 3, 4));
 }
 
-// `::ranges::to<qlm::vector>` deduces the element type, also when the
-// allocator is for a different element type.
+// Test that `::ranges::to<qlm::vector>` deduces the element type, also when
+// the allocator is for a different element type.
 TEST(ContainersWithAllocator, rangesToDeducesElementType) {
   auto alloc = qlever::makeAllocatorWithLimit<char>(1_MB);
   auto v = ql::views::iota(int64_t{3}, int64_t{6}) |
