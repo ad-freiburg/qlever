@@ -365,6 +365,9 @@ TEST(TripleComponent, toString) {
   EXPECT_THAT("hello", match("hello"));
   EXPECT_THAT(12, match("12"));
   EXPECT_THAT(12.3, match("12.3"));
+  EXPECT_THAT(12.0, match("12.0"));
+  EXPECT_THAT(1.0000001, match("1.0000001"));
+  EXPECT_THAT(1e300, match("1e+300"));
   using Tc = TripleComponent;
   EXPECT_THAT(Tc::UNDEF{}, match("UNDEF"));
   EXPECT_THAT(Variable("?x"), match("?x"));

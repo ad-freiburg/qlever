@@ -1513,6 +1513,53 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                   "1", Variable{"?unrelated"})));
 }
 
+// Test that a `geof:distance` filter whose maximum distance or unit is a
+// variable bound to a constant by a `BIND` or a `VALUES` clause with a single
+// row is rewritten to a `SpatialJoin`.
+TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilterWithBoundConstants) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto type = SpatialJoinType::WITHIN_DIST;
+  auto spatialJoin = [&](double maxDist) {
+    return h::spatialJoinFilterSubstitute(
+        maxDist, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+        algo, type, std::nullopt, scan("?x", "<p>", "?y"),
+        scan("?a", "<p>", "?b"));
+  };
+  auto query = [](std::string_view bindings, std::string_view distance) {
+    return absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE { ?a <p> ?b . ?x <p> ?y . ",
+        bindings, " FILTER(", distance, " <= ?d) }");
+  };
+
+  // The maximum distance is bound by a `BIND` after the triples.
+  h::expect(query("BIND(0.5 AS ?d)", "geof:distance(?y, ?b)"),
+            h::Bind(spatialJoin(500), "0.5", V{"?d"}));
+
+  // The maximum distance and the unit are bound by a `VALUES` clause.
+  h::expect(query("VALUES (?d ?unit) { (1 <http://qudt.org/vocab/unit/MI>) }",
+                  "geof:distance(?y, ?b, ?unit)"),
+            h::CartesianProductJoin(
+                spatialJoin(1609.344),
+                h::ValuesClause("VALUES (?d\t?unit) { (1 "
+                                "<http://qudt.org/vocab/unit/MI>) }")));
+
+  // A maximum distance that differs between rows or may be unbound is not
+  // substituted, so the filter remains.
+  auto filter = [&](auto valuesMatcher) {
+    return h::Filter(
+        "geof:distance(?y, ?b) <= ?d",
+        h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                scan("?a", "<p>", "?b"), valuesMatcher));
+  };
+  h::expect(query("VALUES ?d { 1 2 }", "geof:distance(?y, ?b)"),
+            filter(h::ValuesClause("VALUES (?d) { (1) (2) }")));
+  h::expect(query("OPTIONAL { VALUES ?d { 1 } }", "geof:distance(?y, ?b)"),
+            filter(h::NeutralOptional(h::ValuesClause("VALUES (?d) { (1) }"))));
+}
+
 // Test that a `BIND` of the distance between the join variables of a
 // `SpatialJoin` that computes exact distances is replaced by the distance
 // variable of the `SpatialJoin`, with the unit of the `BIND` expression, and

@@ -102,6 +102,31 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr9), dExp9, 0);
 }
 
+// Test that `substituteConstantsInGeoDistanceFilter` also substitutes a maximum
+// distance on the left side of a comparison other than `<=`.
+TEST(QueryRewriteUtilTest, SubstituteConstantsInGeoDistanceFilter) {
+  // The filter `?d > geof:distance(?a, ?b, ?unit)` with constants for `?d` and
+  // `?unit`.
+  ad_utility::HashMap<Variable, TripleComponent> constants{
+      {V{"?d"}, TripleComponent{int64_t{10}}},
+      {V{"?unit"}, TripleComponent{Iri::fromIrirefWithoutBrackets(
+                       "http://qudt.org/vocab/unit/MI")}}};
+  auto expr = gtSprql(
+      V{"?d"}, makeDistWithUnitExpression(getExpr(V{"?a"}), getExpr(V{"?b"}),
+                                          getExpr(V{"?unit"})));
+  substituteConstantsInGeoDistanceFilter(*expr, constants);
+
+  // The maximum distance is replaced by its constant.
+  auto* maxDist = dynamic_cast<const IdExpression*>(expr->children()[0].get());
+  ASSERT_NE(maxDist, nullptr);
+  EXPECT_EQ(maxDist->value(), ValueId::makeFromInt(10));
+
+  // The unit is replaced by its constant, so the distance call has a fixed
+  // unit.
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(*expr->children()[1]),
+                       GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, MILES});
+}
+
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   auto [expr1, exp1] = makeDe9imRelation();

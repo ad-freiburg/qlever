@@ -448,10 +448,11 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
   // the index scan), while the filter on the possibly undefined `?o` may only
   // be applied at the very end.
   std::string queryWithTwoFilters =
-      "SELECT * { ?s <r> ?x . VALUES (?s ?o) { (<s> UNDEF) } "
+      "SELECT * { ?s <r> ?x . VALUES (?s ?o) { (<s> UNDEF) (<t> UNDEF) } "
       "FILTER(?s != <x>) FILTER(?o != <y>) }";
   auto valuesWithFilter = h::Sort(h::Filter(
-      "?s != <x>", h::ValuesClause("VALUES (?s\t?o) { (<s> UNDEF) }")));
+      "?s != <x>",
+      h::ValuesClause("VALUES (?s\t?o) { (<s> UNDEF) (<t> UNDEF) }")));
   h::expectGreedy(
       queryWithTwoFilters,
       h::Filter("?o != <y>",
@@ -462,10 +463,11 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
   // Sanity check that filters are still applied as early as possible if all
   // their variables are always defined.
   h::expectGreedy(
-      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { <r2> } }",
-      h::Join(h::Sort(h::Filter("?p != <r>",
-                                h::ValuesClause("VALUES (?p) { (<r2>) }"))),
-              h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { <r2> <r3> } }",
+      h::Join(
+          h::Sort(h::Filter("?p != <r>",
+                            h::ValuesClause("VALUES (?p) { (<r2>) (<r3>) }"))),
+          h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
       qec);
 }
 
@@ -2028,6 +2030,102 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The <algorithm> value has to be an IRI"),
       InvalidSparqlQueryException);
+}
+
+// Test that a variable that is bound to a constant by a `VALUES` clause with a
+// single row or by a constant `BIND` is replaced by this constant in the
+// triples of the same group.
+TEST(QueryPlanner, substituteConstantVariables) {
+  auto scan = h::IndexScanFromStrings;
+
+  // A `VALUES` clause with a single row also fixes a variable predicate, also
+  // in a triple before it.
+  h::expect("SELECT * { ?x ?p ?o VALUES (?x ?p) { (<a> <p>) } }",
+            h::CartesianProductJoin(
+                scan("<a>", "<p>", "?o"),
+                h::ValuesClause("VALUES (?x\t?p) { (<a> <p>) }")));
+
+  // A constant `BIND` fixes the triples after it.
+  h::expect("SELECT * { BIND(<a> AS ?x) ?s <p> ?x }",
+            h::CartesianProductJoin(
+                h::Bind(h::NeutralElement(), "<a>", Variable{"?x"}),
+                scan("?s", "<p>", "<a>")));
+
+  // A constant `BIND` of a literal or a number also fixes the triples after it,
+  // and a triple may become fully constant.
+  auto p = TripleComponent::Iri::fromIriref("<p>");
+  h::expect("SELECT * { BIND(\"x\" AS ?x) ?s <p> ?x }",
+            h::CartesianProductJoin(
+                h::Bind(h::NeutralElement(), "\"x\"", Variable{"?x"}),
+                h::IndexScan(Variable{"?s"}, p,
+                             TripleComponent::Literal::fromStringRepresentation(
+                                 "\"x\""))));
+  h::expect("SELECT * { BIND(42 AS ?x) ?s <p> ?x }",
+            h::CartesianProductJoin(
+                h::Bind(h::NeutralElement(), "42", Variable{"?x"}),
+                h::IndexScan(Variable{"?s"}, p, Id::makeFromInt(42))));
+  h::expect(
+      "SELECT * { VALUES (?s ?o) { (<a> <b>) } ?s <p> ?o }",
+      h::CartesianProductJoin(h::ValuesClause("VALUES (?s\t?o) { (<a> <b>) }"),
+                              scan("<a>", "<p>", "<b>")));
+
+  // A `VALUES` clause with more than one row, an `UNDEF` value, a
+  // non-constant or undefined `BIND`, and a triple in a nested group are not
+  // substituted (for a property path, see the `emptyPath...` tests).
+  h::expect("SELECT * { VALUES ?x { <a> <b> } ?x <p> ?o }",
+            h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) (<b>) }")),
+                    scan("?x", "<p>", "?o")));
+  h::expect("SELECT * { VALUES ?x { UNDEF } ?x <p> ?o }",
+            h::Join(h::Sort(h::ValuesClause("VALUES (?x) { (UNDEF) }")),
+                    scan("?x", "<p>", "?o")));
+  h::expect(
+      "SELECT * { BIND(3 + 5 AS ?x) ?x <p> ?o }",
+      h::Join(h::Sort(h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"})),
+              scan("?x", "<p>", "?o")));
+  {
+    // An unknown function is an undefined `Id` in the syntax test mode.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
+    h::expect(
+        "SELECT * { BIND(<f>() AS ?x) ?x <p> ?o }",
+        h::Join(h::Sort(h::Bind(h::NeutralElement(), "<f>()", Variable{"?x"})),
+                scan("?x", "<p>", "?o")));
+  }
+  h::expect("SELECT * { VALUES ?x { <a> } MINUS { ?x <p> ?o } }",
+            h::Minus(h::Sort(h::ValuesClause("VALUES (?x) { (<a>) }")),
+                     scan("?x", "<p>", "?o")));
+
+  // A triple before an `OPTIONAL`, `MINUS` or `BIND` is not fixed by a
+  // `VALUES` clause after it, so these are still connected to the triple.
+  auto values = h::ValuesClause("VALUES (?x) { (<a>) }");
+  h::expect(
+      "SELECT * { ?x <p> ?o OPTIONAL { ?x <q> ?z } VALUES ?x { <a> } }",
+      h::Join(h::OptionalJoin(scan("?x", "<p>", "?o"), scan("?x", "<q>", "?z")),
+              h::Sort(values)));
+  h::expect("SELECT * { ?x <p> ?o MINUS { ?x <q> ?z } VALUES ?x { <a> } }",
+            h::Join(h::Minus(scan("?x", "<p>", "?o"), scan("?x", "<q>", "?z")),
+                    h::Sort(values)));
+  h::expect("SELECT * { ?x <p> ?o BIND(?x AS ?y) VALUES ?x { <a> } }",
+            h::Join(h::Bind(scan("?x", "<p>", "?o"), "?x", Variable{"?y"}),
+                    h::Sort(values)));
+
+  // A triple with a special predicate keeps its variables (a `ql:has-predicate`
+  // triple with two constants can't be planned), and a variable predicate is
+  // not replaced by a special predicate.
+  EXPECT_NO_THROW(h::parseAndPlan(
+      "SELECT * { VALUES (?s ?p) { (<a> <b>) } ?s ql:has-predicate ?p }",
+      ad_utility::testing::getQec()));
+  h::expect("SELECT * { VALUES ?p { ql:has-predicate } ?s ?p ?o }",
+            h::Join(h::Sort(h::ValuesClause(absl::StrCat(
+                        "VALUES (?p) { (", HAS_PREDICATE_PREDICATE, ") }"))),
+                    scan("?s", "?p", "?o")));
+
+  // An internal IRI is not substituted (a triple with it is evaluated on the
+  // internal permutation, which contains other triples).
+  h::expect("SELECT * { VALUES ?p { ql:langtag } ?s ?p ?o }",
+            h::Join(h::Sort(h::ValuesClause(absl::StrCat(
+                        "VALUES (?p) { (", LANGUAGE_PREDICATE, ") }"))),
+                    scan("?s", "?p", "?o")));
 }
 
 // _____________________________________________________________________________
@@ -4285,14 +4383,30 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
   // The `?var` of that join is guaranteed to be part of the knowledge graph, so
   // no existence check is required.
   h::expect(
-      "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
+      "SELECT * { VALUES ?var { 1 2 } . ?var <c> <d> . ?other <a>* ?var }",
       h::transitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) }")),
+          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) (2) }")),
                   h::IndexScanFromStrings("?var", "<c>", "<d>")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")),
       qec);
+  // With a single value, the `?var` of the index scan is replaced by it, so the
+  // path is bound to the `VALUES` clause directly (which requires an existence
+  // check). The greedy planner (budgets 0 and 1) joins the unbound path with
+  // the `VALUES` clause instead.
+  h::expectWithGivenBudgets(
+      "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
+      h::CartesianProductJoin(
+          h::transitivePath(
+              left, right, 0, std::numeric_limits<size_t>::max(),
+              h::EmptyPath(Variable{"?var"}, std::nullopt,
+                           h::ValuesClause("VALUES (?var) { (1) }")),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1")),
+          h::IndexScan(1, TripleComponent::Iri::fromIriref("<c>"),
+                       TripleComponent::Iri::fromIriref("<d>"))),
+      qec, {4, 16, 64'000'000});
 }
 
 // _____________________________________________________________________________

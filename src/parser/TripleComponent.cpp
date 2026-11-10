@@ -7,6 +7,7 @@
 
 #include "parser/TripleComponent.h"
 
+#include <charconv>
 #include <sstream>
 
 #include "rdfTypes/GeoPoint.h"
@@ -28,9 +29,20 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
       },
       [&stream](bool v) { stream << (v ? "true" : "false"); },
       [&stream](const GeoPoint& v) { stream << Id::makeFromGeoPoint(v); },
+      [&stream](double v) {
+        // Print the shortest representation that is parsed back to `v`, with a
+        // `.0` for an integral value (to distinguish it from an `int64_t`).
+        std::array<char, 32> buffer;
+        auto end = std::to_chars(buffer.begin(), buffer.end(), v).ptr;
+        std::string_view string{buffer.begin(), end};
+        stream << string;
+        if (string.find_first_of(".en") == std::string_view::npos) {
+          stream << ".0";
+        }
+      },
       [&stream](const auto& v) {
         static_assert(ad_utility::SameAsAny<std::decay_t<decltype(v)>, Id,
-                                            double, int64_t, std::string>);
+                                            int64_t, std::string>);
         stream << v;
       });
   return stream;
