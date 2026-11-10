@@ -66,20 +66,20 @@ inline std::pair<sparqlExpression::SparqlExpressionPimpl, Variable>
 makeExistsExpression(const std::string& predicate) {
   ParsedQuery query;
   query._rootGraphPattern._graphPatterns.push_back(
-      parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}},
-             ad_utility::triple_component::Iri::fromIriref(predicate),
-             TripleComponent{Variable{"?x"}}}}});
+      parsedQuery::BasicGraphPattern{{SparqlTriple{
+          TripleComponent{Variable{"?a"}},
+          ad_utility::triple_component::Iri::fromIriref(predicate),
+          TripleComponent{Variable{"?x"}}}}});
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
   auto exists =
       std::make_shared<sparqlExpression::ExistsExpression>(std::move(query));
   Variable existsVar = exists->variable();
-  return {sparqlExpression::SparqlExpressionPimpl{
-              std::move(exists),
-              absl::StrCat("EXISTS { ?a ", predicate, " ?x }")},
-          existsVar};
+  return {
+      sparqlExpression::SparqlExpressionPimpl{
+          std::move(exists), absl::StrCat("EXISTS { ?a ", predicate, " ?x }")},
+      existsVar};
 }
 }  // namespace column_stripping_test_helpers
 

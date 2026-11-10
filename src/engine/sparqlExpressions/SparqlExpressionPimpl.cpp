@@ -6,9 +6,9 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 #include "backports/algorithm.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "engine/sparqlExpressions/ExistsExpression.h"
 
 namespace sparqlExpression {
 
