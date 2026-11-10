@@ -451,12 +451,10 @@ void Visitor::addVisibleVariable(Variable var) {
 template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
                                        List objectList) {
-  PathObjectPairs tuples;
-  tuples.reserve(objectList.first.size());
-  for (auto& object : objectList.first) {
-    tuples.emplace_back(predicate, std::move(object));
-  }
-  return tuples;
+  return objectList.first | ql::views::transform([&predicate](auto& object) {
+           return PathObjectPairs::value_type{predicate, std::move(object)};
+         }) |
+         ::ranges::to<PathObjectPairs>();
 }
 
 // ___________________________________________________________________________

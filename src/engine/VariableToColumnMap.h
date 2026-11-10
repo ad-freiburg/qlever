@@ -97,11 +97,9 @@ CPP_template(typename S, typename T)(
 void serializeDeterministically(S& serializer, T&& map) {
   if constexpr (ad_utility::serialization::WriteSerializer<S>) {
     serializer << map.size();
-    std::vector<const VariableToColumnMap::value_type*> sortedEntries;
-    sortedEntries.reserve(map.size());
-    for (const auto& entry : map) {
-      sortedEntries.push_back(&entry);
-    }
+    auto sortedEntries =
+        map | ql::views::transform([](const auto& entry) { return &entry; }) |
+        ::ranges::to<std::vector<const VariableToColumnMap::value_type*>>();
     ql::ranges::sort(sortedEntries, {},
                      [](const auto* entry) -> const std::string& {
                        return entry->first.name();

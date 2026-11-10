@@ -411,12 +411,10 @@ size_t GroupByImpl::getResultWidth() const {
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  qlm::vector<ColumnIndex> sortedOn{allocator()};
-  sortedOn.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    sortedOn.push_back(varCols[var].columnIndex_);
-  }
-  return sortedOn;
+  return _groupByVariables | ql::views::transform([&varCols](const auto& var) {
+           return varCols[var].columnIndex_;
+         }) |
+         ::ranges::to<qlm::vector<ColumnIndex>>(allocator());
 }
 
 // _____________________________________________________________________________

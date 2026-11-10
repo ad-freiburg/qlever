@@ -55,11 +55,8 @@ CartesianProductJoin::CartesianProductJoin(
 
 // ____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
-  qlm::vector<QueryExecutionTree*> result{allocator()};
-  ql::ranges::copy(
-      children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }),
-      std::back_inserter(result));
-  return result;
+  return children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }) |
+         ::ranges::to<qlm::vector<QueryExecutionTree*>>(allocator());
 }
 
 // ____________________________________________________________________________

@@ -23,11 +23,7 @@ namespace {
 // Collect all chunks of the `view` into a vector.
 template <typename View>
 auto toVector(const View& view) {
-  std::vector<ql::ranges::range_value_t<View>> result;
-  for (auto chunk : view) {
-    result.push_back(chunk);
-  }
-  return result;
+  return ::ranges::to<std::vector<ql::ranges::range_value_t<View>>>(view);
 }
 
 // A function object that calls `chunkedIotaView`, s.t. we can check which
