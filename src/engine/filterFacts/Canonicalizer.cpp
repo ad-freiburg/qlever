@@ -85,10 +85,12 @@ Definitions collectDefinitions(
         defs.constants_.emplace(variables[i], std::move(column));
       }
     } else if (const auto* bind = std::get_if<parsedQuery::Bind>(&operation)) {
-      // The target of a constant is always bound to it, like a `VALUES`
-      // clause with a single row. The target of any other expression is not
-      // always bound (the expression may be undefined).
-      if (auto constant = bind->_expression.getConstantValue()) {
+      // The target of a constant other than `UNDEF` is always bound to it,
+      // like a `VALUES` clause with a single row. The target of any other
+      // expression is not always bound (the expression may be undefined).
+      auto constant = bind->_expression.getConstantValue();
+      if (constant.has_value() &&
+          !(constant->isId() && constant->getId().isUndefined())) {
         alwaysBound.insert(bind->_target);
         defs.constants_.emplace(bind->_target,
                                 std::vector{std::move(constant).value()});

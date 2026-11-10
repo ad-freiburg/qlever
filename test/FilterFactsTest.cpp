@@ -18,6 +18,7 @@
 #include "engine/filterFacts/Canonicalizer.h"
 #include "engine/filterFacts/Recognizers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 namespace {
 
@@ -137,6 +138,16 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   // triple binds it again.
   EXPECT_THAT(defs.constants_,
               UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
+
+  // A `BIND` of `UNDEF` (here of an unknown function in the syntax test mode)
+  // is not a constant, because a later triple binds its target freely.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
+  auto undef = ad_utility::testing::parseQuery(
+      "SELECT * { BIND(<unknown>() AS ?u) ?u <q> ?o }");
+  EXPECT_THAT(
+      collectDefinitions(undef._rootGraphPattern._graphPatterns).constants_,
+      ::testing::IsEmpty());
 }
 
 // Test that every other expression stays `Opaque`.
