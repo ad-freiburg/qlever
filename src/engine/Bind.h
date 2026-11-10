@@ -60,7 +60,7 @@ class Bind : public Operation {
       const std::set<Variable>& requestedVariables) const override;
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   Result computeResult(bool requestLaziness) override;

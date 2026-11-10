@@ -79,7 +79,7 @@ class DistinctGraphs : public Operation {
 
   // Each graph ID appears once, so the result is distinct iff column 0 is kept.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override {
+      ql::span<const ColumnIndex> distinctIndices) const override {
     return ad_utility::contains(distinctIndices, ColumnIndex{0});
   }
 
@@ -87,8 +87,8 @@ class DistinctGraphs : public Operation {
 
  protected:
   // No column is sorted in result.
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return {};
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 
  private:
