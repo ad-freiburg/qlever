@@ -133,9 +133,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   // Split the threads of the `executor_` between the background work (e.g. an
   // index rebuild) and the queries according to the runtime parameter
   // `rebuild-index-thread-share-percent`. The action holds a copy of the
-  // executor, which keeps the scheduler alive, so it never dangles.
-  // TODO<#3861> Also clear this action in the destructor of `Qlever`, so that
-  // the parameter no longer refers to the scheduler of a destroyed instance.
+  // executor, which keeps the scheduler alive, so it never dangles. The
+  // destructor removes it again.
   globalRuntimeParameters.wlock()
       ->rebuildIndexThreadSharePercent_.setOnUpdateAction(
           [executor = executor_](double percent) {
@@ -220,6 +219,7 @@ Qlever::~Qlever() {
   runtimeParameters->cacheMaxSize_.clearOnUpdateAction();
   runtimeParameters->cacheMaxSizeSingleEntry_.clearOnUpdateAction();
   runtimeParameters->memoryForQueries_.clearOnUpdateAction();
+  runtimeParameters->rebuildIndexThreadSharePercent_.clearOnUpdateAction();
 }
 
 // _____________________________________________________________________________
