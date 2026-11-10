@@ -6,7 +6,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 #include "backports/algorithm.h"
-#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
@@ -143,15 +142,5 @@ std::vector<SparqlExpression*> SparqlExpressionPimpl::getExistsExpressions() {
   std::vector<SparqlExpression*> result;
   _pimpl->getExistsExpressions(result);
   return result;
-}
-
-// _____________________________________________________________________________
-std::vector<Variable> SparqlExpressionPimpl::getExistsVariables() const {
-  std::vector<Variable> existsVariables;
-  for (const auto* expr : getExistsExpressions()) {
-    existsVariables.push_back(
-        dynamic_cast<const ExistsExpression&>(*expr).variable());
-  }
-  return existsVariables;
 }
 }  // namespace sparqlExpression

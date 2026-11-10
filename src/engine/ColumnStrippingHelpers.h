@@ -12,6 +12,7 @@
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
@@ -72,8 +73,9 @@ class VarsRequiredFromSubtree {
     // `ExistsJoin::addExistsJoinsToSubtree`. It has to survive the stripping,
     // otherwise the constructor of the new operation adds a second
     // `ExistsJoin`.
-    for (const auto& var : expression.getExistsVariables()) {
-      add(var);
+    for (const auto* expr : expression.getExistsExpressions()) {
+      add(dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr)
+              .variable());
     }
     return AddVarsResult::Success;
   }
