@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/LocalVocab.h"
@@ -71,7 +72,7 @@ class JoinColumnMapping {
   // Construct the mapping from the `joinColumn` (given as pairs of
   // (leftColIndex, rightColIndex)`), and the total number of columns in the
   // left and right input respectively.
-  JoinColumnMapping(const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+  JoinColumnMapping(ql::span<const std::array<ColumnIndex, 2>> joinColumns,
                     size_t numColsLeft, size_t numColsRight,
                     bool keepJoinColumns = true) {
     permutationResult_.resize(numColsLeft + numColsRight - joinColumns.size());

@@ -1519,7 +1519,8 @@ TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
   };
   auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
     joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
-        JoinColumns{{0, 0}}, makeResult(), makeResult(), std::move(handle));
+        {{{0, 0}}, makeAllocator()}, makeResult(), makeResult(),
+        std::move(handle));
   };
   EXPECT_NO_THROW(
       makeJoin(std::make_shared<ad_utility::CancellationHandle<>>()));
@@ -1542,6 +1543,6 @@ TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   handle->cancel(ad_utility::CancellationState::MANUAL);
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
-      JoinColumns{{0, 0}}, makeResult(), makeResult(), handle);
+      {{{0, 0}}, makeAllocator()}, makeResult(), makeResult(), handle);
   EXPECT_THROW(join.computeLeftExistance(), ad_utility::CancellationException);
 }

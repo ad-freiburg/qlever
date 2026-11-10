@@ -189,9 +189,8 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 VariableToColumnMap JoinImpl::computeVariableToColumnMap() const {
   return makeVarToColMapForJoinOperation(
-      left_->getVariableColumns(), right_->getVariableColumns(),
-      {{leftJoinCol_, rightJoinCol_}}, BinOpType::Join, left_->getResultWidth(),
-      keepJoinColumn_);
+      left_->getVariableColumns(), right_->getVariableColumns(), joinColumns(),
+      BinOpType::Join, left_->getResultWidth(), keepJoinColumn_);
 }
 
 // _____________________________________________________________________________
@@ -790,8 +789,7 @@ Result JoinImpl::createEmptyResult() const {
 
 // _____________________________________________________________________________
 ad_utility::JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
-  return ad_utility::JoinColumnMapping{{{leftJoinCol_, rightJoinCol_}},
-                                       left_->getResultWidth(),
+  return ad_utility::JoinColumnMapping{joinColumns(), left_->getResultWidth(),
                                        right_->getResultWidth(),
                                        keepJoinColumn_};
 }

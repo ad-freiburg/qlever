@@ -8,6 +8,7 @@
 #include <array>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/ContainersWithAllocator.h"
@@ -17,7 +18,7 @@ class MultiColumnJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
+  qlm::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   std::vector<float> _multiplicities;
   size_t _sizeEstimate;
@@ -69,7 +70,7 @@ class MultiColumnJoin : public Operation {
    **/
   void computeMultiColumnJoin(
       const IdTableView<0>& left, const IdTableView<0>& right,
-      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      ql::span<const std::array<ColumnIndex, 2>> joinColumns,
       IdTable* resultMightBeUnsorted);
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(

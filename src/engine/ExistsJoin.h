@@ -18,7 +18,7 @@ class ExistsJoin : public Operation {
   // The left and right child.
   std::shared_ptr<QueryExecutionTree> left_;
   std::shared_ptr<QueryExecutionTree> right_;
-  std::vector<std::array<ColumnIndex, 2>> joinColumns_;
+  qlm::vector<std::array<ColumnIndex, 2>> joinColumns_;
 
   // The variable of the added (Boolean) result column.
   Variable existsVariable_;
