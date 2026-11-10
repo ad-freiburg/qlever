@@ -263,12 +263,8 @@ class AsyncTransformView
   // dropped before the first wait, so that no runner starts another element
   // while the destructor waits.
   ~AsyncTransformView() {
-    for (auto& pending : pending_) {
-      pending.drop();
-    }
-    for (auto& pending : pending_) {
-      pending.waitUnlessDropped();
-    }
+    ql::ranges::for_each(pending_, &Pending::drop);
+    ql::ranges::for_each(pending_, &Pending::waitUnlessDropped);
   }
 
   // Return the result for the next element, or `std::nullopt` once all the
