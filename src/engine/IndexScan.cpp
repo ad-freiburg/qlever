@@ -195,8 +195,8 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
-  auto result = ::ranges::to<qlm::vector>(
-      ad_utility::integerRange(ColumnIndex{numVariables_}), allocator());
+  auto result = ad_utility::integerRange(ColumnIndex{numVariables_}) |
+                ::ranges::to<qlm::vector>(allocator());
   for (size_t i = 0; i < additionalColumns_.size(); ++i) {
     if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
       result.push_back(numVariables_ + i);
