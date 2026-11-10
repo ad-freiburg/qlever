@@ -211,7 +211,11 @@ class CompressedRelationReader {
     // actually yield.
     size_t numElementsRead_ = 0;
     size_t numElementsYielded_ = 0;
-    std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
+    // The time that the consumer waited for the blocks. It is stored in
+    // microseconds (the precision of `ad_utility::Timer`), because when the
+    // metadata of many short scans is added up (see `aggregate`), rounding each
+    // of them to milliseconds would lose most of the time.
+    std::chrono::microseconds blockingTime_ = std::chrono::microseconds::zero();
 
     // Update this metadata, given the metadata from `blockAndMetadata`.
     // Currently updates: `numBlocksPostprocessed_`, `numBlocksWithUpdate_`,
@@ -339,10 +343,13 @@ class CompressedRelationReader {
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
-  // of the relevant blocks.
+  // of the relevant blocks, which reads the first and the last block of the
+  // scan and all the blocks that contain located triples. The
+  // `cancellationHandle` is checked before each of these reads.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle) const;
 
   // Get a lower and an upper bound for the size of the result of the scan. For
   // this call, it is enough that each located triple knows the block to which
@@ -353,11 +360,12 @@ class CompressedRelationReader {
 
  private:
   // Common implementation of `getResultSizeOfScan` and `getSizeEstimateForScan`
-  // above.
+  // above. The `cancellationHandle` is only checked if `exactSize` is true.
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle) const;
 
  public:
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -419,6 +427,19 @@ class CompressedRelationReader {
   // `contentsAreKnownFromMetadata` if you need that.
   static bool columnValuesAreKnownFromMetadata(
       const CompressedBlockMetadata& block, size_t numColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
+  // Return true iff all triples of the `block` match the `scanSpec` (iff its
+  // first and last triple do).
+  static bool isBlockCompletelyInScan(const ScanSpecification& scanSpec,
+                                      const CompressedBlockMetadata& block);
+
+  // Return a lower bound on the rows that a scan with the `scanSpec` yields
+  // for the `block`: its rows minus the deleted delta triples, or zero if the
+  // block is not completely in the scan or may lose rows to the graph filter
+  // or duplicate removal (see `FilterDuplicatesAndGraphs`).
+  static size_t getNumRowsLowerBound(
+      const ScanSpecification& scanSpec, const CompressedBlockMetadata& block,
       const LocatedTriplesPerBlock& locatedTriples);
 
   // Return true iff the complete contents of the given block, restricted to
@@ -512,13 +533,11 @@ class CompressedRelationReader {
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
 
-  // Helper function used by `decompressBlock` and
-  // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
-  // store the result at the `iterator`. For the `numRowsToRead` argument, see
-  // the documentation of `decompressBlock`.
-  template <typename Iterator>
+  // Helper function for `decompressBlock`. Decompress the `compressedColumn`
+  // into the `column`, whose size is the number of rows to read (see the
+  // documentation of `decompressBlock`).
   static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
+                               IdColumnRef column);
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that

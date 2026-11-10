@@ -14,7 +14,6 @@
 
 #include "backports/asio.h"
 #include "backports/three_way_comparison.h"
-#include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "global/Id.h"
@@ -151,10 +150,6 @@ class QueryExecutionContext
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
 
-  [[nodiscard]] double getCostFactor(const std::string& key) const {
-    return _costFactors.getCostFactor(key);
-  }
-
   const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
   }
@@ -268,13 +263,17 @@ class QueryExecutionContext
   const qlever::Executor& executor() const { return executor_; }
 
   // How the in-memory sorts of this query run in parallel (see
-  // `IdTableUtils::sort`), created by `makeSortConfig(executor())` when this
-  // context is constructed.
+  // `IdTableUtils::sort`), created by
+  // `makeSortConfig(executor(), cancellationHandle())` when this context is
+  // constructed, such that the sorts can be cancelled together with the query.
   const SortConfig& sortConfig() const { return sortConfig_; }
 
   // Return a `SortConfig` for sorting on the `executor`, the number of tasks
-  // of which is the runtime parameter `sort-num-tasks-in-flight`.
-  static SortConfig makeSortConfig(qlever::Executor executor);
+  // of which is the runtime parameter `sort-num-tasks-in-flight`, and which
+  // checks the `cancellationHandle`.
+  static SortConfig makeSortConfig(
+      qlever::Executor executor,
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   // The cancellation handle of the query that is executed using this context.
   // All operations of the query (including the ones that are created during
@@ -303,7 +302,6 @@ class QueryExecutionContext
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
-  QueryPlanningCostFactors _costFactors;
   std::function<void(std::string)> updateCallback_;
 
   // Cache the state of both runtime parameters to reduce the contention of the
@@ -357,10 +355,11 @@ class QueryExecutionContext
   qlever::Executor executor_;
 
   // See the documentation for the getter with the same name above.
-  SortConfig sortConfig_ = makeSortConfig(executor_);
-
-  // See the documentation for the getter with the same name above.
   ad_utility::SharedCancellationHandle cancellationHandle_;
+
+  // See the documentation for the getter with the same name above. Declared
+  // after `executor_` and `cancellationHandle_`, from which it is created.
+  SortConfig sortConfig_ = makeSortConfig(executor_, cancellationHandle_);
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

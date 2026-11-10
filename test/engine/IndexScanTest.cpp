@@ -16,6 +16,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
@@ -458,6 +459,45 @@ TEST(IndexScan, additionalColumn) {
   auto exp = makeIdTableFromVector(
       {{getId("<x>"), getId("<z>"), I(0), I(Pattern::NoPattern)}});
   EXPECT_THAT(res.idTableView(), ::testing::ElementsAreArray(exp));
+}
+
+// Test the cases in which `makeCopyWithSelectedBlocks` does not restrict the
+// scan. Only in the last case is the selector called (and declines).
+TEST(IndexScan, makeCopyWithSelectedBlocksWithoutRestriction) {
+  // A relation `<p>` with four numeric objects in one block, and a selector
+  // that counts its calls and never restricts.
+  TestIndexConfig config{"<a> <p> 1 . <b> <p> 2 . <c> <p> 4 . <d> <p> 5 ."};
+  config.rowsPerBlock = 4;
+  auto* qec = getQec(std::move(config));
+  size_t numCalls = 0;
+  auto selector = [&numCalls](const IndexScan::BlocksOfSortedVariable&)
+      -> std::optional<std::vector<size_t>> {
+    ++numCalls;
+    return std::nullopt;
+  };
+  auto makeCopy = [qec, &selector](const SparqlTripleSimple& triple,
+                                   const LimitOffsetClause& limitOffset = {}) {
+    IndexScan scan{qec, Permutation::POS, triple};
+    scan.applyLimitOffset(limitOffset, true);
+    return scan.makeCopyWithSelectedBlocks(selector);
+  };
+
+  // The scan has a `LIMIT` of its own.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}},
+                        LimitOffsetClause{._limit = 1})
+                   .has_value());
+  // No blocks, because `<a>` is not a predicate.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<a>"), Var{"?x"}}).has_value());
+  // No variable.
+  EXPECT_FALSE(makeCopy({iri("<a>"), iri("<p>"), Tc{int64_t{1}}}).has_value());
+  // An empty result, although the block of `<p>` covers the value `3`.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Tc{int64_t{3}}}).has_value());
+  EXPECT_EQ(numCalls, 0);
+
+  // A scan with a variable and a non-empty result calls the selector, which
+  // declines.
+  EXPECT_FALSE(makeCopy({Var{"?s"}, iri("<p>"), Var{"?x"}}).has_value());
+  EXPECT_EQ(numCalls, 1);
 }
 
 // Test that the graphs by which an `IndexScan` is to be filtered is correctly
@@ -1395,9 +1435,9 @@ TEST_P(IndexScanWithLazyJoin,
   LocalVocab extraVocab;
   const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<e>"), localVocabContext});
+      localVocabEntry(iri("<e>"), localVocabContext));
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<g>"), localVocabContext});
+      localVocabEntry(iri("<g>"), localVocabContext));
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -2027,7 +2067,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
     return makePrefilterVec(
-        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+        pr(lt(iriLocalVocabEntry("<s2>", qec->getLocalVocabContext())),
            Var{"?x"}));
   };
 

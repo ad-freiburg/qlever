@@ -24,11 +24,11 @@
 #include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
 #include "backports/algorithm.h"
+#include "global/Id.h"
 #include "global/VocabIndex.h"
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MergeBlock.h"
-#include "index/vocabulary_merger/QueueWord.h"
 #include "index/vocabulary_merger/Segment.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/RegexSet.h"
@@ -49,16 +49,6 @@ inline auto BN = ad_utility::testing::BlankNodeId;
 
 // A `WordComparator` that simply compares the words lexicographically.
 constexpr std::less<> lessThan{};
-
-// Create the `QueueWord` for the occurrence of `word` with the given
-// `localIndex` in the partial vocabulary `partialFileId`.
-inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
-    std::string word, bool isExternal, size_t partialFileId,
-    uint64_t localIndex) {
-  return ad_utility::vocabulary_merger::detail::QueueWord{
-      TripleComponentWithIndex{std::move(word), isExternal, localIndex},
-      partialFileId};
-}
 
 // The buffer pools (see `index/vocabulary_merger/MergeBlock.h`) of the blocks
 // that the helpers below create. Their buffers are small, so that a block of a
@@ -166,8 +156,8 @@ struct PartialVocabularyFiles {
   // The file that holds the words of each of the partial vocabularies.
   std::vector<std::string> wordsFiles_;
   // The file that holds the ID map of each of the partial vocabularies. Hand
-  // these to the `IdMapBatchWriter` and the `VocabularyMergePipeline`, which
-  // take the filenames directly.
+  // these to the `IdMapWriters` and the `SegmentPipeline`, which take the
+  // filenames directly.
   std::vector<std::string> idMapFiles_;
 };
 
@@ -236,13 +226,15 @@ SingleVocabularyParallelWriter makeParallelWriter(Callback callback) {
 // A `ParallelWordWriterBase` with two sub-vocabularies, which simulates a
 // `SplitVocabulary` of a main and a geo vocabulary for testing purposes: the
 // WKT literals go to the second sub-vocabulary, and the index of a word is
-// its position in its sub-vocabulary, with the marker bit `1 << 59` for the
-// geo vocabulary. The words of each sub-vocabulary are collected in `words_`
+// its position in its sub-vocabulary, with the marker bit of the
+// `SplitGeoVocabulary` (the topmost bit of a vocabulary index) for the geo
+// vocabulary. The words of each sub-vocabulary are collected in `words_`
 // and `geoWords_`, together with their `isExternal` flags.
 class TestSplitWriter : public ParallelWordWriterBase {
  public:
   // The marker bit that the indices of the geo words carry.
-  static constexpr uint64_t geoMarker = uint64_t{1} << 59;
+  static constexpr uint64_t geoMarker = uint64_t{1}
+                                        << (ValueId::numVocabIndexBits - 1);
   std::vector<std::pair<std::string, bool>> words_;
   std::vector<std::pair<std::string, bool>> geoWords_;
 

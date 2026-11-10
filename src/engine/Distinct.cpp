@@ -31,7 +31,7 @@ Distinct::Distinct(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 bool Distinct::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // The result is distinct wrt `distinctIndices` iff `keepIndices_` is a subset
   // of `distinctIndices` (a superset of the deduplicated columns cannot
   // reintroduce duplicates).
