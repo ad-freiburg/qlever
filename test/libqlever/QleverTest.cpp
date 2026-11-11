@@ -441,7 +441,7 @@ TEST(LibQlever, destructorUnbindsRuntimeParameters) {
   auto cleanupMemoryForQueries =
       setRuntimeParameterForTest<&RuntimeParameters::memoryForQueries_>(1_GB);
   auto cleanupThreadSharePercent = setRuntimeParameterForTest<
-      &RuntimeParameters::rebuildIndexThreadSharePercent_>(50.0);
+      &RuntimeParameters::backgroundThreadSharePercent_>(50.0);
 }
 
 namespace {

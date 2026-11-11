@@ -30,7 +30,7 @@ RuntimeParameters::RuntimeParameters() {
   add(lazyIndexScanNumBlocksInFlight_);
   add(maxNumThreadsPerQuery_);
   add(rebuildIndexMaxNumThreads_);
-  add(rebuildIndexThreadSharePercent_);
+  add(backgroundThreadSharePercent_);
   add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
@@ -104,7 +104,7 @@ RuntimeParameters::RuntimeParameters() {
   permutationWriterNumBlocksInFlight_.setParameterConstraint(
       mustBeStrictlyPositive);
   sortNumTasksInFlight_.setParameterConstraint(mustBeStrictlyPositive);
-  rebuildIndexThreadSharePercent_.setParameterConstraint(
+  backgroundThreadSharePercent_.setParameterConstraint(
       [](double value, std::string_view parameterName) {
         // NOTE: The negated form also rejects NaN.
         if (!(value > 0 && value < 100)) {

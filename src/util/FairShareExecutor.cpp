@@ -9,8 +9,6 @@
 
 #include "util/FairShareExecutor.h"
 
-#include <absl/cleanup/cleanup.h>
-
 #include <algorithm>
 #include <boost/asio/post.hpp>
 #include <exception>
@@ -19,6 +17,7 @@
 #include <limits>
 
 #include "backports/algorithm.h"
+#include "util/Algorithm.h"
 #include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Timer.h"
 
@@ -83,9 +82,14 @@ void FairScheduler::submit(const std::shared_ptr<Client>& client, Task task) {
     client->queue_.push_back(std::move(task));
     if (!client->isActive_) {
       auto& cls = state.classOf(client->class_);
+      // The client (and maybe its class) becomes active, initially or after
+      // it ran out of queued tasks. Its virtual time is moved forward to that
+      // of the client (class) that was dispatched last, which is about the
+      // least one among the active ones, as the least one is always dispatched
+      // next. This works for any number of clients (classes). This way, it
+      // neither gets credit for the time in which it had no work (with which it
+      // would starve the others), nor is it penalized for work done before.
       if (cls.activeClients_.empty()) {
-        // A class that becomes active neither gets credit for the time in
-        // which it had no work, nor is it penalized for work done before.
         cls.virtualTime_ =
             std::max(cls.virtualTime_, state.lastDispatchedClassTime_);
       }
@@ -94,28 +98,26 @@ void FairScheduler::submit(const std::shared_ptr<Client>& client, Task task) {
       client->isActive_ = true;
       cls.activeClients_.push_back(client);
     }
-    startWorker(state);
+    // A new worker is only needed if the task may start right away. Otherwise
+    // the client already runs its maximal number of tasks, and the worker that
+    // finishes one of them takes the next one.
+    if (client->isBelowMaxConcurrency() && state.numWorkers_ < numSlots_) {
+      ++state.numWorkers_;
+      postWorker();
+    }
   });
 }
 
 // _____________________________________________________________________________
-bool FairScheduler::ClassState::hasRunnableClient() const {
-  return ql::ranges::any_of(activeClients_, [](const auto& client) {
-    return client->isBelowMaxConcurrency();
+auto FairScheduler::ClassState::nextClient()
+    -> std::optional<Clients::iterator> {
+  // Clients that may start a task come first, ordered by their virtual time.
+  auto it = ql::ranges::min_element(activeClients_, {}, [](const auto& client) {
+    return std::pair{!client->isBelowMaxConcurrency(), client->virtualTime_};
   });
-}
-
-// _____________________________________________________________________________
-auto FairScheduler::ClassState::nextClient() -> Clients::iterator {
-  // Clients that may not start another task are never the minimum.
-  auto it = ql::ranges::min_element(
-      activeClients_, std::less<>{}, [](const auto& client) {
-        return client->isBelowMaxConcurrency()
-                   ? client->virtualTime_
-                   : std::numeric_limits<double>::infinity();
-      });
-  AD_CORRECTNESS_CHECK(it != activeClients_.end() &&
-                       (*it)->isBelowMaxConcurrency());
+  if (it == activeClients_.end() || !(*it)->isBelowMaxConcurrency()) {
+    return std::nullopt;
+  }
   return it;
 }
 
@@ -127,35 +129,44 @@ void FairScheduler::ClassState::deactivate(Clients::iterator it) {
 }
 
 // _____________________________________________________________________________
-bool FairScheduler::State::hasRunnableTask() const {
-  return ql::ranges::any_of(classes_, &ClassState::hasRunnableClient);
-}
-
-// _____________________________________________________________________________
-void FairScheduler::startWorker(State& state) {
-  // Start (at most) one worker per call. Every `submit` calls this, and a
-  // worker keeps running tasks as long as there are runnable ones, so this
-  // suffices to keep up to `numSlots_` workers busy.
-  if (state.numWorkers_ < numSlots_ && state.hasRunnableTask()) {
-    ++state.numWorkers_;
-    boost::asio::post(executor_,
-                      [self = shared_from_this()]() { self->runWorker(); });
-  }
-}
-
-// _____________________________________________________________________________
-auto FairScheduler::State::popNextTask() -> std::optional<ClientAndTask> {
-  // The class with the least virtual time among those that may start a task.
-  auto& cls = *ql::ranges::min_element(
-      classes_, std::less<>{}, [](const ClassState& candidate) {
-        return candidate.hasRunnableClient()
-                   ? candidate.virtualTime_
-                   : std::numeric_limits<double>::infinity();
+auto FairScheduler::State::nextClassAndClient()
+    -> std::optional<ClassAndClient> {
+  // Each class with its `nextClient` (computed only once per class).
+  struct Candidate {
+    ClassState& class_;
+    std::optional<ClassState::Clients::iterator> client_;
+  };
+  auto candidates = ad_utility::transformArray(
+      classes_, [](auto&& cls) { return Candidate{cls, cls.nextClient()}; });
+  // Classes that have a `nextClient` come first, ordered by their virtual time.
+  auto& best =
+      *ql::ranges::min_element(candidates, {}, [](const Candidate& candidate) {
+        return std::pair{!candidate.client_.has_value(),
+                         candidate.class_.virtualTime_};
       });
-  if (!cls.hasRunnableClient()) {
+  if (!best.client_.has_value()) {
     return std::nullopt;
   }
-  auto clientIt = cls.nextClient();
+  return ClassAndClient{best.class_, best.client_.value()};
+}
+
+// _____________________________________________________________________________
+void FairScheduler::postWorker() {
+  boost::asio::post(executor_,
+                    [self = shared_from_this()]() { self->runWorker(); });
+}
+
+// _____________________________________________________________________________
+auto FairScheduler::State::popNextTaskOrRetireWorker()
+    -> std::optional<ClientAndTask> {
+  auto next = nextClassAndClient();
+  if (!next.has_value()) {
+    // Retiring in the same critical section in which no task was found
+    // guarantees that a task that is submitted later starts a new worker.
+    --numWorkers_;
+    return std::nullopt;
+  }
+  auto& [cls, clientIt] = next.value();
   auto client = *clientIt;
   Task task = std::move(client->queue_.front());
   client->queue_.pop_front();
@@ -178,29 +189,23 @@ void FairScheduler::State::recordRunTime(Client& client, double seconds) {
 
 // _____________________________________________________________________________
 void FairScheduler::runWorker() {
-  // When the worker returns (also via an exception), give its slot back, and
-  // let another worker take over if there is work (which might have been
-  // submitted after the worker found none, but before the slot was released).
-  absl::Cleanup releaseSlot{[this]() {
-    state_.withWriteLock([this](State& state) {
-      --state.numWorkers_;
-      startWorker(state);
-    });
-  }};
-  auto next = state_.wlock()->popNextTask();
+  auto next = state_.wlock()->popNextTaskOrRetireWorker();
   while (next.has_value()) {
-    auto& client = next->first;
-    auto [seconds, exception] = runAndDestroy(std::move(next->second));
+    auto& [client, task] = next.value();
+    auto [seconds, exception] = runAndDestroy(std::move(task));
     if (exception) {
       // Like a plain thread pool, let the exception propagate out of the
-      // thread of the underlying executor.
+      // thread of the underlying executor. The slot of this worker is handed
+      // over to a new one (which retires right away if there is no task).
       state_.wlock()->recordRunTime(*client, seconds);
+      postWorker();
       std::rethrow_exception(exception);
     }
-    next = state_.withWriteLock([&client, seconds = seconds](State& state) {
-      state.recordRunTime(*client, seconds);
-      return state.popNextTask();
-    });
+    next = state_.withWriteLock(
+        [&client = client, seconds = seconds](State& state) {
+          state.recordRunTime(*client, seconds);
+          return state.popNextTaskOrRetireWorker();
+        });
   }
 }
 
@@ -212,7 +217,7 @@ qlever::Executor makeFairShareExecutor(qlever::Executor executor,
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto scheduler =
       std::make_shared<FairScheduler>(std::move(executor), numSlots);
-  auto client = scheduler->makeClient(FairShareClass::Background);
+  auto client = scheduler->makeClient(FairShareClass::Foreground);
   return FairShareExecutor{std::move(scheduler), std::move(client)};
 #else
   return executor;

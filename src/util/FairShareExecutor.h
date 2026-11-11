@@ -42,23 +42,39 @@
 
 namespace ad_utility {
 
-// The classes of work that share the threads of a `FairScheduler`. Under
-// contention, the threads are split between the classes according to their
-// shares (see `FairScheduler::setShare`), and within a class equally between
-// its clients. A class (or client) that has no work leaves its threads to the
-// others, so a single client gets all the threads if it is the only one with
-// work (the scheduler is work-conserving).
-enum class FairShareClass { Queries = 0, Background = 1 };
-
-// A scheduler that runs tasks of several clients on the threads of an
-// underlying executor (typically a `boost::asio::thread_pool`) such that
+// The classes of a `FairScheduler`, see there. In QLever, the queries are in
+// the `Foreground` class, and a runtime index rebuild in the `Background`
+// class.
 //
-// 1. at most `numSlots` tasks run at the same time (one per thread of the
-//    underlying pool), so the pool's own FIFO queue never holds more than the
-//    tasks that are about to run, and
-// 2. whenever a slot becomes free, the next task is taken from the class and
-//    the client that so far received the least CPU time relative to its share
-//    (stride scheduling on the measured run time of the tasks).
+// NOTE: The scheduler works for any number of classes, which have to be
+// numbered `0, 1, ...` (see `FairScheduler::State::classes_`).
+enum class FairShareClass { Foreground = 0, Background = 1 };
+
+// A scheduler that runs the tasks of several clients on the threads of an
+// underlying executor (typically a `boost::asio::thread_pool`).
+//
+// - A client is a source of tasks, for example a single query (see
+//   `makeClient`). It may have a limit on the number of its tasks that run at
+//   the same time.
+// - Each client belongs to one of the classes of `FairShareClass`, which are
+//   fixed. Each class has a share (see `setShare`).
+//
+// At most `numSlots` tasks run at the same time (one per thread of the
+// underlying executor), so the executor's own FIFO queue never holds more than
+// the tasks that are about to run. Whenever a slot becomes free, the next task
+// is chosen on two levels (stride scheduling on the measured run time of the
+// tasks):
+//
+// 1. Between the classes: under contention, each class gets the threads in
+//    proportion to its share. The next task is taken from the class with the
+//    least CPU time received so far, divided by its share.
+// 2. Between the clients of that class: they get the threads equally. The next
+//    task is taken from the client with the least CPU time received so far.
+//
+// A class or client without queued tasks (or that already runs its maximal
+// number of tasks) is skipped and leaves its threads to the others. So a single
+// client gets all the threads (up to its limit) if it is the only one with
+// work, the scheduler is work-conserving.
 //
 // This replaces the plain FIFO order of the pool, in which a client that posts
 // many tasks (for example the read-ahead of many concurrent index scans) delays
@@ -84,19 +100,17 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     // The clients of the class that currently have queued tasks.
     using Clients = std::vector<std::shared_ptr<Client>>;
     Clients activeClients_;
-    // The virtual time of the client that was dispatched last, used to place
-    // clients that become active (so that a new client neither starves the
-    // others nor is starved by them).
+    // The virtual time of the client of this class that was dispatched last,
+    // used to place clients that become active (see `submit`).
     double lastDispatchedClientTime_ = 0;
 
-    // Return true if any active client of this class may start another task.
-    bool hasRunnableClient() const;
+    // Return the client of this class whose task runs next: among the active
+    // clients that run fewer tasks than their `maxConcurrency_`, the one with
+    // the least virtual time. Return `std::nullopt` if there is no such client.
+    std::optional<Clients::iterator> nextClient();
 
-    // Return the active client with the least virtual time among those that
-    // may start another task. Requires `hasRunnableClient()`.
-    Clients::iterator nextClient();
-
-    // Remove the client at `it` (whose queue is empty) from the active ones.
+    // Remove the client at `it` from the active ones. The client must have no
+    // queued tasks.
     void deactivate(Clients::iterator it);
   };
 
@@ -104,7 +118,8 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
   // A source of tasks (e.g. a single query), see `makeClient`.
   struct Client {
     FairShareClass class_;
-    // The maximal number of tasks that may run at the same time.
+    // The maximal number of tasks of this client that may run at the same
+    // time.
     size_t maxConcurrency_ = std::numeric_limits<size_t>::max();
     // The members below are only accessed while the `state_` of the scheduler
     // is locked.
@@ -112,12 +127,16 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     std::deque<Task> queue_;
     // The number of tasks that currently run.
     size_t numRunning_ = 0;
-    // The CPU time (in seconds) that the tasks of this client received.
+    // The CPU time (in seconds) that the tasks of this client received, plus
+    // the time it is moved forward when it becomes active again (see
+    // `submit`). Like the virtual time in stride scheduling, only the
+    // differences between the clients of a class matter.
     double virtualTime_ = 0;
     // True if the client is in the `activeClients_` of its class.
     bool isActive_ = false;
 
-    // Return true if the client may start another task.
+    // Return true if the client runs fewer tasks than its `maxConcurrency_`, so
+    // that it may start another one (if it has one queued).
     bool isBelowMaxConcurrency() const { return numRunning_ < maxConcurrency_; }
   };
 
@@ -129,20 +148,32 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     // The number of workers that are posted to or running on the underlying
     // executor. Each of them occupies one of the `numSlots_` slots.
     size_t numWorkers_ = 0;
+    // The state of each `FairShareClass`, indexed by its value.
     // TODO<#3918> Size it via `qlever::enumSize<FairShareClass>`.
     std::array<ClassState, 2> classes_;
+    // The virtual time of the class that was dispatched last, used to place
+    // classes that become active (see `submit`).
     double lastDispatchedClassTime_ = 0;
 
     ClassState& classOf(FairShareClass fairShareClass) {
       return classes_[static_cast<size_t>(fairShareClass)];
     }
 
-    // Return true if any active client may start another task.
-    bool hasRunnableTask() const;
+    // A class and one of its active clients.
+    struct ClassAndClient {
+      ClassState& class_;
+      ClassState::Clients::iterator client_;
+    };
 
-    // Pop the next task to run (from the class and the client with the least
-    // virtual time), or return `std::nullopt` if no task may run.
-    std::optional<ClientAndTask> popNextTask();
+    // Return the class with the least virtual time among those that have a
+    // `nextClient`, together with that client, or `std::nullopt` if no client
+    // has a queued task and runs fewer tasks than its `maxConcurrency_`.
+    std::optional<ClassAndClient> nextClassAndClient();
+
+    // Pop the next task to run (of the client from `nextClassAndClient`) for
+    // the calling worker. If there is none, retire the worker (which then has
+    // to return without running another task), and return `std::nullopt`.
+    std::optional<ClientAndTask> popNextTaskOrRetireWorker();
 
     // Account the `seconds` that a task of the `client` ran (and that has
     // finished) to the `client` and its class.
@@ -172,15 +203,19 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
 
  private:
   // The loop of a worker on a thread of the underlying executor: run tasks as
-  // long as there are any that may run, then give the slot of the worker back.
+  // long as there are any that may run, then retire.
   void runWorker();
 
-  // Start a new worker if there is a free slot and a runnable task. The
-  // `state` must be the locked `state_`.
-  void startWorker(State& state);
+  // Post a new worker to the underlying executor. The caller has to account
+  // for its slot in `State::numWorkers_`.
+  void postWorker();
 };
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// The constraints of the members of `FairShareExecutor` that make it a
+// `boost::asio` executor: the properties that the underlying executor supports
+// (e.g. `boost::asio::execution::blocking.never`), and the function objects
+// that it can run.
 namespace detail::fairShare {
 template <typename Property>
 concept QueryableProperty =
@@ -227,6 +262,10 @@ class FairShareExecutor {
 
   const std::shared_ptr<FairScheduler>& scheduler() const { return scheduler_; }
 
+  // The interface of a `boost::asio` executor (see
+  // `boost::asio::execution::executor`). The properties are those of the
+  // underlying executor, and `execute` submits the `function` as a task of
+  // the client.
   template <detail::fairShare::QueryableProperty Property>
   decltype(auto) query(const Property& property) const {
     return boost::asio::query(executor_, property);
@@ -252,10 +291,15 @@ class FairShareExecutor {
 #endif
 
 // Return an executor that runs its tasks on `executor` via a new
-// `FairScheduler` with `numSlots` slots (which should be the number of threads
-// of `executor`), as the default client of the `Background` class. Clients of
-// other classes are derived from it via `makeFairShareClientExecutor`. In the
-// reduced C++17 build, `executor` is returned unchanged.
+// `FairScheduler` with `numSlots` slots, as the default client of the
+// `Foreground` class. Clients of other classes are derived from it via
+// `makeFairShareClientExecutor`. In the reduced C++17 build, `executor` is
+// returned unchanged.
+//
+// NOTE: `numSlots` should be the number of threads of `executor`, which can't
+// be queried from it. With fewer slots, threads of `executor` stay idle while
+// tasks are queued. With more, the surplus workers wait in the FIFO queue of
+// `executor`, so the order in which the tasks run is no longer fair.
 qlever::Executor makeFairShareExecutor(qlever::Executor executor,
                                        size_t numSlots);
 

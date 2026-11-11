@@ -94,14 +94,14 @@ struct RuntimeParameters {
   // and when the pool is busy, it shares them with the queries.
   SizeT rebuildIndexMaxNumThreads_{0, "rebuild-index-max-num-threads"};
   // The share (in percent) of the threads of the executor of the `Qlever`
-  // instance that a runtime index rebuild (together with all other background
-  // work on that executor's default client) gets when queries compete for the
-  // threads. The queries get the rest. When there is no competition, the
-  // rebuild may use all the threads (subject to
-  // `rebuild-index-max-num-threads`). Must be strictly between 0 and 100,
-  // fractions like `12.5` are allowed.
-  Double rebuildIndexThreadSharePercent_{25.0,
-                                         "rebuild-index-thread-share-percent"};
+  // instance that the background work gets when the foreground work (all the
+  // rest, in particular the queries) competes for the threads. The foreground
+  // work gets the rest. When there is no competition, either of them may use
+  // all the threads. Currently, the only background work is a runtime index
+  // rebuild (see also `rebuild-index-max-num-threads`), but more may be added
+  // in the future. Must be strictly between 0 and 100, fractions like `12.5`
+  // are allowed.
+  Double backgroundThreadSharePercent_{25.0, "background-thread-share-percent"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
   // the internal PSO+POS) that a runtime index rebuild processes in
   // parallel. Each pair costs several CPU cores, several GB/s of memory

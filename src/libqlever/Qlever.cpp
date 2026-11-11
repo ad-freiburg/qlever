@@ -72,6 +72,18 @@ readCompressedBlobFile(const std::string& filename) {
 }  // namespace
 
 // _____________________________________________________________________________
+Qlever::Qlever(const EngineConfig& config, bool skipLoading)
+    : Qlever(config, skipLoading, ad_utility::globalExecutor(),
+             ad_utility::globalExecutorNumThreads()) {}
+
+// _____________________________________________________________________________
+Qlever::Qlever(const EngineConfig& config, bool skipLoading,
+               Allocator<Id> allocator)
+    : Qlever(config, skipLoading, std::move(allocator),
+             ad_utility::globalExecutor(),
+             ad_utility::globalExecutorNumThreads()) {}
+
+// _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                qlever::Executor executor, size_t executorNumThreads)
     : Qlever(config, skipLoading,
@@ -131,18 +143,18 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
       });
 
   // Split the threads of the `executor_` between the background work (e.g. an
-  // index rebuild) and the queries according to the runtime parameter
-  // `rebuild-index-thread-share-percent`. The action holds a copy of the
+  // index rebuild) and the foreground work according to the runtime parameter
+  // `background-thread-share-percent`. The action holds a copy of the
   // executor, which keeps the scheduler alive, so it never dangles. The
   // destructor removes it again.
   globalRuntimeParameters.wlock()
-      ->rebuildIndexThreadSharePercent_.setOnUpdateAction(
+      ->backgroundThreadSharePercent_.setOnUpdateAction(
           [executor = executor_](double percent) {
             double share = percent / 100.0;
             ad_utility::setFairShare(
                 executor, ad_utility::FairShareClass::Background, share);
             ad_utility::setFairShare(
-                executor, ad_utility::FairShareClass::Queries, 1.0 - share);
+                executor, ad_utility::FairShareClass::Foreground, 1.0 - share);
           });
 
   // The memory limit of a caller-provided allocator is unknown, so only the
@@ -219,7 +231,7 @@ Qlever::~Qlever() {
   runtimeParameters->cacheMaxSize_.clearOnUpdateAction();
   runtimeParameters->cacheMaxSizeSingleEntry_.clearOnUpdateAction();
   runtimeParameters->memoryForQueries_.clearOnUpdateAction();
-  runtimeParameters->rebuildIndexThreadSharePercent_.clearOnUpdateAction();
+  runtimeParameters->backgroundThreadSharePercent_.clearOnUpdateAction();
 }
 
 // _____________________________________________________________________________

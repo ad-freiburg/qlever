@@ -405,10 +405,10 @@ class Qlever : public ad_utility::NoCopyNoMove {
   // Create a QLever instance for querying using an `EngineConfig` as
   // explained above. The memory limit from `config` is enforced and cache
   // eviction is wired into the allocator. The queries and index rebuilds of
-  // this instance run their parallel work on the `executor`, which has
-  // `executorNumThreads` threads. The instance schedules its tasks on the
-  // `executor` fairly between the queries and the background work (see
-  // `util/FairShareExecutor.h`).
+  // this instance run their parallel work on the global thread pool (see
+  // `util/GlobalExecutor.h`), fairly scheduled between the foreground work
+  // (e.g. the queries) and the background work (e.g. an index rebuild), see
+  // `util/FairShareExecutor.h`.
   //
   // If `skipLoading` is true, no index is loaded from disk (in particular,
   // none of the on-disk index files, not even the vocabulary or the
@@ -419,19 +419,27 @@ class Qlever : public ad_utility::NoCopyNoMove {
   // index, independent of `skipLoading`.
   //
   // NOTE: Neither this constructor nor the computation of a query must be
-  // called from a thread of the `executor`, because they block while waiting
-  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`).
-  explicit Qlever(
-      const EngineConfig& config, bool skipLoading = false,
-      qlever::Executor executor = ad_utility::globalExecutor(),
-      size_t executorNumThreads = ad_utility::globalExecutorNumThreads());
+  // called from a thread of the executor on which the parallel work runs,
+  // because they block while waiting for work on that executor (e.g. the sorts
+  // of `IdTableUtils::sort`).
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
-  // Same as above, but with a caller-provided allocator (e.g. a
-  // platform-injected memory pool). The allocator is used as-is; the memory
-  // limit from `config` is *not* applied on top of it.
+  // Same as above, but the parallel work runs on the `executor`, which must
+  // have `executorNumThreads` threads (an executor can't be asked for its
+  // number of threads). At most that many tasks of this instance are handed
+  // to the `executor` at the same time. With a smaller number, threads of the
+  // `executor` stay idle while tasks are queued. With a larger one, tasks wait
+  // in the FIFO queue of the `executor`, so they no longer run in the fair
+  // order (see `ad_utility::makeFairShareExecutor`).
+  Qlever(const EngineConfig& config, bool skipLoading,
+         qlever::Executor executor, size_t executorNumThreads);
+
+  // Same as the two constructors above, but with a caller-provided allocator
+  // (e.g. a platform-injected memory pool). The allocator is used as-is; the
+  // memory limit from `config` is *not* applied on top of it.
+  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator);
   Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
-         qlever::Executor executor = ad_utility::globalExecutor(),
-         size_t executorNumThreads = ad_utility::globalExecutorNumThreads());
+         qlever::Executor executor, size_t executorNumThreads);
 
   // Remove the actions that the constructors registered on the global runtime
   // parameters, as they refer to this instance.

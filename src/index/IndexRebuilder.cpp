@@ -463,9 +463,9 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // permutations and the writers of the new ones) shares a single limit, see
   // the runtime parameter `rebuild-index-max-num-threads`.
   //
-  // Under contention, the rebuild shares the threads of the `Background` class
-  // with the other background work, see the runtime parameter
-  // `rebuild-index-thread-share-percent` and `FairShareExecutor.h`.
+  // Under contention, the rebuild gets the share of the `Background` class, see
+  // the runtime parameter `background-thread-share-percent` and
+  // `FairShareExecutor.h`.
   executor = ad_utility::makeFairShareClientExecutor(
       executor, ad_utility::FairShareClass::Background,
       getRuntimeParameterAsOptional<
