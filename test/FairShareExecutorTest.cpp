@@ -15,10 +15,12 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <chrono>
+#include <cstdint>
 #include <future>
 #include <thread>
 
 #include "util/FairShareExecutor.h"
+#include "util/Timer.h"
 
 using namespace ad_utility;
 using namespace std::chrono_literals;
@@ -74,18 +76,24 @@ size_t runAndWait(const qlever::Executor& executor, size_t numTasks,
   return tracker.max_;
 }
 
-// A task that keeps a class of a `FairScheduler` saturated: it counts itself
-// and posts a copy of itself again until `stop_` is set.
+// A task that keeps a class of a `FairScheduler` saturated: it adds its run
+// time (in microseconds) to `runTime_` and posts a copy of itself again until
+// `stop_` is set.
+//
+// NOTE: The run time is what the scheduler balances. Counting the tasks
+// instead is not reliable, because on a loaded machine a task may be preempted
+// and then take longer than others.
 struct Feeder {
   qlever::Executor executor_;
-  std::atomic<size_t>* counter_;
+  std::atomic<int64_t>* runTime_;
   const std::atomic<bool>* stop_;
   void operator()() const {
     if (*stop_) {
       return;
     }
+    Timer timer{Timer::Started};
     spin(500us);
-    ++*counter_;
+    *runTime_ += timer.value().count();
     boost::asio::post(executor_, *this);
   }
 };
@@ -129,26 +137,27 @@ TEST(FairShareExecutor, sharesOfClasses) {
     queries.push_back(
         makeFairShareClientExecutor(background, FairShareClass::Foreground, 4));
   }
-  std::atomic<size_t> backgroundDone = 0;
-  std::atomic<size_t> queryDone = 0;
+  std::atomic<int64_t> backgroundRunTime = 0;
+  std::atomic<int64_t> foregroundRunTime = 0;
   std::atomic<bool> stop = false;
   // Keep both classes saturated for a while.
   auto feed = [&stop](const qlever::Executor& executor,
-                      std::atomic<size_t>& counter) {
+                      std::atomic<int64_t>& runTime) {
     for (size_t i = 0; i < 8; ++i) {
-      boost::asio::post(executor, Feeder{executor, &counter, &stop});
+      boost::asio::post(executor, Feeder{executor, &runTime, &stop});
     }
   };
-  feed(background, backgroundDone);
+  feed(background, backgroundRunTime);
   for (auto& q : queries) {
-    feed(q, queryDone);
+    feed(q, foregroundRunTime);
   }
   std::this_thread::sleep_for(1s);
   stop = true;
   pool.join();
-  double fraction = static_cast<double>(backgroundDone) /
-                    static_cast<double>(backgroundDone + queryDone);
-  EXPECT_NEAR(fraction, 0.25, 0.07) << backgroundDone << " " << queryDone;
+  double fraction = static_cast<double>(backgroundRunTime) /
+                    static_cast<double>(backgroundRunTime + foregroundRunTime);
+  EXPECT_NEAR(fraction, 0.25, 0.07)
+      << backgroundRunTime << " " << foregroundRunTime;
 }
 #endif
 
