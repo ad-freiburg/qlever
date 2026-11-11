@@ -97,6 +97,11 @@ bool SparqlExpressionPimpl::isDeterministic() const {
   return _pimpl->isDeterministic();
 }
 
+// ___________________________________________________________________________
+std::optional<TripleComponent> SparqlExpressionPimpl::getConstantValue() const {
+  return _pimpl->getConstantValue();
+}
+
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();
