@@ -26,6 +26,13 @@
 
 namespace ad_utility {
 
+// `util` is only included in this file (GeometryInfoHelpersImpl.h) and not in
+// `GeometryInfo.h`. In `SparqlExpressionValueGetters.h` `CRSTypeValueGetter`
+// can only be declared using `GeometryInfo.h`s forward declaration of
+// `util::geo::CRSType` and it's constant `crsTypeUnsupported`. We need to check
+// that the constant actually matches `CRSType::UNSUPPORTED`.
+static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
+
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries,
@@ -215,12 +222,17 @@ std::optional<std::string_view> SourceCrsType::asIri() const {
 
 // _____________________________________________________________________________
 ::util::geo::CRSType SourceCrsType::iriToCrsType(std::string_view uri) {
-  using namespace ad_utility::detail;
-  auto it = ql::ranges::find(CRS_TYPE_IRI, uri);
-  if (it == CRS_TYPE_IRI.end()) {
-    return ::util::geo::CRSType::UNSUPPORTED;
+  // `::util::geo::getCRSType` expects the input string to be wrapped in
+  // angle brackets (e.g., <http://...>) and returns a default value
+  // (CRS84) if the opening bracket is missing. We wrap the content here
+  // to ensure that `::util::geo::getCRSType` handles the IRIs correctly.
+  std::string content{uri};
+  if (content.empty()) {
+    content = "<>";
+  } else if (content.front() != '<') {
+    content = "<" + content + ">";
   }
-  return static_cast<::util::geo::CRSType>(it - CRS_TYPE_IRI.begin());
+  return ::util::geo::getCRSType(std::string{content});
 }
 
 // ____________________________________________________________________________

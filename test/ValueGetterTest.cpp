@@ -14,7 +14,6 @@
 #include "../test/printers/UnitOfMeasurementPrinters.h"
 #include "./ValueGetterTestHelpers.h"
 #include "GeometryInfoTestHelpers.h"
-#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 
 namespace {

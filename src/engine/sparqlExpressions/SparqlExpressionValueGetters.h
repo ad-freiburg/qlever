@@ -408,7 +408,7 @@ struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
   using Value = decltype(undefined);
   // Set the size of this cache to at least the maximum number of values of any
   // supported enum (`Value`).
-  mutable ad_utility::util::LRUCache<ValueId, Value> cache_{16};
+  mutable ad_utility::util::LRUCache<ValueId, Value> cache_{32};
   using Mixin<EnumValueGetter<iriToValue, undefined>>::operator();
   Value operator()(ValueId id, const EvaluationContext*) const;
   Value operator()(const LiteralOrIri& s, const EvaluationContext*) const;
@@ -425,9 +425,6 @@ using UnitOfMeasurementValueGetter =
     EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
                     UnitOfMeasurement::UNKNOWN>;
 
-// As `util` is not included in this file, we use this constant instead of
-// `util::geo::CRSType::UNSUPPORTED`.
-constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
 using CRSTypeValueGetter =
     EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
                     crsTypeUnsupported>;

@@ -5,7 +5,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 #include <absl/strings/str_format.h>
-#include <util/geo/Geo.h>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
@@ -18,14 +17,6 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/ParsedUri.h"
-
-// `util` is only included in this file and not in
-// `SparqlExpressionValueGetters.h`. There, `CRSTypeValueGetter` can only be
-// declared using a forward declaration of `util::geo::CRSType` and a constant
-// `crsTypeUnsupported`. We need to check that the constant actually matches
-// `CRSType::UNSUPPORTED`.
-static_assert(sparqlExpression::detail::crsTypeUnsupported ==
-              ::util::geo::CRSType::UNSUPPORTED);
 
 using namespace sparqlExpression::detail;
 
@@ -478,7 +469,7 @@ namespace sparqlExpression::detail {
 template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
                                 UnitOfMeasurement::UNKNOWN>;
 template struct EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
-                                ::util::geo::CRSType::UNSUPPORTED>;
+                                crsTypeUnsupported>;
 }  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________
