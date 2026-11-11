@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNITERATOR_H
 
 #include "backports/concepts.h"
+#include "backports/shift.h"
 #include "backports/three_way_comparison.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 
@@ -59,6 +60,18 @@ class BasicIdColumnIterator {
   // the conversion constructor below.
   template <bool>
   friend class BasicIdColumnIterator;
+
+  // `shift_left` for a split column (found via ADL, so call it unqualified
+  // after `using ql::shift_left;`): its payloads and its datatypes are shifted
+  // on their own, each with one `memmove`. The generic `ql::shift_left` rejects
+  // this iterator, because its classic `std::move` requires that `*it` is the
+  // `iterator_traits::reference`, which it is not on purpose.
+  friend BasicIdColumnIterator shift_left(BasicIdColumnIterator first,
+                                          BasicIdColumnIterator last,
+                                          difference_type n) {
+    return {ql::shift_left(first.payload_, last.payload_, n),
+            ql::shift_left(first.datatype_, last.datatype_, n)};
+  }
 
   // Implicit conversion from the mutable to the const iterator, like
   // `iterator` -> `const_iterator` of the standard containers.
