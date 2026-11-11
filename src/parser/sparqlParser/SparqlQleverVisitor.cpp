@@ -2722,6 +2722,15 @@ ExpressionPtr Visitor::visit(Parser::ConditionalOrExpressionContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::ConditionalAndExpressionContext* ctx) {
   auto children = visitVector(ctx->valueLogical());
   AD_CONTRACT_CHECK(!children.empty());
+  // Give each conjunct its original input as descriptor, for the FILTERs that
+  // are split into their conjuncts (see
+  // `SparqlExpressionPimpl::splitConjunction`).
+  if (children.size() > 1) {
+    for (auto&& [child, childCtx] :
+         ::ranges::views::zip(children, ctx->valueLogical())) {
+      child->descriptor() = getOriginalInputForContext(childCtx);
+    }
+  }
   auto result = std::move(children.front());
   std::for_each(children.begin() + 1, children.end(),
                 [&result](ExpressionPtr& ptr) {
