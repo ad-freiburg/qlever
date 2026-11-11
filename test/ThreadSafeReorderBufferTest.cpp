@@ -135,7 +135,7 @@ TEST(ThreadSafeReorderBuffer, exceptionWakesUpTheConsumer) {
   thrower.join();
 }
 
-// Test that a stop without an exception makes `takeNext` throw an
+// Test that a stop without an exception makes `takeNext` throw a
 // `ThreadSafeReorderBufferStopped`, even if the next slot is delivered.
 TEST(ThreadSafeReorderBuffer, stopMakesTakeThrow) {
   ThreadSafeReorderBuffer<int> buffer;
