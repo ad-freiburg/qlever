@@ -19,7 +19,11 @@
 // supports reflection, which CMake passes automatically for that compiler (see
 // the `QLEVER_USE_REFLECTION` option).
 
+// Note: Old compilers (e.g. GCC 8, which is used for the C++17 build) don't
+// have the `<version>` header. They also don't support reflection.
+#if __has_include(<version>)
 #include <version>
+#endif
 
 #if defined(__cpp_impl_reflection) && defined(__cpp_lib_reflection) && \
     defined(__cpp_expansion_statements)

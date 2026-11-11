@@ -15,6 +15,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "backports/keywords.h"
 #include "backports/reflection.h"
 
 // The number of enumerators of a "regular" enum, that is, an enum the values of
@@ -107,11 +108,11 @@ inline constexpr std::array<E, enumSize<E>> allEnumValues = []() {
   static_assert(std::is_enum_v<E>, "`" #E "` must be an enum")
 #endif
 
-#define QL_IMPL_ENUM_SIZE(FRIEND_SPEC, E, N)                         \
-  [[maybe_unused]] FRIEND_SPEC constexpr std::size_t qleverEnumSize( \
-      ::qlever::enumSizeDetail::EnumSizeTag, E) {                    \
-    return N;                                                        \
-  }                                                                  \
+#define QL_IMPL_ENUM_SIZE(FRIEND_SPEC, E, N)                            \
+  [[maybe_unused]] FRIEND_SPEC QL_CONSTEVAL std::size_t qleverEnumSize( \
+      ::qlever::enumSizeDetail::EnumSizeTag, E) {                       \
+    return N;                                                           \
+  }                                                                     \
   QL_IMPL_CHECK_ENUM_SIZE(E, N)
 
 // State that the enum `E` (which has to be declared in the current namespace)
