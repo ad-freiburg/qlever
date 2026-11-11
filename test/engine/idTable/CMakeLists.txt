@@ -11,3 +11,5 @@ addLinkAndDiscoverTest(ExternalIdTableSorterMergeConfigTest engine index testUti
 addLinkAndDiscoverTest(IdTableOrSharedIdTableViewTest engine testUtil)
 
 addLinkAndDiscoverTest(IdColumnByteIOTest engine)
+
+addLinkAndDiscoverTest(ColumnStorageTraitsTest engine testUtil)
