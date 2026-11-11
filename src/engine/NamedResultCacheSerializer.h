@@ -105,7 +105,14 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
     IdTableView<0>::ViewSpans columns;
     columns.reserve(numColumns);
     for (size_t i = 0; i < numColumns; ++i) {
-      auto column = zeroCopyDeserializeToSpan<Id>(serializer);
+      ConstIdColumnRef column = [&serializer] {
+        if constexpr (std::is_same_v<ConstIdColumnRef, ql::span<const Id>>) {
+          return zeroCopyDeserializeToSpan<Id>(serializer);
+        } else {
+          return columnBasedIdTable::splitLayout::zeroCopyDeserializeIdColumn(
+              serializer);
+        }
+      }();
       AD_CORRECTNESS_CHECK(column.size() == numRows);
       AD_CORRECTNESS_CHECK(
           ql::ranges::find(column, Datatype::LocalVocabIndex,
