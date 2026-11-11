@@ -629,17 +629,17 @@ bool isExpressionOfType(const SparqlExpression& expr) {
 std::optional<valueIdComparators::Comparison> getComparison(
     const SparqlExpression& expression) {
   using enum valueIdComparators::Comparison;
-  if (dynamic_cast<const LessThanExpression*>(&expression)) {
+  if (isExpressionOfType<LessThanExpression>(expression)) {
     return LT;
-  } else if (dynamic_cast<const LessEqualExpression*>(&expression)) {
+  } else if (isExpressionOfType<LessEqualExpression>(expression)) {
     return LE;
-  } else if (dynamic_cast<const EqualExpression*>(&expression)) {
+  } else if (isExpressionOfType<EqualExpression>(expression)) {
     return EQ;
-  } else if (dynamic_cast<const NotEqualExpression*>(&expression)) {
+  } else if (isExpressionOfType<NotEqualExpression>(expression)) {
     return NE;
-  } else if (dynamic_cast<const GreaterThanExpression*>(&expression)) {
+  } else if (isExpressionOfType<GreaterThanExpression>(expression)) {
     return GT;
-  } else if (dynamic_cast<const GreaterEqualExpression*>(&expression)) {
+  } else if (isExpressionOfType<GreaterEqualExpression>(expression)) {
     return GE;
   }
   return std::nullopt;

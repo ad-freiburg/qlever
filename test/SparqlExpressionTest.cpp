@@ -3141,8 +3141,7 @@ TEST(SparqlExpression, structureInspection) {
   const auto& filter = query._rootGraphPattern._filters.at(0).expression_;
 
   // The FILTER is split into its conjuncts, each with its original input as
-  // descriptor (except for the parenthesized `||`, which keeps its descriptor
-  // without whitespace from the parser).
+  // descriptor.
   auto conjuncts = filter.splitConjunction();
   std::vector<const SparqlExpression*> c;
   for (const auto& conjunct : conjuncts) {
@@ -3154,7 +3153,8 @@ TEST(SparqlExpression, structureInspection) {
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a < 1"),
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a <= 2"),
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a > 0"),
-          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?b>=2||?c=3"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor,
+                      "(?b >= 2 || ?c = 3)"),
           AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?c != 3")));
 
   // `isAndExpression` and `isOrExpression` recognize only their own operator.

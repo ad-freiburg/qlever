@@ -13,6 +13,8 @@
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
 
+class TripleComponent;
+
 namespace sparqlExpression {
 
 class SparqlExpression;
@@ -90,6 +92,11 @@ class SparqlExpressionPimpl {
   // Return true iff this expression is guaranteed to produce the same result
   // on every invocation. Delegates to `SparqlExpression::isDeterministic()`.
   [[nodiscard]] bool isDeterministic() const;
+
+  // Return the value of this expression if it is a simple constant (an IRI, a
+  // literal, or an `Id`), else `std::nullopt`. Delegates to
+  // `SparqlExpression::getConstantValue()`.
+  [[nodiscard]] std::optional<TripleComponent> getConstantValue() const;
 
   // Return true if we statically (without evaluating the expression) can
   // determine that its result will never contain undefined values / expression
