@@ -48,7 +48,9 @@ ResolvedGeoOperand resolveGeoOperand(
 static std::optional<
     std::pair<LibSpatialJoinConfig, sparqlExpression::GeoFunctionCall>>
 getSpatialJoinConfigForFilter(
-    const sparqlExpression::SparqlExpression& filterBody) {
+    const sparqlExpression::SparqlExpressionPimpl& filter) {
+  const auto& filterBody = *filter.getPimpl();
+
   // The filter body directly is an optimizable `geof:sf...` function.
   if (auto call = getGeoFunctionExpressionParameters(filterBody)) {
     return std::pair{LibSpatialJoinConfig{call.value().function_},
@@ -63,7 +65,7 @@ getSpatialJoinConfigForFilter(
   }
   // The filter body bounds the distance between two geometries (see
   // `filterFacts::recognizeDistanceBound`).
-  auto conjuncts = filterFacts::canonicalize(filterBody);
+  auto conjuncts = filterFacts::canonicalize(filter);
   if (conjuncts.size() != 1) {
     return std::nullopt;
   }
@@ -81,10 +83,8 @@ getSpatialJoinConfigForFilter(
 std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName) {
-  const auto& filterBody = *filter.expression_.getPimpl();
-
   // Currently, we can only optimize GeoSPARQL filters.
-  auto configAndCall = getSpatialJoinConfigForFilter(filterBody);
+  auto configAndCall = getSpatialJoinConfigForFilter(filter.expression_);
   if (!configAndCall.has_value()) {
     return nullptr;
   }
@@ -122,7 +122,7 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 void splitFiltersWithFacts(std::vector<SparqlFilter>& filters) {
   std::vector<SparqlFilter> result;
   for (auto& filter : filters) {
-    auto conjuncts = filterFacts::canonicalize(*filter.expression_.getPimpl());
+    auto conjuncts = filterFacts::canonicalize(filter.expression_);
     bool hasFact = ql::ranges::any_of(conjuncts, [](const auto& conjunct) {
       return filterFacts::recognizeDistanceBound(conjunct).has_value();
     });
