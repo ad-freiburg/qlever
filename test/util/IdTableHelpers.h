@@ -19,6 +19,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/IdTableUtils.h"
@@ -90,6 +91,23 @@ IdTable makeIdTableFromVector(const VectorTable& content,
     }
   }
   return result;
+}
+
+// Return the `ids` in the storage of a column of an `IdTable`. Like a
+// `std::vector<Id>` converts to a `ql::span<const Id>`, it converts to a
+// `ConstIdColumnRef` in both layouts, also with split columns, which cannot
+// view a `std::vector<Id>`.
+inline detail::IdVector makeIdColumn(const std::vector<Id>& ids) {
+  return {ids.begin(), ids.end(),
+          detail::DefaultAllocator{ad_utility::testing::makeAllocator()}};
+}
+
+// The address of the memory of the `column`, to check if two columns share
+// their memory: of its `Id`s for a `ql::span`, of its payloads for a column of
+// the split layout (which has no `data()`).
+inline const char* memoryOf(ConstIdColumnRef column) {
+  return reinterpret_cast<const char*>(
+      ad_utility::idColumnByteIO::chunksOf(column)[0].data());
 }
 
 // Create IdTables from a vector of VectorTables, where each VectorTable

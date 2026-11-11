@@ -148,17 +148,6 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
 }
 
-// The address of the first byte of the data of the `column`: of its `Id`s for a
-// `ql::span`, of its payloads for a column of the split layout.
-template <typename Column>
-const char* firstByteOf(const Column& column) {
-  if constexpr (std::is_same_v<Column, ql::span<const Id>>) {
-    return reinterpret_cast<const char*>(column.data());
-  } else {
-    return reinterpret_cast<const char*>(column.rawPayloads().data());
-  }
-}
-
 // Test that deserializing from an `AlignedByteBufferReadSerializer` (which
 // supports zero-copy deserialization) yields a non-owning `IdTableView<0>`
 // that points directly into the serializer's buffer, instead of an owning
@@ -197,7 +186,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   // serializer, so no column was copied.
   const auto& buffer = readSerializer.data();
   for (const auto& column : view.getColumns()) {
-    const char* firstByte = firstByteOf(column);
+    const char* firstByte = memoryOf(column);
     EXPECT_TRUE(firstByte >= buffer.data() &&
                 firstByte < buffer.data() + buffer.size());
   }
@@ -569,8 +558,8 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   // The replaced columns have the same shape as the table of the `value`, but
   // different `Id`s. The sort order is shortened, because the replacement
   // invalidates the sortedness of the second column.
-  std::vector<std::vector<Id>> replacedColumns{{V(1), V(2), V(3)},
-                                               {V(4), V(5), V(6)}};
+  std::vector<::detail::IdVector> replacedColumns{
+      makeIdColumn({V(1), V(2), V(3)}), makeIdColumn({V(4), V(5), V(6)})};
   std::vector<ColumnIndex> shortenedSortOrder{0};
 
   ByteBufferWriteSerializer writer;
@@ -594,13 +583,15 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
 
   // The number of the columns and the number of rows in each column have to
   // agree with the table of the `value`.
-  std::vector<std::vector<Id>> tooFewColumns{{V(1), V(2), V(3)}};
+  std::vector<::detail::IdVector> tooFewColumns{
+      makeIdColumn({V(1), V(2), V(3)})};
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewColumns, shortenedSortOrder, false,
           namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numColumns()"));
-  std::vector<std::vector<Id>> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
+  std::vector<::detail::IdVector> tooFewRows{makeIdColumn({V(1), V(2)}),
+                                             makeIdColumn({V(4), V(5)})};
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewRows, shortenedSortOrder, false,

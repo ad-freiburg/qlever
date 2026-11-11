@@ -837,7 +837,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto [result, numHandledBlocks] =
-        CompressedRelationReader::getBlocksForJoin(joinColumn,
+        CompressedRelationReader::getBlocksForJoin(makeIdColumn(joinColumn),
                                                    *metadataAndBlocks);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
     EXPECT_EQ(numHandledBlocks, numHandledBlocksExpected);
@@ -2762,7 +2762,7 @@ TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
 TEST(CountDistinctIds, countAndBoundaryIds) {
   using compressedRelationHelpers::countDistinctIds;
   auto count = [](const std::vector<Id>& ids) {
-    return countDistinctIds(ql::span<const Id>{ids});
+    return countDistinctIds(makeIdColumn(ids));
   };
 
   {
@@ -2790,7 +2790,7 @@ TEST(CountDistinctIds, countAndBoundaryIds) {
 TEST(DistinctIdCounter, blocksAndReset) {
   compressedRelationHelpers::DistinctIdCounter counter;
   auto addBlock = [&counter](const std::vector<Id>& ids) {
-    counter.addBlock(ql::span<const Id>{ids});
+    counter.addBlock(makeIdColumn(ids));
   };
   // A fresh counter has counted nothing.
   EXPECT_EQ(counter.getAndReset(), 0);
