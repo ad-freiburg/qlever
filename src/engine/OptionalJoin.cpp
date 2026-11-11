@@ -41,9 +41,9 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
       _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)),
       keepJoinColumns_{keepJoinColumns},
       condition_{std::move(condition)} {
-  // Without join columns, every pair of rows is compatible (Cartesian
-  // product). This only makes sense with a condition, an OPTIONAL without
-  // shared variables and without condition is handled by the `QueryPlanner`.
+  // An OPTIONAL without shared variables and without a condition is handled by
+  // the `QueryPlanner`, see `optionalJoinWithoutJoinColumns` for the other
+  // case.
   AD_CORRECTNESS_CHECK(!_joinColumns.empty() || !condition_.empty());
 
   // The condition is evaluated on the joined rows, so the join columns have to
@@ -178,6 +178,8 @@ string OptionalJoin::getDescriptor() const {
   std::string result = "OptionalJoin ";
   if (!joinVars.empty()) {
     result += "on " + joinVars;
+  } else {
+    result += "(Cartesian product) ";
   }
   if (!condition_.empty()) {
     result += "with condition " +
@@ -198,6 +200,10 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
   Service::precomputeSiblingResult(_left->getRootOperation(),
                                    _right->getRootOperation(), true,
                                    requestLaziness);
+
+  if (_joinColumns.empty()) {
+    return optionalJoinWithoutJoinColumns(requestLaziness);
+  }
 
   // With a condition, neither the result nor the left input are lazy:
   // `applyCondition` needs the complete result and unique left row indices.
@@ -266,6 +272,76 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
           Result::getMergedLocalVocab(*leftResult, *rightResult)};
+}
+
+// _____________________________________________________________________________
+Result OptionalJoin::optionalJoinWithoutJoinColumns(bool requestLaziness) {
+  AD_CORRECTNESS_CHECK(_joinColumns.empty() && !condition_.empty());
+  auto left = _left->getResult(false);
+  auto right = _right->getResult(false);
+  checkCancellation();
+
+  // Compute the result for the next block of rows of the left input, or
+  // `std::nullopt` if there are no more rows. A block has as many left rows
+  // as possible, such that it has at most `CHUNK_SIZE` pairs with the rows of
+  // the right input (but at least one left row).
+  // TODO<ninofrey> The condition is still evaluated for every pair of rows, so
+  // the running time is O(n * m).
+  auto getNextBlock = [this, left, right,
+                       beginLeft =
+                           size_t{0}]() mutable -> std::optional<IdTable> {
+    auto leftTable = left->idTableView().asStaticView<0>();
+    auto rightTable = right->idTableView().asStaticView<0>();
+    if (beginLeft >= leftTable.size()) {
+      return std::nullopt;
+    }
+    size_t numLeftRows = std::max(
+        size_t{1}, CHUNK_SIZE / std::max(size_t{1}, rightTable.size()));
+    size_t endLeft = std::min(leftTable.size(), beginLeft + numLeftRows);
+    auto leftRows = ql::views::iota(beginLeft, endLeft);
+
+    ad_utility::AddCombinedRowToIdTable rowAdder{
+        0, leftTable, rightTable, IdTable{getResultWidth(), allocator()},
+        cancellationHandle()};
+    std::vector<uint64_t> leftRowOfResultRow;
+    rowAdder.trackLeftRowIndices(&leftRowOfResultRow);
+    if (rightTable.empty()) {
+      ql::ranges::for_each(
+          leftRows, [&rowAdder](size_t row) { rowAdder.addOptionalRow(row); });
+    } else {
+      rowAdder.addRows(leftRows, ql::views::iota(size_t{0}, rightTable.size()));
+    }
+    IdTable block = std::move(rowAdder).resultTable();
+    // Without join columns the order of the rows never changes.
+    applyCondition(block, leftRowOfResultRow, leftTable, beginLeft, endLeft);
+    beginLeft = endLeft;
+    return block;
+  };
+
+  if (requestLaziness) {
+    auto localVocab = std::make_shared<LocalVocab>(left->getCopyOfLocalVocab());
+    localVocab->mergeWith(right->localVocab());
+    auto get = [getNextBlock = std::move(getNextBlock),
+                localVocab = std::move(localVocab)]() mutable
+        -> std::optional<Result::IdTableVocabPair> {
+      auto block = getNextBlock();
+      if (!block.has_value()) {
+        return std::nullopt;
+      }
+      return Result::IdTableVocabPair{std::move(block).value(),
+                                      localVocab->clone()};
+    };
+    return {Result::LazyResult{
+                ad_utility::InputRangeFromGetCallable{std::move(get)}},
+            resultSortedOn()};
+  }
+
+  IdTable result{getResultWidth(), allocator()};
+  while (auto block = getNextBlock()) {
+    result.insertAtEnd(block.value());
+  }
+  return {std::move(result), resultSortedOn(),
+          Result::getMergedLocalVocab(*left, *right)};
 }
 
 // _____________________________________________________________________________
@@ -856,7 +932,9 @@ VariableToColumnMap OptionalJoin::getInternalVariableColumns() const {
 // _____________________________________________________________________________
 bool OptionalJoin::applyCondition(
     IdTable& result, const std::vector<uint64_t>& leftRowOfResultRow,
-    const IdTableView<0>& leftPermuted) const {
+    const IdTableView<0>& leftPermuted, size_t beginLeft,
+    size_t endLeft) const {
+  endLeft = std::min(endLeft, leftPermuted.size());
   constexpr uint64_t optionalRowFlag =
       ad_utility::AddCombinedRowToIdTable::OPTIONAL_ROW_FLAG;
   const size_t numRows = result.size();
@@ -907,11 +985,11 @@ bool OptionalJoin::applyCondition(
   // Step 2: Find the left rows that have at least one partner for which the
   // condition holds.
   enum struct State : char { None, HasMatch, HasOptionalRow };
-  std::vector<State> stateOfLeftRow(leftPermuted.size(), State::None);
+  std::vector<State> stateOfLeftRow(endLeft - beginLeft, State::None);
   for (size_t i = 0; i < numRows; ++i) {
     uint64_t leftRow = leftRowOfResultRow[i];
     if (!(leftRow & optionalRowFlag) && conditionHolds[i]) {
-      stateOfLeftRow.at(leftRow) = State::HasMatch;
+      stateOfLeftRow.at(leftRow - beginLeft) = State::HasMatch;
     }
   }
 
@@ -925,7 +1003,7 @@ bool OptionalJoin::applyCondition(
     if ((leftRow & optionalRowFlag) || conditionHolds[i]) {
       continue;
     }
-    auto& state = stateOfLeftRow[leftRow];
+    auto& state = stateOfLeftRow[leftRow - beginLeft];
     if (state == State::None) {
       state = State::HasOptionalRow;
       rowsToMakeOptional.emplace_back(i, leftRow);

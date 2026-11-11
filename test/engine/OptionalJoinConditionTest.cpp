@@ -495,6 +495,38 @@ TEST(OptionalJoinWithCondition, noJoinColumns) {
 }
 
 // _____________________________________________________________________________
+// No shared variables and more pairs than fit into a single block: with
+// 30'000 rows on the right, each block consists of three left rows.
+TEST(OptionalJoinWithCondition, noJoinColumnsSeveralBlocks) {
+  std::mt19937 gen{5};
+  TestCondition condition{"?y < ?z", testConditions().at(0).function_};
+  auto left = randomRelation(gen, {"?u", "?y"}, 10, 8, {0.2, 0.2});
+  auto right = randomRelation(gen, {"?v", "?z"}, 30'000, 8, {0.2, 0.2});
+  testAgainstReference(left, right, condition, InputMode::Materialized);
+
+  // The same join with a lazy result.
+  auto join = makeJoin(left, right, {condition.sparql_});
+  EXPECT_EQ(join.getDescriptor(),
+            "OptionalJoin (Cartesian product) with condition (?y < ?z)");
+  auto result = join.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+  std::vector<Row> actual;
+  size_t numBlocks = 0;
+  for (auto& [table, localVocab] : result.idTables()) {
+    (void)localVocab;
+    ql::ranges::move(toRows(table.asStaticView<0>()),
+                     std::back_inserter(actual));
+    ++numBlocks;
+  }
+  EXPECT_EQ(numBlocks, 4);
+  auto expected = referenceLeftJoin(left, right, condition.function_,
+                                    {"?u", "?y", "?v", "?z"});
+  ql::ranges::sort(actual);
+  ql::ranges::sort(expected);
+  EXPECT_EQ(actual, expected);
+}
+
+// _____________________________________________________________________________
 // Complete queries, the expected results are computed by hand.
 namespace {
 
@@ -705,6 +737,23 @@ TEST(OptionalJoinWithCondition, queryWithoutSharedVariables) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoinWithCondition, queryConjunctionIsSplit) {
+  // Only `?h > 165` uses a variable from outside of the OPTIONAL and becomes
+  // the condition, `?w > 80` stays in the group as a FILTER on the right side.
+  auto query = [](std::string_view filters) {
+    return absl::StrCat(
+        "SELECT ?h ?w { ?a <height> ?h OPTIONAL { ?b <weight> ?w ", filters,
+        " } } ORDER BY ?h");
+  };
+  EXPECT_THAT(runQuery(query("FILTER(?h > 165 && ?w > 80)")),
+              ElementsAre("150\t", "160\t", "170\t90", "180\t90"));
+  EXPECT_EQ(getCacheKey(query("FILTER(?h > 165 && ?w > 80)")),
+            getCacheKey(query("FILTER(?h > 165) FILTER(?w > 80)")));
+  EXPECT_NE(getCacheKey(query("FILTER(?h > 165 && ?w > 80)")),
+            getCacheKey(query("FILTER(?h > 165 && ?w > 90)")));
+}
+
+// _____________________________________________________________________________
 TEST(OptionalJoinWithCondition, queryErrorsInCondition) {
   // A variable that is bound nowhere: the condition is always an error, which
   // counts as not satisfied, so all weights are unbound.
@@ -728,8 +777,8 @@ TEST(OptionalJoinWithCondition, queryErrorsInCondition) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoinWithCondition, queryFilterWithExists) {
-  // A FILTER with `EXISTS` is never part of the condition, it stays in the
-  // group. <a1>, <a2> and <a4> have an age.
+  // A FILTER (or conjunct) with `EXISTS` is never part of the condition, it
+  // stays in the group. <a1>, <a2> and <a4> have an age.
   auto query = [](std::string_view filter) {
     return absl::StrCat(
         "SELECT ?a ?w { ?a <height> ?h OPTIONAL { ?a <weight> ?w FILTER(",
@@ -742,6 +791,14 @@ TEST(OptionalJoinWithCondition, queryFilterWithExists) {
               ::testing::Not(::testing::HasSubstr("condition: [")));
 
   q = query("NOT EXISTS { ?a <age> ?g }");
+  EXPECT_THAT(runQuery(q), ElementsAre("<a1>\t", "<a2>\t", "<a3>\t", "<a4>\t"));
+
+  // Only the conjunct without `EXISTS` becomes the condition.
+  q = query("?w > ?h - 100 && EXISTS { ?a <age> ?g }");
+  EXPECT_THAT(runQuery(q),
+              ElementsAre("<a1>\t90", "<a2>\t60", "<a3>\t", "<a4>\t"));
+  EXPECT_THAT(getCacheKey(q), ::testing::HasSubstr("condition: ["));
+  q = query("?w > ?h - 100 && NOT EXISTS { ?a <age> ?g }");
   EXPECT_THAT(runQuery(q), ElementsAre("<a1>\t", "<a2>\t", "<a3>\t", "<a4>\t"));
 }
 

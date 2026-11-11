@@ -764,7 +764,8 @@ class QueryPlanner {
     // FILTERs of the group that use a variable of the preceding patterns
     // (SPARQL 1.1, section 18.2.2.6). All other FILTERs only depend on the
     // group itself and stay in it, so that they can be applied early. FILTERs
-    // with `EXISTS` are currently also left in the group.
+    // with `EXISTS` are currently also left in the group. The conjuncts of a
+    // FILTER `a && b` are treated like separate FILTERs.
     std::vector<sparqlExpression::SparqlExpressionPimpl>
     extractOptionalJoinCondition(ParsedQuery::GraphPattern& group) const;
 

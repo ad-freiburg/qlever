@@ -109,11 +109,20 @@ class OptionalJoin : public Operation {
   // `result` still has the internal column order of `AddCombinedRowToIdTable`
   // (join columns first). `leftRowOfResultRow[i]` is the index of the row in
   // `leftPermuted` from which row `i` of `result` was created, see
-  // `AddCombinedRowToIdTable::trackLeftRowIndices`. Return true iff the
-  // result is no longer sorted by the join columns afterwards.
-  bool applyCondition(IdTable& result,
-                      const std::vector<uint64_t>& leftRowOfResultRow,
-                      const IdTableView<0>& leftPermuted) const;
+  // `AddCombinedRowToIdTable::trackLeftRowIndices`. All these indices have to
+  // be in `[beginLeft, endLeft)`. Return true iff the result is no longer
+  // sorted by the join columns afterwards.
+  bool applyCondition(
+      IdTable& result, const std::vector<uint64_t>& leftRowOfResultRow,
+      const IdTableView<0>& leftPermuted, size_t beginLeft = 0,
+      size_t endLeft = std::numeric_limits<size_t>::max()) const;
+
+  // Compute the result without join columns: every left row is compatible
+  // with every right row (Cartesian product), and the `condition_` decides
+  // which of these pairs are kept. A left row without a kept pair is kept
+  // once with UNDEF on the right. Works block by block, so the Cartesian
+  // product is never materialized.
+  Result optionalJoinWithoutJoinColumns(bool requestLaziness);
 
   // Like `applyCondition`, but sort the result by the join columns if the
   // order was changed.

@@ -3111,24 +3111,36 @@ QueryPlanner::GraphPatternPlanner::extractOptionalJoinCondition(
     return condition;
   }
   // Split the FILTERs into the condition and the ones that stay in the group,
-  // keeping their order.
+  // keeping their order. A FILTER `a && b` is equivalent to the two FILTERs
+  // `a` and `b`, so this is decided for each conjunct separately.
   std::vector<SparqlFilter> remainingFilters;
   for (auto& filter : group._filters) {
-    const auto& expression = filter.expression_;
-    // TODO: An `EXISTS` inside the condition would have to be evaluated for
-    // each joined row, which is not supported yet. Such FILTERs keep the
-    // previous behavior.
-    bool hasExists = !expression.getExistsExpressions().empty();
-    // TODO: This also holds for a FILTER that only uses a join variable from
-    // the outside. It could stay in the group (and be applied early) if the
-    // join variable is always bound on the right side.
-    bool usesPreviousVariable =
-        ql::ranges::any_of(expression.containedVariables(),
-                           [&previousVariables](const Variable* var) {
-                             return previousVariables.contains(*var);
-                           });
-    if (!hasExists && usesPreviousVariable) {
-      condition.push_back(std::move(filter.expression_));
+    std::vector<SparqlFilter> remainingConjuncts;
+    bool isPartOfCondition = false;
+    for (auto& expression : filter.expression_.splitConjunction()) {
+      // TODO: An `EXISTS` is computed by an `ExistsJoin` below the FILTER and
+      // can't be evaluated for each joined row yet. It stays in the group,
+      // which is wrong if it uses a variable only bound on the left.
+      bool hasExists = !expression.getExistsExpressions().empty();
+      // TODO: This also holds for a FILTER that only uses a join variable from
+      // the outside. It could stay in the group (and be applied early) if the
+      // join variable is always bound on the right side.
+      bool usesPreviousVariable =
+          ql::ranges::any_of(expression.containedVariables(),
+                             [&previousVariables](const Variable* var) {
+                               return previousVariables.contains(*var);
+                             });
+      if (!hasExists && usesPreviousVariable) {
+        condition.push_back(std::move(expression));
+        isPartOfCondition = true;
+      } else {
+        remainingConjuncts.push_back(SparqlFilter{std::move(expression)});
+      }
+    }
+    // A FILTER that stays in the group completely is not split.
+    if (isPartOfCondition) {
+      ql::ranges::move(remainingConjuncts,
+                       std::back_inserter(remainingFilters));
     } else {
       remainingFilters.push_back(std::move(filter));
     }
