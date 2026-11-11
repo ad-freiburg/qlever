@@ -341,17 +341,17 @@ TEST(AsyncTransformView, numberOfRunnersIsBounded) {
   std::thread::id consumerThread = std::this_thread::get_id();
   std::atomic<size_t> maxActiveOnPool = 0;
   std::atomic<size_t> numActiveOnPool = 0;
+  // Raise `max` to `value` if `value` is larger.
+  auto updateMax = [](std::atomic<size_t>& max, size_t value) {
+    size_t prev = max.load();
+    while (value > prev && !max.compare_exchange_weak(prev, value)) {
+    }
+  };
   auto transformation = [&](size_t i) {
     bool onPool = std::this_thread::get_id() != consumerThread;
-    size_t now = ++numActive;
-    size_t nowOnPool = onPool ? ++numActiveOnPool : numActiveOnPool.load();
-    size_t prev = maxActive.load();
-    while (now > prev && !maxActive.compare_exchange_weak(prev, now)) {
-    }
-    prev = maxActiveOnPool.load();
-    while (nowOnPool > prev &&
-           !maxActiveOnPool.compare_exchange_weak(prev, nowOnPool)) {
-    }
+    updateMax(maxActive, ++numActive);
+    updateMax(maxActiveOnPool,
+              onPool ? ++numActiveOnPool : numActiveOnPool.load());
     std::this_thread::sleep_for(1ms);
     if (onPool) {
       --numActiveOnPool;
