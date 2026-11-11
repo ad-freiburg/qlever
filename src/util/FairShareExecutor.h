@@ -66,9 +66,9 @@ enum class FairShareClass { Foreground = 0, Background = 1 };
 //
 // 1. Between the classes: under contention, each class gets the threads in
 //    proportion to its share. The next task is taken from the class with the
-//    least CPU time received so far, divided by its share.
+//    least run time received so far, divided by its share.
 // 2. Between the clients of that class: they get the threads equally. The next
-//    task is taken from the client with the least CPU time received so far.
+//    task is taken from the client with the least run time received so far.
 //
 // A class or client without queued tasks (or that already runs its maximal
 // number of tasks) is skipped and leaves its threads to the others. So a single
@@ -93,7 +93,7 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     // The share of this class (any positive number, relative to the shares of
     // the other classes).
     double share_ = 1.0;
-    // The virtual time of the class: its received CPU time divided by its
+    // The virtual time of the class: its received run time divided by its
     // share.
     double virtualTime_ = 0;
     // The clients of the class that currently have queued tasks.
@@ -132,10 +132,14 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     std::deque<Task> queue_;
     // The number of tasks that currently run.
     size_t numRunning_ = 0;
-    // The CPU time (in seconds) that the tasks of this client received, plus
+    // The run time (in seconds) that the tasks of this client received, plus
     // the time it is moved forward when it becomes active again (see
     // `submit`). Like the virtual time in stride scheduling, only the
     // differences between the clients of a class matter.
+    //
+    // NOTE: The run time of a task is the wall-clock time for which it
+    // occupied a slot, so a task that blocks (e.g. on I/O) is charged for
+    // that time, too.
     double virtualTime_ = 0;
     // True if the client is in the `activeClients_` of its class.
     bool isActive_ = false;
