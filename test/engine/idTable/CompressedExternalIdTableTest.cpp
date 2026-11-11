@@ -515,11 +515,11 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   // The address of the first column of each block, in the order of the blocks.
   // The transformation runs on the single background thread, and each run
   // completes before the next block is handed over, so no lock is needed.
-  auto buffers = std::make_shared<std::vector<const Id*>>();
+  auto buffers = std::make_shared<std::vector<const char*>>();
   struct RecordBuffer {
-    std::shared_ptr<std::vector<const Id*>> buffers_;
+    std::shared_ptr<std::vector<const char*>> buffers_;
     void operator()(IdTableStatic<NUM_COLS>& block) const {
-      buffers_->push_back(block.getColumn(0).data());
+      buffers_->push_back(memoryOf(block.getColumn(0)));
     }
   };
 

@@ -233,7 +233,7 @@ namespace namedResultCacheSerializer {
 // Write `value` to the `serializer`, in exactly the format that the read
 // branch of the serialization of a `NamedResultCache::Value` below reads.
 //
-// The `columns` (a range of ranges of `Id`, one per column of the result) and
+// The `columns` (one column of an `IdTable` per column of the result) and
 // the `resultSortedOn` are passed separately, so that a caller can write a
 // *rewritten* version of the `value`: a caller may for example replace the
 // `Id`s that refer to local vocab entries by `Id`s of the main or of a

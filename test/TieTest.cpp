@@ -51,14 +51,16 @@ TEST(Tie, tieElement) {
   static_assert(!qlever::isProxy<int>);
 }
 
-// Test that `tieElementsByIndexSequence` on a row of an `IdTable`, whose
-// elements are lvalue references, behaves like `std::tie`.
+// Test that `tieElementsByIndexSequence` on a row of an `IdTable` with columns
+// of whole `Id`s (also with `USE_SPLIT_LAYOUT`), whose elements are lvalue
+// references, behaves like `std::tie`.
 TEST(Tie, lvalueReferences) {
-  IdTable table{3, ad_utility::testing::makeAllocator()};
+  using TableOfIds = columnBasedIdTable::IdTable<Id, 0>;
+  TableOfIds table{3};
   table.push_back({intId(1), intId(2), intId(3)});
   table.push_back({intId(4), intId(5), intId(6)});
 
-  IdTable::row_reference row = table[0];
+  TableOfIds::row_reference row = table[0];
   auto tied = tieElementsByIndexSequence(row, std::index_sequence<0, 2>{});
   static_assert(std::is_same_v<decltype(tied), std::tuple<Id&, Id&>>);
 
@@ -72,8 +74,8 @@ TEST(Tie, lvalueReferences) {
   EXPECT_EQ(table(0, 2), intId(30));
 
   // The elements of a `const` row are `const` references.
-  const IdTable& constTable = table;
-  IdTable::const_row_reference constRow = constTable[1];
+  const TableOfIds& constTable = table;
+  TableOfIds::const_row_reference constRow = constTable[1];
   auto constTied =
       tieElementsByIndexSequence(constRow, std::index_sequence<1, 2>{});
   static_assert(
@@ -82,7 +84,7 @@ TEST(Tie, lvalueReferences) {
   EXPECT_EQ(std::get<1>(constTied), intId(6));
 
   // Tied rows are compared lexicographically.
-  IdTable::row_reference secondRow = table[1];
+  TableOfIds::row_reference secondRow = table[1];
   EXPECT_TRUE(
       tieElementsByIndexSequence(row, std::index_sequence<0, 1>{}) <
       tieElementsByIndexSequence(secondRow, std::index_sequence<0, 1>{}));
