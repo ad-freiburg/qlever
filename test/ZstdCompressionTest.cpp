@@ -8,13 +8,13 @@
 
 #include <array>
 #include <cstddef>
-#include <thread>
 
 #include "../test/util/GTestHelpers.h"
 #include "util/CompilerWarnings.h"
 #include "util/CompressionUsingZstd/ZstdContext.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Random.h"
+#include "util/jthread.h"
 
 using ::testing::HasSubstr;
 
@@ -456,16 +456,15 @@ TEST(ThreadLocalZstdContext, PerThreadState) {
   EXPECT_EQ(roundTrip(threadLocal), buffer);
 
   std::vector<const char*> bufferOfThreads(4);
-  std::vector<std::thread> threads;
+  std::vector<ad_utility::JThread> threads;
   for (size_t i = 0; i < bufferOfThreads.size(); ++i) {
     threads.emplace_back([&roundTrip, &threadLocal, &bufferOfThreads, i] {
       bufferOfThreads[i] = roundTrip(threadLocal);
       EXPECT_EQ(roundTrip(threadLocal), bufferOfThreads[i]);
     });
   }
-  for (auto& thread : threads) {
-    thread.join();
-  }
+  // Join the threads, s.t. all the `bufferOfThreads` are set.
+  threads.clear();
   for (const char* bufferOfThread : bufferOfThreads) {
     EXPECT_NE(bufferOfThread, buffer);
   }
