@@ -57,11 +57,16 @@ std::shared_ptr<T> makeShared(const Allocator<T>& allocator, Args&&... args) {
 
 namespace detail {
 // Return true iff the last of the `Args` is convertible to `Alloc` and `Base`
-// is constructible from the `Args`. The constructibility is only checked if the
-// last argument is an allocator: For other arguments, the check instantiates
-// the default allocator argument of the constructors of `std::vector`, which is
-// a hard error for an allocator that is not default-constructible (e.g. for
-// Clang 16 with libstdc++ 12).
+// is constructible from the `Args`.
+//
+// NOTE: The constructibility is only checked if the last argument is an
+// allocator, hence the `if constexpr` chain instead of a single `&&`
+// expression. Without real concepts (C++17, or clang 16 with the concept
+// emulation of range-v3), all operands of an `&&` constraint are instantiated,
+// and `std::is_constructible` for arguments without an allocator (for example
+// an iterator pair) instantiates the defaulted allocator argument of the
+// constructors of `std::vector`, which is a hard error for an allocator that
+// is not default-constructible.
 template <typename Base, typename Alloc, typename... Args>
 constexpr bool isConstructibleWithAllocatorImpl() {
   if constexpr (sizeof...(Args) == 0) {
@@ -94,10 +99,13 @@ class vector : public std::vector<T, Allocator<T>> {
 
   // Forward all constructors of `Base` that take an allocator as their last
   // argument (the allocator is not default-constructible, so there are no
-  // others). We deliberately don't write `using Base::Base`: Since C++23, the
-  // inherited constructors take part in class template argument deduction,
-  // where they would deduce the element type from the type of the allocator
-  // instead of from the range or iterators (e.g. on GCC 15).
+  // others).
+  //
+  // NOTE: The constructors are deliberately not inherited via `using
+  // Base::Base`. Since C++23, inherited constructors take part in class
+  // template argument deduction, where they would deduce the element type from
+  // the allocator instead of from the range or the iterators (GCC 15 and 16
+  // deduce `qlm::vector<char>` for an `AllocatorWithLimit<char>`).
   CPP_template(typename... Args)(
       requires(sizeof...(Args) > 0) &&
       CPP_NOT(concepts::derived_from<
