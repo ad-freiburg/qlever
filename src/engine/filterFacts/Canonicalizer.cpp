@@ -11,8 +11,10 @@
 
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/ParsedQuery.h"
 #include "parser/VariableCounter.h"
+#include "util/Algorithm.h"
 #include "util/UnitOfMeasurement.h"
 
 namespace filterFacts {
@@ -105,12 +107,13 @@ namespace {
 
 // Return the canonical form of a single conjunct: `distance < number` and
 // `distance <= number` become a `Constraint`, everything else is `Opaque`.
-Conjunct toConjunct(const SparqlExpression& expression) {
+std::variant<Constraint, Opaque> toCanonicalForm(
+    const SparqlExpression& expression) {
   // Match `distance op number` for a distance in a unit of length, return
   // `Opaque` for every other expression.
   auto op = sparqlExpression::getComparison(expression);
   if (op != Comparison::LT && op != Comparison::LE) {
-    return Opaque{&expression};
+    return Opaque{};
   }
   auto call = sparqlExpression::getGeoDistanceExpressionParameters(
       *expression.children()[0]);
@@ -118,22 +121,19 @@ Conjunct toConjunct(const SparqlExpression& expression) {
   auto number = constant.has_value() ? constant->getNumber() : std::nullopt;
   if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
       !number.has_value()) {
-    return Opaque{&expression};
+    return Opaque{};
   }
 
   // Convert the number from the unit of the distance to meters.
   //
-  // NOTE: For meters and kilometers, the conversion is exact (in particular, a
-  // number in meters is not converted to kilometers and back, which may change
-  // it). For the other units, it is exact only up to the rounding of the
-  // conversion factor.
-  double meters = number.value();
-  if (call->unit_ == UnitOfMeasurement::KILOMETERS) {
-    meters *= 1000;
-  } else if (call->unit_ != UnitOfMeasurement::METERS) {
-    meters =
-        ad_utility::detail::valueInUnitToKilometer(meters, call->unit_) * 1000;
-  }
+  // NOTE: A number in meters is not converted to kilometers and back (which may
+  // change it). For the other units, the conversion is exact only up to the
+  // rounding of the conversion factor.
+  double meters = call->unit_ == UnitOfMeasurement::METERS
+                      ? number.value()
+                      : ad_utility::detail::valueInUnitToKilometer(
+                            number.value(), call->unit_) *
+                            1000;
   return Constraint{Distance{call->left_, call->right_}, op.value(), meters};
 }
 
@@ -142,11 +142,12 @@ Conjunct toConjunct(const SparqlExpression& expression) {
 // _____________________________________________________________________________
 std::vector<Conjunct> canonicalize(
     const sparqlExpression::SparqlExpressionPimpl& filter) {
-  return ::ranges::to<std::vector>(
-      filter.splitConjunction() |
-      ql::views::transform([](const auto& conjunct) {
-        return toConjunct(*conjunct.getPimpl());
-      }));
+  return ad_utility::transform(
+      filter.splitConjunction(),
+      [](sparqlExpression::SparqlExpressionPimpl conjunct) {
+        auto canonical = toCanonicalForm(*conjunct.getPimpl());
+        return Conjunct{std::move(conjunct), std::move(canonical)};
+      });
 }
 
 }  // namespace filterFacts

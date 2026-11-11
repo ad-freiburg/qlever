@@ -12,6 +12,8 @@
 #include <cmath>
 #include <limits>
 
+#include "util/Exception.h"
+
 namespace filterFacts {
 
 using valueIdComparators::Comparison;
@@ -19,8 +21,8 @@ using valueIdComparators::Comparison;
 // _____________________________________________________________________________
 std::optional<DistanceBound> recognizeDistanceBound(const Conjunct& conjunct) {
   // Only a `Constraint` bounds a distance, and only between two different
-  // geometries, at least one of which is a variable.
-  const auto* constraint = std::get_if<Constraint>(&conjunct);
+  // operands, at least one of which is a variable.
+  const auto* constraint = std::get_if<Constraint>(&conjunct.canonical_);
   if (constraint == nullptr) {
     return std::nullopt;
   }
@@ -30,17 +32,25 @@ std::optional<DistanceBound> recognizeDistanceBound(const Conjunct& conjunct) {
     return std::nullopt;
   }
 
+  // Return `std::nullopt` if the number is infinite or NaN (also after the
+  // conversion to meters, e.g. for `< 1e306` in kilometers).
+  if (!std::isfinite(constraint->rhs_)) {
+    return std::nullopt;
+  }
+
   // Compute the maximum distance (for `<`, the largest `double` below the
-  // number), and return `std::nullopt` if it is negative, infinite or NaN.
+  // number), and return `std::nullopt` if it is negative.
+  AD_CORRECTNESS_CHECK(constraint->op_ == Comparison::LT ||
+                       constraint->op_ == Comparison::LE);
   double maxMeters = constraint->rhs_;
   if (constraint->op_ == Comparison::LT) {
     maxMeters =
         std::nextafter(maxMeters, -std::numeric_limits<double>::infinity());
   }
-  if (!std::isfinite(maxMeters) || maxMeters < 0) {
+  if (maxMeters < 0) {
     return std::nullopt;
   }
-  return DistanceBound{distance.a_, distance.b_, maxMeters};
+  return DistanceBound{distance, maxMeters};
 }
 
 }  // namespace filterFacts
