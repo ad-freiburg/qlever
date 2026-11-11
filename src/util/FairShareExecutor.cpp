@@ -83,12 +83,17 @@ void FairScheduler::submit(const std::shared_ptr<Client>& client, Task task) {
     if (!client->isActive_) {
       auto& cls = state.classOf(client->class_);
       // The client (and maybe its class) becomes active, initially or after
-      // it ran out of queued tasks. Its virtual time is moved forward to that
-      // of the client (class) that was dispatched last, which is about the
-      // least one among the active ones, as the least one is always dispatched
-      // next. This works for any number of clients (classes). This way, it
-      // neither gets credit for the time in which it had no work (with which it
-      // would starve the others), nor is it penalized for work done before.
+      // it ran out of queued tasks. Suppose the other active clients have
+      // already received about 10 seconds each, which is about the virtual
+      // time of the most recently dispatched one (the one with the least
+      // virtual time is always dispatched next). With its own virtual time of
+      // (say) 0, the new client would be preferred to all of them for the
+      // next 10 seconds, so it would starve them. Instead, it is treated as if
+      // it had already received those 10 seconds: it is at (or near) the
+      // front of the queue, but not far ahead of the others. A client whose
+      // own virtual time is larger (because it received more before it ran
+      // out of work) keeps it. The same holds for the classes, and for any
+      // number of clients and classes.
       if (cls.activeClients_.empty()) {
         cls.virtualTime_ =
             std::max(cls.virtualTime_, state.lastDispatchedClassTime_);
@@ -195,8 +200,13 @@ void FairScheduler::runWorker() {
     auto [seconds, exception] = runAndDestroy(std::move(task));
     if (exception) {
       // Like a plain thread pool, let the exception propagate out of the
-      // thread of the underlying executor. The slot of this worker is handed
-      // over to a new one (which retires right away if there is no task).
+      // thread of the underlying executor. For a `boost::asio::thread_pool`,
+      // this calls `std::terminate`, for an `io_context`, the exception is
+      // thrown from `run()`. Tasks are therefore expected to handle their own
+      // exceptions (e.g. by passing them to a completion handler, as
+      // `boost::asio::use_future` and `co_spawn` do). The slot of this worker
+      // is handed over to a new one (which retires right away if there is no
+      // task).
       state_.wlock()->recordRunTime(*client, seconds);
       postWorker();
       std::rethrow_exception(exception);

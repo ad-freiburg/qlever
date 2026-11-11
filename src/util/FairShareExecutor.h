@@ -34,7 +34,6 @@
 #include <boost/asio/query.hpp>
 #include <boost/asio/require.hpp>
 #include <concepts>
-#include <functional>
 #include <type_traits>
 
 #include "util/Forward.h"
@@ -100,13 +99,19 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     // The clients of the class that currently have queued tasks.
     using Clients = std::vector<std::shared_ptr<Client>>;
     Clients activeClients_;
-    // The virtual time of the client of this class that was dispatched last,
-    // used to place clients that become active (see `submit`).
+    // The virtual time of the client of this class whose task was most
+    // recently dispatched, i.e. taken from its queue by a worker, which then
+    // runs it right away (see `popNextTaskOrRetireWorker`). Used to place
+    // clients that become active (see `submit`).
     double lastDispatchedClientTime_ = 0;
 
     // Return the client of this class whose task runs next: among the active
     // clients that run fewer tasks than their `maxConcurrency_`, the one with
     // the least virtual time. Return `std::nullopt` if there is no such client.
+    //
+    // NOTE: This is a linear search over the active clients (about the number
+    // of concurrent queries), which is cheap compared to the tasks as long as
+    // there are not many hundreds of them.
     std::optional<Clients::iterator> nextClient();
 
     // Remove the client at `it` from the active ones. The client must have no
@@ -151,8 +156,9 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     // The state of each `FairShareClass`, indexed by its value.
     // TODO<#3918> Size it via `qlever::enumSize<FairShareClass>`.
     std::array<ClassState, 2> classes_;
-    // The virtual time of the class that was dispatched last, used to place
-    // classes that become active (see `submit`).
+    // The virtual time of the class whose task was most recently dispatched
+    // (see `ClassState::lastDispatchedClientTime_`). Used to place classes that
+    // become active (see `submit`).
     double lastDispatchedClassTime_ = 0;
 
     ClassState& classOf(FairShareClass fairShareClass) {
@@ -228,7 +234,7 @@ concept PreferableProperty =
     boost::asio::can_prefer_v<const ql::any_io_executor&, Property>;
 template <typename Function>
 concept ExecutableFunction =
-    std::invocable<std::decay_t<Function>&> &&
+    std::invocable<std::decay_t<Function>> &&
     std::constructible_from<std::decay_t<Function>, Function> &&
     std::move_constructible<std::decay_t<Function>>;
 }  // namespace detail::fairShare
@@ -283,9 +289,7 @@ class FairShareExecutor {
 
   template <detail::fairShare::ExecutableFunction Function>
   void execute(Function&& function) const {
-    scheduler_->submit(client_, [function = AD_FWD(function)]() mutable {
-      std::invoke(function);
-    });
+    scheduler_->submit(client_, AD_FWD(function));
   }
 };
 #endif
