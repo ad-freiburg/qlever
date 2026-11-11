@@ -51,7 +51,9 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Values::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {
@@ -141,6 +143,8 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
   size_t rowIdx = 0;
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
   for (auto& row : parsedValues_._values) {
+    // Each `toValueId` below might require a lookup in the vocabulary.
+    checkCancellation();
     for (size_t colIdx = 0; colIdx < idTable.numColumns(); colIdx++) {
       const TripleComponent& tc = row[colIdx];
       // TODO<joka921> We don't want to move, but also don't want to

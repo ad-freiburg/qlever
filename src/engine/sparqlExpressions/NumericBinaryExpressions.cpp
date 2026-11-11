@@ -415,8 +415,8 @@ constexpr auto getMergeFunction(bool isNegated) {
 
 //______________________________________________________________________________
 CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
-    requires isOperation<NaryOperation>) class LogicalBinaryExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    requires isOperation<NaryOperation>)
+class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
@@ -518,9 +518,17 @@ SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
   return std::make_unique<AndExpression>(std::move(child1), std::move(child2));
 }
 
+bool isAndExpression(const SparqlExpression& expression) {
+  return dynamic_cast<const AndExpression*>(&expression) != nullptr;
+}
+
 SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2) {
   return std::make_unique<OrExpression>(std::move(child1), std::move(child2));
+}
+
+bool isOrExpression(const SparqlExpression& expression) {
+  return dynamic_cast<const OrExpression*>(&expression) != nullptr;
 }
 
 SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,

@@ -10,6 +10,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -32,7 +33,7 @@ Filter::Filter(QueryExecutionContext* qec,
       _expression{std::move(expression)} {
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
-      cancellationHandle_);
+      cancellationHandle());
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
@@ -145,10 +146,9 @@ IdTable Filter::filterIdTable(qlm::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(int WIDTH,
-                 typename Table)(requires IdTableLike<Table>) void Filter::
-    computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      qlm::vector<ColumnIndex> sortedBy) const {
+CPP_template_def(int WIDTH, typename Table)(requires IdTableLike<Table>)
+void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
+                               qlm::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
@@ -157,7 +157,7 @@ CPP_template_def(int WIDTH,
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
-      cancellationHandle_, deadline_);
+      cancellationHandle());
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.
@@ -193,7 +193,8 @@ CPP_template_def(int WIDTH,
         // The binary filter contains all elements of the input, and we have
         // no previous results, so we can simply copy or move the complete
         // table.
-        dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+        dynamicResultTable =
+            AD_FWD(inputTable).moveOrClone(cancellationChecker());
         return;
       }
       checkCancellation();
@@ -286,4 +287,30 @@ Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
   return pushDownBindToAnyChild(bind, {_subtree});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  // The subtree has to provide the requested variables and all variables that
+  // the `Filter` operation filters on.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  auto addVarsResult =
+      varsRequiredFromSubtree.addVarsFromExpression(_expression);
+  AD_CORRECTNESS_CHECK(
+      addVarsResult == AddVarsResult::Success,
+      "Aggregate functions are not allowed in a `Filter` clause");
+
+  // Strip the subtree.
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
+
+  // The new `Filter` also exports the filtered variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      _expression);
 }

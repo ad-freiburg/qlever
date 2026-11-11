@@ -159,8 +159,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
              typename WebSocketHandler)(
     requires ad_utility::InvocableWithExactReturnType<
         WebSocketHandler, net::awaitable<void>,
-        const http::request<http::string_body>&,
-        tcp::socket>) class HttpServer {
+        const http::request<http::string_body>&, tcp::socket>)
+class HttpServer {
  private:
   // Returned by `handleEagerRequest` and `handleLazyRequest` to indicate
   // whether the session loop should close the connection after this request.

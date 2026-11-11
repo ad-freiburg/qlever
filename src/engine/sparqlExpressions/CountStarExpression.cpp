@@ -57,9 +57,6 @@ ExpressionResult CountStarExpression::evaluate(
     ++targetColIdx;
     checkCancellation();
   }
-  ctx->_qec.getSortPerformanceEstimator().throwIfEstimateTooLong(
-      table.numRows(), table.numColumns(), ctx->deadline_,
-      "Sort for COUNT(DISTINCT *)");
   ad_utility::callFixedSizeVi(
       table.numColumns(),
       [&table, &sortConfig = ctx->_qec.sortConfig()](auto i) {

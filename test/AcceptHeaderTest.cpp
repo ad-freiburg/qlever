@@ -47,6 +47,19 @@ TEST(AcceptHeaderParser, singleTypeNQuads) {
   ASSERT_EQ(c[0], MediaType::nquads);
 }
 
+// Test that the name of QLever's binary export format contains its version.
+TEST(AcceptHeaderParser, singleTypeBinaryQleverExport) {
+#ifdef QLEVER_USE_SPLIT_LAYOUT
+  std::string name = "application/vnd.qlever.results.v1337";
+#else
+  std::string name = "application/vnd.qlever.results.v1";
+#endif
+  auto c = parseAcceptHeader(name);
+  ASSERT_EQ(c.size(), 1u);
+  ASSERT_EQ(c[0], MediaType::binaryQleverExport);
+  ASSERT_EQ(toString(MediaType::binaryQleverExport), name);
+}
+
 // _____________________________________________________________________________
 TEST(AcceptHeaderParser, multipleTypes) {
   auto c = parseAcceptHeader("application/json,text/plain   ,  text/csv");

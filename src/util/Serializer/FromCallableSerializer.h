@@ -23,9 +23,8 @@ namespace ad_utility::serialization {
 // `ReadFunction` is a lambda that captures a network stream, and reads from
 // that stream in its `operator()`.
 CPP_template(typename ReadFunction)(
-    requires ql::concepts::invocable<ReadFunction, char*,
-                                     size_t>) class ReadViaCallableSerializer
-    : public NoCopy {
+    requires ql::concepts::invocable<ReadFunction, char*, size_t>)
+class ReadViaCallableSerializer : public NoCopy {
  public:
   using SerializerType = ReadSerializerTag;
 
@@ -54,9 +53,8 @@ CPP_template(typename ReadFunction)(
 // `WriteFunction` is a lambda that captures a network stream, and writes to
 // that stream in its `operator()`.
 CPP_template(typename WriteFunction)(
-    requires ql::concepts::invocable<WriteFunction, const char*,
-                                     size_t>) class WriteViaCallableSerializer
-    : public NoCopy {
+    requires ql::concepts::invocable<WriteFunction, const char*, size_t>)
+class WriteViaCallableSerializer : public NoCopy {
  public:
   using SerializerType = WriteSerializerTag;
 
