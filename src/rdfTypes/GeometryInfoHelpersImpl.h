@@ -297,10 +297,12 @@ template <typename T>
 inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
     std::string_view wkt) {
   auto parseResult = detail::parseWkt(wkt);
-  if (!parseResult.parsedWkt_.has_value() ||
-      parseResult.sourceCrs_ == CRSType::UNSUPPORTED) {
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
+
+  // A literal with an unsupported CRS has no parsed geometry, see `parseWkt`.
+  AD_CORRECTNESS_CHECK(parseResult.sourceCrs_ != CRSType::UNSUPPORTED);
   std::optional<T> info;
   if constexpr (std::is_same_v<T, Centroid>) {
     info = centroidAsGeoPoint(parseResult.parsedWkt_.value());
