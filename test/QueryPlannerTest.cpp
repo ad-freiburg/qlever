@@ -2038,36 +2038,37 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
 TEST(QueryPlanner, substituteConstantVariables) {
   auto scan = h::IndexScanFromStrings;
 
+  // A knowledge graph that contains all the constants of the queries below.
+  auto qec = ad_utility::testing::getQec("<a> <p> <b>, \"x\", 42 .");
+
   // A `VALUES` clause with a single row also fixes a variable predicate, also
-  // in a triple before it.
+  // in a triple before it. The scan provides the constants as columns.
   h::expect("SELECT * { ?x ?p ?o VALUES (?x ?p) { (<a> <p>) } }",
-            h::CartesianProductJoin(
-                scan("<a>", "<p>", "?o"),
-                h::ValuesClause("VALUES (?x\t?p) { (<a> <p>) }")));
+            scan("<a>", "<p>", "?o", {}, {}, {}, {}, 3), qec);
 
   // A constant `BIND` fixes the triples after it.
   h::expect("SELECT * { BIND(<a> AS ?x) ?s <p> ?x }",
-            h::CartesianProductJoin(
-                h::Bind(h::NeutralElement(), "<a>", Variable{"?x"}),
-                scan("?s", "<p>", "<a>")));
+            scan("?s", "<p>", "<a>", {}, {}, {}, {}, 2), qec);
 
   // A constant `BIND` of a literal or a number also fixes the triples after it,
   // and a triple may become fully constant.
   auto p = TripleComponent::Iri::fromIriref("<p>");
-  h::expect("SELECT * { BIND(\"x\" AS ?x) ?s <p> ?x }",
-            h::CartesianProductJoin(
-                h::Bind(h::NeutralElement(), "\"x\"", Variable{"?x"}),
-                h::IndexScan(Variable{"?s"}, p,
-                             TripleComponent::Literal::fromStringRepresentation(
-                                 "\"x\""))));
-  h::expect("SELECT * { BIND(42 AS ?x) ?s <p> ?x }",
-            h::CartesianProductJoin(
-                h::Bind(h::NeutralElement(), "42", Variable{"?x"}),
-                h::IndexScan(Variable{"?s"}, p, Id::makeFromInt(42))));
   h::expect(
-      "SELECT * { VALUES (?s ?o) { (<a> <b>) } ?s <p> ?o }",
-      h::CartesianProductJoin(h::ValuesClause("VALUES (?s\t?o) { (<a> <b>) }"),
-                              scan("<a>", "<p>", "<b>")));
+      "SELECT * { BIND(\"x\" AS ?x) ?s <p> ?x }",
+      h::IndexScan(Variable{"?s"}, p,
+                   TripleComponent::Literal::fromStringRepresentation("\"x\""),
+                   {}, IndexScan::Graphs::All(), {}, {}, 2),
+      qec);
+  h::expect("SELECT * { BIND(42 AS ?x) ?s <p> ?x }",
+            h::IndexScan(Variable{"?s"}, p, Id::makeFromInt(42), {},
+                         IndexScan::Graphs::All(), {}, {}, 2),
+            qec);
+  h::expect("SELECT * { VALUES (?s ?o) { (<a> <b>) } ?s <p> ?o }",
+            scan("<a>", "<p>", "<b>", {}, {}, {}, {}, 2), qec);
+
+  // A constant that is not in the vocabulary is added by a `Bind` on top.
+  h::expect("SELECT * { VALUES ?x { <c> } ?s ?p ?x }",
+            h::Bind(scan("?s", "?p", "<c>"), "<c>", Variable{"?x"}), qec);
 
   // A `VALUES` clause with more than one row, an `UNDEF` value, a
   // non-constant or undefined `BIND`, and a triple in a nested group are not
@@ -2126,6 +2127,30 @@ TEST(QueryPlanner, substituteConstantVariables) {
             h::Join(h::Sort(h::ValuesClause(absl::StrCat(
                         "VALUES (?p) { (", LANGUAGE_PREDICATE, ") }"))),
                     scan("?s", "?p", "?o")));
+}
+
+// Test that a component of the query graph that is a single row of constants
+// is added as columns to the other component instead of a Cartesian product.
+TEST(QueryPlanner, constantsAsColumns) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<a> <p> <b>. <a> <q> <c>.");
+
+  // A constant is added by a `Bind` on top of a join.
+  h::expect("SELECT * { VALUES ?x { <a> } ?s <p> ?o . ?s <q> ?y }",
+            h::Bind(h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y")),
+                    "<a>", Variable{"?x"}),
+            qec);
+
+  // A variable that is hidden by a subquery (`?y`) is not added.
+  h::expect("SELECT * { ?s <p> ?o { SELECT ?x { VALUES (?x ?y) { (1 2) } } } }",
+            h::Bind(scan("?s", "<p>", "?o"), "1", Variable{"?x"}), qec);
+
+  // A subquery with a `LIMIT` might not have a row, so it stays a Cartesian
+  // product.
+  h::expect("SELECT * { ?s <p> ?o { SELECT * { VALUES ?x { 1 } } LIMIT 0 } }",
+            h::CartesianProductJoin(scan("?s", "<p>", "?o"),
+                                    ::testing::A<const QueryExecutionTree&>()),
+            qec);
 }
 
 // _____________________________________________________________________________
@@ -3388,9 +3413,9 @@ TEST(QueryPlanner, FilterOnNeutralElement) {
   h::expect("SELECT * { FILTER(true) }",
             h::Filter("true", h::NeutralElement()));
 
-  h::expect("SELECT * { { SELECT * WHERE { FILTER(false) } } VALUES ?x { 1 } }",
-            h::CartesianProductJoin(h::Filter("false", h::NeutralElement()),
-                                    h::ValuesClause("VALUES (?x) { (1) }")));
+  h::expect(
+      "SELECT * { { SELECT * WHERE { FILTER(false) } } VALUES ?x { 1 } }",
+      h::Bind(h::Filter("false", h::NeutralElement()), "1", Variable{"?x"}));
 }
 
 // _____________________________________________________________________________
@@ -3503,10 +3528,9 @@ TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
             h::OptionalJoin(::testing::A<const QueryExecutionTree&>(),
                             ::testing::A<const QueryExecutionTree&>()));
   // But only if the preceding pattern binds the graph variable.
-  h::expect(
-      "SELECT * { GRAPH ?g { VALUES ?v { 1 } OPTIONAL { ?x <q> ?y } } }",
-      h::CartesianProductJoin(h::ValuesClause("VALUES (?v) { (1) }"),
-                              h::NeutralOptional(scan("?x", "<q>", "?y"))));
+  h::expect("SELECT * { GRAPH ?g { VALUES ?v { 1 } OPTIONAL { ?x <q> ?y } } }",
+            h::Bind(h::NeutralOptional(scan("?x", "<q>", "?y")), "1",
+                    Variable{"?v"}));
 }
 
 // _____________________________________________________________________________

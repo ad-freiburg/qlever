@@ -527,6 +527,20 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
                 .idTableView(),
             makeIdTableFromVector({{x, o1}}));
 
+  // A scan without variables (`<x> <p> <o1>`) has a single row with the
+  // constant column.
+  IndexScan scanWithoutVariables{
+      qec, Permutation::PSO,
+      SparqlTripleSimple{iri("<x>"), iri("<p>"), iri("<o1>")}};
+  auto treeWithoutVariables =
+      scanWithoutVariables.makeTreeWithBindColumn(bindIri("<x>"));
+  ASSERT_TRUE(treeWithoutVariables.has_value());
+  EXPECT_EQ(treeWithoutVariables.value()
+                ->getRootOperation()
+                ->computeResultOnlyForTesting()
+                .idTableView(),
+            makeIdTableFromVector({{x}}));
+
   // A `BIND` to a variable of the triple that is stripped away (`?o`) is not
   // pushed down (the stripped column must not come back).
   auto strippedTree = scan.makeTreeWithStrippedColumns({V{"?s"}});

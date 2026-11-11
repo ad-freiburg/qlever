@@ -68,6 +68,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -126,6 +127,112 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
   target.containsBindSubstitute_ = source.containsBindSubstitute_;
+}
+
+// Return the `BIND`s that compute the single row of `qet` if this row consists
+// of constants: a `VALUES` clause with a single row (one `BIND` of each value)
+// or `BIND`s of constants to the neutral element, without `LIMIT` or `OFFSET`.
+// Otherwise, return `std::nullopt`. Variables that are hidden (e.g. by the
+// `SELECT` clause of a subquery) get no `BIND`.
+std::optional<std::vector<p::Bind>> getConstantBinds(
+    const QueryExecutionTree& qet) {
+  const Operation* operation = qet.getRootOperation().get();
+  const auto& visibleVariables = qet.getVariableColumns();
+  auto hasLimitOrOffset = [](const Operation* op) {
+    return !op->getLimitOffset().isUnconstrained();
+  };
+
+  // Return a `BIND` of each value of a `VALUES` clause with a single row (an
+  // IRI, a literal, or a value with an `Id` of its own, like a number or
+  // `UNDEF`).
+  if (const auto* values = dynamic_cast<const Values*>(operation)) {
+    using namespace sparqlExpression;
+    const auto& parsedValues = values->parsedValues();
+    if (parsedValues._values.size() != 1 || hasLimitOrOffset(values)) {
+      return std::nullopt;
+    }
+    std::vector<p::Bind> binds;
+    for (const auto& [variable, value] : ::ranges::views::zip(
+             parsedValues._variables, parsedValues._values.at(0))) {
+      if (!visibleVariables.contains(variable)) {
+        continue;
+      }
+      SparqlExpression::Ptr expression;
+      if (value.isIri()) {
+        expression = std::make_unique<IriExpression>(value.getIri());
+      } else if (value.isLiteral()) {
+        expression =
+            std::make_unique<StringLiteralExpression>(value.getLiteral());
+      } else if (auto id = toValueId(value, operation->getIndex())) {
+        expression = std::make_unique<IdExpression>(id.value());
+      } else {
+        return std::nullopt;
+      }
+      binds.push_back(p::Bind{
+          SparqlExpressionPimpl{std::move(expression), value.toString()},
+          variable});
+    }
+    return binds;
+  }
+
+  // Collect the `BIND`s of constants down to the neutral element (in the order
+  // in which they are applied).
+  std::vector<p::Bind> binds;
+  while (const auto* bind = dynamic_cast<const Bind*>(operation)) {
+    if (!bind->bind()._expression.getConstantValue().has_value() ||
+        hasLimitOrOffset(bind)) {
+      return std::nullopt;
+    }
+    if (visibleVariables.contains(bind->bind()._target)) {
+      binds.push_back(bind->bind());
+    }
+    operation = bind->getChildren().at(0)->getRootOperation().get();
+  }
+  if (dynamic_cast<const NeutralElementOperation*>(operation) == nullptr ||
+      hasLimitOrOffset(operation)) {
+    return std::nullopt;
+  }
+  ql::ranges::reverse(binds);
+  return binds;
+}
+
+// Return `subtrees` without a Cartesian product if all of them except one
+// compute a single row of constants (see `getConstantBinds`): The remaining
+// subtree with a column for each of the constants (via
+// `QueryExecutionTree::makeTreeWithBindColumn`, e.g. a constant column of an
+// `IndexScan`, or else a `Bind` on top). Otherwise, return `std::nullopt`.
+//
+// NOTE: The Cartesian product would copy all rows of the remaining subtree,
+// while a `Bind` only adds a column to them.
+std::optional<std::shared_ptr<QueryExecutionTree>> addConstantsAsColumns(
+    const std::vector<std::shared_ptr<QueryExecutionTree>>& subtrees) {
+  // Split the `subtrees` into the `BIND`s of the constants and the single
+  // remaining subtree, return `std::nullopt` if there is no such split.
+  std::vector<p::Bind> binds;
+  std::shared_ptr<QueryExecutionTree> result;
+  for (const auto& subtree : subtrees) {
+    if (auto constantBinds = getConstantBinds(*subtree)) {
+      ql::ranges::move(constantBinds.value(), std::back_inserter(binds));
+    } else if (result == nullptr) {
+      result = subtree;
+    } else {
+      return std::nullopt;
+    }
+  }
+  if (result == nullptr) {
+    return std::nullopt;
+  }
+
+  // Add a column for each constant to the remaining subtree.
+  for (const auto& bind : binds) {
+    auto withColumn = result->makeTreeWithBindColumn(bind);
+    result = withColumn.has_value()
+                 ? std::move(withColumn.value())
+                 : ad_utility::makeExecutionTree<Bind>(
+                       result->getRootOperation()->getExecutionContext(),
+                       result, bind);
+  }
+  return result;
 }
 }  // namespace
 
@@ -2067,14 +2174,20 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
         containsBindSubstitute |= plan.containsBindSubstitute_;
         subtrees.push_back(std::move(plan._qet));
       });
+  // Add the components that are only constants as columns to the remaining
+  // component if possible, otherwise compute the Cartesian product.
+  auto constantsAsColumns = addConstantsAsColumns(subtrees);
   result.at(0).push_back(
-      makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+      constantsAsColumns.has_value()
+          ? SubtreePlan{std::move(constantsAsColumns.value())}
+          : makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
   auto& plan = result.at(0).back();
   plan._idsOfIncludedNodes = nodes;
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
   plan.containsFilterSubstitute_ = containsFilterSubstitute;
-  plan.containsBindSubstitute_ = containsBindSubstitute;
+  plan.containsBindSubstitute_ =
+      containsBindSubstitute || constantsAsColumns.has_value();
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);

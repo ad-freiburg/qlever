@@ -765,7 +765,8 @@ class QueryPlanner {
 
     // Replace each variable of `triple` that has a constant in `constants_` by
     // this constant. The `VALUES` or `BIND` clause that binds the variable is
-    // still planned, so the variable remains bound in the result.
+    // still planned, so the variable remains bound in the result (usually as a
+    // column of the scan, see `addConstantsAsColumns` in `fillDpTab`).
     //
     // NOTE 1: The fixed constant allows for index scans with fewer variables,
     // which are sorted by the remaining variables and thus avoid joins and
