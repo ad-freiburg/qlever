@@ -1007,6 +1007,30 @@ TEST(LibQlever, allocatorGetter) {
   EXPECT_EQ(constEngine.allocator().amountMemoryLeft(), memoryLeftBefore);
 }
 
+// Test the constructor with a caller-provided allocator: the engine uses it
+// as-is (the memory limit from the config is not applied), and can answer
+// queries.
+TEST(LibQlever, callerProvidedAllocator) {
+  using namespace ad_utility::memory_literals;
+  EngineConfig ec = buildTestEngineConfig("<s> <p> <o> .");
+  ec.memoryLimit_ = 50_MB;
+  auto allocator = ad_utility::makeAllocatorWithLimit<Id>(1_GB);
+  Qlever engine{ec, false, allocator};
+  EXPECT_GT(engine.allocator().amountMemoryLeft(), 50_MB);
+
+  // The engine allocates from the caller's allocator.
+  const auto memoryLeftBefore = allocator.amountMemoryLeft();
+  constexpr size_t numIds = 16;
+  Id* ptr = engine.allocator().allocate(numIds);
+  EXPECT_EQ(allocator.amountMemoryLeft(),
+            memoryLeftBefore - memoryOfIds(numIds));
+  engine.allocator().deallocate(ptr, numIds);
+
+  EXPECT_EQ(
+      engine.query("SELECT ?o { <s> <p> ?o }", ad_utility::MediaType::tsv),
+      "?o\n<o>\n");
+}
+
 // _____________________________________________________________________________
 // The `clearOnAllocation` hook that `Qlever` installs in its allocator (see the
 // constructor in `Qlever.cpp`) evicts entries from the query result cache when
