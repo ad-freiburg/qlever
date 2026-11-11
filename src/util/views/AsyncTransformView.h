@@ -27,6 +27,7 @@
 #include "backports/atomic_flag.h"
 #include "util/Exception.h"
 #include "util/Iterators.h"
+#include "util/Math.h"
 #include "util/NoCopyNoMove.h"
 
 namespace ad_utility {
@@ -181,8 +182,7 @@ class AsyncTransformView
       std::lock_guard lock{mutex_};
       ql::ranges::copy(slots, std::back_inserter(todo_));
       size_t wanted =
-          std::min(maxNumRunners_, (todo_.size() + numSlotsPerRunner_ - 1) /
-                                       numSlotsPerRunner_);
+          std::min(maxNumRunners_, ceilDiv(todo_.size(), numSlotsPerRunner_));
       size_t numNewRunners = wanted - std::min(wanted, numRunners_);
       numRunners_ += numNewRunners;
       return numNewRunners;
