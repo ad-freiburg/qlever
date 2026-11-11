@@ -485,7 +485,7 @@ inline std::vector<SizeVec> makeRandomRuns(size_t numRuns, size_t minSize,
 // Return the concatenation of all `runs`.
 template <typename T>
 std::vector<T> concatenation(const std::vector<std::vector<T>>& runs) {
-  return ::ranges::to_vector(runs | ql::views::join);
+  return runs | ql::views::join | ::ranges::to_vector;
 }
 
 // Return the sorted concatenation of all `runs`.

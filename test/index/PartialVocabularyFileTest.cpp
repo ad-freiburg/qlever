@@ -66,11 +66,11 @@ void writePartialVocabulary(const std::string& filename,
 // The words of an input block as (word, isExternal, local index) tuples.
 std::vector<std::tuple<std::string, bool, uint64_t>> tuplesOfBlock(
     const InputBlock& block) {
-  std::vector<std::tuple<std::string, bool, uint64_t>> result;
-  for (const auto& word : block) {
-    result.emplace_back(word.iriOrLiteral(), word.isExternal(), word.id());
-  }
-  return result;
+  return block | ql::views::transform([](const auto& word) {
+           return std::tuple<std::string, bool, uint64_t>{
+               word.iriOrLiteral(), word.isExternal(), word.id()};
+         }) |
+         ::ranges::to<std::vector<std::tuple<std::string, bool, uint64_t>>>();
 }
 
 // The occurrences of a `word` of a merged `block` as a vector (gtest cannot

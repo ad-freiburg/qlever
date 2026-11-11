@@ -32,10 +32,13 @@ constexpr std::string_view testTurtle =
 std::vector<std::string> canonicalResult(const QueryExecutionTree& tree) {
   auto result = tree.getResult();
   const auto& table = result->idTableView();
-  std::vector<std::pair<std::string, ColumnIndex>> varsAndColumns;
-  for (const auto& [variable, columnInfo] : tree.getVariableColumns()) {
-    varsAndColumns.emplace_back(variable.name(), columnInfo.columnIndex_);
-  }
+  auto varsAndColumns =
+      tree.getVariableColumns() |
+      ql::views::transform([](const auto& varAndColumnInfo) {
+        const auto& [variable, columnInfo] = varAndColumnInfo;
+        return std::pair{variable.name(), columnInfo.columnIndex_};
+      }) |
+      ::ranges::to<std::vector<std::pair<std::string, ColumnIndex>>>();
   ql::ranges::sort(varsAndColumns);
   std::vector<std::string> rows;
   for (size_t i = 0; i < table.numRows(); ++i) {

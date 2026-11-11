@@ -39,9 +39,8 @@ VocabBatchLookupResult VocabularyInMemory::lookupBatch(
   AD_CONTRACT_CHECK(!indices.empty());
 
   return SharedWordsVocabBatchLookupData::fromViews(
-      words_,
-      ::ranges::to_vector(indices | ql::views::transform([this](size_t idx) {
-                            AD_CONTRACT_CHECK(idx < size());
-                            return words()[idx];
-                          })));
+      words_, indices | ql::views::transform([this](size_t idx) {
+                AD_CONTRACT_CHECK(idx < size());
+                return words()[idx];
+              }) | ::ranges::to_vector);
 }

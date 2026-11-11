@@ -107,12 +107,11 @@ size_t MultiColumnJoin::getResultWidth() const {
 
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
-  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // The result is sorted on all join columns from the left subtree.
-  for (const auto& a : _joinColumns) {
-    sortedOn.push_back(a[0]);
-  }
-  return sortedOn;
+  return _joinColumns | ql::views::transform([](const auto& a) -> ColumnIndex {
+           return a[0];
+         }) |
+         ::ranges::to<qlm::vector<ColumnIndex>>(allocator());
 }
 
 // _____________________________________________________________________________
@@ -271,10 +270,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // TODO<joka921> We only have to do this if the sorting is required (merge the
   // other PR first).
   if (numOutOfOrder > 0) {
-    std::vector<ColumnIndex> cols;
-    for (size_t i = 0; i < joinColumns.size(); ++i) {
-      cols.push_back(i);
-    }
+    auto cols = ::ranges::to<std::vector<ColumnIndex>>(
+        ad_utility::integerRange(joinColumns.size()));
     checkCancellation();
     IdTableUtils::sort(*result, cols, sortConfig());
   }

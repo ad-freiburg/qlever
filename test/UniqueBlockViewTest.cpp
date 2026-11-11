@@ -50,10 +50,7 @@ TEST(UniqueBlockView, randomInput) {
   }
 
   auto unique = ql::views::join(ad_utility::uniqueBlockView(inputs));
-  std::vector<int> result;
-  for (const auto& element : unique) {
-    result.push_back(element);
-  }
+  auto result = ::ranges::to<std::vector<int>>(unique);
   std::sort(ints.begin(), ints.end());
   // Erase "accidentally" unique duplicates from the random initialization.
   auto it = std::unique(ints.begin(), ints.end());

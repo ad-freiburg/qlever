@@ -196,10 +196,11 @@ template <typename F>
 std::string asciiStringTransform(std::string_view s,
                                  [[maybe_unused]] const char* localeName,
                                  F transformation) {
-  return ::ranges::to<std::string>(
-      s | ql::views::transform([&transformation](char c) {
-        return static_cast<char>(transformation(static_cast<unsigned char>(c)));
-      }));
+  return s | ql::views::transform([&transformation](char c) {
+           return static_cast<char>(
+               transformation(static_cast<unsigned char>(c)));
+         }) |
+         ::ranges::to<std::string>();
 }
 }  // namespace
 

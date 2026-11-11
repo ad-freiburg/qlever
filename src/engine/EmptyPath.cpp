@@ -118,12 +118,13 @@ EmptyPath::EmptyPath(QueryExecutionContext* qec, Variable variable,
   // carried over. Note that the child might have columns without a variable
   // attached to them, so we iterate over the column indices and not over the
   // variables.
-  ql::ranges::copy_if(ad_utility::integerRange(child().getResultWidth()),
-                      std::back_inserter(checkedChild.payloadColumns_),
-                      [&checkedChild](ColumnIndex column) {
-                        return column != checkedChild.joinColumn_ &&
-                               column != checkedChild.graphColumn_;
-                      });
+  checkedChild.payloadColumns_ =
+      ad_utility::integerRange(child().getResultWidth()) |
+      ql::views::filter([&checkedChild](ColumnIndex column) {
+        return column != checkedChild.joinColumn_ &&
+               column != checkedChild.graphColumn_;
+      }) |
+      ::ranges::to<std::vector<ColumnIndex>>();
   resultWidth_ = firstPayloadColumn() + checkedChild.payloadColumns_.size();
   for (const auto& [variable, info] : child().getVariableColumns()) {
     auto column =
@@ -405,10 +406,11 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
   }
   ConstIdColumnRef joinColumn =
       input.getColumn(checkedChild_.value().joinColumn_);
-  std::vector<size_t> undefRows;
-  ql::ranges::copy_if(
-      ad_utility::integerRange(input.numRows()), std::back_inserter(undefRows),
-      [&joinColumn](size_t i) { return joinColumn[i].isUndefined(); });
+  auto undefRows = ad_utility::integerRange(input.numRows()) |
+                   ql::views::filter([&joinColumn](size_t i) {
+                     return joinColumn[i].isUndefined();
+                   }) |
+                   ::ranges::to<std::vector<size_t>>();
   // Note that this doesn't preserve the sort order, which is accounted for by
   // `resultSortedOn`.
   for (const IdTable& part : scanIndex(std::nullopt)) {

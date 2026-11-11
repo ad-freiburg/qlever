@@ -395,9 +395,10 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 
   [[nodiscard]] SortKey getSortKey(std::string_view s,
                                    const Level /*level*/) const {
-    return SortKey{::ranges::to<U8String>(s | ql::views::transform([](char c) {
-                                            return static_cast<uint8_t>(c);
-                                          }))};
+    return SortKey{s | ql::views::transform([](char c) {
+                     return static_cast<uint8_t>(c);
+                   }) |
+                   ::ranges::to<U8String>()};
   }
 
   [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(

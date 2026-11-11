@@ -171,10 +171,7 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   // every vocabulary type (implementations without a specialized `scanAll` use
   // a generic fallback). Here all words are in the main vocabulary, so the
   // indices are simply `0, 1, 2`.
-  std::vector<std::pair<uint64_t, std::string>> scanned;
-  for (const IndexAndWord& indexAndWord : vocab.scanAll()) {
-    scanned.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
-  }
+  auto scanned = vocabulary_test::scanAllToIndexAndWordVector(vocab.scanAll());
   EXPECT_THAT(scanned, ::testing::ElementsAre(std::pair{uint64_t{0}, "alpha"},
                                               std::pair{uint64_t{1}, "beta"},
                                               std::pair{uint64_t{2}, "gamma"}));

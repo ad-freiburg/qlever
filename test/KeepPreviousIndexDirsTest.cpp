@@ -160,10 +160,12 @@ void setUpPreviousIndexDirs(const ql::filesystem::path& testDir) {
 
 // Return the names of the entries of `testDir`, sorted.
 std::vector<std::string> entryNames(const ql::filesystem::path& testDir) {
-  std::vector<std::string> result;
-  for (const auto& entry : ql::filesystem::directory_iterator{testDir}) {
-    result.push_back(entry.path().filename().string());
-  }
+  auto result =
+      ql::directoryRange(testDir) |
+      ql::views::transform([](const ql::filesystem::directory_entry& entry) {
+        return entry.path().filename().string();
+      }) |
+      ::ranges::to<std::vector<std::string>>();
   ql::ranges::sort(result);
   return result;
 }

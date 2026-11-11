@@ -681,11 +681,9 @@ TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
     const auto& qet = plan.queryExecutionTree();
     auto result = qet.getResult();
     auto objectColumn = qet.getVariableColumn(Variable{"?o"});
-    std::vector<int64_t> objects;
-    for (size_t i = 0; i < result->idTableView().numRows(); ++i) {
-      objects.push_back(result->idTableView()(i, objectColumn).getInt());
-    }
-    return objects;
+    return result->idTableView().getColumn(objectColumn) |
+           ql::views::transform([](Id id) { return id.getInt(); }) |
+           ::ranges::to<std::vector<int64_t>>();
   };
 
   // A copy of a `PlannedQuery` shares the `QueryExecutionTree`, so modifying

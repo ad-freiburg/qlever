@@ -165,13 +165,14 @@ class CompressedVocabulary {
       AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size(),
                            "the underlying vocabulary returned a different "
                            "number of words than requested");
-      auto words = ::ranges::to<std::vector<std::string>>(
+      auto words =
           ::ranges::views::zip(*compressedWords, indices) |
           ql::views::transform([this](const auto& compressedWordAndIndex) {
             const auto& [compressedWord, index] = compressedWordAndIndex;
             return compressionWrapper_.decompress(compressedWord,
                                                   getDecoderIdx(index));
-          }));
+          }) |
+          ::ranges::to<std::vector<std::string>>();
       return StringVectorVocabBatchLookupData::fromWords(std::move(words));
     }
   }

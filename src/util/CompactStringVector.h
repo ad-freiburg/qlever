@@ -217,8 +217,9 @@ class CompactVectorOfStrings {
   CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
     clone.offsets_ = offsets_.clone();
-    clone.data_ = DataStorage{::ranges::to_vector(
-        dataSpan() | ql::views::transform(std::move(mappingFunction)))};
+    clone.data_ = DataStorage{dataSpan() |
+                              ql::views::transform(std::move(mappingFunction)) |
+                              ::ranges::to_vector};
     return clone;
   }
 

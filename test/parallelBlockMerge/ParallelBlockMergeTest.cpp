@@ -103,11 +103,7 @@ struct LiveCounted {
 
 // Return the sorted run of the `LiveCounted` elements `first ... last - 1`.
 std::vector<LiveCounted> makeLiveCounted(size_t first, size_t last) {
-  std::vector<LiveCounted> result;
-  for (size_t i = first; i < last; ++i) {
-    result.emplace_back(i);
-  }
-  return result;
+  return ::ranges::to<std::vector<LiveCounted>>(ql::views::iota(first, last));
 }
 
 // An input policy that derives from `SizeInput` (that is, from
@@ -198,11 +194,7 @@ std::vector<typename Input::value_type> mergeToVector(
 
 // Return the keys (that is, the first components) of the `pairs`.
 SizeVec getKeys(const std::vector<Pair>& pairs) {
-  SizeVec result;
-  for (const auto& pair : pairs) {
-    result.push_back(pair.first);
-  }
-  return result;
+  return pairs | ql::views::keys | ::ranges::to<SizeVec>();
 }
 
 // The number of runs and the number of elements per run of
@@ -286,22 +278,14 @@ std::vector<SizeVec> runsWithInterleavedElements() {
 // per element of the range `[0, numSplitPoints)` plus a single chunk that holds
 // everything that is greater.
 SizeVec splitPointsUpTo(size_t numSplitPoints) {
-  SizeVec result;
-  for (size_t i = 0; i < numSplitPoints; ++i) {
-    result.push_back(i);
-  }
-  return result;
+  return ::ranges::to<SizeVec>(ql::views::iota(size_t{0}, numSplitPoints));
 }
 
 // Return the `values` as `CountingString`s, all of which have not been copied
 // yet.
 std::vector<CountingString> makeCountingStrings(
     const std::vector<std::string>& values) {
-  std::vector<CountingString> result;
-  for (const auto& value : values) {
-    result.emplace_back(value);
-  }
-  return result;
+  return ::ranges::to<std::vector<CountingString>>(values);
 }
 
 // Create the `MergeState` that the `detail::ChunkMerger`s of a merge share (see

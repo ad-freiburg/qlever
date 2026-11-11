@@ -164,9 +164,8 @@ TEST(OperationTest, limitPushdownClonesOnlySharedChildren) {
 
     // Exclusively owned children are modified in place, and so are their
     // children.
-    std::vector<QueryExecutionTree*> grandchildren;
-    ql::ranges::transform(clones, std::back_inserter(grandchildren),
-                          getGrandchild);
+    auto grandchildren = clones | ql::views::transform(getGrandchild) |
+                         ::ranges::to<std::vector<QueryExecutionTree*>>();
     operation->applyLimitOffset({1}, true);
     for (size_t i = 0; i < numPushedChildren; ++i) {
       auto* clone = operation->getChildren().at(i);

@@ -740,10 +740,8 @@ std::vector<std::vector<size_t>> generateSplitConfigurations(
 
   // Pathological case 2: One element per block (split after each element).
   if (tableSize > 0) {
-    std::vector<size_t> onePerElement;
-    for (size_t i = 1; i < tableSize; ++i) {
-      onePerElement.push_back(i);
-    }
+    auto onePerElement = ::ranges::to<std::vector<size_t>>(
+        ql::views::iota(size_t{1}, tableSize));
     configs.push_back(onePerElement);
   }
 

@@ -251,11 +251,10 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
   auto tbmdVector = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
                                                       idRange.last().get());
 
-  std::vector<TextBlockMetadataAndWordInfo> result;
-  for (auto tbmd : tbmdVector) {
-    result.emplace_back(tbmd.get(), idRange);
-  }
-  return result;
+  return tbmdVector | ql::views::transform([&idRange](auto tbmd) {
+           return TextBlockMetadataAndWordInfo{tbmd.get(), idRange};
+         }) |
+         ::ranges::to<std::vector<TextBlockMetadataAndWordInfo>>();
 }
 
 // _____________________________________________________________________________

@@ -356,10 +356,11 @@ TEST(FsstEncoder, firstTest) {
   // Now test the `compressAll` interface.
   {
     auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(s);
-    std::vector<std::string> s3;
-    for (auto compressedView : compressedViews) {
-      s3.push_back(decoder.decompress(compressedView));
-    }
+    auto s3 = compressedViews |
+              ql::views::transform([&decoder](auto compressedView) {
+                return decoder.decompress(compressedView);
+              }) |
+              ::ranges::to<std::vector<std::string>>();
     EXPECT_THAT(s3, ::testing::ElementsAreArray(s));
   }
 }

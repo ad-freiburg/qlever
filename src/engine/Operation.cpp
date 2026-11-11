@@ -626,8 +626,8 @@ std::vector<size_t> Operation::getCostEstimatesChargedForChildren() {
   // Not piped as a temporary: libc++ would then wrap it in an `owning_view`,
   // which requires the (deleted) default constructor of the allocator.
   auto children = getChildren();
-  return ::ranges::to_vector(
-      children | ql::views::transform(&QueryExecutionTree::getCostEstimate));
+  return children | ql::views::transform(&QueryExecutionTree::getCostEstimate) |
+         ::ranges::to_vector;
 }
 
 // __________________________________________________________________
@@ -672,12 +672,10 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->addDetail("offset", offset);
   }
 
-  std::vector<float> multiplicityEstimates;
-  multiplicityEstimates.reserve(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    multiplicityEstimates.push_back(getMultiplicity(i));
-  }
-  _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
+  _runtimeInfo->multiplicityEstimates_ =
+      ad_utility::integerRange(numCols) |
+      ql::views::transform([this](size_t i) { return getMultiplicity(i); }) |
+      ::ranges::to<std::vector<float>>();
 
   // Add the warnings that were added before the runtime information was
   // (re)created, e.g. during the query planning.
@@ -811,9 +809,9 @@ void Operation::keepHiddenVariablesHidden(
   if (!variableToColumnMap_ || !externallyVisibleVariableToColumnMap_) {
     return;
   }
-  std::vector<Variable> visibleVariables;
-  ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
-                   std::back_inserter(visibleVariables));
+  auto visibleVariables = getExternallyVisibleVariableColumns() |
+                          ql::views::keys |
+                          ::ranges::to<std::vector<Variable>>();
   if (additionalVisibleVariable.has_value()) {
     visibleVariables.push_back(std::move(additionalVisibleVariable).value());
   }

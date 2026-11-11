@@ -106,9 +106,9 @@ void PatternCreator::finish() {
 
   // Store the actual patterns ordered by their pattern ID. They are currently
   // stored in a hash map, so we first have to sort them.
-  // TODO<C++23> Use `ranges::to<vector>`.
-  std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns{
-      patternToIdAndCount_.begin(), patternToIdAndCount_.end()};
+  auto orderedPatterns =
+      ::ranges::to<std::vector<std::pair<Pattern, PatternIdAndCount>>>(
+          patternToIdAndCount_);
   ql::ranges::sort(orderedPatterns, std::less<>{},
                    [](const auto& a) { return a.second.patternId_; });
   CompactVectorOfStrings<Id> patterns;

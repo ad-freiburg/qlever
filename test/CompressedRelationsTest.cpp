@@ -369,10 +369,8 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
       std::make_shared<ad_utility::CancellationHandle<>>();
   // Check the contents of the metadata.
 
-  // TODO<C++23> `ql::ranges::to<vector>`.
-  std::vector<ColumnIndex> additionalColumns;
-  ql::ranges::copy(ql::views::iota(ColumnIndex{3}, getNumColumns(inputs) + 1),
-                   std::back_inserter(additionalColumns));
+  auto additionalColumns = ::ranges::to<std::vector<ColumnIndex>>(
+      ql::views::iota(ColumnIndex{3}, getNumColumns(inputs) + 1));
   // Get a pair<optional<RelationMetadata>, bool>` for the given `col0`, where
   // the `bool` is true if the `col0` is a "large" relation, meaning that the
   // metadata is explicitly stored and not extracted from the compressed data on
@@ -2087,10 +2085,11 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsHandlesGraphInfoOverflow) {
   auto index = ad_utility::testing::makeTestIndex(config);
   auto getId = ad_utility::testing::makeGetId(index);
 
-  std::vector<Id::T> expectedIds;
-  for (const auto& graph : expectedGraphs) {
-    expectedIds.push_back(getId(graph).getBits());
-  }
+  auto expectedIds = expectedGraphs |
+                     ql::views::transform([&getId](const auto& graph) {
+                       return getId(graph).getBits();
+                     }) |
+                     ::ranges::to<std::vector<Id::T>>();
 
   auto graphIds = computeUniqueGraphIdsForIndex(index);
   EXPECT_THAT(graphIds, ::testing::UnorderedElementsAreArray(expectedIds));
@@ -2435,10 +2434,8 @@ PermutationBuildResult buildPermutation(std::vector<RelationInput> inputs,
                                   ad_utility::File{filename, "r"}};
   BlockMetadataSpan blockSpan{result.blocks_};
   BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
-  std::vector<ColumnIndex> additionalColumns;
-  for (size_t i = 3; i < numColumns; ++i) {
-    additionalColumns.push_back(i);
-  }
+  auto additionalColumns = ::ranges::to<std::vector<ColumnIndex>>(
+      ql::views::iota(size_t{3}, numColumns));
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   for (const auto& input : inputs) {
@@ -2453,12 +2450,12 @@ PermutationBuildResult buildPermutation(std::vector<RelationInput> inputs,
 
 // Return the compressed sizes of the columns of the given block.
 std::vector<size_t> getCompressedSizes(const CompressedBlockMetadata& block) {
-  std::vector<size_t> sizes;
   AD_CONTRACT_CHECK(block.offsetsAndCompressedSize_.has_value());
-  for (const auto& offsetAndSize : block.offsetsAndCompressedSize_.value()) {
-    sizes.push_back(offsetAndSize.compressedSize_);
-  }
-  return sizes;
+  return block.offsetsAndCompressedSize_.value() |
+         ql::views::transform([](const auto& offsetAndSize) {
+           return offsetAndSize.compressedSize_;
+         }) |
+         ::ranges::to<std::vector<size_t>>();
 }
 
 // Check that the two given results of building a permutation are equal. Only
@@ -2673,10 +2670,10 @@ TEST(CompressedRelationWriter, relationSizesAtTheSmallRelationThreshold) {
     SCOPED_TRACE(absl::StrCat("input block size ", inputBlockSize));
     auto [filename, cleanup] = testFilenameWithCleanup();
     auto result = buildPermutation(inputs, 10, inputBlockSize, filename);
-    std::vector<Id> largeCol0Ids;
-    ql::ranges::transform(result.largeRelationMetadata_,
-                          std::back_inserter(largeCol0Ids),
-                          &CompressedRelationMetadata::col0Id_);
+    auto largeCol0Ids =
+        result.largeRelationMetadata_ |
+        ql::views::transform(&CompressedRelationMetadata::col0Id_) |
+        ::ranges::to<std::vector<Id>>();
     EXPECT_THAT(largeCol0Ids, ::testing::ElementsAre(V(3), V(6)));
   }
 }
@@ -2909,11 +2906,8 @@ TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices) {
 
   // Return the number of rows of each of the written `blocks`.
   auto blockSizes = [](const std::vector<CompressedBlockMetadata>& blocks) {
-    std::vector<size_t> result;
-    for (const auto& block : blocks) {
-      result.push_back(block.numRows_);
-    }
-    return result;
+    return blocks | ql::views::transform(&CompressedBlockMetadata::numRows_) |
+           ::ranges::to<std::vector<size_t>>();
   };
 
   {
@@ -3026,10 +3020,9 @@ TEST(CompressedRelationWriter, largeTwinRelationIsWrittenInSlices) {
   std::vector<size_t> expectedBlockSizes(15, blocksize);
   expectedBlockSizes.push_back(20);
   expectedBlockSizes.insert(expectedBlockSizes.end(), 23, blocksize);
-  std::vector<size_t> blockSizes;
-  for (const auto& b : result.blockMetadataSwitched_) {
-    blockSizes.push_back(b.numRows_);
-  }
+  auto blockSizes = result.blockMetadataSwitched_ |
+                    ql::views::transform(&CompressedBlockMetadata::numRows_) |
+                    ::ranges::to<std::vector<size_t>>();
   EXPECT_EQ(blockSizes, expectedBlockSizes);
 
   // Both permutations contain all the rows of the `block`, the twin with

@@ -111,10 +111,11 @@ class ReadBatchForTesting {
     // addresses are stable (no further `add` will reallocate `targetBuffers_`).
     // `addBatch` copies each address into its read request, so this temporary
     // vector need not outlive the call.
-    std::vector<char*> pointers = ::ranges::to_vector(
-        targetBuffers_ | ql::views::transform([](std::string& buffer) {
-          return buffer.data();
-        }));
+    std::vector<char*> pointers = targetBuffers_ |
+                                  ql::views::transform([](std::string& buffer) {
+                                    return buffer.data();
+                                  }) |
+                                  ::ranges::to_vector;
     return manager.addBatch(fd, numBytes_, offsets_, pointers);
   }
 

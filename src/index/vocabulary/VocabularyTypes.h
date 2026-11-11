@@ -169,9 +169,10 @@ struct StringVectorVocabBatchLookupData
   static VocabBatchLookupResult fromWords(std::vector<std::string> words) {
     auto data = std::make_shared<StringVectorVocabBatchLookupData>();
     data->buffer() = std::move(words);
-    data->views() = ::ranges::to_vector(
+    data->views() =
         data->buffer() |
-        ql::views::transform(ad_utility::staticCast<std::string_view>));
+        ql::views::transform(ad_utility::staticCast<std::string_view>) |
+        ::ranges::to_vector;
     return asResult(std::move(data));
   }
 };
@@ -309,10 +310,10 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   // Materialize the words as owning `std::string`s; `fromWords` moves them
   // into the result and points one view at each of them.
   return StringVectorVocabBatchLookupData::fromWords(
-      ::ranges::to<std::vector<std::string>>(
-          indices | ql::views::transform([&vocab](size_t idx) {
-            return wordAsStringOrPlaceholder(vocab, idx);
-          })));
+      indices | ql::views::transform([&vocab](size_t idx) {
+        return wordAsStringOrPlaceholder(vocab, idx);
+      }) |
+      ::ranges::to<std::vector<std::string>>());
 }
 
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the

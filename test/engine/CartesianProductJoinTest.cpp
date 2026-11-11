@@ -81,10 +81,9 @@ void testCartesianProductImpl(VectorTable expected,
       LimitOffsetClause limitClause{limit, 0, offset};
       auto join = makeJoin(inputs, useLimitInSuboperations);
       join.applyLimitOffset(limitClause, false);
-      VectorTable partialResult;
-      std::copy(expected.begin() + limitClause.actualOffset(expected.size()),
-                expected.begin() + limitClause.upperBound(expected.size()),
-                std::back_inserter(partialResult));
+      auto partialResult = ::ranges::to<VectorTable>(ql::ranges::subrange(
+          expected.begin() + limitClause.actualOffset(expected.size()),
+          expected.begin() + limitClause.upperBound(expected.size())));
       EXPECT_EQ(makeIdTableFromVector(partialResult),
                 join.computeResultOnlyForTesting().idTableView())
           << "failed at offset " << offset << " and limit " << limit;
@@ -746,10 +745,12 @@ TEST(CartesianProductJoin, childrenAreOrdered) {
     ql::ranges::shuffle(children, rng);
 
     CartesianProductJoin join{qec, std::move(children)};
-    std::vector<size_t> actualSizeEstimates;
-    for (QueryExecutionTree* child : join.getChildren()) {
-      actualSizeEstimates.push_back(child->getSizeEstimate());
-    }
+    auto actualSizeEstimates =
+        join.getChildren() |
+        ql::views::transform([](QueryExecutionTree* child) -> size_t {
+          return child->getSizeEstimate();
+        }) |
+        ::ranges::to<std::vector<size_t>>();
     EXPECT_THAT(actualSizeEstimates,
                 ::testing::ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
   }

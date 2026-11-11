@@ -114,11 +114,10 @@ ContextListMetaData writePostings(ad_utility::File& out,
         }));
     scoreEncoder.writeToFile(out, currentOffset);
   } else {
-    std::vector<float> scores;
-    scores.reserve(postings.size());
-    ql::ranges::transform(
-        postings, std::back_inserter(scores),
-        [](const auto& posting) { return std::get<2>(posting); });
+    auto scores = postings | ql::views::transform([](const auto& posting) {
+                    return std::get<2>(posting);
+                  }) |
+                  ::ranges::to<std::vector<float>>();
     compressAndWrite<float>(scores, out, currentOffset);
   }
 
@@ -188,9 +187,8 @@ void FrequencyEncode<T>::initialize(View&& view) {
   }
 
   // Convert the hashmap to a vector to sort it by most frequent first
-  std::vector<std::pair<T, size_t>> frequencyVector;
-  frequencyVector.reserve(frequencyMap.size());
-  ql::ranges::copy(frequencyMap, std::back_inserter(frequencyVector));
+  auto frequencyVector =
+      ::ranges::to<std::vector<std::pair<T, size_t>>>(frequencyMap);
   ql::ranges::sort(frequencyVector, [](const auto& a, const auto& b) {
     return a.second > b.second;
   });
@@ -210,10 +208,10 @@ void FrequencyEncode<T>::initialize(View&& view) {
   }
 
   // Finally encode the vector
-  encodedVector_.reserve(ql::ranges::size(view));
-  for (const auto& value : view) {
-    encodedVector_.push_back(codeMap_[value]);
-  }
+  encodedVector_ = view | ql::views::transform([this](const auto& value) {
+                     return codeMap_[value];
+                   }) |
+                   ::ranges::to<std::vector<size_t>>();
 }
 
 // ____________________________________________________________________________

@@ -1197,9 +1197,8 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                     AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
                                 ::testing::Eq(LANGUAGE_PREDICATE))));
 
-    std::vector<IdTriple<>> insertedTriples;
-    ql::ranges::copy(deltaTriples.triplesSetsNormal_.triplesInserted_,
-                     std::back_inserter(insertedTriples));
+    auto insertedTriples = ::ranges::to<std::vector<IdTriple<>>>(
+        deltaTriples.triplesSetsNormal_.triplesInserted_);
     EXPECT_THAT(
         insertedTriples,
         ::testing::ElementsAre(::testing::Eq(IdTriple<>{
@@ -1210,9 +1209,8 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
                          "<test>", localVocabContext))
                      .value()),
              Id::makeFromBool(true), defaultGraph}})));
-    std::vector<IdTriple<>> deletedTriples;
-    ql::ranges::copy(deltaTriples.triplesSetsNormal_.triplesDeleted_,
-                     std::back_inserter(deletedTriples));
+    auto deletedTriples = ::ranges::to<std::vector<IdTriple<>>>(
+        deltaTriples.triplesSetsNormal_.triplesDeleted_);
     EXPECT_THAT(
         deletedTriples,
         ::testing::ElementsAre(::testing::Eq(IdTriple<>{

@@ -45,11 +45,10 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
       std::distance(_blockUpperBoundWordIds.begin(), upperIt));
 
   // Collect all blocks
-  std::vector<std::reference_wrapper<const TextBlockMetaData>> output;
-  ql::ranges::copy(ql::ranges::subrange(_blocks.begin() + startIndex,
-                                        _blocks.begin() + endIndex + 1),
-                   std::back_inserter(output));
-  return output;
+  return ::ranges::to<
+      std::vector<std::reference_wrapper<const TextBlockMetaData>>>(
+      ql::ranges::subrange(_blocks.begin() + startIndex,
+                           _blocks.begin() + endIndex + 1));
 }
 
 // _____________________________________________________________________________

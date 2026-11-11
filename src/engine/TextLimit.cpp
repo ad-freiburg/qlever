@@ -153,20 +153,18 @@ Variable TextLimit::getTextRecordVariable() const {
 
 // _____________________________________________________________________________
 std::vector<Variable> TextLimit::getEntityVariables() const {
-  std::vector<Variable> entityVars;
-  for (auto col : entityColumns_) {
-    entityVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
-  }
-  return entityVars;
+  return entityColumns_ | ql::views::transform([this](auto col) {
+           return child_->getVariableAndInfoByColumnIndex(col).first;
+         }) |
+         ::ranges::to<std::vector<Variable>>();
 }
 
 // _____________________________________________________________________________
 std::vector<Variable> TextLimit::getScoreVariables() const {
-  std::vector<Variable> scoreVars;
-  for (auto col : scoreColumns_) {
-    scoreVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
-  }
-  return scoreVars;
+  return scoreColumns_ | ql::views::transform([this](auto col) {
+           return child_->getVariableAndInfoByColumnIndex(col).first;
+         }) |
+         ::ranges::to<std::vector<Variable>>();
 }
 
 // _____________________________________________________________________________

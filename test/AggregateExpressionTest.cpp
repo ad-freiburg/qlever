@@ -48,13 +48,13 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
                         source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto t = TestContext{};
-  VectorWithMemoryLimit<sparqlExpression::detail::PromoteToLocalVocabEntry<T>>
-      input(makeAllocator());
-  input.reserve(inputAsVector.size());
-  for (auto& value : inputAsVector) {
-    input.push_back(sparqlExpression::detail::promoteToLocalVocabEntry(
-        std::move(value), t.context._qec.getLocalVocabContext()));
-  }
+  auto input = inputAsVector | ql::views::transform([&t](auto& value) {
+                 return sparqlExpression::detail::promoteToLocalVocabEntry(
+                     std::move(value), t.context._qec.getLocalVocabContext());
+               }) |
+               ::ranges::to<VectorWithMemoryLimit<
+                   sparqlExpression::detail::PromoteToLocalVocabEntry<T>>>(
+                   makeAllocator());
   auto d = std::make_unique<SingleUseExpression>(input.clone());
   t.context._endIndex = input.size();
   AggregateExpressionT m{distinct, std::move(d)};

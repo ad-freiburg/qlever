@@ -33,10 +33,7 @@ using asyncPushTestHelpers::viewOf;
 // Return the rows of the `table` as vectors, sorted lexicographically, so that
 // tables can be compared independently of the order of their rows.
 std::vector<std::vector<Id>> sortedRows(const IdTable& table) {
-  std::vector<std::vector<Id>> rows;
-  for (const auto& row : table) {
-    rows.emplace_back(row.begin(), row.end());
-  }
+  auto rows = ::ranges::to<std::vector<std::vector<Id>>>(table);
   ql::ranges::sort(rows);
   return rows;
 }

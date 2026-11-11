@@ -175,15 +175,16 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
       reader, qec->getLocalVocabContext());
   auto fromMapping = [&]() {
-    return ::ranges::to<std::vector>(
-        mapping | ql::views::values |
-        ql::views::transform([](Id id) { return *id.getLocalVocabIndex(); }));
+    return mapping | ql::views::values | ql::views::transform([](Id id) {
+             return *id.getLocalVocabIndex();
+           }) |
+           ::ranges::to<std::vector>();
   };
   auto fromMappingOrigin = [&]() {
-    return ::ranges::to<std::vector>(
-        mapping | ql::views::keys | ql::views::transform([](Id::T id) {
-          return *Id::fromBits(id).getLocalVocabIndex();
-        }));
+    return mapping | ql::views::keys | ql::views::transform([](Id::T id) {
+             return *Id::fromBits(id).getLocalVocabIndex();
+           }) |
+           ::ranges::to<std::vector>();
   };
   EXPECT_EQ(localVocabOut.size(), localVocab.size());
   auto allWords = localVocab.getAllWordsForTesting();

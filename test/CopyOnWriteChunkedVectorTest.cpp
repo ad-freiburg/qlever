@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "util/CopyOnWriteChunkedVector.h"
 
 using ad_utility::CopyOnWriteChunkedVector;
@@ -37,11 +38,9 @@ std::vector<int> elements(const Vec& vec) {
 
 // Return the sizes of the chunks of `vec`.
 std::vector<size_t> chunkSizes(const Vec& vec) {
-  std::vector<size_t> result;
-  for (auto chunk : vec.chunkSpans()) {
-    result.push_back(chunk.size());
-  }
-  return result;
+  return vec.chunkSpans() |
+         ql::views::transform([](auto chunk) { return chunk.size(); }) |
+         ::ranges::to<std::vector<size_t>>();
 }
 }  // namespace
 

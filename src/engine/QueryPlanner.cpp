@@ -209,10 +209,11 @@ SubtreePlanVec QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     checkCancellation();
   }
   for (const auto& bind : pq.postQueryValuesBinds_) {
-    SubtreePlanVec row{allocator()};
-    for (const auto& plan : plans.back()) {
-      row.push_back(makeSubtreePlan<Bind>(_qec, plan._qet, bind));
-    }
+    auto row = plans.back() |
+               ql::views::transform([this, &bind](const auto& plan) {
+                 return makeSubtreePlan<Bind>(_qec, plan._qet, bind);
+               }) |
+               ::ranges::to<SubtreePlanVec>(allocator());
     plans.push_back(std::move(row));
     checkCancellation();
   }
@@ -1555,13 +1556,11 @@ void QueryPlanner::applyTextLimitsIfPossible(SubtreePlanVec& row,
         i++;
         continue;
       }
-      // TODO<C++23> simplify using ranges::to
       auto getVarColumns = [&plan](const std::vector<Variable>& vars) {
-        std::vector<ColumnIndex> result;
-        for (const auto& var : vars) {
-          result.push_back(plan._qet->getVariableColumn(var));
-        }
-        return result;
+        return vars | ql::views::transform([&plan](const auto& var) {
+                 return plan._qet->getVariableColumn(var);
+               }) |
+               ::ranges::to<std::vector<ColumnIndex>>();
       };
       SubtreePlan newPlan = makeSubtreePlan<TextLimit>(
           _qec, textLimit_.value(), plan._qet,
@@ -1847,12 +1846,10 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 QueryPlanner::FiltersAndOptionalSubstitutes
 QueryPlanner::wrapFiltersWithoutSubstitutes(
     const std::vector<SparqlFilter>& filters) {
-  FiltersAndOptionalSubstitutes plans;
-  plans.reserve(filters.size());
-  for (const auto& filter : filters) {
-    plans.push_back({filter, std::nullopt});
-  }
-  return plans;
+  return filters | ql::views::transform([](const auto& filter) {
+           return FilterAndOptionalSubstitute{filter, std::nullopt};
+         }) |
+         ::ranges::to<FiltersAndOptionalSubstitutes>();
 }
 
 // _____________________________________________________________________________
@@ -2522,13 +2519,12 @@ std::shared_ptr<QueryExecutionTree> childWithHiddenVariablesHidden(
     const std::shared_ptr<QueryExecutionTree>& child) {
   const auto& visibleInUnion =
       unionOperation.getExternallyVisibleVariableColumns();
-  std::vector<Variable> visibleVariables;
-  ql::ranges::copy(
+  auto visibleVariables =
       child->getVariableColumns() | ql::views::keys |
-          ql::views::filter([&visibleInUnion](const Variable& var) {
-            return visibleInUnion.contains(var);
-          }),
-      std::back_inserter(visibleVariables));
+      ql::views::filter([&visibleInUnion](const Variable& var) {
+        return visibleInUnion.contains(var);
+      }) |
+      ::ranges::to<std::vector<Variable>>();
   if (visibleVariables.size() == child->getVariableColumns().size()) {
     return child;
   }

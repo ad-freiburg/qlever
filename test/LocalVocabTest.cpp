@@ -282,7 +282,6 @@ TEST(LocalVocab, propagation) {
           const std::vector<std::string>& expectedWordsAsStrings,
           ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) -> void {
     auto t = generateLocationTrace(loc);
-    TestWords expectedWords;
     const auto& localVocabContext = testQec->getLocalVocabContext();
     auto toLitOrIri = [&localVocabContext](const auto& word) {
       using namespace ad_utility::triple_component;
@@ -292,8 +291,9 @@ TEST(LocalVocab, propagation) {
         return LocalVocabEntry::literalWithoutQuotes(word, localVocabContext);
       }
     };
-    ql::ranges::transform(expectedWordsAsStrings,
-                          std::back_inserter(expectedWords), toLitOrIri);
+    auto expectedWords = expectedWordsAsStrings |
+                         ql::views::transform(toLitOrIri) |
+                         ::ranges::to<TestWords>();
     std::shared_ptr<const Result> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;

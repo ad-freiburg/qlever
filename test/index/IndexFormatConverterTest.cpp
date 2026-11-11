@@ -153,11 +153,10 @@ class IndexFormatConverterTest : public ::testing::Test {
         {}, std::make_shared<ad_utility::CancellationHandle<>>(),
         *locatedTriples, executor());
     AD_CORRECTNESS_CHECK(table.numColumns() == 3);
-    std::vector<std::array<Id, 3>> triples;
-    for (const auto& row : table) {
-      triples.push_back({row[0], row[1], row[2]});
-    }
-    return triples;
+    return table | ql::views::transform([](const auto& row) {
+             return std::array{row[0], row[1], row[2]};
+           }) |
+           ::ranges::to<std::vector<std::array<Id, 3>>>();
   }
 };
 
@@ -272,9 +271,8 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
     return absl::StrJoin(components, " ");
   };
   auto spoTriples = scanAllTriples(index, Permutation::SPO, locatedTriples);
-  std::vector<std::string> spoTriplesAsStrings;
-  ql::ranges::transform(spoTriples, std::back_inserter(spoTriplesAsStrings),
-                        tripleToString);
+  auto spoTriplesAsStrings = spoTriples | ql::views::transform(tripleToString) |
+                             ::ranges::to<std::vector<std::string>>();
   EXPECT_THAT(spoTriplesAsStrings,
               ::testing::ElementsAreArray(expectedTriples()));
 
@@ -389,10 +387,12 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
   // Remember the files of the index in the old format for the retirement
   // check below.
   fs::path oldDirectory = fs::path{oldBasename_}.parent_path();
-  std::vector<std::string> filesBefore;
-  for (const auto& entry : fs::directory_iterator{oldDirectory}) {
-    filesBefore.push_back(entry.path().filename().string());
-  }
+  auto fileName = [](const fs::directory_entry& entry) {
+    return entry.path().filename().string();
+  };
+  auto filesBefore = ql::directoryRange(oldDirectory) |
+                     ql::views::transform(fileName) |
+                     ::ranges::to<std::vector<std::string>>();
 
   upgradeIndexInPlace(oldBasename_, executor());
 
@@ -417,10 +417,9 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
   auto retiredDirs = qlever::util::directoriesWithPrefix(
       oldDirectory, std::string{retiredDirPrefix});
   ASSERT_EQ(retiredDirs.size(), 1u);
-  std::vector<std::string> retiredFiles;
-  for (const auto& entry : fs::directory_iterator{retiredDirs.front()}) {
-    retiredFiles.push_back(entry.path().filename().string());
-  }
+  auto retiredFiles = ql::directoryRange(retiredDirs.front()) |
+                      ql::views::transform(fileName) |
+                      ::ranges::to<std::vector<std::string>>();
   EXPECT_THAT(retiredFiles, ::testing::UnorderedElementsAreArray(filesBefore));
   EXPECT_TRUE(qlever::util::directoriesWithPrefix(oldDirectory,
                                                   std::string{stagingDirPrefix})

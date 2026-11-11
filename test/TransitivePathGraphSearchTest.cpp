@@ -129,8 +129,8 @@ class GraphSearchTest : public Test {
         auto& startIds = binSearchMapStartIds_.back();
         auto& targetIds = binSearchMapTargetIds_.back();
 
-        auto keys = ::ranges::to_vector(
-            adjList | ql::views::transform(ad_utility::first));
+        auto keys = adjList | ql::views::transform(ad_utility::first) |
+                    ::ranges::to_vector;
         ql::ranges::sort(keys);
 
         for (const size_t startNode : keys) {

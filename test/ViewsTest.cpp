@@ -30,23 +30,16 @@ TEST(Views, BufferedAsyncView) {
   };
 
   uint64_t numElements = 1000;
-  const std::vector<uint64_t> ints = [numElements]() {
-    std::vector<uint64_t> ints;
-    ints.reserve(numElements);
-    for (uint64_t i = 0; i < numElements; ++i) {
-      ints.push_back(numElements - i);
-    }
-    return ints;
-  }();
+  const auto ints = ql::views::iota(uint64_t{0}, numElements) |
+                    ql::views::transform(
+                        [numElements](uint64_t i) { return numElements - i; }) |
+                    ::ranges::to<std::vector<uint64_t>>();
 
-  const std::vector<std::string> strings = [numElements]() {
-    std::vector<std::string> strings;
-    strings.reserve(numElements);
-    for (uint64_t i = 0; i < numElements; ++i) {
-      strings.push_back(std::to_string(numElements - i));
-    }
-    return strings;
-  }();
+  const auto strings = ql::views::iota(uint64_t{0}, numElements) |
+                       ql::views::transform([numElements](uint64_t i) {
+                         return std::to_string(numElements - i);
+                       }) |
+                       ::ranges::to<std::vector<std::string>>();
 
   testWithVector(ints);
   testWithVector(strings);
@@ -61,9 +54,7 @@ TEST(Views, owningView) {
   static_assert(ql::ranges::random_access_range<OwningView<std::vector<int>>>);
 
   auto toVec = [](auto& range) {
-    std::vector<std::string> result;
-    ql::ranges::copy(range, std::back_inserter(result));
-    return result;
+    return ::ranges::to<std::vector<std::string>>(range);
   };
 
   // check the functionality and the ownership.
@@ -96,8 +87,8 @@ TEST(Views, integerRange) {
     expected.push_back(i);
   }
 
-  std::vector<size_t> actual;
-  ql::ranges::copy(ad_utility::integerRange(42u), std::back_inserter(actual));
+  auto actual =
+      ::ranges::to<std::vector<size_t>>(ad_utility::integerRange(42u));
   ASSERT_THAT(actual, ::testing::ElementsAreArray(expected));
 }
 

@@ -60,10 +60,10 @@ class ValuesForTesting : public Operation {
 
   static std::vector<Result::IdTableVocabPair> liftToPairs(
       std::vector<IdTable> tables, LocalVocab voc) {
-    return ::ranges::to_vector(
-        tables | ql::views::transform([&voc](auto& table) {
-          return Result::IdTableVocabPair{std::move(table), voc.clone()};
-        }));
+    return tables | ql::views::transform([&voc](auto& table) {
+             return Result::IdTableVocabPair{std::move(table), voc.clone()};
+           }) |
+           ::ranges::to_vector;
   }
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<Result::IdTableVocabPair> tables,

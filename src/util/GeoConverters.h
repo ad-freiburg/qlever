@@ -42,8 +42,8 @@ inline S2LatLng toS2LatLng(const util::geo::DPoint& point) {
 // Helper function to convert `libspatialjoin` `DLine` objects to `S2Polyline`.
 inline S2Polyline toS2Polyline(const util::geo::DLine& line) {
   AD_CORRECTNESS_CHECK(!line.empty());
-  return S2Polyline{
-      ::ranges::to_vector(line | ql::views::transform(toS2LatLng))};
+  return S2Polyline{line | ql::views::transform(toS2LatLng) |
+                    ::ranges::to_vector};
 }
 
 // Helper function to convert `libspatialjoin` `DPoint` objects to `S2Point`.
@@ -54,8 +54,9 @@ inline S2Point utilPointToS2Point(const util::geo::DPoint& p) {
 // Helper to convert a `libspatialjoin` `Ring` to an `S2Loop`
 inline std::unique_ptr<S2Loop> makeS2Loop(
     const util::geo::Ring<CoordType>& ring) {
-  std::vector<S2Point> points = ::ranges::to<std::vector>(
-      ring | ::ranges::views::transform(&utilPointToS2Point));
+  std::vector<S2Point> points =
+      ring | ::ranges::views::transform(&utilPointToS2Point) |
+      ::ranges::to<std::vector>();
 
   // Ensure that there are no zero-length edges (that is edges with twice the
   // same point), as this will lead to an exception from `S2Loop`.
@@ -106,11 +107,10 @@ inline S2Polyline simplifyPolyline(const S2Polyline& polyline,
   auto tolerance = S2Earth::MetersToAngle(metersError);
   std::vector<int> indices;
   polyline.SubsampleVertices(tolerance, &indices);
-  std::vector<S2Point> selected;
-  selected.reserve(indices.size());
-  for (int idx : indices) {
-    selected.push_back(polyline.vertex(idx));
-  }
+  auto selected = indices | ql::views::transform([&polyline](int idx) {
+                    return polyline.vertex(idx);
+                  }) |
+                  ::ranges::to<std::vector<S2Point>>();
   return S2Polyline{absl::MakeSpan(selected)};
 }
 
@@ -136,22 +136,20 @@ inline S2Polygon simplifyPolygon(const S2Polygon& polygon, double metersError) {
   for (int i = 0; i < polygon.num_loops(); ++i) {
     const S2Loop* loop = polygon.loop(i);
     int n = loop->num_vertices();
-    std::vector<S2Point> points;
-    points.reserve(n);
-    for (int j = 0; j < n; ++j) {
-      points.push_back(loop->vertex(j));
-    }
+    auto points =
+        ql::views::iota(0, n) |
+        ql::views::transform([loop](int j) { return loop->vertex(j); }) |
+        ::ranges::to<std::vector<S2Point>>();
     // Treat the loop as an open polyline to apply `SubsampleVertices`.
     // The first and last vertices are always preserved, so the ring remains
     // closable.
     S2Polyline polyline{absl::MakeConstSpan(points)};
     std::vector<int> indices;
     polyline.SubsampleVertices(tolerance, &indices);
-    std::vector<S2Point> simplified;
-    simplified.reserve(indices.size());
-    for (int idx : indices) {
-      simplified.push_back(points[idx]);
-    }
+    auto simplified =
+        indices |
+        ql::views::transform([&points](int idx) { return points[idx]; }) |
+        ::ranges::to<std::vector<S2Point>>();
     // A valid S2Loop requires at least three distinct vertices.
     if (simplified.size() < 3) {
       simplified = std::move(points);

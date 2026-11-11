@@ -1912,10 +1912,10 @@ TEST(SpatialJoin, DistanceUnit) {
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"}));
     auto result = spatialJoinTree->getResult();
     auto col = spatialJoinTree->getVariableColumn(distVar);
-    std::vector<double> dists;
-    for (const auto& row : result->idTableView()) {
-      dists.push_back(row[col].getDouble());
-    }
+    auto dists = result->idTableView() |
+                 ql::views::transform(
+                     [col](const auto& row) { return row[col].getDouble(); }) |
+                 ::ranges::to<std::vector<double>>();
     ql::ranges::sort(dists);
     return std::pair{dists, spatialJoinTree->getCacheKey()};
   };
