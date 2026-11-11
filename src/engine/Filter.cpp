@@ -10,6 +10,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -286,4 +287,30 @@ Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
   return pushDownBindToAnyChild(bind, {_subtree});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  // The subtree has to provide the requested variables and all variables that
+  // the `Filter` operation filters on.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  auto addVarsResult =
+      varsRequiredFromSubtree.addVarsFromExpression(_expression);
+  AD_CORRECTNESS_CHECK(
+      addVarsResult == AddVarsResult::Success,
+      "Aggregate functions are not allowed in a `Filter` clause");
+
+  // Strip the subtree.
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
+
+  // The new `Filter` also exports the filtered variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      _expression);
 }
