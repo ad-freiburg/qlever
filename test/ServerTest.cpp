@@ -868,8 +868,10 @@ TEST(ServerTest, gspGet) {
     if (accept.has_value()) {
       get.set(http::field::accept, accept.value());
     }
-    auto response =
-        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(get);
+    // The body of the response is computed lazily and refers to the server,
+    // so the server has to outlive the response.
+    auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+    auto response = server.process(get);
     EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
     EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
   };
