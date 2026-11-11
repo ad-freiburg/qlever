@@ -155,6 +155,11 @@ class SparqlExpressionPimpl {
   // Create a `SparqlExpressionPimpl` from a single variable.
   static SparqlExpressionPimpl makeVariableExpression(const Variable& variable);
 
+  // Split this expression at its top-level `&&` operators, and return one
+  // expression per conjunct (from left to right). The conjuncts share the
+  // subtrees of this expression, which is not changed.
+  std::vector<SparqlExpressionPimpl> splitConjunction() const;
+
   // Convenience functions, that delegate to the respective `SparqlExpression`.
   std::vector<const SparqlExpression*> getExistsExpressions() const;
   std::vector<SparqlExpression*> getExistsExpressions();
