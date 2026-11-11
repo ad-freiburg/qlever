@@ -411,6 +411,37 @@ TEST(LibQlever, disableCaching) {
   }
 }
 
+// Test that the cache of an engine follows the runtime parameters, and that
+// the destructor of the engine removes the actions that bind the parameters to
+// it. Without that, changing the parameters after the engine is destroyed
+// would access the destroyed engine (which AddressSanitizer reports).
+TEST(LibQlever, destructorUnbindsRuntimeParameters) {
+  using namespace ad_utility::memory_literals;
+
+  // While the engine lives, its cache follows the parameters.
+  {
+    Qlever engine{buildTestEngineConfig("<s> <p> <o> .")};
+    auto cleanupMaxSize =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSize_>(3_MB);
+    auto cleanupMaxSizeSingleEntry = setRuntimeParameterForTest<
+        &RuntimeParameters::cacheMaxSizeSingleEntry_>(2_MB);
+    EXPECT_EQ(engine.cache().getMaxSize(), 3_MB);
+    EXPECT_EQ(engine.cache().getMaxSizeSingleEntry(), 2_MB);
+  }
+
+  // After the engine is destroyed, changing the parameters must not touch it
+  // (the cleanups restore the default values at the end of the test).
+  auto cleanupMaxNumEntries =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxNumEntries_>(42);
+  auto cleanupMaxSize =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSize_>(4_MB);
+  auto cleanupMaxSizeSingleEntry =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeSingleEntry_>(
+          1_MB);
+  auto cleanupMemoryForQueries =
+      setRuntimeParameterForTest<&RuntimeParameters::memoryForQueries_>(1_GB);
+}
+
 namespace {
 // The memory that `numIds` `Id`s occupy.
 ad_utility::MemorySize memoryOfIds(size_t numIds) {
