@@ -44,6 +44,7 @@
 #include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/ExecutorStatistics.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -460,11 +461,16 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
 
   // All the work of the rebuild on the `executor` (the scans of the old
   // permutations and the writers of the new ones) shares a single limit, see
-  // the runtime parameter `rebuild-index-max-num-threads`.
-  executor = ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
-      getRuntimeParameterAsOptional<
-          &RuntimeParameters::rebuildIndexMaxNumThreads_>());
+  // the runtime parameter `rebuild-index-max-num-threads`. If the `executor`
+  // has statistics, that work is counted as `TaskClass::IndexRebuild`.
+  executor = ad_utility::withStatisticsFor(
+      executor, ad_utility::TaskClass::IndexRebuild, nullptr,
+      [](const qlever::Executor& underlyingExecutor) {
+        return ad_utility::makeConcurrencyLimitedExecutor(
+            underlyingExecutor,
+            getRuntimeParameterAsOptional<
+                &RuntimeParameters::rebuildIndexMaxNumThreads_>());
+      });
 
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration

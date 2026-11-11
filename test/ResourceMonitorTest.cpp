@@ -239,42 +239,44 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   base.bytesWrittenPerSecond_ = 4096.0;
   base.ioStallPercent_ = 25.0;
   base.indexRebuildId_ = 7u;
-  EXPECT_EQ(rm::formatTsvRow(base),
-            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t7\n");
+  base.poolComputingPercent_ = 60.0;
+  base.poolBlockedPercent_ = 30.0;
+  base.poolIdleWhileWaitingPercent_ = 5.0;
+  EXPECT_EQ(
+      rm::formatTsvRow(base),
+      "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t7\t60.0\t30.0\t5.0\n");
 
   auto noRss = base;
   noRss.rssBytes_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noRss),
-            "1.0\t1000\t\t50.0\t8192.0\t4096.0\t25.0\t7\n");
+            "1.0\t1000\t\t50.0\t8192.0\t4096.0\t25.0\t7\t60.0\t30.0\t5.0\n");
 
   auto noCpu = base;
   noCpu.cpuPercent_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noCpu),
-            "1.0\t1000\t2048\t\t8192.0\t4096.0\t25.0\t7\n");
+            "1.0\t1000\t2048\t\t8192.0\t4096.0\t25.0\t7\t60.0\t30.0\t5.0\n");
 
   auto noReadRate = base;
   noReadRate.bytesReadPerSecond_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noReadRate),
-            "1.0\t1000\t2048\t50.0\t\t4096.0\t25.0\t7\n");
+            "1.0\t1000\t2048\t50.0\t\t4096.0\t25.0\t7\t60.0\t30.0\t5.0\n");
 
   auto noWriteRate = base;
   noWriteRate.bytesWrittenPerSecond_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noWriteRate),
-            "1.0\t1000\t2048\t50.0\t8192.0\t\t25.0\t7\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t\t25.0\t7\t60.0\t30.0\t5.0\n");
 
   // On a non-Linux machine there is no stall reading, so that cell is empty.
   auto noIoStall = base;
   noIoStall.ioStallPercent_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noIoStall),
-            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t\t7\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t\t7\t60.0\t30.0\t5.0\n");
 
-  // Most rows look like this, because no rebuild is running. `index_rebuild_id`
-  // is the last column, so the row ends in a tab. A consumer that strips
-  // trailing whitespace before splitting would lose a column.
+  // Most rows of a server look like this, because no rebuild is running.
   auto noRebuild = base;
   noRebuild.indexRebuildId_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noRebuild),
-            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t\t60.0\t30.0\t5.0\n");
 
   auto nothing = base;
   nothing.rssBytes_ = std::nullopt;
@@ -283,7 +285,12 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   nothing.bytesWrittenPerSecond_ = std::nullopt;
   nothing.ioStallPercent_ = std::nullopt;
   nothing.indexRebuildId_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\t\n");
+  nothing.poolComputingPercent_ = std::nullopt;
+  nothing.poolBlockedPercent_ = std::nullopt;
+  nothing.poolIdleWhileWaitingPercent_ = std::nullopt;
+  // The last columns are empty, so the row ends in tabs. A consumer that
+  // strips trailing whitespace before splitting would lose columns.
+  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\t\t\t\t\n");
 }
 
 // _____________________________________________________________________________
@@ -389,6 +396,9 @@ TEST(ResourceMonitor, SetReadersAfterStartThrows) {
   // Swapping the readers after `start` would race the sampling thread and
   // must throw.
   AD_EXPECT_THROW_WITH_MESSAGE(monitor.setReadersForTesting({}),
+                               ::testing::HasSubstr("before `start`"));
+  // The same holds for the statistics of the thread pool.
+  AD_EXPECT_THROW_WITH_MESSAGE(monitor.setThreadPoolStatistics(nullptr),
                                ::testing::HasSubstr("before `start`"));
 }
 
@@ -627,11 +637,11 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
   auto countTabs = [](std::string_view line) {
     return std::count(line.begin(), line.end(), '\t');
   };
-  // Every data row has eight tab-separated columns (seven tabs), even when a
+  // Every data row has eleven tab-separated columns (ten tabs), even when a
   // reading was empty, and the header names exactly those columns. A column
   // added on one side only therefore fails here.
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
-    EXPECT_EQ(countTabs(*it), 7) << "row does not have 8 columns: " << *it;
+    EXPECT_EQ(countTabs(*it), 10) << "row does not have 11 columns: " << *it;
     EXPECT_EQ(countTabs(rm::tsvHeader), countTabs(*it))
         << "the header does not name the row's columns: " << *it;
   }
@@ -660,7 +670,7 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   // cell. The first two hold the elapsed time and a timestamp, which differ on
   // every run.
   const std::vector<std::string> cells = absl::StrSplit(lines[1], '\t');
-  ASSERT_EQ(cells.size(), 8u);
+  ASSERT_EQ(cells.size(), 11u);
   EXPECT_EQ(cells[2], "2048");  // rss, taken over unchanged
   EXPECT_EQ(cells[3], "0.0");   // cpu, a counter that stands still
   EXPECT_EQ(cells[4], "0.0");   // read bytes, likewise
@@ -670,6 +680,66 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   EXPECT_GT(std::stod(cells[5]), 0.0);
   EXPECT_EQ(cells[6], "0.0");  // io stall, also stands still
   EXPECT_EQ(cells[7], "");     // no rebuild ran, so no rebuild id
+  // No thread pool is measured, so its three columns are empty.
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t\t\t"));
+}
+
+// Test that the rows carry the shares of the time of the threads of the thread
+// pool if its statistics are set.
+TEST(ResourceMonitor, RowsCarryTheSharesOfTheThreadPool) {
+  QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP;
+  using namespace std::chrono_literals;
+  using ad_utility::ThreadPoolStatistics;
+  // Run a monitor with the `statistics` of a thread pool and return the last
+  // three cells of the first two rows.
+  auto sharesOfFirstTwoRows =
+      [](std::shared_ptr<ThreadPoolStatistics> statistics) {
+        auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+        {
+          ResourceMonitor monitor;
+          monitor.setThreadPoolStatistics(std::move(statistics));
+          monitor.start(path, ResourceMonitor::Mode::Truncate, 5ms);
+          std::this_thread::sleep_for(100ms);
+        }
+        auto lines = readLines(path);
+        std::vector<std::string> result;
+        for (size_t i = 1; i < std::min<size_t>(lines.size(), 3); ++i) {
+          std::vector<std::string> cells = absl::StrSplit(lines[i], '\t');
+          AD_CORRECTNESS_CHECK(cells.size() == 11);
+          result.push_back(absl::StrJoin(cells.begin() + 8, cells.end(), " "));
+        }
+        return result;
+      };
+
+  // In each of the following cases, the pool has spent 1000 seconds in exactly
+  // one of the three states before the monitor starts. This is far more than
+  // the time until the first row, so that row shows a share of 100% (clamped)
+  // in the respective column. Afterwards, nothing happens on the pool.
+  ad_utility::TaskStatistics tasks;
+  tasks.wallTime_ = std::chrono::nanoseconds{1000s}.count();
+
+  // Tasks that used a CPU all the time.
+  auto computing = std::make_shared<ThreadPoolStatistics>(2);
+  tasks.cpuTime_ = tasks.wallTime_;
+  computing->ofClass(ad_utility::TaskClass::Query).add(tasks);
+  EXPECT_THAT(sharesOfFirstTwoRows(computing),
+              ::testing::ElementsAre("100.0 0.0 0.0", "0.0 0.0 0.0"));
+
+  // Tasks that never used a CPU.
+  auto blocked = std::make_shared<ThreadPoolStatistics>(2);
+  tasks.cpuTime_ = 0;
+  blocked->ofClass(ad_utility::TaskClass::IndexRebuild).add(tasks);
+  EXPECT_THAT(sharesOfFirstTwoRows(blocked),
+              ::testing::ElementsAre("0.0 100.0 0.0", "0.0 0.0 0.0"));
+
+  // A task that waited although the threads were free.
+  auto now = ThreadPoolStatistics::Clock::now();
+  auto idle = std::make_shared<ThreadPoolStatistics>(2, now - 1000s);
+  idle->taskWasPosted(now - 1000s);
+  idle->taskWasStarted(now);
+  idle->taskHasFinished(now);
+  EXPECT_THAT(sharesOfFirstTwoRows(idle),
+              ::testing::ElementsAre("0.0 0.0 100.0", "0.0 0.0 0.0"));
 }
 
 // _____________________________________________________________________________
@@ -699,7 +769,7 @@ TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
   std::set<std::string> indexRebuildIds;
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
     const std::vector<std::string> cells = absl::StrSplit(*it, '\t');
-    ASSERT_EQ(cells.size(), 8u);
+    ASSERT_EQ(cells.size(), 11u);
     indexRebuildIds.insert(cells[7]);
   }
   EXPECT_THAT(indexRebuildIds, ::testing::UnorderedElementsAre("", "1"));
@@ -719,8 +789,9 @@ TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // No rebuild ran, so the empty `index_rebuild_id` cell follows the stall.
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0\t"));
+  // No rebuild ran and no thread pool is measured, so four empty cells follow
+  // the stall.
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0\t\t\t\t"));
 }
 
 // _____________________________________________________________________________
@@ -735,11 +806,11 @@ TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // All eight columns are still there rather than one being dropped. The stall
-  // cell is empty, and so is the `index_rebuild_id` cell after it, because no
-  // rebuild ran.
-  EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 7);
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t"));
+  // All eleven columns are still there rather than one being dropped. The
+  // stall cell is empty, and so are the four cells after it, because no
+  // rebuild ran and no thread pool is measured.
+  EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 10);
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t\t\t\t"));
 }
 
 // _____________________________________________________________________________
@@ -752,10 +823,10 @@ TEST(ResourceMonitor, AMissingDiskIoReadingLeavesBothColumnsEmpty) {
 
   auto lines = sampledLines(std::move(readers));
   ASSERT_GE(lines.size(), 2u);
-  // Only the two disk cells are empty; the row keeps all eight columns and the
-  // surrounding readings still arrive.
+  // Only the two disk cells are empty; the row keeps all eleven columns and
+  // the surrounding readings still arrive.
   const std::vector<std::string> cells = absl::StrSplit(lines[1], '\t');
-  ASSERT_EQ(cells.size(), 8u);
+  ASSERT_EQ(cells.size(), 11u);
   EXPECT_EQ(cells[2], "2048");
   EXPECT_EQ(cells[4], "");
   EXPECT_EQ(cells[5], "");

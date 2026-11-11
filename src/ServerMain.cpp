@@ -435,6 +435,12 @@ int main(int argc, char** argv) {
   try {
     // Samples RSS and CPU usage, starting before the index is loaded.
     ad_utility::ResourceMonitor resourceMonitor;
+    // The statistics of the global thread pool, which the server fills and the
+    // resource monitor writes to its log.
+    auto threadPoolStatistics =
+        std::make_shared<ad_utility::ThreadPoolStatistics>(
+            ad_utility::globalExecutorNumThreads());
+    resourceMonitor.setThreadPoolStatistics(threadPoolStatistics);
     if (!noResourceUsageLog) {
       resourceMonitor.start(config.baseName_ + ".server.resource-usage-log.tsv",
                             ad_utility::ResourceMonitor::Mode::Append,
@@ -443,7 +449,8 @@ int main(int argc, char** argv) {
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
                   noAccessCheck, std::move(metricsReader),
-                  resourceMonitor.indexRebuildIdTracker());
+                  resourceMonitor.indexRebuildIdTracker(),
+                  std::move(threadPoolStatistics));
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {

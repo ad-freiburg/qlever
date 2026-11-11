@@ -12,17 +12,20 @@
 
 #include <absl/functional/any_invocable.h>
 #include <opentelemetry/metrics/async_instruments.h>
+#include <opentelemetry/metrics/meter.h>
 #include <opentelemetry/metrics/sync_instruments.h>
 
 #include <memory>
 
 #include "engine/UpdateMetadata.h"
+#include "util/ExecutorStatistics.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
 // destruction.
 class ServerMetrics {
  public:
+  using ThreadPoolSnapshot = ad_utility::ThreadPoolStatistics::Snapshot;
   ~ServerMetrics();
   ServerMetrics(const ServerMetrics&) = delete;
   ServerMetrics& operator=(const ServerMetrics&) = delete;
@@ -43,13 +46,15 @@ class ServerMetrics {
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> httpErrors_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
 
-  ServerMetrics(absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples,
-                absl::AnyInvocable<int64_t() const> getMemoryLeft,
-                absl::AnyInvocable<int64_t() const> getCacheUsed,
-                absl::AnyInvocable<int64_t() const> getCacheLimit,
-                absl::AnyInvocable<int64_t() const> getRebuildInProgress,
-                std::optional<ad_utility::MemorySize> maxMem,
-                absl::AnyInvocable<int64_t() const> getNumTriplesIndex);
+  ServerMetrics(
+      absl::AnyInvocable<DeltaTriplesCount() const> getDeltaTriples,
+      absl::AnyInvocable<int64_t() const> getMemoryLeft,
+      absl::AnyInvocable<int64_t() const> getCacheUsed,
+      absl::AnyInvocable<int64_t() const> getCacheLimit,
+      absl::AnyInvocable<int64_t() const> getRebuildInProgress,
+      std::optional<ad_utility::MemorySize> maxMem,
+      absl::AnyInvocable<int64_t() const> getNumTriplesIndex,
+      absl::AnyInvocable<ThreadPoolSnapshot() const> getThreadPoolStatistics);
   void registerCallbacks();
 
  private:
@@ -70,6 +75,7 @@ class ServerMetrics {
   absl::AnyInvocable<int64_t() const> getCacheLimit_;
   absl::AnyInvocable<int64_t() const> getRebuildInProgress_;
   absl::AnyInvocable<int64_t() const> getNumTriplesIndex_;
+  absl::AnyInvocable<ThreadPoolSnapshot() const> getThreadPoolStatistics_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.
@@ -85,6 +91,20 @@ class ServerMetrics {
       rebuildInProgressMetric_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       numTriplesIndex_;
+
+  // The observable counters for the statistics of the thread pool (see
+  // `util/ExecutorStatistics.h`), each with the callback that observes it.
+  using Callback = void (*)(opentelemetry::metrics::ObserverResult, void*);
+  struct ThreadPoolInstrument {
+    std::shared_ptr<opentelemetry::metrics::ObservableInstrument> instrument_;
+    Callback callback_;
+  };
+  std::vector<ThreadPoolInstrument> threadPoolInstruments_;
+  void createThreadPoolInstruments(opentelemetry::metrics::Meter& meter);
+  // Observe the time `Time`, with one value per class of tasks.
+  template <uint64_t ad_utility::TaskStatistics::*Time>
+  static void taskTimeCallback(opentelemetry::metrics::ObserverResult result,
+                               void* state);
 };
 
 #endif  // QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H

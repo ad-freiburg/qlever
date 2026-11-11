@@ -268,6 +268,40 @@ TEST(AsyncTransformView, destructionWithPendingElements) {
   EXPECT_EQ(numFinished, 5);
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// Test that the time that the consumer waits for a result is added to the
+// statistics of the executor.
+TEST(AsyncTransformView, resultWaitTimeIsAddedToTheStatistics) {
+  // An executor with statistics for a thread pool and for a single query.
+  boost::asio::thread_pool pool{2};
+  auto poolStatistics = std::make_shared<ad_utility::ThreadPoolStatistics>(2);
+  auto queryStatistics = std::make_shared<ad_utility::SharedTaskStatistics>();
+  ad_utility::ExecutorWithStatistics executor{
+      pool.get_executor(), poolStatistics, ad_utility::TaskClass::Query,
+      queryStatistics};
+
+  // The consumer has to wait for the only result for about 50 ms.
+  AsyncTransformView view{std::vector<int>{1},
+                          [](int i) {
+                            std::this_thread::sleep_for(50ms);
+                            return i;
+                          },
+                          2, executor};
+  EXPECT_THAT(::ranges::to_vector(view), ElementsAre(1));
+  uint64_t expected = std::chrono::nanoseconds{40ms}.count();
+  EXPECT_GE(queryStatistics->snapshot().resultWaitTime_, expected);
+  EXPECT_GE(poolStatistics->snapshot()
+                .ofClass(ad_utility::TaskClass::Query)
+                .resultWaitTime_,
+            expected);
+
+  // The task is added to the statistics when it has completed, which is after
+  // its result has become available.
+  pool.join();
+  EXPECT_EQ(queryStatistics->snapshot().numTasks_, 1u);
+}
+#endif
+
 // _____________________________________________________________________________
 TEST(AsyncTransformView, globalExecutorAndTypeErasure) {
   // The view can be type-erased via `InputRangeTypeErased`, which makes it

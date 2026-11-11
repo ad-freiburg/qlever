@@ -56,6 +56,11 @@ class MessageSender {
   std::shared_ptr<std::atomic<QueryStatus>> sharedStatus() const noexcept {
     return distributorAndOwningQueryId_->owningQueryId_.sharedStatus();
   }
+
+  // Shared handle to the task statistics of the underlying `OwningQueryId`.
+  std::shared_ptr<SharedTaskStatistics> sharedTaskStatistics() const noexcept {
+    return distributorAndOwningQueryId_->owningQueryId_.sharedTaskStatistics();
+  }
 };
 
 }  // namespace ad_utility::websocket
