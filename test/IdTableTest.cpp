@@ -10,12 +10,14 @@
 
 #include <array>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "global/Id.h"
 #include "util/CompilerWarnings.h"
 #include "util/TypeIdentity.h"
@@ -24,6 +26,13 @@ using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
 auto V = ad_utility::testing::VocabId;
+
+// An `IdTable` whose columns have the split layout (two arrays per column). The
+// split columns also work with the legacy `Id`, so all the tests that run for
+// this type test the split columns without `USE_SPLIT_LAYOUT`.
+using SplitColumnIdTable = columnBasedIdTable::IdTable<
+    Id, 0,
+    columnBasedIdTable::splitLayout::IdColumnVector<detail::DefaultAllocator>>;
 
 // A storage type that only differs from a plain `std::vector` in that it has an
 // additional constructor that takes (and ignores) the arguments that the old
@@ -259,7 +268,9 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
     }
     allocators.emplace_back(makeAllocator());
   }
+  std::vector splitAllocators{allocators};
   testCase(ti<IdTable>, V, std::move(allocators));
+  testCase(ti<SplitColumnIdTable>, V, std::move(splitAllocators));
   testCase(ti<BufferedTable>, V, std::move(buffers));
   auto makeInt = [](auto el) { return static_cast<int>(el); };
   testCase(ti<IntTable>, makeInt);
@@ -1326,16 +1337,20 @@ TEST(IdTable, fromColumns) {
 }
 
 // ____________________________________________________________________________
-// Typed test fixture for `subView`, covering both owned `IdTable` and
-// `IdTableView<0>`.
+// Typed test fixture for `subView`, covering the owned `IdTable`, an
+// `IdTableView<0>` and an `IdTable` with split columns.
 template <typename T>
 class IdTableSubViewTest : public testing::Test {};
-using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
+using SubViewTestTypes =
+    testing::Types<IdTable, IdTableView<0>, SplitColumnIdTable>;
 TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
 
 TYPED_TEST(IdTableSubViewTest, subView) {
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
-  IdTable table{2, alloc};
+  // The table that owns the data: a view refers to an `IdTable`.
+  using Table = std::conditional_t<std::is_same_v<TypeParam, IdTableView<0>>,
+                                   IdTable, TypeParam>;
+  Table table{2, alloc};
   for (int i = 0; i < 5; ++i) {
     table.push_back({V(i * 10), V(i * 10 + 1)});
   }
@@ -1347,7 +1362,9 @@ TYPED_TEST(IdTableSubViewTest, subView) {
     auto fullView = target.subView(0, 5);
     EXPECT_EQ(fullView.numRows(), 5u);
     EXPECT_EQ(fullView.numColumns(), 2u);
-    EXPECT_EQ(fullView, table);
+    // A view can only be compared with an `IdTable` of the default columns,
+    // so the comparison uses a copy of the view.
+    EXPECT_EQ(fullView.clone(), table);
 
     // Empty sub-view: `subView(0, 0)` must have zero rows.
     auto emptyView = target.subView(0, 0);
@@ -1368,8 +1385,18 @@ TYPED_TEST(IdTableSubViewTest, subView) {
     EXPECT_EQ(sliceView(1, 0), V(20));
 
     // `subView` is non-owning: data pointers point into the original table.
-    EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
-    EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+    if constexpr (std::is_reference_v<typename Table::reference>) {
+      EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
+      EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+    } else {
+      // The entries of split columns (also of `IdTable` with
+      // `USE_SPLIT_LAYOUT`) are proxies without an address, so the pointers of
+      // their two arrays are compared.
+      EXPECT_EQ(sliceView.getColumn(0).rawPayloads().data(),
+                table.getColumn(0).rawPayloads().data() + 1);
+      EXPECT_EQ(sliceView.getColumn(0).rawDatatypes().data(),
+                table.getColumn(0).rawDatatypes().data() + 1);
+    }
 
     // Out-of-range access must trigger a contract check.
     EXPECT_ANY_THROW(target.subView(3, 3));  // offset + size > numRows.
@@ -1377,7 +1404,7 @@ TYPED_TEST(IdTableSubViewTest, subView) {
   };
 
   if constexpr (std::is_same_v<TypeParam, IdTableView<0>>) {
-    auto view = table.asStaticView<0>();
+    auto view = table.template asStaticView<0>();
     runTests(view);
   } else {
     runTests(table);
