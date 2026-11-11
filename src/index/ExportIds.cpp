@@ -82,6 +82,8 @@ std::optional<Literal> idToLiteral(const IndexImpl& index, Id id,
   auto datatype = id.getDatatype();
 
   switch (datatype) {
+    case Datatype::TripleTermIndex:
+      return std::nullopt;
     case WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
     case EncodedVal:
@@ -157,6 +159,8 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
                                              bool skipEncodedValues) {
   using enum Datatype;
   switch (id.getDatatype()) {
+    case Datatype::TripleTermIndex:
+      return std::nullopt;
     case WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
@@ -290,6 +294,9 @@ idToStringAndTypeForEncodedValue(Id id) {
       // keys etc. Consider removing it in the future.
     case EncodedVal:
       return std::pair{absl::StrCat("encodedId: ", id.getBits()), nullptr};
+    case TripleTermIndex:
+      throw std::runtime_error(
+          "Export of triple-term references is not supported yet");
     default:
       AD_FAIL();
   }

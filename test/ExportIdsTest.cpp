@@ -632,3 +632,12 @@ TEST(ExportIds, resolveNonVocabIndexIds) {
 }
 
 }  // namespace
+
+TEST(ExportIds, tripleTermReferencesHaveNoLiteralOrStringRepresentationYet) {
+  const auto& index = ad_utility::testing::getQec()->getIndex();
+  auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  EXPECT_FALSE(ql::exportIds::idToLiteral(index, term, LocalVocab{}));
+  EXPECT_FALSE(ql::exportIds::idToLiteralOrIri(index, term, LocalVocab{}));
+  EXPECT_THROW(ql::exportIds::idToStringAndTypeForEncodedValue(term),
+               std::runtime_error);
+}

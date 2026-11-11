@@ -389,6 +389,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
+    // Equality is exact for index-local term references. Order across term IDs
+    // is only their physical order, not a SPARQL ordering.
+    case Datatype::TripleTermIndex:
       // TODO<joka921> The same caveat as for `EncodedVal` above applies to the
       // `SecondaryVocabIndex` type: the comparison via bits is only correct for
       // equality, because the words of a secondary vocabulary are all sorted

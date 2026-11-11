@@ -108,10 +108,12 @@ QL_CONSTEVAL bool isStrictlyAscending(
 // converter is not applicable to it.
 static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 
-// Exactly one datatype was added, so no datatype of the source format was
-// removed or duplicated above.
+// The historical conversion adds SecondaryVocabIndex. TripleTermIndex is
+// appended without changing existing tags and cannot occur in the source
+// format.
 static_assert(datatypesOfSourceFormat.size() + 1 ==
-              static_cast<size_t>(Datatype::MaxValue) + 1);
+              static_cast<size_t>(Datatype::TripleTermIndex));
+static_assert(Datatype::MaxValue == Datatype::TripleTermIndex);
 
 // The version of the on-disk format of the materialized views (see
 // `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format

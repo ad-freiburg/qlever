@@ -213,3 +213,13 @@ TEST(TransmittedStringRewriter, malformedStrings) {
         ::testing::HasSubstr("malformed string"));
   }
 }
+
+// Index-local term references require structural transport, which is not yet
+// part of the binary format. Never transmit their raw payload as a value.
+TEST(StringMapping, rejectsTripleTermReferences) {
+  StringMapping mapping{getQecWithTextIndex()->getIndex()};
+  EXPECT_THROW(
+      mapping.remapId(Id::makeFromTripleTermIndex(TripleTermIndex::make(17))),
+      std::runtime_error);
+  EXPECT_EQ(mapping.size(), 0);
+}

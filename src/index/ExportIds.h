@@ -59,7 +59,8 @@ using Literal = ad_utility::triple_component::Literal;
 // `idToLiteralForEncodedValue`, which turns the value that the `Id` stores
 // into a plain literal (`Bool`, `Int`, `Double`, `Date`, `GeoPoint`), returns
 // the label of the blank node (`BlankNodeIndex`), or returns `std::nullopt`
-// (`Undefined`).
+// (`Undefined`). Triple-term references have no literal representation and
+// return `std::nullopt`.
 std::optional<Literal> idToLiteral(
     const IndexImpl& index, Id id, const LocalVocab& localVocab,
     bool onlyReturnLiteralsWithXsdString = false);

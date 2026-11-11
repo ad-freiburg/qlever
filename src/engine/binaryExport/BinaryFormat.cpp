@@ -40,7 +40,19 @@ static constexpr auto datatypesOfVersion1 = []() {
                         Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
                         EncodedVal});
 }();
-static_assert(isListOfAllDatatypesInOrder(datatypesOfVersion1));
+// TripleTermIndex is an index-local datatype. Version 1's existing tags remain
+// unchanged; triple terms must not be sent in that format until a dictionary
+// transfer protocol exists (StringMapping rejects them explicitly).
+static_assert([] {
+  for (size_t i = 0; i < datatypesOfVersion1.size(); ++i) {
+    if (static_cast<size_t>(datatypesOfVersion1[i]) != i) {
+      return false;
+    }
+  }
+  return static_cast<size_t>(Datatype::TripleTermIndex) ==
+             datatypesOfVersion1.size() &&
+         Datatype::MaxValue == Datatype::TripleTermIndex;
+}());
 
 // _____________________________________________________________________________
 std::string Header::serialize() const {

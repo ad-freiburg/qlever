@@ -79,6 +79,8 @@ TEST(OrderByComparator, getTermKind) {
   auto kind = [&comparator](Id id) { return comparator.getTermKind(id); };
 
   EXPECT_EQ(kind(UndefId()), TermKind::Undefined);
+  EXPECT_THROW(kind(Id::makeFromTripleTermIndex(TripleTermIndex::make(3))),
+               std::runtime_error);
 
   EXPECT_EQ(kind(BlankNodeId(3)), TermKind::BlankNode);
   auto blankNodeOfBnodeFunction = localVocabEntryFromStringRepresentation(
