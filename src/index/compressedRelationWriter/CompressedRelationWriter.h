@@ -32,6 +32,7 @@
 #include "index/KeyOrder.h"
 #include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/CompressionUsingZstd/ZstdContext.h"
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Iterators.h"
@@ -65,6 +66,9 @@ class CompressedRelationWriter {
   // why the `outfile_` has to be empty when this writer is constructed (this
   // is checked there).
   std::atomic<off_t> nextOffset_{0};
+  // The ZSTD context and compression buffer of each thread that compresses
+  // blocks, see `compressAndWriteColumn`.
+  ad_utility::ThreadLocalZstdContext zstdContext_;
   ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
       blockBuffer_;
   // The actual number of columns that is stored by this writer. Is 2 if there

@@ -21,7 +21,7 @@
 #include "backports/memory.h"
 #include "backports/numeric.h"
 #include "backports/span.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/CompressionUsingZstd/ZstdContext.h"
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/Log.h"
@@ -89,6 +89,9 @@ class CompressedBlockFile {
   Synchronized<File, std::shared_mutex> file_{filename_, "w+"};
   // The offset at which the next block is appended, see `appendBytes`.
   std::atomic<off_t> nextOffset_{0};
+  // The ZSTD context and compression buffer of each thread that appends or
+  // reads blocks.
+  ThreadLocalZstdContext zstdContext_;
 
  public:
   // Create the file at `filename`, overwriting it if it already exists, and
@@ -141,10 +144,15 @@ class CompressedBlockFile {
     if (!compressionLevel_.has_value()) {
       return {uncompressedSize, uncompressedSize, appendBytes(chunks)};
     }
-    auto compressed =
-        ZstdWrapper::compressChunks(chunks, compressionLevel_.value());
-    std::array compressedChunks{ql::as_bytes(ql::span<const char>{compressed})};
-    return {compressed.size(), uncompressedSize, appendBytes(compressedChunks)};
+    return zstdContext_.run(
+        [this, chunks, uncompressedSize](ZstdContext& context,
+                                         std::vector<char>& buffer) {
+          auto compressed =
+              context.compressChunks(chunks, buffer, compressionLevel_.value());
+          std::array compressedChunks{ql::as_bytes(compressed)};
+          return BlockMetadata{compressed.size(), uncompressedSize,
+                               appendBytes(compressedChunks)};
+        });
   }
 
   // Like `readBlock`, but into `targets` of the sizes of the chunks that the
@@ -156,7 +164,11 @@ class CompressedBlockFile {
           ql::make_unique_for_overwrite<char[]>(metadata.compressedSize_);
       ql::span compressed{buffer.get(), metadata.compressedSize_};
       readBytes(metadata.offsetInFile_, ql::as_writable_bytes(compressed));
-      ZstdWrapper::decompressChunks(compressed, targets);
+      zstdContext_.run(
+          [compressed, targets](ZstdContext& context,
+                                [[maybe_unused]] std::vector<char>& buffer) {
+            context.decompressChunks(compressed, targets);
+          });
       return;
     }
     // Without compression, the chunks are stored one after the other.

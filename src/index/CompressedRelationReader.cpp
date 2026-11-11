@@ -826,10 +826,14 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 
 // ____________________________________________________________________________
 void CompressedRelationReader::decompressColumn(
-    const std::vector<char>& compressedBlock, IdColumnRef column) {
-  ad_utility::idColumnByteIO::decode(
-      column, [&compressedBlock](const auto& buffers) {
-        ZstdWrapper::decompressChunks(compressedBlock, buffers);
+    const std::vector<char>& compressedBlock, IdColumnRef column) const {
+  zstdContext_.run(
+      [&compressedBlock, &column](ad_utility::ZstdContext& context,
+                                  [[maybe_unused]] std::vector<char>& buffer) {
+        ad_utility::idColumnByteIO::decode(
+            column, [&context, &compressedBlock](const auto& buffers) {
+              context.decompressChunks(compressedBlock, buffers);
+            });
       });
 }
 

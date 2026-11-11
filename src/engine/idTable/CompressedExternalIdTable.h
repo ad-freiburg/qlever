@@ -29,7 +29,7 @@
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/CompressionUsingZstd/ZstdContext.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
@@ -91,6 +91,9 @@ class CompressedExternalIdTableWriter {
   std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
                                                                       "w+"};
+  // The ZSTD context and compression buffer of each thread that compresses or
+  // decompresses blocks.
+  ad_utility::ThreadLocalZstdContext zstdContext_;
   // For a single column, the concatenation of the blocks for that column of all
   // `IdTables`.
   using ColumnMetadata = std::vector<CompressedBlockMetadata>;
@@ -241,14 +244,22 @@ class CompressedExternalIdTableWriter {
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
-    auto compressed = idColumnByteIO::encode(
-        column.subspan(lower, upper - lower),
-        [](const auto& chunks) { return ZstdWrapper::compressChunks(chunks); });
-    auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
-    // NOTE: This throws if not all the bytes could be written.
-    file_.rlock()->write(compressed.data(), compressed.size(), offset);
+    auto [compressedSize, offset] = zstdContext_.run(
+        [this, &column, lower, upper](ad_utility::ZstdContext& context,
+                                      std::vector<char>& buffer) {
+          auto compressed = idColumnByteIO::encode(
+              column.subspan(lower, upper - lower),
+              [&context, &buffer](const auto& chunks) {
+                return context.compressChunks(chunks, buffer);
+              });
+          auto offset =
+              nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
+          // NOTE: This throws if not all the bytes could be written.
+          file_.rlock()->write(compressed.data(), compressed.size(), offset);
+          return std::pair{compressed.size(), offset};
+        });
     blocksPerColumn_.at(columnIdx).at(layout.firstBlockIdx_ + blockIdx) =
-        CompressedBlockMetadata{compressed.size(), uncompressedSize,
+        CompressedBlockMetadata{compressedSize, uncompressedSize,
                                 static_cast<size_t>(offset)};
   }
 
@@ -402,8 +413,11 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    idColumnByteIO::decode(col, [&compressed](const auto& buffers) {
-      ZstdWrapper::decompressChunks(compressed, buffers);
+    zstdContext_.run([&col, &compressed](ad_utility::ZstdContext& context,
+                                         [[maybe_unused]] auto& buffer) {
+      idColumnByteIO::decode(col, [&context, &compressed](const auto& buffers) {
+        context.decompressChunks(compressed, buffers);
+      });
     });
   }
 
