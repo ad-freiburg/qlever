@@ -500,9 +500,7 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   BoundingBox bb1{{0, 0}, {1, 1}};
   ASSERT_EQ(bb1.asWkt(), "POLYGON((0 0,1 0,1 1,0 1,0 0))");
   BoundingBox bb2{{0, 0}, {0, 0}};
-  ASSERT_EQ(bb2.asWkt(),
-            "POLYGON((0 0,0 0,0 0,0 0))");  // TODO <yarox-1> one missing 0 0 in
-                                            // result
+  ASSERT_EQ(bb2.asWkt(), "POLYGON((0 0,0 0,0 0,0 0,0 0))");
   auto bb3 = GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
@@ -609,8 +607,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   auto bb1Wkt =
       boundingBoxAsWkt(bb1.value().lowerLeft(), bb1.value().upperRight());
-  EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4))");  // TODO <yarox-1> one
-                                                    // missing 3 4 in result
+  EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
   EXPECT_EQ(addSfPrefix<example>(), "http://www.opengis.net/ont/sf#Example");
   EXPECT_FALSE(wktTypeToIri(0).has_value());

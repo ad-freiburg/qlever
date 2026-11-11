@@ -183,16 +183,16 @@ class WktMetricLength {
 class WktCentroid {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<GeometryInfo>& geom) const {
+      const std::optional<WithSourceCrs<Centroid>>& geom) const {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    std::optional<SourceCrsType> sourceCrs = geom.value().getSourceCrsType();
+    std::optional<SourceCrsType> sourceCrs = geom.value().crs_;
     AD_CORRECTNESS_CHECK(sourceCrs.has_value());
     // TODO<yarox-1> Check if this breaks somethings (old index might have
     // problem as stored with unsupported Crs -> maybe just assume CRS84)
 
-    Centroid centroid = geom.value().getCentroid();
+    Centroid centroid = geom.value().info_;
 
     auto resultWkt = ad_utility::detail::geoPointToWktInCrs(centroid.centroid(),
                                                             sourceCrs.value());
@@ -211,17 +211,17 @@ class WktCentroid {
 class WktEnvelope {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<ad_utility::GeometryInfo>& geom) const {
+      const std::optional<WithSourceCrs<BoundingBox>>& geom) const {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
 
-    std::optional<SourceCrsType> sourceCrs = geom.value().getSourceCrsType();
+    std::optional<SourceCrsType> sourceCrs = geom.value().crs_;
     AD_CORRECTNESS_CHECK(sourceCrs.has_value());
     // TODO<yarox-1> Check if this breaks somethings (old index might have
     // problem as stored with unsupported Crs -> maybe just assume CRS84)
 
-    BoundingBox boundingBox = geom.value().getBoundingBox();
+    BoundingBox boundingBox = geom.value().info_;
     using namespace triple_component;
     auto lit =
         Literal::literalWithoutQuotes(ad_utility::detail::boundingBoxToWkt(

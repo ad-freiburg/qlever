@@ -266,17 +266,8 @@ inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
 inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
                                     const GeoPoint& upperRight,
                                     CRSType projCrs = defaultCrs) {
-  // TODO <yarox-1> currently `util` cannot get the appropriate WKT for a `Box`
-  // in a different CRS. Therefore in the intermediate time, we first create the
-  // `Polygon` representing the `Box` and then get the WKT. Box<CoordType>
-  // box{geoPointToUtilPoint(lowerLeft),
-  //                   geoPointToUtilPoint(upperRight)};
-  Point<CoordType> lowLeft = geoPointToUtilPoint(lowerLeft);
-  Point<CoordType> upRight = geoPointToUtilPoint(upperRight);
-  Point<CoordType> lowRight{upRight.getX(), lowLeft.getY()};
-  Point<CoordType> upLeft{lowLeft.getX(), upRight.getY()};
-  Polygon<CoordType> box{
-      Ring<CoordType>{lowLeft, lowRight, upRight, upLeft, lowLeft}};
+  Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
+                     geoPointToUtilPoint(upperRight)};
   return getWKT(box, defaultCrs, projCrs);
 }
 
