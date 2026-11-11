@@ -473,13 +473,15 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
   using V = Variable;
   IndexScan scan{qec, Permutation::PSO,
                  SparqlTripleSimple{V{"?s"}, iri("<p>"), V{"?o"}}};
-  auto bind = [](std::shared_ptr<sparqlExpression::SparqlExpression> expr) {
+  auto bind = [](std::shared_ptr<sparqlExpression::SparqlExpression> expr,
+                 V target = V{"?c"}) {
     return parsedQuery::Bind{
         sparqlExpression::SparqlExpressionPimpl{std::move(expr), "constant"},
-        V{"?c"}};
+        std::move(target)};
   };
-  auto bindIri = [&bind](std::string_view s) {
-    return bind(std::make_shared<sparqlExpression::IriExpression>(iri(s)));
+  auto bindIri = [&bind](std::string_view s, V target = V{"?c"}) {
+    return bind(std::make_shared<sparqlExpression::IriExpression>(iri(s)),
+                std::move(target));
   };
 
   // `BIND(<p> AS ?c)` adds an always defined column with `<p>` in each row,
@@ -490,8 +492,9 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
   EXPECT_THAT(tree.value()->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(VariableToColumnMap{
                   {V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}}));
-  EXPECT_THAT(tree.value()->getCacheKey(),
-              ::testing::ContainsRegex("Constant Columns: 0"));
+  EXPECT_THAT(
+      tree.value()->getCacheKey(),
+      ::testing::HasSubstr(absl::StrCat("Constant Columns: ", p.getBits())));
   auto expected = makeIdTableFromVector({{x, o1, p}, {x, o2, p}});
   auto& op = *tree.value()->getRootOperation();
   EXPECT_EQ(op.computeResultOnlyForTesting().idTableView(), expected);
@@ -505,8 +508,32 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
   EXPECT_FALSE(scan.makeTreeWithBindColumn(bindIri("<q>")).has_value());
   EXPECT_FALSE(
       scan.makeTreeWithBindColumn(bindIri("<notInVocab>")).has_value());
-  EXPECT_FALSE(scan.makeTreeWithBindColumn(
-      bind(std::make_shared<sparqlExpression::VariableExpression>(V{"?s"}))));
+  EXPECT_FALSE(
+      scan
+          .makeTreeWithBindColumn(bind(
+              std::make_shared<sparqlExpression::VariableExpression>(V{"?s"})))
+          .has_value());
+
+  // The second fixed component of `?s <p> <o1>` is also a constant column.
+  IndexScan scanWithTwoFixed{
+      qec, Permutation::POS,
+      SparqlTripleSimple{V{"?s"}, iri("<p>"), iri("<o1>")}};
+  auto treeWithObject =
+      scanWithTwoFixed.makeTreeWithBindColumn(bindIri("<o1>"));
+  ASSERT_TRUE(treeWithObject.has_value());
+  EXPECT_EQ(treeWithObject.value()
+                ->getRootOperation()
+                ->computeResultOnlyForTesting()
+                .idTableView(),
+            makeIdTableFromVector({{x, o1}}));
+
+  // A `BIND` to a variable of the triple that is stripped away (`?o`) is not
+  // pushed down (the stripped column must not come back).
+  auto strippedTree = scan.makeTreeWithStrippedColumns({V{"?s"}});
+  ASSERT_TRUE(strippedTree.has_value());
+  EXPECT_FALSE(strippedTree.value()
+                   ->makeTreeWithBindColumn(bindIri("<p>", V{"?o"}))
+                   .has_value());
 
   // Stripping a constant column removes it from the scan, keeping it yields
   // the column after the remaining variables.

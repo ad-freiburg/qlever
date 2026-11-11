@@ -24,7 +24,7 @@ class IndexScan final : public Operation {
  public:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
   using PermutationPtr = std::shared_ptr<const Permutation>;
-  using ConstantColumns = std::vector<std::pair<ColumnIndex, Variable>>;
+  using ConstantColumns = std::vector<std::pair<Id, Variable>>;
 
  private:
   using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
@@ -50,14 +50,13 @@ class IndexScan final : public Operation {
   std::vector<Variable> additionalVariables_;
 
   // Fixed components of the scan triple that are also part of the result, each
-  // as a column with the constant value of the component that is bound to a
-  // variable (see `makeTreeWithBindColumn`). The `ColumnIndex` is the position
-  // of the component in the permuted triple.
+  // as a column with the `Id` of the component in every row, bound to a
+  // variable (see `makeTreeWithBindColumn`).
   //
   // NOTE: These columns come after the additional columns. A column that is not
   // needed is removed instead of stripped (see `makeTreeWithStrippedColumns`).
-  // The `Id` of the component is never a `LocalVocabIndex` (which the result
-  // would have to keep alive).
+  // The `Id` is never a `LocalVocabIndex` (which the result would have to keep
+  // alive).
   ConstantColumns constantColumns_;
 
   // If set, then only the specified variables will be part of the result.
@@ -390,9 +389,6 @@ class IndexScan final : public Operation {
   std::vector<float> computeMultiplicitiesForView(
       const MaterializedView& view) const;
 
-  // Return the `Id` of the fixed component of each of the `constantColumns_`.
-  std::vector<Id> getConstantColumnIds() const;
-
   // Implementation of `makeTreeWithBindColumn` for a `bind` of a constant that
   // equals a fixed component of the scan triple: Return a copy of this scan
   // with an additional constant column for the target of the `bind`. If the
@@ -416,8 +412,8 @@ class IndexScan final : public Operation {
     auto cols =
         hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
     return [cols = std::move(cols),
-            constantIds = getConstantColumnIds()](auto&& table) {
-      for (Id id : constantIds) {
+            constantColumns = constantColumns_](auto&& table) {
+      for (Id id : constantColumns | ql::views::keys) {
         table.addEmptyColumn();
         ql::ranges::fill(table.getColumn(table.numColumns() - 1), id);
       }
