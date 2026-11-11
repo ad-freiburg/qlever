@@ -96,7 +96,7 @@ TEST(FairShareExecutor, singleClientIsWorkConserving) {
   boost::asio::thread_pool pool{8};
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 4);
   qlever::Executor executor = FairShareExecutor{
-      scheduler, scheduler->makeClient(FairShareClass::Foreground)};
+      scheduler, FairScheduler::makeClient(FairShareClass::Foreground)};
   EXPECT_EQ(runAndWait(executor, 64, 4), 4u);
   pool.join();
 }
@@ -106,7 +106,7 @@ TEST(FairShareExecutor, maxConcurrencyOfClient) {
   boost::asio::thread_pool pool{8};
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 8);
   qlever::Executor root = FairShareExecutor{
-      scheduler, scheduler->makeClient(FairShareClass::Background)};
+      scheduler, FairScheduler::makeClient(FairShareClass::Background)};
   auto limited =
       makeFairShareClientExecutor(root, FairShareClass::Foreground, 2);
   EXPECT_EQ(runAndWait(limited, 32, 2), 2u);
@@ -122,7 +122,7 @@ TEST(FairShareExecutor, sharesOfClasses) {
   scheduler->setShare(FairShareClass::Background, 0.25);
   scheduler->setShare(FairShareClass::Foreground, 0.75);
   qlever::Executor background = FairShareExecutor{
-      scheduler, scheduler->makeClient(FairShareClass::Background)};
+      scheduler, FairScheduler::makeClient(FairShareClass::Background)};
   // Many query clients, each of which floods the scheduler with tasks.
   std::vector<qlever::Executor> queries;
   for (size_t i = 0; i < 8; ++i) {
@@ -159,7 +159,7 @@ TEST(FairShareExecutor, idleClassLeavesItsShareToOthers) {
   scheduler->setShare(FairShareClass::Background, 0.1);
   scheduler->setShare(FairShareClass::Foreground, 0.9);
   qlever::Executor background = FairShareExecutor{
-      scheduler, scheduler->makeClient(FairShareClass::Background)};
+      scheduler, FairScheduler::makeClient(FairShareClass::Background)};
   EXPECT_EQ(runAndWait(background, 64, 4), 4u);
   pool.join();
 }
@@ -218,7 +218,7 @@ TEST(FairShareExecutor, clientsAtTheirLimitAreSkipped) {
   auto makeExecutor = [&scheduler](FairShareClass fairShareClass,
                                    size_t maxConcurrency) {
     return qlever::Executor{FairShareExecutor{
-        scheduler, scheduler->makeClient(fairShareClass, maxConcurrency)}};
+        scheduler, FairScheduler::makeClient(fairShareClass, maxConcurrency)}};
   };
   auto limitedBackground = makeExecutor(FairShareClass::Background, 1);
   auto limitedForeground = makeExecutor(FairShareClass::Foreground, 1);
@@ -295,9 +295,9 @@ TEST(FairShareExecutor, invalidArguments) {
   EXPECT_ANY_THROW(FairScheduler(ql::any_io_executor{}, 1));
   EXPECT_ANY_THROW(FairScheduler(pool.get_executor(), 0));
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 1);
-  EXPECT_ANY_THROW(scheduler->makeClient(FairShareClass::Foreground, 0));
+  EXPECT_ANY_THROW(FairScheduler::makeClient(FairShareClass::Foreground, 0));
   EXPECT_ANY_THROW(scheduler->setShare(FairShareClass::Foreground, 0.0));
-  auto client = scheduler->makeClient(FairShareClass::Foreground);
+  auto client = FairScheduler::makeClient(FairShareClass::Foreground);
   EXPECT_ANY_THROW(FairShareExecutor(nullptr, client));
   EXPECT_ANY_THROW(FairShareExecutor(scheduler, nullptr));
   EXPECT_ANY_THROW(makeFairShareClientExecutor(

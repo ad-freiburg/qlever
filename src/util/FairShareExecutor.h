@@ -188,7 +188,9 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
 
   ql::any_io_executor executor_;
   size_t numSlots_;
-  ad_utility::Synchronized<State, std::mutex> state_;
+  // NOTE: `State` has to be passed explicitly, because for a nested class with
+  // default member initializers, `Synchronized` sees no default constructor.
+  ad_utility::Synchronized<State, std::mutex> state_{State{}};
 
  public:
   FairScheduler(ql::any_io_executor executor, size_t numSlots);
@@ -196,8 +198,9 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
   const ql::any_io_executor& underlyingExecutor() const { return executor_; }
 
   // Create a new client of the given class, which may run at most
-  // `maxConcurrency` tasks at the same time (by default without a limit).
-  std::shared_ptr<Client> makeClient(
+  // `maxConcurrency` tasks at the same time (by default without a limit). The
+  // client must only be used with a single scheduler.
+  static std::shared_ptr<Client> makeClient(
       FairShareClass fairShareClass,
       size_t maxConcurrency = std::numeric_limits<size_t>::max());
 

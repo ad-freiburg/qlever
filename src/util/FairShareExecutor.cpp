@@ -52,10 +52,7 @@ TaskOutcome runAndDestroy(FairScheduler::Task task) {
 
 // _____________________________________________________________________________
 FairScheduler::FairScheduler(ql::any_io_executor executor, size_t numSlots)
-    // NOTE: `State` has to be passed explicitly, because for a nested class
-    // with default member initializers, `Synchronized` sees no default
-    // constructor.
-    : executor_{std::move(executor)}, numSlots_{numSlots}, state_{State{}} {
+    : executor_{std::move(executor)}, numSlots_{numSlots} {
   AD_CONTRACT_CHECK(static_cast<bool>(executor_));
   AD_CONTRACT_CHECK(numSlots_ > 0);
 }
@@ -142,7 +139,7 @@ auto FairScheduler::State::nextClassAndClient()
     std::optional<ClassState::Clients::iterator> client_;
   };
   auto candidates = ad_utility::transformArray(
-      classes_, [](auto&& cls) { return Candidate{cls, cls.nextClient()}; });
+      classes_, [](auto& cls) { return Candidate{cls, cls.nextClient()}; });
   // Classes that have a `nextClient` come first, ordered by their virtual time.
   auto& best =
       *ql::ranges::min_element(candidates, {}, [](const Candidate& candidate) {
@@ -227,7 +224,7 @@ qlever::Executor makeFairShareExecutor(qlever::Executor executor,
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto scheduler =
       std::make_shared<FairScheduler>(std::move(executor), numSlots);
-  auto client = scheduler->makeClient(FairShareClass::Foreground);
+  auto client = FairScheduler::makeClient(FairShareClass::Foreground);
   return FairShareExecutor{std::move(scheduler), std::move(client)};
 #else
   return executor;
@@ -243,7 +240,7 @@ qlever::Executor makeFairShareClientExecutor(
     const auto& scheduler = fair->scheduler();
     return FairShareExecutor{
         scheduler,
-        scheduler->makeClient(
+        FairScheduler::makeClient(
             fairShareClass,
             maxConcurrency.value_or(std::numeric_limits<size_t>::max()))};
   }
