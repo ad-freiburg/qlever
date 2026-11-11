@@ -88,6 +88,9 @@ struct CompressedBlockMetadataNoBlockIndex {
     // Helper function to make `PermutedTriple` easier to compare without
     // `graphId_`.
     auto tieWithoutGraph() const { return std::tie(col0Id_, col1Id_, col2Id_); }
+
+    // Return the `Id` in the column with the given index (0, 1, or 2).
+    Id getId(size_t columnIndex) const;
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;

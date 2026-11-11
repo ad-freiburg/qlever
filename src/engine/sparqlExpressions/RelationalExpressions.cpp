@@ -6,6 +6,9 @@
 
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 
+#include <cmath>
+#include <limits>
+
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
@@ -639,24 +642,51 @@ template class RelationalExpression<Comparison::GE>;
 
 namespace sparqlExpression {
 
+namespace {
+// Return true iff `expr` is a `T`.
+template <typename T>
+bool isExpressionOfType(const SparqlExpression& expr) {
+  return dynamic_cast<const T*>(&expr) != nullptr;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::optional<valueIdComparators::Comparison> getComparison(
+    const SparqlExpression& expression) {
+  using enum valueIdComparators::Comparison;
+  if (isExpressionOfType<LessThanExpression>(expression)) {
+    return LT;
+  } else if (isExpressionOfType<LessEqualExpression>(expression)) {
+    return LE;
+  } else if (isExpressionOfType<EqualExpression>(expression)) {
+    return EQ;
+  } else if (isExpressionOfType<NotEqualExpression>(expression)) {
+    return NE;
+  } else if (isExpressionOfType<GreaterThanExpression>(expression)) {
+    return GT;
+  } else if (isExpressionOfType<GreaterEqualExpression>(expression)) {
+    return GE;
+  }
+  return std::nullopt;
+}
+
 // _____________________________________________________________________________
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr) {
   // TODO<ullingerc> Add support for more optimizable filters:
-  // * `geof:distance() < constant`
   // * `constant > geof:distance()`
   // * `constant >= geof:distance()`
   // The supported patterns are documented in the header declaration of this
   // function.
 
-  // Supported comparison operator
-  auto compareExpr = dynamic_cast<const LessEqualExpression*>(&expr);
-  if (compareExpr == nullptr) {
+  // Supported comparison operators
+  bool isLessThan = isExpressionOfType<LessThanExpression>(expr);
+  if (!isLessThan && !isExpressionOfType<LessEqualExpression>(expr)) {
     return std::nullopt;
   }
 
   // Left child must be distance function
-  auto children = compareExpr->children();
+  auto children = expr.children();
   const auto& leftChild = *children[0];
 
   // Right child must be constant
@@ -684,10 +714,23 @@ getGeoDistanceFilter(const SparqlExpression& expr) {
     return std::nullopt;
   }
 
-  // Convert unit to meters
+  // Convert unit to meters. For `<`, use the largest `double` below the
+  // maximum distance (the spatial join includes the maximum distance).
   double maxDist = ad_utility::detail::valueInUnitToKilometer(
                        maxDistAnyUnit, geoFuncCall.value().unit_) *
                    1000;
+  if (isLessThan) {
+    maxDist = std::nextafter(maxDist, -std::numeric_limits<double>::infinity());
+  }
+
+  // A negative maximum distance (`< 0` or a negative constant) matches
+  // nothing, leave such a filter to the regular `Filter` operation.
+  //
+  // NOTE: `libspatialjoin` treats a negative maximum distance as "no distance
+  // limit" and would report all intersecting pairs instead.
+  if (maxDist < 0) {
+    return std::nullopt;
+  }
 
   return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
 }

@@ -25,6 +25,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
@@ -239,10 +240,10 @@ class CompressedExternalIdTableWriter {
     size_t lower = blockIdx * layout.blockSize_;
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
-    static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
-    auto compressed =
-        ZstdWrapper::compress(column.data() + lower, uncompressedSize);
+    auto compressed = idColumnByteIO::encode(
+        column.subspan(lower, upper - lower),
+        [](const auto& chunks) { return ZstdWrapper::compressChunks(chunks); });
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
     file_.rlock()->write(compressed.data(), compressed.size(), offset);
@@ -401,10 +402,9 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    auto numBytesDecompressed =
-        ZstdWrapper::decompressToBuffer(compressed.data(), compressed.size(),
-                                        col.data(), metaData.uncompressedSize_);
-    AD_CORRECTNESS_CHECK(numBytesDecompressed == metaData.uncompressedSize_);
+    idColumnByteIO::decode(col, [&compressed](const auto& buffers) {
+      ZstdWrapper::decompressChunks(compressed, buffers);
+    });
   }
 
   // Allocate and size an IdTableStatic for the block at `blockIdx`.

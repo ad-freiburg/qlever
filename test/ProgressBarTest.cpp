@@ -101,6 +101,28 @@ TEST(ProgressBar, getTimer) {
               MatchesRegex(expectedUpdateRegex));
 }
 
+// Test that a jump over several batches yields a single update, which shows
+// the last multiple of the batch size, and that the next update is due one
+// batch size after that multiple.
+TEST(ProgressBar, jumpOverSeveralBatches) {
+  size_t numSteps = 0;
+  ProgressBar progressBar(numSteps, "Steps: ", 100'000,
+                          DEFAULT_SPEED_DESCRIPTION_FUNCTION,
+                          ProgressBar::UseNewLine);
+  numSteps = 350'000;
+  ASSERT_TRUE(progressBar.update());
+  EXPECT_THAT(progressBar.getProgressString(),
+              ::testing::StartsWith("Steps: 300,000 "));
+  EXPECT_FALSE(progressBar.update());
+  numSteps = 399'999;
+  EXPECT_FALSE(progressBar.update());
+  numSteps = 400'000;
+  ASSERT_TRUE(progressBar.update());
+  EXPECT_THAT(progressBar.getProgressString(),
+              ::testing::StartsWith("Steps: 400,000 "));
+  EXPECT_FALSE(progressBar.update());
+}
+
 // Tests for `ConcurrentProgressBar`, see `ProgressBar.h`.
 
 // Single-threaded: an `Update` is returned exactly when the batch size is

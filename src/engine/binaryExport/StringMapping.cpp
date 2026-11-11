@@ -71,11 +71,9 @@ Id StringMapping::remapId(Id id) {
     AD_CORRECTNESS_CHECK(strings_.size() == stringMapping_.size());
   }
 
-  // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
-  // are all zero and then performs a right shift. We have to shift the
-  // `distinctIndex` left by the same amount to counter this effect.
-  return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
-      distinctIndex << Id::numDatatypeBits));
+  // The `distinctIndex` is not a pointer, so it is stored directly as the
+  // payload, without `Id::makeFromLocalVocabIndex`.
+  return Id::fromBits(Datatype::LocalVocabIndex, distinctIndex);
 }
 
 }  // namespace qlever::binary_export
