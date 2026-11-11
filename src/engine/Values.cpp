@@ -105,6 +105,10 @@ void Values::computeMultiplicities() {
     multiplicities_.resize(1, 1);
     return;
   }
+  if (parsedValues_._values.empty()) {
+    multiplicities_.resize(parsedValues_._variables.size(), 1);
+    return;
+  }
   multiplicities_.resize(parsedValues_._variables.size());
   ad_utility::HashSet<TripleComponent> distinctValues;
   size_t numValues = parsedValues_._values.size();
