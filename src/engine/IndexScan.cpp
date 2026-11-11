@@ -309,24 +309,30 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   auto isContained = [&](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
+  // Add `var` at the next result column, with the undef status of column
+  // `permutationColIdx` of the permutation (which is the column index in the
+  // case of a materialized view).
   auto addCol = [&isContained, &variableToColumnMap,
                  nextColIdx = ColumnIndex{0},
-                 permutationColIdx = ColumnIndex{0},
-                 this](const Variable& var) mutable {
+                 this](const Variable& var,
+                       ColumnIndex permutationColIdx) mutable {
     if (isContained(var)) {
       variableToColumnMap[var] = {
           nextColIdx, permutation().getColumnUndefStatus(permutationColIdx)};
       ++nextColIdx;
     }
-    ++permutationColIdx;
   };
 
-  for (const TripleComponent* const ptr : getPermutedTriple()) {
+  auto spo = getPermutedTriple();
+  for (const auto [index, ptr] : ::ranges::views::enumerate(spo)) {
     if (ptr->isVariable()) {
-      addCol(ptr->getVariable());
+      addCol(ptr->getVariable(), index);
     }
   }
-  ql::ranges::for_each(additionalVariables_, addCol);
+  for (const auto& [index, var] :
+       ::ranges::views::zip(additionalColumns_, additionalVariables_)) {
+    addCol(var, index);
+  }
   return variableToColumnMap;
 }
 
