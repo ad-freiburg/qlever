@@ -422,59 +422,55 @@ TEST(ZstdContext, DecompressionErrors) {
 }
 
 // _____________________________________________________________________________
-// Test that each thread gets a `ZstdContext` and buffer of its own, that each
-// thread keeps using the same ones, and that a copy or a moved-to object gets
-// ones of its own.
+// Test that `ThreadLocalZstdContext` (de)compresses correctly, that each thread
+// gets a compression buffer of its own and keeps using it, and that different
+// objects have different buffers.
 TEST(ThreadLocalZstdContext, PerThreadState) {
-  // Return the addresses of the context and buffer of the calling thread, and
-  // check that they can be used.
-  auto getState = [](const ad_utility::ThreadLocalZstdContext& threadLocal) {
-    return threadLocal.run(
-        [](ad_utility::ZstdContext& context, std::vector<char>& buffer) {
-          std::vector<uint64_t> input(1000, 3);
-          auto compressed = context.compress(
-              input.data(), input.size() * sizeof(uint64_t), buffer);
-          std::vector<uint64_t> result(input.size());
-          context.decompressToBuffer(
-              compressed, ql::as_writable_bytes(ql::span<uint64_t>{result}));
-          EXPECT_EQ(result, input);
-          return std::pair{&context, buffer.data()};
-        });
+  // Compress and decompress with the `threadLocal`, check the round trip, and
+  // return the address of the compressed bytes, which are in the buffer of
+  // the calling thread.
+  auto roundTrip = [](const ad_utility::ThreadLocalZstdContext& threadLocal) {
+    std::vector<uint64_t> input(1000, 3);
+    size_t numBytes = input.size() * sizeof(uint64_t);
+    std::array chunks{
+        ql::as_bytes(ql::span<const uint64_t>{input}).subspan(0, numBytes / 2),
+        ql::as_bytes(ql::span<const uint64_t>{input}).subspan(numBytes / 2)};
+    auto compressedChunks = threadLocal.compressChunks(chunks);
+    std::vector<uint64_t> result(input.size());
+    auto resultBytes = ql::as_writable_bytes(ql::span<uint64_t>{result});
+    std::array targets{resultBytes.subspan(0, numBytes / 2),
+                       resultBytes.subspan(numBytes / 2)};
+    threadLocal.decompressChunks(compressedChunks, targets);
+    EXPECT_EQ(result, input);
+
+    ql::ranges::fill(result, 0);
+    auto compressed = threadLocal.compress(input.data(), numBytes);
+    EXPECT_EQ(threadLocal.decompressToBuffer(compressed, resultBytes),
+              numBytes);
+    EXPECT_EQ(result, input);
+    return compressed.data();
   };
 
   ad_utility::ThreadLocalZstdContext threadLocal;
-  auto state = getState(threadLocal);
-  EXPECT_EQ(getState(threadLocal), state);
+  const char* buffer = roundTrip(threadLocal);
+  EXPECT_EQ(roundTrip(threadLocal), buffer);
 
-  std::vector<std::pair<ad_utility::ZstdContext*, char*>> stateOfThreads(4);
+  std::vector<const char*> bufferOfThreads(4);
   std::vector<std::thread> threads;
-  for (size_t i = 0; i < stateOfThreads.size(); ++i) {
-    threads.emplace_back([&getState, &threadLocal, &stateOfThreads, i] {
-      stateOfThreads[i] = getState(threadLocal);
-      EXPECT_EQ(getState(threadLocal), stateOfThreads[i]);
+  for (size_t i = 0; i < bufferOfThreads.size(); ++i) {
+    threads.emplace_back([&roundTrip, &threadLocal, &bufferOfThreads, i] {
+      bufferOfThreads[i] = roundTrip(threadLocal);
+      EXPECT_EQ(roundTrip(threadLocal), bufferOfThreads[i]);
     });
   }
   for (auto& thread : threads) {
     thread.join();
   }
-  for (const auto& stateOfThread : stateOfThreads) {
-    EXPECT_NE(stateOfThread.first, state.first);
-    EXPECT_NE(stateOfThread.second, state.second);
+  for (const char* bufferOfThread : bufferOfThreads) {
+    EXPECT_NE(bufferOfThread, buffer);
   }
 
-  // NOTE: Creating the state of another object might move the state of the
-  // `threadLocal` (see `ThreadLocalMember::getOrCreate`), so the states are
-  // compared only after all of them have been created.
-  ad_utility::ThreadLocalZstdContext copy{threadLocal};
-  ad_utility::ThreadLocalZstdContext assigned;
-  assigned = threadLocal;
-  ad_utility::ThreadLocalZstdContext moved{std::move(threadLocal)};
-  for (const auto* object : {&copy, &assigned, &moved}) {
-    getState(*object);
-  }
-  auto original = getState(threadLocal).first;
-  EXPECT_NE(getState(copy).first, original);
-  EXPECT_NE(getState(assigned).first, original);
-  EXPECT_NE(getState(moved).first, original);
-  EXPECT_NE(getState(copy).first, getState(moved).first);
+  // Another object has a buffer of its own.
+  ad_utility::ThreadLocalZstdContext other;
+  EXPECT_NE(roundTrip(other), roundTrip(threadLocal));
 }

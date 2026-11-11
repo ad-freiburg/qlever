@@ -144,15 +144,10 @@ class CompressedBlockFile {
     if (!compressionLevel_.has_value()) {
       return {uncompressedSize, uncompressedSize, appendBytes(chunks)};
     }
-    return zstdContext_.run(
-        [this, chunks, uncompressedSize](ZstdContext& context,
-                                         std::vector<char>& buffer) {
-          auto compressed =
-              context.compressChunks(chunks, buffer, compressionLevel_.value());
-          std::array compressedChunks{ql::as_bytes(compressed)};
-          return BlockMetadata{compressed.size(), uncompressedSize,
-                               appendBytes(compressedChunks)};
-        });
+    auto compressed =
+        zstdContext_.compressChunks(chunks, compressionLevel_.value());
+    std::array compressedChunks{ql::as_bytes(compressed)};
+    return {compressed.size(), uncompressedSize, appendBytes(compressedChunks)};
   }
 
   // Like `readBlock`, but into `targets` of the sizes of the chunks that the
@@ -164,11 +159,7 @@ class CompressedBlockFile {
           ql::make_unique_for_overwrite<char[]>(metadata.compressedSize_);
       ql::span compressed{buffer.get(), metadata.compressedSize_};
       readBytes(metadata.offsetInFile_, ql::as_writable_bytes(compressed));
-      zstdContext_.run(
-          [compressed, targets](ZstdContext& context,
-                                [[maybe_unused]] std::vector<char>& buffer) {
-            context.decompressChunks(compressed, targets);
-          });
+      zstdContext_.decompressChunks(compressed, targets);
       return;
     }
     // Without compression, the chunks are stored one after the other.

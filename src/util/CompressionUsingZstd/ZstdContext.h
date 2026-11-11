@@ -15,11 +15,13 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "backports/span.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
+#include "util/NoCopyNoMove.h"
 #include "util/ThreadLocalMember.h"
 
 namespace ad_utility {
@@ -134,46 +136,80 @@ class ZstdContext {
 // context and buffer of its own, s.t. no synchronization is needed, and they
 // are freed when the owning object is destroyed (see `ThreadLocalMember`).
 //
-// The context and buffer are only a cache, so a copy or a moved-to object
-// starts with empty ones of its own. That makes the owning classes copyable
-// and movable as before, which `ThreadLocalMember` itself is not.
-class ThreadLocalZstdContext {
+// Like `ThreadLocalMember`, this class can be neither copied nor moved. An
+// owner that has to be movable can hold it via a `std::unique_ptr`.
+class ThreadLocalZstdContext : public NoCopyNoMove {
  private:
   struct PerThread {
     ZstdContext context_;
     std::vector<char> buffer_;
   };
-  std::unique_ptr<ThreadLocalMember<PerThread>> perThread_ =
-      std::make_unique<ThreadLocalMember<PerThread>>();
+  mutable ThreadLocalMember<PerThread> perThread_;
 
  public:
   ThreadLocalZstdContext() = default;
-  ThreadLocalZstdContext([[maybe_unused]] const ThreadLocalZstdContext& other)
-      : ThreadLocalZstdContext() {}
-  ThreadLocalZstdContext& operator=(
-      [[maybe_unused]] const ThreadLocalZstdContext& other) {
-    return *this;
+
+  // Compress like `ZstdContext::compress`, with the context and into the
+  // buffer of the calling thread. The result is valid until the calling thread
+  // compresses again with this object.
+  ql::span<const char> compress(const void* src, size_t numBytes,
+                                int compressionLevel = 3) const {
+    auto& perThread = getForCompression();
+    return perThread.context_.compress(src, numBytes, perThread.buffer_,
+                                       compressionLevel);
   }
 
-  // Call `function(context, buffer)` with the `ZstdContext` and the
-  // compression buffer of the calling thread, and return its result. The
-  // result must not refer to the `buffer`, so the compressed bytes have to be
-  // used (e.g. written to a file) inside the `function`.
-  //
-  // NOTE: The `function` must not call `run` of another
-  // `ThreadLocalZstdContext`, which might invalidate the references that it
-  // gets (see `ThreadLocalMember::getOrCreate`).
+  // Compress like `ZstdContext::compressChunks`, with the context and into the
+  // buffer of the calling thread. The result is valid until the calling thread
+  // compresses again with this object.
+  ql::span<const char> compressChunks(
+      ql::span<const ql::span<const std::byte>> chunks,
+      int compressionLevel = 3) const {
+    auto& perThread = getForCompression();
+    return perThread.context_.compressChunks(chunks, perThread.buffer_,
+                                             compressionLevel);
+  }
+
+  // Decompress like `ZstdContext::decompressToBuffer`, with the context of the
+  // calling thread.
+  size_t decompressToBuffer(ql::span<const char> compressed,
+                            ql::span<std::byte> target) const {
+    return withDecompressionContext([&](ZstdContext& context) {
+      return context.decompressToBuffer(compressed, target);
+    });
+  }
+
+  // Decompress like `ZstdContext::decompressChunks`, with the context of the
+  // calling thread.
+  void decompressChunks(ql::span<const char> compressed,
+                        ql::span<const ql::span<std::byte>> targets) const {
+    withDecompressionContext([&](ZstdContext& context) {
+      context.decompressChunks(compressed, targets);
+    });
+  }
+
+ private:
+  // Return the context and buffer of the calling thread. Compressing from a
+  // thread that is already exiting (e.g. in the destructor of another
+  // `thread_local` object) is not supported, because the result of the
+  // compression refers to the buffer of the thread.
+  PerThread& getForCompression() const {
+    PerThread* perThread = perThread_.getOrCreate();
+    AD_CORRECTNESS_CHECK(perThread != nullptr);
+    return *perThread;
+  }
+
+  // Call `function` with the context of the calling thread, and return its
+  // result. If the values of the calling thread were already destroyed,
+  // because the thread is exiting, then use a context for this call only.
   template <typename Function>
-  decltype(auto) run(Function&& function) const {
-    if (PerThread* perThread = perThread_->getOrCreate()) {
-      return std::forward<Function>(function)(perThread->context_,
-                                              perThread->buffer_);
+  std::invoke_result_t<const Function&, ZstdContext&> withDecompressionContext(
+      const Function& function) const {
+    if (PerThread* perThread = perThread_.getOrCreate()) {
+      return function(perThread->context_);
     }
-    // The values of the calling thread were already destroyed, because the
-    // thread is exiting, so use a context and buffer for this call only.
-    PerThread temporary;
-    return std::forward<Function>(function)(temporary.context_,
-                                            temporary.buffer_);
+    ZstdContext temporary;
+    return function(temporary);
   }
 };
 

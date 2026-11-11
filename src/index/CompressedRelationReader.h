@@ -241,8 +241,10 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
-  // The ZSTD context of each thread that decompresses blocks.
-  ad_utility::ThreadLocalZstdContext zstdContext_;
+  // The ZSTD context of each thread that decompresses blocks. It is held via a
+  // pointer, because a `ThreadLocalZstdContext` cannot be moved.
+  std::unique_ptr<ad_utility::ThreadLocalZstdContext> zstdContext_ =
+      std::make_unique<ad_utility::ThreadLocalZstdContext>();
 
   // This setting controls whether filtering on the graph column and
   // deduplication of rows is performed during scanning. Deactivating this is

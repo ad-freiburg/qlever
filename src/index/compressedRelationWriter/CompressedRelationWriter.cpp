@@ -56,24 +56,18 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
-  return zstdContext_.run([this, &column](ad_utility::ZstdContext& context,
-                                          std::vector<char>& buffer) {
-    auto compressedBlock = ad_utility::idColumnByteIO::encode(
-        column, [&context, &buffer](const auto& chunks) {
-          return context.compressChunks(chunks, buffer);
-        });
-    auto compressedSize = compressedBlock.size();
-    // Reserve a range of the file and write to it with the positioned
-    // `File::write`, which needs a shared lock only. The compression above and
-    // the write itself therefore run concurrently for any number of blocks.
-    auto offsetInFile =
-        nextOffset_.fetch_add(static_cast<off_t>(compressedSize));
-    // NOTE: This throws if not all the bytes could be written.
-    outfile_.rlock()->write(compressedBlock.data(), compressedSize,
-                            offsetInFile);
-    return CompressedBlockMetadata::OffsetAndCompressedSize{offsetInFile,
-                                                            compressedSize};
-  });
+  ql::span<const char> compressedBlock =
+      ad_utility::idColumnByteIO::encode(column, [this](const auto& chunks) {
+        return zstdContext_.compressChunks(chunks);
+      });
+  auto compressedSize = compressedBlock.size();
+  // Reserve a range of the file and write to it with the positioned
+  // `File::write`, which needs a shared lock only. The compression above and
+  // the write itself therefore run concurrently for any number of blocks.
+  auto offsetInFile = nextOffset_.fetch_add(static_cast<off_t>(compressedSize));
+  // NOTE: This throws if not all the bytes could be written.
+  outfile_.rlock()->write(compressedBlock.data(), compressedSize, offsetInFile);
+  return {offsetInFile, compressedSize};
 }
 
 // _____________________________________________________________________________

@@ -244,22 +244,15 @@ class CompressedExternalIdTableWriter {
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
-    auto [compressedSize, offset] = zstdContext_.run(
-        [this, &column, lower, upper](ad_utility::ZstdContext& context,
-                                      std::vector<char>& buffer) {
-          auto compressed = idColumnByteIO::encode(
-              column.subspan(lower, upper - lower),
-              [&context, &buffer](const auto& chunks) {
-                return context.compressChunks(chunks, buffer);
-              });
-          auto offset =
-              nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
-          // NOTE: This throws if not all the bytes could be written.
-          file_.rlock()->write(compressed.data(), compressed.size(), offset);
-          return std::pair{compressed.size(), offset};
+    auto compressed = idColumnByteIO::encode(
+        column.subspan(lower, upper - lower), [this](const auto& chunks) {
+          return zstdContext_.compressChunks(chunks);
         });
+    auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
+    // NOTE: This throws if not all the bytes could be written.
+    file_.rlock()->write(compressed.data(), compressed.size(), offset);
     blocksPerColumn_.at(columnIdx).at(layout.firstBlockIdx_ + blockIdx) =
-        CompressedBlockMetadata{compressedSize, uncompressedSize,
+        CompressedBlockMetadata{compressed.size(), uncompressedSize,
                                 static_cast<size_t>(offset)};
   }
 
@@ -413,11 +406,8 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    zstdContext_.run([&col, &compressed](ad_utility::ZstdContext& context,
-                                         [[maybe_unused]] auto& buffer) {
-      idColumnByteIO::decode(col, [&context, &compressed](const auto& buffers) {
-        context.decompressChunks(compressed, buffers);
-      });
+    idColumnByteIO::decode(col, [this, &compressed](const auto& buffers) {
+      zstdContext_.decompressChunks(compressed, buffers);
     });
   }
 
