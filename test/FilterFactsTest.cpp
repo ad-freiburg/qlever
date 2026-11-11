@@ -51,16 +51,17 @@ Canonical canonical(std::string_view filter) {
   return result;
 }
 
-// Matcher for a `Conjunct` that is the `Constraint` `distance op meters`
+// Matcher for a `Conjunct` whose canonical form is `distance op meters`
 // (compared with a tolerance, because the factors of the conversion of units
 // are rounded).
-auto constraint(Comparison op, double meters, double tolerance = 1e-3) {
+auto distanceComparison(Comparison op, double meters, double tolerance = 1e-3) {
   using namespace ::testing;
-  return Field(&Conjunct::canonical_,
-               VariantWith<Constraint>(AllOf(
-                   Field(&Constraint::lhs_, Eq(Distance{V{"?ga"}, V{"?gb"}})),
-                   Field(&Constraint::op_, op),
-                   Field(&Constraint::rhs_, DoubleNear(meters, tolerance)))));
+  return Field(
+      &Conjunct::canonical_,
+      VariantWith<DistanceComparison>(AllOf(
+          Field(&DistanceComparison::lhs_, Eq(Distance{V{"?ga"}, V{"?gb"}})),
+          Field(&DistanceComparison::op_, op),
+          Field(&DistanceComparison::rhs_, DoubleNear(meters, tolerance)))));
 }
 
 // Matcher for a `Conjunct` that is `Opaque` with the given `expression`.
@@ -77,14 +78,14 @@ auto opaque(const sparqlExpression::SparqlExpression* expression) {
 }
 
 // Test that `distance < number` and `distance <= number` become a
-// `Constraint` with the number in meters, also in a nested `&&`.
+// `DistanceComparison` with the number in meters, also in a nested `&&`.
 TEST(FilterFactsCanonicalizer, Distance) {
-  // Expect that `filter` is a single `Constraint` `distance op meters`.
+  // Expect that `filter` is a single `DistanceComparison` `distance op meters`.
   auto expect = [](std::string_view filter, Comparison op, double meters,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(canonical(filter).conjuncts_,
-                ElementsAre(constraint(op, meters)));
+                ElementsAre(distanceComparison(op, meters)));
   };
 
   // Different distance functions and units.
@@ -97,10 +98,10 @@ TEST(FilterFactsCanonicalizer, Distance) {
   // `1001 / 1000 * 1000` and `63.7 / 1000 * 1000` are not). The number `63.7`
   // of the FILTER is stored as an `Id`, which rounds its mantissa.
   EXPECT_THAT(canonical("geof:metricDistance(?ga, ?gb) <= 1001").conjuncts_,
-              ElementsAre(constraint(Comparison::LE, 1001, 0)));
+              ElementsAre(distanceComparison(Comparison::LE, 1001, 0)));
   EXPECT_THAT(canonical("geof:distance(?ga, ?gb, unit:M) < 63.7").conjuncts_,
-              ElementsAre(constraint(Comparison::LT,
-                                     Id::makeFromDouble(63.7).getDouble(), 0)));
+              ElementsAre(distanceComparison(
+                  Comparison::LT, Id::makeFromDouble(63.7).getDouble(), 0)));
 
   // Each conjunct of `&&` is canonicalized on its own, and the `Opaque` one
   // has its subexpression.
@@ -110,9 +111,10 @@ TEST(FilterFactsCanonicalizer, Distance) {
   const auto& root =
       *result.query_._rootGraphPattern._filters[0].expression_.getPimpl();
   const auto* notEqual = root.children()[1]->children()[0].get();
-  EXPECT_THAT(result.conjuncts_,
-              ElementsAre(constraint(Comparison::LE, 500), opaque(notEqual),
-                          constraint(Comparison::LT, 400)));
+  EXPECT_THAT(
+      result.conjuncts_,
+      ElementsAre(distanceComparison(Comparison::LE, 500), opaque(notEqual),
+                  distanceComparison(Comparison::LT, 400)));
 }
 
 // Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
@@ -215,7 +217,8 @@ TEST(FilterFactsRecognizers, DistanceBound) {
           ::testing::Field(&Distance::a_, TripleComponent{V{"?ga"}}))));
 
   // A negative, infinite (also after the conversion to meters) or NaN maximum
-  // distance, the same variable or two constants, or no `Constraint` at all.
+  // distance, the same variable or two constants, or no `DistanceComparison` at
+  // all.
   auto xsdDouble = std::string{"^^<http://www.w3.org/2001/XMLSchema#double>"};
   for (std::string filter :
        {std::string{"geof:metricDistance(?ga, ?gb) <= -1"},

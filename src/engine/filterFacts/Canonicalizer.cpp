@@ -106,8 +106,9 @@ Definitions collectDefinitions(
 namespace {
 
 // Return the canonical form of a single conjunct: `distance < number` and
-// `distance <= number` become a `Constraint`, everything else is `Opaque`.
-std::variant<Constraint, Opaque> toCanonicalForm(
+// `distance <= number` become a `DistanceComparison`, everything else is
+// `Opaque`.
+std::variant<DistanceComparison, Opaque> toCanonicalForm(
     const SparqlExpression& expression) {
   // Match `distance op number` for a distance in a unit of length, return
   // `Opaque` for every other expression.
@@ -134,7 +135,8 @@ std::variant<Constraint, Opaque> toCanonicalForm(
                       : ad_utility::detail::valueInUnitToKilometer(
                             number.value(), call->unit_) *
                             1000;
-  return Constraint{Distance{call->left_, call->right_}, op.value(), meters};
+  return DistanceComparison{Distance{call->left_, call->right_}, op.value(),
+                            meters};
 }
 
 }  // namespace
