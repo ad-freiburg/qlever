@@ -20,6 +20,7 @@
 #include "backports/keywords.h"
 #include "backports/type_traits.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
 
@@ -58,8 +59,7 @@ class VectorWithMemoryLimit
       requires(sizeof...(Args) > 0) &&
       CPP_NOT(concepts::derived_from<
               ql::remove_cvref_t<ad_utility::First<Args...>>, Base>) &&
-      concepts::convertible_to<ad_utility::Last<Args...>, Allocator> &&
-      concepts::constructible_from<Base, Args && ...>)
+      qlm::detail::isConstructibleWithAllocator<Base, Allocator, Args...>)
   QL_EXPLICIT(sizeof...(Args) == 1)
   VectorWithMemoryLimit(Args&&... args) : Base(AD_FWD(args)...) {}
 
