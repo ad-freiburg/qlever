@@ -106,6 +106,8 @@ void Values::computeMultiplicities() {
     return;
   }
   if (parsedValues_._values.empty()) {
+    // If there are variables but no rows, every column gets multiplicity 1 (the
+    // general formula below would divide zero rows by zero distinct values).
     multiplicities_.resize(parsedValues_._variables.size(), 1);
     return;
   }
