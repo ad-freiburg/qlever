@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
-#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/ValueIdComparators.h"
 #include "parser/TripleComponent.h"
@@ -31,8 +30,7 @@
 // Every other expression stays `Opaque`, so it is never rewritten.
 namespace filterFacts {
 
-// `geof:distance(a_, b_)` in meters. `a_` and `b_` are variables or constant
-// geometries.
+// `geof:distance(a_, b_)` in meters. `a_` and `b_` are variables or constants.
 struct Distance {
   TripleComponent a_;
   TripleComponent b_;
@@ -49,20 +47,18 @@ struct Constraint {
 };
 
 // Any other expression.
-struct Opaque {
-  const sparqlExpression::SparqlExpression* expression_;
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(Opaque, expression_)
-};
+struct Opaque {};
 
-// A conjunct of a FILTER (the FILTER holds iff all its conjuncts hold).
-using Conjunct = std::variant<Constraint, Opaque>;
+// A conjunct of a FILTER (the FILTER holds iff all its conjuncts hold): its
+// expression and its canonical form.
+struct Conjunct {
+  sparqlExpression::SparqlExpressionPimpl expression_;
+  std::variant<Constraint, Opaque> canonical_;
+};
 
 // Bring the expression of a FILTER into canonical form: split it at `&&` into
 // its conjuncts, and bring each comparison `distance < number` or
 // `distance <= number` into a `Constraint` (with the number in meters).
-//
-// NOTE: The result points into `filter` (for the `Opaque` conjuncts), so
-// `filter` must outlive it.
 std::vector<Conjunct> canonicalize(
     const sparqlExpression::SparqlExpressionPimpl& filter);
 
