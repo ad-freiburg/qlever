@@ -99,7 +99,7 @@ struct Feeder {
 };
 }  // namespace
 
-// A single client without a limit gets all the slots.
+// Test that a single client without a limit gets all the slots.
 TEST(FairShareExecutor, singleClientIsWorkConserving) {
   boost::asio::thread_pool pool{8};
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 4);
@@ -109,7 +109,7 @@ TEST(FairShareExecutor, singleClientIsWorkConserving) {
   pool.join();
 }
 
-// The limit of a client is respected.
+// Test that the limit of a client is respected.
 TEST(FairShareExecutor, maxConcurrencyOfClient) {
   boost::asio::thread_pool pool{8};
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 8);
@@ -121,8 +121,8 @@ TEST(FairShareExecutor, maxConcurrencyOfClient) {
   pool.join();
 }
 
-// Under contention, the classes get the threads according to their shares,
-// no matter how many tasks each of them has queued.
+// Test that under contention the classes get the threads according to their
+// shares, no matter how many tasks each of them has queued.
 #ifndef _QLEVER_NO_TIMING_TESTS
 TEST(FairShareExecutor, sharesOfClasses) {
   boost::asio::thread_pool pool{4};
@@ -161,7 +161,8 @@ TEST(FairShareExecutor, sharesOfClasses) {
 }
 #endif
 
-// If only the background class has work, it gets all the threads.
+// Test that the background class gets all the threads if it is the only one
+// with work.
 TEST(FairShareExecutor, idleClassLeavesItsShareToOthers) {
   boost::asio::thread_pool pool{4};
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 4);
@@ -173,9 +174,9 @@ TEST(FairShareExecutor, idleClassLeavesItsShareToOthers) {
   pool.join();
 }
 
-// `makeFairShareExecutor` wraps a plain executor into a new scheduler, which
-// runs at most `numSlots` tasks at the same time, and from which clients of
-// other classes can be derived.
+// Test that `makeFairShareExecutor` wraps a plain executor into a new
+// scheduler, which runs at most `numSlots` tasks at the same time, and from
+// which clients of other classes can be derived.
 TEST(FairShareExecutor, makeFairShareExecutor) {
   boost::asio::thread_pool pool{8};
   auto executor = makeFairShareExecutor(pool.get_executor(), 3);
@@ -207,7 +208,8 @@ TEST(FairShareExecutor, makeFairShareExecutor) {
   pool.join();
 }
 
-// Executors that are not `FairShareExecutor`s fall back to a concurrency limit.
+// Test that executors that are not `FairShareExecutor`s fall back to a
+// concurrency limit.
 TEST(FairShareExecutor, fallbackForOtherExecutors) {
   boost::asio::thread_pool pool{8};
   auto limited = makeFairShareClientExecutor(pool.get_executor(),
@@ -219,8 +221,9 @@ TEST(FairShareExecutor, fallbackForOtherExecutors) {
   pool.join();
 }
 
-// A client that is at its limit (with queued tasks) and a class all of whose
-// clients are at their limits are skipped in favor of a client that may run.
+// Test that a client at its limit (with queued tasks), and a class all of
+// whose clients are at their limits, are skipped in favor of a client that
+// may run.
 TEST(FairShareExecutor, clientsAtTheirLimitAreSkipped) {
   boost::asio::thread_pool pool{3};
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 3);
@@ -271,8 +274,9 @@ TEST(FairShareExecutor, clientsAtTheirLimitAreSkipped) {
   pool.join();
 }
 
-// A task that throws gives the slot of its worker back, so that the next task
-// runs, and the exception propagates out of the underlying executor.
+// Test that a task that throws gives the slot of its worker back, so that the
+// next task runs, and that the exception propagates out of the underlying
+// executor.
 TEST(FairShareExecutor, throwingTaskReleasesItsSlot) {
   boost::asio::io_context ctx;
   auto executor = makeFairShareExecutor(ctx.get_executor(), 1);
@@ -285,8 +289,8 @@ TEST(FairShareExecutor, throwingTaskReleasesItsSlot) {
   EXPECT_TRUE(secondHasRun);
 }
 
-// `setFairShare` sets the share on the scheduler of a `FairShareExecutor`, and
-// does nothing for other executors.
+// Test that `setFairShare` sets the share on the scheduler of a
+// `FairShareExecutor`, and does nothing for other executors.
 TEST(FairShareExecutor, setFairShare) {
   boost::asio::thread_pool pool{1};
   auto fair = makeFairShareExecutor(pool.get_executor(), 1);
@@ -298,7 +302,7 @@ TEST(FairShareExecutor, setFairShare) {
   pool.join();
 }
 
-// Invalid arguments are rejected.
+// Test that invalid arguments are rejected.
 TEST(FairShareExecutor, invalidArguments) {
   boost::asio::thread_pool pool{1};
   EXPECT_ANY_THROW(FairScheduler(ql::any_io_executor{}, 1));
