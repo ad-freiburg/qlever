@@ -103,8 +103,7 @@ TEST(Sort, sortNumTasksInFlight) {
     IdTable input = shuffled.clone();
     IdTableUtils::sort(
         input, {0},
-        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks},
-        std::make_shared<ad_utility::CancellationHandle<>>());
+        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks});
     EXPECT_EQ(input, expected) << "numTasks = " << numTasks;
   }
 }
@@ -112,7 +111,7 @@ TEST(Sort, sortNumTasksInFlight) {
 // Test that the number of tasks of the `SortConfig` of a query is the runtime
 // parameter `sort-num-tasks-in-flight`, not capped by
 // `max-num-threads-per-query` (which limits the threads of the query's executor
-// instead).
+// instead), and that it checks the given cancellation handle.
 TEST(Sort, makeSortConfig) {
   auto numTasks = [](size_t sortNumTasks, size_t maxNumThreadsPerQuery) {
     auto cleanup1 =
@@ -121,9 +120,11 @@ TEST(Sort, makeSortConfig) {
     auto cleanup2 =
         setRuntimeParameterForTest<&RuntimeParameters::maxNumThreadsPerQuery_>(
             maxNumThreadsPerQuery);
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     auto config = QueryExecutionContext::makeSortConfig(
-        ad_utility::testing::singleThreadExecutor());
+        ad_utility::testing::singleThreadExecutor(), handle);
     EXPECT_TRUE(static_cast<bool>(config.executor_));
+    EXPECT_EQ(config.cancellationHandle_, handle);
     return config.numTasksInFlight_;
   };
   EXPECT_EQ(numTasks(3, 6), 3);
@@ -238,10 +239,11 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
                       {-17}, {1230957}, {123}, {-1249867132}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0});
-    EXPECT_THROW(sort.makeSortedTree({0}), ad_utility::Exception);
+    EXPECT_THROW(sort.makeSortedTree(std::vector<ColumnIndex>{0}),
+                 ad_utility::Exception);
     EXPECT_THROW(sort.makeSortedTree({}), ad_utility::Exception);
     // Check that we don't double sort
-    auto operation = sort.makeSortedTree({0, 1});
+    auto operation = sort.makeSortedTree(std::vector<ColumnIndex>{0, 1});
     ASSERT_TRUE(operation.has_value());
     const auto& childReference =
         *operation.value()->getRootOperation()->getChildren().at(0);
@@ -252,7 +254,7 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0, 1});
     // Check that we don't double sort
-    auto operation = sort.makeSortedTree({1, 0});
+    auto operation = sort.makeSortedTree(std::vector<ColumnIndex>{1, 0});
     ASSERT_TRUE(operation.has_value());
     const auto& childReference =
         *operation.value()->getRootOperation()->getChildren().at(0);
@@ -267,11 +269,11 @@ TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
   Sort sort = makeSort(std::move(inputTable), {0, 1}, true);
   // Without a `LIMIT`/`OFFSET` the sort order of an explicit `INTERNAL SORT BY`
   // is not observable, so it may be replaced by a different one.
-  EXPECT_TRUE(sort.makeSortedTree({1, 0}).has_value());
+  EXPECT_TRUE(sort.makeSortedTree(std::vector<ColumnIndex>{1, 0}).has_value());
   // With a `LIMIT` the sort order determines which rows are part of the result,
   // so an additional `Sort` has to be placed on top of this operation instead.
   sort.applyLimitOffset({1}, false);
-  EXPECT_FALSE(sort.makeSortedTree({1, 0}).has_value());
+  EXPECT_FALSE(sort.makeSortedTree(std::vector<ColumnIndex>{1, 0}).has_value());
 }
 
 // Test that `IdTableUtils::sort` (the in-memory sort of `Sort`, `OrderBy`,
@@ -290,12 +292,11 @@ TEST(Sort, inMemorySortIsCancellable) {
   handle->cancel(ad_utility::CancellationState::MANUAL);
   for (uint32_t numTasks : {1, 8}) {
     IdTable input = table.clone();
-    EXPECT_THROW(
-        IdTableUtils::sort(
-            input, {0},
-            SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks},
-            handle),
-        ad_utility::CancellationException)
+    EXPECT_THROW(IdTableUtils::sort(
+                     input, {0},
+                     SortConfig{ad_utility::testing::multiThreadExecutor(),
+                                numTasks, handle}),
+                 ad_utility::CancellationException)
         << "numTasks = " << numTasks;
   }
 }

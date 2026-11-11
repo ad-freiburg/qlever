@@ -13,6 +13,7 @@
 
 namespace {
 using namespace vocabulary_test;
+using namespace std::string_view_literals;
 
 // A common suffix for all files to reduce the probability of colliding file
 // names, when other tests are run in parallel.
@@ -248,7 +249,7 @@ TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
   // In an empty vocabulary, every word yields the empty range at index 0.
   auto emptyVocab = createVocabularyWithIndices(filename, {}, {});
   EXPECT_EQ(emptyVocab.endIndex(), 0);
-  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha", ql::ranges::less{}),
+  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha"sv, ql::ranges::less{}),
             (std::pair<uint64_t, uint64_t>{0, 0}));
 }
 
@@ -347,7 +348,7 @@ TEST(VocabularyInMemoryBinSearch, zeroCopyDeserialization) {
   auto view =
       VocabularyInMemoryBinSearch::fromZeroCopyDeserializer(readSerializer);
   expectVocabulariesAreEqual(vocab, view);
-  EXPECT_EQ(view[3], std::optional{std::string_view{"beta"}});
+  EXPECT_EQ(view[3], std::optional{"beta"sv});
   EXPECT_EQ(view[5], std::nullopt);
 }
 

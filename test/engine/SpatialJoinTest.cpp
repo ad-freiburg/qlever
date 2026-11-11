@@ -8,8 +8,10 @@
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <regex>
 #include <sstream>
@@ -1002,6 +1004,16 @@ TEST(SpatialJoin, getCacheKeyImpl) {
               std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(leftCacheKeyString) != std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
+
+  // A maximum distance that differs only in the last bit (a `FILTER` with `<`
+  // uses the largest `double` below the constant) gives a different cache key.
+  auto maxDistBelow =
+      std::nextafter(1000.0, -std::numeric_limits<double>::infinity());
+  auto spatialJoinBelow = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, SpatialJoinConfiguration{MaxDistanceConfig{maxDistBelow}, subj, obj},
+      leftChild, rightChild);
+  ASSERT_NE(spatialJoinBelow->getRootOperation()->getCacheKey(),
+            spJoin2->getCacheKey());
 }
 
 // _____________________________________________________________________________

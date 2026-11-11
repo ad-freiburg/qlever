@@ -33,6 +33,7 @@
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/RegexSet.h"
 
 // The segments of the vocabulary merger: a segment is a range of consecutive
@@ -122,6 +123,18 @@ struct IdConverterForSegment {
   }
 };
 
+// The ID map entries of a segment, grouped by partial vocabulary, see
+// `Segment::idMapEntries_`.
+using SegmentIdMapEntries = CompactVectorOfStrings<SegmentIdMapEntry>;
+
+// The memory that the `words` occupy: their bytes and offsets, their external
+// flags, and their payload.
+inline MemorySize memorySizeOf(const WordBlock& words) {
+  return words.words_.memorySize() +
+         MemorySize::bytes(words.isExternal_.capacity() / 8 +
+                           words.payload_.capacity());
+}
+
 // The output of a segment task.
 struct Segment {
   // The distinct words of the segment, one block per sub-vocabulary, in
@@ -135,7 +148,14 @@ struct Segment {
   // The ID map entries, grouped by partial vocabulary: `idMapEntries_[p]` are
   // the entries of the partial vocabulary `p` (in the order of the words), so
   // there is one element per partial vocabulary, which may be empty.
-  CompactVectorOfStrings<SegmentIdMapEntry> idMapEntries_;
+  SegmentIdMapEntries idMapEntries_;
+
+  // The memory that the `wordBlocks_` occupy (the metadata is negligible).
+  MemorySize memorySizeOfWords() const {
+    return ::ranges::accumulate(
+        wordBlocks_, MemorySize::bytes(0), std::plus<>{},
+        [](const WordBlock& words) { return memorySizeOf(words); });
+  }
 
   // The number of distinct words including the blank nodes. This is exact:
   // `buildSegment` removes all the duplicates, also those at the boundaries of

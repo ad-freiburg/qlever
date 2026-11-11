@@ -101,6 +101,26 @@ class VocabLookupDataCommonBase {
   void finalize() { span_ = ql::span<std::string_view>{views_}; }
 };
 
+// Lookup data of a vocabulary that keeps its words in RAM
+// (`VocabularyInMemory`): the result shares the ownership of the word storage
+// with the vocabulary, so the views point into storage that `buffer()` owns
+// and no word is copied. Closing or reopening the vocabulary does not
+// invalidate a result.
+struct SharedWordsVocabBatchLookupData
+    : VocabLookupDataCommonBase<
+          std::shared_ptr<const CompactVectorOfStrings<char>>> {
+  // Return the batch-lookup result for `views` (one per looked-up index, in
+  // order), which point into `words`.
+  static VocabBatchLookupResult fromViews(
+      std::shared_ptr<const CompactVectorOfStrings<char>> words,
+      std::vector<std::string_view> views) {
+    auto data = std::make_shared<SharedWordsVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views() = std::move(views);
+    return asResult(std::move(data));
+  }
+};
+
 // A vocabulary batch-lookup result whose total size is known up front, so all
 // strings can be materialized into a single contiguous `buffer()` in one go
 // (e.g. reading a contiguous byte range from a disk-based vocabulary). Because
@@ -141,7 +161,20 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 // owning `std::string`s. The words are moved into the
 // `std::vector<std::string>` buffer and the `views()` point at those strings.
 struct StringVectorVocabBatchLookupData
-    : VocabLookupDataCommonBase<std::vector<std::string>> {};
+    : VocabLookupDataCommonBase<std::vector<std::string>> {
+  // Return the batch-lookup result that takes ownership of `words` (one word
+  // per looked-up index, in order): move the vector into the buffer (this
+  // transfers the storage, the strings are not relocated) and then point one
+  // view at each string.
+  static VocabBatchLookupResult fromWords(std::vector<std::string> words) {
+    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views() = ::ranges::to_vector(
+        data->buffer() |
+        ql::views::transform(ad_utility::staticCast<std::string_view>));
+    return asResult(std::move(data));
+  }
+};
 
 // The two owners that a `SubBatchVocabBatchLookupData` holds on to: the word
 // storage of a vocabulary that keeps its words in RAM (shared with that
@@ -272,24 +305,14 @@ template <typename Vocab>
 VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
                                              ql::span<const size_t> indices) {
   AD_CONTRACT_CHECK(!indices.empty());
-  // Materialize the words as owning `std::string`s and move them into the
-  // result's `std::vector<std::string>` buffer. The views then point at those
-  // strings; no byte copying into a contiguous buffer is needed. Building the
-  // views after the move is safe: moving the vector does not relocate the
-  // contained strings.
 
-  std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
-      indices | ql::views::transform([&vocab](size_t idx) {
-        return wordAsStringOrPlaceholder(vocab, idx);
-      }));
-
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+  // Materialize the words as owning `std::string`s; `fromWords` moves them
+  // into the result and points one view at each of them.
+  return StringVectorVocabBatchLookupData::fromWords(
+      ::ranges::to<std::vector<std::string>>(
+          indices | ql::views::transform([&vocab](size_t idx) {
+            return wordAsStringOrPlaceholder(vocab, idx);
+          })));
 }
 
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the

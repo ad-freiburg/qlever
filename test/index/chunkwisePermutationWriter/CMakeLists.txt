@@ -1,0 +1,3 @@
+addLinkAndDiscoverTest(ChunkWriterTest index)
+addLinkAndDiscoverTest(BoundaryConsolidatorTest index)
+addLinkAndDiscoverTest(ConcurrentCallbackDispatcherTest index)
