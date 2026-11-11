@@ -25,6 +25,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./ValuesForTesting.h"
@@ -251,6 +252,41 @@ enum struct InputMode {
   LazyRightInBlocks,
 };
 
+// Compute the materialized result of `join` (an `OptionalJoin` of `left` and
+// `right` with `condition`) and compare it to `referenceLeftJoin`.
+void expectResultMatchesReference(OptionalJoin& join, const Relation& left,
+                                  const Relation& right,
+                                  const TestCondition& condition) {
+  auto result = join.computeResultOnlyForTesting(false);
+  ASSERT_TRUE(result.isFullyMaterialized());
+
+  // The variables of the result in the order of the columns.
+  std::vector<std::string> resultVars(join.getResultWidth());
+  for (const auto& [var, info] : join.getExternallyVisibleVariableColumns()) {
+    resultVars.at(info.columnIndex_) = var.name();
+  }
+
+  auto actual = toRows(result.idTableView());
+  auto expected =
+      referenceLeftJoin(left, right, condition.function_, resultVars);
+
+  // The result must be sorted as promised by `resultSortedOn`.
+  auto sortedOn = join.resultSortedOn();
+  EXPECT_TRUE(ql::ranges::is_sorted(actual, [&sortedOn](const Row& a,
+                                                        const Row& b) {
+    for (auto col : sortedOn) {
+      if (a[col] != b[col]) {
+        return a[col] < b[col];
+      }
+    }
+    return false;
+  })) << "Result is not sorted by the join columns";
+
+  ql::ranges::sort(actual);
+  ql::ranges::sort(expected);
+  EXPECT_EQ(actual, expected) << "Condition: " << condition.sparql_;
+}
+
 // Sort `relation` by the columns `cols` (in this order). UNDEF is the smallest
 // `Id`, as required by the join algorithms.
 void sortBy(Relation& relation, const std::vector<ColumnIndex>& cols) {
@@ -266,10 +302,11 @@ void sortBy(Relation& relation, const std::vector<ColumnIndex>& cols) {
 
 // Run the `OptionalJoin` of `left` and `right` with `condition` and compare
 // the result to `referenceLeftJoin`. The join columns are the variables that
-// occur in both relations.
+// occur in both relations. With a small `conditionChunkSize`, the condition is
+// applied to the result in many small chunks while the join is running.
 void testAgainstReference(
     Relation left, Relation right, const TestCondition& condition,
-    InputMode mode, size_t blockSize = 3,
+    InputMode mode, size_t blockSize = 3, size_t conditionChunkSize = 100'000,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
   auto* qec = getQec();
@@ -305,34 +342,8 @@ void testAgainstReference(
   OptionalJoin join{
       qec, leftTree, rightTree, true,
       OptionalJoin::JoinCondition{parseExpression(condition.sparql_)}};
-  auto result = join.computeResultOnlyForTesting(false);
-  ASSERT_TRUE(result.isFullyMaterialized());
-
-  // The variables of the result in the order of the columns.
-  std::vector<std::string> resultVars(join.getResultWidth());
-  for (const auto& [var, info] : join.getExternallyVisibleVariableColumns()) {
-    resultVars.at(info.columnIndex_) = var.name();
-  }
-
-  auto actual = toRows(result.idTableView());
-  auto expected =
-      referenceLeftJoin(left, right, condition.function_, resultVars);
-
-  // The result must be sorted as promised by `resultSortedOn`.
-  auto sortedOn = join.resultSortedOn();
-  EXPECT_TRUE(ql::ranges::is_sorted(actual, [&sortedOn](const Row& a,
-                                                        const Row& b) {
-    for (auto col : sortedOn) {
-      if (a[col] != b[col]) {
-        return a[col] < b[col];
-      }
-    }
-    return false;
-  })) << "Result is not sorted by the join columns";
-
-  ql::ranges::sort(actual);
-  ql::ranges::sort(expected);
-  EXPECT_EQ(actual, expected) << "Condition: " << condition.sparql_;
+  join.setConditionChunkSizeForTesting(conditionChunkSize);
+  expectResultMatchesReference(join, left, right, condition);
 }
 
 }  // namespace
@@ -366,6 +377,12 @@ TEST(OptionalJoinWithCondition, handwrittenExamples) {
   EXPECT_THAT(join.getDescriptor(), ::testing::HasSubstr("?y < ?z"));
   EXPECT_THAT(join.getCacheKey(), ::testing::HasSubstr("condition: ["));
 
+  // With join columns and a condition, the result is never lazy.
+  auto resultForLazyRequest = makeJoin(left, right, {lessThan.sparql_})
+                                  .computeResultOnlyForTesting(true);
+  ASSERT_TRUE(resultForLazyRequest.isFullyMaterialized());
+  EXPECT_EQ(resultForLazyRequest.idTableView(), expected);
+
   // Duplicates in the left input are kept: each copy of `?x = 2` gets its own
   // UNDEF row, each copy of `?x = 1` its own match.
   left.rows_ = {{I(1), I(10)}, {I(1), I(10)}, {I(2), I(20)}, {I(2), I(20)}};
@@ -379,6 +396,62 @@ TEST(OptionalJoinWithCondition, handwrittenExamples) {
                        InputMode::Materialized);
   testAgainstReference(left, Relation{{"?x", "?z"}, {}}, lessThan,
                        InputMode::LazyRightInBlocks);
+}
+
+// _____________________________________________________________________________
+// The condition is applied chunk by chunk while the join is running. The first
+// pair of a left row is kept as the candidate for its UNDEF row and has to be
+// removed again if a later chunk contains a match for that left row.
+TEST(OptionalJoinWithCondition, conditionIsAppliedInChunks) {
+  auto I = IntId;
+  // `?x = 1`: the first pair fails, the third pair is a match.
+  // `?x = 2`: all pairs fail -> the first pair becomes the UNDEF row.
+  // `?x = 3`: the first pair is a match, the others fail.
+  Relation left{{"?x", "?y"}, {{I(1), I(10)}, {I(2), I(20)}, {I(3), I(30)}}};
+  Relation right{{"?x", "?z"},
+                 {{I(1), I(5)},
+                  {I(1), I(6)},
+                  {I(1), I(15)},
+                  {I(2), I(1)},
+                  {I(2), I(2)},
+                  {I(3), I(31)},
+                  {I(3), I(7)},
+                  {I(3), I(8)}}};
+  const auto& lessThan = testConditions().at(0);
+  auto expected = makeIdTableFromVector(
+      {{I(1), I(10), I(15)}, {I(2), I(20), U}, {I(3), I(30), I(31)}});
+  for (size_t chunkSize : {1, 2, 3, 4, 100}) {
+    auto join = makeJoin(left, right, {lessThan.sparql_});
+    join.setConditionChunkSizeForTesting(chunkSize);
+    auto result = join.computeResultOnlyForTesting(false);
+    EXPECT_EQ(result.idTableView(), expected) << "chunk size " << chunkSize;
+    testAgainstReference(left, right, lessThan, InputMode::LazyRightInBlocks, 2,
+                         chunkSize);
+  }
+}
+
+// _____________________________________________________________________________
+// The join column is not part of the result. If the condition uses the join
+// variable, the join column is kept nevertheless.
+TEST(OptionalJoinWithCondition, joinColumnIsNotKept) {
+  std::mt19937 gen{17};
+  for (size_t iteration = 0; iteration < 5; ++iteration) {
+    auto left = randomRelation(gen, {"?x", "?y"}, 20, 6, {0.3, 0.1});
+    auto right = randomRelation(gen, {"?x", "?z"}, 20, 6, {0, 0.1});
+    for (size_t chunkSize : {1, 100'000}) {
+      const auto& withoutJoinVariable = testConditions().at(0);
+      auto join = makeJoin(left, right, {withoutJoinVariable.sparql_}, false);
+      join.setConditionChunkSizeForTesting(chunkSize);
+      EXPECT_EQ(join.getResultWidth(), 2u);
+      expectResultMatchesReference(join, left, right, withoutJoinVariable);
+
+      const auto& withJoinVariable = testConditions().at(1);
+      auto join2 = makeJoin(left, right, {withJoinVariable.sparql_}, false);
+      join2.setConditionChunkSizeForTesting(chunkSize);
+      EXPECT_EQ(join2.getResultWidth(), 3u);
+      expectResultMatchesReference(join2, left, right, withJoinVariable);
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -445,6 +518,15 @@ TEST(OptionalJoinWithCondition, randomOneJoinColumn) {
         testAgainstReference(left, right, condition, InputMode::Materialized);
         testAgainstReference(left, right, condition,
                              InputMode::LazyRightInBlocks, 1 + iteration);
+        // Apply the condition in small chunks, so that the pairs of a left
+        // row are spread over several chunks.
+        for (size_t chunkSize : {1, 2, 7}) {
+          testAgainstReference(left, right, condition, InputMode::Materialized,
+                               3, chunkSize);
+          testAgainstReference(left, right, condition,
+                               InputMode::LazyRightInBlocks, 1 + iteration,
+                               chunkSize);
+        }
       }
     }
   }
@@ -473,6 +555,10 @@ TEST(OptionalJoinWithCondition, randomTwoJoinColumns) {
         auto right =
             randomRelation(gen, {"?x", "?w", "?z"}, 25, 3, c.undefRight_);
         testAgainstReference(left, right, condition, InputMode::Materialized);
+        for (size_t chunkSize : {1, 5}) {
+          testAgainstReference(left, right, condition, InputMode::Materialized,
+                               3, chunkSize);
+        }
       }
     }
   }
@@ -490,8 +576,14 @@ TEST(OptionalJoinWithCondition, noJoinColumns) {
       auto left = randomRelation(gen, {"?u", "?y"}, 10, 8, {0.2, 0.2});
       auto right = randomRelation(gen, {"?v", "?z"}, sizeRight, 8, {0.2, 0.2});
       testAgainstReference(left, right, condition, InputMode::Materialized);
+      testAgainstReference(left, right, condition, InputMode::Materialized, 3,
+                           2);
     }
   }
+  // An empty left input.
+  testAgainstReference(Relation{{"?u", "?y"}, {}},
+                       randomRelation(gen, {"?v", "?z"}, 7, 8, {0.2, 0.2}),
+                       condition, InputMode::Materialized);
 }
 
 // _____________________________________________________________________________
@@ -1019,9 +1111,86 @@ TEST(OptionalJoinWithCondition, stringsAndLocalVocab) {
       ElementsAre("<a1>\t\"x\"\t70", "<a1>\t\"x\"\t90", "<a2>\t\"y\"\t"));
 }
 
+// The same with a lazy right input, where each block has its own local vocab.
+// The condition is applied in small chunks while the join is running, so the
+// strings of the blocks must still be valid when a chunk is evaluated and in
+// the final result.
+TEST(OptionalJoinWithCondition, stringsAndLocalVocabLazyRight) {
+  auto* qec = getQec();
+  auto entry = [qec](const std::string& s) {
+    return localVocabEntryFromStringRepresentation(absl::StrCat("\"", s, "\""),
+                                                   qec->getLocalVocabContext());
+  };
+  LocalVocab leftVocab;
+  auto idOf = [](LocalVocab& vocab, const LocalVocabEntry& e) {
+    return Id::makeFromLocalVocabIndex(vocab.getIndexAndAddIfNotContained(e));
+  };
+  IdTable leftTable =
+      makeIdTableFromVector({{IntId(1), idOf(leftVocab, entry("a"))},
+                             {IntId(2), idOf(leftVocab, entry("b"))}});
+  // `?x = 1` has a match in the second block, `?x = 2` has none.
+  std::vector<Result::IdTableVocabPair> blocks;
+  for (auto [x, r] : std::vector<std::pair<int64_t, std::string>>{
+           {1, "a1"}, {1, "a2"}, {1, "a3"}, {2, "b1"}, {2, "b3"}}) {
+    LocalVocab vocab;
+    IdTable table = makeIdTableFromVector({{IntId(x), idOf(vocab, entry(r))}});
+    blocks.emplace_back(std::move(table), std::move(vocab));
+  }
+  auto toString = [](Id id) -> std::string {
+    if (id.isUndefined()) {
+      return "UNDEF";
+    }
+    return std::string{
+        id.getLocalVocabIndex()->asLiteralOrIri().toStringRepresentation()};
+  };
+
+  for (size_t chunkSize : {1, 2, 100}) {
+    qec->getQueryTreeCache().clearAll();
+    std::vector<Result::IdTableVocabPair> blocksCopy;
+    for (const auto& [table, vocab] : blocks) {
+      blocksCopy.emplace_back(table.clone(), vocab.clone());
+    }
+    OptionalJoin join{qec,
+                      ad_utility::makeExecutionTree<ValuesForTesting>(
+                          qec, leftTable.clone(),
+                          std::vector<std::optional<Variable>>{Variable{"?x"},
+                                                               Variable{"?l"}},
+                          false, std::vector<ColumnIndex>{0}, leftVocab.clone(),
+                          std::nullopt, true),
+                      ad_utility::makeExecutionTree<ValuesForTesting>(
+                          qec, std::move(blocksCopy),
+                          std::vector<std::optional<Variable>>{Variable{"?x"},
+                                                               Variable{"?r"}},
+                          false, std::vector<ColumnIndex>{0}),
+                      true,
+                      OptionalJoin::JoinCondition{
+                          parseExpression("?r = CONCAT(STR(?l), \"2\")")}};
+    join.setConditionChunkSizeForTesting(chunkSize);
+    auto result = join.computeResultOnlyForTesting(false);
+    ASSERT_TRUE(result.isFullyMaterialized());
+    const auto& table = result.idTableView();
+    ASSERT_EQ(table.numColumns(), 3u);
+    std::vector<std::vector<std::string>> actual;
+    for (const auto& row : table) {
+      for (size_t col : {1, 2}) {
+        if (row[col].getDatatype() == Datatype::LocalVocabIndex) {
+          EXPECT_TRUE(result.localVocab().isLocalVocabIndexContained(
+              row[col].getLocalVocabIndex()))
+              << "chunk size " << chunkSize;
+        }
+      }
+      actual.push_back({std::to_string(row[0].getInt()), toString(row[1]),
+                        toString(row[2])});
+    }
+    EXPECT_THAT(actual, ElementsAre(ElementsAre("1", "\"a\"", "\"a2\""),
+                                    ElementsAre("2", "\"b\"", "UNDEF")))
+        << "chunk size " << chunkSize;
+  }
+}
+
 // The variable of the condition is bound on the left by an earlier OPTIONAL
 // (so it can be UNDEF there) and also bound inside the group.
-TEST(OptionalJoinWithConditionReview, conditionVariableBoundOnBothSides) {
+TEST(OptionalJoinWithCondition, conditionVariableBoundOnBothSides) {
   // Left: (a1,70,180) (a1,90,180) (a2,60,150) (a4,50,160) (a4,55,160)
   // (a5,75,UNDEF). Right: heights again. Only for <a5> the value of `?h` in
   // the merged row could come from the right, but <a5> has no height.

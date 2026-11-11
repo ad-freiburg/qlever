@@ -142,15 +142,21 @@ class AddCombinedRowToIdTable {
   static constexpr uint64_t OPTIONAL_ROW_FLAG = uint64_t{1} << 63;
 
   // Store for each row of the result the index of the row of the left input
-  // from which it was created in `target`. This is used to apply the condition
-  // of an OPTIONAL join with a FILTER after the join, see `OptionalJoin`. The
-  // indices are only meaningful if the left input doesn't change between calls
-  // to `setInput` and if the result is not yielded in blocks.
-  void trackLeftRowIndices(std::vector<uint64_t>* target) {
+  // from which it was created in `target`, and replace the blockwise callback
+  // by `callback`. This is used to apply the condition of an OPTIONAL join
+  // with a FILTER, see `OptionalJoin::ConditionFilter`. The indices are only
+  // meaningful if the left input doesn't change between calls to `setInput`.
+  // The `callback` may remove rows from the result, but then it has to remove
+  // the same rows from `target`, and it must not leave the result empty. The
+  // result needs at least one column, otherwise `addRows` doesn't store the
+  // indices.
+  void trackLeftRowIndices(std::vector<uint64_t>* target,
+                           BlockwiseCallback callback) {
     AD_CONTRACT_CHECK(target != nullptr && nextIndex_ == 0 &&
-                      resultTable_.empty());
+                      resultTable_.empty() && resultTable_.numColumns() > 0);
     leftRowIndices_ = target;
     leftRowIndices_->clear();
+    blockwiseCallback_ = std::move(callback);
   }
 
   // Return the number of UNDEF values per column.

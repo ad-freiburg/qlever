@@ -13,11 +13,9 @@
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/JoinWithIndexScanHelpers.h"
+#include "engine/OptionalJoinConditionFilter.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
-#include "engine/sparqlExpressions/SparqlExpression.h"
-#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
@@ -205,8 +203,9 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
     return optionalJoinWithoutJoinColumns(requestLaziness);
   }
 
-  // With a condition, neither the result nor the left input are lazy:
-  // `applyCondition` needs the complete result and unique left row indices.
+  // With a condition, neither the result nor the left input are lazy: the
+  // `ConditionFilter` needs unique left row indices, and a left row without a
+  // match is only known after the whole join.
   if (!condition_.empty()) {
     requestLaziness = false;
   }
@@ -290,30 +289,16 @@ Result OptionalJoin::optionalJoinWithoutJoinColumns(bool requestLaziness) {
   auto getNextBlock = [this, left, right,
                        beginLeft =
                            size_t{0}]() mutable -> std::optional<IdTable> {
-    auto leftTable = left->idTableView().asStaticView<0>();
-    auto rightTable = right->idTableView().asStaticView<0>();
+    const auto& leftTable = left->idTableView();
+    const auto& rightTable = right->idTableView();
     if (beginLeft >= leftTable.size()) {
       return std::nullopt;
     }
     size_t numLeftRows = std::max(
         size_t{1}, CHUNK_SIZE / std::max(size_t{1}, rightTable.size()));
     size_t endLeft = std::min(leftTable.size(), beginLeft + numLeftRows);
-    auto leftRows = ql::views::iota(beginLeft, endLeft);
-
-    ad_utility::AddCombinedRowToIdTable rowAdder{
-        0, leftTable, rightTable, IdTable{getResultWidth(), allocator()},
-        cancellationHandle()};
-    std::vector<uint64_t> leftRowOfResultRow;
-    rowAdder.trackLeftRowIndices(&leftRowOfResultRow);
-    if (rightTable.empty()) {
-      ql::ranges::for_each(
-          leftRows, [&rowAdder](size_t row) { rowAdder.addOptionalRow(row); });
-    } else {
-      rowAdder.addRows(leftRows, ql::views::iota(size_t{0}, rightTable.size()));
-    }
-    IdTable block = std::move(rowAdder).resultTable();
-    // Without join columns the order of the rows never changes.
-    applyCondition(block, leftRowOfResultRow, leftTable, beginLeft, endLeft);
+    auto block =
+        joinBlockWithoutJoinColumns(leftTable, rightTable, beginLeft, endLeft);
     beginLeft = endLeft;
     return block;
   };
@@ -342,6 +327,33 @@ Result OptionalJoin::optionalJoinWithoutJoinColumns(bool requestLaziness) {
   }
   return {std::move(result), resultSortedOn(),
           Result::getMergedLocalVocab(*left, *right)};
+}
+
+// _____________________________________________________________________________
+IdTable OptionalJoin::joinBlockWithoutJoinColumns(IdTableView<0> left,
+                                                  IdTableView<0> right,
+                                                  size_t beginLeft,
+                                                  size_t endLeft) const {
+  ad_utility::AddCombinedRowToIdTable rowAdder{
+      0,
+      left,
+      right,
+      IdTable{getResultWidth(), allocator()},
+      cancellationHandle(),
+      true,
+      conditionChunkSize_};
+  ConditionFilter conditionFilter{*this, left, rowAdder, beginLeft, endLeft};
+  auto leftRows = ql::views::iota(beginLeft, endLeft);
+  if (right.empty()) {
+    ql::ranges::for_each(
+        leftRows, [&rowAdder](size_t row) { rowAdder.addOptionalRow(row); });
+  } else {
+    rowAdder.addRows(leftRows, ql::views::iota(size_t{0}, right.size()));
+  }
+  IdTable block = std::move(rowAdder).resultTable();
+  // Without join columns the order of the rows never changes.
+  conditionFilter.finish(block);
+  return block;
 }
 
 // _____________________________________________________________________________
@@ -574,10 +586,12 @@ void OptionalJoin::optionalJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle(), keepJoinColumns_);
-  std::vector<uint64_t> leftRowOfResultRow;
+      cancellationHandle(), keepJoinColumns_, conditionChunkSize_);
+  // With a condition, the pairs for which it doesn't hold are removed each
+  // time the `rowAdder` has written a chunk of rows.
+  std::optional<ConditionFilter> conditionFilter;
   if (!condition_.empty()) {
-    rowAdder.trackLeftRowIndices(&leftRowOfResultRow);
+    conditionFilter.emplace(*this, leftPermuted, rowAdder);
   }
   auto rowAdderOnIterators = [&]() {
     auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
@@ -644,9 +658,8 @@ void OptionalJoin::optionalJoin(
   // order.
   *result = std::move(rowAdder).resultTable();
   bool conditionChangedOrder = false;
-  if (!condition_.empty()) {
-    conditionChangedOrder =
-        applyCondition(*result, leftRowOfResultRow, leftPermuted);
+  if (conditionFilter.has_value()) {
+    conditionChangedOrder = conditionFilter->finish(*result);
   }
 
   // TODO<joka921> We have two sorted ranges, a simple merge would suffice
@@ -688,10 +701,15 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
                     std::function<void(IdTable&, LocalVocab&)> yieldTable) {
     auto rowAdder = getRowAdderForJoin(*this, _joinColumns.size(),
                                        keepJoinColumns_, std::move(yieldTable));
-    std::vector<uint64_t> leftRowOfResultRow;
+    // With a condition the result is never lazy, so instead of yielding the
+    // result the callback of the row adder is used to apply the condition.
+    std::optional<ConditionFilter> conditionFilter;
     if (!condition_.empty()) {
       AD_CORRECTNESS_CHECK(left->isFullyMaterialized());
-      rowAdder.trackLeftRowIndices(&leftRowOfResultRow);
+      conditionFilter.emplace(
+          *this,
+          left->idTableView().asColumnSubsetView(joinColMap.permutationLeft()),
+          rowAdder);
     }
     auto leftRange = resultToView(*left, joinColMap.permutationLeft());
     auto rightRange = resultToView(*right, joinColMap.permutationRight());
@@ -705,10 +723,8 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
     auto localVocab = std::move(rowAdder.localVocab());
     Result::IdTableVocabPair result{std::move(rowAdder).resultTable(),
                                     std::move(localVocab)};
-    if (!condition_.empty()) {
-      applyConditionAndRestoreOrder(
-          result.idTable_, leftRowOfResultRow,
-          left->idTableView().asColumnSubsetView(joinColMap.permutationLeft()));
+    if (conditionFilter.has_value()) {
+      conditionFilter->finishAndRestoreOrder(result.idTable_);
     }
     return result;
   };
@@ -737,10 +753,14 @@ Result OptionalJoin::optionalJoinWithIndexScan(
                std::function<void(IdTable&, LocalVocab&)> yieldTable) {
       auto rowAdder = getRowAdderForJoin(
           *this, _joinColumns.size(), keepJoinColumns_, std::move(yieldTable));
-      std::vector<uint64_t> leftRowOfResultRow;
+      // See `lazyOptionalJoin` for the role of the `conditionFilter`.
+      std::optional<ConditionFilter> conditionFilter;
       if (!condition_.empty()) {
         AD_CORRECTNESS_CHECK(leftIsMaterialized);
-        rowAdder.trackLeftRowIndices(&leftRowOfResultRow);
+        conditionFilter.emplace(*this,
+                                left->idTableView().asColumnSubsetView(
+                                    joinColMap.permutationLeft()),
+                                rowAdder);
       }
       auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
         auto firstJoinColLeft = _joinColumns.at(0).at(0);
@@ -791,12 +811,8 @@ Result OptionalJoin::optionalJoinWithIndexScan(
       }
       setScanStatusToLazilyCompleted(*rightScan);
       auto result = std::move(rowAdder).toIdTableVocabPair();
-      if constexpr (leftIsMaterialized) {
-        if (!condition_.empty()) {
-          applyConditionAndRestoreOrder(result.idTable_, leftRowOfResultRow,
-                                        left->idTableView().asColumnSubsetView(
-                                            joinColMap.permutationLeft()));
-        }
+      if (conditionFilter.has_value()) {
+        conditionFilter->finishAndRestoreOrder(result.idTable_);
       }
       return result;
     };
@@ -927,141 +943,4 @@ VariableToColumnMap OptionalJoin::getInternalVariableColumns() const {
     info.columnIndex_ = permutation.at(info.columnIndex_);
   }
   return result;
-}
-
-// _____________________________________________________________________________
-bool OptionalJoin::applyCondition(
-    IdTable& result, const std::vector<uint64_t>& leftRowOfResultRow,
-    const IdTableView<0>& leftPermuted, size_t beginLeft,
-    size_t endLeft) const {
-  endLeft = std::min(endLeft, leftPermuted.size());
-  constexpr uint64_t optionalRowFlag =
-      ad_utility::AddCombinedRowToIdTable::OPTIONAL_ROW_FLAG;
-  const size_t numRows = result.size();
-  AD_CORRECTNESS_CHECK(leftRowOfResultRow.size() == numRows);
-  if (numRows == 0 || condition_.empty()) {
-    return false;
-  }
-
-  // Step 1: Evaluate the condition on all rows, chunk by chunk to limit the
-  // memory for intermediate results. Like for a `FILTER`, only rows with an
-  // effective boolean value of `true` satisfy it (`false` and errors don't).
-  // The rows that were added by `addOptionalRow` have no partner on the right,
-  // so the condition doesn't apply to them, they are simply kept below.
-  std::vector<char> conditionHolds(numRows, 1);
-  VariableToColumnMap internalColumns = getInternalVariableColumns();
-  LocalVocab localVocab;
-  sparqlExpression::EvaluationContext context{
-      *getExecutionContext(),
-      internalColumns,
-      result.asStaticView<0>(),
-      getExecutionContext()->getAllocator(),
-      localVocab,
-      cancellationHandle()};
-  using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;
-  constexpr size_t chunkSize = 100'000;
-  for (size_t begin = 0; begin < numRows; begin += chunkSize) {
-    context._beginIndex = begin;
-    context._endIndex = std::min(numRows, begin + chunkSize);
-    for (const auto& expression : condition_) {
-      auto expressionResult = expression.getPimpl()->evaluate(&context);
-      std::visit(
-          [&context, &conditionHolds, begin](auto&& singleResult) {
-            auto values = sparqlExpression::detail::makeGenerator(
-                AD_FWD(singleResult), context.size(), &context);
-            size_t i = begin;
-            for (auto&& value : values) {
-              if (ValueGetter{}(value, &context) != ValueGetter::Result::True) {
-                conditionHolds[i] = 0;
-              }
-              ++i;
-            }
-          },
-          std::move(expressionResult));
-      checkCancellation();
-    }
-  }
-
-  // Step 2: Find the left rows that have at least one partner for which the
-  // condition holds.
-  enum struct State : char { None, HasMatch, HasOptionalRow };
-  std::vector<State> stateOfLeftRow(endLeft - beginLeft, State::None);
-  for (size_t i = 0; i < numRows; ++i) {
-    uint64_t leftRow = leftRowOfResultRow[i];
-    if (!(leftRow & optionalRowFlag) && conditionHolds[i]) {
-      stateOfLeftRow.at(leftRow - beginLeft) = State::HasMatch;
-    }
-  }
-
-  // Step 3: Decide which rows to keep. A pair for which the condition doesn't
-  // hold is dropped, except for the first such pair of a left row without any
-  // match: that pair becomes the single row with UNDEF on the right.
-  std::vector<char> keep(numRows, 1);
-  std::vector<std::pair<size_t, uint64_t>> rowsToMakeOptional;
-  for (size_t i = 0; i < numRows; ++i) {
-    uint64_t leftRow = leftRowOfResultRow[i];
-    if ((leftRow & optionalRowFlag) || conditionHolds[i]) {
-      continue;
-    }
-    auto& state = stateOfLeftRow[leftRow - beginLeft];
-    if (state == State::None) {
-      state = State::HasOptionalRow;
-      rowsToMakeOptional.emplace_back(i, leftRow);
-    } else {
-      keep[i] = 0;
-    }
-  }
-  checkCancellation();
-
-  // Step 4: Turn the selected pairs into rows with UNDEF on the right. The
-  // columns of the result are [join columns, non-join columns of the left,
-  // non-join columns of the right], see `AddCombinedRowToIdTable`.
-  const size_t numJoinColumns = _joinColumns.size();
-  const size_t numKeptJoinColumns = keepJoinColumns_ ? numJoinColumns : 0;
-  const size_t firstRightColumn =
-      numKeptJoinColumns + leftPermuted.numColumns() - numJoinColumns;
-  bool orderChanged = false;
-  for (auto [i, leftRow] : rowsToMakeOptional) {
-    // The value of a join column only changes if it is UNDEF in the left row,
-    // then the order of the result might change.
-    for (size_t col = 0; col < numKeptJoinColumns; ++col) {
-      Id leftId = leftPermuted(leftRow, col);
-      if (result(i, col) != leftId) {
-        result(i, col) = leftId;
-        orderChanged = true;
-      }
-    }
-    for (size_t col = firstRightColumn; col < result.numColumns(); ++col) {
-      result(i, col) = Id::makeUndefined();
-    }
-  }
-
-  // Step 5: Remove the dropped rows, keeping the order of the others.
-  size_t numKept = ql::ranges::count(keep, 1);
-  if (numKept < numRows) {
-    for (size_t col = 0; col < result.numColumns(); ++col) {
-      decltype(auto) column = result.getColumn(col);
-      size_t target = 0;
-      for (size_t i = 0; i < numRows; ++i) {
-        if (keep[i]) {
-          column[target++] = column[i];
-        }
-      }
-      checkCancellation();
-    }
-    result.resize(numKept);
-  }
-  return orderChanged;
-}
-
-// _____________________________________________________________________________
-void OptionalJoin::applyConditionAndRestoreOrder(
-    IdTable& result, const std::vector<uint64_t>& leftRowOfResultRow,
-    const IdTableView<0>& leftPermuted) const {
-  if (applyCondition(result, leftRowOfResultRow, leftPermuted) &&
-      keepJoinColumns_) {
-    std::vector<ColumnIndex> cols(_joinColumns.size());
-    std::iota(cols.begin(), cols.end(), ColumnIndex{0});
-    IdTableUtils::sort(result, cols, sortConfig());
-  }
 }

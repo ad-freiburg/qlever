@@ -439,6 +439,81 @@ TEST(AddCombinedRowToTable, localVocabIsOnlyClearedWhenLegal) {
   EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::SizeIs(4));
 }
 
+// _______________________________________________________________________________
+TEST(AddCombinedRowToTable, trackLeftRowIndices) {
+  using Adder = ad_utility::AddCombinedRowToIdTable;
+  auto left = makeIdTableFromVector({{0, 10}, {1, 11}, {2, 12}});
+  auto right = makeIdTableFromVector({{0, 20}, {0, 21}, {2, 22}});
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto makeResult = [](size_t numColumns) {
+    auto result = makeIdTableFromVector({});
+    result.setNumColumns(numColumns);
+    return result;
+  };
+  std::vector<uint64_t> leftRows;
+
+  // With a buffer size of 2, the callback is called after every second row.
+  // It removes the second row of the first chunk from the result and from
+  // the indices.
+  {
+    Adder adder{1,
+                left.asStaticView<0>(),
+                right.asStaticView<0>(),
+                makeResult(3),
+                handle,
+                true,
+                2};
+    size_t numCalls = 0;
+    adder.trackLeftRowIndices(&leftRows, [&](IdTable& result, LocalVocab&) {
+      EXPECT_EQ(result.size(), leftRows.size());
+      if (numCalls++ == 0) {
+        result.resize(1);
+        leftRows.resize(1);
+      }
+    });
+    adder.addRow(0, 0);
+    adder.addRow(0, 1);
+    adder.addOptionalRow(1);
+    adder.addRow(2, 2);
+    auto result = std::move(adder).resultTable();
+    EXPECT_EQ(numCalls, 2u);
+    EXPECT_EQ(result,
+              makeIdTableFromVector({{0, 10, 20}, {1, 11, U}, {2, 12, 22}}));
+    EXPECT_THAT(leftRows,
+                ::testing::ElementsAre(0, 1 | Adder::OPTIONAL_ROW_FLAG, 2));
+  }
+
+  // The indices can only be tracked from the beginning, and only for a result
+  // with at least one column.
+  {
+    Adder adder{1, left.asStaticView<0>(), right.asStaticView<0>(),
+                makeResult(3), handle};
+    EXPECT_ANY_THROW(adder.trackLeftRowIndices(nullptr, ad_utility::noop));
+    adder.addRow(0, 0);
+    EXPECT_ANY_THROW(adder.trackLeftRowIndices(&leftRows, ad_utility::noop));
+    adder.flush();
+    EXPECT_ANY_THROW(adder.trackLeftRowIndices(&leftRows, ad_utility::noop));
+  }
+  {
+    auto empty = makeResult(0);
+    Adder adder{0, empty.asStaticView<0>(), empty.asStaticView<0>(),
+                makeResult(0), handle};
+    EXPECT_ANY_THROW(adder.trackLeftRowIndices(&leftRows, ad_utility::noop));
+  }
+
+  // The left input must not change, otherwise the indices are meaningless.
+  {
+    auto otherLeft = makeIdTableFromVector({{0, 10}});
+    Adder adder{1, makeResult(3), handle};
+    adder.trackLeftRowIndices(&leftRows, ad_utility::noop);
+    adder.setInput(left, right);
+    adder.addRow(0, 0);
+    adder.setInput(otherLeft, right);
+    adder.addRow(0, 0);
+    EXPECT_ANY_THROW(adder.flush());
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(AddCombinedRowToTable, RowAdderTest,
                          ::testing::Combine(::testing::Values(1u, 2u, 3u, 4u,
                                                               5u, 6u, 7u, 8u,

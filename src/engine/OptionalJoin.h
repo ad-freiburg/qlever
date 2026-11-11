@@ -48,16 +48,18 @@ class OptionalJoin : public Operation {
   // row for which no such pair exists is kept once, with UNDEF on the right.
   using JoinCondition = std::vector<sparqlExpression::SparqlExpressionPimpl>;
 
- private:
-  JoinCondition condition_;
-
- public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
                std::shared_ptr<QueryExecutionTree> t2,
                bool keepJoinColumns = true, JoinCondition condition = {});
 
  private:
+  JoinCondition condition_;
+  // The `ConditionFilter` only evaluates the condition when at least this
+  // many new rows have been written. This is also the buffer size of the row
+  // adder in the materialized case.
+  size_t conditionChunkSize_ = 100'000;
+
   std::string getCacheKeyImpl() const override;
 
   void onLimitOffsetChanged(const LimitOffsetClause&,
@@ -105,34 +107,11 @@ class OptionalJoin : public Operation {
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
-  // Apply the `condition_` to the `result` of the join without condition.
-  // `result` still has the internal column order of `AddCombinedRowToIdTable`
-  // (join columns first). `leftRowOfResultRow[i]` is the index of the row in
-  // `leftPermuted` from which row `i` of `result` was created, see
-  // `AddCombinedRowToIdTable::trackLeftRowIndices`. All these indices have to
-  // be in `[beginLeft, endLeft)`. Return true iff the result is no longer
-  // sorted by the join columns afterwards.
-  bool applyCondition(
-      IdTable& result, const std::vector<uint64_t>& leftRowOfResultRow,
-      const IdTableView<0>& leftPermuted, size_t beginLeft = 0,
-      size_t endLeft = std::numeric_limits<size_t>::max()) const;
-
-  // Compute the result without join columns: every left row is compatible
-  // with every right row (Cartesian product), and the `condition_` decides
-  // which of these pairs are kept. A left row without a kept pair is kept
-  // once with UNDEF on the right. Works block by block, so the Cartesian
-  // product is never materialized.
-  Result optionalJoinWithoutJoinColumns(bool requestLaziness);
-
-  // Like `applyCondition`, but sort the result by the join columns if the
-  // order was changed.
-  void applyConditionAndRestoreOrder(
-      IdTable& result, const std::vector<uint64_t>& leftRowOfResultRow,
-      const IdTableView<0>& leftPermuted) const;
-
-  // The variable to column map for the internal column order of the result
-  // during the join, which is used to evaluate the condition.
-  VariableToColumnMap getInternalVariableColumns() const;
+  // Set `conditionChunkSize_`.
+  void setConditionChunkSizeForTesting(size_t chunkSize) {
+    AD_CONTRACT_CHECK(chunkSize > 0);
+    conditionChunkSize_ = chunkSize;
+  }
 
   // Joins two results on a single join column lazily, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
@@ -160,6 +139,26 @@ class OptionalJoin : public Operation {
   }
 
   std::unique_ptr<Operation> cloneImpl() const override;
+
+  // Applies the `condition_` while the join result is being written, see
+  // `OptionalJoinConditionFilter.h`.
+  class ConditionFilter;
+
+  // Compute the result without join columns: every left row is compatible
+  // with every right row (Cartesian product), and the `condition_` decides
+  // which of these pairs are kept. A left row without a kept pair is kept
+  // once with UNDEF on the right. Works block by block, so the Cartesian
+  // product is never materialized.
+  Result optionalJoinWithoutJoinColumns(bool requestLaziness);
+
+  // The part of the result of `optionalJoinWithoutJoinColumns` for the rows
+  // `[beginLeft, endLeft)` of the `left` input.
+  IdTable joinBlockWithoutJoinColumns(IdTableView<0> left, IdTableView<0> right,
+                                      size_t beginLeft, size_t endLeft) const;
+
+  // The variable to column map for the internal column order of the result
+  // during the join, which is used to evaluate the condition.
+  VariableToColumnMap getInternalVariableColumns() const;
 
   // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
   // logic reusable. Note that this depends on the size estimates and hence may
