@@ -32,8 +32,8 @@ namespace qlever::binary_export {
 class EncodedIriRewriter {
   const Index* index_;
   std::vector<encodedIri::Pattern> remotePatterns_;
-  // For each remote pattern the index of the equal local pattern, if there is
-  // one, see `getPrefixMapping`.
+  // For each remote pattern the index of the equal local pattern, if it can
+  // be used directly, see `getPrefixMapping`.
   std::vector<std::optional<uint8_t>> prefixMapping_;
   // A cache of the IRIs that were decoded since the last call to
   // `invalidateCache`.
@@ -43,10 +43,11 @@ class EncodedIriRewriter {
   EncodedIriRewriter(const Index& index,
                      std::vector<encodedIri::Pattern> remotePatterns);
 
-  // If the pattern of the `id` also exists locally, only change the index of
-  // the pattern. Otherwise decode the IRI and convert it to a local `Id` (see
-  // `stringToLocalId`), which might add it to the `localVocab`. Each IRI is
-  // decoded at most once until the next call to `invalidateCache`.
+  // If the pattern of the `id` can be used directly (see `getPrefixMapping`),
+  // only change the index of the pattern. Otherwise decode the IRI and convert
+  // it to a local `Id` (see `stringToLocalId`), which might add it to the
+  // `localVocab`. Each IRI is decoded at most once until the next call to
+  // `invalidateCache`.
   Id operator()(Id id, LocalVocab& localVocab);
 
   // Clear the cache of decoded IRIs, which is required when the `localVocab`
@@ -55,8 +56,13 @@ class EncodedIriRewriter {
   void invalidateCache() { decodedIriCache_.clear(); }
 
   // Get the mapping from the indices of the `remotePatterns` to the indices of
-  // the equal patterns of the `localManager` (`std::nullopt` for a remote
-  // pattern that doesn't exist locally).
+  // the equal patterns of the `localManager`. The result is `std::nullopt` for
+  // a remote pattern that doesn't exist locally, or that is preceded by a
+  // local pattern with a compatible prefix (one is a prefix of the other).
+  //
+  // NOTE: The local instance encodes an IRI with the first pattern that it
+  // matches, and patterns may overlap. An IRI of the latter kind of pattern
+  // might therefore have a different local `Id` and has to be decoded.
   static std::vector<std::optional<uint8_t>> getPrefixMapping(
       const EncodedIriManager& localManager,
       const std::vector<encodedIri::Pattern>& remotePatterns);

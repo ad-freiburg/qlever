@@ -339,6 +339,44 @@ TEST(EncodedIriRewriter, getPrefixMapping) {
   EXPECT_TRUE(EncodedIriRewriter::getPrefixMapping(manager, {}).empty());
 }
 
+// Test that an encoded IRI is rewritten to the `Id` with which the local
+// instance encodes it, also if it matches several local patterns.
+TEST(EncodedIriRewriter, overlappingLocalPatterns) {
+  // A local index with a plain prefix and two general patterns with the same
+  // prefix. The remote instance only has the two general patterns.
+  using encodedIri::Part;
+  encodedIri::Pattern small{"http://example.org/", {Part{8, {}, ""}}};
+  encodedIri::Pattern large{"http://example.org/", {Part{16, {}, ""}}};
+  ad_utility::testing::TestIndexConfig config;
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  config.encodedIriPatterns = {small, large};
+  const auto& index = ad_utility::testing::getQec(config)->getIndex();
+  const auto& manager = index.encodedIriManager();
+  EncodedIriManager remoteManager{std::vector<std::string>{}, {small, large}};
+
+  // Both general patterns exist locally, but none of them is the first local
+  // pattern that might match their IRIs. The first remote pattern is the
+  // hardcoded prefix for the graphs that QLever creates itself.
+  auto mapping =
+      EncodedIriRewriter::getPrefixMapping(manager, remoteManager.patterns_);
+  ASSERT_EQ(mapping.size(), 3);
+  EXPECT_TRUE(mapping[0].has_value());
+  EXPECT_EQ(mapping[1], std::nullopt);
+  EXPECT_EQ(mapping[2], std::nullopt);
+
+  // The IRIs get the same `Id` as when the local instance encodes them (with
+  // the plain prefix), no matter with which pattern the remote instance
+  // encoded them.
+  EncodedIriRewriter rewriter{index, remoteManager.patterns_};
+  LocalVocab localVocab;
+  for (std::string iri :
+       {"<http://example.org/5>", "<http://example.org/300>"}) {
+    EXPECT_EQ(rewriter(remoteManager.encode(iri).value(), localVocab),
+              manager.encode(iri).value());
+  }
+  EXPECT_TRUE(localVocab.empty());
+}
+
 // Test that the same remote blank node is always mapped to the same local
 // one, and that `addBlankNodesTo` makes all the blank nodes so far (but no
 // words) part of a local vocab.

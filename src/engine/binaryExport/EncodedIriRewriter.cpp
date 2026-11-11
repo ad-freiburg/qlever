@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/binaryExport/StringMapping.h"
 
@@ -36,8 +37,8 @@ Id EncodedIriRewriter::operator()(Id id, LocalVocab& localVocab) {
         "The result in QLever's binary export format contains an encoded IRI "
         "with an unknown pattern"};
   }
-  // The common case: the pattern also exists locally, which requires no
-  // lookup.
+  // The common case: the pattern also exists locally (and is the one that the
+  // local instance would use for the IRI), which requires no lookup.
   if (auto localPrefixIdx = prefixMapping_[prefixIdx]) {
     return EncodedIriManager::makeIdFromPrefixIdxAndPayload(
         localPrefixIdx.value(), payload);
@@ -57,12 +58,26 @@ std::vector<std::optional<uint8_t>> EncodedIriRewriter::getPrefixMapping(
     const EncodedIriManager& localManager,
     const std::vector<encodedIri::Pattern>& remotePatterns) {
   const auto& localPatterns = localManager.patterns_;
+  // Return true if an IRI might match both patterns, which requires that the
+  // prefix of one of them is a prefix of the other one.
+  auto mightMatchSameIri = [](const encodedIri::Pattern& a,
+                              const encodedIri::Pattern& b) {
+    return ql::starts_with(a.prefix_, b.prefix_) ||
+           ql::starts_with(b.prefix_, a.prefix_);
+  };
   std::vector<std::optional<uint8_t>> prefixMapping;
   prefixMapping.reserve(remotePatterns.size());
   for (const auto& pattern : remotePatterns) {
     auto patternIt = ql::ranges::find(localPatterns, pattern);
+    // The local instance encodes an IRI with the first pattern that it
+    // matches, so the equal local pattern can only be used directly if none
+    // of the local patterns before it might match the same IRI.
+    bool isFirstMatch = ql::ranges::none_of(
+        localPatterns.begin(), patternIt, [&](const auto& earlier) {
+          return mightMatchSameIri(earlier, pattern);
+        });
     prefixMapping.push_back(
-        patternIt == localPatterns.end()
+        patternIt == localPatterns.end() || !isFirstMatch
             ? std::nullopt
             : std::optional{static_cast<uint8_t>(
                   ql::ranges::distance(localPatterns.begin(), patternIt))});
