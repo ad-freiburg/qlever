@@ -19,6 +19,7 @@
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/ExecutorStatistics.h"
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
 #include "util/Timer.h"
@@ -90,15 +91,22 @@ class OwningQueryId {
   // Shared with the unregister lambda in `id_`. `shared_ptr` because
   // `OwningQueryId` is movable; a captured `&status_` would dangle.
   std::shared_ptr<std::atomic<QueryStatus>> status_;
+  // The statistics of the tasks that the query runs on the thread pool. Shared
+  // with the unregister lambda in `id_`, like the `status_`.
+  std::shared_ptr<SharedTaskStatistics> taskStatistics_;
   unique_cleanup::UniqueCleanup<QueryId> id_;
 
   friend class QueryRegistry;
 
   OwningQueryId(QueryId id, std::shared_ptr<std::atomic<QueryStatus>> status,
+                std::shared_ptr<SharedTaskStatistics> taskStatistics,
                 std::function<void(const QueryId&)> unregister)
-      : status_{std::move(status)}, id_{std::move(id), std::move(unregister)} {
+      : status_{std::move(status)},
+        taskStatistics_{std::move(taskStatistics)},
+        id_{std::move(id), std::move(unregister)} {
     AD_CORRECTNESS_CHECK(!id_->empty());
     AD_CORRECTNESS_CHECK(status_ != nullptr);
+    AD_CORRECTNESS_CHECK(taskStatistics_ != nullptr);
   }
 
  public:
@@ -116,6 +124,13 @@ class OwningQueryId {
   [[nodiscard]] std::shared_ptr<std::atomic<QueryStatus>> sharedStatus()
       const noexcept {
     return status_;
+  }
+
+  // The statistics to which the tasks that the query runs on the thread pool
+  // have to be added. They are written to the `end` event of the query.
+  [[nodiscard]] std::shared_ptr<SharedTaskStatistics> sharedTaskStatistics()
+      const noexcept {
+    return taskStatistics_;
   }
 };
 
@@ -187,6 +202,8 @@ class QueryRegistry {
     const QueryId& queryId_;
     QueryStatus status_;
     std::chrono::system_clock::time_point endedAt_;
+    // The sums over the tasks that the query ran on the thread pool.
+    TaskStatistics taskStatistics_;
 
     // Field-by-field so `ordered_json` keeps insertion order (the on-disk
     // contract); a brace-init can't mix the foreign `qid` json with the rest.
@@ -195,6 +212,17 @@ class QueryRegistry {
       json["event"] = "end";
       json["qid"] = nlohmann::json(info.queryId_);
       json["status"] = toString(info.status_);
+      const TaskStatistics& tasks = info.taskStatistics_;
+      json["pool-tasks"] = tasks.numTasks_;
+      json["pool-wait-ms"] = nanosecondsToMilliseconds(tasks.waitTime_);
+      json["pool-wall-ms"] = nanosecondsToMilliseconds(tasks.wallTime_);
+      json["pool-cpu-ms"] = nanosecondsToMilliseconds(tasks.cpuTime_);
+      json["pool-result-wait-ms"] =
+          nanosecondsToMilliseconds(tasks.resultWaitTime_);
+      json["scan-blocks"] = tasks.numScanBlocks_;
+      json["scan-bytes"] = tasks.numScanBytes_;
+      json["scan-cpu-ms"] = nanosecondsToMilliseconds(tasks.scanCpuTime_);
+      json["scan-thread-changes"] = tasks.numScanThreadChanges_;
     }
   };
 
@@ -230,14 +258,16 @@ class QueryRegistry {
     // overwrites this with an explicit outcome (`OK`/`CANCELLED`/`TIMEOUT`).
     auto status =
         std::make_shared<std::atomic<QueryStatus>>(QueryStatus::FAILED);
+    auto taskStatistics = std::make_shared<SharedTaskStatistics>();
     // `weak_ptr` so the lambda doesn't keep the registry alive. The
     // end-event push runs unconditionally (one `end` per `start`); the
     // erase is best-effort.
     std::weak_ptr<SynchronizedType> weakRegistry = registry_;
     auto unregister = [weakRegistry = std::move(weakRegistry), status,
-                       onEnd = onEnd_](const QueryId& qid) {
+                       taskStatistics, onEnd = onEnd_](const QueryId& qid) {
       AD_CORRECTNESS_CHECK(!qid.empty());
-      EndInfo info{qid, status->load(), std::chrono::system_clock::now()};
+      EndInfo info{qid, status->load(), std::chrono::system_clock::now(),
+                   taskStatistics->snapshot()};
       for (const auto& cb : *onEnd) {
         cb(info);
       }
@@ -262,6 +292,7 @@ class QueryRegistry {
     // start callbacks. If one throws, the OwningQueryId is destroyed and
     // removes the entry again.
     OwningQueryId owningQueryId{std::move(queryId), std::move(status),
+                                std::move(taskStatistics),
                                 std::move(unregister)};
     StartInfo info{owningQueryId.toQueryId(), query, clientIp, startedAt,
                    operationType};

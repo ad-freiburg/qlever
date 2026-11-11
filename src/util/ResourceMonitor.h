@@ -24,6 +24,7 @@
 #include <string_view>
 
 #include "backports/filesystem.h"
+#include "util/ExecutorStatistics.h"
 #include "util/jthread.h"
 
 namespace ad_utility {
@@ -103,6 +104,13 @@ struct Sample {
   // The ID of the index rebuild that was running when this row was sampled.
   // `nullopt` means that no index rebuild was running.
   std::optional<uint64_t> indexRebuildId_;
+  // The share of the time of the threads of the thread pool, during which they
+  // ran a task and used a CPU, ran a task and did not use a CPU, and ran no
+  // task although a task was waiting (see `ThreadPoolStatistics`). `nullopt`
+  // means that no thread pool is measured.
+  std::optional<double> poolComputingPercent_;
+  std::optional<double> poolBlockedPercent_;
+  std::optional<double> poolIdleWhileWaitingPercent_;
 };
 
 // The column names `formatTsvRow` produces values for, without the trailing
@@ -110,7 +118,9 @@ struct Sample {
 // notice that the format has changed since that file was written.
 inline constexpr std::string_view tsvHeader =
     "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes_per_s\t"
-    "write_bytes_per_s\tio_stall_percent\tindex_rebuild_id";
+    "write_bytes_per_s\tio_stall_percent\tindex_rebuild_id\t"
+    "pool_computing_percent\tpool_blocked_percent\t"
+    "pool_idle_while_waiting_percent";
 
 // One TSV row; a missing field becomes an empty cell.
 std::string formatTsvRow(const Sample& sample);
@@ -182,8 +192,10 @@ class IndexRebuildIdTracker {
 // Samples the RSS, CPU usage, and disk IO rate of this process, plus
 // system-wide IO stall on a background thread and appends one TSV row
 // (`elapsed_s`, `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes_per_s`,
-// `write_bytes_per_s`, `io_stall_percent`, `index_rebuild_id`) per interval;
-// failed readings become empty cells. The destructor stops the sampling thread
+// `write_bytes_per_s`, `io_stall_percent`, `index_rebuild_id`,
+// `pool_computing_percent`, `pool_blocked_percent`,
+// `pool_idle_while_waiting_percent`) per interval; failed readings become empty
+// cells. The destructor stops the sampling thread
 // and closes the file. Sampling is designed for intervals on the order of a
 // second, as set by the `--resource-usage-interval-s` option. One tick reads
 // a few small OS counters, which is negligible at such intervals.
@@ -211,6 +223,12 @@ class ResourceMonitor {
   // An index build marks nothing, so there the column stays empty.
   std::shared_ptr<IndexRebuildIdTracker> indexRebuildIdTracker() const;
 
+  // Set the statistics of the thread pool, from which the sampler computes the
+  // `pool_...` columns. This has to be called before `start`. Without it, these
+  // columns stay empty (for example, in an index build).
+  void setThreadPoolStatistics(
+      std::shared_ptr<const ThreadPoolStatistics> threadPoolStatistics);
+
   // Test-only: swap the OS readers before `start`, for example a throwing
   // reader that exercises the sampler's error handling. The readers that a
   // test does not set keep the defaults from `Readers`, which are the real OS
@@ -230,6 +248,8 @@ class ResourceMonitor {
   // the two is destroyed first.
   std::shared_ptr<IndexRebuildIdTracker> indexRebuildIdTracker_ =
       std::make_shared<IndexRebuildIdTracker>();
+  // The statistics for the `pool_...` columns, or `nullptr` if there are none.
+  std::shared_ptr<const ThreadPoolStatistics> threadPoolStatistics_;
   std::atomic<bool> started_{false};
   std::mutex mutex_;
   std::condition_variable stopCondition_;

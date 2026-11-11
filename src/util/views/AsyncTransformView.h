@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_UTIL_VIEWS_ASYNCTRANSFORMVIEW_H
 #define QLEVER_SRC_UTIL_VIEWS_ASYNCTRANSFORMVIEW_H
 
+#include <chrono>
 #include <deque>
 #include <functional>
 #include <future>
@@ -20,6 +21,7 @@
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "util/Exception.h"
+#include "util/ExecutorStatistics.h"
 #include "util/Iterators.h"
 #include "util/NoCopyNoMove.h"
 #include "util/TaskQueueOnExecutor.h"
@@ -86,6 +88,9 @@ class AsyncTransformView
   std::optional<ql::ranges::iterator_t<Range>> it_;
   [[no_unique_address]] Transformation transformation_;
   size_t maxNumElementsInFlight_;
+  // The `executor`, to whose statistics (if it has any) the time is added that
+  // the consumer waits for a result.
+  ql::any_io_executor executor_;
   // The results of the elements that have been read from the `range_`, but not
   // yet yielded, in the order of the elements. Some of them may still be in
   // the process of being computed.
@@ -109,6 +114,7 @@ class AsyncTransformView
       : range_{std::move(range)},
         transformation_{std::move(transformation)},
         maxNumElementsInFlight_{maxNumElementsInFlight},
+        executor_{executor},
         queue_{std::move(executor), maxNumElementsInFlight,
                "The tasks of an `AsyncTransformView`"} {}
 
@@ -123,6 +129,14 @@ class AsyncTransformView
     // that `get()` rethrows doesn't leave an invalid future behind.
     auto future = std::move(pending_.front());
     pending_.pop_front();
+    // If the result is not yet available, measure how long the consumer has to
+    // wait for it.
+    using namespace std::chrono;
+    if (future.wait_for(seconds{0}) != std::future_status::ready) {
+      auto start = steady_clock::now();
+      future.wait();
+      addResultWaitTime(executor_, steady_clock::now() - start);
+    }
     return future.get();
   }
 

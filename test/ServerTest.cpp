@@ -1122,6 +1122,18 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
   EXPECT_EQ(end.at("qid").get<std::string>(),
             start.at("qid").get<std::string>());
   EXPECT_GE(end.at("ts-ms").get<int64_t>(), start.at("ts-ms").get<int64_t>());
+  // The statistics of the tasks on the thread pool are written to the `end`
+  // event.
+  //
+  // NOTE: The values are not checked here, because a task is added to the
+  // statistics shortly after its result has become available, which can be
+  // after the `end` event of a query as short as this one.
+  for (std::string_view key :
+       {"pool-tasks", "pool-wait-ms", "pool-wall-ms", "pool-cpu-ms",
+        "pool-result-wait-ms", "scan-blocks", "scan-bytes", "scan-cpu-ms",
+        "scan-thread-changes"}) {
+    EXPECT_TRUE(end.contains(key)) << key;
+  }
 }
 
 // _____________________________________________________________________________

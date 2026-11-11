@@ -25,6 +25,7 @@
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/ExecutorStatistics.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
@@ -197,29 +198,42 @@ CompressedRelationReader::lazyScan(
   // return it together with the statistics of reading it. The block is
   // `std::nullopt` if it was skipped because of its graphs. This runs on the
   // `executor`, concurrently for several blocks.
-  auto readBlock = [this, scanSpec,
-                    config = getScanConfig(scanSpec, additionalColumns,
-                                           locatedTriplesPerBlock),
-                    cancellationHandle, &locatedTriplesPerBlock,
-                    blocks = std::move(relevantBlockMetadata)](size_t i) {
-    cancellationHandle->throwIfCancelled();
-    LazyScanMetadata stats;
-    const auto& blockMetadata = blocks.at(i);
-    // Only the first and the last block may contain triples that don't match
-    // the `scanSpec`, all the blocks in between are read completely.
-    if (i == 0 || i + 1 == blocks.size()) {
-      auto block =
-          readPossiblyIncompleteBlock(scanSpec, config, blockMetadata,
-                                      std::ref(stats), locatedTriplesPerBlock);
-      return std::pair{std::optional{std::move(block)}, stats};
-    }
-    auto block = readAndDecompressBlock(blockMetadata, config);
-    stats.update(block);
-    return std::pair{block.has_value()
-                         ? std::optional{std::move(block.value().block_)}
-                         : std::nullopt,
-                     stats};
-  };
+  auto readBlock =
+      [this, scanSpec,
+       config =
+           getScanConfig(scanSpec, additionalColumns, locatedTriplesPerBlock),
+       cancellationHandle, &locatedTriplesPerBlock,
+       blocks = std::move(relevantBlockMetadata),
+       threadOfPreviousBlock =
+           std::make_shared<std::atomic<std::thread::id>>()](size_t i) {
+        cancellationHandle->throwIfCancelled();
+        LazyScanMetadata stats;
+        const auto& blockMetadata = blocks.at(i);
+        // Add the block to the statistics of the task that reads it.
+        auto recordBlock = [&threadOfPreviousBlock](const IdTable& block) {
+          ad_utility::recordScanBlockOfCurrentTask(
+              block.numRows() * block.numColumns() * sizeof(Id),
+              *threadOfPreviousBlock);
+        };
+        // Only the first and the last block may contain triples that don't
+        // match the `scanSpec`, all the blocks in between are read completely.
+        if (i == 0 || i + 1 == blocks.size()) {
+          auto block = readPossiblyIncompleteBlock(
+              scanSpec, config, blockMetadata, std::ref(stats),
+              locatedTriplesPerBlock);
+          recordBlock(block);
+          return std::pair{std::optional{std::move(block)}, stats};
+        }
+        auto block = readAndDecompressBlock(blockMetadata, config);
+        stats.update(block);
+        if (block.has_value()) {
+          recordBlock(block.value().block_);
+        }
+        return std::pair{block.has_value()
+                             ? std::optional{std::move(block.value().block_)}
+                             : std::nullopt,
+                         stats};
+      };
   // The block that the consumer is currently processing still counts as in
   // flight for the `AsyncTransformView`, so one more block is needed to read
   // and decompress `numBlocksAhead` blocks while the consumer is busy.

@@ -234,7 +234,10 @@ std::string formatTsvRow(const Sample& sample) {
                             formatCell(sample.bytesReadPerSecond_),
                             formatCell(sample.bytesWrittenPerSecond_),
                             formatCell(sample.ioStallPercent_),
-                            formatCell(sample.indexRebuildId_)};
+                            formatCell(sample.indexRebuildId_),
+                            formatCell(sample.poolComputingPercent_),
+                            formatCell(sample.poolBlockedPercent_),
+                            formatCell(sample.poolIdleWhileWaitingPercent_)};
   return absl::StrCat(absl::StrJoin(tsvCells, "\t"), "\n");
 }
 
@@ -350,6 +353,15 @@ std::shared_ptr<IndexRebuildIdTracker> ResourceMonitor::indexRebuildIdTracker()
 }
 
 // _____________________________________________________________________________
+void ResourceMonitor::setThreadPoolStatistics(
+    std::shared_ptr<const ThreadPoolStatistics> threadPoolStatistics) {
+  AD_CONTRACT_CHECK(!started_,
+                    "The thread pool statistics must be set before `start` is "
+                    "called, otherwise this would race the sampling thread.");
+  threadPoolStatistics_ = std::move(threadPoolStatistics);
+}
+
+// _____________________________________________________________________________
 void ResourceMonitor::setReadersForTesting(resource_monitor::Readers readers) {
   AD_CONTRACT_CHECK(!started_,
                     "The readers must be swapped before `start` is called, "
@@ -366,6 +378,11 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   resource_monitor::RateTracker bytesReadTracker{initialDiskIo.numBytesRead_};
   resource_monitor::RateTracker bytesWrittenTracker{
       initialDiskIo.numBytesWritten_};
+  // The three trackers for the time of the threads of the thread pool, which
+  // start at zero like the statistics.
+  resource_monitor::RateTracker poolComputingTracker{0.0};
+  resource_monitor::RateTracker poolBlockedTracker{0.0};
+  resource_monitor::RateTracker poolIdleWhileWaitingTracker{0.0};
 
   // Cpu time and I/O stall are in seconds, so their rate is a fraction of
   // the wall clock; the log stores it as a percentage.
@@ -414,6 +431,28 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
         bytesWrittenTracker.update(numBytesWritten, elapsed);
     sample.ioStallPercent_ = ioStallPercent;
     sample.indexRebuildId_ = indexRebuildIdTracker_->currentId();
+
+    // Turn the times of the thread pool (which are summed over its threads)
+    // into the share of the time of all its threads. The clamp is for the same
+    // reason as for the I/O stall above.
+    if (threadPoolStatistics_ != nullptr) {
+      auto pool = threadPoolStatistics_->snapshot();
+      auto toShare = [&](resource_monitor::RateTracker& tracker,
+                         uint64_t time) -> std::optional<double> {
+        auto percent = toPercent(tracker.update(
+            nanosecondsToSeconds(time) / pool.numThreads_, elapsed));
+        if (percent.has_value()) {
+          percent = std::clamp(percent.value(), 0.0, 100.0);
+        }
+        return percent;
+      };
+      sample.poolComputingPercent_ =
+          toShare(poolComputingTracker, pool.computingTime());
+      sample.poolBlockedPercent_ =
+          toShare(poolBlockedTracker, pool.blockedTime());
+      sample.poolIdleWhileWaitingPercent_ =
+          toShare(poolIdleWhileWaitingTracker, pool.idleWhileWaitingTime_);
+    }
     stream_ << resource_monitor::formatTsvRow(sample);
     stream_.flush();
     if (stream_.fail()) {
