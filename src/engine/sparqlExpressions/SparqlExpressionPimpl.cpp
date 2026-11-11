@@ -7,6 +7,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
@@ -67,6 +68,28 @@ std::string SparqlExpressionPimpl::getCacheKey(
 bool SparqlExpressionPimpl::isResultAlwaysDefined(
     const VariableToColumnMap& variableToColumnMap) const {
   return _pimpl->isResultAlwaysDefined(variableToColumnMap);
+}
+
+// ___________________________________________________________________________
+std::vector<SparqlExpressionPimpl> SparqlExpressionPimpl::splitConjunction()
+    const {
+  std::vector<SparqlExpressionPimpl> result;
+  auto split = [this, &result](SparqlExpression& expression,
+                               auto& self) -> void {
+    if (isAndExpression(expression)) {
+      for (auto& child : expression.children()) {
+        self(*child, self);
+      }
+      return;
+    }
+    // The aliasing constructor of `std::shared_ptr` keeps the complete tree
+    // alive as long as the conjunct is used.
+    result.push_back(SparqlExpressionPimpl{
+        std::shared_ptr<SparqlExpression>{_pimpl, &expression},
+        expression.descriptor()});
+  };
+  split(*_pimpl, split);
+  return result;
 }
 
 // ___________________________________________________________________________
