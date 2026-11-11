@@ -3310,8 +3310,15 @@ template <typename Arg>
 void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
   planner_.checkCancellation();
-  if constexpr (std::is_same_v<T, p::Optional> ||
-                std::is_same_v<T, p::GroupGraphPattern>) {
+  if constexpr (std::is_same_v<T, p::Optional>) {
+    auto condition = extractOptionalJoinCondition(arg._child);
+    auto candidates = planner_.optimize(&arg._child);
+    for (auto& c : candidates) {
+      c.type = SubtreePlan::OPTIONAL;
+      c.optionalJoinCondition_ = condition;
+    }
+    visitGroupOptionalOrMinus(std::move(candidates));
+  } else if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
     // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
     // default graphs while planning this clause, and reset them when leaving
     // the clause.
@@ -3324,52 +3331,32 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
           planner_.defaultGraphBehaviour_ = behaviour;
         }};
     auto& activeDatasets = planner_.activeDatasetClauses_;
-    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (const auto* graphIri =
-              std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
-        datasetBackup = std::exchange(
-            activeDatasets,
-            activeDatasets.getDatasetClauseForGraphClause(*graphIri));
-      } else if (const auto* graphPair = std::get_if<std::pair<
-                     Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
-                     &arg.graphSpec_)) {
-        datasetBackup = std::exchange(
-            activeDatasets,
-            activeDatasets.getDatasetClauseForVariableGraphClause());
+    if (const auto* graphIri =
+            std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
+      datasetBackup = std::exchange(
+          activeDatasets,
+          activeDatasets.getDatasetClauseForGraphClause(*graphIri));
+    } else if (const auto* graphPair = std::get_if<std::pair<
+                   Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+                   &arg.graphSpec_)) {
+      datasetBackup = std::exchange(
+          activeDatasets,
+          activeDatasets.getDatasetClauseForVariableGraphClause());
 
-        // We already have backed up the `activeGraphVariable_` and
-        // `defaultGraphBehaviour_`.
-        std::tie(planner_.activeGraphVariable_,
-                 planner_.defaultGraphBehaviour_) = *graphPair;
-      } else {
-        AD_CORRECTNESS_CHECK(
-            std::holds_alternative<std::monostate>(arg.graphSpec_));
-      }
+      // We already have backed up the `activeGraphVariable_` and
+      // `defaultGraphBehaviour_`.
+      std::tie(planner_.activeGraphVariable_, planner_.defaultGraphBehaviour_) =
+          *graphPair;
+    } else {
+      AD_CORRECTNESS_CHECK(
+          std::holds_alternative<std::monostate>(arg.graphSpec_));
     }
 
-    // For an OPTIONAL, the FILTERs that are the condition of the left join
-    // are removed from the group before it is planned. This modifies the
-    // `ParsedQuery`, so the condition would be lost if the same group was
-    // planned a second time.
-    std::vector<sparqlExpression::SparqlExpressionPimpl> condition;
-    if constexpr (std::is_same_v<T, p::Optional>) {
-      condition = extractOptionalJoinCondition(arg._child);
-    }
     auto candidates = planner_.optimize(&arg._child);
-
-    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (const auto* graphPair = std::get_if<std::pair<
-              Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
-              &arg.graphSpec_)) {
-        bindGraphVariableIfUnbound(graphPair->first, candidates);
-      }
-    }
-
-    if constexpr (std::is_same_v<T, p::Optional>) {
-      for (auto& c : candidates) {
-        c.type = SubtreePlan::OPTIONAL;
-        c.optionalJoinCondition_ = condition;
-      }
+    if (const auto* graphPair = std::get_if<
+            std::pair<Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+            &arg.graphSpec_)) {
+      bindGraphVariableIfUnbound(graphPair->first, candidates);
     }
     visitGroupOptionalOrMinus(std::move(candidates));
     if (datasetBackup.has_value()) {
