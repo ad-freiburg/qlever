@@ -17,18 +17,17 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "engine/filterFacts/Canonicalizer.h"
 #include "engine/filterFacts/Recognizers.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace {
 
 using namespace filterFacts;
 using ::testing::ElementsAre;
-using ::testing::VariantWith;
 using valueIdComparators::Comparison;
 using V = Variable;
 
 // A parsed query and the canonical form of the FILTERs of its root group
-// graph pattern (which point into the query).
+// graph pattern (which shares the expressions of the query).
 struct Canonical {
   ParsedQuery query_;
   std::vector<Conjunct> conjuncts_;
@@ -51,14 +50,29 @@ Canonical canonical(std::string_view filter) {
   return result;
 }
 
-// Matcher for a `Constraint` `distance op meters` (compared with a tolerance,
-// because the factors of the conversion of units are rounded).
-auto constraint(Comparison op, double meters) {
+// Matcher for a `Conjunct` that is the `Constraint` `distance op meters`
+// (compared with a tolerance, because the factors of the conversion of units
+// are rounded).
+auto constraint(Comparison op, double meters, double tolerance = 1e-3) {
   using namespace ::testing;
-  return VariantWith<Constraint>(
-      AllOf(Field(&Constraint::lhs_, Eq(Distance{V{"?ga"}, V{"?gb"}})),
-            Field(&Constraint::op_, op),
-            Field(&Constraint::rhs_, DoubleNear(meters, 1e-3))));
+  return Field(&Conjunct::canonical_,
+               VariantWith<Constraint>(AllOf(
+                   Field(&Constraint::lhs_, Eq(Distance{V{"?ga"}, V{"?gb"}})),
+                   Field(&Constraint::op_, op),
+                   Field(&Constraint::rhs_, DoubleNear(meters, tolerance)))));
+}
+
+// Matcher for a `Conjunct` that is `Opaque` with the given `expression`.
+auto opaque(const sparqlExpression::SparqlExpression* expression) {
+  using namespace ::testing;
+  return AllOf(
+      Field(&Conjunct::canonical_, VariantWith<Opaque>(_)),
+      Field(&Conjunct::expression_,
+            ResultOf(
+                [](const sparqlExpression::SparqlExpressionPimpl& pimpl) {
+                  return pimpl.getPimpl();
+                },
+                expression)));
 }
 
 // Test that `distance < number` and `distance <= number` become a
@@ -79,29 +93,16 @@ TEST(FilterFactsCanonicalizer, Distance) {
   expect("geof:distance(?ga, ?gb, unit:MI) < 1", Comparison::LT, 1609.344);
 
   // A number in meters is exactly the number of the FILTER (whereas
-  // `1001 / 1000 * 1000` and `63.7 / 1000 * 1000` are not), and a number in
-  // kilometers is exactly 1000 times it.
-  for (auto [filter, factor] : std::vector<std::pair<std::string_view, double>>{
-           {"geof:metricDistance(?ga, ?gb) <= 1001", 1},
-           {"geof:distance(?ga, ?gb, unit:M) < 63.7", 1},
-           {"geof:distance(?ga, ?gb) <= 1.1", 1000}}) {
-    auto result = canonical(filter);
-    const auto& comparison =
-        *result.query_._rootGraphPattern._filters[0].expression_.getPimpl();
-    auto number = dynamic_cast<const sparqlExpression::IdExpression&>(
-                      *comparison.children()[1])
-                      .value();
-    double expected = number.getDatatype() == Datatype::Int
-                          ? static_cast<double>(number.getInt())
-                          : number.getDouble();
-    ASSERT_EQ(result.conjuncts_.size(), 1u);
-    EXPECT_EQ(std::get<Constraint>(result.conjuncts_[0]).rhs_,
-              expected * factor)
-        << filter;
-  }
+  // `1001 / 1000 * 1000` and `63.7 / 1000 * 1000` are not). The number `63.7`
+  // of the FILTER is stored as an `Id`, which rounds its mantissa.
+  EXPECT_THAT(canonical("geof:metricDistance(?ga, ?gb) <= 1001").conjuncts_,
+              ElementsAre(constraint(Comparison::LE, 1001, 0)));
+  EXPECT_THAT(canonical("geof:distance(?ga, ?gb, unit:M) < 63.7").conjuncts_,
+              ElementsAre(constraint(Comparison::LT,
+                                     Id::makeFromDouble(63.7).getDouble(), 0)));
 
   // Each conjunct of `&&` is canonicalized on its own, and the `Opaque` one
-  // points to its subexpression.
+  // has its subexpression.
   auto result = canonical(
       "geof:metricDistance(?ga, ?gb) <= 500 && "
       "(?a != ?b && geof:metricDistance(?ga, ?gb) < 400)");
@@ -109,72 +110,83 @@ TEST(FilterFactsCanonicalizer, Distance) {
       *result.query_._rootGraphPattern._filters[0].expression_.getPimpl();
   const auto* notEqual = root.children()[1]->children()[0].get();
   EXPECT_THAT(result.conjuncts_,
-              ElementsAre(constraint(Comparison::LE, 500),
-                          VariantWith<Opaque>(Opaque{notEqual}),
+              ElementsAre(constraint(Comparison::LE, 500), opaque(notEqual),
                           constraint(Comparison::LT, 400)));
 }
 
 // Test that every other expression stays `Opaque`.
 TEST(FilterFactsCanonicalizer, Opaque) {
-  for (std::string_view filter :
-       {"geof:metricDistance(?ga, ?gb) > 500",
-        "500 >= geof:metricDistance(?ga, ?gb)",
-        "geof:metricDistance(?ga, ?gb) <= \"500\"",
-        "geof:metricDistance(?ga, ?gb) <= ?a",
-        "geof:metricDistance(?ga, ?gb) + 1 <= 500", "?a <= 500", "BOUND(?a)",
-        "geof:metricDistance(?ga, ?gb) <= 500 || ?a = 1",
-        "geof:distance(?ga, ?gb, unit:M2) <= 500"}) {
+  // Expect that `filter` is a single `Opaque` conjunct with the whole
+  // expression of the FILTER.
+  auto expectOpaque = [](std::string_view filter,
+                         ad_utility::source_location l =
+                             AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
     auto result = canonical(filter);
     EXPECT_THAT(result.conjuncts_,
-                ElementsAre(VariantWith<Opaque>(
-                    Opaque{result.query_._rootGraphPattern._filters[0]
-                               .expression_.getPimpl()})))
-        << filter;
-  }
+                ElementsAre(opaque(result.query_._rootGraphPattern._filters[0]
+                                       .expression_.getPimpl())));
+  };
+
+  // A comparison other than `distance < number` or `distance <= number`.
+  expectOpaque("geof:metricDistance(?ga, ?gb) > 500");
+  expectOpaque("500 >= geof:metricDistance(?ga, ?gb)");
+
+  // A right side that is not a number.
+  expectOpaque("geof:metricDistance(?ga, ?gb) <= \"500\"");
+  expectOpaque("geof:metricDistance(?ga, ?gb) <= ?a");
+
+  // A left side that is not a distance in a unit of length.
+  expectOpaque("geof:metricDistance(?ga, ?gb) + 1 <= 500");
+  expectOpaque("?a <= 500");
+  expectOpaque("geof:distance(?ga, ?gb, unit:M2) <= 500");
+
+  // No comparison, or a comparison inside `||`.
+  expectOpaque("BOUND(?a)");
+  expectOpaque("geof:metricDistance(?ga, ?gb) <= 500 || ?a = 1");
 }
 
 // Test that `distance <= c` and `distance < c` for a finite number `c >= 0`
-// between two different geometries (at least one of them a variable) are
+// between two different operands (at least one of them a variable) are
 // recognized as `DistanceBound`.
 TEST(FilterFactsRecognizers, DistanceBound) {
-  // Recognize the `DistanceBound` of the single conjunct of `filter` (while
-  // the parsed query is alive), and a constant point.
+  // Recognize the `DistanceBound` of the single conjunct of `filter`, and a
+  // constant point.
   auto recognize = [](std::string_view filter) {
     auto result = canonical(filter);
-    AD_CORRECTNESS_CHECK(result.conjuncts_.size() == 1);
-    return recognizeDistanceBound(result.conjuncts_[0]);
+    EXPECT_EQ(result.conjuncts_.size(), 1u) << filter;
+    return recognizeDistanceBound(result.conjuncts_.at(0));
   };
   auto point = std::string{
       "\"POINT(7.8 48.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  Distance distance{V{"?ga"}, V{"?gb"}};
 
   // `<=` and `<` (where the maximum distance is the largest `double` below
   // the number).
   EXPECT_THAT(recognize("geof:distance(?ga, ?gb, unit:M) <= 500"),
-              ::testing::Optional(DistanceBound{V{"?ga"}, V{"?gb"}, 500}));
+              ::testing::Optional(DistanceBound{distance, 500}));
   EXPECT_THAT(
       recognize("geof:metricDistance(?ga, ?gb) < 500"),
       ::testing::Optional(DistanceBound{
-          V{"?ga"}, V{"?gb"},
+          distance,
           std::nextafter(500.0, -std::numeric_limits<double>::infinity())}));
-  EXPECT_THAT(
-      recognize("geof:metricDistance(?ga, ?gb) < 1001"),
-      ::testing::Optional(::testing::Field(
-          &DistanceBound::maxMeters_,
-          std::nextafter(1001.0, -std::numeric_limits<double>::infinity()))));
 
   // A constant geometry on one side.
   EXPECT_THAT(
       recognize(absl::StrCat("geof:metricDistance(?ga, ", point, ") <= 500")),
-      ::testing::Optional(
-          ::testing::Field(&DistanceBound::a_, TripleComponent{V{"?ga"}})));
+      ::testing::Optional(::testing::Field(
+          &DistanceBound::distance_,
+          ::testing::Field(&Distance::a_, TripleComponent{V{"?ga"}}))));
 
-  // A negative, infinite or NaN maximum distance, the same variable or two
-  // constants, or no `Constraint` at all.
+  // A negative, infinite (also after the conversion to meters) or NaN maximum
+  // distance, the same variable or two constants, or no `Constraint` at all.
   auto xsdDouble = std::string{"^^<http://www.w3.org/2001/XMLSchema#double>"};
   for (std::string filter :
        {std::string{"geof:metricDistance(?ga, ?gb) <= -1"},
         std::string{"geof:metricDistance(?ga, ?gb) < 0"},
         absl::StrCat("geof:metricDistance(?ga, ?gb) <= \"INF\"", xsdDouble),
+        absl::StrCat("geof:metricDistance(?ga, ?gb) < \"INF\"", xsdDouble),
+        std::string{"geof:distance(?ga, ?gb) < 1e306"},
         absl::StrCat("geof:metricDistance(?ga, ?gb) <= \"NaN\"", xsdDouble),
         std::string{"geof:metricDistance(?ga, ?ga) <= 500"},
         absl::StrCat("geof:metricDistance(", point, ", ", point, ") <= 500"),

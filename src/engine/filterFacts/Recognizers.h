@@ -12,22 +12,20 @@
 
 #include <optional>
 
-#include "backports/three_way_comparison.h"
 #include "engine/filterFacts/Canonicalizer.h"
 
 // The recognition of typed facts in the canonical conjuncts of a FILTER (see
-// `Canonicalizer.h`). A fact holds iff its conjunct holds, so a rewrite of the
-// query may replace the conjunct by an operation that implements the fact.
+// `Canonicalizer.h`). A fact holds iff its conjunct holds (up to the rounding
+// of the conversion of units, see `canonicalize`), so a rewrite of the query
+// may replace the conjunct by an operation that implements the fact.
 namespace filterFacts {
 
-// The distance between the geometries `a_` and `b_` (each a variable or a
-// constant geometry, at least one of them a variable) is at most
-// `maxMeters_`.
+// The `distance_` (between two different operands, at least one of them a
+// variable) is at most `maxMeters_`.
 struct DistanceBound {
-  TripleComponent a_;
-  TripleComponent b_;
+  Distance distance_;
   double maxMeters_;
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(DistanceBound, a_, b_, maxMeters_)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(DistanceBound, distance_, maxMeters_)
 };
 
 // Recognize `distance(a, b) <= c` and `distance(a, b) < c` for a finite number
