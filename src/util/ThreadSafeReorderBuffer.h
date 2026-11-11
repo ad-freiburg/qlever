@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_ORDEREDRESULTMAILBOX_H
-#define QLEVER_SRC_UTIL_ORDEREDRESULTMAILBOX_H
+#ifndef QLEVER_SRC_UTIL_THREADSAFEREORDERBUFFER_H
+#define QLEVER_SRC_UTIL_THREADSAFEREORDERBUFFER_H
 
 #include <absl/functional/function_ref.h>
 
@@ -28,29 +28,29 @@
 
 namespace ad_utility {
 
-// The exception that `OrderedResultMailbox::takeNext` throws if a stop was
+// The exception that `ThreadSafeReorderBuffer::takeNext` throws if a stop was
 // requested (without an exception being stored) before all the slots were
 // taken.
-class OrderedResultMailboxStopped : public std::runtime_error {
+class ThreadSafeReorderBufferStopped : public std::runtime_error {
  public:
-  explicit OrderedResultMailboxStopped(size_t nextIndex)
+  explicit ThreadSafeReorderBufferStopped(size_t nextIndex)
       : std::runtime_error{"The tasks were stopped before slot " +
                            std::to_string(nextIndex) +
-                           " of the `OrderedResultMailbox` was taken"} {}
+                           " of the `ThreadSafeReorderBuffer` was taken"} {}
 };
 
-// The hand-off of the results of a fixed number of concurrent tasks (the
-// "slots") to a single consumer that takes them in the order of the slots,
-// together with the error and stop state that the tasks and the consumer
-// share. The tasks `deliver` their results in an arbitrary order, from
-// arbitrary threads, and the consumer `takeNext`s them one by one, waiting for
-// each of them. Any party may `storeException` (only the first exception is
-// kept) or `requestStop`, after which the consumer stops waiting: `takeNext`
-// then rethrows the stored exception (if any) or throws an
-// `OrderedResultMailboxStopped`.
+// A reorder buffer: the hand-off of the results of a fixed number of
+// concurrent tasks (the "slots"), which complete in an arbitrary order, to a
+// single consumer that takes them in the order of the slots, together with the
+// error and stop state that the tasks and the consumer share. The tasks
+// `deliver` their results in an arbitrary order, from arbitrary threads, and
+// the consumer `takeNext`s them one by one, waiting for each of them. Any party
+// may `storeException` (only the first exception is kept) or `requestStop`,
+// after which the consumer stops waiting: `takeNext` then rethrows the stored
+// exception (if any) or throws a `ThreadSafeReorderBufferStopped`.
 //
 // MEMORY: `deliver` never blocks, so there is no backpressure, and a result
-// stays in the mailbox until the consumer has taken all the slots before it.
+// stays in the buffer until the consumer has taken all the slots before it.
 // In the worst case (the slots are delivered in reverse order), all the
 // results are held in memory at the same time.
 //
@@ -73,7 +73,7 @@ class OrderedResultMailboxStopped : public std::runtime_error {
 // can be told apart from the regular end, and the producers can query
 // `stopRequested`.
 template <typename T>
-class OrderedResultMailbox : public NoCopyNoMove {
+class ThreadSafeReorderBuffer : public NoCopyNoMove {
  private:
   mutable std::mutex mutex_;
   std::condition_variable conditionVariable_;
@@ -89,8 +89,8 @@ class OrderedResultMailbox : public NoCopyNoMove {
   std::atomic<bool> wasStopRequested_{false};
 
  public:
-  // Create a mailbox without any slots, see `setNumSlots`.
-  OrderedResultMailbox() = default;
+  // Create a buffer without any slots, see `setNumSlots`.
+  ThreadSafeReorderBuffer() = default;
 
   // Set the number of slots. Has to be called before any of the other
   // functions that refer to a slot.
@@ -122,13 +122,13 @@ class OrderedResultMailbox : public NoCopyNoMove {
   }
 
   // Wait until the next slot has been delivered, then return its result and
-  // remove it from the mailbox. Return `std::nullopt` once all the slots have
+  // remove it from the buffer. Return `std::nullopt` once all the slots have
   // been taken. While waiting, call `onTick` (without holding the lock) after
   // every wakeup (e.g. to report the progress of the tasks). The consumer
   // wakes up at the latest every `tickInterval`, but possibly more often (on
   // the delivery of the next slot, on a stop, or spuriously). If an exception
   // has been stored before or while waiting, rethrow it. Otherwise, if a stop
-  // has been requested, throw an `OrderedResultMailboxStopped`. Both take
+  // has been requested, throw a `ThreadSafeReorderBufferStopped`. Both take
   // precedence over a result that is already there and over the end.
   std::optional<T> takeNext(std::chrono::milliseconds tickInterval,
                             absl::FunctionRef<void()> onTick) {
@@ -153,7 +153,7 @@ class OrderedResultMailbox : public NoCopyNoMove {
       std::rethrow_exception(exception_);
     }
     if (wasStopRequested_.load()) {
-      throw OrderedResultMailboxStopped{nextIndex_};
+      throw ThreadSafeReorderBufferStopped{nextIndex_};
     }
     if (nextIndex_ == results_.size()) {
       return std::nullopt;
@@ -206,4 +206,4 @@ class OrderedResultMailbox : public NoCopyNoMove {
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_ORDEREDRESULTMAILBOX_H
+#endif  // QLEVER_SRC_UTIL_THREADSAFEREORDERBUFFER_H

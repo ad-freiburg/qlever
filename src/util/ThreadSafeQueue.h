@@ -145,7 +145,7 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
 // eventually by some thread, and that for each thread individually the
 // indices are increasing, otherwise the queue will lead to a deadlock.
 // For producers that must not block (e.g. coroutines on a thread pool), see
-// `ad_utility::OrderedResultMailbox` in `OrderedResultMailbox.h`.
+// `ad_utility::ThreadSafeReorderBuffer` in `ThreadSafeReorderBuffer.h`.
 //
 // The queue may neither be copied nor moved, because the producer and consumer
 // threads refer to it by reference.

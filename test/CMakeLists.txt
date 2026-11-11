@@ -570,7 +570,7 @@ endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
-addLinkAndDiscoverTest(OrderedResultMailboxTest)
+addLinkAndDiscoverTest(ThreadSafeReorderBufferTest)
 
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
