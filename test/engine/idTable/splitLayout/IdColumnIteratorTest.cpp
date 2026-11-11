@@ -14,6 +14,7 @@
 
 #include "IdColumnTestHelpers.h"
 #include "backports/algorithm.h"
+#include "backports/shift.h"
 #include "engine/idTable/splitLayout/IdColumn.h"
 #include "engine/idTable/splitLayout/IdColumnIterator.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
@@ -175,4 +176,24 @@ TEST(IdColumnIteratorTest, rangeBasedForAndSort) {
   ql::ranges::sort(sortedIds, {}, Id::getBitsL);
   std::vector afterSort(mutableView.begin(), mutableView.end());
   EXPECT_THAT(afterSort, ::testing::ElementsAreArray(sortedIds));
+}
+
+// Test that `shift_left` on a split column shifts it like `ql::shift_left`
+// shifts the ids themselves, for all shifts from none to beyond the end.
+TEST(IdColumnIteratorTest, shiftLeft) {
+  const auto ids = sampleIds();
+  const auto size = static_cast<int64_t>(ids.size());
+  for (int64_t n = 0; n <= size + 1; ++n) {
+    IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};
+    const auto view = vec.asView();
+    std::vector<Id> expected = ids;
+
+    using ql::shift_left;
+    auto end = shift_left(view.begin(), view.end() - 1, n);
+    auto expectedEnd = shift_left(expected.begin(), expected.end() - 1, n);
+
+    EXPECT_EQ(end - view.begin(), expectedEnd - expected.begin());
+    std::vector afterShift(view.begin(), view.end());
+    EXPECT_THAT(afterShift, ::testing::ElementsAreArray(expected));
+  }
 }
