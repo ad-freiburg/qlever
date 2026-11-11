@@ -45,23 +45,50 @@ struct ConcurrencyTracker {
   void leave() { --current_; }
 };
 
-// Post `numTasks` tasks to `executor` and wait for all of them.
-void runAndWait(const qlever::Executor& executor, size_t numTasks,
-                std::chrono::microseconds duration,
-                ConcurrencyTracker* tracker = nullptr) {
+// Post `numTasks` tasks to `executor`, wait for all of them, and return the
+// maximal number of them that ran at the same time. Each task waits (for at
+// most 10 seconds) until `expectedConcurrency` tasks have run at the same time,
+// so that the result doesn't depend on the timing, and then keeps its thread
+// busy for a short while, so that exceeding the limit is detected.
+size_t runAndWait(const qlever::Executor& executor, size_t numTasks,
+                  size_t expectedConcurrency) {
+  ConcurrencyTracker tracker;
+  auto deadline = std::chrono::steady_clock::now() + 10s;
   std::vector<std::future<void>> futures;
   for (size_t i = 0; i < numTasks; ++i) {
     futures.push_back(boost::asio::post(
-        executor, boost::asio::use_future([tracker, duration]() {
-          if (tracker) tracker->enter();
-          spin(duration);
-          if (tracker) tracker->leave();
+        executor,
+        boost::asio::use_future([&tracker, expectedConcurrency, deadline]() {
+          tracker.enter();
+          while (tracker.max_ < expectedConcurrency &&
+                 std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+          }
+          spin(1000us);
+          tracker.leave();
         })));
   }
   for (auto& future : futures) {
     future.get();
   }
+  return tracker.max_;
 }
+
+// A task that keeps a class of a `FairScheduler` saturated: it counts itself
+// and posts a copy of itself again until `stop_` is set.
+struct Feeder {
+  qlever::Executor executor_;
+  std::atomic<size_t>* counter_;
+  const std::atomic<bool>* stop_;
+  void operator()() const {
+    if (*stop_) {
+      return;
+    }
+    spin(500us);
+    ++*counter_;
+    boost::asio::post(executor_, *this);
+  }
+};
 }  // namespace
 
 // A single client without a limit gets all the slots.
@@ -70,9 +97,7 @@ TEST(FairShareExecutor, singleClientIsWorkConserving) {
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 4);
   qlever::Executor executor = FairShareExecutor{
       scheduler, scheduler->makeClient(FairShareClass::Queries)};
-  ConcurrencyTracker tracker;
-  runAndWait(executor, 64, 2000us, &tracker);
-  EXPECT_EQ(tracker.max_, 4u);
+  EXPECT_EQ(runAndWait(executor, 64, 4), 4u);
   pool.join();
 }
 
@@ -83,14 +108,13 @@ TEST(FairShareExecutor, maxConcurrencyOfClient) {
   qlever::Executor root = FairShareExecutor{
       scheduler, scheduler->makeClient(FairShareClass::Background)};
   auto limited = makeFairShareClientExecutor(root, FairShareClass::Queries, 2);
-  ConcurrencyTracker tracker;
-  runAndWait(limited, 32, 2000us, &tracker);
-  EXPECT_EQ(tracker.max_, 2u);
+  EXPECT_EQ(runAndWait(limited, 32, 2), 2u);
   pool.join();
 }
 
 // Under contention, the classes get the threads according to their shares,
 // no matter how many tasks each of them has queued.
+#ifndef _QLEVER_NO_TIMING_TESTS
 TEST(FairShareExecutor, sharesOfClasses) {
   boost::asio::thread_pool pool{4};
   auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 4);
@@ -108,16 +132,10 @@ TEST(FairShareExecutor, sharesOfClasses) {
   std::atomic<size_t> queryDone = 0;
   std::atomic<bool> stop = false;
   // Keep both classes saturated for a while.
-  auto feed = [&](qlever::Executor executor, std::atomic<size_t>& counter) {
-    auto self = std::make_shared<std::function<void()>>();
-    *self = [&, executor, self]() {
-      if (stop) return;
-      spin(500us);
-      ++counter;
-      boost::asio::post(executor, *self);
-    };
+  auto feed = [&stop](const qlever::Executor& executor,
+                      std::atomic<size_t>& counter) {
     for (size_t i = 0; i < 8; ++i) {
-      boost::asio::post(executor, *self);
+      boost::asio::post(executor, Feeder{executor, &counter, &stop});
     }
   };
   feed(background, backgroundDone);
@@ -131,6 +149,7 @@ TEST(FairShareExecutor, sharesOfClasses) {
                     static_cast<double>(backgroundDone + queryDone);
   EXPECT_NEAR(fraction, 0.25, 0.07) << backgroundDone << " " << queryDone;
 }
+#endif
 
 // If only the background class has work, it gets all the threads.
 TEST(FairShareExecutor, idleClassLeavesItsShareToOthers) {
@@ -140,9 +159,7 @@ TEST(FairShareExecutor, idleClassLeavesItsShareToOthers) {
   scheduler->setShare(FairShareClass::Queries, 0.9);
   qlever::Executor background = FairShareExecutor{
       scheduler, scheduler->makeClient(FairShareClass::Background)};
-  ConcurrencyTracker tracker;
-  runAndWait(background, 64, 2000us, &tracker);
-  EXPECT_EQ(tracker.max_, 4u);
+  EXPECT_EQ(runAndWait(background, 64, 4), 4u);
   pool.join();
 }
 
@@ -153,9 +170,7 @@ TEST(FairShareExecutor, makeFairShareExecutor) {
   boost::asio::thread_pool pool{8};
   auto executor = makeFairShareExecutor(pool.get_executor(), 3);
   EXPECT_NE(executor.target<FairShareExecutor>(), nullptr);
-  ConcurrencyTracker tracker;
-  runAndWait(executor, 32, 2000us, &tracker);
-  EXPECT_EQ(tracker.max_, 3u);
+  EXPECT_EQ(runAndWait(executor, 32, 3), 3u);
 
   auto query = makeFairShareClientExecutor(executor, FairShareClass::Queries,
                                            std::nullopt);
@@ -187,9 +202,7 @@ TEST(FairShareExecutor, fallbackForOtherExecutors) {
   boost::asio::thread_pool pool{8};
   auto limited = makeFairShareClientExecutor(pool.get_executor(),
                                              FairShareClass::Queries, 3);
-  ConcurrencyTracker tracker;
-  runAndWait(limited, 32, 2000us, &tracker);
-  EXPECT_EQ(tracker.max_, 3u);
+  EXPECT_EQ(runAndWait(limited, 32, 3), 3u);
   auto unlimited = makeFairShareClientExecutor(
       pool.get_executor(), FairShareClass::Queries, std::nullopt);
   EXPECT_TRUE(unlimited == qlever::Executor{pool.get_executor()});
