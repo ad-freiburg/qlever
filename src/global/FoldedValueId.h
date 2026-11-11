@@ -8,6 +8,7 @@
 #define QLEVER_SRC_GLOBAL_FOLDEDVALUEID_H
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <cstdint>
 #include <limits>
@@ -33,8 +34,15 @@ namespace foldedValueId {
 class ValueId {
  public:
   using T = uint64_t;
+  using PayloadType = uint64_t;
+  using DatatypeType = uint8_t;
+
   static constexpr T numDatatypeBits = 4;
   static constexpr T numDataBits = 64 - numDatatypeBits;
+  // The number of bits of a vocabulary index, including the markers in its
+  // topmost bits (see `SplitVocabulary` and `GeoCellGrid`). For this `Id`, a
+  // vocabulary index uses the whole payload.
+  static constexpr T numVocabIndexBits = numDataBits;
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 
@@ -73,9 +81,12 @@ class ValueId {
   // that position (which may be expensive to compute); for all other datatypes
   // the comparison of the bits already yields the correct result, see
   // `compareThreeWay` below.
-  static constexpr std::array<Datatype, 3> datatypesOfPositionInVocab_{
-      Datatype::VocabIndex, Datatype::SecondaryVocabIndex,
-      Datatype::EncodedVal};
+  //
+  // NOTE: `EncodedVal` is not among them, because an IRI that is encoded
+  // directly in an `Id` is never stored in a `LocalVocabEntry` (see
+  // `toIdOrLocalVocabEntry`).
+  static constexpr std::array<Datatype, 2> datatypesOfPositionInVocab_{
+      Datatype::VocabIndex, Datatype::SecondaryVocabIndex};
 
   // A mapping that decides if a Datatype is bitwise comparable or not. See
   // `canBeComparedBitwise()` below.
@@ -153,13 +164,7 @@ class ValueId {
   // `LocalVocabIndex` is directly adjacent to `VocabIndex` and
   // `SecondaryVocabIndex` (see the `static_assert`s above), so an `Id` of any
   // other datatype compares to the datatype bits of a `LocalVocabIndex` exactly
-  // like it compares to the datatype bits of the position. NOTE: The single
-  // exception is a word that is stored as an encoded IRI (see
-  // `LocalVocabContext::encodeAsId`), whose position is of type `EncodedVal`,
-  // which is *not* adjacent to `LocalVocabIndex`. Comparing such a word to an
-  // `Id` of an unrelated datatype hence deviates from comparing the positions.
-  // This is a pre-existing inconsistency of the encoded IRIs that is tracked
-  // separately, see the note at `valueIdComparators::detail::compareIdsImpl`.
+  // like it compares to the datatype bits of the position.
   // NOTE: This is only `constexpr` in C++20 mode. GCC 8, which the C++17 CI job
   // uses, rejects the branches below in a relaxed-constexpr function
   // ("expression `<statement>` is not a constant expression"), and nothing
@@ -246,8 +251,8 @@ class ValueId {
   }
 
   // Get the datatype bits.
-  [[nodiscard]] constexpr uint8_t getDatatypeBits() const noexcept {
-    return static_cast<uint8_t>(_bits >> numDataBits);
+  [[nodiscard]] constexpr DatatypeType getDatatypeBits() const noexcept {
+    return static_cast<DatatypeType>(_bits >> numDataBits);
   }
 
   // Get the payload bits.
@@ -458,6 +463,10 @@ class ValueId {
     return {std::numeric_limits<T>::max()};
   }
 
+  // Return the smallest `Id` that is greater than this one. The overflow of
+  // the payload carries into the datatype, as the bits form one integer.
+  [[nodiscard]] constexpr ValueId incremented() const { return _bits + 1; }
+
   // Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
   // and `ad_utility::HashMap`
   template <typename H>
@@ -539,8 +548,12 @@ class ValueId {
       if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
-      } else if constexpr (ad_utility::SimilarToAny<T, double, int64_t,
-                                                    uint64_t>) {
+      } else if constexpr (ad_utility::isSimilar<T, double>) {
+        // NOTE: `%f` is what `std::to_string` did for floating-point values
+        // before C++26. Since C++26, it produces the shortest round-trip
+        // representation instead (`42` instead of `42.000000`).
+        ostr << absl::StrFormat("%f", value);
+      } else if constexpr (ad_utility::SimilarToAny<T, int64_t, uint64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");

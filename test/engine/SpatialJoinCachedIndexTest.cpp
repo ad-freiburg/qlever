@@ -233,6 +233,7 @@ TEST(SpatialJoinCachedIndex, S2PointPolylineAlgorithmReturnsMinimalDistance) {
   config.algo_ = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
   config.rightCacheName_ = "dummy";
   config.distanceVariable_ = Variable{"?dist"};
+  config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
                                                  std::nullopt);

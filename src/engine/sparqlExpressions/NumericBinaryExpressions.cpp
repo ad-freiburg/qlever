@@ -75,6 +75,11 @@ struct AddImpl {
     return Id::makeUndefined();
   }
 };
+// Passing any value that is neither numeric nor a date to addition
+// always yields `UNDEF`. Booleans are converted to integers by the value
+// getter.
+template <>
+inline constexpr bool undefForNonNumericOrDate<AddImpl> = true;
 BINARY_EXPRESSION(AddExpression, FV<AddImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
@@ -115,6 +120,11 @@ struct SubtractImpl {
     return Id::makeUndefined();
   }
 };
+// Passing any value that is neither numeric nor a date to subtraction
+// always yields `UNDEF`. Booleans are converted to integers by the value
+// getter.
+template <>
+inline constexpr bool undefForNonNumericOrDate<SubtractImpl> = true;
 BINARY_EXPRESSION(SubtractExpression,
                   FV<SubtractImpl, NumericOrDateValueGetter>);
 
@@ -405,8 +415,8 @@ constexpr auto getMergeFunction(bool isNegated) {
 
 //______________________________________________________________________________
 CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
-    requires isOperation<NaryOperation>) class LogicalBinaryExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    requires isOperation<NaryOperation>)
+class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
@@ -508,9 +518,17 @@ SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
   return std::make_unique<AndExpression>(std::move(child1), std::move(child2));
 }
 
+bool isAndExpression(const SparqlExpression& expression) {
+  return dynamic_cast<const AndExpression*>(&expression) != nullptr;
+}
+
 SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2) {
   return std::make_unique<OrExpression>(std::move(child1), std::move(child2));
+}
+
+bool isOrExpression(const SparqlExpression& expression) {
+  return dynamic_cast<const OrExpression*>(&expression) != nullptr;
 }
 
 SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,

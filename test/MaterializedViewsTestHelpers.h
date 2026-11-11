@@ -258,6 +258,9 @@ class MaterializedViewsPatternMatchingTest
   // ___________________________________________________________________________
   void TearDown() override {
     manager_.reset();
+    // The query execution context holds a non-owning copy of the allocator of
+    // `qlv_`, so it has to be destroyed first.
+    qec_.reset();
     qlv_.reset();
     removeTestIndex(onDiskBase_);
     MaterializedViewsRewriteTestBase::TearDown();
@@ -357,7 +360,8 @@ inline void expectNotSuitableForRewrite(
   manager.writeViewToDisk(viewName, plan);
   auto view = manager.getView(viewName, qec.get());
   qpc.analyzeView(view, qec.get());
-  EXPECT_THAT(logStream.str(), ::testing::HasSubstr(expectedLogMessage));
+  EXPECT_THAT(logStream.str(), ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+                                   ::testing::HasSubstr(expectedLogMessage)));
   // `analyzeView` may still return `true` because the view got registered for
   // cache-key based rewriting, even for queries that (by design) are not
   // suitable for the pattern-based (star/chain) rewriting tested here. So

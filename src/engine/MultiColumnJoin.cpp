@@ -106,8 +106,8 @@ size_t MultiColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
-  std::vector<ColumnIndex> sortedOn;
+qlm::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // The result is sorted on all join columns from the left subtree.
   for (const auto& a : _joinColumns) {
     sortedOn.push_back(a[0]);
@@ -228,7 +228,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_);
+      cancellationHandle());
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
                  beginRight = rightJoinColumns.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -247,7 +247,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
            ql::ranges::any_of(left.getColumn(leftCol), Id::isUndefinedL);
   });
 
-  auto checkCancellationLambda = [this] { checkCancellation(); };
+  auto checkCancellationLambda = cancellationChecker();
 
   const size_t numOutOfOrder = [&]() {
     if (isCheap) {

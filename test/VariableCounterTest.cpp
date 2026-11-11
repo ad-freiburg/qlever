@@ -220,6 +220,7 @@ TEST(VariableCounterTest, MagicServices) {
           "qlss:right ?z ;"
           "qlss:maxDistance 500 ;"
           "qlss:algorithm qlss:s2 ;"
+          "qlss:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
           "qlss:bindDistance ?dist . } }"),
       counts({{V{"?e"}, 1}, {V{"?z"}, 1}, {V{"?dist"}, 1}}));
   EXPECT_THAT(
@@ -292,6 +293,14 @@ TEST(VariableCounterTest, MagicServices) {
           "qlext:variable ?x ;"
           "qlext:variable ?y . } }"),
       counts({{V{"?x"}, 1}, {V{"?y"}, 1}}));
+
+  // Row number.
+  EXPECT_THAT(
+      parseAndCount("SELECT * {"
+                    "SERVICE <https://qlever.cs.uni-freiburg.de/rowNumber/> {"
+                    "[] <bind> ?n ."
+                    "{ SELECT ?x { ?x <p> ?y } ORDER BY ?x } } }"),
+      counts({{V{"?n"}, 1}, {V{"?x"}, 1}, {V{"?y"}, 1}}));
 }
 
 }  // namespace

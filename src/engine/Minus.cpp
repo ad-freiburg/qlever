@@ -89,7 +89,7 @@ VariableToColumnMap Minus::computeVariableToColumnMap() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Minus::resultSortedOn() const {
+qlm::vector<ColumnIndex> Minus::resultSortedOn() const {
   if (rightIndexNestedLoopJoinIsPossible()) {
     return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }
@@ -177,7 +177,7 @@ IdTable Minus::copyMatchingRows(
         ql::views::transform(nonMatchingIndices,
                              [&inputCol](size_t row) { return inputCol[row]; }),
         outputCol.begin(), qlever::joinHelpers::CHUNK_SIZE,
-        [this]() { checkCancellation(); });
+        cancellationChecker());
   }
 
   return result;
@@ -238,7 +238,7 @@ IdTable Minus::computeMinus(
             joinColumnsLeft, joinColumnsRight,
             ql::ranges::lexicographical_compare, handleCompatibleRow,
             std::move(findUndefLeft), std::move(findUndefRight), {},
-            [this]() { checkCancellation(); });
+            cancellationChecker());
       },
       makeUndefRangesChecker(true, left), makeUndefRangesChecker(false, right));
 
@@ -272,7 +272,8 @@ std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
   const IdTableView<0>& leftTable = leftRes->idTableView();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+      _matchedColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
 
   auto nonMatchingEntries = nestedLoopJoin.computeLeftExistance();
   return std::optional{Result{
@@ -296,7 +297,8 @@ std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable(
   auto rightRes = _right->getResult(false);
 
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+      _matchedColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
   auto result = nestedLoopJoin.computeRightExistance(
       [this](const auto& idTable, LocalVocab localVocab,
              const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {
@@ -354,7 +356,7 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
        permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         ad_utility::MinusRowHandler rowAdder{
             _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
-            cancellationHandle_, std::move(yieldTable)};
+            cancellationHandle(), std::move(yieldTable)};
         auto leftRange = qlever::joinHelpers::resultToView(*left, permutation);
         auto rightRange = qlever::joinHelpers::resultToView(
             *right, {_matchedColumns.at(0).at(1)});

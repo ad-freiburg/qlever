@@ -71,8 +71,8 @@ class TripleComponent {
   CPP_template(typename FirstArg, typename... Args)(
       requires CPP_NOT(ql::concepts::same_as<ql::remove_cvref_t<FirstArg>,
                                              TripleComponent>) &&
-      std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
-      TripleComponent(FirstArg&& firstArg, Args&&... args)
+      std::is_constructible_v<Variant, FirstArg &&, Args && ...>)
+  TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
       // Storing variables and literals as strings is deprecated. The following
@@ -96,9 +96,8 @@ class TripleComponent {
 
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
-  CPP_template(typename T)(requires std::is_assignable_v<Variant, T&&>)
-      TripleComponent&
-      operator=(T&& value) {
+  CPP_template(typename T)(requires std::is_assignable_v<Variant, T &&>)
+  TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
     checkThatStringIsValid();
     return *this;
@@ -117,8 +116,8 @@ class TripleComponent {
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
   CPP_template(typename T)(
-      requires ad_utility::SameAsAnyTypeIn<T, Variant>) bool
-  operator==(const T& other) const {
+      requires ad_utility::SameAsAnyTypeIn<T, Variant>)
+  bool operator==(const T& other) const {
     auto ptr = std::get_if<T>(&_variant);
     return ptr && *ptr == other;
   }
@@ -141,8 +140,8 @@ class TripleComponent {
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
   CPP_template(typename H, typename TC)(
-      requires ql::concepts::same_as<TC, TripleComponent>) friend H
-      AbslHashValue(H h, const TC& tc) {
+      requires ql::concepts::same_as<TC, TripleComponent>)
+  friend H AbslHashValue(H h, const TC& tc) {
     return H::combine(std::move(h), tc._variant);
   }
 
@@ -202,6 +201,22 @@ class TripleComponent {
   bool isId() const { return std::holds_alternative<Id>(_variant); }
   const Id& getId() const { return std::get<Id>(_variant); }
   Id& getId() { return std::get<Id>(_variant); }
+
+  // Return the value if this is a number (an `int64_t` or `double`, or an `Int`
+  // or `Double` `Id`), and `std::nullopt` otherwise (e.g. for the string
+  // "500").
+  std::optional<double> getNumber() const {
+    if (isInt()) {
+      return static_cast<double>(getInt());
+    } else if (isDouble()) {
+      return getDouble();
+    } else if (isId() && getId().getDatatype() == Datatype::Int) {
+      return static_cast<double>(getId().getInt());
+    } else if (isId() && getId().getDatatype() == Datatype::Double) {
+      return getId().getDouble();
+    }
+    return std::nullopt;
+  }
 
   // Access the underlying variant (mostly used for testing)
   const auto& getVariant() const { return _variant; }

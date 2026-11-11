@@ -64,9 +64,9 @@ class GeoPoint {
  public:
   using T = uint64_t;
 
-  CPP_template(typename H,
-               typename G)(requires ql::concepts::same_as<G, GeoPoint>) friend H
-      AbslHashValue(H h, const G& g) {
+  CPP_template(typename H, typename G)(
+      requires ql::concepts::same_as<G, GeoPoint>)
+  friend H AbslHashValue(H h, const G& g) {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }
 
@@ -85,10 +85,18 @@ class GeoPoint {
   // `LatMajor`: The latitude is in the upper 30, the longitude in the lower 30
   // of the 60 bits. A geographic rectangle then only maps to one range per
   // quantized latitude, or, as a single range, to the whole latitude band.
+  //
+  // TODO<pas-kes> Use all 64 bits with the split layout. This needs a new place
+  // for the WKT type, which `GeometryInfo` stores in the upper 4 bits of the
+  // centroid.
   static constexpr T numDataBits = 60;
+  // The remaining upper bits of the 64-bit representation. They are zero in
+  // the result of `toBitRepresentation()` and hold the datatype when a point is
+  // stored as an `Id`. `GeometryInfo` uses them for the WKT type of a geometry.
+  static constexpr T numTypeBits = sizeof(T) * 8 - numDataBits;
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
   static constexpr T coordinateMaskFreeBits =
-      ad_utility::bitMaskForHigherBits(sizeof(T) * 8 - numDataBits);
+      ad_utility::bitMaskForHigherBits(numTypeBits);
   // The largest quantized coordinate value (30 one-bits).
   static constexpr T maxCoordinateEncoded =
       ad_utility::bitMaskForLowerBits(numDataBitsCoordinate);

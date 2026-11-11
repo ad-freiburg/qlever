@@ -26,19 +26,22 @@ namespace columnBasedIdTable::splitLayout {
 // `std::vector<Id>` in `IdTable`.
 //
 // `Allocator` is `IdTable`'s own `Id` allocator; the two underlying arrays
-// use it rebound to `uint64_t`/`uint8_t`, so both count towards the same
-// memory limit.
+// use it rebound to `PayloadType`/`DatatypeType`, so both count towards the
+// same memory limit.
 template <typename Allocator>
 class IdColumnVector {
  public:
   using PayloadAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<uint64_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<Id::PayloadType>;
   using DatatypeAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<uint8_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<Id::DatatypeType>;
 
   using value_type = Id;
+  // The two reference types, see `BasicIdColumnIterator`.
   using reference = IdRef;
   using const_reference = ConstIdRef;
+  using reference_restricted = IdRef::Base;
+  using const_reference_restricted = ConstIdRef::Base;
   using iterator = IdColumnIterator;
   using const_iterator = ConstIdColumnIterator;
 
@@ -47,8 +50,8 @@ class IdColumnVector {
   // allocators) to preserve the passed-in allocator's exact state (e.g. a
   // shared memory limit).
   Allocator allocator_;
-  std::vector<uint64_t, PayloadAllocator> payloads_;
-  std::vector<uint8_t, DatatypeAllocator> datatypes_;
+  std::vector<Id::PayloadType, PayloadAllocator> payloads_;
+  std::vector<Id::DatatypeType, DatatypeAllocator> datatypes_;
 
  public:
   explicit IdColumnVector(Allocator allocator = Allocator{})
@@ -62,8 +65,8 @@ class IdColumnVector {
         datatypes_(size, DatatypeAllocator{allocator}) {}
 
   // Construct from a range of elements that are convertible to `Id` (e.g.
-  // `Id` itself, or `IdRef`/`ConstIdRef` as yielded by another column's
-  // iterators). Needed e.g. for `IdTable::clone()` on this storage.
+  // `Id` itself, or the references that the iterators of another column
+  // yield). Needed e.g. for `IdTable::clone()` on this storage.
   //
   // TODO<pas-kes>: This element-wise interface is inefficient as soon as the
   // iterators point into another split column. Check its performance and
@@ -108,17 +111,17 @@ class IdColumnVector {
     datatypes_.emplace_back();
   }
 
-  [[nodiscard]] reference operator[](size_t i) {
+  [[nodiscard]] reference_restricted operator[](size_t i) {
     return {&payloads_[i], &datatypes_[i]};
   }
-  [[nodiscard]] const_reference operator[](size_t i) const {
+  [[nodiscard]] const_reference_restricted operator[](size_t i) const {
     return {&payloads_[i], &datatypes_[i]};
   }
-  [[nodiscard]] reference at(size_t i) {
+  [[nodiscard]] reference_restricted at(size_t i) {
     AD_CONTRACT_CHECK(i < size());
     return (*this)[i];
   }
-  [[nodiscard]] const_reference at(size_t i) const {
+  [[nodiscard]] const_reference_restricted at(size_t i) const {
     AD_CONTRACT_CHECK(i < size());
     return (*this)[i];
   }
@@ -160,8 +163,8 @@ class IdColumnVector {
   }
   template <typename InputIt>
   void insertImpl(ptrdiff_t offset, InputIt first, InputIt last) {
-    std::vector<uint64_t> newPayloads;
-    std::vector<uint8_t> newDatatypes;
+    std::vector<Id::PayloadType> newPayloads;
+    std::vector<Id::DatatypeType> newDatatypes;
     for (; first != last; ++first) {
       const auto id = static_cast<Id>(*first);
       newPayloads.push_back(id.getPayloadBits());

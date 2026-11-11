@@ -37,9 +37,12 @@ template <bool IsConst>
 class BasicIdColumnView {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
-  using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
-  using Reference = BasicIdRef<IsConst>;
+      std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
+  using DatatypePointer =
+      std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
+  // The two reference types, see `BasicIdColumnIterator`.
+  using reference = BasicIdRef<IsConst>;
+  using reference_restricted = typename BasicIdRef<IsConst>::Base;
   using value_type = Id;
   using iterator = BasicIdColumnIterator<IsConst>;
   using const_iterator = BasicIdColumnIterator<true>;
@@ -72,8 +75,8 @@ class BasicIdColumnView {
   // (rather than a conversion operator on the mutable view) avoids the
   // mutable instantiation having to name its own type as a target.
   CPP_template(typename = void)(requires IsConst)
-      /*implicit*/ BasicIdColumnView(
-          const BasicIdColumnView<false>& other)  // NOSONAR, intended
+  /*implicit*/ BasicIdColumnView(
+      const BasicIdColumnView<false>& other)  // NOSONAR, intended
       : payloads_{other.payloads_},
         datatypes_{other.datatypes_},
         size_{other.size_} {}
@@ -83,19 +86,19 @@ class BasicIdColumnView {
 
   // Like `ql::span` and the legacy `IdTable`, only `at()` is always
   // bounds-checked, `operator[]` only in builds with expensive checks.
-  [[nodiscard]] Reference operator[](size_t i) const {
+  [[nodiscard]] reference_restricted operator[](size_t i) const {
     AD_EXPENSIVE_CHECK(i < size_);
     return {payloads_ + i, datatypes_ + i};
   }
-  [[nodiscard]] Reference at(size_t i) const {
+  [[nodiscard]] reference_restricted at(size_t i) const {
     AD_CONTRACT_CHECK(i < size_);
     return (*this)[i];
   }
-  [[nodiscard]] Reference front() const {
+  [[nodiscard]] reference_restricted front() const {
     AD_CONTRACT_CHECK(!empty());
     return (*this)[0];
   }
-  [[nodiscard]] Reference back() const {
+  [[nodiscard]] reference_restricted back() const {
     AD_CONTRACT_CHECK(!empty());
     return (*this)[size_ - 1];
   }
@@ -124,11 +127,13 @@ class BasicIdColumnView {
 
   // Direct access to the two underlying arrays (`.data()` is intentionally
   // not provided), e.g. for raw byte I/O.
-  [[nodiscard]] ql::span<std::conditional_t<IsConst, const uint64_t, uint64_t>>
+  [[nodiscard]] ql::span<
+      std::conditional_t<IsConst, const Id::PayloadType, Id::PayloadType>>
   rawPayloads() const {
     return {payloads_, size_};
   }
-  [[nodiscard]] ql::span<std::conditional_t<IsConst, const uint8_t, uint8_t>>
+  [[nodiscard]] ql::span<
+      std::conditional_t<IsConst, const Id::DatatypeType, Id::DatatypeType>>
   rawDatatypes() const {
     return {datatypes_, size_};
   }

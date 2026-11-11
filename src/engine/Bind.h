@@ -37,7 +37,8 @@ class Bind : public Operation {
  public:
   size_t getCostEstimate() override;
   LimitOffsetHandling handlesLimitOffset() const override;
-  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                            bool childrenAreExclusivelyOwned) override;
 
   // `BIND` needs to be able to push down other `BIND`s if the query contains
   // multiple `BIND`s of which only some can be rewritten.
@@ -54,9 +55,12 @@ class Bind : public Operation {
  public:
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   Result computeResult(bool requestLaziness) override;

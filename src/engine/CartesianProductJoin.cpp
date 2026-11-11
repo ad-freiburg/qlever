@@ -280,7 +280,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() &&
         childTree->handlesLimitOffset() != LimitOffsetHandling::NONE) {
-      childTree->applyLimitOffset(limitIfPresent.value());
+      childTree->applyLimitOffset(limitIfPresent.value(), false);
       forbiddenToRecompute_ = true;
     }
     auto& child = *childTree->getRootOperation();
@@ -438,7 +438,7 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 // _____________________________________________________________________________
 std::vector<std::vector<ColumnIndex>>
 CartesianProductJoin::perChildDistinctIndices(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   std::vector<std::vector<ColumnIndex>> result;
   result.reserve(children_.size());
   size_t offset = 0;
@@ -458,7 +458,7 @@ CartesianProductJoin::perChildDistinctIndices(
 
 // _____________________________________________________________________________
 bool CartesianProductJoin::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   return ql::ranges::all_of(
       ::ranges::views::zip(children_, perChildDistinctIndices(distinctIndices)),
       [](const auto& childAndIndices) {
@@ -470,7 +470,7 @@ bool CartesianProductJoin::isDistinctByImpl(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 CartesianProductJoin::makeDistinctTree(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // Applying `DISTINCT` on `distinctIndices` to the Cartesian product is
   // equivalent to first making each child distinct on the subset of
   // `distinctIndices` that falls into its columns, and then forming the

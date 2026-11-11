@@ -60,14 +60,15 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // this word would be stored if it were present.
   PositionInVocab positionInVocab;
 
-  // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
-  // give us a consistent ordering, which is important for determining equality
-  // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
+  // An IRI that is encoded directly in an `Id` is never stored in a
+  // `LocalVocabEntry` (the constructors that can store an IRI are private, see
+  // `toIdOrLocalVocabEntry`), so the position is always a position in the
+  // vocabularies.
+  AD_EXPENSIVE_CHECK(
+      !isIri() || !context_->encodeAsId(toStringRepresentation()).has_value(),
+      "An IRI that is encoded directly in an `Id` must not be stored in a "
+      "`LocalVocabEntry`.");
   auto [lower, upper] = [&]() -> std::pair<Id, Id> {
-    if (auto opt = context_->encodeAsId(toStringRepresentation());
-        opt.has_value()) {
-      return {opt.value(), Id::fromBits(opt.value().getBits() + 1)};
-    }
     // Look up the word in the vocabularies of the index. A word that is
     // contained in one of them is positioned exactly at its `Id`, so its range
     // is that single `Id`. A word that is contained in none of them is
@@ -76,7 +77,7 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
     auto idOrBounds =
         context_->lookupWordInVocabularies(toStringRepresentation());
     if (const auto* id = std::get_if<Id>(&idOrBounds)) {
-      return {*id, Id::fromBits(id->getBits() + 1)};
+      return {*id, id->incremented()};
     }
     auto [l, u] = std::get<LocalVocabContext::VocabBounds>(idOrBounds);
     return {Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
@@ -93,18 +94,6 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
 }
 
 // _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromStringRepresentation(
-    std::string s, const LocalVocabContext& ctx) {
-  return LocalVocabEntry{Base::fromStringRepresentation(std::move(s)), ctx};
-}
-
-// _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromIriref(std::string_view view,
-                                            const LocalVocabContext& ctx) {
-  return LocalVocabEntry{IriT::fromIriref(view), ctx};
-}
-
-// _____________________________________________________________________________
 LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
     std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithoutQuotes(view), ctx};
@@ -114,4 +103,14 @@ LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
 LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
     std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
+}
+
+// _____________________________________________________________________________
+LocalVocabEntry LocalVocabEntry::reanchoredTo(
+    const LocalVocabContext& newContext) const {
+  AD_EXPENSIVE_CHECK(
+      !isIri() || !newContext.encodeAsId(toStringRepresentation()).has_value(),
+      "An IRI that the new index encodes directly in an `Id` must not be "
+      "stored in a `LocalVocabEntry`.");
+  return LocalVocabEntry{asLiteralOrIri(), newContext};
 }

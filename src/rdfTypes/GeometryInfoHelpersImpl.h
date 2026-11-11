@@ -115,9 +115,16 @@ inline ParseResult parseWktOrThrow(const std::string_view& wkt,
   using enum WKTType;
   try {
     switch (type) {
-      case POINT:
-        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
+      case POINT: {
+        auto point =
+            pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
+        // `POINT EMPTY` yields a point with sentinel coordinates.
+        if (point.empty()) {
+          throw std::runtime_error("Cannot parse point from WKT");
+        }
+        parsed = point;
         break;
+      }
       case LINESTRING: {
         auto line =
             lineFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
@@ -280,6 +287,43 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
           geoPointToUtilPoint(boundingBox.upperRight())};
 }
 
+// Combine `info` (a `Centroid` or `BoundingBox`) and `crs` into a
+// `WithSourceCrs<T>`. Empty iff one of them is empty, in particular for a
+// `GeometryInfo` read from an index that predates the stored source CRS (see
+// `GeometryInfo::getSourceCrsType`).
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
+    std::optional<T> info, std::optional<SourceCrsType> crs) {
+  if (!info.has_value() || !crs.has_value()) {
+    return std::nullopt;
+  }
+  return WithSourceCrs<T>{info.value(), crs.value()};
+}
+
+// Parse the WKT literal `wkt` and compute its `T` (a `Centroid` or
+// `BoundingBox`) together with its source CRS. Empty iff the literal cannot be
+// parsed or has an unsupported CRS.
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
+    std::string_view wkt) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
+    return std::nullopt;
+  }
+
+  // A literal with an unsupported CRS has no parsed geometry, see `parseWkt`.
+  AD_CORRECTNESS_CHECK(parseResult.sourceCrs_ != CRSType::UNSUPPORTED);
+  std::optional<T> info;
+  if constexpr (std::is_same_v<T, Centroid>) {
+    info = centroidAsGeoPoint(parseResult.parsedWkt_.value());
+  } else if constexpr (std::is_same_v<T, BoundingBox>) {
+    info = boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>);
+  }
+  return getWithSourceCrs(info, SourceCrsType{parseResult.sourceCrs_});
+}
+
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
 // prefix.
 template <const std::string_view& suffix>
@@ -383,9 +427,8 @@ enum class AnyGeometryMember : uint8_t {
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
 CPP_template(typename Visitor, typename T)(
-    requires SimilarTo<
-        T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
-                                                       T&& geom) {
+    requires SimilarTo<T, DAnyGeometry>)
+inline auto visitAnyGeometry(Visitor visitor, T&& geom) {
   using enum AnyGeometryMember;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
@@ -427,10 +470,11 @@ struct MetricLengthVisitor {
 
   // Compute the length of a multi-geometry by adding up the lengths of its
   // members.
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, MultiLine<CoordType>, MultiPolygon<CoordType>,
-                           MultiPoint<CoordType>, Collection<CoordType>>) double
-  operator()(const T& multiGeom) const {
+  CPP_template(typename T)(
+      requires ad_utility::SimilarToAny<
+          T, MultiLine<CoordType>, MultiPolygon<CoordType>,
+          MultiPoint<CoordType>, Collection<CoordType>>)
+  double operator()(const T& multiGeom) const {
     // This overload only handles the geometry types implemented by vectors.
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
@@ -441,8 +485,8 @@ struct MetricLengthVisitor {
   // Compute the length for the custom container type `AnyGeometry` from
   // `pb_util`. It can dynamically hold any geometry type.
   CPP_template(typename T)(
-      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
-  operator()(const T& geom) const {
+      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>)
+  double operator()(const T& geom) const {
     return visitAnyGeometry(MetricLengthVisitor{}, geom);
   }
 
@@ -521,8 +565,8 @@ struct MetricAreaVisitor {
   // The remaining geometry types always return the area zero
   CPP_template(typename T)(
       requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
-                         Line<CoordType>, MultiLine<CoordType>>) double
-  operator()(const T&) const {
+                         Line<CoordType>, MultiLine<CoordType>>)
+  double operator()(const T&) const {
     return 0.0;
   }
 
@@ -594,9 +638,9 @@ struct UtilGeomToWktVisitor {
   }
 
   // Visitor for each of the `pb_util` geometry types.
-  CPP_template(typename T)(
-      requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
-  operator()(const T& geom, CRSType projCrs = defaultCrs) const {
+  CPP_template(typename T)(requires SimilarToAnyTypeIn<T, ParsedWkt>)
+  std::optional<std::string> operator()(const T& geom,
+                                        CRSType projCrs = defaultCrs) const {
     return getWKT(geom, defaultCrs, projCrs);
   }
 
@@ -708,9 +752,8 @@ static constexpr UtilGeomToGeoJsonVisitor utilGeomToGeoJson;
 // that this is 1-indexed and non-collection types return themselves at index 1.
 struct GeometryNVisitor {
   // Visitor for collection types.
-  CPP_template(typename T)(
-      requires WktCollectionType<T>) std::optional<ParsedWkt>
-  operator()(const T& geom, int64_t n) const {
+  CPP_template(typename T)(requires WktCollectionType<T>)
+  std::optional<ParsedWkt> operator()(const T& geom, int64_t n) const {
     // Index range check.
     if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
       return std::nullopt;
@@ -728,9 +771,8 @@ struct GeometryNVisitor {
   }
 
   // Visitor for single geometry types.
-  CPP_template(typename T)(
-      requires WktSingleGeometryType<T>) std::optional<ParsedWkt>
-  operator()(const T& geom, int64_t n) const {
+  CPP_template(typename T)(requires WktSingleGeometryType<T>)
+  std::optional<ParsedWkt> operator()(const T& geom, int64_t n) const {
     // For non collection types, only index 1 is defined and returns the
     // geometry itself.
     if (n == 1) {
@@ -876,8 +918,8 @@ struct MetricDistanceVisitor {
   }
 
   // Delegate the actual distance computation to `pb_util`.
-  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
-  operator()(const T& a, const U& b) const {
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>)
+  double operator()(const T& a, const U& b) const {
     return webMercMeterDist<T, U>(a, b);
   }
 

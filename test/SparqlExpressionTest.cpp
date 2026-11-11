@@ -12,6 +12,7 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "./printers/LocalVocabEntryPrinters.h"
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -35,6 +36,9 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
+
+using ad_utility::testing::localVocabEntry;
 
 namespace {
 using ad_utility::source_location;
@@ -80,7 +84,7 @@ auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
 };
 
 auto iriref = [](std::string_view s) {
-  return LocalVocabEntry{iri(s), testContext().qec->getLocalVocabContext()};
+  return localVocabEntry(iri(s), testContext().qec->getLocalVocabContext());
 };
 
 auto idOrLitOrStringVec =
@@ -120,8 +124,8 @@ concept VectorOrExpressionResult =
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
-CPP_template(typename T)(
-    requires VectorOrExpressionResult<T>) auto toExpressionResult(T vec) {
+CPP_template(typename T)(requires VectorOrExpressionResult<T>)
+auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
   } else if constexpr (ranges::convertible_to<T, std::string_view>) {
@@ -727,7 +731,178 @@ TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
                ad_utility::CancellationException);
 }
 
-// _____________________________________________________________________________________
+// Test typed date execution and compare subtype combinations with the
+// constant (generic getter) path. Datatype::Date is a storage tag, not an RDF
+// datatype: date/dateTime, durations, invalid dates and large years retain the
+// original arithmetic semantics.
+TEST(SparqlExpression, homogeneousDateArithmetic) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // `Date` + duration is directional in the current implementation.
+  auto testPlus = std::bind_front(testNaryExpression, &makeAddExpression);
+  auto date = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDate, value);
+  };
+  auto datetime = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDatetime, value);
+  };
+  auto duration = [](const std::string& value) {
+    return Dat(DateYearOrDuration::parseXsdDayTimeDuration, value);
+  };
+  const Id day = duration("P1D");
+  const Id zero = duration("PT0S");
+  const Id first = date("2020-01-01");
+  const Id second = date("2020-01-02");
+  testMinus(day, second, first);
+  testMinus(V<Id>{{day, day}, alloc}, V<Id>{{second, second}, alloc}, first);
+  testMinus(V<Id>{{day, day}, alloc}, second, V<Id>{{first, first}, alloc});
+  testMinus(V<Id>{{day, zero}, alloc}, V<Id>{{second, first}, alloc},
+            V<Id>{{first, first}, alloc});
+  testMinus(V<Id>{{day, zero}, alloc},
+            V<Id>{{datetime("2020-01-02T00:00:00Z"),
+                   datetime("2020-01-01T01:00:00+01:00")},
+                  alloc},
+            datetime("2020-01-01T00:00:00Z"));
+  // Existing date +/- duration arithmetic returns a dateTime at midnight.
+  const Id firstMidnight = datetime("2020-01-01T00:00:00");
+  const Id secondMidnight = datetime("2020-01-02T00:00:00");
+  testPlus(V<Id>{{secondMidnight, secondMidnight}, alloc},
+           V<Id>{{first, first}, alloc}, day);
+  testMinus(V<Id>{{firstMidnight, firstMidnight}, alloc},
+            V<Id>{{second, second}, alloc}, day);
+  testMinus(V<Id>{{zero, zero}, alloc}, V<Id>{{day, day}, alloc}, day);
+  testPlus(V<Id>{{duration("P2D"), duration("P2D")}, alloc},
+           V<Id>{{day, day}, alloc}, day);
+
+  const std::vector<Id> values{first,
+                               second,
+                               datetime("2020-01-01T12:00:00Z"),
+                               datetime("2020-01-01T13:00:00+01:00"),
+                               datetime("2020-01-01T12:00:00"),
+                               date("2020-02-30"),
+                               date("12000-01-01"),
+                               day,
+                               duration("-PT1S"),
+                               duration("P1048575D")};
+  for (Id left : values) {
+    for (Id right : values) {
+      auto difference = left.getDate() - right.getDate();
+      auto sum = left.getDate() + right.getDate();
+      Id expectedMinus = difference ? Id::makeFromDate(*difference) : U;
+      Id expectedPlus = sum ? Id::makeFromDate(*sum) : U;
+      testMinus(expectedMinus, left, right);
+      testPlus(expectedPlus, left, right);
+      testMinus(V<Id>{{expectedMinus, expectedMinus}, alloc},
+                V<Id>{{left, left}, alloc}, right);
+      testPlus(V<Id>{{expectedPlus, expectedPlus}, alloc},
+               V<Id>{{left, left}, alloc}, right);
+    }
+  }
+  // Sharing the storage tag does not erase subtype distinctions.
+  testMinus(V<Id>{{day, U}, alloc}, V<Id>{{second, day}, alloc}, first);
+  testPlus(V<Id>{{secondMidnight, duration("P2D")}, alloc},
+           V<Id>{{first, day}, alloc}, day);
+  testMinus(V<Id>{{U, U}, alloc}, V<Id>{{first, second}, alloc},
+            IdOrLocalVocabEntry{lit("not a date")});
+  // A `Date` first row must not incorrectly classify the rest of the column.
+  testMinus(V<Id>{{day, U, U, U, U}, alloc},
+            V<Id>{{second, I(2), B(true), U, Voc(4)}, alloc}, first);
+  testMinus(V<Id>{{U, day}, alloc}, V<Id>{{I(2), second}, alloc}, first);
+#endif
+}
+
+// The generic overload fails if N-ary dispatch applies the variant getter.
+struct TestTypedDateFunction {
+  Id operator()(DateYearOrDuration, DateYearOrDuration) const { return I(7); }
+  Id operator()(sparqlExpression::detail::NumericOrDateValue,
+                sparqlExpression::detail::NumericOrDateValue) const {
+    ADD_FAILURE() << "Generic date variant dispatch was used";
+    return U;
+  }
+};
+
+// Test that N-ary date expressions use the typed overload of the function, not
+// the generic variant overload.
+TEST(SparqlExpression, homogeneousDateNaryDispatch) {
+  using Op = sparqlExpression::detail::Operation<
+      2, sparqlExpression::detail::FV<
+             TestTypedDateFunction,
+             sparqlExpression::detail::NumericOrDateValueGetter>>;
+  auto factory = [](SparqlExpression::Ptr left, SparqlExpression::Ptr right) {
+    return std::make_unique<
+        sparqlExpression::detail::NaryExpressionStronglyTyped<Op>>(
+        std::move(left), std::move(right));
+  };
+  Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
+  V<Id> dates{{date, date}, alloc};
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, date);
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, date, dates);
+  testNaryExpression(factory, V<Id>{{I(7), I(7)}, alloc}, dates, dates);
+}
+
+// Test that homogeneous and speculative date execution share the same typed
+// getter.
+TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
+  namespace hn = sparqlExpression::detail::homogeneousNumeric;
+  struct TypedOnly {
+    Id operator()(DateYearOrDuration, DateYearOrDuration) const { return I(7); }
+  };
+  TestContext outerContext;
+  auto& context = outerContext.context;
+  context._endIndex = 2;
+  const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
+  V<Id> dates{{date, date}, alloc};
+  ConstIdColumnRef column{dates.data(), dates.size()};
+  auto result =
+      hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
+                                              DateYearOrDuration>(
+          std::tie(column, date), &context);
+  EXPECT_EQ((std::get<V<Id>>(result)), (V<Id>{{I(7), I(7)}, alloc}));
+  EXPECT_EQ(hn::getPrimitiveNumericValue<DateYearOrDuration>(date),
+            date.getDate());
+  EXPECT_EQ(hn::datatypeForNumericType<DateYearOrDuration>(), Datatype::Date);
+  EXPECT_EQ(hn::numericTypeToIndex<true>(hn::NumericType::Date), 2);
+  EXPECT_ANY_THROW(hn::numericTypeToIndex(hn::NumericType::Date));
+  V<Id> empty{alloc};
+  context._endIndex = 0;
+  EXPECT_EQ(hn::classifyNumericOperand<true>(empty, &context).majorityType_,
+            hn::NumericType::Other);
+  context._endIndex = 2;
+  context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(
+      (hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
+                                               DateYearOrDuration>(
+          std::tie(dates, date), &context)),
+      ad_utility::CancellationException);
+}
+
+// Test the speculative date path for columns with a date majority and
+// undefined, numeric or boolean outliers.
+TEST(SparqlExpression, speculativeDateArithmetic) {
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  const Id start = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01Z");
+  const Id end =
+      Dat(DateYearOrDuration::parseXsdDatetime, "2020-01-02T01:00:00+01:00");
+  const Id day = Dat(DateYearOrDuration::parseXsdDayTimeDuration, "P1D");
+  const Id zero = Dat(DateYearOrDuration::parseXsdDayTimeDuration, "PT0S");
+  // Each operand has a date majority; undefined/numeric rows take the shared
+  // speculative slow path without changing dateTime/date subtraction semantics.
+  V<Id> left{{end, end, U, I(8), end, end, end}, alloc};
+  V<Id> right{{start, start, start, I(3), U, start, start}, alloc};
+  testMinus(V<Id>{{day, day, U, I(5), U, day, day}, alloc}, left, right);
+  testMinus(V<Id>{{day, day, U, U, day, day, day}, alloc}, left, start);
+  testMinus(V<Id>{{zero, zero, U, U, zero, zero, zero}, alloc}, end, left);
+  // Date-aware undefined rejection also applies without any supported
+  // majority.
+  testMinus(V<Id>{{U, U, U, U}, alloc}, V<Id>{{U, Voc(4), B(true), end}, alloc},
+            V<Id>{{end, end, end, U}, alloc});
+  testMinus(U, U, end);
+  testMinus(U, end, Voc(4));
+  // Booleans still convert to integers in a date-aware expression.
+  testMinus(V<Id>{{day, day, I(0)}, alloc}, V<Id>{{end, end, B(true)}, alloc},
+            V<Id>{{start, start, B(true)}, alloc});
+#endif
+}
+
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
   // `DivideExpression`.
@@ -1114,9 +1289,9 @@ TEST(SparqlExpression, stringOperators) {
   checkIriOrUri(IdOrLocalVocabEntryVec{U, U, U, U, U, U, U},
                 std::tuple{IdOrLocalVocabEntryVec{U, IntId(2), DoubleId(12.99),
                                                   dateDate, dateLYear, T, F},
-                           IdOrLocalVocabEntry{LocalVocabEntry{
+                           IdOrLocalVocabEntry{localVocabEntry(
                                ad_utility::triple_component::Iri{},
-                               testContext().qec->getLocalVocabContext()}}});
+                               testContext().qec->getLocalVocabContext())}});
   // test valid
   checkIriOrUri(
       IdOrLocalVocabEntryVec{
@@ -1140,8 +1315,8 @@ TEST(SparqlExpression, stringOperators) {
               lit("http://example/"), iriref("<http://\t\t\nexample/>"),
               lit("\t\n\r")},
           IdOrLocalVocabEntry{
-              LocalVocabEntry{ad_utility::triple_component::Iri{},
-                              testContext().qec->getLocalVocabContext()}}});
+              localVocabEntry(ad_utility::triple_component::Iri{},
+                              testContext().qec->getLocalVocabContext())}});
 
   // test with base iri
   checkIriOrUri(
@@ -1606,6 +1781,81 @@ TEST(SparqlExpression, isSomethingFunctions) {
   auto expression = makeBoundExpression(
       std::make_unique<IdExpression>(ValueId::makeUndefined()));
   EXPECT_TRUE(expression->isResultAlwaysDefined(testContext().varToColMap));
+}
+
+// Test that `isBlank`, `isNumeric`, `ql:isGeoPoint` and `BOUND` are evaluated
+// with binary search (result `SetOfIntervals`) if the input is sorted by their
+// argument, and row by row otherwise.
+TEST(SparqlExpression, isSomethingFunctionsOnSortedInput) {
+  using SetOfIntervals = ad_utility::SetOfIntervals;
+  Variable var{"?x"};
+  TestContext testContext;
+  auto& ctx = testContext.context;
+  // In sorted order: UNDEF, bool, int, doubles, strings, date, point, blanks.
+  std::vector<Id> ids{
+      U,
+      Id::makeFromBool(false),
+      I(42),
+      D(1),
+      D(-2),
+      testContext.x,
+      testContext.notInVocabA,
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-06-13")),
+      Id::makeFromGeoPoint(GeoPoint{0, 0}),
+      testContext.blank,
+      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12))};
+  ql::ranges::sort(ids);
+  testContext.table = IdTable{1, ctx._allocator};
+  for (Id id : ids) {
+    testContext.table.push_back({id});
+  }
+  ctx._inputTable = testContext.table.asStaticView<0>();
+  ctx._endIndex = ids.size();
+  testContext.varToColMap.clear();
+  testContext.varToColMap[var] = makePossiblyUndefinedColumn(0);
+  ctx._columnsByWhichResultIsSorted = {0};
+
+  auto evaluate = [&](auto makeExpression) {
+    return makeExpression(std::make_unique<VariableExpression>(var))
+        ->evaluate(&ctx);
+  };
+  auto test = [&](auto makeExpression, SetOfIntervals expected,
+                  source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    EXPECT_THAT(evaluate(makeExpression),
+                ::testing::VariantWith<SetOfIntervals>(expected));
+  };
+  using Vec = VectorWithMemoryLimit<Id>;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  // `BOUND` is false for UNDEF, the other functions are UNDEF, which a
+  // `SetOfIntervals` can't represent, so the result is computed row by row.
+  test(&makeBoundExpression, {{{1, 11}}, 11});
+  EXPECT_THAT(evaluate(&makeIsBlankExpression),
+              ::testing::VariantWith<Vec>(
+                  ::testing::ElementsAre(U, F, F, F, F, F, F, F, F, T, T)));
+
+  // Only evaluate on a subrange of the input without UNDEF.
+  ctx._beginIndex = 1;
+  test(&makeIsBlankExpression, {{{8, 10}}, 10});
+  test(&makeIsNumericExpression, {{{1, 4}}, 10});
+  test(&makeIsGeoPointExpression, {{{7, 8}}, 10});
+  test(&makeBoundExpression, {{{0, 10}}, 10});
+  ctx._endIndex = 8;
+  test(&makeIsBlankExpression, {{}, 7});
+  ctx._endIndex = 1;
+  test(&makeIsBlankExpression, {{}, 0});
+
+  // Without the sortedness or for a grouped variable, the result is computed
+  // row by row.
+  ctx._endIndex = ids.size();
+  auto rowByRow = ::testing::VariantWith<Vec>(
+      ::testing::ElementsAre(F, F, F, F, F, F, F, F, T, T));
+  ctx._groupedVariables.insert(var);
+  EXPECT_THAT(evaluate(&makeIsBlankExpression), rowByRow);
+  ctx._groupedVariables.clear();
+  ctx._columnsByWhichResultIsSorted.clear();
+  EXPECT_THAT(evaluate(&makeIsBlankExpression), rowByRow);
 }
 
 // ____________________________________________________________________________
@@ -2893,6 +3143,51 @@ TEST(NaryExpressionTypeErased, isDeterministic) {
 
   EXPECT_TRUE(makeTypeErasedOrExpression(var(), var())->isDeterministic());
   EXPECT_FALSE(makeTypeErasedOrExpression(var(), rand())->isDeterministic());
+}
+
+// Test the functions that inspect the structure of an expression:
+// `splitConjunction`, `isAndExpression`, `isOrExpression` and `getComparison`.
+TEST(SparqlExpression, structureInspection) {
+  using enum valueIdComparators::Comparison;
+
+  // A FILTER with five conjuncts, one of which is an `||`.
+  auto query = ad_utility::testing::parseQuery(
+      "SELECT * { ?a ?b ?c FILTER(?a < 1 && ?a <= 2 && ?a > 0 && "
+      "(?b >= 2 || ?c = 3) && ?c != 3) }");
+  const auto& filter = query._rootGraphPattern._filters.at(0).expression_;
+
+  // The FILTER is split into its conjuncts, each with its original input as
+  // descriptor.
+  auto conjuncts = filter.splitConjunction();
+  std::vector<const SparqlExpression*> c;
+  for (const auto& conjunct : conjuncts) {
+    c.push_back(conjunct.getPimpl());
+  }
+  EXPECT_THAT(
+      conjuncts,
+      ::testing::ElementsAre(
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a < 1"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a <= 2"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a > 0"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor,
+                      "(?b >= 2 || ?c = 3)"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?c != 3")));
+
+  // `isAndExpression` and `isOrExpression` recognize only their own operator.
+  EXPECT_TRUE(isAndExpression(*filter.getPimpl()));
+  EXPECT_FALSE(isOrExpression(*filter.getPimpl()));
+  EXPECT_TRUE(isOrExpression(*c[3]));
+  EXPECT_FALSE(isAndExpression(*c[3]));
+
+  // `getComparison` returns the comparison of each of the six relational
+  // expressions, and `std::nullopt` for every other expression.
+  EXPECT_EQ(getComparison(*c[0]), LT);
+  EXPECT_EQ(getComparison(*c[1]), LE);
+  EXPECT_EQ(getComparison(*c[2]), GT);
+  EXPECT_EQ(getComparison(*c[3]->children()[0]), GE);
+  EXPECT_EQ(getComparison(*c[3]->children()[1]), EQ);
+  EXPECT_EQ(getComparison(*c[4]), NE);
+  EXPECT_EQ(getComparison(*c[3]), std::nullopt);
 }
 
 }  // anonymous namespace

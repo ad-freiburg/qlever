@@ -37,6 +37,10 @@ constexpr inline size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
 
 constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
+// The size estimate of a join is multiplied by this factor to account for the
+// typical overestimation of the result size.
+constexpr inline double JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR = 0.7;
+
 constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
 // Batching parameters for `VocabularyOnDisk::scanAll`, which reads the whole
@@ -51,6 +55,22 @@ constexpr inline size_t VOCABULARY_SCAN_MAX_WORDS_PER_BATCH = 10'000;
 // necessarily exceeded (a word must not be split).
 constexpr inline ad_utility::MemorySize
     VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH = 10_MB;
+
+// Read-ahead of `VocabularyOnDisk::operator[]`: when a thread looks up words
+// (nearly) sequentially, the following words are read together with the
+// requested one and cached (one window per thread).
+//
+// A lookup is considered to be sequential if it is at most this many words
+// after the previous lookup of the same thread in the same vocabulary.
+constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_GAP = 64;
+// The window of the read-ahead starts with one word and doubles with every
+// sequential lookup that is not in it, up to this many words (8 bytes of offset
+// each).
+constexpr inline size_t VOCABULARY_READ_AHEAD_MAX_WORDS = 4096;
+// The maximum size of the word data in a window, which bounds the memory per
+// thread.
+constexpr inline ad_utility::MemorySize VOCABULARY_READ_AHEAD_MAX_WORD_DATA =
+    1_MB;
 
 constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_URL =
@@ -155,9 +175,9 @@ constexpr inline std::string_view CACHED_RESULT_WITH_NAME_PREFIX =
         string_constants::detail::cachedResultWithNamePrefix>();
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
-    "geof:", "http://www.opengis.net/def/function/geosparql/"};
+    "geof", "http://www.opengis.net/def/function/geosparql/"};
 constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
-    "math:", "http://www.w3.org/2005/xpath-functions/math#"};
+    "math", "http://www.w3.org/2005/xpath-functions/math#"};
 constexpr inline std::pair<std::string_view, std::string_view> XSD_PREFIX = {
     "xsd", "http://www.w3.org/2001/XMLSchema#"};
 constexpr inline std::pair<std::string_view, std::string_view> QL_PREFIX = {
@@ -297,10 +317,6 @@ constexpr inline uint8_t NUM_COMPRESSION_PREFIXES = 126;
 // compression has been applied to  a word
 constexpr inline uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
-
-// When initializing a sort performance estimator, at most this percentage of
-// the number of triples in the index is being sorted at once.
-constexpr inline size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.

@@ -69,9 +69,9 @@ class LRUCache {
   // and a reference to it is returned. If the cache is already at maximum
   // capacity, the least recently used element is evicted first.
   CPP_template(typename Key, typename Func)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, V, const K&>) const V& getOrCompute(Key&& key,
-                                                    Func computeFunction) {
+      requires ad_utility::InvocableWithConvertibleReturnType<Func, V,
+                                                              const K&>)
+  const V& getOrCompute(Key&& key, Func computeFunction) {
     auto optValue = tryGet(key);
     if (optValue) {
       return optValue.value();
@@ -108,9 +108,9 @@ class LRUCache {
 
   // Set-like insertion for empty value types. This stores a default-constructed
   // empty value and returns `true` iff the key was not already present.
-  CPP_template(typename Key)(
-      requires std::is_empty_v<V> CPP_and
-          std::is_default_constructible_v<V>) bool insert(Key&& key) {
+  CPP_template(typename Key)(requires std::is_empty_v<V> &&
+                                   std::is_default_constructible_v<V>)
+  bool insert(Key&& key) {
     return insert(AD_FWD(key), V{});
   }
 
@@ -158,7 +158,7 @@ class LRUCache {
   // Precondition: `key` is not already present in the cache.
   CPP_template(typename Key, typename MakeValue)(
       requires ad_utility::InvocableWithConvertibleReturnType<MakeValue, V>)
-      V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
+  V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
     evictLRUKeyIfFullAndMarkNewKeyAsMRU(AD_FWD(key));
     auto result = cache_.try_emplace(keys_.front(), makeValue(), keys_.begin());
     AD_CORRECTNESS_CHECK(result.second);

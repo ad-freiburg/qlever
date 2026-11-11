@@ -2,22 +2,34 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/OrderBy.h"
+#include "engine/OrderByOnSortedNumericInput.h"
+#include "engine/QueryPlanner.h"
+#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"
 #include "index/LocalVocabEntry.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 using namespace std::string_literals;
-using namespace std::chrono_literals;
 using ad_utility::source_location;
+using V = Variable;
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace {
 // Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
@@ -190,7 +202,7 @@ TEST(OrderBy, mixedDatatypes) {
   auto U = Id::makeUndefined();
   auto* qec = ad_utility::testing::getQec();
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  auto localIri = LocalVocabEntry::fromStringRepresentation(
+  auto localIri = localVocabEntryFromStringRepresentation(
       "<a>", qec->getLocalVocabContext());
   Id a = Id::makeFromLocalVocabIndex(&localIri);
 
@@ -239,8 +251,8 @@ TEST(OrderBy, mixedDatatypes) {
 TEST(OrderBy, irisBeforeNumbers) {
   auto I = ad_utility::testing::IntId;
   const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
-  auto x1 = LocalVocabEntry::fromStringRepresentation("<x:1>", context);
-  auto x2 = LocalVocabEntry::fromStringRepresentation("<x:2>", context);
+  auto x1 = localVocabEntryFromStringRepresentation("<x:1>", context);
+  auto x2 = localVocabEntryFromStringRepresentation("<x:2>", context);
   Id iri1 = Id::makeFromLocalVocabIndex(&x1);
   Id iri2 = Id::makeFromLocalVocabIndex(&x2);
   VectorTable input{{I(3)}, {iri1}, {I(4)}, {iri2}};
@@ -257,27 +269,34 @@ namespace {
 // numeric input.
 using ResultAndFastPath = std::pair<IdTable, bool>;
 
-// Sort the `input` by the `sortedColumns` in the internal order, and compute
-// an `OrderBy` on the first column (descending iff `isDescending`) on an input
-// that reports being sorted by these columns.
-ResultAndFastPath orderByOnSortedInput(
-    const VectorTable& input, bool isDescending = false,
-    std::vector<ColumnIndex> sortedColumns = {0}) {
-  // Sort the `input` by the `sortedColumns`, and make it the result of a
-  // subtree that reports being sorted by these columns.
+// Sort the `input` by the `sortedColumns` in the internal order, and make an
+// `OrderBy` by the `sortIndices` on a subtree with that input that reports
+// being sorted by these columns. The direction of the first sort column is
+// set to `isDescending`.
+OrderBy makeOrderByOnSortedInput(IdTable input, bool isDescending = false,
+                                 std::vector<ColumnIndex> sortedColumns = {0},
+                                 OrderBy::SortIndices sortIndices = {
+                                     {0, false}}) {
   auto qec = ad_utility::testing::getQec();
-  IdTable table = makeIdTableFromVector(input);
-  IdTableUtils::sort(table, sortedColumns, qec->sortConfig());
+  IdTableUtils::sort(input, sortedColumns, qec->sortConfig());
   std::vector<std::optional<Variable>> vars;
-  for (size_t i = 0; i < table.numColumns(); ++i) {
+  for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(table), vars, false, std::move(sortedColumns));
+      qec, std::move(input), vars, false, std::move(sortedColumns));
+  sortIndices.front().second = isDescending;
+  return OrderBy{qec, std::move(subtree), std::move(sortIndices)};
+}
 
-  // Compute the `OrderBy` on that subtree, and check the runtime information
-  // for whether it took the fast path.
-  OrderBy orderBy{qec, std::move(subtree), {{0, isDescending}}};
+// Compute an `OrderBy` on the first column (descending iff `isDescending`) of
+// the `input`, sorted by the `sortedColumns` (see `makeOrderByOnSortedInput`),
+// and return its result together with whether it took the fast path.
+ResultAndFastPath orderByOnSortedInput(
+    const VectorTable& input, bool isDescending = false,
+    std::vector<ColumnIndex> sortedColumns = {0}) {
+  OrderBy orderBy = makeOrderByOnSortedInput(
+      makeIdTableFromVector(input), isDescending, std::move(sortedColumns));
   return {orderBy.getResult()->idTableView().clone(),
           orderBy.runtimeInfo().details_.contains("sorted-numeric-input")};
 }
@@ -435,6 +454,413 @@ TEST(OrderBy, sortedInputWithoutFastPath) {
                 makeIdTableFromVector({{I(-2), I(0)}, {I(3), I(1)}}), false}));
 }
 
+// Test that `ORDER BY` on a sorted input with a single sort column handles the
+// `LIMIT` and `OFFSET` itself, with and without the fast path.
+TEST(OrderBy, limitOffsetOnSortedInput) {
+  // Inputs of ints, of doubles (with all special values), and of mixed
+  // datatypes.
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  auto U = Id::makeUndefined();
+  auto inf = std::numeric_limits<double>::infinity();
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  auto negNan = std::copysign(nan, -1.0);
+  std::vector<VectorTable> inputs{
+      // Ints with undefined values, and without.
+      {{I(0), I(1)},
+       {I(3), I(2)},
+       {I(-1), I(3)},
+       {U, I(4)},
+       {I(-17), I(5)},
+       {I(123), I(6)}},
+      {{I(0), I(1)}, {I(3), I(2)}, {I(-1), I(3)}, {I(-17), I(5)}},
+      // Doubles.
+      {{D(0.0), D(1)},
+       {D(2.25), D(2)},
+       {D(-inf), D(3)},
+       {D(nan), D(4)},
+       {D(-0.0), D(5)},
+       {D(-3.5), D(6)},
+       {U, D(7)},
+       {D(negNan), D(8)},
+       {D(inf), D(9)},
+       {D(-1e-4), D(10)}},
+      // Mixed datatypes: no fast path, but the limit must still be applied by
+      // the `OrderBy`, as it promises to handle it for sorted input.
+      {{I(3), I(1)}, {D(-2.5), I(2)}, {I(-4), I(3)}, {D(7.0), I(4)}}};
+  for (const auto& input : inputs) {
+    auto inputTable = makeIdTableFromVector(input);
+    for (bool isDescending : {false, true}) {
+      // The complete result of the `ORDER BY`, against which the limited
+      // results are checked.
+      OrderBy complete =
+          makeOrderByOnSortedInput(inputTable.clone(), isDescending);
+      EXPECT_EQ(complete.handlesLimitOffset(), LimitOffsetHandling::FULL);
+      const auto& completeTable = complete.getResult()->idTableView();
+      bool fastPath =
+          complete.runtimeInfo().details_.contains("sorted-numeric-input");
+      for (uint64_t offset : {0, 1, 2, 3, 5, 20}) {
+        for (std::optional<uint64_t> limit :
+             {std::optional<uint64_t>{}, std::optional<uint64_t>{0},
+              std::optional<uint64_t>{1}, std::optional<uint64_t>{2},
+              std::optional<uint64_t>{4}, std::optional<uint64_t>{100}}) {
+          OrderBy orderBy =
+              makeOrderByOnSortedInput(inputTable.clone(), isDescending);
+          LimitOffsetClause limitOffset{limit, offset};
+          orderBy.applyLimitOffset(limitOffset, true);
+          IdTable expected = completeTable.clone();
+          size_t begin = limitOffset.actualOffset(expected.numRows());
+          size_t end = limitOffset.upperBound(expected.numRows());
+          expected.erase(expected.begin() + end, expected.end());
+          expected.erase(expected.begin(), expected.begin() + begin);
+          EXPECT_EQ(orderBy.getResult()->idTableView(), expected)
+              << "descending: " << isDescending << ", offset: " << offset
+              << ", limit: " << limit.value_or(0);
+          EXPECT_EQ(
+              orderBy.runtimeInfo().details_.contains("sorted-numeric-input"),
+              fastPath);
+        }
+      }
+    }
+  }
+
+  // The `LIMIT`/`OFFSET` is only handled if the input is sorted by the single
+  // sort column.
+  auto I2 = makeIdTableFromVector({{I(3), I(1)}, {I(-2), I(0)}});
+  EXPECT_EQ(makeOrderBy(I2.clone(), {{0, false}}).handlesLimitOffset(),
+            LimitOffsetHandling::NONE);
+  EXPECT_EQ(
+      makeOrderByOnSortedInput(I2.clone(), false, {1}).handlesLimitOffset(),
+      LimitOffsetHandling::NONE);
+  EXPECT_EQ(
+      makeOrderByOnSortedInput(I2.clone(), false, {0}, {{0, false}, {1, false}})
+          .handlesLimitOffset(),
+      LimitOffsetHandling::NONE);
+  EXPECT_EQ(makeOrderByOnSortedInput(I2.clone(), true).handlesLimitOffset(),
+            LimitOffsetHandling::FULL);
+}
+
+namespace {
+// Run the query and return the TSV result and the runtime details of the root
+// `OrderBy`. The cache is cleared first: a restricted scan can read the full
+// scan's cached result, which would hide a wrong block selection.
+std::pair<std::string, nlohmann::json> queryWithOrderByAtRoot(
+    QueryExecutionContext* qec, const std::string& queryString) {
+  qec->clearCacheUnpinnedOnly();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner planner{qec, cancellationHandle};
+  auto parsedQuery = ad_utility::testing::parseQuery(queryString);
+  auto tree = planner.createExecutionTree(parsedQuery);
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  std::string result;
+  for (const auto& block : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, *tree, ad_utility::MediaType::tsv, timer,
+           std::move(cancellationHandle))) {
+    result += block;
+  }
+  auto rootOperation = tree->getRootOperation();
+  EXPECT_NE(dynamic_cast<const OrderBy*>(rootOperation.get()), nullptr);
+  return {std::move(result), rootOperation->runtimeInfo().details_};
+}
+
+// Check that the results of the `query` (which has an `ORDER BY`, but no
+// `LIMIT`) with various `LIMIT`s and `OFFSET`s are slices of its complete
+// result.
+void expectLimitedResultsAreSlices(
+    QueryExecutionContext* qec, const std::string& query,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  // Return the result rows (without header) of the `query` with the given
+  // `LIMIT` and `OFFSET`.
+  auto rows = [qec, &query](std::optional<size_t> limit, size_t offset) {
+    std::string queryString = query;
+    if (limit.has_value()) {
+      absl::StrAppend(&queryString, " LIMIT ", limit.value(), " OFFSET ",
+                      offset);
+    }
+    auto result = queryWithOrderByAtRoot(qec, queryString).first;
+    std::vector<std::string> lines = absl::StrSplit(result, '\n');
+    lines.erase(lines.begin());
+    lines.pop_back();
+    return lines;
+  };
+  auto complete = rows(std::nullopt, 0);
+  for (size_t offset : {0, 1, 2, 4}) {
+    for (size_t limit : {0, 1, 2, 3, 5, 20}) {
+      std::vector<std::string> expected;
+      for (size_t i = offset; i < std::min(complete.size(), offset + limit);
+           ++i) {
+        expected.push_back(complete[i]);
+      }
+      EXPECT_EQ(rows(limit, offset), expected)
+          << query << " LIMIT " << limit << " OFFSET " << offset;
+    }
+  }
+}
+}  // namespace
+
+// Test that an `ORDER BY` with a `LIMIT` on top of an `IndexScan` that is
+// sorted by the `ORDER BY` variable only reads the blocks that can contain the
+// requested rows. With three rows per block, the values of `<p>` form the
+// blocks [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2] (and those of `<q>` the
+// same values plus 0.5); the third block spans the boundary between the
+// non-negative and the negative numbers.
+TEST(OrderBy, limitPushedIntoIndexScan) {
+  // The index described above.
+  std::vector<int> values{1, 2, 3, 4, 5, 6, 7, 8, -5, -4, -3, -2};
+  std::string turtle;
+  for (int i : values) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . <t", i, "> <q> ", i,
+                    ".5 . ");
+  }
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  // Run a query, and compute the expected result (the subjects with the given
+  // `prefix`, sorted by value) for a given direction, `OFFSET` and `LIMIT`.
+  auto query = [qec](const std::string& queryString) {
+    return queryWithOrderByAtRoot(qec, queryString);
+  };
+  auto expected = [&values](const std::string& prefix, bool isDescending,
+                            size_t offset, size_t limit) {
+    auto sorted = values;
+    ql::ranges::sort(sorted);
+    if (isDescending) {
+      ql::ranges::reverse(sorted);
+    }
+    std::string result = "?s\n";
+    for (size_t i = offset; i < std::min(sorted.size(), offset + limit); ++i) {
+      absl::StrAppend(&result, "<", prefix, sorted[i], ">\n");
+    }
+    return result;
+  };
+
+  // All combinations of predicate, direction, `OFFSET` and `LIMIT` give the
+  // correct result and take the fast path.
+  for (auto [predicate, prefix] : {std::pair{"p", "s"}, std::pair{"q", "t"}}) {
+    for (bool isDescending : {false, true}) {
+      for (size_t offset : {0, 1, 2, 4, 7}) {
+        for (size_t limit : {0, 1, 2, 3, 5, 8, 20}) {
+          auto queryString =
+              absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                           "> ?x } ORDER BY ", isDescending ? "DESC" : "ASC",
+                           "(?x) LIMIT ", limit, " OFFSET ", offset);
+          auto [result, details] = query(queryString);
+          EXPECT_EQ(result, expected(prefix, isDescending, offset, limit))
+              << queryString;
+          EXPECT_TRUE(details.contains("sorted-numeric-input")) << queryString;
+          // As long as the requested rows fit into two of the four blocks,
+          // the scan does not read all blocks (the blocks at the border of
+          // the relation are always read, so the exact number depends on the
+          // layout of the index).
+          if (offset + limit <= 3) {
+            ASSERT_TRUE(details.contains("num-blocks-read-for-limit"))
+                << queryString;
+            EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
+                      details["num-blocks-total"].get<size_t>())
+                << queryString;
+          } else if (offset + limit >= values.size()) {
+            EXPECT_FALSE(details.contains("num-blocks-read-for-limit"))
+                << queryString;
+          }
+        }
+      }
+    }
+  }
+
+  // Without a `LIMIT` the complete scan is read, and the `OrderBy` still uses
+  // the fast path.
+  auto [result, details] =
+      query("SELECT ?s WHERE { ?s <p> ?x } ORDER BY DESC(?x)");
+  EXPECT_EQ(result, expected("s", true, 0, 100));
+  EXPECT_TRUE(details.contains("sorted-numeric-input"));
+  EXPECT_FALSE(details.contains("num-blocks-read-for-limit"));
+}
+
+// Test the `LIMIT` pushdown for relations whose block metadata does not allow
+// it: `<i>` (IRIs), `<m>` (ints and doubles), `<n>` (ints and an IRI), and
+// `<k>`, whose only block also holds the row of `<j>` (a block at the border
+// of the relation).
+TEST(OrderBy, limitPushedIntoIndexScanSpecialCases) {
+  // The relations described above, and `<p>` with seven ints, three rows per
+  // block.
+  std::string turtle;
+  for (int i = 1; i <= 7; ++i) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . ");
+  }
+  absl::StrAppend(&turtle, "<a> <i> <x> . <b> <i> <y> . <c> <i> <z> . ",
+                  "<a> <j> 5 . <a> <k> 1 . <b> <k> 2 . ",
+                  "<a> <m> 1 . <b> <m> 2.5 . <c> <m> 3 . <d> <m> -4.5 . ",
+                  "<a> <n> 1 . <b> <n> 2 . <c> <n> <x> . ");
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  // With every `LIMIT` and `OFFSET`, the result is a slice of the complete one.
+  for (std::string_view predicate : {"p", "i", "k", "m", "n"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      expectLimitedResultsAreSlices(
+          qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate, "> ?x } ",
+                            "ORDER BY ", direction, "(?x)"));
+    }
+  }
+
+  // Without a single numeric datatype, no blocks are skipped.
+  for (std::string_view predicate : {"i", "m", "n"}) {
+    auto details = queryWithOrderByAtRoot(
+                       qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                                         "> ?x } ORDER BY ?x LIMIT 1"))
+                       .second;
+    EXPECT_FALSE(details.contains("num-blocks-read-for-limit")) << predicate;
+  }
+}
+
+// Test the `LIMIT` pushdown with named graphs, where a scan can yield fewer
+// rows than its blocks hold (graph filter, merged duplicates). `<s1> <p> 1`,
+// `<s2> <p> 2`, and `<s7> <p> 7` are in both graphs.
+TEST(OrderBy, limitPushedIntoIndexScanWithGraphs) {
+  // Twelve ints for `<p>` in `<g1>`, three of them also in `<g2>`, three rows
+  // per block.
+  std::string nquads;
+  auto addQuad = [&nquads](int i, std::string_view graph) {
+    absl::StrAppend(&nquads, "<s", i, "> <p> \"", i,
+                    "\"^^<http://www.w3.org/2001/XMLSchema#integer> <", graph,
+                    "> .\n");
+  };
+  for (int i = 1; i <= 12; ++i) {
+    addQuad(i, "g1");
+  }
+  for (int i : {1, 2, 7}) {
+    addQuad(i, "g2");
+  }
+  ad_utility::testing::TestIndexConfig config{nquads};
+  config.indexType = qlever::Filetype::NQuad;
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  // With every dataset, `LIMIT` and `OFFSET`, the result is a slice of the
+  // complete one.
+  for (std::string_view dataset :
+       {"", "FROM <g1>", "FROM <g2>", "FROM <g1> FROM <g2>"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      expectLimitedResultsAreSlices(
+          qec, absl::StrCat("SELECT ?s ", dataset, " WHERE { ?s <p> ?x } ",
+                            "ORDER BY ", direction, "(?x)"));
+    }
+  }
+
+  // Blocks with only `<g1>` triples and no duplicates still count.
+  auto [result, details] = queryWithOrderByAtRoot(
+      qec, "SELECT ?s FROM <g1> WHERE { ?s <p> ?x } ORDER BY DESC(?x) LIMIT 1");
+  EXPECT_EQ(result, "?s\n<s12>\n");
+  ASSERT_TRUE(details.contains("num-blocks-read-for-limit"));
+  EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
+            details["num-blocks-total"].get<size_t>());
+}
+
+// Test `selectBlocksForLimit` directly on block metadata. The scan has the
+// values 0.5 .. -3.0 (doubles); block 0 lies inside the scan, but its first
+// `Id` is an `Int`, as happens when a nonexistent triple is deleted (the
+// metadata of a block also covers the deleted triples located in it).
+TEST(OrderBy, selectBlocksForLimit) {
+  using orderByOnSortedNumericInput::selectBlocksForLimit;
+  auto I = ad_utility::testing::IntId;
+  auto D = ad_utility::testing::DoubleId;
+  using B = IndexScan::BlockOfSortedVariable;
+  IndexScan::BlocksOfSortedVariable blocks{
+      D(0.5),
+      D(-3.0),
+      {B{I(1), D(1.0), 3, true}, B{D(1.5), D(2.5), 3, true},
+       B{D(3.0), D(4.0), 3, true}, B{D(-1.0), D(-2.0), 3, true},
+       B{D(-2.5), D(-3.0), 3, false}}};
+  using V = std::vector<size_t>;
+  // Block 0 (wrong datatype) and block 4 (at the border of the scan) are
+  // always read.
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, false), (V{0, 3, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 4, false), (V{0, 1, 3, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, true), (V{0, 2, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 4, true), (V{0, 1, 2, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 7, true), std::nullopt);
+  // For `LIMIT 0`, only the blocks that are always read are read.
+  EXPECT_EQ(selectBlocksForLimit(blocks, 0, false), (V{0, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 0, true), (V{0, 4}));
+
+  // A block whose metadata is not numeric at all is also always read. Its rows
+  // do not count towards the `LIMIT`, so block 1 is read as well.
+  blocks.blocks_[2].last_ = Id::makeFromVocabIndex(VocabIndex::make(7));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, true), (V{0, 1, 2, 4}));
+  EXPECT_EQ(selectBlocksForLimit(blocks, 1, false), (V{0, 2, 3, 4}));
+}
+
+// Test the `LIMIT` pushdown after deletions that leave the block metadata of a
+// relation of doubles with an `Int`, while the scan only yields doubles:
+// for `<p>`, a nonexistent triple with an `Int` object is deleted (the metadata
+// of a block also covers the deleted triples located in it); for `<r>`, the
+// only triple with an `Int` object is deleted (the metadata is not narrowed).
+TEST(OrderBy, limitPushedIntoIndexScanAfterDeletions) {
+  // Twelve doubles for `<p>` and `<r>`, and one int for `<r>`, three rows per
+  // block.
+  std::string turtle;
+  for (int i = 1; i <= 12; ++i) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, ".5 . <s", i, "> <r> ", i,
+                    ".5 . ");
+  }
+  absl::StrAppend(&turtle, "<s0> <r> 0 . ");
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto index = std::make_shared<Index>(
+      ad_utility::testing::makeTestIndex(std::move(config)));
+
+  // Delete two nonexistent triples with an int object from `<p>` and the only
+  // int triple of `<r>` (`deleteTriples` requires the triples to be sorted).
+  auto getId = ad_utility::testing::makeGetId(*index);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  DeltaTriples::Triples triplesToDelete{
+      IdTriple<0>{
+          {getId("<s1>"), getId("<p>"), ad_utility::testing::IntId(1), g}},
+      IdTriple<0>{
+          {getId("<s2>"), getId("<p>"), ad_utility::testing::IntId(-7), g}},
+      IdTriple<0>{
+          {getId("<s0>"), getId("<r>"), ad_utility::testing::IntId(0), g}}};
+  ql::ranges::sort(triplesToDelete);
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.deleteTriples(cancellationHandle, std::move(triplesToDelete));
+  });
+
+  // A `QueryExecutionContext` on the index with the deletions.
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  QueryExecutionContext qec{index,
+                            &cache,
+                            ad_utility::testing::makeAllocator(
+                                ad_utility::MemorySize::megabytes(100)),
+                            &namedCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            ad_utility::testing::singleThreadExecutor()};
+
+  // With every `LIMIT` and `OFFSET`, the result is a slice of the complete one.
+  for (std::string_view predicate : {"p", "r"}) {
+    for (std::string_view direction : {"ASC", "DESC"}) {
+      expectLimitedResultsAreSlices(
+          &qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                             "> ?x } ORDER BY ", direction, "(?x)"));
+    }
+    // The blocks after the first one can still be skipped.
+    auto [result, details] = queryWithOrderByAtRoot(
+        &qec, absl::StrCat("SELECT ?s WHERE { ?s <", predicate,
+                           "> ?x } ORDER BY DESC(?x) LIMIT 1"));
+    EXPECT_EQ(result, "?s\n<s12>\n") << predicate;
+    ASSERT_TRUE(details.contains("num-blocks-read-for-limit")) << predicate;
+    EXPECT_LT(details["num-blocks-read-for-limit"].get<size_t>(),
+              details["num-blocks-total"].get<size_t>())
+        << predicate;
+  }
+}
+
 // Test that the cost estimate of `ORDER BY` is linear for an input that is
 // sorted by the sort column, and `n log n` otherwise.
 TEST(OrderBy, costEstimateForSortedInput) {
@@ -505,28 +931,6 @@ TEST(OrderBy, simpleMemberFunctions) {
   }
 }
 
-TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
-  VectorTable input;
-  // Make sure the estimator estimates a couple of ms to sort this
-  for (int64_t i = 0; i < 1000; i++) {
-    input.push_back({0, i});
-  }
-  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  OrderBy orderBy = makeOrderBy(std::move(inputTable), {{1, false}, {0, true}});
-  // Safe to do, because we know the underlying estimator is mutable
-  const_cast<SortPerformanceEstimator&>(
-      orderBy.getExecutionContext()->getSortPerformanceEstimator())
-      .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
-          orderBy.sortConfig());
-
-  orderBy.recursivelySetTimeConstraint(0ms);
-
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::CancellationException);
-}
-
 // _____________________________________________________________________________
 TEST(OrderBy, clone) {
   auto* qec = ad_utility::testing::getQec();
@@ -539,4 +943,105 @@ TEST(OrderBy, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(orderBy, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), orderBy.getDescriptor());
+}
+
+// Matcher that checks the variables and directions that an `OrderBy` sorts by.
+auto hasSortedVariables(OrderBy::SortedVariables expectedVariables) {
+  return ::testing::Truly([expectedVariables = std::move(expectedVariables)](
+                              const QueryExecutionTree* tree) {
+    auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
+    return orderBy && orderBy->getSortedVariables() == expectedVariables;
+  });
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables the `OrderBy` compares on, translates
+// `sortIndices_` accordingly, and adds a `StripColumns` for the compared
+// variables that the parent did not request.
+TEST(OrderBy, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 4, 5, 4}, {1, 6, 5, 1}},
+          &Id::makeFromInt),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<std::pair<ColumnIndex, bool>> sortIndices,
+                   std::set<V> requestedVariables) {
+    OrderBy orderBy{qec, values, sortIndices};
+    auto tree = orderBy.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `OrderBy` `?b`, only `?b` requested: the result has only `?b`, the
+  // `OrderBy` now sorts on column 0.
+  {
+    auto tree = strip({{1, false}}, {V{"?b"}});
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(
+            hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}),
+            isStrippedColumns<OrderBy>(
+                {V{"?b"}}, matchesIdTableFromVector({{1}, {2}, {4}, {6}},
+                                                    &Id::makeFromInt))));
+  }
+
+  // `OrderBy` on `?b`, `?a`, `?b` and `?d` requested: `?c` is stripped
+  // and the columns are renumbered.
+  {
+    auto tree = strip({{1, true}}, {V{"?a"}, V{"?b"}, V{"?d"}});
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
+    EXPECT_EQ(
+        tree->getResult(false)->idTableView(),
+        makeIdTableFromVector({{1, 6, 1}, {3, 4, 4}, {2, 2, 5}, {6, 1, 6}},
+                              &Id::makeFromInt));
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree =
+        strip({{1, true}}, {V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // `OrderBy` on `?b`, only `?c` requested: the `OrderBy` keeps `?b` and `?c`,
+  // a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({{1, true}}, {V{"?c"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?c"}}, matchesIdTableFromVector({{5}, {5}, {3}, {3}},
+                                                        &Id::makeFromInt)));
+
+    EXPECT_THAT(
+        tree->getRootOperation()->getChildren().at(0),
+        ::testing::AllOf(
+            hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Desc}}),
+            isStrippedColumns<OrderBy>(
+                {V{"?b"}, V{"?c"}},
+                matchesIdTableFromVector({{6, 5}, {4, 5}, {2, 3}, {1, 3}},
+                                         &Id::makeFromInt))));
+  }
+
+  // All variables requested: nothing is stripped and the indices stay.
+  {
+    auto tree = strip({{1, false}}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    EXPECT_THAT(
+        tree.get(),
+        ::testing::AllOf(
+            hasSortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}),
+            isStrippedColumns<OrderBy>(
+                {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
+                matchesIdTableFromVector(
+                    {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 4, 5, 4}, {1, 6, 5, 1}},
+                    &Id::makeFromInt))));
+  }
 }

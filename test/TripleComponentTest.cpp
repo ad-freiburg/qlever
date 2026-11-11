@@ -15,6 +15,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Literal.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace std::literals;
 using namespace ad_utility::testing;
@@ -88,6 +89,17 @@ TEST(TripleComponent, setAndGetId) {
   ASSERT_EQ(tc.getId(), id);
   const TripleComponent tcConst = std::move(tc);
   ASSERT_EQ(tcConst.getId(), id);
+}
+
+// Test that `getNumber` returns the value of an integer or a double (also as an
+// `Id`), and `std::nullopt` for every other value.
+TEST(TripleComponent, getNumber) {
+  EXPECT_EQ(TripleComponent{-42}.getNumber(), -42.0);
+  EXPECT_EQ(TripleComponent{0.5}.getNumber(), 0.5);
+  EXPECT_EQ(TripleComponent{I(-42)}.getNumber(), -42.0);
+  EXPECT_EQ(TripleComponent{D(0.5)}.getNumber(), 0.5);
+  EXPECT_EQ(TripleComponent{lit("\"500\"")}.getNumber(), std::nullopt);
+  EXPECT_EQ(TripleComponent{Id::makeFromBool(true)}.getNumber(), std::nullopt);
 }
 
 TEST(TripleComponent, assignmentOperator) {
@@ -300,7 +312,7 @@ TEST(TripleComponent, toValueIdOrBounds) {
     auto lve =
         tc.isLiteral()
             ? LocalVocabEntry(tc.getLiteral(), index.getLocalVocabContext())
-            : LocalVocabEntry(tc.getIri(), index.getLocalVocabContext());
+            : localVocabEntry(tc.getIri(), index.getLocalVocabContext());
     LocalVocabEntry::PositionInVocab positionFromBounds{makePos(bounds.first),
                                                         makePos(bounds.second)};
     EXPECT_EQ(lve.positionInVocab(), positionFromBounds);
@@ -373,4 +385,40 @@ TEST(TripleComponent, toString) {
   EXPECT_THAT(true, match("true"));
   EXPECT_THAT(false, match("false"));
   EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
+}
+
+// Test that `toIdOrLocalVocabEntry` returns the encoded `Id` of an encodable
+// IRI and a `LocalVocabEntry` for everything else.
+TEST(TripleComponent, toIdOrLocalVocabEntry) {
+  using ad_utility::triple_component::Iri;
+  using ad_utility::triple_component::Literal;
+  using ad_utility::triple_component::LiteralOrIri;
+  TestIndexConfig config{"<subject> <predicate> <http://example.org/42>"};
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+
+  // An encodable IRI yields its encoded `Id`.
+  auto encodable = Iri::fromIriref("<http://example.org/69>");
+  auto expectedId = qec->getIndex()
+                        .encodedIriManager()
+                        .encode(encodable.toStringRepresentation())
+                        .value();
+  auto result = toIdOrLocalVocabEntry(LiteralOrIri{encodable}, context);
+  ASSERT_TRUE(std::holds_alternative<Id>(result));
+  // Compare the bits, as `Id::operator==` also matches a `LocalVocabIndex`.
+  EXPECT_EQ(std::get<Id>(result).getBits(), expectedId.getBits());
+
+  // Everything else becomes a `LocalVocabEntry`, including IRIs from the
+  // vocabulary and literals that look like an encodable IRI.
+  auto expectEntry = [&context](LiteralOrIri word) {
+    auto result = toIdOrLocalVocabEntry(word, context);
+    ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(result));
+    const auto& entry = std::get<LocalVocabEntry>(result);
+    EXPECT_EQ(entry, word);
+  };
+  expectEntry(LiteralOrIri{Iri::fromIriref("<subject>")});
+  expectEntry(LiteralOrIri{Iri::fromIriref("<http://example.org/5a>")});
+  expectEntry(
+      LiteralOrIri{Literal::literalWithoutQuotes("<http://example.org/69>")});
 }

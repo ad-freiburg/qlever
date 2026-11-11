@@ -99,14 +99,14 @@ class CartesianProductJoin : public Operation {
   // (because the children have disjoint columns). A child without any such
   // column must have at most one row.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
   // Push a `DISTINCT` over `distinctIndices` down into the children. Because
   // the children have disjoint sets of columns, making each child distinct on
   // its slice of `distinctIndices` and then forming the Cartesian product
   // yields a result that is already distinct wrt `distinctIndices`.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
  protected:
   // Don't promise any sorting of the result.
@@ -119,7 +119,9 @@ class CartesianProductJoin : public Operation {
   // result is already being computed, at which point an invalidated sort order
   // could no longer be repaired (see the caution note on
   // `Operation::applyLimitOffset`).
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -128,7 +130,7 @@ class CartesianProductJoin : public Operation {
   // For each child, compute the subset of `distinctIndices` that falls into
   // that child's columns, translated into the child's local column indices.
   std::vector<std::vector<ColumnIndex>> perChildDistinctIndices(
-      const std::vector<ColumnIndex>& distinctIndices) const;
+      ql::span<const ColumnIndex> distinctIndices) const;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
@@ -142,9 +144,9 @@ class CartesianProductJoin : public Operation {
   // rows to write at most. `lastTableOffset` is the offset of the last table,
   // to account for cases where the last table does not cover the whole result
   // and so index 0 of a table does not correspond to row 0 of the result.
-  CPP_template(typename R)(requires ql::ranges::random_access_range<R>) IdTable
-      writeAllColumns(R idTables, size_t offset, size_t limit,
-                      size_t lastTableOffset = 0) const;
+  CPP_template(typename R)(requires ql::ranges::random_access_range<R>)
+  IdTable writeAllColumns(R idTables, size_t offset, size_t limit,
+                          size_t lastTableOffset = 0) const;
 
   // Calculate the subresults of the children and store them into a vector. If
   // the rightmost child can produce a lazy result, it will be stored outside of
@@ -162,7 +164,8 @@ class CartesianProductJoin : public Operation {
   // `lastTableOffset` is the offset of the last table in the range. This is
   // used to handle `IdTable`s yielded by generators where the range of indices
   // they represent do not cover the whole result.
-  CPP_template(typename R)(requires ql::ranges::range<R>) Result::LazyResult
+  CPP_template(typename R)(requires ql::ranges::range<R>)
+  Result::LazyResult
       produceTablesLazily(LocalVocab mergedVocab, R idTables, size_t offset,
                           size_t limit, size_t lastTableOffset = 0) const;
 
