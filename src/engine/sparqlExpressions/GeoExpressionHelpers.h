@@ -13,6 +13,7 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_GEOEXPRESSIONHELPERS_H
 
 #include <optional>
+#include <utility>
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
