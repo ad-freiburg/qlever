@@ -15,6 +15,7 @@
 #include <deque>
 #include <functional>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -178,9 +179,7 @@ class AsyncTransformView
     template <typename Slots>
     size_t enqueue(const Slots& slots) {
       std::lock_guard lock{mutex_};
-      for (const std::shared_ptr<Slot>& slot : slots) {
-        todo_.push_back(slot);
-      }
+      ql::ranges::copy(slots, std::back_inserter(todo_));
       size_t wanted =
           std::min(maxNumRunners_, (todo_.size() + numSlotsPerRunner_ - 1) /
                                        numSlotsPerRunner_);
@@ -224,9 +223,8 @@ class AsyncTransformView
 
     // Remove all the queued slots and wait until no runner holds a slot.
     void clearAndWaitUntilIdle() {
-      std::deque<std::shared_ptr<Slot>> todo;
       std::unique_lock lock{mutex_};
-      std::swap(todo, todo_);
+      todo_.clear();
       slotReleased_.wait(lock, [this]() { return numBusyRunners_ == 0; });
     }
   };
