@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMN_H
 
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 
 #include "backports/concepts.h"
@@ -19,6 +20,7 @@
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
 #include "util/Exception.h"
+#include "util/serializer/Serializer.h"
 
 namespace columnBasedIdTable::splitLayout {
 
@@ -137,11 +139,55 @@ class BasicIdColumnView {
   rawDatatypes() const {
     return {datatypes_, size_};
   }
+
+  // Serialization of a column: its size, then the payloads and then the
+  // datatypes of all the `Id`s, each as one block of bytes. Like for
+  // `ql::span`, reading needs a view that already has the right size.
+  AD_SERIALIZE_FRIEND_FUNCTION(BasicIdColumnView) {
+    namespace s = ad_utility::serialization;
+    size_t size = arg.size();
+    serializer | size;
+    AD_CORRECTNESS_CHECK(size == arg.size());
+    using CharPtr =
+        std::conditional_t<s::ReadSerializer<S>, char*, const char*>;
+    auto serializeArray = [&serializer](auto values) {
+      using V = typename decltype(values)::value_type;
+      s::alignSerializerForType<V>(serializer);
+      serializer.serializeBytes(reinterpret_cast<CharPtr>(values.data()),
+                                values.size() * sizeof(V));
+    };
+    serializeArray(arg.rawPayloads());
+    serializeArray(arg.rawDatatypes());
+  }
 };
 
 using IdColumnRef = BasicIdColumnView<false>;
 using ConstIdColumnRef = BasicIdColumnView<true>;
 
+// Read a column that was written by the serialization of `BasicIdColumnView`
+// without copying it. The returned view points into the buffer of the
+// `serializer`, which has to outlive it. Counterpart of
+// `zeroCopyDeserializeToSpan` in `SerializeVector.h`.
+CPP_template(typename S)(
+    requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+ConstIdColumnRef zeroCopyDeserializeIdColumn(S& serializer) {
+  size_t size = 0;
+  serializer >> size;
+  // Skip the padding and return a pointer to the next `size` values of the
+  // type of `tag` in the buffer.
+  auto nextArray = [&serializer, size](auto tag) {
+    using V = decltype(tag);
+    ad_utility::serialization::alignSerializerForType<V>(serializer);
+    auto bytes = serializer.getSpanToBytes(size * sizeof(V));
+    AD_CORRECTNESS_CHECK(bytes.size() == size * sizeof(V));
+    AD_CORRECTNESS_CHECK(
+        reinterpret_cast<std::uintptr_t>(bytes.data()) % alignof(V) == 0);
+    return reinterpret_cast<const V*>(bytes.data());
+  };
+  const auto* payloads = nextArray(Id::PayloadType{});
+  const auto* datatypes = nextArray(Id::DatatypeType{});
+  return {payloads, datatypes, size};
+}
 }  // namespace columnBasedIdTable::splitLayout
 
 // `BasicIdColumnView` is a `borrowed_range` (like `ql::span`): a non-owning
