@@ -235,11 +235,11 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
   if (!keepJoinColumns_) {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
-  std::vector<ColumnIndex> sortedOn;
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // This optimization doesn't allow preserving sort order.
   if (isIndexNestedLoopJoinSuitable()) {
     return sortedOn;
@@ -505,7 +505,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols, sortConfig(), cancellationHandle());
+    IdTableUtils::sort(*result, cols, sortConfig());
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
@@ -663,7 +663,8 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _joinColumns, std::move(leftRes), std::move(rightRes)};
+      _joinColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
 
   // This algorithm doesn't produce sorted output
   AD_CORRECTNESS_CHECK(resultSortedOn().empty());
@@ -671,8 +672,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto lazyResult =
       std::move(nestedLoopJoin)
           .computeOptionalJoin(!requestLaziness, getResultWidth(),
-                               cancellationHandle(), _right->getResultWidth(),
-                               keepJoinColumns_);
+                               _right->getResultWidth(), keepJoinColumns_);
   return requestLaziness
              ? Result{std::move(lazyResult), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(lazyResult)),

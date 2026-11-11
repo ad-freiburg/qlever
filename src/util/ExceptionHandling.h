@@ -163,10 +163,13 @@ class ThrowInDestructorIfSafe {
 //   net::co_spawn(pool, createCoroutineThatMightThrow(), std::ref(collector));
 //   pool.join();
 //   collector.rethrowIfException();
+//
+// NOTE: The captured exception is only ever thrown by `rethrowIfException`,
+// never by the destructor (see there), so the owner of a collector has to call
+// `rethrowIfException` on every path on which the exception matters.
 class ExceptionCollector {
   mutable std::mutex mutex_;
   std::exception_ptr firstException_;
-  ThrowInDestructorIfSafe throwIfSafe_;
 
  public:
   ExceptionCollector() = default;
@@ -175,19 +178,11 @@ class ExceptionCollector {
   ExceptionCollector(ExceptionCollector&&) = delete;
   ExceptionCollector& operator=(ExceptionCollector&&) = delete;
 
-  ~ExceptionCollector() noexcept(false) {
-    if (!firstException_) {
-      return;
-    }
-    AD_LOG_WARN << "`ExceptionCollector` was destroyed without a call to "
-                   "`rethrow()` even though an exception was captured. The "
-                   "exception will be rethrown now (or logged if rethrowing "
-                   "would call `std::terminate`)."
-                << std::endl;
-    throwIfSafe_(
-        [this]() { std::rethrow_exception(std::move(firstException_)); },
-        std::string_view{"in `ExceptionCollector` destructor"});
-  }
+  // Destroy the collector. An exception that was captured but never rethrown
+  // (see `rethrowIfException`) is silently dropped: the destructor never
+  // throws. Typically, the collector is then destroyed while another exception
+  // propagates, which is the one that the caller should see.
+  ~ExceptionCollector() = default;
 
   // Stores the first non-null exception. Subsequent exceptions are logged.
   // Thread-safe.

@@ -11,6 +11,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/ExistsJoin.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
@@ -39,6 +40,7 @@
 #include "parser/SparqlParser.h"
 #include "util/DateYearDuration.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
@@ -1253,9 +1255,14 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
       {Variable{"?w"}, {3, PossiblyUndefined}}};
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  auto expected = makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
-                                         {d(3), d(1), d(13.37), d(18.37)},
-                                         {d(4), undef, undef, undef}});
+  // The sum `13.37 + 1.0 + 4.0` differs from the double `18.37` in the lowest
+  // bit of the mantissa. The legacy `Id` drops that bit, the split `Id` keeps
+  // it, so the expected value is spelled as the sum (the same in every
+  // summation order).
+  auto expected =
+      makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
+                             {d(3), d(1), d(13.37), d(13.37 + 1.0 + 4.0)},
+                             {d(4), undef, undef, undef}});
   EXPECT_EQ(table, expected);
 }
 
@@ -2860,11 +2867,11 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
   const auto& [idTable0, localVocab0] = resultPairs.at(0);
   EXPECT_EQ(localVocab0.size(), 2);
   auto localVocabIndex0 =
-      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+      localVocab0.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
           "\"1\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex0.has_value());
   auto localVocabIndex1 =
-      localVocab0.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+      localVocab0.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
           "\"2\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex1.has_value());
   EXPECT_EQ(idTable0,
@@ -2877,7 +2884,7 @@ TEST(GroupBy, strOnGroupedVariableWorks) {
   const auto& [idTable1, localVocab1] = resultPairs.at(1);
   EXPECT_EQ(localVocab1.size(), 1);
   auto localVocabIndex2 =
-      localVocab1.getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
+      localVocab1.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
           "\"3\"", qec->getLocalVocabContext()));
   ASSERT_TRUE(localVocabIndex2.has_value());
   EXPECT_EQ(idTable1,
@@ -2895,7 +2902,7 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
   LocalVocab dummy{};
-  dummy.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+  dummy.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
@@ -2925,12 +2932,11 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
               expected.at(expectedIndex));
     // New value + dummy value
     EXPECT_EQ(localVocab.size(), 2);
-    EXPECT_TRUE(
-        localVocab
-            .getIndexOrNullopt(LocalVocabEntry::fromStringRepresentation(
-                std::string{expected.at(expectedIndex)},
-                qec->getLocalVocabContext()))
-            .has_value());
+    EXPECT_TRUE(localVocab
+                    .getIndexOrNullopt(localVocabEntryFromStringRepresentation(
+                        std::string{expected.at(expectedIndex)},
+                        qec->getLocalVocabContext()))
+                    .has_value());
     expectedIndex++;
   }
   EXPECT_EQ(expectedIndex, expected.size());
@@ -3149,9 +3155,8 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
 
   // Acquire the local vocab index for a given string representation if present.
   auto makeEntry = [this](std::string string, const LocalVocab& localVocab) {
-    return localVocab.getIndexOrNullopt(
-        LocalVocabEntry::fromStringRepresentation(
-            std::move(string), qec_->getLocalVocabContext()));
+    return localVocab.getIndexOrNullopt(localVocabEntryFromStringRepresentation(
+        std::move(string), qec_->getLocalVocabContext()));
   };
 
   auto entryToId = [](std::optional<LocalVocabIndex> entry) {
@@ -3765,6 +3770,48 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     EXPECT_EQ(tree->getRootOperation()->getDescriptor(),
               "GroupBy on unbound variables");
     EXPECT_EQ(tree->getResult(false)->idTableView().numRows(), 0u);
+  }
+
+  // An alias with an `EXISTS`: the constructor of `GroupBy` adds an
+  // `ExistsJoin` for it. When the constructor is called with a subtree that
+  // already contains this `ExistsJoin` (in `clone` and in
+  // `makeTreeWithStrippedColumns`), the column of the `EXISTS` must survive the
+  // stripping in the constructor, otherwise a second `ExistsJoin` is added.
+  {
+    // The constructor of `GroupBy` only strips columns if this is enabled (the
+    // default is `false`).
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
+
+    // `EXISTS { ?a <predicate> ?x }`, correlated only with the grouped `?a`.
+    using ::column_stripping_test_helpers::countOperations;
+    using ::column_stripping_test_helpers::makeExistsExpression;
+    auto [existsPimpl, existsVar] = makeExistsExpression("<predicate>");
+    Alias existsAlias(std::move(existsPimpl), Variable{"?target"});
+
+    // `GroupBy` `?a` with an `EXISTS` expression should result in one added
+    // `ExistsJoin` operation as a child of `GroupBy`. The columns delivered by
+    // `ExistsJoin` are `?a` and `existsVar`, `?b`, `?c` and `?d` are stripped.
+    GroupBy groupBy(qec, {V{"?a"}}, {existsAlias}, values);
+    ASSERT_EQ(groupBy.computeVariableToColumnMap().size(), 2u);
+    ASSERT_EQ(groupBy.getChildren().size(), 1u);
+    ASSERT_FALSE(groupBy.getChildren().at(0)->containsVariable(V{"?b"}));
+    ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(existsVar));
+    ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(V{"?a"}));
+    ASSERT_EQ(countOperations<ExistsJoin>(groupBy), 1u);
+
+    // There should only be one `ExistsJoin` in the tree after cloning.
+    auto clone = groupBy.clone();
+    EXPECT_EQ(countOperations<ExistsJoin>(*clone), 1u);
+
+    // There should only be one `ExistsJoin` in the tree after stripping (with
+    // and without the `StripColumns` on top).
+    for (const auto& requested :
+         {std::set<V>{V{"?a"}, V{"?target"}}, std::set<V>{V{"?target"}}}) {
+      auto tree = groupBy.makeTreeWithStrippedColumns(requested);
+      ASSERT_TRUE(tree.has_value() && tree.value() != nullptr);
+      EXPECT_EQ(countOperations<ExistsJoin>(*tree.value()), 1u);
+    }
   }
 }
 

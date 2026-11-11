@@ -179,6 +179,22 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
+  add("read-from-blob-file",
+      po::value<std::string>()->notifier([&config](const std::string& f) {
+        config.compressedBlobFilename_ = f;
+      }),
+      "Do not load the index from the files with the given index basename, but "
+      "from the compressed blob in the given file (which contains the "
+      "vocabulary and the named result cache, see "
+      "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`). This mode is "
+      "only meant for serving a fixed set of precomputed results: the blob "
+      "contains no permutations, so only queries that read from the named "
+      "result cache (`SERVICE ql:cached-result-with-name-...`) or that need no "
+      "triples at all can be answered. Updates, materialized views, and index "
+      "rebuilds are not supported, so this option cannot be combined with "
+      "`--persist-updates`, `--text`, an automatic `--rebuild-index-strategy`, "
+      "or `--preload-materialized-views`. The `--index-basename` is still "
+      "required, it determines the names of the log files.");
   add("rebuild-index-strategy",
       po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
       "When to rebuild the index from the current data (including updates). "
@@ -307,10 +323,11 @@ int main(int argc, char** argv) {
     if (optionsMap.count("set-runtime-parameter") &&
         ad_utility::contains(
             optionsMap["set-runtime-parameter"].as<std::vector<std::string>>(),
-            "help")) {
+            std::string_view{"help"})) {
       std::cout << "Available runtime parameters and their default values:\n";
       auto parameters = globalRuntimeParameters.rlock()->toMap();
-      for (const auto& name : globalRuntimeParameters.rlock()->getKeys()) {
+      auto keys = globalRuntimeParameters.rlock()->getKeys();
+      for (const auto& name : keys) {
         std::cout << "  " << name << " = " << parameters.at(name) << '\n';
       }
       return EXIT_SUCCESS;

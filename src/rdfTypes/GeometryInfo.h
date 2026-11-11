@@ -22,7 +22,6 @@
 #include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/Constants.h"
-#include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 
@@ -296,9 +295,9 @@ class GeometryInfo {
   //   int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
-      bitMaskForHigherBits(ValueId::numDatatypeBits);
+      bitMaskForHigherBits(GeoPoint::numTypeBits);
   static constexpr uint64_t bitMaskCentroid =
-      bitMaskForLowerBits(ValueId::numDataBits);
+      bitMaskForLowerBits(GeoPoint::numDataBits);
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -327,9 +326,8 @@ class GeometryInfo {
   // to the strict parsing mode of `pb_util`. This is a purely syntactic check.
   //
   // NOTE: A valid literal does not necessarily yield a geometry in
-  // `fromWktLiteral`. In particular, `EMPTY` geometries (except `POINT EMPTY`,
-  // which the strict mode rejects), an unsupported CRS IRI, and coordinates
-  // out of range are all valid.
+  // `fromWktLiteral`. In particular, `EMPTY` geometries, an unsupported CRS
+  // IRI, and coordinates out of range are all valid.
   static bool isValidWktStrict(std::string_view wkt);
 
   // Create geometry info for a GeoPoint object.

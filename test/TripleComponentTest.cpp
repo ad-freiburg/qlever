@@ -15,6 +15,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Literal.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 using namespace std::literals;
 using namespace ad_utility::testing;
@@ -88,6 +89,17 @@ TEST(TripleComponent, setAndGetId) {
   ASSERT_EQ(tc.getId(), id);
   const TripleComponent tcConst = std::move(tc);
   ASSERT_EQ(tcConst.getId(), id);
+}
+
+// Test that `getNumber` returns the value of an integer or a double (also as an
+// `Id`), and `std::nullopt` for every other value.
+TEST(TripleComponent, getNumber) {
+  EXPECT_EQ(TripleComponent{-42}.getNumber(), -42.0);
+  EXPECT_EQ(TripleComponent{0.5}.getNumber(), 0.5);
+  EXPECT_EQ(TripleComponent{I(-42)}.getNumber(), -42.0);
+  EXPECT_EQ(TripleComponent{D(0.5)}.getNumber(), 0.5);
+  EXPECT_EQ(TripleComponent{lit("\"500\"")}.getNumber(), std::nullopt);
+  EXPECT_EQ(TripleComponent{Id::makeFromBool(true)}.getNumber(), std::nullopt);
 }
 
 TEST(TripleComponent, assignmentOperator) {
@@ -300,7 +312,7 @@ TEST(TripleComponent, toValueIdOrBounds) {
     auto lve =
         tc.isLiteral()
             ? LocalVocabEntry(tc.getLiteral(), index.getLocalVocabContext())
-            : LocalVocabEntry(tc.getIri(), index.getLocalVocabContext());
+            : localVocabEntry(tc.getIri(), index.getLocalVocabContext());
     LocalVocabEntry::PositionInVocab positionFromBounds{makePos(bounds.first),
                                                         makePos(bounds.second)};
     EXPECT_EQ(lve.positionInVocab(), positionFromBounds);
