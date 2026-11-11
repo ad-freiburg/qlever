@@ -50,6 +50,9 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ParallelExecutor.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/Synchronized.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
@@ -93,8 +96,14 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     return internal(triple[0]) || internal(triple[1]) || internal(triple[2]);
   };
 
-  auto firstSorter = convertPartialToGlobalIds(
-      indexBuilderData.parsedTriples_, isQleverInternalTriple, numThreads);
+  // The triple terms need the merged vocabulary (for the global IDs of their
+  // components), and the triples need the global IDs of the triple terms.
+  auto tripleTermMaps =
+      mergeTripleTerms(indexBuilderData.parsedTriples_.numPartialVocabularies_);
+
+  auto firstSorter = convertPartialToGlobalIds(indexBuilderData.parsedTriples_,
+                                               isQleverInternalTriple,
+                                               tripleTermMaps, numThreads);
 
   return {std::move(indexBuilderData.vocabularyMetaData_),
           std::move(firstSorter)};
@@ -492,6 +501,7 @@ void IndexImpl::createFromFilesAfterPreparation(
     size_t numThreads) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
+  writeTripleTerms();
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -675,11 +685,22 @@ using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
 using BufferView = IdTableView<NumColumnsIndexBuilding>;
 
 // Replace the local IDs in all the columns of the `triples` by the global IDs
-// from the `idMap` (see `IdMapFromPartialIdMapFile`).
+// from the `idMap` (see `IdMapFromPartialIdMapFile`), and the batch-local
+// triple-term references by the global ones from `tripleTermMap` (see
+// `IndexImpl::mergeTripleTerms`).
 void transformTriples(Buffer& triples,
-                      const ad_utility::HashMap<VocabIndex, Id>& idMap) {
+                      const ad_utility::HashMap<VocabIndex, Id>& idMap,
+                      const std::vector<Id>& tripleTermMap) {
   for (IdColumnRef column : triples.getColumns()) {
     for (IdRef id : column) {
+      if (id.getDatatype() == Datatype::TripleTermIndex) {
+        // Must not be passed through like the other non-vocabulary IDs below:
+        // the batch-local index is meaningless outside its partial vocabulary.
+        auto localIndex = id.getTripleTermIndex().get();
+        AD_CORRECTNESS_CHECK(localIndex < tripleTermMap.size());
+        id = tripleTermMap[localIndex];
+        continue;
+      }
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
@@ -749,10 +770,127 @@ class ConversionOutput {
 }  // namespace
 
 // _____________________________________________________________________________
+std::vector<std::vector<Id>> IndexImpl::mergeTripleTerms(
+    size_t numPartialVocabularies) {
+  auto partialTerms = std::exchange(*partialTripleTerms_.wlock(), {});
+  // Partial vocabularies without triple terms have no entry at the end.
+  AD_CORRECTNESS_CHECK(partialTerms.size() <= numPartialVocabularies);
+  partialTerms.resize(numPartialVocabularies);
+  std::vector<std::vector<Id>> tripleTermMaps(numPartialVocabularies);
+  auto hasTerms = [](const auto& terms) { return !terms.empty(); };
+  if (ql::ranges::none_of(partialTerms, hasTerms)) {
+    return tripleTermMaps;
+  }
+  AD_LOG_INFO << "Assigning global IDs to the triple terms ..." << std::endl;
+
+  // Replace the partial IDs of the components by their global IDs. Components
+  // that are not in the vocabulary (encoded IRIs) already have global IDs.
+  for (size_t partialVocabIdx = 0; partialVocabIdx < numPartialVocabularies;
+       ++partialVocabIdx) {
+    auto& terms = partialTerms[partialVocabIdx];
+    if (terms.empty()) {
+      continue;
+    }
+    // `convertPartialToGlobalIds` reads (and then deletes) this file again.
+    auto idMap = ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(
+        partialVocabularyIdMapFilename(onDiskBase_, partialVocabIdx));
+    for (auto& components : terms) {
+      for (Id& id : components) {
+        if (id.getDatatype() == Datatype::VocabIndex) {
+          auto it = idMap.find(id.getVocabIndex());
+          AD_CORRECTNESS_CHECK(it != idMap.end());
+          id = it->second;
+        }
+      }
+    }
+  }
+
+  // Number the distinct terms in the sorted order of their components, so that
+  // the IDs are the same for every partitioning of the input and every number
+  // of threads. (Prototype: everything in memory.)
+  std::vector<TripleTermIds> distinctTerms;
+  for (const auto& terms : partialTerms) {
+    distinctTerms.insert(distinctTerms.end(), terms.begin(), terms.end());
+  }
+  ql::ranges::sort(distinctTerms);
+  distinctTerms.erase(std::unique(distinctTerms.begin(), distinctTerms.end()),
+                      distinctTerms.end());
+  tripleTerms_ = {};
+  for (const auto& components : distinctTerms) {
+    tripleTerms_.intern(components);
+  }
+
+  // `intern` returns the existing ID for a term that is already known.
+  for (size_t partialVocabIdx = 0; partialVocabIdx < numPartialVocabularies;
+       ++partialVocabIdx) {
+    auto& map = tripleTermMaps[partialVocabIdx];
+    for (const auto& components : partialTerms[partialVocabIdx]) {
+      map.push_back(tripleTerms_.internId(components));
+    }
+  }
+  AD_CORRECTNESS_CHECK(tripleTerms_.size() == distinctTerms.size());
+  AD_LOG_INFO << "Number of distinct triple terms: " << tripleTerms_.size()
+              << std::endl;
+  return tripleTermMaps;
+}
+
+namespace {
+// The configuration entry with the number of triple terms. Its absence marks
+// an index that was built before triple terms were supported.
+constexpr std::string_view numTripleTermsKey = "num-triple-terms";
+}  // namespace
+
+// _____________________________________________________________________________
+void IndexImpl::writeTripleTerms() {
+  // Prototype format: the components of all terms in the order of their
+  // `TripleTermIndex`, as raw `Id`s. The file is always written (possibly
+  // empty), so that a rebuilt index never sees a stale file.
+  ad_utility::serialization::FileWriteSerializer writer{
+      absl::StrCat(onDiskBase_, TRIPLE_TERMS_FILE_SUFFIX)};
+  writer << tripleTerms_.terms();
+  configurationJson_[numTripleTermsKey] = tripleTerms_.size();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::readTripleTerms() {
+  tripleTerms_ = {};
+  if (!configurationJson_.contains(numTripleTermsKey)) {
+    return;
+  }
+  auto expectedSize = configurationJson_[numTripleTermsKey].get<size_t>();
+  std::string filename = absl::StrCat(onDiskBase_, TRIPLE_TERMS_FILE_SUFFIX);
+  if (!ql::filesystem::exists(filename)) {
+    throw std::runtime_error{
+        absl::StrCat("The index has ", expectedSize,
+                     " triple terms, but the file \"", filename,
+                     "\" with these terms does not exist; please rebuild the "
+                     "index")};
+  }
+  std::vector<qlever::tripleTermPrototype::TripleTermIndexBuilder::Triple>
+      terms;
+  ad_utility::serialization::FileReadSerializer reader{filename};
+  reader >> terms;
+  if (terms.size() != expectedSize) {
+    throw std::runtime_error{
+        absl::StrCat("The file \"", filename, "\" has ", terms.size(),
+                     " triple terms, but the configuration of the index says ",
+                     expectedSize, "; please rebuild the index")};
+  }
+  // Interning in the stored order reproduces the IDs of the index build.
+  for (const auto& components : terms) {
+    tripleTerms_.intern(components);
+  }
+  AD_CORRECTNESS_CHECK(tripleTerms_.size() == terms.size(),
+                       "The triple terms of the index contain duplicates");
+}
+
+// _____________________________________________________________________________
 template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
     const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple,
+    const std::vector<std::vector<Id>>& tripleTermMaps,
     size_t numThreads) -> FirstPermutationSorterAndInternalTriplesAsPso {
+  AD_CORRECTNESS_CHECK(tripleTermMaps.size() == data.numPartialVocabularies_);
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
 
@@ -765,7 +903,8 @@ auto IndexImpl::convertPartialToGlobalIds(
   // `buildPartialVocabularies`, so this function needs nothing but the
   // `partialVocabIdx`.
   auto convertTriplesOfPartialVocabulary = [this, &output,
-                                            &isQLeverInternalTriple](
+                                            &isQLeverInternalTriple,
+                                            &tripleTermMaps](
                                                size_t partialVocabIdx) {
     // The mapping from the partial IDs of this partial vocabulary to the global
     // IDs. Its file is not needed anymore once the mapping has been read.
@@ -782,7 +921,7 @@ auto IndexImpl::convertPartialToGlobalIds(
         ad_utility::vocabulary_merger::readMappedIdsFromFile(triplesFilename);
     deleteTemporaryFile(triplesFilename);
 
-    transformTriples(triples, idMap);
+    transformTriples(triples, idMap, tripleTermMaps[partialVocabIdx]);
 
     // Partitioning makes each of the two kinds of triples contiguous, so that
     // each of them can be copied to its sorter in one go. The QLever-internal
@@ -1008,6 +1147,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   setOnDiskBase(onDiskBase);
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
+  readTripleTerms();
 
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                << vocab_.size() << std::endl;
@@ -1253,7 +1393,8 @@ std::vector<ql::filesystem::path> IndexImpl::allIndexFiles(
   for (auto suffix :
        {PATTERNS_FILE_SUFFIX, CONFIGURATION_FILE, SETTINGS_FILE_SUFFIX,
         UPDATE_TRIPLES_SUFFIX, ALLOCATED_GRAPHS_SUFFIX, TEXT_INDEX_FILE_SUFFIX,
-        TEXT_VOCAB_FILE_SUFFIX, TEXT_DOCS_DB_FILE_SUFFIX}) {
+        TEXT_VOCAB_FILE_SUFFIX, TEXT_DOCS_DB_FILE_SUFFIX,
+        TRIPLE_TERMS_FILE_SUFFIX}) {
     addIfExists(absl::StrCat(onDiskBase, suffix));
   }
 
@@ -1740,7 +1881,28 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   };
   handleStringOrId(&TurtleTriple::subject_, 0);
   handleStringOrId(&TurtleTriple::predicate_, 1);
-  handleStringOrId(&TurtleTriple::object_, 2);
+  if (triple.object_.isTripleTerm()) {
+    // A triple term is not a word of the vocabulary, but its components are.
+    // They are encoded and externalized exactly like the IRIs of an ordinary
+    // triple (see `handleStringOrId` above and the loop below).
+    auto processComponent = [this](const TripleComponent::Iri& iri) {
+      TripleComponent component{iri};
+      if (auto id = toValueIdIfNotString(component, &encodedIriManager())) {
+        return PossiblyExternalizedTripleComponent{TripleComponent{id.value()}};
+      }
+      bool isExternal =
+          vocab_.shouldBeExternalized(iri.toStringRepresentation());
+      return PossiblyExternalizedTripleComponent{std::move(component),
+                                                 isExternal};
+    };
+    const auto& term = triple.object_.getTripleTerm();
+    result.objectTripleTerm_ = TripleTermComponents{
+        processComponent(term.subject()), processComponent(term.predicate()),
+        processComponent(term.object())};
+    resultTriple[2] = std::move(triple.object_);
+  } else {
+    handleStringOrId(&TurtleTriple::object_, 2);
+  }
   handleStringOrId(&TurtleTriple::graphIri_, 3);
   // If we ever add additional elements to the triples then we have to change
   // this position.
@@ -1751,6 +1913,10 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   for (auto& component : resultTriple) {
     if (component.tripleComponent_.isId()) {
       // If we already have an ID, we can just continue;
+      continue;
+    }
+    if (component.tripleComponent_.isTripleTerm()) {
+      // Its components have already been handled above.
       continue;
     }
     const auto& iriOrLiteral = component.tripleComponent_;
@@ -1929,6 +2095,26 @@ void IndexImpl::writePartialVocabulary(
     return createInternalMapping(vec);
   }();
   AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
+  if (!items.tripleTerms_.empty()) {
+    // Renumber the components of the triple terms exactly like the words in
+    // the triples (see `writeMappedIdsToFile`), so that they can later be
+    // converted with the same partial-to-global ID map.
+    auto terms = items.tripleTerms_;
+    for (auto& components : terms) {
+      for (Id& id : components) {
+        if (id.getDatatype() == Datatype::VocabIndex) {
+          auto it = mapping.find(id.getVocabIndex().get());
+          AD_CORRECTNESS_CHECK(it != mapping.end());
+          id = Id::makeFromVocabIndex(VocabIndex::make(it->second));
+        }
+      }
+    }
+    auto lock = partialTripleTerms_.wlock();
+    if (lock->size() <= partialVocabIdx) {
+      lock->resize(partialVocabIdx + 1);
+    }
+    (*lock)[partialVocabIdx] = std::move(terms);
+  }
   // since now adjacent duplicates also have the same Ids, it suffices to
   // compare those
   {

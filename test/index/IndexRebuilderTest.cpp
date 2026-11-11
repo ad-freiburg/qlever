@@ -735,6 +735,76 @@ TEST(IndexRebuilder, materializeToIndex) {
 }
 
 // _____________________________________________________________________________
+// The RDF 1.2 triple terms of an index survive a rebuild. Their components are
+// vocabulary IDs, which change in the rebuild, so they have to be remapped.
+TEST(IndexRebuilder, materializeToIndexKeepsTripleTerms) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string baseFolder = gtestCurrentTestName();
+  std::string newIndexName = baseFolder + "/index";
+  std::string logFile = newIndexName + ".log";
+
+  auto index =
+      ad_utility::testing::makeTestIndex("materializeToIndexKeepsTripleTerms",
+                                         "<r> <reifies> <<( <s> <p> <o> )>> .");
+  auto idInOldIndex = [&index](std::string_view iri) {
+    return toValueId(
+               TripleComponent{
+                   ad_utility::triple_component::Iri::fromIriref(iri)},
+               index.getImpl())
+        .value();
+  };
+  Id oldS = idInOldIndex("<s>");
+  ASSERT_EQ(index.getImpl().tripleTerms().size(), 1);
+
+  // Insert a triple with the new word `<a>`, which sorts before all components
+  // of the term, so that all their vocabulary IDs change in the rebuild.
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto g =
+        toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                      DEFAULT_GRAPH_IRI)},
+                  index)
+            .value();
+    LocalVocab outsideVocab;
+    Id localA =
+        Id::makeFromLocalVocabIndex(outsideVocab.getIndexAndAddIfNotContained(
+            iriLocalVocabEntry("<a>", index.getLocalVocabContext())));
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{localA, localA, localA, g}}});
+  });
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+
+  ql::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeIndexFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+  qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                             blankNodes, cancellationHandle, executor(),
+                             logFile);
+
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  newIndex.createFromOnDiskIndex(newIndexName, false);
+  auto idInNewIndex = [&newIndex](std::string_view iri) {
+    return toValueId(
+               TripleComponent{
+                   ad_utility::triple_component::Iri::fromIriref(iri)},
+               newIndex)
+        .value();
+  };
+  const auto& terms = newIndex.tripleTerms();
+  ASSERT_EQ(terms.size(), 1);
+  using Triple = qlever::tripleTermPrototype::TripleTermIndexBuilder::Triple;
+  EXPECT_EQ(
+      terms.resolve(TripleTermIndex::make(0)),
+      (Triple{idInNewIndex("<s>"), idInNewIndex("<p>"), idInNewIndex("<o>")}));
+  // Otherwise, this test would not test the remapping.
+  EXPECT_NE(idInNewIndex("<s>"), oldS);
+}
+
+// _____________________________________________________________________________
 TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   // Build a regular source index (with the default, unlimited allocator), but
   // then load it with an allocator that has zero available memory. Rebuilding

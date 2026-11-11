@@ -43,9 +43,11 @@ enum struct Datatype {
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
+  // An index-local reference to a structural triple term.
+  TripleTermIndex,
   // Always the last member (there is no easy way to get the number of members
   // of an enum, and other code sizes its arrays by `MaxValue`).
-  MaxValue = EncodedVal
+  MaxValue = TripleTermIndex
 };
 
 // Return true iff `datatype` is trivial, that is, IDs with this datatype
@@ -110,6 +112,8 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
       return "BlankNodeIndex";
     case Datatype::SecondaryVocabIndex:
       return "SecondaryVocabIndex";
+    case Datatype::TripleTermIndex:
+      return "TripleTermIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();

@@ -28,6 +28,10 @@ std::vector<std::string> StringMapping::takeStrings() {
 // _____________________________________________________________________________
 Id StringMapping::remapId(Id id) {
   using enum Datatype;
+  if (id.getDatatype() == Datatype::TripleTermIndex) {
+    throw std::runtime_error(
+        "Binary export of prototype triple-term references is not supported");
+  }
   // The datatypes that can be passed to a string mapping are exactly the
   // datatypes that semantically point to strings (so literals/IRIs that can't
   // be directly encoded into the ID). All other IDs have to be serialized by
@@ -45,7 +49,7 @@ Id StringMapping::remapId(Id id) {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||
              isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
-             datatype == EncodedVal;
+             datatype == EncodedVal || datatype == Datatype::TripleTermIndex;
     };
     for (size_t i = 0; i <= static_cast<size_t>(MaxValue); ++i) {
       if (!checkType(static_cast<Datatype>(i))) {

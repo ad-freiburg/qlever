@@ -458,7 +458,15 @@ graphNode
     ;
 
 graphNodePath
-    : varOrTerm | triplesNodePath
+    : varOrTerm | triplesNodePath | tripleTermPattern
+    ;
+
+/* An RDF 1.2 triple term in a triple pattern, e.g. `<<( ?s <p> ?o )>>`
+   (SPARQL 1.2 `TripleTerm`). Prototype: only in the object position of the
+   triples of a WHERE clause (via `graphNodePath`), not nested, and the
+   visitor only accepts variables and IRIs as its components. */
+tripleTermPattern
+    : '<<(' varOrIri verb varOrTerm ')>>'
     ;
 
 varOrTerm

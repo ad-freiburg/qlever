@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -39,6 +40,7 @@
 #include "index/Permutation.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
+#include "index/TripleTermIndex.h"
 #include "index/VocabularyMerger.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "index/vocabulary/EncodedIriManager.h"
@@ -55,6 +57,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/RegexSet.h"
+#include "util/Synchronized.h"
 #include "util/TransparentFunctors.h"
 #include "util/json.h"
 
@@ -156,6 +159,20 @@ class IndexImpl {
   std::vector<std::string> hasWordRestrictPredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+
+  // Prototype for RDF 1.2 triple terms, kept in memory only for now.
+  //
+  // The triple terms of each partial vocabulary (indexed by `partialVocabIdx`),
+  // with the components as sorted partial-vocabulary IDs. Written by the
+  // concurrent calls of `writePartialVocabulary` (which is `const`, hence
+  // `mutable`) and consumed by `mergeTripleTerms`.
+  mutable ad_utility::Synchronized<std::vector<std::vector<TripleTermIds>>,
+                                   std::mutex>
+      partialTripleTerms_;
+  // The triple terms of the index, with global IDs as components. Their
+  // `TripleTermIndex`es are assigned by `mergeTripleTerms` in the sorted order
+  // of the components, so they do not depend on the partitioning of the input.
+  qlever::tripleTermPrototype::TripleTermIndexBuilder tripleTerms_;
 
   NumNormalAndInternal numSubjects_;
   NumNormalAndInternal numPredicates_;
@@ -411,6 +428,23 @@ class IndexImpl {
   const GraphNameManager& graphNameManager() const { return graphNameManager_; }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
+
+  // The RDF 1.2 triple terms of the index (built by `mergeTripleTerms`, or read
+  // from disk by `createFromOnDiskIndex`).
+  const qlever::tripleTermPrototype::TripleTermIndexBuilder& tripleTerms()
+      const {
+    return tripleTerms_;
+  }
+
+  // Replace the triple terms and write them to disk, together with the
+  // configuration (which then contains their number). Used by the index
+  // rebuilder for the new index, see `materializeToIndex`.
+  void setAndWriteTripleTerms(
+      qlever::tripleTermPrototype::TripleTermIndexBuilder terms) {
+    tripleTerms_ = std::move(terms);
+    writeTripleTerms();
+    writeConfiguration();
+  }
 
   // Return the context of the `LocalVocabEntry`s that belong to this index.
   // Mirror `Index::getLocalVocabContext()`, such that callers can spell this
@@ -769,11 +803,30 @@ class IndexImpl {
   // file per partial vocabulary) back from disk, convert their partial to
   // global IDs using the corresponding partial-vocabulary mappings, and feed
   // them into the sorter for the first permutation. Use at most `numThreads`
-  // workers for the conversion.
+  // workers for the conversion. `tripleTermMaps[i]` maps the batch-local
+  // `TripleTermIndex`es of partial vocabulary `i` to their global `Id`s (see
+  // `mergeTripleTerms`).
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple,
-      size_t numThreads);
+      const std::vector<std::vector<Id>>& tripleTermMaps, size_t numThreads);
+
+  // Give the triple terms of all the partial vocabularies global IDs. Must be
+  // called after the partial vocabularies have been merged (it reads their ID
+  // maps, but does not delete them) and before `convertPartialToGlobalIds`.
+  // Fill `tripleTerms_` and return, per partial vocabulary, the map from its
+  // batch-local `TripleTermIndex` to the global `Id` of the term. If the input
+  // has no triple terms, nothing is read and all the maps are empty.
+  std::vector<std::vector<Id>> mergeTripleTerms(size_t numPartialVocabularies);
+
+  // Prototype persistence of `tripleTerms_`. `writeTripleTerms` writes them to
+  // `<onDiskBase>.triple-terms` and their number to the configuration (which
+  // the caller has to write). `readTripleTerms` restores them when an index is
+  // loaded. An index without that configuration entry was built before
+  // triple terms were supported and has none. Otherwise a missing file or a
+  // different number of terms is an error.
+  void writeTripleTerms();
+  void readTripleTerms();
 
   // Helper function to get the filename for a given permutation.
   std::string getFilenameForPermutation(const Permutation& permutation,

@@ -27,6 +27,10 @@ constexpr inline std::string_view PERMUTATION_FILE_INFIX = ".index";
 // The patterns file of an index (used for `ql:has-predicate`).
 constexpr inline std::string_view PATTERNS_FILE_SUFFIX = ".index.patterns";
 
+// The RDF 1.2 triple terms of an index (prototype format: the components of
+// each term, in the order of their `TripleTermIndex`).
+constexpr inline std::string_view TRIPLE_TERMS_FILE_SUFFIX = ".triple-terms";
+
 // The copy of the settings file that is stored next to an index.
 constexpr inline std::string_view SETTINGS_FILE_SUFFIX = ".settings.json";
 

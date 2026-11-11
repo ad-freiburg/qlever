@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -108,6 +109,12 @@ struct PossiblyExternalizedTripleComponent {
 using Triple =
     std::array<PossiblyExternalizedTripleComponent, NumColumnsIndexBuilding>;
 
+// The subject, predicate, and object of an RDF 1.2 triple term (prototype:
+// non-nested, IRI components only), as `TripleComponent`s before and as `Id`s
+// after they have been mapped by an `ItemMapManager`.
+using TripleTermComponents = std::array<PossiblyExternalizedTripleComponent, 3>;
+using TripleTermIds = std::array<Id, 3>;
+
 // The index of a word within a partial vocabulary and the corresponding bool
 // that indicates if it belongs to the external vocabulary.
 // The `isExternal` bool is encoded in the most significant bit, so that both
@@ -198,6 +205,12 @@ class MonotonicBuffer {
 struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
   ItemMap map_;
   MonotonicBuffer buffer_;
+  // The distinct triple terms of this partial vocabulary. The position of a
+  // term is its batch-local `TripleTermIndex`, and its components are the local
+  // IDs of this partial vocabulary. Kept here so that they reach
+  // `writePartialVocabulary` together with the words they refer to.
+  std::vector<TripleTermIds> tripleTerms_;
+  ad_utility::HashMap<TripleTermIds, uint64_t> tripleTermIndices_;
 
   // Remove all the entries and deallocate all the strings, but keep the hash
   // map's memory for the next partial vocabulary.
@@ -210,6 +223,8 @@ struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
     static_assert(ad_utility::isInstantiation<ItemMap, absl::flat_hash_map>);
     map_.erase(map_.begin(), map_.end());
     buffer_.clear();
+    tripleTerms_.clear();
+    tripleTermIndices_.clear();
   }
 };
 
@@ -280,6 +295,25 @@ struct alignas(256) ItemMapManager {
         [this](const auto&... els) { return std::array{getId(els)...}; }, t);
   }
 
+  // Map the components of a triple term to local IDs (which also adds them to
+  // the partial vocabulary) and return the batch-local `TripleTermIndex` of the
+  // term, as an `Id`. Equal terms of the same partial vocabulary get the same
+  // index. These indices are only meaningful together with this partial
+  // vocabulary; `IndexImpl::mergeTripleTerms` makes them global.
+  Id getTripleTermId(const TripleTermComponents& components) {
+    // Braced initialization is evaluated from left to right, so the components
+    // get their IDs in the order subject, predicate, object.
+    TripleTermIds ids{getId(components[0]), getId(components[1]),
+                      getId(components[2])};
+    auto& terms = map_.tripleTerms_;
+    auto [it, inserted] =
+        map_.tripleTermIndices_.try_emplace(ids, terms.size());
+    if (inserted) {
+      terms.push_back(ids);
+    }
+    return Id::makeFromTripleTermIndex(TripleTermIndex::make(it->second));
+  }
+
  private:
   // Precompute the mapping from the `specialIds` to their normal IDs in the
   // vocabulary. This makes resolving such IRIs much cheaper. Every partial
@@ -300,6 +334,9 @@ struct ProcessedTriple {
   Triple triple_;
   std::string langtag_;
   ad_utility::HashMap<std::string, size_t> wordFrequencies_;
+  // Set iff the object is a triple term. Then these are its components, and the
+  // object in `triple_` is only the unprocessed term.
+  std::optional<TripleTermComponents> objectTripleTerm_;
 };
 
 // The Ids of a triple, once its string components have been mapped via an
@@ -322,8 +359,18 @@ void mapTripleToIds(Triple&& triple, ItemMapManager& map, IndexPtr* index,
   // Process the given triple.
   ProcessedTriple lt = index->processTriple(AD_FWD(triple));
 
-  // First, process the original triple.
-  IdRow spoIds = map.getId(lt.triple_);
+  // First, process the original triple. A triple-term object becomes a
+  // reference to the term; the term's own triple is never added as a row.
+  IdRow spoIds = [&map, &lt]() {
+    if (!lt.objectTripleTerm_.has_value()) {
+      return map.getId(lt.triple_);
+    }
+    const auto& t = lt.triple_;
+    // Evaluated from left to right, like `getId(lt.triple_)`.
+    return IdRow{map.getId(t[0]), map.getId(t[1]),
+                 map.getTripleTermId(lt.objectTripleTerm_.value()),
+                 map.getId(t[3])};
+  }();
   result.push_back(spoIds);
   static_assert(NumColumnsIndexBuilding == 4,
                 " The following lines probably have to be changed when "

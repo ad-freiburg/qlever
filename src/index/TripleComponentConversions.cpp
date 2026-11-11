@@ -69,6 +69,16 @@ std::optional<Id> toValueIdIfNotString(
     } else if constexpr (std::is_same_v<T, Variable>) {
       // Cannot turn a variable into a ValueId.
       AD_FAIL();
+    } else if constexpr (std::is_same_v<T, TripleComponent::TripleTerm>) {
+      // A triple term gets its `Id` from the triple-term dictionary of the
+      // index (see `IndexImpl::processTriple` and `mergeTripleTerms`), not from
+      // this context-free conversion. Fail loudly instead of treating the term
+      // like an IRI or literal string, e.g. for terms in SPARQL queries, which
+      // are not supported yet.
+      throw std::runtime_error(
+          "A triple term cannot be converted to an Id without the triple-term "
+          "dictionary of the index; triple terms in queries and updates are "
+          "not supported yet");
     } else {
       static_assert(ad_utility::alwaysFalse<T>);
     }

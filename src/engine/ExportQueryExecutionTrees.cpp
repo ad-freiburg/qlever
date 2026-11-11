@@ -446,6 +446,28 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
   return b;
 }
 
+// Convert the RDF 1.2 triple term `id` to a binding of the SPARQL 1.2 JSON
+// results format, `{"type": "triple", "value": {"subject": ..., "predicate":
+// ..., "object": ...}}`, where the components are ordinary bindings.
+static nlohmann::json tripleTermToBinding(const Index& index, Id id,
+                                          const LocalVocab& localVocab) {
+  static constexpr std::array<const char*, 3> names{"subject", "predicate",
+                                                    "object"};
+  auto components = ql::exportIds::tripleTermComponents(index.getImpl(), id);
+  nlohmann::ordered_json value;
+  for (size_t i = 0; i < components.size(); ++i) {
+    auto stringAndType =
+        ql::exportIds::idToStringAndType(index, components[i], localVocab);
+    AD_CORRECTNESS_CHECK(stringAndType.has_value());
+    const auto& [stringValue, xsdType] = stringAndType.value();
+    value[names[i]] = stringAndTypeToBinding(stringValue, xsdType);
+  }
+  nlohmann::ordered_json binding;
+  binding["type"] = "triple";
+  binding["value"] = std::move(value);
+  return binding;
+}
+
 // _____________________________________________________________________________
 InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
@@ -575,6 +597,12 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
                                   const LocalVocabType& localVocab) {
   using namespace std::string_view_literals;
   using namespace std::string_literals;
+  if (id.getDatatype() == Datatype::TripleTermIndex) {
+    // The string form `<<( ... )>>` would be misread as an IRI below.
+    throw std::runtime_error(
+        "The SPARQL XML results format does not support RDF 1.2 triple terms "
+        "yet; please use the SPARQL JSON, TSV, or CSV format");
+  }
   const auto& optionalValue =
       ql::exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalValue.has_value()) {
@@ -732,6 +760,13 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
       Id id = pair.idTable()(i, column->columnIndex_);
+      if (id.getDatatype() == Datatype::TripleTermIndex) [[unlikely]] {
+        // Structured, not the string form of `idToStringAndType` (which
+        // `stringAndTypeToBinding` would misread as an IRI).
+        binding[column->variable_] = tripleTermToBinding(
+            qet.getQec()->getIndex(), id, pair.localVocab());
+        continue;
+      }
       auto optionalStringAndType = ql::exportIds::idToStringAndType(
           qet.getQec()->getIndex(), id, pair.localVocab());
       if (optionalStringAndType.has_value()) [[likely]] {

@@ -13,6 +13,8 @@
 #ifndef QLEVER_SRC_INDEX_EXPORTIDS_H
 #define QLEVER_SRC_INDEX_EXPORTIDS_H
 
+#include <absl/strings/str_cat.h>
+
 #include <array>
 #include <optional>
 #include <string>
@@ -127,6 +129,10 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
 std::optional<std::pair<std::string, const char*>>
 idToStringAndTypeForEncodedValue(Id id);
 
+// The subject, predicate, and object of the RDF 1.2 triple term `id` (which
+// must have the datatype `TripleTermIndex`) from the triple terms of `index`.
+std::array<Id, 3> tripleTermComponents(const IndexImpl& index, Id id);
+
 // Convert an `EncodedVal` ID to a `LiteralOrIri` by looking up the encoded
 // IRI via the `EncodedIriManager` in the index.
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
@@ -222,6 +228,23 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
+    case TripleTermIndex: {
+      // The N-Triples 1.2 form `<<( s p o )>>`. The components always keep
+      // their angle brackets (also for CSV), so that the term stays readable
+      // as a term. Prototype: the components are IRIs, so no recursion depth
+      // or literal datatypes have to be handled.
+      std::string term = "<<(";
+      for (Id component : tripleTermComponents(index.getImpl(), id)) {
+        auto componentString =
+            idToStringAndType(index, component, localVocab);
+        AD_CORRECTNESS_CHECK(componentString.has_value());
+        absl::StrAppend(&term, " ", componentString.value().first);
+      }
+      absl::StrAppend(&term, " )>>");
+      // Escape the complete RDF term as one field, not its components.
+      // In particular, a comma inside an IRI must quote the entire CSV cell.
+      return std::pair{escapeFunction(std::move(term)), nullptr};
+    }
     default:
       return idToStringAndTypeForEncodedValue(id);
   }

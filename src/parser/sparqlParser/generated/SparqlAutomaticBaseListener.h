@@ -610,6 +610,11 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitGraphNodePath(
       SparqlAutomaticParser::GraphNodePathContext* /*ctx*/) override {}
 
+  virtual void enterTripleTermPattern(
+      SparqlAutomaticParser::TripleTermPatternContext* /*ctx*/) override {}
+  virtual void exitTripleTermPattern(
+      SparqlAutomaticParser::TripleTermPatternContext* /*ctx*/) override {}
+
   virtual void enterVarOrTerm(
       SparqlAutomaticParser::VarOrTermContext* /*ctx*/) override {}
   virtual void exitVarOrTerm(

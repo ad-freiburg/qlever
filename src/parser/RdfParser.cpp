@@ -10,6 +10,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
@@ -372,10 +373,62 @@ bool TurtleParser<T>::predicate() {
 
 // ____________________________________________________________________
 template <class T>
+std::optional<TripleComponent::TripleTerm>
+TurtleParser<T>::parseTripleTermPrototype() {
+  tok_.skipWhitespaceAndComments();
+  if (!ql::starts_with(tok_.view(), "<<(")) {
+    return std::nullopt;
+  }
+  tok_.remove_prefix(3);
+  // The IRI rules use the shared scratch result. Preserve it so that parsing a
+  // term cannot overwrite a surrounding parser rule's last result.
+  auto previous = lastParseResult_;
+  absl::Cleanup restore = [this, &previous] {
+    lastParseResult_ = std::move(previous);
+  };
+  // Use `iriref()` and `prefixedName()` instead of `iri()`, which would encode
+  // the IRI into an `Id`. The components stay IRIs (see `TripleTerm`).
+  auto parseComponent = [this]() {
+    tok_.skipWhitespaceAndComments();
+    if (ql::starts_with(tok_.view(), "<<") || !(iriref() || prefixedName())) {
+      raise(
+          "Triple-term prototype requires three IRIs; nesting, blank nodes "
+          "and literals are not supported yet");
+    }
+    return std::move(lastParseResult_.getIri());
+  };
+  // Separate statements, because the order of evaluation matters.
+  auto subject = parseComponent();
+  auto predicate = parseComponent();
+  auto object = parseComponent();
+  tok_.skipWhitespaceAndComments();
+  if (!ql::starts_with(tok_.view(), ")>>")) {
+    raise("Expected )>> after the three triple-term components");
+  }
+  tok_.remove_prefix(3);
+  return TripleComponent::TripleTerm{std::move(subject), std::move(predicate),
+                                     std::move(object)};
+}
+
+// ______________________________________________________________________
+template <class T>
+bool TurtleParser<T>::tripleTerm() {
+  auto term = parseTripleTermPrototype();
+  if (!term.has_value()) {
+    return false;
+  }
+  // Only the outer triple is emitted (by the caller); the term's own triple is
+  // not asserted.
+  lastParseResult_ = std::move(term.value());
+  return true;
+}
+
+// ______________________________________________________________________
+template <class T>
 bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
-  if (blankNode() || literal() || iri() || collection() ||
+  if (blankNode() || literal() || tripleTerm() || iri() || collection() ||
       blankNodePropertyList()) {
     emitTriple();
     return true;
@@ -604,7 +657,10 @@ bool NQuadParser<T>::nQuadPredicate() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadObject() {
-  if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
+  // The triple term goes first: on `<<(`, `iriref()` does not just fail but
+  // raises an "unterminated IRI" parse error.
+  if (Base::tripleTerm() || Base::iriref() || Base::blankNodeLabel() ||
+      nQuadLiteral()) {
     this->activeObject_ = std::move(this->lastParseResult_);
     return true;
   }

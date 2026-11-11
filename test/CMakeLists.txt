@@ -420,6 +420,18 @@ addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
+addLinkAndDiscoverTestNoLibs(TripleTermIndexTest localVocab)
+
+addLinkAndDiscoverTestNoLibs(TripleTermParserTest rdfParser)
+
+addLinkAndDiscoverTestNoLibs(TripleTermIdTest localVocab)
+
+addLinkAndDiscoverTest(TripleTermExecutionTest)
+
+addLinkAndDiscoverTest(TripleTermIngestionTest)
+
+addLinkAndDiscoverTest(TripleTermSparqlTest engine)
+
 addLinkAndDiscoverTest(TieTest qlever_util)
 
 addLinkAndDiscoverTest(DatatypeTest qlever_util)

@@ -78,6 +78,7 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".index.osp",
           indexBasename + ".index.osp.meta",
           indexBasename + ".index.patterns",
+          indexBasename + ".triple-terms",
           indexBasename + ".meta-data.json",
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
