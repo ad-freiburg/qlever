@@ -73,8 +73,9 @@ getSpatialJoinConfigForFilter(
     using enum SpatialJoinType::Enum;
     return std::pair{
         LibSpatialJoinConfig{WITHIN_DIST, bound->maxMeters_, std::nullopt},
-        sparqlExpression::GeoFunctionCall{WITHIN_DIST, std::move(bound->a_),
-                                          std::move(bound->b_)}};
+        sparqlExpression::GeoFunctionCall{WITHIN_DIST,
+                                          std::move(bound->distance_.a_),
+                                          std::move(bound->distance_.b_)}};
   }
   return std::nullopt;
 }
@@ -127,8 +128,8 @@ void splitFiltersWithFacts(std::vector<SparqlFilter>& filters) {
       return filterFacts::recognizeDistanceBound(conjunct).has_value();
     });
     if (conjuncts.size() > 1 && hasFact) {
-      for (auto& conjunct : filter.expression_.splitConjunction()) {
-        result.push_back(SparqlFilter{std::move(conjunct)});
+      for (auto& conjunct : conjuncts) {
+        result.push_back(SparqlFilter{std::move(conjunct.expression_)});
       }
     } else {
       result.push_back(std::move(filter));
