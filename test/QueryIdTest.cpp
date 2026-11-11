@@ -354,6 +354,37 @@ TEST(QueryRegistry, onEndFiresAtDestructionWithDefaultStatus) {
   EXPECT_EQ(ends.at(0).at("status").get<std::string_view>(), "failed");
 }
 
+// Test that the `end` event carries the statistics of the tasks that were
+// added to the `sharedTaskStatistics()` of the `OwningQueryId`.
+TEST(QueryRegistry, endEventCarriesTheTaskStatistics) {
+  QueryRegistry registry{};
+  std::vector<nlohmann::ordered_json> ends;
+  registry.addOnEnd(
+      [&ends](const QueryRegistry::EndInfo& info) { ends.push_back(info); });
+
+  // A query with tasks that have a different value for each member, where the
+  // times are multiples of half a millisecond.
+  {
+    auto owned = registry.uniqueId("q", QueryOperation::QUERY);
+    ad_utility::TaskStatistics tasks{2, 500'000, 1'500'000, 1'000'000, 250'000,
+                                     7, 8'000,   750'000,   3};
+    owned.sharedTaskStatistics()->add(tasks);
+  }
+
+  // The counts are written as they are and the times in milliseconds.
+  ASSERT_EQ(ends.size(), 1u);
+  const auto& end = ends.at(0);
+  EXPECT_EQ(end.at("pool-tasks").get<uint64_t>(), 2u);
+  EXPECT_EQ(end.at("pool-wait-ms").get<double>(), 0.5);
+  EXPECT_EQ(end.at("pool-wall-ms").get<double>(), 1.5);
+  EXPECT_EQ(end.at("pool-cpu-ms").get<double>(), 1.0);
+  EXPECT_EQ(end.at("pool-result-wait-ms").get<double>(), 0.25);
+  EXPECT_EQ(end.at("scan-blocks").get<uint64_t>(), 7u);
+  EXPECT_EQ(end.at("scan-bytes").get<uint64_t>(), 8000u);
+  EXPECT_EQ(end.at("scan-cpu-ms").get<double>(), 0.75);
+  EXPECT_EQ(end.at("scan-thread-changes").get<uint64_t>(), 3u);
+}
+
 // _____________________________________________________________________________
 
 namespace {

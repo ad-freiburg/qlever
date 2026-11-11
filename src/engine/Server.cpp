@@ -37,6 +37,8 @@
 #include "util/AsioHelpers.h"
 #include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
+#include "util/ExecutorStatistics.h"
+#include "util/GlobalExecutor.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/ParseableDuration.h"
@@ -62,8 +64,16 @@ Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
     std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
-    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker)
-    : qlever_(config),
+    std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker,
+    std::shared_ptr<ad_utility::ThreadPoolStatistics> threadPoolStatistics)
+    : threadPoolStatistics_(
+          threadPoolStatistics
+              ? std::move(threadPoolStatistics)
+              : std::make_shared<ad_utility::ThreadPoolStatistics>(
+                    ad_utility::globalExecutorNumThreads())),
+      qlever_(config, false,
+              ad_utility::makeExecutorWithStatistics(
+                  ad_utility::globalExecutor(), threadPoolStatistics_)),
       numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -124,7 +134,8 @@ void Server::initializeServerMetrics(
       memoryLimit,
       [this]() -> int64_t {
         return indexAndViewsSnapshot()->index_.numTriples().normal;
-      });
+      },
+      [this]() { return threadPoolStatistics_->snapshot(); });
   metrics_->registerCallbacks();
 }
 
@@ -291,11 +302,20 @@ class QueryAlreadyInUseError : public std::runtime_error {
 
 namespace {
 // Return an executor for a single query, which runs at most
-// `max-num-threads-per-query` tasks on the `executor` at the same time.
-qlever::Executor makeQueryExecutor(qlever::Executor executor) {
-  return ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
-      getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
+// `max-num-threads-per-query` tasks on the `executor` at the same time. If the
+// `executor` has statistics, the tasks are also added to the `taskStatistics`
+// of the query (which may be `nullptr`).
+qlever::Executor makeQueryExecutor(
+    const qlever::Executor& executor,
+    std::shared_ptr<ad_utility::SharedTaskStatistics> taskStatistics =
+        nullptr) {
+  return ad_utility::withStatisticsFor(
+      executor, ad_utility::TaskClass::Query, std::move(taskStatistics),
+      [](const qlever::Executor& underlyingExecutor) {
+        return ad_utility::makeConcurrencyLimitedExecutor(
+            underlyingExecutor,
+            getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
+      });
 }
 }  // namespace
 
@@ -368,6 +388,7 @@ auto Server::prepareOperation(
     std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+  auto taskStatistics = messageSender.sharedTaskStatistics();
   auto resultPinning = qlever::http_api_helpers::determineResultPinning(params);
 
   AD_LOG_INFO << "Processing the following " << operationName
@@ -386,9 +407,11 @@ auto Server::prepareOperation(
   MakeQueryExecutionContext makeQec =
       [this, sharedMessageSender = std::move(sharedMessageSender),
        resultPinning = std::move(resultPinning), accessTokenOk,
-       cancellationHandle](SharedIndexAndView indexAndViews) mutable {
+       cancellationHandle, taskStatistics = std::move(taskStatistics)](
+          SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
-            std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
+            std::move(indexAndViews),
+            makeQueryExecutor(qlever().executor(), taskStatistics),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },

@@ -85,6 +85,8 @@ class Server {
       std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader =
           nullptr,
       std::shared_ptr<ad_utility::IndexRebuildIdTracker> indexRebuildIdTracker =
+          nullptr,
+      std::shared_ptr<ad_utility::ThreadPoolStatistics> threadPoolStatistics =
           nullptr);
 
   virtual ~Server() = default;
@@ -98,6 +100,12 @@ class Server {
   void configureQueryEventLog(const ql::filesystem::path& path);
 
  private:
+  // The statistics of the tasks that the queries and index rebuilds of this
+  // server run on the global thread pool, which the resource sampler reads for
+  // the `pool_...` columns. The `shared_ptr` is never null, as the constructor
+  // creates the statistics even if the caller passes none. Declared before
+  // `qlever_`, because the executor of `qlever_` is constructed from it.
+  std::shared_ptr<ad_utility::ThreadPoolStatistics> threadPoolStatistics_;
   qlever::Qlever qlever_;
   const size_t numThreads_;
   unsigned short port_;
