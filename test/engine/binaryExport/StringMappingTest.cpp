@@ -165,10 +165,10 @@ TEST(TransmittedStringRewriter, roundTrip) {
   // in it.
   LocalVocabEntry testWord = localVocabEntryFromStringRepresentation(
       "\"abc\"", index.getLocalVocabContext());
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   Id vocabId = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id transmittedVocabId = mapping.remapId(vocabId);
-  Id transmittedTestWord =
-      mapping.remapId(Id::makeFromLocalVocabIndex(&testWord));
+  Id transmittedTestWord = mapping.remapId(getLocalVocabId(testWord));
 
   LocalVocab localVocab;
   TransmittedStringRewriter rewriter{mapping.takeStrings(), index, localVocab};
