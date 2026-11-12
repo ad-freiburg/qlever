@@ -332,8 +332,9 @@ TEST(GeometryInfoValueGetterTest, ValidWktWithoutGeometryInfo) {
 }
 
 // Test that a valid WKT literal with precomputed geometry info gets its source
-// CRS and its geometry type from the `GeoVocabulary`, with the same values as
-// computed from the string without a `GeoVocabulary`.
+// CRS, its geometry type and its centroid and bounding box with source CRS from
+// the `GeoVocabulary`, with the same values as computed from the string without
+// a `GeoVocabulary`.
 TEST(GeometryInfoValueGetterTest, ValidWktWithGeometryInfo) {
   // A line with an explicit WGS84 CRS, which the `GeoVocabulary` stores.
   static constexpr std::string_view lit =
@@ -356,6 +357,28 @@ TEST(GeometryInfoValueGetterTest, ValidWktWithGeometryInfo) {
   EXPECT_EQ(getGeoInfoFromIndex<ad_utility::GeometryType>(
                 lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
             expected);
+
+  // The centroid and the bounding box come with the source CRS WGS84, with both
+  // vocabulary types.
+  auto expectedCentroid = withSourceCrsNear<Centroid>(
+      WithSourceCrs<Centroid>{Centroid{3, 4}, SourceCrsType{2}});
+  auto expectedBoundingBox =
+      withSourceCrsNear<BoundingBox>(WithSourceCrs<BoundingBox>{
+          BoundingBox{{2, 3}, {4, 5}}, SourceCrsType{2}});
+  EXPECT_THAT(
+      getGeoInfoFromIndex<WithSourceCrs<Centroid>>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      expectedCentroid);
+  EXPECT_THAT(getGeoInfoFromIndex<WithSourceCrs<Centroid>>(
+                  lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
+              expectedCentroid);
+  EXPECT_THAT(
+      getGeoInfoFromIndex<WithSourceCrs<BoundingBox>>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      expectedBoundingBox);
+  EXPECT_THAT(getGeoInfoFromIndex<WithSourceCrs<BoundingBox>>(
+                  lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
+              expectedBoundingBox);
 }
 
 // _____________________________________________________________________________

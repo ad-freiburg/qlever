@@ -136,6 +136,11 @@ SparqlExpression::getPrefilterExpressionForMetadata(
 bool SparqlExpression::isConstantExpression() const { return false; }
 
 // _____________________________________________________________________________
+std::optional<TripleComponent> SparqlExpression::getConstantValue() const {
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 bool SparqlExpression::isStrExpression() const { return false; }
 
 // _____________________________________________________________________________

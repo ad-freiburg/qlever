@@ -9,8 +9,8 @@
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/TripleSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/TripleSerializer.h"
 
 namespace {
 auto I = ad_utility::testing::IntId;

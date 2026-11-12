@@ -67,7 +67,7 @@ class OrderByComparator {
                                              : TermKind::Literal;
       }
       case Datatype::LocalVocabIndex: {
-        const LocalVocabEntry& entry = *id.getLocalVocabIndex();
+        const LocalVocabEntryView& entry = *id.getLocalVocabIndex();
         if (entry.isLiteral()) {
           return TermKind::Literal;
         }

@@ -151,9 +151,6 @@ struct SortedUnionImpl
         applyPermutation_{std::move(applyPermutation)},
         cancellationHandle_{std::move(cancellationHandle)} {
     AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
-    if (requestLaziness) {
-      resultTable_.reserve(Union::chunkSize);
-    }
     targetOrder_.reserve(comparatorView.size());
     for (auto& col : comparatorView) {
       targetOrder_.push_back(columnOrigins_.at(col));
@@ -206,7 +203,6 @@ struct SortedUnionImpl
     auto result = Result::IdTableVocabPair{std::move(resultTable_),
                                            std::move(localVocab_)};
     resultTable_ = IdTable{resultTable_.numColumns(), allocator_};
-    resultTable_.reserve(Union::chunkSize);
     localVocab_ = LocalVocab{};
     return result;
   }

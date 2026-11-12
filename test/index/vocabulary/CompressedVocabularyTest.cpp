@@ -14,11 +14,12 @@
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 namespace {
 
 using namespace vocabulary_test;
+using namespace std::string_view_literals;
 using namespace ad_utility::vocabulary;
 // A stateless "compressor" that applies a trivial transformation to a string
 struct DummyDecoder {
@@ -349,13 +350,8 @@ CompressedVocabularyWithHoles createVocabularyWithHoles(
 // The `{index, word}` pairs that a vocabulary built from `wordsWithHoles` and
 // `indicesWithHoles` is expected to contain.
 std::vector<std::pair<uint64_t, std::string>> expectedIndicesAndWords() {
-  std::vector<std::pair<uint64_t, std::string>> result;
-  auto words = wordsWithHoles();
-  auto indices = indicesWithHoles();
-  for (size_t i = 0; i < words.size(); ++i) {
-    result.emplace_back(indices.at(i), words.at(i));
-  }
-  return result;
+  return ::ranges::to<std::vector<std::pair<uint64_t, std::string>>>(
+      ::ranges::views::zip(indicesWithHoles(), wordsWithHoles()));
 }
 
 }  // namespace
@@ -483,7 +479,7 @@ TEST(CompressedVocabularyWithHoles, endIndexAndGetPositionOfWord) {
   // In an empty vocabulary, every word yields the empty range at index 0.
   auto emptyVocab = createVocabularyWithHoles(filename, {}, {});
   EXPECT_EQ(emptyVocab.endIndex(), 0);
-  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha", ql::ranges::less{}),
+  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha"sv, ql::ranges::less{}),
             (std::pair<uint64_t, uint64_t>{0, 0}));
 }
 

@@ -13,8 +13,8 @@
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace ad_utility {
 

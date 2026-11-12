@@ -3,6 +3,7 @@
 // Authors: Jonathan Zeller @Jonathan24680
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
@@ -22,6 +23,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "backports/filesystem.h"
+#include "backports/span.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
@@ -424,7 +426,7 @@ class SpatialJoinParamTest
     auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
     auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
 
-    return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
+    return absl::StrFormat("%f", S2Earth::ToKm(S1Angle(p1_, p2_)));
   }
 
   // Places for testing
@@ -1081,7 +1083,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   // bounding box, is really more than 'maxDistanceInMeters' away from
   // 'startPoint'
   auto checkOutside = [&](const Point& point1, const Point& startPoint,
-                          const std::vector<Box>& bbox,
+                          ql::span<const Box> bbox,
                           BoundingBoxAlgorithm* spatialJoinAlg) {
     // check if the point is contained in any bounding box
     bool within = spatialJoinAlg->isContainedInBoundingBoxes(bbox, point1);
@@ -1096,7 +1098,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   BoundingBoxAlgorithm spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting(maxDistInMeters);
 
-  std::vector<Box> bbox = spatialJoinAlgs.computeQueryBox(startPoint);
+  auto bbox = spatialJoinAlgs.computeQueryBox(startPoint);
   // broad grid test
   for (int lon = -180; lon < 180; lon += 20) {
     for (int lat = -90; lat < 90; lat += 20) {

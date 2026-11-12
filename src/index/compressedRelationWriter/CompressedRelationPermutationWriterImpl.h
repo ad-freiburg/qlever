@@ -583,12 +583,8 @@ struct CompressedRelationWriter::PermutationWriter
   // Get the indices of all columns in the order in which they have to be added
   // to the relation.
   std::vector<ColumnIndex> getPermutedColIndices() const {
-    auto [c0, c1, c2, c3] = permutation_.keys();
-    std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
-    for (size_t colIdx = 3; colIdx < numColumns_; ++colIdx) {
-      permutedColIndices.push_back(colIdx);
-    }
-    return permutedColIndices;
+    return compressedRelationHelpers::permutedColIndices(permutation_,
+                                                         numColumns_);
   }
 
   // This function actually writes the permutation using the blocks of rows from

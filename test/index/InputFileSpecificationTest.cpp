@@ -15,7 +15,7 @@
 #include "backports/filesystem.h"
 #include "index/InputFileSpecification.h"
 #include "parser/AsyncBlockSource.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 using namespace qlever;
 using namespace testing;

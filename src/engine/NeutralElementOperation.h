@@ -45,8 +45,8 @@ class NeutralElementOperation : public Operation {
   }
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return {};
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 
  private:

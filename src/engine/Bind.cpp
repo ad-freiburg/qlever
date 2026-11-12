@@ -9,6 +9,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -69,7 +70,7 @@ float Bind::getMultiplicity(size_t col) {
 std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 
 // _____________________________________________________________________________
-[[nodiscard]] std::vector<ColumnIndex> Bind::resultSortedOn() const {
+[[nodiscard]] qlm::vector<ColumnIndex> Bind::resultSortedOn() const {
   // We always append the result column of the BIND at the end and this column
   // is not sorted, so the sequence of indices of the sorted columns do not
   // change.
@@ -248,12 +249,12 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return cloneWithNewChildren({_subtree->clone()});
+  return cloneWithNewChildren({{_subtree->clone()}, allocator()});
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Bind>(_executionContext, std::move(children.at(0)),
                                 _bind);
 }
@@ -266,5 +267,38 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
   if (_bind._expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
-  return pushDownBindToAnyChild(bind, {_subtree});
+  return pushDownBindToAnyChild(bind, {{_subtree}, allocator()});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Bind::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  // The subtree has to provide the requested variables and the variables that
+  // are required by `Bind` to build its target.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  bool bindTargetRequested =
+      ad_utility::contains(requestedVariables, _bind._target);
+  if (bindTargetRequested) {
+    auto addVarsResult =
+        varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
+    AD_CORRECTNESS_CHECK(
+        addVarsResult == AddVarsResult::Success,
+        "Aggregate functions are not allowed in a `Bind` clause");
+  }
+
+  // Strip the subtree. The `Bind` itself is only kept if the parent requests
+  // its target.
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
+  if (!bindTargetRequested) {
+    return subtree;
+  }
+
+  // The new `Bind` also exports evaluated variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Bind>(
+      getExecutionContext(), requestedVariables, std::move(subtree), _bind);
 }

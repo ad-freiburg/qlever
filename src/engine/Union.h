@@ -28,13 +28,18 @@ class Union : public Operation {
   // Stores the indices of the columns that the result of this operation should
   // be sorted on. If set, the expensive union with merge implementation has to
   // be used (which is most likely cheaper than sorting afterwards).
-  std::vector<ColumnIndex> targetOrder_;
+  qlm::vector<ColumnIndex> targetOrder_;
 
  public:
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
         const std::shared_ptr<QueryExecutionTree>& t2,
-        std::vector<ColumnIndex> targetOrder = {});
+        qlm::vector<ColumnIndex> targetOrder);
+
+  // Construct with an empty `targetOrder`, i.e., the result is not sorted.
+  Union(QueryExecutionContext* qec,
+        const std::shared_ptr<QueryExecutionTree>& t1,
+        const std::shared_ptr<QueryExecutionTree>& t2);
 
  protected:
   virtual std::string getCacheKeyImpl() const override;
@@ -44,7 +49,7 @@ class Union : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override;
 
@@ -77,7 +82,7 @@ class Union : public Operation {
   // sorted properly then it is way cheaper to sort the other child and then
   // merge the two sorted results.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const override;
+      ql::span<const ColumnIndex> sortColumns) const override;
 
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {
@@ -184,7 +189,7 @@ class Union : public Operation {
 
   // ___________________________________________________________________________
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // ___________________________________________________________________________
   std::optional<std::shared_ptr<QueryExecutionTree>>

@@ -67,7 +67,7 @@ std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
+qlm::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
   return tree_->resultSortedOn();
 }
 

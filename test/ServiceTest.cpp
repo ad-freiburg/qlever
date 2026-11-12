@@ -34,6 +34,7 @@
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
+using ad_utility::testing::colIndices;
 using ad_utility::testing::iriLocalVocabEntry;
 
 // Fixture that sets up a test index and a factory for producing mocks for the
@@ -861,10 +862,10 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "a\"b\"c", index.getLocalVocabContext());
-  EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
-            "\"a\\\"b\\\"c\"");
+  EXPECT_EQ(idToVc(index, getLocalVocabId(str), localVocab), "\"a\\\"b\\\"c\"");
 
   // value with xsd-type
   EXPECT_EQ(
@@ -989,7 +990,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                                           {TC(iri("<z>")), TC(iri("<a>"))}}});
   auto sibling = std::make_shared<Sort>(
       testQec, std::make_shared<QueryExecutionTree>(testQec, siblingOperation),
-      std::vector<ColumnIndex>{});
+      colIndices({}));
 
   // Reset the computed results, to reuse the mock-operations.
   auto reset = [&]() {
@@ -1127,7 +1128,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
       strip->applyLimitOffset(limitForStripColumns.value(), false);
     }
     return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
-                                  std::vector<ColumnIndex>{0});
+                                  colIndices({0}));
   };
   // The `VALUES` clause that is expected when only `?x` is pushed down.
   const std::string valuesClauseX = "VALUES (?x) { (<x>) } ";
@@ -1193,11 +1194,11 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    auto innerSort = std::make_shared<Sort>(testQec, makeTree(service),
-                                            std::vector<ColumnIndex>{0});
+    auto innerSort =
+        std::make_shared<Sort>(testQec, makeTree(service), colIndices({0}));
     innerSort->applyLimitOffset(LimitOffsetClause{1}, false);
-    auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
-                                            std::vector<ColumnIndex>{0});
+    auto outerSort =
+        std::make_shared<Sort>(testQec, makeTree(innerSort), colIndices({0}));
     Service::precomputeSiblingResult(sibling, outerSort, true, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(

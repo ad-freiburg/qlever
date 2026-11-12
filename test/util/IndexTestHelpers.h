@@ -28,7 +28,7 @@
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "util/Executor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
 // `QueryExecutionContext` that store a small example knowledge graph. Those can
