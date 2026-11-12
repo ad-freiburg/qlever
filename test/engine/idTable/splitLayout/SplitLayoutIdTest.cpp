@@ -24,8 +24,8 @@
 #include "../../../ValueIdTestHelpers.h"
 #include "engine/idTable/splitLayout/SplitLayoutId.h"
 #include "util/Random.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/Serializer.h"
 
 namespace columnBasedIdTable::splitLayout {
 

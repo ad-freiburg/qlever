@@ -11,21 +11,7 @@
 
 #include "./ValueIdTestHelpers.h"
 #include "global/FoldedValueId.h"
-#include "index/LocalVocabEntry.h"
 #include "util/BitUtils.h"
-#include "util/HashSet.h"
-#include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Random.h"
-#include "util/serializer/ByteBufferSerializer.h"
-#include "util/serializer/Serializer.h"
-
-using ad_utility::testing::iriLocalVocabEntry;
-using ad_utility::testing::localVocabEntry;
-using ad_utility::testing::localVocabEntryFromStringRepresentation;
-
-struct ValueIdTest : public ::testing::Test {
-  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
-};
 
 namespace foldedValueId {
 
