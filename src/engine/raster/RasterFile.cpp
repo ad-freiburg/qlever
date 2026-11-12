@@ -79,31 +79,84 @@ std::optional<PixelValue> readNoData(GDALRasterBand& band) {
   return PixelValue{storedNoData};
 }
 
-// Return `polygons` as an OGR multipolygon. QLever stores rings without
-// repeating the first point at the end, but OGR needs closed rings.
-OGRMultiPolygon toOgrMultiPolygon(const ::util::geo::DMultiPolygon& polygons) {
-  auto toOgrRing = [](const ::util::geo::Ring<double>& points) {
-    OGRLinearRing ring;
-    for (const auto& point : points) {
-      ring.addPoint(point.getX(), point.getY());
-    }
-    return ring;
-  };
+// Converts a geometry parsed by QLever to the same geometry in OGR. One call
+// operator per type, so that `visitAnyGeometry` can apply it to the members of
+// a collection. All return the base class, because a collection mixes types.
+struct ToOgrGeometry {
+  using OgrGeometryPtr = std::unique_ptr<OGRGeometry>;
 
-  OGRMultiPolygon result;
-  for (const auto& polygon : polygons) {
-    OGRPolygon ogrPolygon;
-    OGRLinearRing outer = toOgrRing(polygon.getOuter());
-    ogrPolygon.addRing(&outer);
-    for (const auto& innerPoints : polygon.getInners()) {
-      OGRLinearRing inner = toOgrRing(innerPoints);
-      ogrPolygon.addRing(&inner);
-    }
-    result.addGeometry(&ogrPolygon);
+  OgrGeometryPtr operator()(const ::util::geo::DPoint& point) const {
+    return std::make_unique<OGRPoint>(point.getX(), point.getY());
   }
-  result.closeRings();
-  return result;
-}
+
+  OgrGeometryPtr operator()(const ::util::geo::DLine& line) const {
+    auto ogrLine = std::make_unique<OGRLineString>();
+    addPoints(*ogrLine, line);
+    return ogrLine;
+  }
+
+  OgrGeometryPtr operator()(const ::util::geo::DPolygon& polygon) const {
+    auto ogrPolygon = std::make_unique<OGRPolygon>();
+    auto addRing = [&ogrPolygon](const ::util::geo::Ring<double>& points) {
+      OGRLinearRing ring;
+      addPoints(ring, points);
+      ogrPolygon->addRing(&ring);
+    };
+    // The first ring is the outer one, the others are holes.
+    addRing(polygon.getOuter());
+    for (const auto& inner : polygon.getInners()) {
+      addRing(inner);
+    }
+    // QLever stores rings without repeating the first point at the end, but
+    // OGR needs closed rings.
+    ogrPolygon->closeRings();
+    return ogrPolygon;
+  }
+
+  OgrGeometryPtr operator()(const ::util::geo::DMultiPoint& points) const {
+    return toContainer<OGRMultiPoint>(points);
+  }
+
+  OgrGeometryPtr operator()(const ::util::geo::DMultiLine& lines) const {
+    return toContainer<OGRMultiLineString>(lines);
+  }
+
+  OgrGeometryPtr operator()(const ::util::geo::DMultiPolygon& polygons) const {
+    return toContainer<OGRMultiPolygon>(polygons);
+  }
+
+  OgrGeometryPtr operator()(const ::util::geo::DCollection& members) const {
+    return toContainer<OGRGeometryCollection>(members);
+  }
+
+  // A member of a collection, which can hold any of the types above.
+  OgrGeometryPtr operator()(
+      const ::util::geo::AnyGeometry<double>& geometry) const {
+    return ad_utility::detail::visitAnyGeometry(*this, geometry);
+  }
+
+ private:
+  // Lines and polygon rings are both curves of points in OGR.
+  static void addPoints(OGRSimpleCurve& curve,
+                        const ::util::geo::DLine& points) {
+    for (const auto& point : points) {
+      curve.addPoint(point.getX(), point.getY());
+    }
+  }
+
+  // An `OgrContainer` with all `members`, each converted by this struct.
+  template <typename OgrContainer, typename Members>
+  OgrGeometryPtr toContainer(const Members& members) const {
+    auto container = std::make_unique<OgrContainer>();
+    for (const auto& member : members) {
+      // The container takes ownership. It only refuses a member of the wrong
+      // type, which the overloads above never create.
+      OGRErr error = container->addGeometryDirectly((*this)(member).release());
+      AD_CORRECTNESS_CHECK(error == OGRERR_NONE);
+    }
+    return container;
+  }
+};
 
 }  // namespace
 
@@ -160,16 +213,19 @@ struct RasterFile::Impl {
   // clipped to the grid. Return nothing if `envelope` misses the grid.
   std::optional<PixelWindow> pixelWindow(const OGREnvelope& envelope) const;
 
-  // Return one byte per pixel of `window`, row by row. A byte is 1 if the
-  // center of its pixel lies inside `polygons`, which is in the CRS of the
-  // file, and 0 otherwise. `polygons` is not `const`, because GDAL takes the
-  // geometries as non-const handles.
-  std::vector<uint8_t> rasterizeMask(OGRMultiPolygon& polygons,
+  // Return one byte per pixel of `window`, row by row. A byte is 1 if its
+  // pixel belongs to `geometry`, which is in the CRS of the file, by GDAL's
+  // default rule: the pixel center lies inside a polygon, the pixel is on the
+  // thin line drawn along a line, or the pixel contains a point. `geometry`
+  // is not `const`, because GDAL takes the geometries as non-const handles.
+  std::vector<uint8_t> rasterizeMask(OGRGeometry& geometry,
                                      const PixelWindow& window) const;
 
-  // Return the pixels of `band` whose center lies inside `polygons`, which is
-  // in CRS84. Takes `polygons` by value, because it is changed in place.
-  std::vector<Pixel> lookupPolygons(OGRMultiPolygon polygons, const Band& band);
+  // Return the pixels of `band` that belong to `geometry`, which is in CRS84
+  // (see `rasterizeMask`). Takes ownership, because `geometry` is changed in
+  // place.
+  std::vector<Pixel> lookupOgrGeometry(std::unique_ptr<OGRGeometry> geometry,
+                                       const Band& band);
 };
 
 // _____________________________________________________________________________
@@ -351,7 +407,7 @@ std::optional<RasterFile::Impl::PixelWindow> RasterFile::Impl::pixelWindow(
 
 // _____________________________________________________________________________
 std::vector<uint8_t> RasterFile::Impl::rasterizeMask(
-    OGRMultiPolygon& polygons, const PixelWindow& window) const {
+    OGRGeometry& geometry, const PixelWindow& window) const {
   // An image in memory that covers exactly the window, all pixels 0.
   GDALDriver* memDriver = GetGDALDriverManager()->GetDriverByName("MEM");
   GDALDatasetUniquePtr mask{memDriver->Create("", window.width_, window.height_,
@@ -360,49 +416,50 @@ std::vector<uint8_t> RasterFile::Impl::rasterizeMask(
   AD_CORRECTNESS_CHECK(mask != nullptr);
 
   // Our geotransform, but with its origin at the top-left pixel of the
-  // window. This places the polygons on the right pixels of the mask.
+  // window. This places the geometry on the right pixels of the mask.
   std::array<double, 6> windowToRaster = pixelToRaster_;
   GDALApplyGeoTransform(pixelToRaster_.data(), window.column_, window.row_,
                         &windowToRaster[0], &windowToRaster[3]);
   GDALSetGeoTransform(GDALDataset::ToHandle(mask.get()), windowToRaster.data());
 
-  // Write 1 into every pixel whose center lies inside `polygons`.
+  // Write 1 into every pixel that belongs to `geometry`.
   int bandNumber = 1;
-  OGRGeometryH geometry = OGRGeometry::ToHandle(&polygons);
+  OGRGeometryH geometryHandle = OGRGeometry::ToHandle(&geometry);
   double burnValue = 1.0;
   AD_CORRECTNESS_CHECK(
       GDALRasterizeGeometries(
           GDALDataset::ToHandle(mask.get()), /*nBandCount=*/1, &bandNumber,
-          /*nGeomCount=*/1, &geometry, /*pfnTransformer=*/nullptr,
+          /*nGeomCount=*/1, &geometryHandle, /*pfnTransformer=*/nullptr,
           /*pTransformArg=*/nullptr, &burnValue, /*papszOptions=*/nullptr,
           /*pfnProgress=*/nullptr, /*pProgressArg=*/nullptr) == CE_None);
 
-  std::vector<uint8_t> isInside(static_cast<size_t>(window.width_) *
-                                window.height_);
+  std::vector<uint8_t> belongsToGeometry(static_cast<size_t>(window.width_) *
+                                         window.height_);
   AD_CORRECTNESS_CHECK(mask->GetRasterBand(1)->RasterIO(
                            GF_Read, 0, 0, window.width_, window.height_,
-                           isInside.data(), window.width_, window.height_,
-                           GDT_Byte, /*nPixelSpace=*/0,
+                           belongsToGeometry.data(), window.width_,
+                           window.height_, GDT_Byte, /*nPixelSpace=*/0,
                            /*nLineSpace=*/0) == CE_None);
-  return isInside;
+  return belongsToGeometry;
 }
 
 // _____________________________________________________________________________
-std::vector<Pixel> RasterFile::Impl::lookupPolygons(OGRMultiPolygon polygons,
-                                                    const Band& band) {
+std::vector<Pixel> RasterFile::Impl::lookupOgrGeometry(
+    std::unique_ptr<OGRGeometry> geometry, const Band& band) {
   // An edge that is straight in CRS84 is curved in the CRS of the file. Extra
   // vertices let the transformed edge follow that curve.
-  polygons.segmentize(MAX_SEGMENT_LENGTH_DEGREES);
-  if (polygons.transform(crs84ToRaster_.get()) != OGRERR_NONE) {
+  geometry->segmentize(MAX_SEGMENT_LENGTH_DEGREES);
+  if (geometry->transform(crs84ToRaster_.get()) != OGRERR_NONE) {
     return {};
   }
   OGREnvelope envelope;
-  polygons.getEnvelope(&envelope);
+  geometry->getEnvelope(&envelope);
   std::optional<PixelWindow> window = pixelWindow(envelope);
   if (!window.has_value()) {
     return {};
   }
-  std::vector<uint8_t> isInside = rasterizeMask(polygons, window.value());
+  std::vector<uint8_t> belongsToGeometry =
+      rasterizeMask(*geometry, window.value());
 
   // The values of the pixels to return, and their centers in the CRS of the
   // file.
@@ -414,7 +471,7 @@ std::vector<Pixel> RasterFile::Impl::lookupPolygons(OGRMultiPolygon polygons,
         for (int row = 0; row < window->height_; ++row) {
           for (int column = 0; column < window->width_; ++column) {
             size_t index = static_cast<size_t>(row) * window->width_ + column;
-            if (!isInside[index]) {
+            if (!belongsToGeometry[index]) {
               continue;
             }
             PixelValue value{windowValues[index]};
@@ -523,13 +580,10 @@ std::vector<Pixel> RasterFile::lookupGeometry(std::string_view wktLiteral,
             return {};
           }
           return {pixel.value()};
-        } else if constexpr (std::is_same_v<T, ::util::geo::DPolygon>) {
-          return impl_->lookupPolygons(
-              toOgrMultiPolygon(::util::geo::DMultiPolygon{parsed}), bandInfo);
-        } else if constexpr (std::is_same_v<T, ::util::geo::DMultiPolygon>) {
-          return impl_->lookupPolygons(toOgrMultiPolygon(parsed), bandInfo);
         } else {
-          return {};
+          // Lines, polygons, and their multi types and collections, each by
+          // the rule of `rasterizeMask`.
+          return impl_->lookupOgrGeometry(ToOgrGeometry{}(parsed), bandInfo);
         }
       },
       geometry.value());

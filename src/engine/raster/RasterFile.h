@@ -56,8 +56,8 @@ class RasterFile {
   // grid or the pixel is NoData.
   std::optional<Pixel> lookupPoint(const GeoPoint& point, int band);
 
-  // The pixels in `band` whose center lies inside `wktLiteral`, without NoData
-  // pixels. Only POINT, POLYGON and MULTIPOLYGON give a result.
+  // The pixels in `band` under a point, on a line, or with their center inside
+  // a polygon of `wktLiteral`, without NoData pixels and duplicates.
   std::vector<Pixel> lookupGeometry(std::string_view wktLiteral, int band);
 };
 
