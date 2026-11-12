@@ -186,6 +186,7 @@ TEST(GeoSparqlHelpers, WktTypeIri) {
   EXPECT_EQ(WktCrsType{}(SourceCrsType{4}), undef);
 }
 
+// TODO: this does not compile yet.
 // Test that the bounding coordinates of a WKT literal are first projected to
 // the given `SourceCrsType` and then returned as a `double`.
 TEST(GeoSparqlHelpers, WktBoundingCoordinate) {
@@ -197,8 +198,8 @@ TEST(GeoSparqlHelpers, WktBoundingCoordinate) {
   sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
 
   BoundingBox bb1{{2, 1}, {4, 3}};
-  SourceCrsType defaultCrs{util::geo::CRSType::CRS84} SourceCrsType wgs84{
-      util::geo::CRSType::WGS84}
+  SourceCrsType defaultCrs{util::geo::CRSType::CRS84};
+  SourceCrsType wgs84{util::geo::CRSType::WGS84};
 
   // No projection (defaultCrs).
   EXPECT_EQ(WktBoundingCoordinate<MIN_X>{}(WithSourceCrs{bb1, defaultCrs}),

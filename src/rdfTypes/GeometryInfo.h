@@ -103,9 +103,10 @@ struct BoundingBox {
   std::string asWkt() const;
 
   // Project the bounding coordinates to `projCrs` and extract the minimum or
-  // maximum coordinates.
+  // maximum coordinates. As `GeometryInfoHelpersImpl.h` is not included here,
+  // we cannot use `defaultCrs` and need to use `1` instead.
   template <BoundingCoordinate RequestedCoordinate>
-  double getBoundingCoordinate(SourceCrsType projCrs) const;
+  double getBoundingCoordinate(SourceCrsType projCrs = SourceCrsType{1}) const;
 };
 
 // The encoded bounding box is a pair of the bit encodings of the
