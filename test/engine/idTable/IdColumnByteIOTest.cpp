@@ -22,7 +22,7 @@
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 
 using namespace ad_utility::idColumnByteIO;
 namespace splitLayout = columnBasedIdTable::splitLayout;

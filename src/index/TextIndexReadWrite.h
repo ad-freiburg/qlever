@@ -12,11 +12,11 @@
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoringEnum.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/NoCopyNoMove.h"
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 
 namespace textIndexReadWrite::detail {
 

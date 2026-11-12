@@ -961,7 +961,7 @@ bool Operation::areVariablesVisible(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>>) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>>) const {
   AD_THROW(absl::StrCat("`cloneWithNewChildren` is not implemented for ",
                         getDescriptor()));
 }
@@ -970,7 +970,7 @@ std::unique_ptr<Operation> Operation::cloneWithNewChildren(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::pushDownBindToChild(
     const parsedQuery::Bind& bind,
-    std::vector<std::shared_ptr<QueryExecutionTree>> children,
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children,
     size_t childIndex) const {
   auto& child = children.at(childIndex);
   AD_CORRECTNESS_CHECK(child != nullptr);
@@ -1026,7 +1026,7 @@ Operation::pushDownBindToChild(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::pushDownBindToAnyChild(
     const parsedQuery::Bind& bind,
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       children, [](const auto& child) { return child != nullptr; }));
   for (size_t i = 0; i < children.size(); ++i) {

@@ -16,8 +16,8 @@
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMerger.h"
-#include "index/vocabulary_merger/PartialVocabularyFile.h"
-#include "index/vocabulary_merger/SegmentPipeline.h"
+#include "index/vocabularyMerger/PartialVocabularyFile.h"
+#include "index/vocabularyMerger/SegmentPipeline.h"
 #include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
@@ -25,14 +25,14 @@
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/Math.h"
-#include "util/Serializer/CompressedSerializer.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
+#include "util/serializer/CompressedSerializer.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
 
 namespace ad_utility::vocabulary_merger {
 
@@ -83,7 +83,7 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   return options;
 }
 
-// The maximal number of segments (see `index/vocabulary_merger/Segment.h`)
+// The maximal number of segments (see `index/vocabularyMerger/Segment.h`)
 // that are being built or waiting to be committed at the same time: two per
 // thread, so that the pool is never starved. Their memory is bounded by the
 // memory budget of `detail::SegmentPipeline`, which also cuts them small

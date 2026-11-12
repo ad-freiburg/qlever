@@ -1,5 +1,5 @@
 add_subdirectory(vocabulary)
-add_subdirectory(vocabulary_merger)
+add_subdirectory(vocabularyMerger)
 add_subdirectory(compressedRelationWriter)
 add_subdirectory(chunkwisePermutationWriter)
 addLinkAndDiscoverTest(PatternCreatorTest index)

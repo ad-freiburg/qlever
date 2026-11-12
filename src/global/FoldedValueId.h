@@ -24,6 +24,7 @@
 #include "util/Exception.h"
 #include "util/NBitInteger.h"
 #include "util/SourceLocation.h"
+#include "util/serializer/Serializer.h"
 
 namespace foldedValueId {
 
