@@ -19,7 +19,11 @@
 // supports reflection, which CMake passes automatically for that compiler (see
 // the `QLEVER_USE_REFLECTION` option).
 
+// NOTE: The `<version>` header only exists since C++20 (e.g. it is missing in
+// the standard library of GCC 8). Without it, there is no reflection either.
+#if __has_include(<version>)
 #include <version>
+#endif
 
 #if defined(__cpp_impl_reflection) && defined(__cpp_lib_reflection) && \
     defined(__cpp_expansion_statements)
