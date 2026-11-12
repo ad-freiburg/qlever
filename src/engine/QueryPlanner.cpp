@@ -3110,6 +3110,15 @@ QueryPlanner::GraphPatternPlanner::extractOptionalJoinCondition(
   if (previousVariables.empty()) {
     return condition;
   }
+  // Variables of triples directly in the group are never UNDEF there, so they
+  // have the same value in the group as in the joined row.
+  ad_utility::HashSet<Variable> alwaysBoundInGroup;
+  for (const auto& operation : group._graphPatterns) {
+    if (const auto* triples =
+            std::get_if<parsedQuery::BasicGraphPattern>(&operation)) {
+      triples->collectAllContainedVariables(alwaysBoundInGroup);
+    }
+  }
   // Split the FILTERs into the condition and the ones that stay in the group,
   // keeping their order. A FILTER `a && b` is equivalent to the two FILTERs
   // `a` and `b`, so this is decided for each conjunct separately.
@@ -3122,15 +3131,14 @@ QueryPlanner::GraphPatternPlanner::extractOptionalJoinCondition(
       // can't be evaluated for each joined row yet. It stays in the group,
       // which is wrong if it uses a variable only bound on the left.
       bool hasExists = !expression.getExistsExpressions().empty();
-      // TODO: This also holds for a FILTER that only uses a join variable from
-      // the outside. It could stay in the group (and be applied early) if the
-      // join variable is always bound on the right side.
-      bool usesPreviousVariable =
-          ql::ranges::any_of(expression.containedVariables(),
-                             [&previousVariables](const Variable* var) {
-                               return previousVariables.contains(*var);
-                             });
-      if (!hasExists && usesPreviousVariable) {
+      // Otherwise the conjunct can be applied early in the group.
+      bool needsLeftSide = ql::ranges::any_of(
+          expression.containedVariables(),
+          [&previousVariables, &alwaysBoundInGroup](const Variable* var) {
+            return previousVariables.contains(*var) &&
+                   !alwaysBoundInGroup.contains(*var);
+          });
+      if (!hasExists && needsLeftSide) {
         condition.push_back(std::move(expression));
         isPartOfCondition = true;
       } else {

@@ -762,10 +762,14 @@ class QueryPlanner {
     // Remove the FILTERs from the group of an OPTIONAL that are the condition
     // of the left join and return their expressions. These are the outermost
     // FILTERs of the group that use a variable of the preceding patterns
-    // (SPARQL 1.1, section 18.2.2.6). All other FILTERs only depend on the
-    // group itself and stay in it, so that they can be applied early. FILTERs
-    // with `EXISTS` are currently also left in the group. The conjuncts of a
-    // FILTER `a && b` are treated like separate FILTERs.
+    // (SPARQL 1.1, section 18.2.2.6). A variable that is bound by a triple
+    // directly in the group doesn't count: it is never UNDEF in the group, so
+    // it has the same value there and in the joined row. All other FILTERs
+    // only depend on the group itself and stay in it, so that they can be
+    // applied early. FILTERs with `EXISTS` also stay (wrong if they use a
+    // variable only bound by the preceding patterns). A FILTER `a && b` is
+    // equivalent to the two FILTERs `a` and `b`, so its conjuncts are treated
+    // separately.
     std::vector<sparqlExpression::SparqlExpressionPimpl>
     extractOptionalJoinCondition(ParsedQuery::GraphPattern& group) const;
 

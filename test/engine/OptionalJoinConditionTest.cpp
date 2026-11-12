@@ -733,6 +733,46 @@ TEST(OptionalJoinWithCondition, queryFilterOnlyUsesInnerVariables) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoinWithCondition, queryFilterUsesJoinVariableBoundInGroup) {
+  // `?a` is also bound by a triple of the OPTIONAL group, so in a joined row it
+  // has the same value as in the group. The FILTER stays in the group and there
+  // is no condition.
+  auto query =
+      "SELECT ?a ?w { ?a <height> ?h OPTIONAL { ?a <weight> ?w "
+      "FILTER(?a != <a1>) } } ORDER BY ?a ?w";
+  EXPECT_THAT(runQuery(query), ElementsAre("<a1>\t", "<a2>\t60", "<a3>\t",
+                                           "<a4>\t50", "<a4>\t55"));
+  EXPECT_THAT(getCacheKey(query),
+              ::testing::Not(::testing::HasSubstr("condition: [")));
+
+  // If `?a` is UNDEF on the left, it takes the value from the right side, so
+  // the result is the same as with the FILTER as a condition.
+  query =
+      "SELECT ?a ?h ?w { VALUES (?a ?h) { (<a1> 180) (UNDEF 165) } OPTIONAL { "
+      "?a <weight> ?w FILTER(?a != <a1>) } } ORDER BY ?h ?a ?w";
+  EXPECT_THAT(runQuery(query),
+              ElementsAre("<a2>\t165\t60", "<a4>\t165\t50", "<a4>\t165\t55",
+                          "<a5>\t165\t75", "<a1>\t180\t"));
+  EXPECT_THAT(getCacheKey(query),
+              ::testing::Not(::testing::HasSubstr("condition: [")));
+
+  // Only the conjunct with `?h` (not bound in the group) is a condition.
+  query =
+      "SELECT ?a ?w { ?a <height> ?h OPTIONAL { ?a <weight> ?w "
+      "FILTER(?a != <a1> && ?w > ?h - 100) } } ORDER BY ?a ?w";
+  EXPECT_THAT(runQuery(query),
+              ElementsAre("<a1>\t", "<a2>\t60", "<a3>\t", "<a4>\t"));
+  EXPECT_THAT(getCacheKey(query), ::testing::HasSubstr("condition: ["));
+
+  // A variable that is only bound in a nested OPTIONAL of the group might be
+  // UNDEF there, so the FILTER remains a condition.
+  EXPECT_THAT(getCacheKey("SELECT ?a ?w { VALUES ?a { <a1> <a3> } OPTIONAL { "
+                          "?x <weight> ?w OPTIONAL { ?a <age> ?g } "
+                          "FILTER(?a = <a1>) } }"),
+              ::testing::HasSubstr("condition: ["));
+}
+
+// _____________________________________________________________________________
 TEST(OptionalJoinWithCondition, queryNestedGroupsAndOptionals) {
   // A FILTER in a nested group (not the outermost level of the OPTIONAL) only
   // sees the variables of this group, `?h` is unbound there, so the FILTER is
