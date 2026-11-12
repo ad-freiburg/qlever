@@ -81,6 +81,7 @@ TEST(SparqlParser, Prefix) {
   {
     static ad_utility::BlankNodeManager blankNodeManager;
     ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
+                       ad_utility::testing::makeAllocator(),
                        "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
@@ -1456,8 +1457,11 @@ TEST(SparqlParser, ConstructQuery) {
 // _____________________________________________________________________________
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
   static ad_utility::BlankNodeManager blankNodeManager;
-  SparqlQleverVisitor visitor{
-      &blankNodeManager, encodedIriManager(), {}, std::nullopt};
+  SparqlQleverVisitor visitor{&blankNodeManager,
+                              encodedIriManager(),
+                              ad_utility::testing::makeAllocator(),
+                              {},
+                              std::nullopt};
 
   EXPECT_THROW(
       visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
@@ -1504,6 +1508,19 @@ TEST(SparqlParser, graphPatternAllocationsCountTowardsMemoryLimit) {
   expectGrowth(
       [](size_t i) { return absl::StrCat("OPTIONAL { ?s <q", i, "> ?x } "); },
       sizeof(parsedQuery::GraphPatternOperation));
+}
+
+// Test that the parser respects the memory limit of the passed allocator.
+TEST(SparqlParser, parsingRespectsTheMemoryLimitOfTheAllocator) {
+  EncodedIriManager encodedIriManager;
+  auto parseWithLimit = [&encodedIriManager](ad_utility::MemorySize limit) {
+    return SparqlParser::parseQuery(&encodedIriManager,
+                                    ad_utility::testing::makeAllocator(limit),
+                                    "SELECT * { ?s ?p ?o FILTER(?s = ?o) }");
+  };
+  EXPECT_NO_THROW(parseWithLimit(ad_utility::MemorySize::megabytes(1)));
+  EXPECT_THROW(parseWithLimit(ad_utility::MemorySize::bytes(1)),
+               ad_utility::detail::AllocationExceedsLimitException);
 }
 
 // Test that ASK queries are parsed as they should.
@@ -2075,7 +2092,9 @@ TEST(ParserTest, propertyPathInCollection) {
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
   EncodedIriManager encodedIriManager;
   EXPECT_THAT(
-      SparqlParser::parseQuery(&encodedIriManager, std::move(query)),
+      SparqlParser::parseQuery(&encodedIriManager,
+                               ad_utility::testing::makeAllocator(),
+                               std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(
@@ -2160,7 +2179,8 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
 
   auto parseWithEncoding = [&](const std::string& input) {
     static ad_utility::BlankNodeManager blankNodeManager;
-    return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
+    return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(),
+                            ad_utility::testing::makeAllocator(), input}
         .parseTypesafe(&SparqlAutomaticParser::query);
   };
 
@@ -2309,7 +2329,7 @@ TEST(SparqlParser, strictInlineWktForGeoFunctions) {
   auto parse = [](std::string_view body) {
     EncodedIriManager encodedIriManager;
     return SparqlParser::parseQuery(
-        &encodedIriManager,
+        &encodedIriManager, ad_utility::testing::makeAllocator(),
         absl::StrCat("PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
                      "PREFIX geof: <http://www.opengis.net/def/function/"
                      "geosparql/> PREFIX ql: <",

@@ -100,7 +100,8 @@ ad_utility::triple_component::Iri GraphStoreProtocol::generateNewGraphIri() {
 
 // ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformGet(
-    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
+    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager,
+    qlever::Allocator<Id> allocator) {
   // Construct the parsed query from its short equivalent SPARQL Update
   // string. This is easier and also provides e.g. the `_originalString` field.
   auto getQuery = [&graph]() -> std::string {
@@ -112,13 +113,15 @@ ParsedQuery GraphStoreProtocol::transformGet(
       return "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
     }
   };
-  return SparqlParser::parseQuery(encodedIriManager, getQuery());
+  return SparqlParser::parseQuery(encodedIriManager, std::move(allocator),
+                                  getQuery());
 }
 
 // ____________________________________________________________________________
 ParsedQuery GraphStoreProtocol::transformHead(
-    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager) {
-  auto pq = transformGet(graph, encodedIriManager);
+    const GraphOrDefault& graph, const EncodedIriManager* encodedIriManager,
+    qlever::Allocator<Id> allocator) {
+  auto pq = transformGet(graph, encodedIriManager, std::move(allocator));
   // HEAD does the same as GET except that the response has no body.
   // Overwrite the body to be empty.
   pq.responseMiddleware_ =
@@ -132,8 +135,9 @@ ParsedQuery GraphStoreProtocol::transformHead(
 }
 
 // ____________________________________________________________________________
-ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
-                                                const Index& index) {
+ParsedQuery GraphStoreProtocol::transformDelete(
+    const GraphOrDefault& graph, const Index& index,
+    qlever::Allocator<Id> allocator) {
   // Construct the parsed update from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
   auto getUpdate = [&graph]() -> std::string {
@@ -145,7 +149,8 @@ ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph,
     }
   };
   auto update = ad_utility::getSingleElement(SparqlParser::parseUpdate(
-      index.getBlankNodeManager(), &index.encodedIriManager(), getUpdate()));
+      index.getBlankNodeManager(), &index.encodedIriManager(),
+      std::move(allocator), getUpdate()));
   // DELETE must return 404 if the graph being deleted does not exist (GSP 5.4).
   // With implicit graph existence a graph existed iff triples were actually
   // deleted.
