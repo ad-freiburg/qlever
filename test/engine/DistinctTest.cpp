@@ -11,6 +11,7 @@
 #include "engine/operation/NeutralElementOperation.h"
 #include "engine/operation/StripColumns.h"
 
+using ad_utility::testing::colIndices;
 using ad_utility::testing::makeAllocator;
 using V = Variable;
 
@@ -44,10 +45,11 @@ TEST(Distinct, CacheKey) {
   auto d = ad_utility::makeExecutionTree<Distinct>(
       ad_utility::testing::getQec(),
       ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
-      std::vector<ColumnIndex>{0, 1});
+      colIndices({0, 1}));
   Distinct d2(ad_utility::testing::getQec(),
-              ad_utility::makeExecutionTree<NeutralElementOperation>(qec), {0});
-  Distinct d3(ad_utility::testing::getQec(), d, {0});
+              ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+              colIndices({0}));
+  Distinct d3(ad_utility::testing::getQec(), d, colIndices({0}));
 
   EXPECT_NE(d->getCacheKey(), d2.getCacheKey());
   EXPECT_NE(d->getCacheKey(), d3.getCacheKey());
@@ -141,9 +143,9 @@ TEST(Distinct, nonLazy) {
       qec, std::move(input),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
-      false, std::vector<ColumnIndex>{1, 2}, LocalVocab{}, std::nullopt, true);
+      false, colIndices({1, 2}), LocalVocab{}, std::nullopt, true);
 
-  Distinct distinct{qec, std::move(values), {1, 2}};
+  Distinct distinct{qec, std::move(values), colIndices({1, 2})};
 
   {
     auto result =
@@ -177,9 +179,9 @@ TEST(Distinct, nonLazyWithLazyInputs) {
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
-      false, std::vector<ColumnIndex>{1, 2});
+      false, colIndices({1, 2}));
 
-  Distinct distinct{qec, std::move(values), {1, 2}};
+  Distinct distinct{qec, std::move(values), colIndices({1, 2})};
 
   auto result = distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
   ASSERT_TRUE(result->isFullyMaterialized());
@@ -207,9 +209,9 @@ TEST(Distinct, lazyWithLazyInputs) {
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
-      false, std::vector<ColumnIndex>{1, 2});
+      false, colIndices({1, 2}));
 
-  Distinct distinct{qec, std::move(values), {1, 2}};
+  Distinct distinct{qec, std::move(values), colIndices({1, 2})};
 
   auto result = distinct.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isFullyMaterialized());
@@ -231,7 +233,7 @@ TEST(Distinct, clone) {
   auto qec = ad_utility::testing::getQec();
   Distinct distinct{ad_utility::testing::getQec(),
                     ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
-                    std::vector<ColumnIndex>{0, 1}};
+                    colIndices({0, 1})};
 
   auto clone = distinct.clone();
   ASSERT_TRUE(clone);

@@ -10,11 +10,13 @@
 #ifndef QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H
 #define QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "backports/algorithm.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/Operation.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 
 namespace column_stripping_test_helpers {
 
@@ -56,6 +58,46 @@ auto isStrippedColumns(std::vector<Variable> expectedVariables,
   return ::testing::AllOf(hasRootOperation<Operation>(),
                           hasVariables(std::move(expectedVariables)),
                           hasExpectedResult(std::move(resultMatcher)));
+}
+
+// Return the number of operations of type `OperationType` in the tree with the
+// root operation `root` (`root` included).
+template <typename OperationType>
+size_t countOperations(const Operation& root) {
+  size_t count = dynamic_cast<const OperationType*>(&root) != nullptr ? 1 : 0;
+  for (const auto* child : root.getChildren()) {
+    count += countOperations<OperationType>(*child->getRootOperation());
+  }
+  return count;
+}
+
+// Overload for a `QueryExecutionTree`.
+template <typename OperationType>
+size_t countOperations(const QueryExecutionTree& tree) {
+  return countOperations<OperationType>(*tree.getRootOperation());
+}
+
+// Create the expression `EXISTS { ?a <predicate> ?x }`, which is correlated
+// with the variable `?a`. Return the expression and the variable that the
+// `ExistsJoin` writes the result of the `EXISTS` to.
+inline std::pair<sparqlExpression::SparqlExpressionPimpl, Variable>
+makeExistsExpression(const std::string& predicate) {
+  ParsedQuery query;
+  query._rootGraphPattern._graphPatterns.push_back(
+      parsedQuery::BasicGraphPattern{{SparqlTriple{
+          TripleComponent{Variable{"?a"}},
+          ad_utility::triple_component::Iri::fromIriref(predicate),
+          TripleComponent{Variable{"?x"}}}}});
+  // Select the visible variables via `*`, exactly as the parser does.
+  query.selectClause().setAsterisk();
+  query.selectClause().addVisibleVariable(Variable{"?a"});
+  auto exists =
+      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query));
+  Variable existsVar = exists->variable();
+  return {
+      sparqlExpression::SparqlExpressionPimpl{
+          std::move(exists), absl::StrCat("EXISTS { ?a ", predicate, " ?x }")},
+      existsVar};
 }
 }  // namespace column_stripping_test_helpers
 

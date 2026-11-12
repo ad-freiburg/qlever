@@ -6,14 +6,27 @@
 #define QLEVER_OPERATIONTESTHELPERS_H
 
 #include <chrono>
+#include <initializer_list>
 #include <vector>
 
+#include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/Operation.h"
 #include "util/ContainersWithAllocator.h"
 
 using namespace std::chrono_literals;
+
+namespace ad_utility::testing {
+// Create a `qlm::vector<ColumnIndex>` with the given `columns`, for the sort
+// and distinct columns of an operation. The allocator is unimportant in the
+// tests, so it defaults to the unlimited test allocator.
+inline constexpr auto colIndices =
+    [](std::initializer_list<ColumnIndex> columns,
+       const qlever::Allocator<ColumnIndex>& allocator = makeAllocator()) {
+      return qlm::vector<ColumnIndex>{columns, allocator};
+    };
+}  // namespace ad_utility::testing
 
 class StallForeverOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {

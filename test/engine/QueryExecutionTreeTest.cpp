@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/CartesianProductJoin.h"
@@ -127,7 +128,7 @@ TEST(QueryExecutionTree, createDistinctTreeFallbackAddsDistinct) {
   auto tree = QueryExecutionTree::createDistinctTree(values, SC{0, 1});
   auto distinct = std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
   ASSERT_TRUE(distinct);
-  EXPECT_EQ(distinct->getDistinctColumns(), (SC{0, 1}));
+  EXPECT_THAT(distinct->getDistinctColumns(), ::testing::ElementsAre(0, 1));
 }
 
 // _____________________________________________________________________________
@@ -168,7 +169,7 @@ TEST(QueryExecutionTree, createDistinctTreeKeepsHiddenVariablesHidden) {
   auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{5}, {6}}), Vars{Var{"?b"}});
   auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
-      qec, CartesianProductJoin::Children{left, right});
+      qec, CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
   cartesian->getRootOperation()->setSelectedVariablesForSubquery({a});
 
   auto tree = QueryExecutionTree::createDistinctTree(
@@ -271,7 +272,6 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
 TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
-  using SC = std::vector<ColumnIndex>;
   auto* qec = getQec();
   VariableToColumnMap expectedVariables{
       {Var{"?a"}, makeAlwaysDefinedColumn(0)}};
@@ -283,7 +283,7 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   };
   auto unionTree = ad_utility::makeExecutionTree<Union>(
       qec, makeValues(makeIdTableFromVector({{1, 2}})),
-      makeValues(makeIdTableFromVector({{0, 3}})), SC{1});
+      makeValues(makeIdTableFromVector({{0, 3}})), colIndices({1}));
   unionTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
 
   auto sortedUnion = QueryExecutionTree::createSortedTree(unionTree, {0});
@@ -296,7 +296,8 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
 
   // The same holds for `Sort`.
   auto sortTree = ad_utility::makeExecutionTree<Sort>(
-      qec, makeValues(makeIdTableFromVector({{1, 0}, {0, 1}})), SC{1});
+      qec, makeValues(makeIdTableFromVector({{1, 0}, {0, 1}})),
+      colIndices({1}));
   sortTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
 
   auto sortedSort = QueryExecutionTree::createSortedTree(sortTree, {0});
@@ -348,8 +349,8 @@ TEST(QueryExecutionTree,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
 
-  auto sort = ad_utility::makeExecutionTree<Sort>(qec, indexScan,
-                                                  std::vector<ColumnIndex>{0});
+  auto sort =
+      ad_utility::makeExecutionTree<Sort>(qec, indexScan, colIndices({0}));
 
   sort->applyLimitOffset(limitOffset, false);
   EXPECT_TRUE(

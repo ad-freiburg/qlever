@@ -10,6 +10,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/ColumnStrippingHelpers.h"
 #include "engine/operation/ExistsJoin.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -248,12 +249,12 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return cloneWithNewChildren({_subtree->clone()});
+  return cloneWithNewChildren({{_subtree->clone()}, allocator()});
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Bind>(_executionContext, std::move(children.at(0)),
                                 _bind);
 }
@@ -266,5 +267,38 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
   if (_bind._expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
-  return pushDownBindToAnyChild(bind, {_subtree});
+  return pushDownBindToAnyChild(bind, {{_subtree}, allocator()});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Bind::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  // The subtree has to provide the requested variables and the variables that
+  // are required by `Bind` to build its target.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  bool bindTargetRequested =
+      ad_utility::contains(requestedVariables, _bind._target);
+  if (bindTargetRequested) {
+    auto addVarsResult =
+        varsRequiredFromSubtree.addVarsFromExpression(_bind._expression);
+    AD_CORRECTNESS_CHECK(
+        addVarsResult == AddVarsResult::Success,
+        "Aggregate functions are not allowed in a `Bind` clause");
+  }
+
+  // Strip the subtree. The `Bind` itself is only kept if the parent requests
+  // its target.
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
+  if (!bindTargetRequested) {
+    return subtree;
+  }
+
+  // The new `Bind` also exports evaluated variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Bind>(
+      getExecutionContext(), requestedVariables, std::move(subtree), _bind);
 }

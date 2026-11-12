@@ -48,6 +48,17 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParameters) {
 
   auto [expr4, exp4] = makeUnrelated();
   checkGeoDistanceCall(getGeoDistanceExpressionParameters(*expr4), exp4);
+
+  // An unsupported expression type (neither a variable, `IdExpression`, nor
+  // `StringLiteralExpression`) as the left or right argument is rejected.
+  auto unsupportedLeftPtr = makeMetricDistExpression(
+      makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}));
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(*unsupportedLeftPtr),
+                       std::nullopt);
+  auto unsupportedRightPtr = makeMetricDistExpression(
+      getExpr(V{"?a"}), makePowExpression(getExpr(V{"?b"}), getExpr(V{"?c"})));
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(*unsupportedRightPtr),
+                       std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -155,6 +166,12 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
       getExpr(Literal::literalWithoutQuotes("T*T***T**")));
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*unsupportedArgPtr), std::nullopt);
+  auto unsupportedRightArgPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), makePowExpression(getExpr(V{"?b"}), getExpr(V{"?c"})),
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*unsupportedRightArgPtr),
+      std::nullopt);
 
   // A syntactically valid pattern that could still match disjoint geometries
   // is rejected, because `geof:relate` currently only supports patterns that

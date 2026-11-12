@@ -65,6 +65,17 @@ TEST(Values, emptyValuesClause) {
   EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
 }
 
+// Test that a `VALUES` clause with variables but no rows has multiplicity 1 for
+// every column (the general formula would divide 0 rows by 0 distinct values).
+TEST(Values, emptyValuesClauseWithVariables) {
+  auto testQec = ad_utility::testing::getQec();
+  Values valuesOp(testQec, {{Variable{"?x"}, Variable{"?y"}}, {}});
+  EXPECT_TRUE(valuesOp.knownEmptyResult());
+  EXPECT_EQ(valuesOp.getSizeEstimate(), 0u);
+  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(1), 1.0f);
+}
+
 // A VALUES clause without variables, but with rows (e.g. `VALUES () { () }`)
 // is not empty, its result consists of one empty solution per row.
 TEST(Values, emptyRowsWithoutVariables) {

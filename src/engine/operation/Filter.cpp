@@ -11,6 +11,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/ColumnStrippingHelpers.h"
 #include "engine/operation/ExistsJoin.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -267,12 +268,12 @@ bool Filter::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Filter::cloneImpl() const {
-  return cloneWithNewChildren({_subtree->clone()});
+  return cloneWithNewChildren({{_subtree->clone()}, allocator()});
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Filter::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Filter>(_executionContext, std::move(children.at(0)),
                                   _expression);
 }
@@ -285,5 +286,31 @@ Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   if (_expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
-  return pushDownBindToAnyChild(bind, {_subtree});
+  return pushDownBindToAnyChild(bind, {{_subtree}, allocator()});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  // The subtree has to provide the requested variables and all variables that
+  // the `Filter` operation filters on.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  auto addVarsResult =
+      varsRequiredFromSubtree.addVarsFromExpression(_expression);
+  AD_CORRECTNESS_CHECK(
+      addVarsResult == AddVarsResult::Success,
+      "Aggregate functions are not allowed in a `Filter` clause");
+
+  // Strip the subtree.
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
+
+  // The new `Filter` also exports the filtered variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      _expression);
 }

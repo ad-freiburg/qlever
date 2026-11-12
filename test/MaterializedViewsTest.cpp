@@ -24,6 +24,7 @@
 #endif
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "./util/OperationTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/MaterializedViews.h"
@@ -54,6 +55,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerWarnings.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
@@ -2216,7 +2218,8 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   {
     auto plan = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     AD_EXPECT_THROW_WITH_MESSAGE(
-        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren({}),
+        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren(
+            {{}, plan.queryExecutionContext().getAllocator()}),
         ::testing::HasSubstr("`cloneWithNewChildren` is not implemented"));
   }
 
@@ -2510,8 +2513,9 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       return makeExecutionTree<Union>(qec, left, right);
     };
     auto cartesian = [qec](auto left, auto right) {
-      return makeExecutionTree<CartesianProductJoin>(qec,
-                                                     std::vector{left, right});
+      return makeExecutionTree<CartesianProductJoin>(
+          qec,
+          CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
     };
 
     // Push the `BIND` into `tree` (like the query planner does) and check the
@@ -2573,8 +2577,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         bindUnion->getRootOperation()->makeTreeWithBindColumn(bind));
     expectPush(unionOf(view(), sharesS()), std::nullopt);
     expectPush(unionOf(sharesSAndO(), view()), std::nullopt);
-    expectPush(makeExecutionTree<Union>(qec, view(), view(),
-                                        std::vector<ColumnIndex>{0}),
+    expectPush(makeExecutionTree<Union>(qec, view(), view(), colIndices({0})),
                std::nullopt);
 
     // `NeutralOptional` refuses: for an empty child it fabricates an
