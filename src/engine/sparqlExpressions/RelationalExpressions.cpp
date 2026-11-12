@@ -332,12 +332,15 @@ ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
 
 namespace {
 // Return the language of `LANG(?x) = expression` if `expression` is a literal
-// without a language tag and a datatype (e.g. "en"), and `std::nullopt`
+// with neither a language tag nor a datatype (e.g. "en"), and `std::nullopt`
 // otherwise.
 //
-// NOTE: `LANG(?x)` never equals a literal with a language tag or a datatype
+// NOTE 1: `LANG(?x)` never equals a literal with a language tag or a datatype
 // (e.g. "en"@de or "en"^^<x>), so such a FILTER must not become a language
 // filter on the triple of `?x`.
+//
+// NOTE 2: A literal with the datatype `xsd:string` (e.g. "en"^^xsd:string) is
+// the same RDF term as the plain literal, and `hasDatatype()` is false for it.
 std::optional<std::string> getLanguage(const SparqlExpression* expression) {
   const auto* literal =
       dynamic_cast<const StringLiteralExpression*>(expression);
