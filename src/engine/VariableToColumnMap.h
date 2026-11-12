@@ -11,6 +11,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
@@ -145,7 +146,7 @@ copySortedByColumnIndex(VariableToColumnMap map);
 enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
-    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
     size_t leftResultWidth, bool keepJoinColumns = true);
 
 #endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H

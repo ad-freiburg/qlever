@@ -8,6 +8,7 @@
 #include <array>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/ContainersWithAllocator.h"
@@ -19,7 +20,7 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _right;
 
   std::vector<float> _multiplicities;
-  std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
+  qlm::vector<std::array<ColumnIndex, 2>> _matchedColumns{allocator()};
 
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
 
@@ -83,7 +84,7 @@ class Minus : public Operation {
    **/
   IdTable computeMinus(
       const IdTableView<0>& a, const IdTableView<0>& b,
-      const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
+      ql::span<const std::array<ColumnIndex, 2>> matchedColumns) const;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
