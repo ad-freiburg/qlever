@@ -1191,6 +1191,19 @@ TEST(RelationalExpression, getLanguageFilterExpression) {
     EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt)
         << langtagOrDatatype;
   }
+  // A literal with the datatype `xsd:string` is the same term as a plain
+  // literal and gives a language filter.
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(tripleComponentLiteral(
+        "\"en\"", "^^<http://www.w3.org/2001/XMLSchema#string>"));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(le), std::move(sle)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
   // No String Literal
   {
     auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
