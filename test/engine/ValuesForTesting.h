@@ -293,7 +293,7 @@ class ValuesForTestingCountingDeterminismChecks : public ValuesForTesting {
   }
 };
 
-// Count the amounts the tree of this class was cloned.
+// Count how often the tree of this class was cloned.
 class ValuesForTestingCountClones : public ValuesForTesting {
  public:
   // Clone counter, must be reset.

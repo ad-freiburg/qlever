@@ -460,7 +460,7 @@ class QueryPlanner {
   // for the transitive path operation and one from the other operation with
   // which the result of the transitive path operation is joined.
   // A side that is not bound to a variable will be `std::nullopt`. If that is
-  // the case for both side, it indicates that the full transitive path will be
+  // the case for both sides, it indicates that the full transitive path will be
   // computed. If the Boolean `leftSideTransitivePath` is true, the column
   // indices of the transitive path are on the "left side" of the pairs from
   // `jcs`, otherwise they are on the "right side". The join pairs for the graph

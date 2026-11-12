@@ -183,10 +183,10 @@ class TransitivePathBase : public Operation {
 
   ~TransitivePathBase() override = 0;
 
-  // Return a new transitive Path `Operation` that uses the fact that either
+  // Return a new transitive path `Operation` that uses the fact that either
   // the left, right or both input columns (each given by their index) generate
   // all possible values of their corresponding side. If they are
-  // `std::nullopt`,this side is not bound. This may result in a faster
+  // `std::nullopt`, this side is not bound. This may result in a faster
   // transitive path operation if the amount of those values is smaller than all
   // possible values (as the transitive path has to be computed for fewer
   // elements).
@@ -326,7 +326,7 @@ class TransitivePathBase : public Operation {
 
   // Get a list of indices of all payload columns (no side, no graph). The
   // `leftCol` and `rightCol` indicate the columns that are actually used in the
-  // transitive Path and are not payload.
+  // transitive path and are not payload.
   std::vector<ColumnIndex> computePayloadColumns(
       const std::shared_ptr<QueryExecutionTree>& op,
       const std::optional<ColumnIndex>& leftCol,

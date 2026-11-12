@@ -206,7 +206,7 @@ class TransitivePathImpl : public TransitivePathBase {
                                     resultSortedOn()};
   }
 
-  // Compute the transitive Hull starting at the nodes given in the range
+  // Compute the transitive hull starting at the nodes given in the range
   // `startNodes` with optional targets given in `startNodes.targetNodes_`,
   // using the map given in `edges`. If no target nodes are given, all nodes
   // connected to the current start node are returned. The `TripleComponent`s
@@ -344,8 +344,8 @@ class TransitivePathImpl : public TransitivePathBase {
   // Prepare a Map and a nodes vector for the transitive hull
   // computation. The start and target sides are given in `startSide` and
   //`targetSide` respectively. The `Result` object for the operation is given
-  // as `startSideResult.Returns a range for the transitive hull computation as
-  // used in `transitiveHull`.
+  // as `startSideResult`. Returns a range for the transitive hull computation
+  // as used in `transitiveHull`.
   ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide, const TransitivePathSide& targetSide,
       std::shared_ptr<const Result> startSideResult) const {

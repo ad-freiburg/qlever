@@ -386,10 +386,10 @@ TransitivePathBase::Estimates TransitivePathBase::computeEstimates() {
   double numStartRowsWithEdges = numStartRows * fractionWithEdges;
   double numVisitedNodes = numStartRowsWithEdges * reach;
 
-  // For a fixed target, the result consists of the start rows from which the
-  // target is reachable.
+  // For a fixed or bound target, the result consists of the start rows from
+  // which the target is reachable.
   double size = numVisitedNodes;
-  if (!targetSide.isVariable()) {
+  if (!targetSide.isVariable() || targetSide.isBoundVariable()) {
     size = numStartRowsWithEdges * std::min(reach / numTargetNodes, 1.0);
   } else if (minDist_ == 0) {
     size += numStartRows;
@@ -413,6 +413,11 @@ TransitivePathBase::Estimates TransitivePathBase::computeEstimates() {
                     numTargetNodes));
   if (minDist_ == 0) {
     numDistinctTargetValues += numDistinctStartValues;
+  }
+  // For a bound target, the values of the target column stem from its input.
+  if (targetSide.isBoundVariable()) {
+    const auto& [tree, col] = targetSide.treeAndCol_.value();
+    numDistinctTargetValues = numDistinctValues(*tree, col);
   }
   double targetMultiplicity =
       targetSide.isVariable()

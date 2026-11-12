@@ -3886,9 +3886,9 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         query, h::MultiColumnJoin(h::Sort(values), h::Sort(completeHull(1))),
         std::nullopt, greedyBudgets);
 
-    // Ensure join with too many columns doesn't result in an exception. (This
-    // could be optimized in the future.)
-    h::expectWithGivenBudgets(
+    // Ensure join with too many columns doesn't result in an exception and that
+    // both sides are bound at once.
+    h::expect(
         "SELECT * "
         "{ VALUES (?g ?a ?b) { (1 1 1) } GRAPH ?g { ?a <label>+ ?b } }",
         h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
@@ -3896,8 +3896,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
                               "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                              {Variable{"?g"}}, {3}))),
-        std::nullopt, {4, 16, 64'000'000});
+                              {Variable{"?g"}}, {3}))));
 
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
