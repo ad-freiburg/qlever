@@ -34,18 +34,21 @@ struct Canonical {
   std::vector<Conjunct> conjuncts_;
 };
 
-// Parse `SELECT * { ?a <p> ?ga . ?b <p> ?gb . FILTER(<filter>) }` and
-// canonicalize its FILTER.
-Canonical canonical(std::string_view filter) {
+// Parse `SELECT * { ?a <p> ?ga . ?b <p> ?gb . <definitions> FILTER(<filter>)
+// }` and canonicalize its FILTER with the definitions of the group.
+Canonical canonical(std::string_view filter,
+                    std::string_view definitions = "") {
   Canonical result{
       ad_utility::testing::parseQuery(absl::StrCat(
           "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
           "PREFIX unit: <http://qudt.org/vocab/unit/> "
-          "SELECT * { ?a <p> ?ga . ?b <p> ?gb . FILTER(",
-          filter, ") }")),
+          "SELECT * { ?a <p> ?ga . ?b <p> ?gb . ",
+          definitions, " FILTER(", filter, ") }")),
       {}};
-  for (const auto& f : result.query_._rootGraphPattern._filters) {
-    ql::ranges::move(canonicalize(f.expression_),
+  const auto& group = result.query_._rootGraphPattern;
+  auto defs = collectDefinitions(group._graphPatterns);
+  for (const auto& f : group._filters) {
+    ql::ranges::move(canonicalize(f.expression_, defs),
                      std::back_inserter(result.conjuncts_));
   }
   return result;
@@ -115,6 +118,24 @@ TEST(FilterFactsCanonicalizer, Distance) {
       result.conjuncts_,
       ElementsAre(distanceComparison(Comparison::LE, 500), opaque(notEqual),
                   distanceComparison(Comparison::LT, 400)));
+}
+
+// Test that a variable is replaced by its definition from `VALUES` or `BIND`
+// (for the distance and the number).
+TEST(FilterFactsCanonicalizer, Definitions) {
+  auto expect = [](std::string_view definitions, std::string_view filter,
+                   Comparison op, double meters,
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    EXPECT_THAT(canonical(filter, definitions).conjuncts_,
+                ElementsAre(distanceComparison(op, meters)));
+  };
+  expect("VALUES ?r { 500 }", "geof:metricDistance(?ga, ?gb) <= ?r",
+         Comparison::LE, 500);
+  expect("BIND(0.5 AS ?r)", "geof:distance(?ga, ?gb) < ?r", Comparison::LT,
+         500);
+  expect("BIND(geof:metricDistance(?ga, ?gb) AS ?d)", "?d <= 500",
+         Comparison::LE, 500);
 }
 
 // Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of

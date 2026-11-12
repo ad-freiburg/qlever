@@ -81,8 +81,11 @@ struct Conjunct {
 // Bring the expression of a FILTER into canonical form: split it at `&&` into
 // its conjuncts, and bring each comparison `distance < number` or
 // `distance <= number` into a `DistanceComparison` (with the number in meters).
+// A variable with a definition in `defs` is replaced by its definition (for the
+// distance and the number).
 std::vector<Conjunct> canonicalize(
-    const sparqlExpression::SparqlExpressionPimpl& filter);
+    const sparqlExpression::SparqlExpressionPimpl& filter,
+    const Definitions& defs = {});
 
 }  // namespace filterFacts
 

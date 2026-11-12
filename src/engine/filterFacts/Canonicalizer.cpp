@@ -105,11 +105,46 @@ Definitions collectDefinitions(
 
 namespace {
 
+// Return `expression`, or the expression of the `BIND` in `defs` if it is a
+// variable with such a definition.
+const SparqlExpression& resolve(const SparqlExpression& expression,
+                                const Definitions& defs) {
+  if (auto variable = expression.getVariableOrNullopt()) {
+    if (auto it = defs.expressions_.find(variable.value());
+        it != defs.expressions_.end()) {
+      return resolve(*it->second, defs);
+    }
+  }
+  return expression;
+}
+
+// Return the value of `expression` if it is a number (an `Int` or `Double`
+// `Id`, e.g. `500` or `0.5`) or a variable with a single number in `defs`, and
+// `std::nullopt` otherwise (e.g. for the string "500").
+std::optional<double> getNumber(const SparqlExpression& expression,
+                                const Definitions& defs) {
+  const auto& resolved = resolve(expression, defs);
+
+  // A variable with a single number from a `VALUES` clause or a `BIND` (whose
+  // constant is an `Id`).
+  if (auto variable = resolved.getVariableOrNullopt()) {
+    auto it = defs.constants_.find(variable.value());
+    if (it == defs.constants_.end() || it->second.size() != 1) {
+      return std::nullopt;
+    }
+    return it->second.front().getNumber();
+  }
+
+  // A number.
+  auto constant = resolved.getConstantValue();
+  return constant.has_value() ? constant->getNumber() : std::nullopt;
+}
+
 // Return the canonical form of a single conjunct: `distance < number` and
 // `distance <= number` become a `DistanceComparison`, everything else is
 // `Opaque`.
 std::variant<DistanceComparison, Opaque> toCanonicalForm(
-    const SparqlExpression& expression) {
+    const SparqlExpression& expression, const Definitions& defs) {
   // Match `distance op number` for a distance in a unit of length, return
   // `Opaque` for every other expression.
   auto op = sparqlExpression::getComparison(expression);
@@ -117,9 +152,8 @@ std::variant<DistanceComparison, Opaque> toCanonicalForm(
     return Opaque{};
   }
   auto call = sparqlExpression::getGeoDistanceExpressionParameters(
-      *expression.children()[0]);
-  auto constant = expression.children()[1]->getConstantValue();
-  auto number = constant.has_value() ? constant->getNumber() : std::nullopt;
+      resolve(*expression.children()[0], defs));
+  auto number = getNumber(*expression.children()[1], defs);
   if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
       !number.has_value()) {
     return Opaque{};
@@ -143,11 +177,12 @@ std::variant<DistanceComparison, Opaque> toCanonicalForm(
 
 // _____________________________________________________________________________
 std::vector<Conjunct> canonicalize(
-    const sparqlExpression::SparqlExpressionPimpl& filter) {
+    const sparqlExpression::SparqlExpressionPimpl& filter,
+    const Definitions& defs) {
   return ad_utility::transform(
       filter.splitConjunction(),
-      [](sparqlExpression::SparqlExpressionPimpl conjunct) {
-        auto canonical = toCanonicalForm(*conjunct.getPimpl());
+      [&defs](sparqlExpression::SparqlExpressionPimpl conjunct) {
+        auto canonical = toCanonicalForm(*conjunct.getPimpl(), defs);
         return Conjunct{std::move(conjunct), std::move(canonical)};
       });
 }
