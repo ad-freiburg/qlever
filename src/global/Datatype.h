@@ -43,7 +43,7 @@ enum struct Datatype {
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
-  // An index-local reference to a structural triple term.
+  // The Index of an RDF 1.2 triple term.
   TripleTermIndex,
   // Always the last member (there is no easy way to get the number of members
   // of an enum, and other code sizes its arrays by `MaxValue`).
@@ -58,8 +58,7 @@ enum struct Datatype {
 // NOTE: `BlankNodeIndex` is deliberately NOT trivial, as blank nodes depend on
 // the context (they have to be remapped when results from different RDF
 // sources are merged). The same holds for `EncodedVal`, which depends on the
-// configurable prefixes of the encoding. `TripleTermIndex` refers to a
-// structural term in one index and is also non-trivial.
+// configurable prefixes of the encoding.
 constexpr bool isDatatypeTrivial(Datatype datatype) {
   using enum Datatype;
   constexpr std::array trivialDatatypes{Undefined, Bool, Int,

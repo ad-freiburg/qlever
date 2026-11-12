@@ -64,4 +64,16 @@ TEST(FoldedValueId, indexTooLarge) {
                ValueId::IndexTooLargeException);
 }
 
+// Test that existing raw IDs retain their datatype, bits and 64-bit layout.
+TEST(FoldedValueId, ExistingRawIdLayoutRemainsStable) {
+  for (size_t tag = 0; tag < static_cast<size_t>(Datatype::TripleTermIndex);
+       ++tag) {
+    auto bits = (static_cast<ValueId::T>(tag) << ValueId::numDataBits) | 17;
+    auto id = ValueId::fromBits(bits);
+    EXPECT_EQ(id.getDatatype(), static_cast<Datatype>(tag));
+    EXPECT_EQ(id.getBits(), bits);
+  }
+  EXPECT_EQ(sizeof(ValueId), sizeof(uint64_t));
+}
+
 }  // namespace foldedValueId

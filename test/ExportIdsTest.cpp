@@ -17,6 +17,7 @@
 #include "index/LocalVocabEntry.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/Literal.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -638,6 +639,8 @@ TEST(ExportIds, tripleTermReferencesHaveNoLiteralOrStringRepresentationYet) {
   auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
   EXPECT_FALSE(ql::exportIds::idToLiteral(index, term, LocalVocab{}));
   EXPECT_FALSE(ql::exportIds::idToLiteralOrIri(index, term, LocalVocab{}));
-  EXPECT_THROW(ql::exportIds::idToStringAndTypeForEncodedValue(term),
-               std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      ql::exportIds::idToStringAndTypeForEncodedValue(term),
+      ::testing::StrEq("Export of triple-term references is not supported yet"),
+      std::runtime_error);
 }

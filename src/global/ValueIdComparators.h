@@ -391,6 +391,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::BlankNodeIndex:
     // Equality is exact for index-local term references. Order across term IDs
     // is only their physical order, not a SPARQL ordering.
+    // TODO<Prashanth0703> Determine the correct semantic ordering of triple
+    // terms.
     case Datatype::TripleTermIndex:
       // TODO<joka921> The same caveat as for `EncodedVal` above applies to the
       // `SecondaryVocabIndex` type: the comparison via bits is only correct for

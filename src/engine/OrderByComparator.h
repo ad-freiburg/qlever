@@ -56,6 +56,8 @@ class OrderByComparator {
       case Datatype::Undefined:
         return TermKind::Undefined;
       case Datatype::TripleTermIndex:
+        // TODO<Prashanth0703> Implement semantic ORDER BY support for triple
+        // terms.
         throw std::runtime_error(
             "ORDER BY for triple terms is not supported yet");
       case Datatype::BlankNodeIndex:

@@ -424,8 +424,6 @@ addLinkAndDiscoverTest(IdBaseTest qlever_util)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
-addLinkAndDiscoverTestNoLibs(TripleTermIdTest localVocab)
-
 addLinkAndDiscoverTest(TieTest qlever_util)
 
 addLinkAndDiscoverTest(DatatypeTest qlever_util)

@@ -14,6 +14,10 @@
 
 #include "global/TypedIndex.h"
 
+// TODO<Prashanth0703> Decide how to represent query-local triple terms before
+// adding persistent term storage: a payload marker or an adjacent local
+// datatype. Account for ownership and equality between local and index-stored
+// terms.
 inline constexpr ad_utility::IndexTag tripleTermIndexTag = "TripleTermIndex";
 using TripleTermIndex = ad_utility::TypedIndex<uint64_t, tripleTermIndexTag>;
 

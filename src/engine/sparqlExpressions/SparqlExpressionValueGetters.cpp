@@ -130,8 +130,11 @@ auto EffectiveBooleanValueGetter::operator()(
       return (id.getInt() != 0) ? True : False;
     case Datatype::Bool:
       return id.getBool() ? True : False;
-    case Datatype::Undefined:
     case Datatype::TripleTermIndex:
+      // SPARQL 1.2 section 17.2.3: EBV of a non-literal is an error.
+      // `Undef` represents that error, not an unbound triple term.
+      return Undef;
+    case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
     case Datatype::EncodedVal:
@@ -286,9 +289,12 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Date:
     case Datatype::GeoPoint:
       return Id::makeFromBool(prefix == isLiteralPrefix);
+    case Datatype::TripleTermIndex:
+      // A triple term is neither an IRI nor a literal (SPARQL 1.2 sections
+      // 17.4.2.3 and 17.4.2.5).
+      return Id::makeFromBool(false);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
-    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
       return Id::makeFromBool(false);
   }
@@ -323,6 +329,10 @@ bool IsValidValueGetter::operator()(
 IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    case Datatype::TripleTermIndex:
+      // Triple terms cannot be cast to numeric or boolean literals. The
+      // constructor maps `monostate` to an undefined expression result.
+      return std::monostate{};
     case Datatype::Undefined:
       return std::monostate{};
     case Datatype::Int:
@@ -338,7 +348,6 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::Date:
-    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::EncodedVal:
     case Datatype::SecondaryVocabIndex:

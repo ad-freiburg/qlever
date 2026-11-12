@@ -33,8 +33,12 @@ std::vector<std::string> StringMapping::takeStrings() {
 Id StringMapping::remapId(Id id) {
   using enum Datatype;
   if (id.getDatatype() == Datatype::TripleTermIndex) {
+    // TODO<Prashanth0703> Support binary export of triple terms with a suitable
+    // format version and structural term transport. The version compatibility
+    // checks in BinaryFormat.cpp rely on this rejection. Before supporting this
+    // datatype, reassess the binary export version and its format checks there.
     throw std::runtime_error(
-        "Binary export of triple-term references is not supported");
+        "Binary export of triple-term references is not yet supported");
   }
   // The datatypes that can be passed to a string mapping are exactly the
   // datatypes that semantically point to strings (so literals/IRIs that can't
@@ -49,6 +53,7 @@ Id StringMapping::remapId(Id id) {
   // (see above), or `EncodedVal`, or `BlankNodeIndex`. The latter two are not
   // sent as strings: An `EncodedVal` is sent as is (together with the patterns
   // of its encoding), and a `BlankNodeIndex` is remapped by the importer.
+  // TripleTermIndex is accounted for separately because it is rejected above.
   static constexpr auto checkDatatypes = []() {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||

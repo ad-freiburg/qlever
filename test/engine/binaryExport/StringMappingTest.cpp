@@ -218,8 +218,10 @@ TEST(TransmittedStringRewriter, malformedStrings) {
 // part of the binary format. Never transmit their raw payload as a value.
 TEST(StringMapping, rejectsTripleTermReferences) {
   StringMapping mapping{getQecWithTextIndex()->getIndex()};
-  EXPECT_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mapping.remapId(Id::makeFromTripleTermIndex(TripleTermIndex::make(17))),
+      ::testing::StrEq(
+          "Binary export of triple-term references is not yet supported"),
       std::runtime_error);
   EXPECT_EQ(mapping.size(), 0);
 }

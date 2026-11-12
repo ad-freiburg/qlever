@@ -22,6 +22,7 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "./ValueIdTestHelpers.h"
@@ -892,3 +893,39 @@ TYPED_TEST(IdBaseTest, fromBitsL) {
 // evaluated in a `static_assert` after the definition of the class, which the
 // coverage tool does not count as a call.
 TYPED_TEST(IdBaseTest, checkDerived) { EXPECT_TRUE(TypeParam::checkDerived()); }
+
+// Test triple-term ID round-tripping, datatype separation and visitor dispatch
+// for both layouts.
+TYPED_TEST(IdBaseTest, TripleTermRoundTripAndTypeSeparation) {
+  using Id = TypeParam;
+  auto id = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  EXPECT_EQ(id.getDatatype(), Datatype::TripleTermIndex);
+  EXPECT_EQ(id.getTripleTermIndex().get(), 17);
+  EXPECT_EQ(id, Id::fromBits(id.getBits()));
+  EXPECT_NE(id, Id::makeFromInt(17));
+  EXPECT_NE(id, Id::makeFromVocabIndex(VocabIndex::make(17)));
+  EXPECT_FALSE(id.isTrivial());
+  EXPECT_TRUE(id.canBeComparedBitwise());
+  EXPECT_TRUE(id.visit([](const auto& value) {
+    return std::is_same_v<std::decay_t<decltype(value)>, TripleTermIndex>;
+  }));
+}
+
+// Test triple-term payload bounds and physical reference ordering for both
+// layouts, including overflow rejection where a larger index is representable.
+TYPED_TEST(IdBaseTest, TripleTermPayloadBoundsAndOrdering) {
+  using Id = TypeParam;
+  auto zero = Id::makeFromTripleTermIndex(TripleTermIndex::make(0));
+  auto maximum =
+      Id::makeFromTripleTermIndex(TripleTermIndex::make(Id::maxIndex));
+  EXPECT_LT(zero, maximum);
+  EXPECT_EQ(maximum.getTripleTermIndex().get(), Id::maxIndex);
+  // A 64-bit payload has no representable index beyond its maximum.
+  if constexpr (Id::maxIndex < std::numeric_limits<uint64_t>::max()) {
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        Id::makeFromTripleTermIndex(TripleTermIndex::make(Id::maxIndex + 1)),
+        ::testing::HasSubstr(
+            "is bigger than what the maxIndex of ValueId allows"),
+        typename Id::IndexTooLargeException);
+  }
+}

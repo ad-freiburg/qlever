@@ -91,3 +91,18 @@ TEST(DatatypeTest, toString) {
 TEST(DatatypeTest, invalidDatatypeEnumValue) {
   EXPECT_ANY_THROW(toString(static_cast<Datatype>(2345)));
 }
+
+// Test that appending a datatype preserves the numeric tag assignments used by
+// existing index files and binary query results.
+TEST(DatatypeTest, ExistingDatatypeTagsRemainStable) {
+  constexpr auto existing = std::to_array<Datatype>(
+      {Datatype::Undefined, Datatype::Bool, Datatype::Int, Datatype::Double,
+       Datatype::VocabIndex, Datatype::LocalVocabIndex,
+       Datatype::SecondaryVocabIndex, Datatype::TextRecordIndex, Datatype::Date,
+       Datatype::GeoPoint, Datatype::WordVocabIndex, Datatype::BlankNodeIndex,
+       Datatype::EncodedVal});
+  for (size_t tag = 0; tag < existing.size(); ++tag) {
+    EXPECT_EQ(static_cast<size_t>(existing[tag]), tag);
+  }
+  EXPECT_EQ(static_cast<size_t>(Datatype::TripleTermIndex), existing.size());
+}

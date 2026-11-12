@@ -286,3 +286,16 @@ TEST_F(ValueIdComparators, contractViolations) {
   // Invalid value for the `Comparison` enum.
   ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
 }
+
+// Test that an equality range matches the term reference, excluding IDs of
+// other datatypes with the same numeric value or payload.
+TEST_F(ValueIdComparators, TripleTermEqualityRangeDoesNotMatchOtherDatatypes) {
+  auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  std::vector<Id> values{Id::makeFromInt(17),
+                         Id::makeFromVocabIndex(VocabIndex::make(17)), term};
+  auto ranges = valueIdComparators::getRangesForId(
+      values.begin(), values.end(), term, valueIdComparators::Comparison::EQ);
+  ASSERT_EQ(ranges.size(), 1);
+  EXPECT_EQ(ranges[0].first, values.begin() + 2);
+  EXPECT_EQ(ranges[0].second, values.end());
+}

@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -79,8 +80,10 @@ TEST(OrderByComparator, getTermKind) {
   auto kind = [&comparator](Id id) { return comparator.getTermKind(id); };
 
   EXPECT_EQ(kind(UndefId()), TermKind::Undefined);
-  EXPECT_THROW(kind(Id::makeFromTripleTermIndex(TripleTermIndex::make(3))),
-               std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      kind(Id::makeFromTripleTermIndex(TripleTermIndex::make(3))),
+      ::testing::StrEq("ORDER BY for triple terms is not supported yet"),
+      std::runtime_error);
 
   EXPECT_EQ(kind(BlankNodeId(3)), TermKind::BlankNode);
   auto blankNodeOfBnodeFunction = localVocabEntryFromStringRepresentation(

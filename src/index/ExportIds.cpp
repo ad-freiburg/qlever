@@ -295,6 +295,7 @@ idToStringAndTypeForEncodedValue(Id id) {
     case EncodedVal:
       return std::pair{absl::StrCat("encodedId: ", id.getBits()), nullptr};
     case TripleTermIndex:
+      // TODO<Prashanth0703> Implement structural serialization of triple terms.
       throw std::runtime_error(
           "Export of triple-term references is not supported yet");
     default:

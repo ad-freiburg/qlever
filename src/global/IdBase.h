@@ -135,7 +135,7 @@ class IdBase {
   // `canBeComparedBitwise()` below.
   static constexpr std::array<bool, 14> isTypeBitwiseComparable_{
       true, true, true, true, true, false, true,
-      true, true, true, true, true, true, true};
+      true, true, true, true, true, true,  true};
 
   // Constant to be used in `static_assert` statements to indicate that
   // behavior is relying on the local vocab entry to be the only datatype that
@@ -312,7 +312,7 @@ class IdBase {
   // the index type that the respective getter below is named after, then the
   // result is unspecified.
   [[nodiscard]] constexpr TripleTermIndex getTripleTermIndex() const noexcept {
-    return TripleTermIndex::make(getPayloadBits());
+    return TripleTermIndex::make(derived().getPayloadBits());
   }
 
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {

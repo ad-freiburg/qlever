@@ -695,7 +695,11 @@ TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
       {intZero_, doubleZero_, boolFalse_, Id::makeFromDouble(std::nan("")),
        localEmptyLiteral_, secondaryEmptyLiteral_},
       Eq(Result::False));
-  expectAll<Getter>({undefined_, blankNode_}, Eq(Result::Undef));
+  // A triple term is a bound RDF term, but its EBV is an error because it is
+  // not a literal (SPARQL 1.2 section 17.2.3).
+  expectAll<Getter>({undefined_, blankNode_,
+                     Id::makeFromTripleTermIndex(TripleTermIndex::make(17))},
+                    Eq(Result::Undef));
 }
 
 // _____________________________________________________________________________
@@ -782,7 +786,8 @@ TEST_F(ToNumericValueGetterTest, OperatorWithId) {
   // An IRI is not a literal, so there is nothing to convert, and the remaining
   // datatypes have no string representation that this getter uses.
   expectAll<Getter>({iri_, localIri_, secondaryIri_, encodedIri_, undefined_,
-                     date_, blankNode_, textRecord_, wordVocab_},
+                     date_, blankNode_, textRecord_, wordVocab_,
+                     Id::makeFromTripleTermIndex(TripleTermIndex::make(17))},
                     VariantWith<std::monostate>(_));
 }
 
@@ -820,6 +825,9 @@ TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
                           true);
   // The remaining datatypes are neither.
   expectIsIriAndIsLiteral({blankNode_, textRecord_, wordVocab_}, false, false);
+  // A triple term is bound, but is neither an IRI nor a literal.
+  expectIsIriAndIsLiteral(
+      {Id::makeFromTripleTermIndex(TripleTermIndex::make(17))}, false, false);
   // An unbound argument is an error.
   expectAll<IsIriValueGetter>({undefined_}, Eq(Id::makeUndefined()));
   expectAll<IsLiteralValueGetter>({undefined_}, Eq(Id::makeUndefined()));
