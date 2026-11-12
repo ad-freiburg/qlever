@@ -198,9 +198,7 @@ string IndexScan::getDescriptor() const {
       }) | ql::views::transform(&TripleComponent::toString),
       // All non-stripped additional variables and the variables of the
       // constant columns.
-      ::ranges::views::concat(additionalVariables_,
-                              constantColumns_ | ql::views::values) |
-          ql::views::filter(isNotStripped) |
+      additionalAndConstantVariables() | ql::views::filter(isNotStripped) |
           ql::views::transform(
               [](const auto& var) -> decltype(auto) { return var.name(); }));
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
@@ -756,9 +754,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
         addOtherVar(el.getVariable());
       }
     }
-    for (const auto& var :
-         ::ranges::views::concat(scan.additionalVariables(),
-                                 scan.constantColumns() | ql::views::values)) {
+    for (const auto& var : scan.additionalAndConstantVariables()) {
       addOtherVar(var);
     }
     return std::pair{*scan.getPermutedTriple()[3 - numVars],
@@ -1381,8 +1377,7 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
       ++idx;
     }
   }
-  for (const auto& var : ::ranges::views::concat(
-           additionalVariables_, constantColumns_ | ql::views::values)) {
+  for (const auto& var : additionalAndConstantVariables()) {
     if (v.contains(var)) {
       result.push_back(idx);
     }
