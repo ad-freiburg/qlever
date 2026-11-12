@@ -16,14 +16,14 @@
 class Distinct : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
-  std::vector<ColumnIndex> keepIndices_;
+  qlm::vector<ColumnIndex> keepIndices_;
 
  public:
   static constexpr int64_t CHUNK_SIZE = 100'000;
 
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           const std::vector<ColumnIndex>& keepIndices);
+           ql::span<const ColumnIndex> keepIndices);
 
   [[nodiscard]] size_t getResultWidth() const override;
 
@@ -34,7 +34,7 @@ class Distinct : public Operation {
   }
 
   // Get all columns that need to be distinct.
-  const std::vector<ColumnIndex>& getDistinctColumns() const {
+  const qlm::vector<ColumnIndex>& getDistinctColumns() const {
     return keepIndices_;
   }
 

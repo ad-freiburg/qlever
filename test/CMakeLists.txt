@@ -572,6 +572,8 @@ endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
+addLinkAndDiscoverTest(ThreadSafeReorderBufferTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)

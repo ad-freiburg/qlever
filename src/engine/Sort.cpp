@@ -35,7 +35,7 @@ size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           std::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
+           qlm::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
     : Operation{qec},
       subtree_{std::move(subtree)},
       sortColumnIndices_{std::move(sortColumnIndices)},
@@ -266,7 +266,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
       << std::endl;
   return ad_utility::makeExecutionTree<Sort>(
       _executionContext, subtree_,
-      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()),
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               allocator()},
       explicitSort_);
 }
 
@@ -296,7 +297,7 @@ Sort::makeTreeWithStrippedColumns(
   // of the stripped subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree.get());
-  std::vector<ColumnIndex> sortColumnIndices;
+  qlm::vector<ColumnIndex> sortColumnIndices{allocator()};
   for (const auto& var : sortVars) {
     sortColumnIndices.push_back(subtree->getVariableColumn(*var));
   }

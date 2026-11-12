@@ -522,9 +522,10 @@ TYPED_TEST(IdBaseTest, toDebugString) {
   test(Id::makeBoolFromZeroOrOne(false), "B:false");
   test(Id::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId<Id>(15), "V:15");
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId<Id>();
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "SomeValue", this->qec_->getLocalVocabContext());
-  test(Id::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
+  test(getLocalVocabId(str), "L:\"SomeValue\"");
   test(makeTextRecordId<Id>(37), "T:37");
   test(makeWordVocabId<Id>(42), "W:42");
   test(makeBlankNodeId<Id>(27), "B:27");
@@ -739,11 +740,11 @@ TEST(IdBase, compareThreeWayWithLocalVocabIndex) {
   // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
   // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
   // `SecondaryVocabIndex`.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry entryInVocab = iriLocalVocabEntry("<b>", ctx);
   LocalVocabEntry entryInSecondaryVocab = iriLocalVocabEntry("<zzz>", ctx);
-  Id localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
-  Id localVocabIdSecondary =
-      Id::makeFromLocalVocabIndex(&entryInSecondaryVocab);
+  Id localVocabId = getLocalVocabId(entryInVocab);
+  Id localVocabIdSecondary = getLocalVocabId(entryInSecondaryVocab);
   Id secondaryVocabId =
       Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
   // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is
@@ -813,7 +814,8 @@ TEST(IdBase, compareThreeWayWithLocalVocabIndexOfOtherLayout) {
                          foldedValueId::ValueId>;
   LocalVocabEntry entry = iriLocalVocabEntry(
       "<x>", ad_utility::testing::getQec()->getLocalVocabContext());
-  auto localVocabId = OtherId::makeFromLocalVocabIndex(&entry);
+  auto localVocabId =
+      ad_utility::testing::makeGetLocalVocabId<OtherId>()(entry);
   auto matcher = ::testing::HasSubstr("Only the `Id` of the current build");
   AD_EXPECT_THROW_WITH_MESSAGE((void)(makeVocabId<OtherId>(3) < localVocabId),
                                matcher);
