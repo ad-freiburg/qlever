@@ -223,7 +223,8 @@ TEST(ServerTest, createResponseMetadata) {
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
   ad_utility::BlankNodeManager bnm;
-  auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+  auto pqs = SparqlParser::parseUpdate(
+      &bnm, encodedIriManager(), ad_utility::testing::makeAllocator(), update);
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);

@@ -610,15 +610,18 @@ CPP_concept TriplePosition =
 
 // Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
 // Used as a helper function below.
-SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
+SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2,
+                               qlever::Allocator<Id> allocator) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
   ad_utility::BlankNodeManager bn;
   static EncodedIriManager ev;
-  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
-                    .parseTypesafe(&SparqlAutomaticParser::filterR)
-                    .resultOfParse_;
+  auto result =
+      sparqlParserHelpers::ParserAndVisitor{&bn, &ev, std::move(allocator),
+                                            filterString}
+          .parseTypesafe(&SparqlAutomaticParser::filterR)
+          .resultOfParse_;
 
   // The `filter` rule never adds blank nodes.
   AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
@@ -631,10 +634,11 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
 // equality.
 constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
     T rewritePosition, SparqlTripleSimple& scanTriple, const auto& addFilter,
-    const auto& generateUniqueVarName)(requires TriplePosition<T>) {
+    const auto& generateUniqueVarName,
+    const qlever::Allocator<Id>& allocator)(requires TriplePosition<T>) {
   Variable filterVar = generateUniqueVarName();
   auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-  addFilter(createEqualFilter(filterVar, target));
+  addFilter(createEqualFilter(filterVar, target, allocator));
   target = filterVar;
 };
 
@@ -645,12 +649,13 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
+       const qlever::Allocator<Id>& allocator,
        ql::span<const Permutation::Enum> permutations, auto... rewritePositions)
     -> CPP_ret(void)(
         requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
   (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
-                      generateUniqueVarName));
+                      generateUniqueVarName, allocator));
   for (const auto& permutation : permutations) {
     addIndexScan(permutation, scanTriple);
   }
@@ -687,13 +692,13 @@ void QueryPlanner::indexScanTwoVarsCase(
   // add an index scan for the rewritten triple.
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [this, &triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
+                                       addFilter, allocator(), permutations,
                                        rewritePositions...);
   };
 
@@ -742,13 +747,13 @@ void QueryPlanner::indexScanThreeVarsCase(
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [this, &triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
+                                       addFilter, allocator(), permutations,
                                        rewritePositions...);
   };
 

@@ -334,7 +334,7 @@ const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
 
 // _____________________________________________________________________________
 void ParsedQuery::registerVariablesVisibleInQueryBody(
-    const vector<Variable>& variables) {
+    ql::span<const Variable> variables) {
   for (const auto& var : variables) {
     registerVariableVisibleInQueryBody(var);
   }

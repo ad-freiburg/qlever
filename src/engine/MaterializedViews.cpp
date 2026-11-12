@@ -540,7 +540,8 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
     // interested in analyzing the query structure, not in converting its
     // components to `ValueId`s.
     EncodedIriManager e;
-    parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
+    parsedQuery_ =
+        SparqlParser::parseQuery(&e, allocator, originalQuery_.value(), {});
 
     // Compute the `BIND`-to-column map.
     coveredBinds_ = materializedViewsQueryAnalysis::extractBindExpressions(
@@ -991,8 +992,8 @@ MaterializedView::computeCacheKey(
   auto encodedIriManager = qec.getIndex().encodedIriManager();
   // The query needs to be parsed again to take the `EncodedIriManager` into
   // account.
-  auto parsedQuery =
-      SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
+  auto parsedQuery = SparqlParser::parseQuery(
+      &encodedIriManager, qec.getAllocator(), originalQuery_.value());
   const auto& viewCols = variableToColumnMap();
 
   auto planAndComputeMapping =
