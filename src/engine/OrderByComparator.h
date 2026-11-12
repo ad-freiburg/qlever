@@ -55,6 +55,9 @@ class OrderByComparator {
     switch (id.getDatatype()) {
       case Datatype::Undefined:
         return TermKind::Undefined;
+      case Datatype::TripleTermIndex:
+        throw std::runtime_error(
+            "ORDER BY for prototype triple terms is not supported yet");
       case Datatype::BlankNodeIndex:
         return TermKind::BlankNode;
       case Datatype::VocabIndex: {

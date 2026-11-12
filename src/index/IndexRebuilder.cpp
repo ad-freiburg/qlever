@@ -550,6 +550,27 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
+  // The RDF 1.2 triple terms of the new index are those of the old index
+  // (updates cannot contain triple terms yet). Their `TripleTermIndex`es stay
+  // the same, which is consistent with the permutations, whose triple-term
+  // references are not remapped (see `remapId` above). Only the vocabulary IDs
+  // of their components change, like all other vocabulary IDs. That remapping
+  // keeps the order of the vocabulary IDs, so the terms stay in the sorted
+  // order of their components (see `IndexImpl::mergeTripleTerms`).
+  {
+    qlever::tripleTermPrototype::TripleTermIndexBuilder newTerms;
+    for (auto components : index.tripleTerms().terms()) {
+      for (Id& id : components) {
+        if (id.getDatatype() == Datatype::VocabIndex) {
+          id = remapVocabId(id, insertionPositions);
+        }
+      }
+      newTerms.intern(components);
+    }
+    AD_CORRECTNESS_CHECK(newTerms.size() == index.tripleTerms().size());
+    newIndex.setAndWriteTripleTerms(std::move(newTerms));
+  }
+
   // Phase 3: write the new index (permutations and patterns).
   REBUILD_LOG_INFO << "Writing new index (" << numNormalPermutations + 2
                    << " permutations, " << numNormalPermutations

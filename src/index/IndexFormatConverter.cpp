@@ -54,6 +54,9 @@
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/ProgressBar.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/json.h"
 
 namespace qlever::indexFormatConverter {
@@ -74,7 +77,8 @@ std::string versionAsString(const IndexFormatVersion& version) {
 // `datatypesOfSourceFormat[i]` in the target format. The only difference
 // between the two formats is that `Datatype::SecondaryVocabIndex` was inserted
 // (see the note there), which is why this array is exactly the current enum
-// without that datatype.
+// without that datatype. The prototype-only TripleTermIndex was appended
+// later; it cannot occur in the historical source format.
 constexpr std::array<Datatype, 12> datatypesOfSourceFormat{
     Datatype::Undefined,
     Datatype::Bool,
@@ -108,10 +112,12 @@ QL_CONSTEVAL bool isStrictlyAscending(
 // converter is not applicable to it.
 static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 
-// Exactly one datatype was added, so no datatype of the source format was
-// removed or duplicated above.
+// The historical conversion adds SecondaryVocabIndex. The prototype appends
+// TripleTermIndex without changing any existing tag; it is not produced by
+// this converter. Keep both facts explicit rather than weakening the check.
 static_assert(datatypesOfSourceFormat.size() + 1 ==
-              static_cast<size_t>(Datatype::MaxValue) + 1);
+              static_cast<size_t>(Datatype::TripleTermIndex));
+static_assert(Datatype::MaxValue == Datatype::TripleTermIndex);
 
 // The version of the on-disk format of the materialized views (see
 // `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format
@@ -761,6 +767,31 @@ void copyFilesThatNeedNoConversion(const std::string& oldBasename,
       copy);
 }
 
+// The file with the RDF 1.2 triple terms (see `IndexImpl::writeTripleTerms`)
+// stores `Id`s. The source format of this converter predates triple terms, so
+// in practice the file is either missing or empty (written by a newer index
+// builder). An empty file contains no `Id`s and is copied. Converting actual
+// triple terms is not supported, because nothing can produce such an index.
+void copyEmptyTripleTermsFile(const std::string& oldBasename,
+                              const std::string& newBasename,
+                              std::vector<fs::path>& handledFiles) {
+  fs::path oldFile = absl::StrCat(oldBasename, TRIPLE_TERMS_FILE_SUFFIX);
+  if (!fs::exists(oldFile)) {
+    return;
+  }
+  std::vector<std::array<Id, 3>> terms;
+  ad_utility::serialization::FileReadSerializer reader{oldFile.native()};
+  reader >> terms;
+  if (!terms.empty()) {
+    throw std::runtime_error{absl::StrCat(
+        "The index \"", oldBasename,
+        "\" contains RDF 1.2 triple terms, which this index converter does "
+        "not support")};
+  }
+  handledFiles.emplace_back(oldFile);
+  fs::copy_file(oldFile, absl::StrCat(newBasename, TRIPLE_TERMS_FILE_SUFFIX));
+}
+
 // Check that every file of the index with the base name `oldBasename` was
 // either converted or copied. This makes sure that a file type that is added to
 // an index in the future is not silently dropped by this converter.
@@ -879,6 +910,7 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
       rowsPerBlock, handledFiles, executor);
   convertPatterns(oldBasename, newBasename, handledFiles);
   copyFilesThatNeedNoConversion(oldBasename, newBasename, handledFiles);
+  copyEmptyTripleTermsFile(oldBasename, newBasename, handledFiles);
   checkAllFilesWereHandled(oldBasename, handledFiles);
   convertMaterializedViews(oldBasename, newBasename, rowsPerBlock, executor);
 

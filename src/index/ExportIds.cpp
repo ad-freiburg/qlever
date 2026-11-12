@@ -82,6 +82,8 @@ std::optional<Literal> idToLiteral(const IndexImpl& index, Id id,
   auto datatype = id.getDatatype();
 
   switch (datatype) {
+    case Datatype::TripleTermIndex:
+      return std::nullopt;
     case WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
     case EncodedVal:
@@ -157,6 +159,8 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
                                              bool skipEncodedValues) {
   using enum Datatype;
   switch (id.getDatatype()) {
+    case Datatype::TripleTermIndex:
+      return std::nullopt;
     case WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
@@ -290,6 +294,11 @@ idToStringAndTypeForEncodedValue(Id id) {
       // keys etc. Consider removing it in the future.
     case EncodedVal:
       return std::pair{absl::StrCat("encodedId: ", id.getBits()), nullptr};
+    case TripleTermIndex:
+      // Reached from `idToStringAndType`. A term reference is index-local and
+      // has no string form until structural serialization is implemented.
+      throw std::runtime_error(
+          "Export of prototype triple-term references is not supported yet");
     default:
       AD_FAIL();
   }
@@ -299,6 +308,17 @@ idToStringAndTypeForEncodedValue(Id id) {
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   const auto& mgr = index.encodedIriManager();
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
+}
+
+// _____________________________________________________________________________
+std::array<Id, 3> tripleTermComponents(const IndexImpl& index, Id id) {
+  AD_CONTRACT_CHECK(id.getDatatype() == Datatype::TripleTermIndex);
+  const auto& terms = index.tripleTerms();
+  // A term reference in a result always comes from the triple terms of the
+  // same index, so an unknown one is a bug.
+  AD_CORRECTNESS_CHECK(id.getTripleTermIndex().get() < terms.size(),
+                       "Triple-term reference not found in the index");
+  return terms.resolve(id);
 }
 
 // _____________________________________________________________________________

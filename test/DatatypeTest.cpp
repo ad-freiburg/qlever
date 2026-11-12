@@ -25,7 +25,7 @@ constexpr std::array trivialDatatypes{Undefined, Bool, Int,
                                       Double,    Date, GeoPoint};
 constexpr std::array nonTrivialDatatypes{
     VocabIndex,     LocalVocabIndex, SecondaryVocabIndex, TextRecordIndex,
-    WordVocabIndex, BlankNodeIndex,  EncodedVal};
+    WordVocabIndex, BlankNodeIndex,  EncodedVal,          TripleTermIndex};
 }  // namespace
 
 // Test that exactly the datatypes that encode their value directly are
@@ -44,10 +44,10 @@ TEST(DatatypeTest, isDatatypeTrivial) {
 // Test that `isListOfAllDatatypesInOrder` accepts exactly the complete list of
 // datatypes in the order of their numeric values.
 TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
-  constexpr auto allDatatypes =
-      std::to_array({Undefined, Bool, Int, Double, VocabIndex, LocalVocabIndex,
-                     SecondaryVocabIndex, TextRecordIndex, Date, GeoPoint,
-                     WordVocabIndex, BlankNodeIndex, EncodedVal});
+  constexpr auto allDatatypes = std::to_array(
+      {Undefined, Bool, Int, Double, VocabIndex, LocalVocabIndex,
+       SecondaryVocabIndex, TextRecordIndex, Date, GeoPoint, WordVocabIndex,
+       BlankNodeIndex, EncodedVal, TripleTermIndex});
   static_assert(isListOfAllDatatypesInOrder(allDatatypes));
   EXPECT_TRUE(isListOfAllDatatypesInOrder(allDatatypes));
 
@@ -65,7 +65,7 @@ TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
 // Test the string of each datatype. Note that `EncodedVal` is printed as
 // `EncodedIri`.
 TEST(DatatypeTest, toString) {
-  constexpr std::array<std::pair<Datatype, std::string_view>, 13> expected{{
+  constexpr std::array<std::pair<Datatype, std::string_view>, 14> expected{{
       {Undefined, "Undefined"},
       {Bool, "Bool"},
       {Int, "Int"},
@@ -79,6 +79,7 @@ TEST(DatatypeTest, toString) {
       {WordVocabIndex, "WordVocabIndex"},
       {BlankNodeIndex, "BlankNodeIndex"},
       {EncodedVal, "EncodedIri"},
+      {TripleTermIndex, "TripleTermIndex"},
   }};
   EXPECT_EQ(expected.size(), static_cast<size_t>(MaxValue) + 1);
   for (const auto& [type, name] : expected) {

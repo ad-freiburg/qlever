@@ -19,6 +19,7 @@
 #include "global/Constants.h"
 #include "global/Datatype.h"
 #include "global/IndexTypes.h"
+#include "global/TripleTermIndex.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"
 #include "util/BitUtils.h"
@@ -90,9 +91,9 @@ class ValueId {
 
   // A mapping that decides if a Datatype is bitwise comparable or not. See
   // `canBeComparedBitwise()` below.
-  static constexpr std::array<bool, 13> isTypeBitwiseComparable_{
+  static constexpr std::array<bool, 14> isTypeBitwiseComparable_{
       true, true, true, true, true, false, true,
-      true, true, true, true, true, true};
+      true, true, true, true, true, true,  true};
 
   // Assert that the types in `stringTypes_` are directly adjacent. This is
   // required to make the comparison of IDs in `ValueIdComparators.h` work.
@@ -347,6 +348,14 @@ class ValueId {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
 
+  static constexpr ValueId makeFromTripleTermIndex(TripleTermIndex index) {
+    return makeFromIndex(index.get(), Datatype::TripleTermIndex);
+  }
+
+  [[nodiscard]] constexpr TripleTermIndex getTripleTermIndex() const noexcept {
+    return TripleTermIndex::make(getPayloadBits());
+  }
+
   static constexpr ValueId makeFromEncodedVal(uint64_t idx) {
     return makeFromIndex(idx, Datatype::EncodedVal);
   }
@@ -531,6 +540,8 @@ class ValueId {
         return std::invoke(visitor, getBlankNodeIndex());
       case Datatype::SecondaryVocabIndex:
         return std::invoke(visitor, getSecondaryVocabIndex());
+      case Datatype::TripleTermIndex:
+        return std::invoke(visitor, getTripleTermIndex());
     }
     AD_FAIL();
   }

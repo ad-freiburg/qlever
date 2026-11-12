@@ -542,6 +542,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitGraphNodePath(
       SparqlAutomaticParser::GraphNodePathContext* ctx) = 0;
 
+  virtual void enterTripleTermPattern(
+      SparqlAutomaticParser::TripleTermPatternContext* ctx) = 0;
+  virtual void exitTripleTermPattern(
+      SparqlAutomaticParser::TripleTermPatternContext* ctx) = 0;
+
   virtual void enterVarOrTerm(SparqlAutomaticParser::VarOrTermContext* ctx) = 0;
   virtual void exitVarOrTerm(SparqlAutomaticParser::VarOrTermContext* ctx) = 0;
 

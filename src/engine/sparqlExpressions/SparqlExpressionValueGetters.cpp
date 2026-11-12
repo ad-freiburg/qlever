@@ -81,6 +81,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -108,6 +109,7 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
     case Datatype::Date:
       return id.getDate();
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -129,6 +131,7 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::Bool:
       return id.getBool() ? True : False;
     case Datatype::Undefined:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
       return Undef;
     case Datatype::EncodedVal:
@@ -285,6 +288,7 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
       return Id::makeFromBool(prefix == isLiteralPrefix);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
       return Id::makeFromBool(false);
   }
@@ -334,6 +338,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::Date:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::EncodedVal:
     case Datatype::SecondaryVocabIndex:
@@ -380,6 +385,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case SecondaryVocabIndex:
       return (*this)(getLiteralOrIri(id, context), context);
     case Undefined:
+    case Datatype::TripleTermIndex:
     case BlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
@@ -472,6 +478,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case Undefined:
     case TextRecordIndex:
     case WordVocabIndex:
+    case Datatype::TripleTermIndex:
     case BlankNodeIndex:
     case EncodedVal:
       return std::nullopt;
@@ -505,6 +512,7 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
       return valueGetter(getLiteralOrIri(id, context), context);
     case TextRecordIndex:
     case WordVocabIndex:
+    case Datatype::TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
@@ -546,6 +554,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case LocalVocabIndex:
     case TextRecordIndex:
     case WordVocabIndex:
+    case Datatype::TripleTermIndex:
     case BlankNodeIndex:
     case SecondaryVocabIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
@@ -629,6 +638,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
           .getRequestedInfo<RequestedInfo>();
     case TextRecordIndex:
     case WordVocabIndex:
+    case Datatype::TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:

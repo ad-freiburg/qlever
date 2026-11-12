@@ -18,6 +18,7 @@
 #include "global/SpecialIds.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
+#include "rdfTypes/TripleTerm.h"
 #include "rdfTypes/Variable.h"
 #include "util/Date.h"
 #include "util/Exception.h"
@@ -43,6 +44,7 @@ class TripleComponent {
  public:
   using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
+  using TripleTerm = ad_utility::triple_component::TripleTerm;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
@@ -59,7 +61,7 @@ class TripleComponent {
   // The underlying variant type.
   using Variant =
       std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
-                   Literal, Iri, DateYearOrDuration, GeoPoint>;
+                   Literal, Iri, DateYearOrDuration, GeoPoint, TripleTerm>;
   Variant _variant;
 
  public:
@@ -174,6 +176,14 @@ class TripleComponent {
 
   Iri& getIri() { return std::get<Iri>(_variant); }
   const Iri& getIri() const { return std::get<Iri>(_variant); }
+
+  // An RDF 1.2 triple term (prototype: non-nested, IRI components only).
+  bool isTripleTerm() const {
+    return std::holds_alternative<TripleTerm>(_variant);
+  }
+  const TripleTerm& getTripleTerm() const {
+    return std::get<TripleTerm>(_variant);
+  }
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 

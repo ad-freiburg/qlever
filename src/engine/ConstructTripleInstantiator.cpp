@@ -62,6 +62,16 @@ std::optional<EvaluatedTriple> tryInstantiateTriple(
   if (!subject || !predicate || !object) {
     return std::nullopt;
   }
+  // A bound triple term is legal only as an object. Drop this template
+  // instance rather than emitting an invalid RDF triple. Other template
+  // triples for the same solution must still be instantiated.
+  auto isTripleTerm = [](const EvaluatedTerm& term) {
+    return term->rdfTermDataType_ == nullptr &&
+           ql::starts_with(term->rdfTermString_, "<<(");
+  };
+  if (isTripleTerm(*subject) || isTripleTerm(*predicate)) {
+    return std::nullopt;
+  }
   if (deduplication) {
     const size_t rowIdxInIdTable =
         deduplication.value().ctx_.get().firstRow_ + rowInBatch;

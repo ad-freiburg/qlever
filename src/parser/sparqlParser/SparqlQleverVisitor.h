@@ -539,6 +539,11 @@ class SparqlQleverVisitor {
 
   SubjectOrObjectAndPathTriples visit(Parser::GraphNodePathContext* ctx);
 
+  // Replace the triple term by a fresh internal variable `?t` and return it
+  // together with the three triples that bind `?t` to the term's components
+  // (see `TRIPLE_TERM_SUBJECT_PREDICATE` in `Constants.h`).
+  SubjectOrObjectAndPathTriples visit(Parser::TripleTermPatternContext* ctx);
+
   GraphTerm visit(Parser::VarOrTermContext* ctx);
 
   VarOrIri visit(Parser::VarOrIriContext* ctx);

@@ -60,6 +60,7 @@
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
+#include "engine/TripleTermScan.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -68,6 +69,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -99,6 +102,35 @@ template <typename Op>
 SubtreePlan makeSubtreePlan(std::shared_ptr<Op> operation) {
   auto* qec = operation->getExecutionContext();
   return {qec, std::move(operation)};
+}
+
+// Plan the triple term `?term = <<( subject predicate object )>>` (see
+// `GraphPatternPlanner::visitBasicGraphPattern`) as a scan of the triple terms
+// of the index, with the columns `subject` and `?term`. Prototype: only the
+// POIS access path exists, i.e. a variable subject and a fixed predicate and
+// object. The scan is computed eagerly when the plan is created.
+SubtreePlan makeTripleTermScanPlan(QueryExecutionContext* qec,
+                                   const Variable& term,
+                                   const TripleComponent& subject,
+                                   const TripleComponent& predicate,
+                                   const TripleComponent& object) {
+  if (!subject.isVariable() || predicate.isVariable() || object.isVariable()) {
+    throw NotSupportedException{
+        "Triple terms in SPARQL queries can currently only be evaluated in "
+        "the form <<( ?variable <predicate> <object> )>>"};
+  }
+  // The predicate and object may already be `Id`s (encoded IRIs). An IRI that
+  // is not in the index cannot be the component of any triple term.
+  const auto& index = qec->getIndex().getImpl();
+  auto predicateId = toValueId(predicate, index);
+  auto objectId = toValueId(object, index);
+  static const qlever::tripleTermPrototype::TripleTermIndexBuilder noTerms;
+  const auto& terms = predicateId.has_value() && objectId.has_value()
+                          ? index.tripleTerms()
+                          : noTerms;
+  return SubtreePlan{qlever::tripleTermPrototype::makeTripleTermScan(
+      qec, terms, predicateId.value_or(Id::makeUndefined()),
+      objectId.value_or(Id::makeUndefined()), subject.getVariable(), term)};
 }
 
 // Update the `target` query plan such that it knows that it includes all the
@@ -550,6 +582,16 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   std::vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
+    // These pseudo-triples have no data in the permutations, so planning them
+    // as ordinary scans would silently return no results. A basic graph
+    // pattern turns them into triple-term scans before (see
+    // `visitBasicGraphPattern`), so this only guards against other routes.
+    if (auto predicate = t.getSimplePredicate();
+        predicate.has_value() &&
+        isTripleTermPseudoPredicate(predicate.value())) {
+      throw NotSupportedException{
+          "Triple terms are not supported in this part of a SPARQL query yet"};
+    }
     if (t.getSimplePredicate() == CONTAINS_WORD_PREDICATE) {
       std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
@@ -3379,11 +3421,47 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // the bound variables.
   v.collectAllContainedVariables(boundVariables_);
 
+  // RDF 1.2 triple terms: the parser has replaced each term by a fresh
+  // variable `?t` and three pseudo-triples `?t <triple-term-...> component`
+  // (see `TRIPLE_TERM_SUBJECT_PREDICATE`). Collect the components per `?t` (in
+  // the order of first appearance, so that planning is deterministic) and plan
+  // each term as a single scan of the triple terms of the index. The ordinary
+  // join planning then joins it with the other triples via `?t`.
+  using TermComponents = std::array<std::optional<TripleComponent>, 3>;
+  std::vector<std::pair<Variable, TermComponents>> tripleTerms;
+  auto addTripleTermComponent = [&tripleTerms](const SparqlTriple& triple,
+                                               std::string_view predicate) {
+    if (!triple.s_.isVariable()) {
+      throw NotSupportedException{absl::StrCat(
+          "The QLever-internal predicate ", predicate,
+          " can only be used via the triple-term syntax <<( s p o )>>")};
+    }
+    const Variable& term = triple.s_.getVariable();
+    auto it = ql::ranges::find(tripleTerms, term,
+                               [](const auto& entry) { return entry.first; });
+    if (it == tripleTerms.end()) {
+      it = tripleTerms.insert(tripleTerms.end(), {term, TermComponents{}});
+    }
+    size_t position = predicate == TRIPLE_TERM_SUBJECT_PREDICATE     ? 0
+                      : predicate == TRIPLE_TERM_PREDICATE_PREDICATE ? 1
+                                                                     : 2;
+    if (it->second[position].has_value()) {
+      throw NotSupportedException{absl::StrCat(
+          "The QLever-internal predicate ", predicate,
+          " can only be used via the triple-term syntax <<( s p o )>>")};
+    }
+    it->second[position] = triple.o_;
+  };
+
   // Then collect the triples. Transform each triple with a property path to
   // an equivalent form without property path (using `seedFromPropertyPath`).
   for (const auto& triple : v._triples) {
-    if (std::holds_alternative<Variable>(triple.p_) ||
-        triple.getSimplePredicate().has_value()) {
+    if (auto predicate = triple.getSimplePredicate();
+        predicate.has_value() &&
+        isTripleTermPseudoPredicate(predicate.value())) {
+      addTripleTermComponent(triple, predicate.value());
+    } else if (std::holds_alternative<Variable>(triple.p_) ||
+               triple.getSimplePredicate().has_value()) {
       candidateTriples_._triples.push_back(triple);
     } else {
       auto children = planner_.seedFromPropertyPath(
@@ -3398,6 +3476,18 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
                        std::back_inserter(rootPattern_->_filters));
     }
     planner_.checkCancellation();
+  }
+
+  for (const auto& [term, components] : tripleTerms) {
+    if (!ql::ranges::all_of(components,
+                            [](const auto& c) { return c.has_value(); })) {
+      throw NotSupportedException{
+          "The QLever-internal triple-term predicates can only be used via "
+          "the triple-term syntax <<( s p o )>>"};
+    }
+    candidatePlans_.push_back(singlePlanVec(
+        makeTripleTermScanPlan(planner_._qec, term, components[0].value(),
+                               components[1].value(), components[2].value())));
   }
 }
 

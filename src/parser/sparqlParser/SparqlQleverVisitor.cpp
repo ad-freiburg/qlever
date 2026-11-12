@@ -2674,10 +2674,45 @@ SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::GraphNodePathContext* ctx) {
   if (ctx->varOrTerm()) {
     return {visit(ctx->varOrTerm()), {}};
+  } else if (ctx->tripleTermPattern()) {
+    return visit(ctx->tripleTermPattern());
   } else {
     AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
     return visit(ctx->triplesNodePath());
   }
+}
+
+// ____________________________________________________________________________________
+SubjectOrObjectAndPathTriples Visitor::visit(
+    Parser::TripleTermPatternContext* ctx) {
+  GraphTerm subject =
+      std::visit(ad_utility::staticCast<GraphTerm>, visit(ctx->varOrIri()));
+  GraphTerm predicate = visit(ctx->verb());
+  // In a query pattern, a blank node has already become an internal variable
+  // here (as in any other triple of a WHERE clause), so only literals remain.
+  GraphTerm object = visit(ctx->varOrTerm());
+  if (!std::holds_alternative<Variable>(object) &&
+      !std::holds_alternative<Iri>(object)) {
+    reportNotSupported(ctx->varOrTerm(), "Literals inside a triple term are");
+  }
+  // Mentioning a triple term does not assert its triple, so the components
+  // are only bound via the pseudo-predicates, never as a triple of their own.
+  Variable term = getNewInternalVariable();
+  auto makeTriple = [&term](std::string_view pseudoPredicate,
+                            GraphTerm component) {
+    return TripleWithPropertyPath{
+        GraphTerm{term},
+        PropertyPath::fromIri(Iri::fromIriref(pseudoPredicate)),
+        std::move(component)};
+  };
+  std::vector<TripleWithPropertyPath> triples;
+  triples.push_back(
+      makeTriple(TRIPLE_TERM_SUBJECT_PREDICATE, std::move(subject)));
+  triples.push_back(
+      makeTriple(TRIPLE_TERM_PREDICATE_PREDICATE, std::move(predicate)));
+  triples.push_back(
+      makeTriple(TRIPLE_TERM_OBJECT_PREDICATE, std::move(object)));
+  return {GraphTerm{std::move(term)}, std::move(triples)};
 }
 
 // ____________________________________________________________________________________

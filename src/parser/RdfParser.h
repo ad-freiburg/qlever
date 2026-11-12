@@ -206,6 +206,14 @@ class TurtleParser : public RdfParserBase {
   // Get the currently buffered triples. Used for testing.
   const std::vector<TurtleTriple>& getTriples() const { return triples_; }
 
+  // Parse a non-nested, IRI-only RDF 1.2 triple term `<<( s p o )>>`. The
+  // components have their prefixes and base IRI resolved, but are never
+  // encoded into an `Id` (see `TripleTerm`). Parsing a term emits no triple.
+  // Returns nullopt if the opening delimiter is absent; malformed or
+  // unsupported contents after the delimiter raise a ParseException. Used by
+  // `object()`, and public for testing.
+  std::optional<TripleComponent::TripleTerm> parseTripleTermPrototype();
+
   // Convert the content of a literal and its datatype to TripleComponent. In
   // particular this also handles the cases where the datatype indicates that
   // the value can be encoded directly into the ID (for example a `typeIri` of
@@ -361,6 +369,8 @@ class TurtleParser : public RdfParserBase {
   bool blankNodePropertyList();
   bool objectList();
   bool object();
+  // A triple term in object position (RDF 1.2 allows no other position).
+  bool tripleTerm();
   bool verb();
   bool predicateSpecialA();
   bool predicate();

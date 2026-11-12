@@ -121,6 +121,33 @@ constexpr bool isFullTextPseudoPredicate(std::string_view predicate) {
          predicate == CONTAINS_WORD_PREDICATE;
 }
 
+// The pseudo-predicates for an RDF 1.2 triple term in a SPARQL triple pattern.
+// The parser replaces `<<( s p o )>>` by a fresh variable `?t` and adds the
+// triples `?t <triple-term-subject> s`, `?t <triple-term-predicate> p`, and
+// `?t <triple-term-object> o`, which mean "`?t` is the triple term with these
+// components". They are never stored in the index; the query planner has to
+// rewrite them into a scan of the triple terms of the index.
+namespace string_constants::detail {
+constexpr inline std::string_view triple_term_subject = "triple-term-subject";
+constexpr inline std::string_view triple_term_predicate =
+    "triple-term-predicate";
+constexpr inline std::string_view triple_term_object = "triple-term-object";
+}  // namespace string_constants::detail
+constexpr inline std::string_view TRIPLE_TERM_SUBJECT_PREDICATE =
+    makeQleverInternalIriConst<string_constants::detail::triple_term_subject>();
+constexpr inline std::string_view TRIPLE_TERM_PREDICATE_PREDICATE =
+    makeQleverInternalIriConst<
+        string_constants::detail::triple_term_predicate>();
+constexpr inline std::string_view TRIPLE_TERM_OBJECT_PREDICATE =
+    makeQleverInternalIriConst<string_constants::detail::triple_term_object>();
+
+// Whether `predicate` is one of the triple-term pseudo-predicates above.
+constexpr bool isTripleTermPseudoPredicate(std::string_view predicate) {
+  return predicate == TRIPLE_TERM_SUBJECT_PREDICATE ||
+         predicate == TRIPLE_TERM_PREDICATE_PREDICATE ||
+         predicate == TRIPLE_TERM_OBJECT_PREDICATE;
+}
+
 namespace string_constants::detail {
 constexpr inline std::string_view text = "text";
 }  // namespace string_constants::detail
