@@ -19,6 +19,7 @@
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/DefaultedHash.h"
 #include "util/Forward.h"
 
 // The only class that may use the constructor of `LiteralOrIriView` from an
@@ -103,11 +104,7 @@ class alignas(16) BasicLiteralOrIri {
         std::move(data_));
   }
 
-  CPP_template(typename H, typename L)(
-      requires ql::concepts::same_as<L, BasicLiteralOrIri>)
-  friend H AbslHashValue(H h, const L& literalOrIri) {
-    return H::combine(std::move(h), literalOrIri.data_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(BasicLiteralOrIri, data_)
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteralOrIri, data_)
 

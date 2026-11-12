@@ -18,6 +18,7 @@
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
+#include "util/DefaultedHash.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
@@ -48,10 +49,7 @@ class QueryId {
   // this is usually a good indicator if the object has been moved out of
   [[nodiscard]] bool empty() const noexcept { return id_.empty(); }
 
-  template <typename H>
-  friend H AbslHashValue(H h, const QueryId& c) {
-    return H::combine(std::move(h), c.id_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(QueryId, id_)
 
   // Starting with gcc 12 and clang 15 this can be constexpr
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryId, id_)

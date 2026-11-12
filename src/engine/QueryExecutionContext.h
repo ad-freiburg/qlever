@@ -24,6 +24,7 @@
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
+#include "util/DefaultedHash.h"
 #include "util/Executor.h"
 
 // The value of the `QueryResultCache` below. It consists of a `Result` together
@@ -84,10 +85,7 @@ struct QueryCacheKey {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(QueryCacheKey, key_,
                                               locatedTriplesSnapshotIndex_)
 
-  template <typename H>
-  friend H AbslHashValue(H h, const QueryCacheKey& key) {
-    return H::combine(std::move(h), key.key_, key.locatedTriplesSnapshotIndex_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(QueryCacheKey, key_, locatedTriplesSnapshotIndex_)
 };
 
 // Threadsafe LRU cache for (partial) query results, that

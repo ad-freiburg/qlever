@@ -9,6 +9,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "util/ConstexprSmallString.h"
+#include "util/DefaultedHash.h"
 
 namespace ad_utility {
 using IndexTag = ConstexprSmallString<30>;
@@ -43,10 +44,7 @@ struct TypedIndex {
     return {_value + 1};
   }
 
-  template <typename H>
-  friend H AbslHashValue(H h, const TypedIndex& id) {
-    return H::combine(std::move(h), id.get());
-  }
+  QL_DEFINE_DEFAULTED_HASH(TypedIndex, _value)
 
   template <typename Serializer>
   friend void serialize(Serializer& serializer, TypedIndex& id) {

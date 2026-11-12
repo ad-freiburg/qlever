@@ -17,6 +17,7 @@
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "index/vocabulary/NibbleEncoding.h"
 #include "util/BitUtils.h"
+#include "util/DefaultedHash.h"
 #include "util/Log.h"
 #include "util/json.h"
 
@@ -264,10 +265,7 @@ class EncodedIriManagerImpl {
   }
 
   // Hash support for use in `TestIndexConfig`.
-  template <typename H>
-  friend H AbslHashValue(H h, const EncodedIriManagerImpl& manager) {
-    return H::combine(std::move(h), manager.patterns_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(EncodedIriManagerImpl, patterns_)
 
   // Equality operator for use in `TestIndexConfig`.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, patterns_)

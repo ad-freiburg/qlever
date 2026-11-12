@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "backports/three_way_comparison.h"
+#include "util/DefaultedHash.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
 #include "util/UnicodeSupport.h"
@@ -64,10 +65,7 @@ class Variable {
 
   // Make the type hashable for absl, see
   // https://abseil.io/docs/cpp/guides/hash.
-  template <typename H>
-  friend H AbslHashValue(H h, const Variable& v) {
-    return H::combine(std::move(h), v._name);
-  }
+  QL_DEFINE_DEFAULTED_HASH(Variable, _name)
 
   // Formatter for use in `absl::StrJoin` (we need this in several places).
   static void AbslFormatter(std::string* out, const Variable& variable) {
