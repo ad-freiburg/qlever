@@ -64,10 +64,15 @@ class VocabularyInternalExternal {
   // vocabulary.
   auto scanAll() const { return externalVocab_.scanAll(); }
 
-  //____________________________________________________________________________
-  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
-  }
+  // Return the words for `indices` (not empty, all `< size()`) in that order.
+  // A word of the internal (RAM) vocabulary is returned as a view into that
+  // vocabulary (no copy), all other words are read with one `lookupBatch` call
+  // on the external vocabulary (batched reads, via `io_uring` where available).
+  //
+  // NOTE: The result shares the ownership of the internal words and owns the
+  // buffer of the external words, so it stays valid when this vocabulary is
+  // closed.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {

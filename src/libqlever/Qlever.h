@@ -44,6 +44,7 @@
 #include "util/Allocator.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
@@ -322,14 +323,20 @@ struct EngineConfig : CommonConfig {
 // `src/engine/LibQleverExample.cpp` for an example use. If you extend the
 // interface of this class, consider also adding bindings to
 // `QleverEmscriptenBindings.cpp` so it can be used by JS code.
-class Qlever {
+//
+// NOTE: Neither copyable nor movable, because the constructors register
+// callbacks (on the allocator and the global runtime parameters) that refer to
+// this instance.
+class Qlever : public ad_utility::NoCopyNoMove {
  public:
   using PlannedQuery = qlever::PlannedQuery;
 
   // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
   // so that an index rebuild can atomically swap both in, while other threads
   // continue to read the previous instances via the `shared_ptr`s they hold.
-  struct IndexAndViews {
+  // Not copyable or movable, so it is only passed around as a `shared_ptr` or
+  // reference.
+  struct IndexAndViews : public ad_utility::NoCopyNoMove {
     Index index_;
     MaterializedViewsManager materializedViewsManager_;
 
@@ -338,12 +345,6 @@ class Qlever {
                   MaterializedViewsManager materializedViewsManager)
         : index_{std::move(index)},
           materializedViewsManager_{std::move(materializedViewsManager)} {}
-
-    // Make sue this is only passed around as a shared pointer or reference.
-    IndexAndViews(IndexAndViews&&) noexcept = delete;
-    IndexAndViews& operator=(IndexAndViews&&) noexcept = delete;
-    IndexAndViews(const IndexAndViews&) noexcept = delete;
-    IndexAndViews& operator=(const IndexAndViews&) noexcept = delete;
 
     // Helper function to decompose `self` into a pair of two shared pointers
     // pointing to the individual members via aliasing semantics.
@@ -424,6 +425,14 @@ class Qlever {
   // limit from `config` is *not* applied on top of it.
   Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
          qlever::Executor executor = ad_utility::globalExecutor());
+
+  // Remove the actions that the constructors registered on the global runtime
+  // parameters, as they refer to this instance.
+  //
+  // NOTE: The parameters are global, so only the most recently constructed
+  // instance is bound to them, and destroying any instance unbinds all of
+  // them.
+  ~Qlever();
 
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work (unless a different one is passed to
