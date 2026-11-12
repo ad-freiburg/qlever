@@ -71,7 +71,7 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
 // _____________________________________________________________________________
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr,
-    const std::function<std::optional<TripleComponent>(const Variable&)>&
+    absl::FunctionRef<std::optional<TripleComponent>(const Variable&)>
         constantOfVariable) {
   using namespace ad_utility::use_type_identity;
   using DistArgs =
@@ -96,8 +96,7 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     }
 
     // Unit given as a variable with a constant IRI or literal
-    if (auto var = ptr->getVariableOrNullopt();
-        var.has_value() && constantOfVariable) {
+    if (auto var = ptr->getVariableOrNullopt()) {
       auto constant = constantOfVariable(var.value());
       if (constant.has_value() && constant->isIri()) {
         return UnitOfMeasurementValueGetter::litOrIriToUnit(
