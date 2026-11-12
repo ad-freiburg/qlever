@@ -570,6 +570,8 @@ endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
+addLinkAndDiscoverTest(ThreadSafeReorderBufferTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)
@@ -694,3 +696,5 @@ addLinkAndDiscoverTest(MetricsTest metrics)
 addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
+
+addLinkAndDiscoverTest(KernelBugWorkaroundTest qlever_util)

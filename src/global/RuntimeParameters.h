@@ -276,6 +276,7 @@ struct RuntimeParameters {
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
+  // (With C++26 reflection, the constructor checks this.)
   // ___________________________________________________________________________
 
   std::map<std::string, ad_utility::ParameterBase*, std::less<>> runtimeMap_;
