@@ -8,6 +8,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Date.h"
+#include "util/DefaultedHash.h"
 #include "util/Duration.h"
 #include "util/NBitInteger.h"
 
@@ -154,10 +155,7 @@ class DateYearOrDuration {
   QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(DateYearOrDuration, bits_)
 
   // Bitwise hashing.
-  template <typename H>
-  friend H AbslHashValue(H h, const DateYearOrDuration& d) {
-    return H::combine(std::move(h), d.bits_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(DateYearOrDuration, bits_)
 
   // Parsing functions. They all have the following properties:
   // 1. The input is not contained in quotes (for example 1900-12-13 for a date,

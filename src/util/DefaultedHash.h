@@ -33,9 +33,28 @@
 // `backports/three_way_comparison.h`), which compares exactly the same members.
 // In particular, a member that is added to the class later cannot be forgotten
 // in the hash. With C++26 reflection (see `backports/reflection.h`) these
-// conditions are checked at compile time. A class for which the hash
-// deliberately considers only some of the members (or a function of them) has
-// to define the `AbslHashValue` function manually.
+// conditions are checked at compile time.
+//
+// A class for which the hash deliberately considers only some of the members
+// uses `QL_DEFINE_DEFAULTED_HASH_OF_SUBSET` instead, which additionally lists
+// the members that are NOT hashed, for example:
+//
+// struct Literal {
+//   std::string content_;
+//   size_t beginOfSuffix_;
+//   QL_DEFINE_DEFAULTED_HASH_OF_SUBSET(Literal, QL_HASHED(content_),
+//                                      QL_NOT_HASHED(beginOfSuffix_))
+// };
+//
+// Each of the two lists has to be in declaration order, and together they have
+// to contain each data member of the class exactly once (which is also checked
+// with reflection). That way, it is an explicit decision for each member
+// (in particular for one that is added later) whether it is hashed. Note that
+// not hashing a member is always correct, but leads to hash collisions between
+// objects that only differ in that member. A class for which the hash is not
+// simply a combination of data members (for example because it hashes a
+// function of them or a base class) has to define the `AbslHashValue` function
+// manually.
 //
 // NOTE: The class is only hashable as itself, but not via an implicit
 // conversion from another type (this includes classes that are derived from
@@ -45,67 +64,94 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ad_utility::defaultedHash {
-// Return the names of the non-static data members of the class `T` (including
-// the private ones) in declaration order, separated by `", "`.
+// Split the stringification (`#__VA_ARGS__`) of a list of identifiers in a
+// macro into the single identifiers. Whitespace is ignored.
+consteval std::vector<std::string> splitListOfMembers(std::string_view list) {
+  std::vector<std::string> result;
+  std::string current;
+  for (char c : list) {
+    if (c == ',') {
+      result.push_back(std::move(current));
+      current.clear();
+    } else if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+      current += c;
+    }
+  }
+  if (!current.empty()) {
+    result.push_back(std::move(current));
+  }
+  return result;
+}
+
+// Return the empty string iff the stringified lists of the members that are
+// hashed (`hashedMembers`) and of the members that are deliberately not hashed
+// (`notHashedMembers`) are each in the declaration order of the class `T`, and
+// together contain each data member of `T` exactly once, and `T` has no base
+// classes. Otherwise return an error message.
 //
 // NOTE: This is deliberately a template. GCC 16 (20260322) wrongly evaluates
 // an equivalent non-template `consteval` function that takes the class as a
 // `std::meta::info` argument when it is called from a member function of that
 // class (the loop then sees no members at all).
 template <typename T>
-consteval std::string namesOfDataMembers() {
-  std::string result;
-  for (auto member : std::meta::nonstatic_data_members_of(
-           ^^T, std::meta::access_context::unchecked())) {
-    if (!result.empty()) {
-      result += ", ";
-    }
-    result += std::meta::identifier_of(member);
-  }
-  return result;
-}
-
-// Return `text` with all whitespace removed. Used to compare the result of the
-// stringification (`#__VA_ARGS__`) of a list of identifiers in a macro with the
-// result of `namesOfDataMembers` independent of the formatting.
-consteval std::string removeWhitespace(std::string_view text) {
-  std::string result;
-  for (char c : text) {
-    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-      result += c;
-    }
-  }
-  return result;
-}
-
-// Return the empty string iff the stringified list of members of
-// `QL_DEFINE_DEFAULTED_HASH` (`listedMembers`) contains exactly the data
-// members of `T` in declaration order, and `T` has no base classes. Otherwise
-// return an error message.
-template <typename T>
-consteval std::string_view checkHashedMembers(std::string_view listedMembers) {
+consteval std::string_view checkHashedMembers(
+    std::string_view hashedMembers, std::string_view notHashedMembers) {
+  constexpr auto ctx = std::meta::access_context::unchecked();
   const std::string className{std::meta::display_string_of(^^T)};
   auto error = [&className](std::string_view message) {
     return std::string_view{std::define_static_string(
-        "The `QL_DEFINE_DEFAULTED_HASH` (see `util/DefaultedHash.h`) of `" +
+        "The `QL_DEFINE_DEFAULTED_HASH...` (see `util/DefaultedHash.h`) of `" +
         className + "` is invalid: " + message)};
   };
-  if (!std::meta::bases_of(^^T, std::meta::access_context::unchecked())
-           .empty()) {
+  if (!std::meta::bases_of(^^T, ctx).empty()) {
     return error(
         "The class has base classes, which is not supported. Define the "
         "`AbslHashValue` function manually");
   }
-  auto actualMembers = namesOfDataMembers<T>();
-  if (removeWhitespace(listedMembers) != removeWhitespace(actualMembers)) {
-    return error("The listed members `" + std::string{listedMembers} +
-                 "` are not exactly the data members of the class in "
-                 "declaration order, which are `" +
+  auto hashed = splitListOfMembers(hashedMembers);
+  auto notHashed = splitListOfMembers(notHashedMembers);
+  // As the names of the members are unique, the two lists are valid iff each
+  // member of the class is the next element of exactly one of them.
+  size_t numHashed = 0;
+  size_t numNotHashed = 0;
+  bool isValid = true;
+  std::string actualMembers;
+  auto members = std::meta::nonstatic_data_members_of(^^T, ctx);
+  for (auto member : members) {
+    std::string_view name = std::meta::identifier_of(member);
+    if (!actualMembers.empty()) {
+      actualMembers += ", ";
+    }
+    actualMembers += name;
+    if (numHashed < hashed.size() && hashed[numHashed] == name) {
+      ++numHashed;
+    } else if (numNotHashed < notHashed.size() &&
+               notHashed[numNotHashed] == name) {
+      ++numNotHashed;
+    } else {
+      isValid = false;
+    }
+  }
+  if (isValid && numHashed == hashed.size() &&
+      numNotHashed == notHashed.size()) {
+    return {};
+  }
+  // The message for `QL_DEFINE_DEFAULTED_HASH_OF_SUBSET`.
+  if (!notHashedMembers.empty()) {
+    return error("The hashed members `" + std::string{hashedMembers} +
+                 "` and the not hashed members `" +
+                 std::string{notHashedMembers} +
+                 "` have to be in declaration order each, and together have "
+                 "to be exactly the data members of the class, which are `" +
                  actualMembers + "`");
   }
-  return {};
+  return error("The listed members `" + std::string{hashedMembers} +
+               "` are not exactly the data members of the class in "
+               "declaration order, which are `" +
+               actualMembers + "`");
 }
 }  // namespace ad_utility::defaultedHash
 
@@ -113,25 +159,28 @@ consteval std::string_view checkHashedMembers(std::string_view listedMembers) {
 // such that for a class that is not a template it is evaluated when the class
 // is defined, even if the hash is never used. For a class template, the
 // function is instantiated (and thus the check is evaluated) by the call in the
-// hash function.
-#define QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, ...)                     \
-  static constexpr void qlImplCheckHashedMembers() {                       \
-    static_assert(                                                         \
-        ::ad_utility::defaultedHash::checkHashedMembers<T>(#__VA_ARGS__)   \
-            .empty(),                                                      \
-        ::ad_utility::defaultedHash::checkHashedMembers<T>(#__VA_ARGS__)); \
+// hash function. `HASHED` and `NOT_HASHED` are string literals.
+#define QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, HASHED, NOT_HASHED)          \
+  static constexpr void qlImplCheckHashedMembers() {                           \
+    static_assert(                                                             \
+        ::ad_utility::defaultedHash::checkHashedMembers<T>(HASHED, NOT_HASHED) \
+            .empty(),                                                          \
+        ::ad_utility::defaultedHash::checkHashedMembers<T>(HASHED,             \
+                                                           NOT_HASHED));       \
   }
 #define QL_IMPL_CALL_CHECK_OF_HASHED_MEMBERS qlImplCheckHashedMembers();
 #else
-#define QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, ...)
+#define QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, HASHED, NOT_HASHED)
 #define QL_IMPL_CALL_CHECK_OF_HASHED_MEMBERS
 #endif
 
-// See the documentation at the beginning of this file. The actual hashing is
-// implemented in a member function, because inside of it the members can be
-// named without a prefix.
-#define QL_DEFINE_DEFAULTED_HASH(T, ...)                                \
-  QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, __VA_ARGS__)                \
+// The implementation of the two public macros below. `HASHED` and `NOT_HASHED`
+// are the stringified lists of the respective members, and the variadic
+// arguments are the members that are hashed. The actual hashing is implemented
+// in a member function, because inside of it the members can be named without
+// a prefix.
+#define QL_IMPL_DEFAULTED_HASH(T, HASHED, NOT_HASHED, ...)              \
+  QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, HASHED, NOT_HASHED)         \
   template <typename QlHashState>                                       \
   QlHashState qlImplCombineHashOfMembers(QlHashState hashState) const { \
     QL_IMPL_CALL_CHECK_OF_HASHED_MEMBERS                                \
@@ -143,5 +192,25 @@ consteval std::string_view checkHashedMembers(std::string_view listedMembers) {
                                    const QlHashedType& value) {         \
     return value.qlImplCombineHashOfMembers(std::move(hashState));      \
   }
+
+// See the documentation at the beginning of this file.
+#define QL_DEFINE_DEFAULTED_HASH(T, ...) \
+  QL_IMPL_DEFAULTED_HASH(T, #__VA_ARGS__, "", __VA_ARGS__)
+
+// The two lists of members of `QL_DEFINE_DEFAULTED_HASH_OF_SUBSET`. They expand
+// to a parenthesized list, which the following helper macros turn into a plain
+// list of members (`QL_IMPL_UNWRAP LIST`) or into a string literal.
+#define QL_HASHED(...) (__VA_ARGS__)
+#define QL_NOT_HASHED(...) (__VA_ARGS__)
+#define QL_IMPL_UNWRAP(...) __VA_ARGS__
+#define QL_IMPL_STRINGIFY(...) #__VA_ARGS__
+#define QL_IMPL_STRINGIFY_LIST(LIST) QL_IMPL_STRINGIFY LIST
+
+// See the documentation at the beginning of this file. `HASHED` has to be a
+// `QL_HASHED(members...)` and `NOT_HASHED` a `QL_NOT_HASHED(members...)`.
+#define QL_DEFINE_DEFAULTED_HASH_OF_SUBSET(T, HASHED, NOT_HASHED) \
+  QL_IMPL_DEFAULTED_HASH(T, QL_IMPL_STRINGIFY_LIST(HASHED),       \
+                         QL_IMPL_STRINGIFY_LIST(NOT_HASHED),      \
+                         QL_IMPL_UNWRAP HASHED)
 
 #endif  // QLEVER_SRC_UTIL_DEFAULTEDHASH_H

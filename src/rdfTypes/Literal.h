@@ -22,6 +22,7 @@
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
+#include "util/DefaultedHash.h"
 
 namespace ad_utility::triple_component {
 
@@ -86,11 +87,10 @@ class BasicLiteral {
   std::string_view content() const { return storage_; }
 
  public:
-  CPP_template(typename H, typename L)(
-      requires ql::concepts::same_as<L, BasicLiteral>)
-  friend H AbslHashValue(H h, const L& literal) {
-    return H::combine(std::move(h), literal.storage_);
-  }
+  // The `beginOfSuffix_` is not hashed, because two literals with the same
+  // `storage_` almost always also have the same `beginOfSuffix_`.
+  QL_DEFINE_DEFAULTED_HASH_OF_SUBSET(BasicLiteral, QL_HASHED(storage_),
+                                     QL_NOT_HASHED(beginOfSuffix_))
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,
                                               beginOfSuffix_)
 
