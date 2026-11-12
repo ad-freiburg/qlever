@@ -23,6 +23,7 @@
 #include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/IndexFormatLayout.h"
 #include "util/Exception.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -142,6 +143,12 @@ struct CompressedBlockMetadataNoBlockIndex {
     return str;
   }
 };
+
+// The first and the last triple of each block are serialized by copying their
+// bytes (see `allowTrivialSerialization` above).
+QL_ASSERT_INDEX_FORMAT_LAYOUT(
+    CompressedBlockMetadataNoBlockIndex::PermutedTriple,
+    "col0Id_:ValueId, col1Id_:ValueId, col2Id_:ValueId, graphId_:ValueId");
 
 // The same as the above struct, but this block additionally knows its index.
 struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {

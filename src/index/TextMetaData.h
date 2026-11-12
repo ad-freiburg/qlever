@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "index/IndexFormatLayout.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -80,6 +81,17 @@ class TextBlockMetaData {
   template <typename T>
   friend std::true_type allowTrivialSerialization(TextBlockMetaData, T);
 };
+
+// The metadata of the blocks of the text index is serialized by copying its
+// bytes (see `allowTrivialSerialization` above).
+QL_ASSERT_INDEX_FORMAT_LAYOUT(
+    ContextListMetaData,
+    "_nofElements:u64, _startContextlist:i64, _startWordlist:i64, "
+    "_startScorelist:i64, _lastByte:i64");
+QL_ASSERT_INDEX_FORMAT_LAYOUT(
+    TextBlockMetaData,
+    "_firstWordId:u64, _lastWordId:u64, _cl:ContextListMetaData, "
+    "_entityCl:ContextListMetaData");
 
 ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
 

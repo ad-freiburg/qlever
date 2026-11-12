@@ -24,6 +24,7 @@
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
+#include "util/OnDiskLayout.h"
 
 // Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
 // included in this header).
@@ -429,6 +430,19 @@ static_assert(std::is_trivially_copyable_v<GeometryInfo>);
 // A new field must also be added to `GEOMETRY_INFO_SIZE_PER_VERSION`, see the
 // rules at `GEOMETRY_INFO_VERSION`.
 static_assert(GEOMETRY_INFO_SIZE_PER_VERSION.back() == sizeof(GeometryInfo));
+
+// With C++26 reflection, the complete layout (and the absence of implicit
+// padding) is checked directly.
+QL_ASSERT_ON_DISK_LAYOUT(
+    GeometryInfo,
+    "boundingBox_:{lowerLeftEncoded_:u64, upperRightEncoded_:u64}, "
+    "geometryTypeAndCentroid_:u64, numGeometries_:u32, sourceCrs_:{type_:u16}, "
+    "serializationType_:enum<u16>, metricLength_:{length_:f64}, "
+    "metricArea_:{area_:f64}",
+    "The bytes of this class are written to disk by the `GeoVocabulary`. "
+    "Follow the rules at `GEOMETRY_INFO_VERSION` in `rdfTypes/GeometryInfo.h` "
+    "(in particular, only append new members and bump the version), and then "
+    "also update the layout that is asserted for this class");
 
 // Return true iff `word` is a WKT literal (with quotes and datatype suffix).
 // This is the criterion by which the `SplitGeoVocabulary` routes words into
