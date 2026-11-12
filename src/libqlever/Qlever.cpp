@@ -458,8 +458,8 @@ ParsedQueryAndContext Qlever::parseQuery(
       pinSubtrees, pinResult, disableCaching_, std::move(handle));
 
   auto parsedQuery = SparqlParser::parseQuery(
-      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
-      datasetClauses);
+      &qecPtr->getIndex().getImpl().encodedIriManager(), allocator(),
+      std::move(query), datasetClauses);
 
   return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
 }

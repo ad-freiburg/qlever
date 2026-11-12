@@ -9,10 +9,12 @@
 #include <gtest/gtest_prod.h>
 
 #include "engine/HttpError.h"
+#include "global/Id.h"
 #include "parser/ParsedQuery.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
+#include "util/Allocator.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
@@ -185,23 +187,25 @@ class GraphStoreProtocol {
   }
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
-  // which is a SPARQL Query.
+  // which is a SPARQL Query. The `allocator` is used for parsing that query.
   static ParsedQuery transformGet(const GraphOrDefault& graph,
-                                  const EncodedIriManager* encodedIriManager);
+                                  const EncodedIriManager* encodedIriManager,
+                                  qlever::Allocator<Id> allocator);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
   // Transform a SPARQL Graph Store Protocol HEAD to an equivalent
   // `ParsedQuery`. The response is the same as for GET but without the body.
   static ParsedQuery transformHead(const GraphOrDefault& graph,
-                                   const EncodedIriManager* encodedIriManager);
+                                   const EncodedIriManager* encodedIriManager,
+                                   qlever::Allocator<Id> allocator);
 
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
-  // which are SPARQL Updates.
+  // which are SPARQL Updates. The `allocator` is used for parsing them.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-  static std::vector<ParsedQuery> transformPut(const RequestT& rawRequest,
-                                               const GraphOrDefault& graph,
-                                               const Index& index) {
+  static std::vector<ParsedQuery> transformPut(
+      const RequestT& rawRequest, const GraphOrDefault& graph,
+      const Index& index, qlever::Allocator<Id> allocator) {
     std::string stringRepresentation =
         truncatedStringRepresentation("PUT", rawRequest);
 
@@ -219,7 +223,8 @@ class GraphStoreProtocol {
     };
 
     ParsedQuery drop = ad_utility::getSingleElement(SparqlParser::parseUpdate(
-        index.getBlankNodeManager(), &index.encodedIriManager(), getDrop()));
+        index.getBlankNodeManager(), &index.encodedIriManager(),
+        std::move(allocator), getDrop()));
     drop._originalString = stringRepresentation;
 
     auto triples =
@@ -255,30 +260,35 @@ class GraphStoreProtocol {
   FRIEND_TEST(GraphStoreProtocolTest, transformPut);
 
   // Transform a SPARQL Graph Store Protocol DELETE to equivalent ParsedQueries
-  // which are SPARQL Updates.
+  // which are SPARQL Updates. The `allocator` is used for parsing them.
   static ParsedQuery transformDelete(const GraphOrDefault& graph,
-                                     const Index& index);
+                                     const Index& index,
+                                     qlever::Allocator<Id> allocator);
   FRIEND_TEST(GraphStoreProtocolTest, transformDelete);
 
  public:
   // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
   // Transform the Graph Store Protocol request into it's equivalent Query or
-  // Update.
+  // Update. The `allocator` is used for parsing the SPARQL that is created for
+  // some of the requests.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
   static std::vector<ParsedQuery> transformGraphStoreProtocol(
       ad_utility::url_parser::sparqlOperation::GraphStoreOperation operation,
-      const RequestT& rawRequest, const Index& index) {
+      const RequestT& rawRequest, const Index& index,
+      qlever::Allocator<Id> allocator) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
     std::string_view method = rawRequest.method_string();
     if (method == "GET") {
-      return {transformGet(operation.graph_, &index.encodedIriManager())};
+      return {transformGet(operation.graph_, &index.encodedIriManager(),
+                           std::move(allocator))};
     } else if (method == "PUT") {
-      return transformPut(rawRequest, operation.graph_, index);
+      return transformPut(rawRequest, operation.graph_, index,
+                          std::move(allocator));
     } else if (method == "DELETE") {
-      return {transformDelete(operation.graph_, index)};
+      return {transformDelete(operation.graph_, index, std::move(allocator))};
     } else if (method == "POST") {
       return {transformPost(rawRequest, operation.graph_, index)};
     } else if (method == "TSOP") {
@@ -286,7 +296,8 @@ class GraphStoreProtocol {
       // DATA` of the payload.
       return {transformTsop(rawRequest, operation.graph_, index)};
     } else if (method == "HEAD") {
-      return {transformHead(operation.graph_, &index.encodedIriManager())};
+      return {transformHead(operation.graph_, &index.encodedIriManager(),
+                            std::move(allocator))};
     } else if (method == "PATCH") {
       throwNotYetImplementedHTTPMethod("PATCH");
     } else {
