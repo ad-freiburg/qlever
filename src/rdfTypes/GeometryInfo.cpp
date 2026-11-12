@@ -297,16 +297,19 @@ MetricArea::MetricArea(double area) : area_{area} {
 
 // ____________________________________________________________________________
 template <BoundingCoordinate RequestedCoordinate>
-double BoundingBox::getBoundingCoordinate() const {
+double BoundingBox::getBoundingCoordinate(SourceCrsType projCrs = SourceCrsType{
+                                              defaultCrs}) const {
   using enum BoundingCoordinate;
+  ::util::geo::CRSType projectionCrs =
+      static_cast<::util::geo::CRSType>(projCrs);
   if constexpr (RequestedCoordinate == MIN_X) {
-    return lowerLeft_.getLng();
+    return geoPointToUtilPoint(lowerLeft_, projectionCrs).getX();
   } else if constexpr (RequestedCoordinate == MIN_Y) {
-    return lowerLeft_.getLat();
+    return geoPointToUtilPoint(lowerLeft_, projectionCrs).getY();
   } else if constexpr (RequestedCoordinate == MAX_X) {
-    return upperRight_.getLng();
+    return geoPointToUtilPoint(upperRight_, projectionCrs).getX();
   } else if constexpr (RequestedCoordinate == MAX_Y) {
-    return upperRight_.getLat();
+    return geoPointToUtilPoint(upperRight_, projectionCrs).getY();
   } else {
     // Unfortunately, we cannot use a `static_assert` here because some
     // compiler versions don't like it.

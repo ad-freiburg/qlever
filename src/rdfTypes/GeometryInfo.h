@@ -52,6 +52,30 @@ struct Centroid {
   GeoPoint centroid() const { return centroid_; }
 };
 
+// Represents the source CRS type (before parsing/projecting), for the meaning
+// see `libspatialjoin`'s `CRSType`.
+struct SourceCrsType {
+ private:
+  // The default (for the C++17 default constructor) is CRS84, the value of
+  // `util::geo::CRSType::CRS84` (the util is not included in this header).
+  uint16_t type_ = 1;
+
+ public:
+  explicit SourceCrsType(uint16_t type);
+  explicit SourceCrsType(::util::geo::CRSType type);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  SourceCrsType() = default;
+#endif
+
+  uint16_t type() const { return type_; }
+
+  // Returns the representing IRI.
+  std::optional<std::string_view> asIri() const;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
+};
+
 // The individual coordinates describing the bounding box.
 enum class BoundingCoordinate { MIN_X, MIN_Y, MAX_X, MAX_Y };
 
@@ -78,9 +102,10 @@ struct BoundingBox {
   // bounding box.
   std::string asWkt() const;
 
-  // Extract the minimum or maximum coordinates
+  // Project the bounding coordinates to `projCrs` and extract the minimum or
+  // maximum coordinates.
   template <BoundingCoordinate RequestedCoordinate>
-  double getBoundingCoordinate() const;
+  double getBoundingCoordinate(SourceCrsType projCrs) const;
 };
 
 // The encoded bounding box is a pair of the bit encodings of the
@@ -106,30 +131,6 @@ struct GeometryType {
   std::optional<std::string_view> asIri() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
-};
-
-// Represents the source CRS type (before parsing/projecting), for the meaning
-// see `libspatialjoin`'s `CRSType`.
-struct SourceCrsType {
- private:
-  // The default (for the C++17 default constructor) is CRS84, the value of
-  // `util::geo::CRSType::CRS84` (the util is not included in this header).
-  uint16_t type_ = 1;
-
- public:
-  explicit SourceCrsType(uint16_t type);
-  explicit SourceCrsType(::util::geo::CRSType type);
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  // Required for `bit_cast`.
-  SourceCrsType() = default;
-#endif
-
-  uint16_t type() const { return type_; }
-
-  // Returns the representing IRI.
-  std::optional<std::string_view> asIri() const;
-
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
 };
 
 // Represents the number of child geometries inside a collection geometry type.

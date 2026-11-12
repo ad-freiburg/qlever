@@ -216,12 +216,15 @@ class WktEnvelopeCorner {
 template <BoundingCoordinate RequestedCoordinate>
 class WktBoundingCoordinate {
  public:
-  ValueId operator()(const std::optional<BoundingBox>& boundingBox) const {
-    if (!boundingBox.has_value()) {
+  ValueId operator()(
+      const std::optional<WithSourceCrs<BoundingBox>>& boxWithCrs) const {
+    if (!boxWithCrs.has_value()) {
       return ValueId::makeUndefined();
     }
+    BoundingBox boundingBox = boxWithCrs.value().info_;
+    SourceCrsType sourceCrs = boxWithCrs.value().crs_;
     return ValueId::makeFromDouble(
-        boundingBox.value().getBoundingCoordinate<RequestedCoordinate>());
+        boundingBox.getBoundingCoordinate<RequestedCoordinate>(sourceCrs));
   }
 };
 

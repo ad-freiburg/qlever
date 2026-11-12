@@ -523,6 +523,30 @@ TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
   EXPECT_NEAR(bb2.getBoundingCoordinate<MIN_Y>(), -20, 0.0001);
   EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_X>(), -3, 0.0001);
   EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_Y>(), -4, 0.0001);
+
+  // Test bounding coordinates with projection to WGS84.
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(util::geo::CRSType::WGS84), 2,
+              0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_Y>(util::geo::CRSType::WGS84), 1,
+              0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_X>(util::geo::CRSType::WGS84), 4,
+              0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_Y>(util::geo::CRSType::WGS84), 3,
+              0.0001);
+
+  // Test bounding coordinates with projection to WebMercator.
+  EXPECT_NEAR(
+      bb1.getBoundingCoordinate<MIN_X>(util::geo::CRSType::WEB_MERCATOR),
+      111319.49079, 0.0001);
+  EXPECT_NEAR(
+      bb1.getBoundingCoordinate<MIN_Y>(util::geo::CRSType::WEB_MERCATOR),
+      222684.20851, 0.0001);
+  EXPECT_NEAR(
+      bb1.getBoundingCoordinate<MAX_X>(util::geo::CRSType::WEB_MERCATOR),
+      333958.47238, 0.0001);
+  EXPECT_NEAR(
+      bb1.getBoundingCoordinate<MAX_Y>(util::geo::CRSType::WEB_MERCATOR),
+      445640.10966, 0.0001);
 }
 
 // ____________________________________________________________________________

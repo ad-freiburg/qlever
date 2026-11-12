@@ -64,7 +64,8 @@ NARY_EXPRESSION(MetricLengthExpression, 1,
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
-                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+                   GeometryInfoValueGetter<
+                       ad_utility::WithSourceCrs<ad_utility::BoundingBox>>>);
 
 NARY_EXPRESSION(NumGeometriesExpression, 1,
                 FV<ad_utility::WktNumGeometries,
