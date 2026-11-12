@@ -12,6 +12,8 @@
 
 #include <unistd.h>
 
+#include <cerrno>
+#include <climits>
 #include <stdexcept>
 
 #include "util/Exception.h"
