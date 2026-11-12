@@ -50,8 +50,10 @@ struct GeoDistanceCall : public GeoFunctionCall {
 
 // Same as `getGeoFunctionExpressionParameters`, but with special handling for
 // the unit of measurement associated with a distance. Also implemented in
-// `GeoDistanceExpression.cpp`. If the unit is a variable, it is replaced by the
-// result of `constantOfVariable` (unless it is `std::nullopt`).
+// `GeoDistanceExpression.cpp`. A unit given as a variable is resolved with
+// `constantOfVariable`, which returns the constant value of a variable if it is
+// known, by default never. An IRI or literal that is not a unit gives
+// `UNKNOWN`.
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr,
     absl::FunctionRef<std::optional<TripleComponent>(const Variable&)>

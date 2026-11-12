@@ -77,36 +77,28 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   using DistArgs =
       std::tuple<TripleComponent, TripleComponent, UnitOfMeasurement>;
 
-  // Helper lambda to extract a unit of measurement from a SparqlExpression (IRI
-  // or literal with xsd:anyURI datatype)
+  // Helper lambda to extract a unit of measurement (an IRI or a literal with
+  // datatype `xsd:anyURI`) from a `SparqlExpression`. The unit is written
+  // directly in the call or given as a variable with a known constant.
   auto extractUnit =
       [&](const SparqlExpression* ptr) -> std::optional<UnitOfMeasurement> {
-    // Unit given as IRI
-    auto unitExpr = dynamic_cast<const IriExpression*>(ptr);
-    if (unitExpr != nullptr) {
-      return UnitOfMeasurementValueGetter::litOrIriToUnit(
-          LiteralOrIri{unitExpr->value()});
-    }
-
-    // Unit given as literal expression
-    auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(ptr);
-    if (unitExpr2 != nullptr) {
-      return UnitOfMeasurementValueGetter::litOrIriToUnit(
-          LiteralOrIri{unitExpr2->value()});
-    }
-
-    // Unit given as a variable with a constant IRI or literal
-    if (auto var = ptr->getVariableOrNullopt()) {
-      auto constant = constantOfVariable(var.value());
-      if (constant.has_value() && constant->isIri()) {
-        return UnitOfMeasurementValueGetter::litOrIriToUnit(
-            LiteralOrIri{constant->getIri()});
-      } else if (constant.has_value() && constant->isLiteral()) {
-        return UnitOfMeasurementValueGetter::litOrIriToUnit(
-            LiteralOrIri{constant->getLiteral()});
+    auto constant = ptr->getConstantValue();
+    if (!constant.has_value()) {
+      if (auto var = ptr->getVariableOrNullopt()) {
+        constant = constantOfVariable(var.value());
       }
     }
-
+    if (!constant.has_value()) {
+      return std::nullopt;
+    }
+    if (constant->isIri()) {
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{constant->getIri()});
+    }
+    if (constant->isLiteral()) {
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{constant->getLiteral()});
+    }
     return std::nullopt;
   };
 
