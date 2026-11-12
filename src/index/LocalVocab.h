@@ -106,8 +106,6 @@ class LocalVocab {
     // Create an empty set, the memory of which is allocated with `allocator`.
     explicit WordSet(Allocator allocator) : upstream_{std::move(allocator)} {}
 
-    const Allocator& allocator() const { return upstream_.allocator(); }
-
     // If a word that is equal to `word` (a `LocalVocabEntry` or a
     // `LocalVocabEntryView`) is already contained, return its address and
     // `false`. Else add a copy of `word` and return its address and `true`.

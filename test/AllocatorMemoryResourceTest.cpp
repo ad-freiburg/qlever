@@ -92,6 +92,21 @@ TEST(AllocatorMemoryResource, tooLargeAlignmentThrows) {
   EXPECT_THROW(
       std::ignore = resource.allocate(8, 2 * decltype(resource)::maxAlignment),
       std::bad_alloc);
+  // Memory with such an alignment can't have been allocated by the resource.
+  EXPECT_ANY_THROW(
+      resource.deallocate(nullptr, 8, 2 * decltype(resource)::maxAlignment));
+}
+
+// _____________________________________________________________________________
+TEST(AllocatorMemoryResource, isEqualOnlyToItself) {
+  using Resource =
+      ad_utility::AllocatorMemoryResource<RecordingAllocator<std::byte>>;
+  RecordingAllocator<std::byte> allocator;
+  Resource resource{allocator};
+  Resource other{allocator};
+  EXPECT_TRUE(resource.is_equal(resource));
+  EXPECT_FALSE(resource.is_equal(other));
+  EXPECT_FALSE(other.is_equal(resource));
 }
 
 // _____________________________________________________________________________

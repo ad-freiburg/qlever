@@ -743,6 +743,11 @@ TEST(Result, assertionOnNullptrConstruction) {
 }
 
 // _____________________________________________________________________________
+TEST(Result, getMergedLocalVocabThrowsWithoutResults) {
+  EXPECT_ANY_THROW(Result::getMergedLocalVocab(std::vector<Result>{}));
+}
+
+// _____________________________________________________________________________
 // Tests for the `IdTableView<0>`-backed `Result` constructor and the
 // corresponding `if constexpr` branches in `makeView` and `applyLimitOffset`.
 
