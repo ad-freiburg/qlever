@@ -86,8 +86,8 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParametersUnitVariable) {
       getGeoDistanceExpressionParameters(*expr, constantOf(meters)),
       GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, METERS});
 
-  // Without a constant of `?u` (no `constantOfVariable`, `std::nullopt`, or a
-  // number), the call is not recognized.
+  // Without a constant of `?u` (no `constantOfVariable`, `std::nullopt`, a
+  // number or `UNDEF`), the call is not recognized.
   checkGeoDistanceCall(getGeoDistanceExpressionParameters(*expr), std::nullopt);
   checkGeoDistanceCall(
       getGeoDistanceExpressionParameters(*expr, constantOf(std::nullopt)),
@@ -95,6 +95,24 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParametersUnitVariable) {
   checkGeoDistanceCall(getGeoDistanceExpressionParameters(
                            *expr, constantOf(TripleComponent{int64_t{5}})),
                        std::nullopt);
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(
+          *expr, constantOf(TripleComponent{TripleComponent::UNDEF{}})),
+      std::nullopt);
+
+  // An IRI or literal of `?u` that is not a unit gives `UNKNOWN`, as for a unit
+  // written directly in the call.
+  auto unknown = GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, UNKNOWN};
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(
+          *expr, constantOf(TripleComponent{Iri::fromIrirefWithoutBrackets(
+                     "http://example.org/nexistepas")})),
+      unknown);
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(
+          *expr, constantOf(TripleComponent{
+                     Literal::fromStringRepresentation("\"m\"")})),
+      unknown);
 }
 
 // _____________________________________________________________________________
