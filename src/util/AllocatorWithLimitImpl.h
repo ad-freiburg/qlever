@@ -16,7 +16,7 @@
 #include "backports/functional.h"
 #include "backports/keywords.h"
 #include "util/MemoryLimitTracker.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // This header contains the *implementation* of the historical, memory-limit
 // enforcing allocator. It used to live directly in `util/AllocatorWithLimit.h`

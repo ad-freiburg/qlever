@@ -14,8 +14,8 @@
 #include "global/FileSuffixConstants.h"
 #include "util/File.h"
 #include "util/ReadableNumberFacet.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/FileSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/FileSerializer.h"
 
 // _____________________________________________________________________________
 void IndexMetaData::add(const CompressedRelationMetadata& addedValue) {

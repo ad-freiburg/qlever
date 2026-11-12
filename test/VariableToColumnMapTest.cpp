@@ -10,7 +10,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 
