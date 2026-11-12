@@ -2917,7 +2917,7 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
 // `test/engine/ExistsJoinTest.cpp`.
 TEST(ExistsExpression, basicFunctionality) {
   using namespace ::testing;
-  ParsedQuery pq;
+  ParsedQuery pq{alloc};
   pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
   pq.selectClause().setAsterisk();
   ExistsExpression exists{std::move(pq)};

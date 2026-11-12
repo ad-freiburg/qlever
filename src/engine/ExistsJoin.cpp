@@ -275,15 +275,16 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // the way `QueryExecutionTree::getJoinColumns` expects, so that
     // `ExistsJoin`'s constructor does not have to add an extra `Sort`.
     pq._isInternalSort = IsInternalSort::True;
-    pq._orderBy = subtree->getVariableColumns() | ql::views::keys |
-                  ql::views::filter([&visibleVars = pq.getVisibleVariables()](
-                                        const Variable& variable) {
-                    return ad_utility::contains(visibleVars, variable);
-                  }) |
-                  ql::views::transform([](const Variable& variable) {
-                    return VariableOrderKey{variable};
-                  }) |
-                  ::ranges::to<std::vector>;
+    auto orderByKeys =
+        subtree->getVariableColumns() | ql::views::keys |
+        ql::views::filter([&visibleVars = pq.getVisibleVariables()](
+                              const Variable& variable) {
+          return ad_utility::contains(visibleVars, variable);
+        }) |
+        ql::views::transform([](const Variable& variable) {
+          return VariableOrderKey{variable};
+        });
+    pq._orderBy.assign(orderByKeys.begin(), orderByKeys.end());
     // Ensure we have the same ordering `QueryExecutionTree::getJoinColumns`
     // would produce.
     ql::ranges::sort(pq._orderBy, {},
@@ -297,8 +298,11 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // place, but since we're creating our own instance of `QueryPlanner` we
     // can't prevent them without refactoring the code. This workaround has the
     // downside that it might look confusing
+    // TODO<vrbommireddy> Pass the `qlm::vector` directly when
+    // `setSelectedVariablesForSubquery` takes a `ql::span`.
+    const auto& visibleVariables = pq.getVisibleVariables();
     tree->getRootOperation()->setSelectedVariablesForSubquery(
-        pq.getVisibleVariables());
+        {visibleVariables.begin(), visibleVariables.end()});
     subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }

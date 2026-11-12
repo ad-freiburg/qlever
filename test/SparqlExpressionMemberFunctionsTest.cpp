@@ -209,7 +209,7 @@ TEST(SparqlExpressionMemberFunctions, isDeterministic) {
 
   EXPECT_TRUE(NowDatetimeExpression{"2024-06-18T12:00:00"}.isDeterministic());
 
-  ParsedQuery pq;
+  ParsedQuery pq{ad_utility::testing::makeAllocator()};
   EXPECT_TRUE(ExistsExpression{pq}.isDeterministic());
 
   EXPECT_FALSE(makeUniqueBlankNodeExpression()->isDeterministic());

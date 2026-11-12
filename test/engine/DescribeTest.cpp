@@ -41,7 +41,8 @@ TEST(Describe, recursiveBlankNodes) {
       "_:g2 <p>  <o4> ."
       "<s2> <p>   <o> ."
       "_:g4 <p>  _:g5 .");
-  parsedQuery::Describe parsedDescribe;
+  parsedQuery::Describe parsedDescribe{
+      {}, {}, parsedQuery::Subquery{qec->getAllocator()}};
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
   Describe describe{qec,
                     ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
@@ -80,7 +81,8 @@ TEST(Describe, describeWithVariable) {
       "<s4> <p2> <o2> .");
 
   // On the above knowledge graph, evaluate `DESCRIBE <s4> ?x { ?x <p> <o> }`.
-  parsedQuery::Describe parsedDescribe;
+  parsedQuery::Describe parsedDescribe{
+      {}, {}, parsedQuery::Subquery{qec->getAllocator()}};
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s4>"));
   parsedDescribe.resources_.push_back(Variable{"?x"});
   SparqlTripleSimple triple{Variable{"?x"},
@@ -117,7 +119,8 @@ TEST(Describe, describeWithVariable) {
 // return an empty result).
 TEST(Describe, describeWithVariableButNoWhereClause) {
   auto qec = getQec("<s> <p> <o>");
-  parsedQuery::Describe parsedDescribe;
+  parsedQuery::Describe parsedDescribe{
+      {}, {}, parsedQuery::Subquery{qec->getAllocator()}};
   parsedDescribe.resources_.push_back(Variable{"?x"});
   auto noWhere = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
   Describe describe{qec, noWhere, parsedDescribe};
@@ -131,7 +134,8 @@ TEST(Describe, describeWithVariableButNoWhereClause) {
 TEST(Describe, describeWithUndefinedValues) {
   auto qec = getQec("<s> <p> <o> . <s2> <p> <o2>");
   auto getId = makeGetId(qec->getIndex());
-  parsedQuery::Describe parsedDescribe;
+  parsedQuery::Describe parsedDescribe{
+      {}, {}, parsedQuery::Subquery{qec->getAllocator()}};
   parsedDescribe.resources_.push_back(Variable{"?x"});
   auto where = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<s>")}, {UndefId()}, {UndefId()}}),
@@ -157,7 +161,8 @@ TEST(Describe, simpleMembers) {
       "_:g2 <p>  <o4> ."
       "<s2> <p>   <o> ."
       "_:g4 <p>  _:g5 .");
-  parsedQuery::Describe parsedDescribe;
+  parsedQuery::Describe parsedDescribe{
+      {}, {}, parsedQuery::Subquery{qec->getAllocator()}};
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
   Describe describe{qec,
                     ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
@@ -204,7 +209,8 @@ TEST(Describe, simpleMembers) {
 // _____________________________________________________________________________
 TEST(Describe, clone) {
   auto qec = getQec();
-  parsedQuery::Describe parsedDescribe;
+  parsedQuery::Describe parsedDescribe{
+      {}, {}, parsedQuery::Subquery{qec->getAllocator()}};
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
   Describe describe{qec,
                     ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
