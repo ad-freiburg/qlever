@@ -25,12 +25,22 @@
 
 namespace ad_utility {
 
-// A ZSTD compression and decompression context that is reused for many calls.
-// The one-shot functions of `ZstdWrapper` (`ZSTD_compress`, `ZSTD_decompress`)
-// create, initialize, and free a context on every call, which is a noticeable
-// cost when many small blocks are (de)compressed. The contexts are created
-// lazily on first use, so a default-constructed `ZstdContext` is cheap. An
-// object must not be used by several threads at the same time.
+// A ZSTD compression context and a ZSTD decompression context that are reused
+// for many calls. An object must not be used by several threads at the same
+// time.
+//
+// NOTE 1: The one-shot functions of `ZstdWrapper` (`ZSTD_compress`,
+// `ZSTD_decompress`) create, initialize, and free a context on every call,
+// which is a noticeable cost when many small blocks are (de)compressed. The
+// contexts here are created lazily on first use, so a default-constructed
+// `ZstdContext` is cheap.
+//
+// NOTE 2: No parameters are ever set on the two contexts. For the compression
+// this would not matter (see `compressChunks`), but `ZSTD_decompressDCtx`
+// honors parameters that were set on its context, so the output of a
+// `ZstdContext` is the same as that of the one-shot functions only as long as
+// this stays so (functions that need parameters, like
+// `ZstdWrapper::compressWithReference`, create contexts of their own).
 class ZstdContext {
  private:
   std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> compressionContext_{
