@@ -201,12 +201,13 @@ TEST(AggregateExpression, min) {
   // from the local vocabulary ("alx" and "aalx").
   Id alpha = t.alpha;
   const auto& localVocabContext = t.qec->getLocalVocabContext();
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry l1 =
       LocalVocabEntry::literalWithoutQuotes("alx", localVocabContext);
-  Id alx = Id::makeFromLocalVocabIndex(&l1);
+  Id alx = getLocalVocabId(l1);
   LocalVocabEntry l2 =
       LocalVocabEntry::literalWithoutQuotes("aalx", localVocabContext);
-  Id aalx = Id::makeFromLocalVocabIndex(&l2);
+  Id aalx = getLocalVocabId(l2);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
   // compared correctly, that UNDEF is smaller than any other value, and that
@@ -231,9 +232,10 @@ TEST(AggregateExpression, max) {
   // from the local vocabulary ("alx").
   Id alpha = t.alpha;
   Id beta = t.Beta;
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry l = LocalVocabEntry::literalWithoutQuotes(
       "alx", t.qec->getLocalVocabContext());
-  Id alx = Id::makeFromLocalVocabIndex(&l);
+  Id alx = getLocalVocabId(l);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
   // compared correctly, that UNDEF is smaller than any other value, and that
@@ -252,9 +254,10 @@ TEST(AggregateExpression, minAndMaxForDifferentKindsOfTerms) {
   auto testMinId = testAggregate<MinExpression, Id>;
   auto testMaxId = testAggregate<MaxExpression, Id>;
   auto t = TestContext{};
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry iriEntry = localVocabEntryFromStringRepresentation(
       "<x:1>", t.qec->getLocalVocabContext());
-  Id iri = Id::makeFromLocalVocabIndex(&iriEntry);
+  Id iri = getLocalVocabId(iriEntry);
   Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3));
   Id alpha = t.alpha;
 

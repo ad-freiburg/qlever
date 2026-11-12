@@ -16,6 +16,7 @@
 #include <tuple>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -89,8 +90,8 @@ struct SortText {
 struct SortByColumns {
   std::vector<ColumnIndex> sortColumns_;
 
-  explicit SortByColumns(std::vector<ColumnIndex> sortColumns)
-      : sortColumns_{std::move(sortColumns)} {}
+  explicit SortByColumns(ql::span<const ColumnIndex> sortColumns)
+      : sortColumns_{sortColumns.begin(), sortColumns.end()} {}
 
   // Default constructor for template requirements.
   SortByColumns() = default;

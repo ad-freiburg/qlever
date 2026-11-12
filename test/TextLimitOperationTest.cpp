@@ -33,7 +33,7 @@ TextLimit makeTextLimit(IdTable input, const size_t& n,
 CartesianProductJoin makeJoin(IdTable input1, IdTable input2) {
   auto qec = ad_utility::testing::getQec();
   size_t j = 0;
-  std::vector<std::shared_ptr<QueryExecutionTree>> valueOperations;
+  CartesianProductJoin::Children valueOperations{qec->getAllocator()};
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < input1.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(j++));
