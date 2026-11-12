@@ -61,6 +61,42 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParameters) {
                        std::nullopt);
 }
 
+// Test that a unit given as a variable is replaced by its constant from
+// `constantOfVariable`.
+TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParametersUnitVariable) {
+  // `geof:distance(?a, ?b, ?u)` and the constants of `?u`.
+  auto expr = makeDistWithUnitExpression(getExpr(V{"?a"}), getExpr(V{"?b"}),
+                                         getExpr(V{"?u"}));
+  auto miles = TripleComponent{
+      Iri::fromIrirefWithoutBrackets("http://qudt.org/vocab/unit/MI")};
+  auto meters = TripleComponent{Literal::fromStringRepresentation(absl::StrCat(
+      "\"http://qudt.org/vocab/unit/M\"^^<", XSD_ANYURI_TYPE, ">"))};
+  auto constantOf = [](std::optional<TripleComponent> constant) {
+    return [constant](const Variable& variable) {
+      EXPECT_EQ(variable, V{"?u"});
+      return constant;
+    };
+  };
+
+  // The unit is the IRI or the `xsd:anyURI` literal of `?u`.
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*expr, constantOf(miles)),
+      GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, MILES});
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*expr, constantOf(meters)),
+      GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, METERS});
+
+  // Without a constant of `?u` (no `constantOfVariable`, `std::nullopt`, or a
+  // number), the call is not recognized.
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(*expr), std::nullopt);
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*expr, constantOf(std::nullopt)),
+      std::nullopt);
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(
+                           *expr, constantOf(TripleComponent{int64_t{5}})),
+                       std::nullopt);
+}
+
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   auto D = &ValueId::makeFromDouble;
