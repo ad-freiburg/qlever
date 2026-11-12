@@ -53,30 +53,6 @@ Id localVocabId(LocalVocab& localVocab, std::string word,
           std::move(word), qec.getLocalVocabContext())));
 }
 
-// Export the `varNames` of the result of `qet` and return all the bytes.
-std::string exportBytes(const QueryExecutionTree& qet,
-                        const std::vector<std::string>& varNames,
-                        LimitOffsetClause limitAndOffset = {}) {
-  parsedQuery::SelectClause selectClause;
-  selectClause.setSelected(ad_utility::transform(
-      varNames, [](const std::string& name) { return Variable{name}; }));
-  std::string result;
-  for (std::string_view chunk : exportAsQLeverBinary(
-           qet, selectClause, limitAndOffset,
-           std::make_shared<ad_utility::CancellationHandle<>>())) {
-    result.append(chunk);
-  }
-  return result;
-}
-
-// A `QueryExecutionTree` with the result `table` and the `variables`.
-QueryExecutionTree makeQet(QueryExecutionContext* qec, IdTable table,
-                           std::vector<std::optional<Variable>> variables) {
-  return QueryExecutionTree{
-      qec, std::make_shared<ValuesForTesting>(qec, std::move(table),
-                                              std::move(variables))};
-}
-
 // Return the result of `f`, which is called while `GeoPoint`s use the
 // `encoding` (the default encoding is restored afterwards).
 template <typename F>
