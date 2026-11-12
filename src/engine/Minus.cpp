@@ -185,7 +185,7 @@ IdTable Minus::copyMatchingRows(
 // _____________________________________________________________________________
 IdTable Minus::computeMinus(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns) const {
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns) const {
   if (left.empty()) {
     return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
   }

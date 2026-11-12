@@ -208,8 +208,7 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 // _______________________________________________________________________
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-    IdTable* result) {
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, IdTable* result) {
   // check for trivial cases
   if (left.empty() || right.empty()) {
     return;
